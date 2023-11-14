@@ -6,13 +6,20 @@
 # SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
 # SPDX-License-Identifier: EPL-2.0
 
-from org.eclipse.dirigible.components.api.core import GlobalsFacade
 
-def get(name):
-    return GlobalsFacade.get(name)
+import java
+GlobalsFacade = java.type('org.eclipse.dirigible.components.api.core')
 
-def set(name, value):
-    GlobalsFacade.set(name, value)
 
-def list():
-    return GlobalsFacade.list()
+class Globals:
+    @staticmethod
+    def get(name):
+        return GlobalsFacade.get(name)
+
+    @staticmethod
+    def set(name, value):
+        GlobalsFacade.set(name, value)
+
+    @staticmethod
+    def list():
+        return GlobalsFacade.list()

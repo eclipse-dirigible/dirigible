@@ -6,10 +6,15 @@
 # SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
 # SPDX-License-Identifier: EPL-2.0
 
-from org.eclipse.dirigible.components.api.core import ContextFacade
 
-def get(name):
-    return ContextFacade.get(name)
+import java
+ContextFacade = java.type('org.eclipse.dirigible.components.api.core')
 
-def set(name, value):
-    ContextFacade.set(name, value)
+class Context:
+    @staticmethod
+    def get(name):
+        return ContextFacade.get(name)
+
+    @staticmethod
+    def set(name, value):
+        ContextFacade.set(name, value)

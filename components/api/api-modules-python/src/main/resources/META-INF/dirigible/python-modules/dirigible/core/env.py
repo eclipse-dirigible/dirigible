@@ -7,10 +7,14 @@
 # SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
 # SPDX-License-Identifier: EPL-2.0
 
-from org.eclipse.dirigible.components.api.core import EnvFacade
+import java
+EnvFacade = java.type('org.eclipse.dirigible.components.api.core')
 
-def get(name):
-    return EnvFacade.get(name)
+class Env:
+    @staticmethod
+    def get(name):
+        return EnvFacade.get(name)
 
-def list():
-    return EnvFacade.list()
+    @staticmethod
+    def list():
+        return EnvFacade.list()
