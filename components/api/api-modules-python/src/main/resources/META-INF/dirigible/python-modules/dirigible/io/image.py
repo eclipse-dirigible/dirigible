@@ -9,8 +9,10 @@
 import streams
 import java
 
-ImageFacade = java.type("org.eclipse.dirigible.components.api.io.ImageFacade")
+class Image:
+    ImageFacade = java.type("org.eclipse.dirigible.components.api.io.ImageFacade")
 
-def resize(original, imageType, width, height):
-    native = ImageFacade.resize(original, imageType, width, height)
-    return streams.InputStream(native)
+    @staticmethod
+    def resize(original, imageType, width, height):
+        native = ImageFacade.resize(original, imageType, width, height)
+        return streams.InputStream(native)

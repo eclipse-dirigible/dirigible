@@ -10,120 +10,158 @@ import streams
 import bytes
 import java
 
-FilesFacade = java.type("org.eclipse.dirigible.components.api.io.FilesFacade")
+class Files:
+    FilesFacade = java.type("org.eclipse.dirigible.components.api.io.FilesFacade")
 
-def exists(path):
-    return FilesFacade.exists(path)
+    @staticmethod
+    def exists(path):
+        return FilesFacade.exists(path)
 
-def isExecutable(path):
-    return FilesFacade.isExecutable(path)
+    @staticmethod
+    def isExecutable(path):
+        return FilesFacade.isExecutable(path)
 
-def isReadable(path):
-    return FilesFacade.isReadable(path)
+    @staticmethod
+    def isReadable(path):
+        return FilesFacade.isReadable(path)
 
-def isWritable(path):
-    return FilesFacade.isWritable(path)
+    @staticmethod
+    def isWritable(path):
+        return FilesFacade.isWritable(path)
 
-def isHidden(path):
-    return FilesFacade.isHidden(path)
+    @staticmethod
+    def isHidden(path):
+        return FilesFacade.isHidden(path)
 
-def isDirectory(path):
-    return FilesFacade.isDirectory(path)
+    @staticmethod
+    def isDirectory(path):
+        return FilesFacade.isDirectory(path)
 
-def isFile(path):
-    return FilesFacade.isFile(path)
+    @staticmethod
+    def isFile(path):
+        return FilesFacade.isFile(path)
 
-def isSameFile(path1, path2):
-    return FilesFacade.isSameFile(path1, path2)
+    @staticmethod
+    def isSameFile(path1, path2):
+        return FilesFacade.isSameFile(path1, path2)
 
-def getCanonicalPath(path):
-    return FilesFacade.getCanonicalPath(path)
+    @staticmethod
+    def getCanonicalPath(path):
+        return FilesFacade.getCanonicalPath(path)
 
-def getName(path):
-    return FilesFacade.getName(path)
+    @staticmethod
+    def getName(path):
+        return FilesFacade.getName(path)
 
-def getParentPath(path):
-    return FilesFacade.getParentPath(path)
+    @staticmethod
+    def getParentPath(path):
+        return FilesFacade.getParentPath(path)
 
-def readBytes(path):
-    native = FilesFacade.readBytes(path)
-    data = bytes.toPythonBytes(native)
-    return data
+    @staticmethod
+    def readBytes(path):
+        native = FilesFacade.readBytes(path)
+        data = bytes.toPythonBytes(native)
+        return data
 
-def readBytesNative(path):
-    return FilesFacade.readBytes(path)
+    @staticmethod
+    def readBytesNative(path):
+        return FilesFacade.readBytes(path)
 
-def readText(path):
-    return FilesFacade.readText(path)
+    @staticmethod
+    def readText(path):
+        return FilesFacade.readText(path)
 
-def writeBytes(path, data):
-    native = bytes.toJavaBytes(data)
-    FilesFacade.writeBytesNative(path, native)
+    @staticmethod
+    def writeBytes(path, data):
+        native = bytes.toJavaBytes(data)
+        FilesFacade.writeBytesNative(path, native)
 
-def writeBytesNative(path, data):
-    FilesFacade.writeBytesNative(path, data)
+    @staticmethod
+    def writeBytesNative(path, data):
+        FilesFacade.writeBytesNative(path, data)
 
-def writeText(path, text):
-    FilesFacade.writeText(path, text)
+    @staticmethod
+    def writeText(path, text):
+        FilesFacade.writeText(path, text)
 
-def getLastModified(path):
-    return FilesFacade.getLastModified(path)
+    @staticmethod
+    def getLastModified(path):
+        return FilesFacade.getLastModified(path)
 
-def setLastModified(path, time):
-    FilesFacade.setLastModified(path, time.getMilliseconds())
+    @staticmethod
+    def setLastModified(path, time):
+        FilesFacade.setLastModified(path, time.getMilliseconds())
 
-def getOwner(path):
-    return FilesFacade.getOwner(path)
+    @staticmethod
+    def getOwner(path):
+        return FilesFacade.getOwner(path)
 
-def setOwner(path, owner):
-    FilesFacade.setOwner(path, owner)
+    @staticmethod
+    def setOwner(path, owner):
+        FilesFacade.setOwner(path, owner)
 
-def getPermissions(path):
-    return FilesFacade.getPermissions(path)
+    @staticmethod
+    def getPermissions(path):
+        return FilesFacade.getPermissions(path)
 
-def setPermissions(path, permissions):
-    FilesFacade.setPermissions(path, permissions)
+    @staticmethod
+    def setPermissions(path, permissions):
+        FilesFacade.setPermissions(path, permissions)
 
-def size(path):
-    return FilesFacade.size(path)
+    @staticmethod
+    def size(path):
+        return FilesFacade.size(path)
 
-def createFile(path):
-    FilesFacade.createFile(path)
+    @staticmethod
+    def createFile(path):
+        FilesFacade.createFile(path)
 
-def createDirectory(path):
-    FilesFacade.createDirectory(path)
+    @staticmethod
+    def createDirectory(path):
+        FilesFacade.createDirectory(path)
 
-def copy(source, target):
-    FilesFacade.copy(source, target)
+    @staticmethod
+    def copy(source, target):
+        FilesFacade.copy(source, target)
 
-def move(source, target):
-    FilesFacade.move(source, target)
+    @staticmethod
+    def move(source, target):
+        FilesFacade.move(source, target)
 
-def deleteFile(path):
-    FilesFacade.deleteFile(path)
+    @staticmethod
+    def deleteFile(path):
+        FilesFacade.deleteFile(path)
 
-def deleteDirectory(path, forced):
-    FilesFacade.deleteDirectory(path, forced)
+    @staticmethod
+    def deleteDirectory(path, forced):
+        FilesFacade.deleteDirectory(path, forced)
 
-def createTempFile(prefix, suffix):
-    return FilesFacade.createTempFile(prefix, suffix)
+    @staticmethod
+    def createTempFile(prefix, suffix):
+        return FilesFacade.createTempFile(prefix, suffix)
 
-def createTempDirectory(prefix):
-    return FilesFacade.createTempDirectory(prefix)
+    @staticmethod
+    def createTempDirectory(prefix):
+        return FilesFacade.createTempDirectory(prefix)
 
-def createInputStream(path):
-    native = FilesFacade.createInputStream(path)
-    return streams.InputStream(native)
+    @staticmethod
+    def createInputStream(path):
+        native = FilesFacade.createInputStream(path)
+        return streams.InputStream(native)
 
-def createOutputStream(path):
-    native = FilesFacade.createOutputStream(path)
-    return streams.OutputStream(native)
+    @staticmethod
+    def createOutputStream(path):
+        native = FilesFacade.createOutputStream(path)
+        return streams.OutputStream(native)
 
-def traverse(path):
-    return FilesFacade.traverse(path)
+    @staticmethod
+    def traverse(path):
+        return FilesFacade.traverse(path)
 
-def list(path):
-    return list(map(lambda e: e['path'], JSON.parse(FilesFacade.list(path)))
+    @staticmethod
+    def list(path):
+        return list(map(lambda e: e['path'], JSON.parse(FilesFacade.list(path))))
 
-def find(path, pattern):
-    return JSON.parse(FilesFacade.find(path, pattern))
+    @staticmethod
+    def find(path, pattern):
+        return JSON.parse(FilesFacade.find(path, pattern))
