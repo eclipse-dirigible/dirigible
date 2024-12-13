@@ -196,7 +196,7 @@
 		<jquery-ui.version>1.13.0</jquery-ui.version>
 		<sap-theming__theming-base-content.version>11.18.2</sap-theming__theming-base-content.version>
 		<chart.js.version>4.4.3</chart.js.version>
-		<sortablejs.version>1.15.2</sortablejs.version>
+		<sortablejs.version>1.15.6</sortablejs.version>
 		<fundamental-styles.version>0.38.0</fundamental-styles.version>
 		<angular-aria.version>1.8.2</angular-aria.version>
 		<split.js.version>1.6.5</split.js.version>
