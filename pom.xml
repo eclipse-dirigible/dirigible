@@ -187,7 +187,7 @@
 		
 		<!-- Various -->
 		<c3p0.version>0.10.1</c3p0.version>
-		<guava.version>33.3.1-jre</guava.version>
+		<guava.version>33.4.0-jre</guava.version>
 		<icu4j.version>76.1</icu4j.version>
 		<classgraph.version>4.8.179</classgraph.version>
 		<logcaptor.version>2.10.0</logcaptor.version>
