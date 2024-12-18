@@ -1,0 +1,5 @@
+{
+    "module": "view-properties/configs/properties-view.js",
+    "extensionPoint": "platform-views",
+    "description": "File properties"
+}

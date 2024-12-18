@@ -1,0 +1,93 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="projects" ng-controller="ProjectsViewController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="configs/projects-view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=editor-js"></script>
+        <script type="text/javascript" src="/services/web/platform-core/ui/platform/editors.js"></script>
+        <script type="text/javascript" src="/services/web/service-publisher/publisher.js"></script>
+        <script type="text/javascript" src="/services/web/service-template/templates.js"></script>
+        <script type="text/javascript" src="/services/web/service-generate/generate.js"></script>
+        <script type="text/javascript" src="/services/web/service-transport/transport.js"></script>
+        <script type="text/javascript" src="/services/web/service-actions/actions.js"></script>
+        <script type="text/javascript" src="/webjars/jstree/jstree.min.js"></script>
+        <script type="text/javascript" src="/services/web/platform-core/ui/jstree/indicator.plugin.js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/web/platform-core/ui/styles/jstree.css" />
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="js/projects.js"></script>
+    </head>
+
+    <body class="bk-vbox" shortcut="'enter|shift+enter|f2|delete|ctrl+f|ctrl+c|ctrl+x|ctrl+v|meta+backspace|down'" shortcut-action="keyboardShortcuts" ignore-inputs>
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">
+            {{state.busyText}}
+        </bk-busy-indicator-extended>
+        <bk-toolbar compact="true" ng-show="!state.error && !state.isBusy">
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-button compact="true" state="transparent" glyph="sap-icon--save" title="Save all" aria-label="Save all" ng-click="saveAll()"></bk-button>
+            <bk-button compact="true" state="transparent" glyph="sap-icon--play" title="Publish all" aria-label="Publish all" ng-click="publishAll()" ng-if="isPublishEnabled()"></bk-button>
+            <bk-button compact="true" state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="reloadWorkspace()"></bk-button>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button state="transparent" toggled="searchVisible" glyph="sap-icon--search" title="Toggle search" aria-label="Toggle search" ng-click="toggleSearch()">
+            </bk-button>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-popover>
+                <bk-popover-control>
+                    <bk-button state="transparent" is-menu="true" label="{{ selectedWorkspace }}" title="Workspace select">
+                    </bk-button>
+                </bk-popover-control>
+                <bk-popover-body align="bottom-right" no-arrow="true">
+                    <bk-menu aria-label="workspaces menu">
+                        <bk-menu-item title="{{ name }}" ng-repeat="name in workspaceNames" is-selected="isSelectedWorkspace(name)" ng-click="switchWorkspace(name)">
+                        </bk-menu-item>
+                    </bk-menu>
+                </bk-popover-body>
+            </bk-popover>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-toolbar-overflow>
+                <bk-button state="transparent" label="Create project" glyph="sap-icon--create" is-overflow="true" ng-click="createProject()">
+                </bk-button>
+                <bk-button state="transparent" label="Duplicate project" glyph="sap-icon--duplicate" is-overflow="true" ng-click="duplicateProject()">
+                </bk-button>
+                <bk-button state="transparent" label="Export projects" glyph="sap-icon--download-from-cloud" is-overflow="true" ng-click="exportProjects()">
+                </bk-button>
+                <bk-toolbar-separator></bk-toolbar-separator>
+                <bk-button state="transparent" label="Create workspace" glyph="sap-icon--add" is-overflow="true" ng-click="createWorkspace()">
+                </bk-button>
+                <bk-button state="transparent" label="Delete workspace" glyph="sap-icon--delete" is-overflow="true" state="{{ selectedWorkspace === 'workspace' ? 'disabled' : '' }}" ng-click="deleteWorkspace()">
+                </bk-button>
+            </bk-toolbar-overflow>
+        </bk-toolbar>
+        <bk-toolbar ng-if="searchVisible && !state.error && !state.isBusy">
+            <bk-input type="search" placeholder="Search" ng-keyup="search($event)" bk-focus="true" ng-model="searchField.text">
+            </bk-input>
+        </bk-toolbar>
+        <div id="pvtree" class="jstree-fiori--fill jstree-fiori--context-menu" bk-scrollbar ng-on-contextmenu="showContextMenu($event)" ng-show="!state.error && !state.isBusy"></div>
+        <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+            <bk-message-page-title>Something went wrong!</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+            <bk-message-page-actions>
+                <bk-button compact="true" label="Reload panel" ng-click="init()">
+                </bk-button>
+            </bk-message-page-actions>
+        </bk-message-page>
+        <theme></theme>
+    </body>
+
+</html>

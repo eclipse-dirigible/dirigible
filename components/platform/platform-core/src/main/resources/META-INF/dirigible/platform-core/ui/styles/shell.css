@@ -1,0 +1,222 @@
+/**
+ * Copyright (c) 2010-2024 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v2.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ */
+:root {
+    --status-bar-height: 1.625rem;
+}
+
+html {
+    height: 100%;
+}
+
+body {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* header */
+.main-header {
+    width: 100%;
+    height: auto;
+}
+
+.main-header>.fd-shellbar {
+    -webkit-app-region: drag;
+}
+
+.main-header>.fd-shellbar>* {
+    -webkit-app-region: no-drag;
+}
+
+/* Sidebar */
+.sidebar {
+    box-sizing: border-box;
+    box-shadow: none;
+    border-right: .0625rem solid var(--sapGroup_TitleBorderColor, #d9d9d9);
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.sidebar::-webkit-scrollbar {
+    display: none;
+}
+
+/* Main container */
+.main-container {
+    display: flex;
+    flex-direction: row;
+    box-sizing: border-box;
+    height: 100%;
+    max-height: calc(100% - var(--fdShellbar_Height) - var(--status-bar-height));
+}
+
+.main-container[no-statusbar="true"] {
+    max-height: calc(100% - var(--fdShellbar_Height));
+}
+
+/* Perspective view */
+.main-container>iframe {
+    display: block;
+    box-sizing: border-box;
+    height: 100%;
+    flex-grow: 1;
+    width: 0;
+}
+
+/* Statusbar */
+.statusbar {
+    background-color: var(--sapInfobar_NonInteractive_Background, #fff);
+    width: 100%;
+    height: 100%;
+    max-height: var(--status-bar-height);
+    box-sizing: border-box;
+    font-size: var(--sapFontSmallSize, .75rem);
+    font-weight: normal;
+    color: var(--fdToolbar_Info_Color, var(--sapTextColor));
+    font-family: var(--sapFontBoldFamily);
+    word-break: break-word;
+    display: inline-flex;
+    align-items: center;
+    border-top: 0.0625rem solid var(--sapPageFooter_BorderColor);
+    overflow: hidden;
+}
+
+.statusbar>* {
+    box-sizing: border-box;
+}
+
+.statusbar-busy,
+.statusbar-message,
+.statusbar-error {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+.statusbar-message,
+.statusbar-error {
+    flex: 2;
+}
+
+.statusbar-busy>*,
+.statusbar-message>*,
+.statusbar-error>* {
+    box-sizing: border-box;
+}
+
+.statusbar .statusbar--text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-sizing: border-box;
+}
+
+.statusbar .statusbar--icon,
+.fd-busy-indicator {
+    background: inherit;
+    border-radius: inherit;
+    line-height: 1;
+    display: flex;
+    display: -ms-flexbox;
+    justify-content: center;
+    -webkit-box-align: center;
+    -ms-flex-pack: center;
+    align-items: center;
+    box-sizing: border-box;
+    padding-inline: 0.5rem 0.5rem;
+}
+
+.statusbar .statusbar--link {
+    cursor: pointer;
+    margin-left: 0.5rem;
+}
+
+.statusbar .statusbar--link {
+    width: var(--status-bar-height);
+    height: var(--status-bar-height);
+}
+
+.statusbar-message {
+    color: var(--sapButton_Information_TextColor, #fff);
+    background-color: var(--sapButton_Information_Background, #3584e4);
+}
+
+.statusbar-message .statusbar--icon {
+    color: var(--sapButton_Information_TextColor, #fff);
+}
+
+.statusbar-message .statusbar--link:hover {
+    color: var(--sapButton_Information_Hover_TextColor, #fff);
+    background-color: var(--sapButton_Information_Hover_Background, #4990e7);
+}
+
+.statusbar-error {
+    color: var(--sapButton_Reject_TextColor, #fff);
+    background-color: var(--sapButton_Reject_Background, #e01b24);
+}
+
+.statusbar-error .statusbar--icon {
+    color: var(--sapButton_Reject_TextColor, #fff);
+}
+
+.statusbar-error .statusbar--link:hover {
+    color: var(--sapButton_Reject_Hover_TextColor, #fff);
+    background-color: var(--sapButton_Reject_Hover_Background, #e3323a);
+}
+
+.statusbar-busy {
+    flex: 1;
+    color: var(--sapButton_Attention_TextColor, #fff);
+    background-color: var(--sapButton_Attention_Background, #e97119);
+}
+
+.statusbar-label {
+    box-sizing: border-box;
+    padding: 0 6px 0 6px;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: end;
+}
+
+/* Notification overlay */
+.notification-overlay {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    right: 0;
+    pointer-events: none;
+    z-index: 300;
+}
+
+.notification-overlay>* {
+    pointer-events: auto;
+}
+
+.notification-popover {
+    --bkPopoverBody_BackgroundColor: var(--sapGroup_TitleBackground);
+    width: 35rem;
+    height: auto;
+    max-width: 35rem;
+    max-height: 42.75rem;
+}
+
+.notification-popover .fd-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}

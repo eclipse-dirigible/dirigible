@@ -1,0 +1,5 @@
+{
+    "module": "editor-bpm/configs/flowable-editor.js",
+    "extensionPoint": "platform-editors",
+    "description": "BPMN Modeler"
+}

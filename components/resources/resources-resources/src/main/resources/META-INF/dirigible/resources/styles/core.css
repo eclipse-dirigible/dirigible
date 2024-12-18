@@ -1,41 +1,41 @@
 @font-face {
   font-family: "72";
-  src: url("/webjars/sap-theming__theming-base-content/11.7.0/content/Base/baseLib/baseTheme/fonts/72-Regular-full.woff2") format("woff2");
+  src: url("/webjars/sap-theming__theming-base-content/11.18.2/content/Base/baseLib/baseTheme/fonts/72-Regular-full.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
 }
 
 @font-face {
   font-family: "72";
-  src: url("/webjars/sap-theming__theming-base-content/11.7.0/content/Base/baseLib/baseTheme/fonts/72-Bold-full.woff2") format("woff2");
+  src: url("/webjars/sap-theming__theming-base-content/11.18.2/content/Base/baseLib/baseTheme/fonts/72-Bold-full.woff2") format("woff2");
   font-weight: 700;
   font-style: normal;
 }
 
 @font-face {
   font-family: "72";
-  src: url("/webjars/sap-theming__theming-base-content/11.7.0/content/Base/baseLib/baseTheme/fonts/72-Light-full.woff2") format("woff2");
+  src: url("/webjars/sap-theming__theming-base-content/11.18.2/content/Base/baseLib/baseTheme/fonts/72-Light-full.woff2") format("woff2");
   font-weight: 300;
   font-style: normal;
 }
 
 @font-face {
   font-family: "SAP-icons";
-  src: url("/webjars/sap-theming__theming-base-content/11.7.0/content/Base/baseLib/sap_horizon/fonts/SAP-icons.woff2") format("woff2");
+  src: url("/webjars/sap-theming__theming-base-content/11.18.2/content/Base/baseLib/sap_horizon/fonts/SAP-icons.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
 }
 
 @font-face {
   font-family: "BusinessSuiteInAppSymbols";
-  src: url("/webjars/sap-theming__theming-base-content/11.7.0/content/Base/baseLib/baseTheme/fonts/BusinessSuiteInAppSymbols.woff2") format("woff2");
+  src: url("/webjars/sap-theming__theming-base-content/11.18.2/content/Base/baseLib/baseTheme/fonts/BusinessSuiteInAppSymbols.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
 }
 
 @font-face {
   font-family: "SAP-icons-TNT";
-  src: url("/webjars/sap-theming__theming-base-content/11.7.0/content/Base/baseLib/baseTheme/fonts/SAP-icons-TNT.woff2") format("woff2");
+  src: url("/webjars/sap-theming__theming-base-content/11.18.2/content/Base/baseLib/baseTheme/fonts/SAP-icons-TNT.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
 }

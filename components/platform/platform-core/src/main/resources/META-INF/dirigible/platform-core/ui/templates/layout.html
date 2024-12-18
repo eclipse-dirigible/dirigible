@@ -1,0 +1,57 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<div class="bk-border-box bk-fill-parent">
+    <split direction="horizontal" state="splitPanesState.side">
+        <split-pane ng-if="leftTabs.length > 0" size="{{ layoutSettings.leftPaneSize }}" min-size="::layoutSettings.leftPaneMinSize" max-size="::layoutSettings.leftPaneMaxSize" snap-offset="0" class="pane-left">
+            <accordion views="leftTabs"></accordion>
+        </split-pane>
+        <split-pane size="auto" min-size="100" snap-offset="0">
+            <split direction="vertical" state="splitPanesState.main">
+                <split-pane ng-if="!layoutSettings.hideCenterPane" size="auto" min-size="0" snap-offset="0" class="pane-center">
+
+                    <splitted-tabs direction="centerSplittedTabViews.direction" panes="centerSplittedTabViews.panes" focused-pane="focusedTabView" remove-tab="closeCenterTab(pane)" split-tabs="splitCenterTabs(direction, pane)"
+                        hide-tabs="layoutSettings.hideCenterTabs">
+                    </splitted-tabs>
+
+                </split-pane>
+                <split-pane ng-if="bottomTabs.length > 0" size="{{ ::layoutSettings.bottomPaneSize }}" min-size="0" snap-offset="100" class="pane-bottom">
+
+                    <bk-icon-tab-bar side-padding="sm" selected-tab-id="selection.selectedBottomTab" compact="true">
+                        <bk-icon-tab-bar-tablist ng-if="!layoutSettings.hideBottomTabs" bk-tabs-overflowable>
+                            <bk-icon-tab-bar-tab ng-repeat="tab in bottomTabs track by tab.id" label="{{tab.label}}" tab-id="{{::tab.id}}" is-hidden="tab.isHidden" ng-click="selection.selectedBottomTab = tab.id">
+                            </bk-icon-tab-bar-tab>
+                            <bk-icon-tab-bar-overflow label="More" ng-class="isMoreTabsButtonVisible(bottomTabs) ? '' : 'bk-invisible'">
+                                <bk-icon-tab-bar-overflow-item ng-if="tab.isHidden" ng-repeat="tab in bottomTabs track by tab.id" label="{{tab.label}}" tab-id="{{::tab.id}}-overflow" ng-click="selection.selectedBottomTab = tab.id">
+                                </bk-icon-tab-bar-overflow-item>
+                            </bk-icon-tab-bar-overflow>
+                            <bk-icon-tab-bar-buttons ng-if="!layoutSettings.hideCenterPane" align="right">
+                                <bk-button state="transparent" compact="true" ng-click="toggleCenterPane()" aria-label="{{isCenterPaneCollapsed() ? 'Show center panel' : 'Hide center panel'}}"
+                                    title="{{isCenterPaneCollapsed() ? 'Show center panel' : 'Hide center panel'}}" glyph="{{isCenterPaneCollapsed() ? 'sap-icon--navigation-down-arrow' : 'sap-icon--navigation-up-arrow'}}">
+                                </bk-button>
+                                <bk-button state="transparent" compact="true" ng-click="collapseBottomPane()" glyph="sap-icon--decline" aria-label="Collapse bottom panel" title="Collapse bottom panel">
+                                </bk-button>
+                            </bk-icon-tab-bar-buttons>
+                        </bk-icon-tab-bar-tablist>
+                        <bk-icon-tab-bar-panel ng-repeat="tab in bottomTabs track by tab.id" tab-id="{{::tab.id}}" ng-show="selection.selectedBottomTab === tab.id">
+                            <layout-tab-content tab="tab"></layout-tab-content>
+                        </bk-icon-tab-bar-panel>
+                    </bk-icon-tab-bar>
+                </split-pane>
+            </split>
+        </split-pane>
+        <split-pane ng-if="rightTabs.length > 0" size="{{ ::layoutSettings.rightPaneSize }}" min-size="::layoutSettings.rightPaneMinSize" max-size="::layoutSettings.rightPaneMaxSize" snap-offset="0" class="pane-right">
+            <accordion views="rightTabs"></accordion>
+        </split-pane>
+    </split>
+</div>

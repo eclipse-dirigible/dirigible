@@ -5,14 +5,14 @@
  */
 export function getTemplate() {
 	return {
-		name: "Hello World",
-		description: "Hello World Template",
+		name: 'Hello World',
+		description: 'Basic Dirigible service',
 		sources: [{
-			location: "/template-hello-world/service.mjs.template",
-			action: "copy",
-			rename: "{{fileName}}.mjs"
+			location: '/template-hello-world/service.mjs.template',
+			action: 'copy',
+			rename: '{{fileName}}.mjs'
 		}],
 		parameters: [],
-		order: -1
+		order: 0,
 	};
 };

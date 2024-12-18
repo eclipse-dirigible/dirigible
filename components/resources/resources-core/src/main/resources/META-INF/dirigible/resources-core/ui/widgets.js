@@ -4021,9 +4021,9 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 'avatar': '?fdAvatar'
             },
             scope: {
-                interactive: '<'
+                interactive: '<?'
             },
-            link: function (scope, element, attributes, controller, $transclude) {
+            link: function (scope, element, _attributes, _controller, $transclude) {
                 if (scope.interactive === undefined)
                     scope.interactive = true;
 
@@ -4036,24 +4036,28 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     'fd-card__header--non-interactive': !scope.interactive
                 });
             },
-            template: `<a ng-class="getClasses()">
-                <ng-transclude ng-transclude-slot="avatar"></ng-transclude>
-                <div class="fd-card__header-text">
-                    <div class="fd-card__title-area">
-                        <ng-transclude ng-transclude-slot="title"></ng-transclude>
+            template: `<div ng-class="getClasses()" role="group">
+                <div class="fd-card__header-main">
+                    <div class="fd-card__header-main-container" ng-attr-role="{{ interactive === true ? 'button' : undefined}}" ng-attr-tabindex="{{ interactive === true ? 0 : undefined}}" aria-description="{{description}}">
+                        <ng-transclude ng-if="isAvatarFilled()" ng-transclude-slot="avatar"></ng-transclude>
+                        <div class="fd-card__header-text">
+                            <div class="fd-card__title-area"><ng-transclude ng-transclude-slot="title"></ng-transclude></div>
+                            <div ng-if="isSubtitleFilled()" class="fd-card__subtitle-area" ng-transclude="subtitle"></div>
+                        </div>
+                    </div>
+                    <div class="fd-card__header-main-actions">
+                        <ng-transclude></ng-transclude>
                         <ng-transclude ng-transclude-slot="status"></ng-transclude>
                     </div>
-                    <div ng-if="isSubtitleFilled()" class="fd-card__subtitle-area" ng-transclude="subtitle">
-                    </div>
                 </div>
-            </a>`
+            </div>`,
         }
     }]).directive('fdCardTitle', [function () {
         return {
             restrict: 'EA',
-            replace: false,
+            replace: true,
             transclude: true,
-            template: `<div class="fd-card__title" ng-transclude></div>`
+            template: `<div class="fd-card__title" role="heading" aria-level="3" ng-transclude></div>`
         }
     }]).directive('fdCardSubtitle', [function () {
         return {

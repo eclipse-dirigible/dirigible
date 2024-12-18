@@ -5,16 +5,17 @@
  */
 export function getTemplate() {
 	return {
-		name: "Database Table (Model)",
-		description: "Database Table Template",
+		name: 'Database Table (Model)',
+		description: 'Database Table Template',
+		glyph: 'sap-icon--table-view',
 		sources: [{
-			location: "/template-database-table/database.table.template", 
-			action: "generate",
-			rename: "{{fileName}}.table"
+			location: '/template-database-table/database.table.template',
+			action: 'generate',
+			rename: '{{fileName}}.table'
 		}],
 		parameters: [{
-			name: "tableName",
-			label: "Table Name"
+			name: 'tableName',
+			label: 'Table Name'
 		}],
 		order: 40
 	};

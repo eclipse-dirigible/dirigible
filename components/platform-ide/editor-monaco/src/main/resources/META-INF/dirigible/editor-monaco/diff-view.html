@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta http-equiv="Content-Language" content="en-us" />
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title>Difference</title>
+        <link type="text/css" rel="stylesheet" href="/services/web/platform-core/ui/styles/fonts.css" />
+        <link type="text/css" rel="stylesheet" href="/services/web/platform-core/ui/styles/blimpkit.css" />
+        <link type="text/css" rel="stylesheet" href="/webjars/fundamental-styles/dist/busy-indicator.css">
+        <link type="text/css" data-name="/webjars/monaco-editor/min/vs/editor/editor.main" rel="stylesheet" href="/webjars/monaco-editor/min/vs/editor/editor.main.css">
+        <link type="text/css" rel="stylesheet" href="css/editor.css" />
+        <script type="text/javascript" src="/services/web/platform-branding/branding.js"></script>
+        <script type="text/javascript" src="/services/web/platform-core/ui/platform/message-hub.js"></script>
+        <script type="text/javascript" src="/services/web/platform-core/ui/platform/theming-hub.js"></script>
+    </head>
+
+    <body id="diff-browser" spellcheck="false">
+        <div id="loadingOverview" class="fd-busy-indicator-extended">
+            <div class="fd-busy-indicator fd-busy-indicator--l" aria-hidden="false" aria-label="Loading">
+                <div class="fd-busy-indicator__circle"></div>
+                <div class="fd-busy-indicator__circle"></div>
+                <div class="fd-busy-indicator__circle"></div>
+            </div>
+            <div id="loadingMessage" class="fd-busy-indicator-extended__label">Loading difference...</div>
+        </div>
+
+        <div id="embeddedEditor"></div>
+
+        <script type="text/javascript" src="/webjars/monaco-editor/min/vs/loader.js"></script>
+        <script>
+            const loadingOverview = document.getElementById('loadingOverview');
+            const themingHub = new ThemingHub();
+            let csrfToken;
+            let dirty = false;
+            let diffEditor;
+            let useParameters = false;
+            let monacoTheme = 'vs-light';
+            let themeId = 'vs-light';
+            let headElement = document.getElementsByTagName('head')[0];
+
+            let autoThemeListener = false;
+
+            function setTheme(theme, monaco) {
+                if (!theme) theme = themingHub.getSavedTheme();
+                themeId = theme.id;
+                let themeLinks = headElement.querySelectorAll("link[data-type='theme']");
+                for (let i = 0; i < themeLinks.length; i++) {
+                    headElement.removeChild(themeLinks[i]);
+                }
+                for (let i = 0; i < theme.links.length; i++) {
+                    const link = document.createElement('link');
+                    link.type = 'text/css';
+                    link.href = theme.links[i];
+                    link.rel = 'stylesheet';
+                    link.setAttribute("data-type", "theme");
+                    headElement.appendChild(link);
+                }
+                if (theme.type === 'light') {
+                    monacoTheme = 'vs-light';
+                    if (monaco) monaco.editor.setTheme(monacoTheme);
+                    autoThemeListener = false;
+                } else if (theme.type === 'dark') {
+                    if (themeId === 'classic-dark') monacoTheme = 'classic-dark';
+                    else monacoTheme = 'blimpkit-dark';
+                    if (monaco) monaco.editor.setTheme(monacoTheme);
+                    autoThemeListener = false;
+                } else {
+                    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                        if (themeId.startsWith('classic')) monacoTheme = 'classic-dark';
+                        else monacoTheme = 'blimpkit-dark';
+                    } else monacoTheme = 'vs-light';
+                    if (monaco) monaco.editor.setTheme(monacoTheme);
+                    autoThemeListener = true;
+                }
+            }
+
+            setTheme();
+
+            function getViewParameters() {
+                const dataParameters = window.frameElement?.getAttribute("data-parameters");
+                if (dataParameters) {
+                    const params = JSON.parse(dataParameters);
+                    if (params.original) useParameters = true;
+                    return {
+                        contentType: params["contentType"] || '',
+                        original: params["original"] || '',
+                        modified: params["modified"] || '',
+                    }
+                }
+                return {};
+            }
+
+            let editorParameters = getViewParameters();
+
+            function FileIO() {
+                let __URL = URL;
+                this.gitApiUrl = "/services/ide/git";
+
+                this.resolveFileType = function (fileName) {
+                    if (!fileName) return "text";
+                    // TODO: Cache response
+                    return new Promise((resolve, reject) => {
+                        const xhr = new XMLHttpRequest();
+                        xhr.open("GET", "/services/js/ide-monaco/api/fileTypes.js");
+                        xhr.onload = () => {
+                            if (xhr.status === 200) {
+                                let fileTypes = JSON.parse(xhr.responseText);
+
+                                let fileType = "text";
+                                if (fileName) {
+                                    for (let fileExtension in fileTypes) {
+                                        if (fileName.endsWith(fileExtension)) {
+                                            fileType = fileTypes[fileExtension];
+                                        }
+                                    }
+                                }
+                                if (fileName && fileName.indexOf(".") === -1 && fileName.toLowerCase().indexOf("dockerfile") > 0) {
+                                    fileType = "dockerfile";
+                                }
+
+                                resolve(fileType);
+                            } else {
+                                reject(`HTTP ${xhr.status} - ${xhr.statusText}`)
+                            }
+                            csrfToken = xhr.getResponseHeader("x-csrf-token");
+                        };
+                        xhr.onerror = () => reject(`HTTP ${xhr.status} - ${xhr.statusText}`);
+                        xhr.send();
+                    });
+                };
+
+                this.loadDiff = function (project, file) {
+                    return new Promise((resolve, reject) => {
+                        if (file) {
+                            let url = this.gitApiUrl + "/" + project + "/diff?path=" + file;
+                            let xhr = new XMLHttpRequest();
+                            xhr.open("GET", url);
+                            xhr.setRequestHeader("X-CSRF-Token", "Fetch");
+                            xhr.onload = () => {
+                                let diff = JSON.parse(xhr.responseText);
+                                resolve({
+                                    original: diff.original,
+                                    modified: diff.modified,
+                                });
+                                csrfToken = xhr.getResponseHeader("x-csrf-token");
+                            };
+                            xhr.onerror = () => reject(xhr.statusText);
+                            xhr.send();
+                        } else {
+                            resolve({
+                                original: "",
+                                modified: "",
+                            });
+                        }
+                    });
+                };
+            }
+
+            let fileIO = new FileIO();
+
+            function createEditorInstance() {
+                return new Promise((resolve, reject) => {
+                    setTimeout(function () {
+                        try {
+                            let containerEl = document.getElementById("embeddedEditor");
+                            if (containerEl.childElementCount > 0) {
+                                for (let i = 0; i < containerEl.childElementCount; i++)
+                                    containerEl.removeChild(containerEl.children.item(i));
+                            }
+                            let editor = monaco.editor.createDiffEditor(containerEl, {
+                                automaticLayout: true,
+                                readOnly: true,
+                                scrollBeyondLastLine: false,
+                                enableSplitViewResizing: false,
+                            });
+
+                            monaco.editor.createDiffNavigator(editor, {
+                                followsCaret: true,
+                                ignoreCharChanges: true,
+                            });
+                            resolve(editor);
+                            window.onresize = function () {
+                                diffEditor.layout();
+                            };
+                            if (loadingOverview) loadingOverview.classList.add("hide");
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+                });
+            }
+
+            (function init() {
+                require.config({ paths: { vs: "/webjars/monaco-editor/min/vs" } });
+
+                require(["vs/editor/editor.main"], function () {
+                    createEditorInstance().then((editor) => {
+                        diffEditor = editor;
+                        if (useParameters) {
+                            if (loadingOverview) loadingOverview.classList.remove("hide");
+                            diffEditor.setModel({
+                                original: monaco.editor.createModel(parameters.original, parameters.contentType),
+                                modified: monaco.editor.createModel(parameters.modified, parameters.contentType),
+                            });
+                            if (loadingOverview) loadingOverview.classList.add("hide");
+                        } else {
+                            diffEditor.setModel({
+                                original: monaco.editor.createModel("", "text"),
+                                modified: monaco.editor.createModel("", "text"),
+                            });
+                        }
+                    });
+                    monaco.editor.defineTheme('blimpkit-dark', {
+                        base: 'vs-dark',
+                        inherit: true,
+                        rules: [{ background: '1d1d1d' }],
+                        colors: {
+                            'editor.background': '#1d1d1d',
+                            'breadcrumb.background': '#1d1d1d',
+                            'minimap.background': '#1d1d1d',
+                            'editorGutter.background': '#1d1d1d',
+                            'editorMarkerNavigation.background': '#1d1d1d',
+                            'input.background': '#242424',
+                            'input.border': '#4e4e4e',
+                            'editorWidget.background': '#1d1d1d',
+                            'editorWidget.border': '#313131',
+                            'editorSuggestWidget.background': '#262626',
+                            'dropdown.background': '#262626',
+                        }
+                    });
+
+                    monaco.editor.defineTheme('classic-dark', {
+                        base: 'vs-dark',
+                        inherit: true,
+                        rules: [{ background: '1c2228' }],
+                        colors: {
+                            'editor.background': '#1c2228',
+                            'breadcrumb.background': '#1c2228',
+                            'minimap.background': '#1c2228',
+                            'editorGutter.background': '#1c2228',
+                            'editorMarkerNavigation.background': '#1c2228',
+                            'input.background': '#29313a',
+                            'input.border': '#8696a9',
+                            'editorWidget.background': '#1c2228',
+                            'editorWidget.border': '#495767',
+                            'editorSuggestWidget.background': '#29313a',
+                            'dropdown.background': '#29313a',
+                        }
+                    });
+
+                    monaco.editor.setTheme(monacoTheme);
+                    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+                        if (autoThemeListener) {
+                            if (event.matches) {
+                                if (themeId.startsWith('classic')) monacoTheme = 'classic-dark';
+                                else monacoTheme = 'blimpkit-dark';
+                            } else monacoTheme = 'vs-light';
+                            this.monaco.editor.setTheme(monacoTheme);
+                        }
+                    });
+
+                    themingHub.onThemeChange((theme) => {
+                        setTheme(theme, this.monaco);
+                    });
+                });
+
+                themingHub.addMessageListener({
+                    topic: 'git.diff.view.type',
+                    handler: (data) => {
+                        if (data.type === 'unified') {
+                            diffEditor.updateOptions({ renderSideBySide: false });
+                        } else {
+                            diffEditor.updateOptions({ renderSideBySide: true });
+                        }
+                    }
+                });
+
+                if (!useParameters) {
+                    themingHub.addMessageListener({
+                        topic: 'git.staging.file.diff',
+                        handler: (data) => {
+                            const project = data.project;
+                            const file = data.file;
+                            fileIO.loadDiff(project, file).then((diff) => {
+                                fileIO.resolveFileType(file).then((fileType) => {
+                                    diffEditor.setModel({
+                                        original: monaco.editor.createModel(diff.original, fileType),
+                                        modified: monaco.editor.createModel(diff.modified, fileType),
+                                    });
+                                    if (loadingOverview) loadingOverview.classList.add("hide");
+                                });
+                            });
+                        } 
+                    });
+
+                    themingHub.addMessageListener({
+                        topic: 'git.diff.view.clear',
+                        handler: () => {
+                            diffEditor.setModel({
+                                original: monaco.editor.createModel("", "text"),
+                                modified: monaco.editor.createModel("", "text"),
+                            });
+                        } 
+                    });
+                }
+            })();
+        </script>
+    </body>
+
+</html>

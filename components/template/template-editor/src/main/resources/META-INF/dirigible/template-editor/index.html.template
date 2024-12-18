@@ -1,0 +1,48 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="editor" ng-controller="EditorController">
+
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<!-- Fake icon -->
+		<link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+		<!-- Title directive that will automatically create a title based on the view config -->
+		<title config-title></title>
+		<!-- Editor configuration module -->
+		<script type="text/javascript" src="/services/web/${projectName}/configs/${fileName}-editor.js"></script>
+		<!-- Editor services and view styles -->
+		<script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=editor-js"></script>
+		<link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+		<!-- Editor controller -->
+		<script type="text/javascript" src="js/editor.js"></script>
+	</head>
+
+	<body class="bk-vbox bk-padding" shortcut="'ctrl+s'" shortcut-action="saveShortcut">
+		<!-- Loading indicator -->
+		<bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{::state.busyText}}</bk-busy-indicator-extended>
+		<!-- Editor text area -->
+		<bk-form-label for="eta" colon="true">File content</bk-form-label>
+		<bk-textarea id="eta" class="bk-fill-parent" ng-model="file.model" ng-change="modelChange()" ng-show="!state.error && !state.isBusy"></bk-textarea>
+		<!-- Error page in case loading fails -->
+		<bk-message-page glyph="sap-icon--error" ng-if="state.error">
+			<bk-message-page-title>Editor encounterd an error!</bk-message-page-title>
+			<bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+		</bk-message-page>
+		<!-- Theme support. This must always be placed last -->
+		<theme></theme>
+	</body>
+
+</html>

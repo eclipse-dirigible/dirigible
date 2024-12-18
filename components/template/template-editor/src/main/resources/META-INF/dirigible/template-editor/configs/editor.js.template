@@ -1,0 +1,22 @@
+/*
+ * Copyright (c) 2024 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v2.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ */
+const editorData = { // This must always be called 'editorData'
+	id: '{{editorId}}', // Unique editor ID
+	region: 'center', // The layout region in which this view will be shown - 'left', 'right', 'center' and 'bottom'.
+	label: '{{editorName}}', // Editor label
+	path: '/services/web/{{projectName}}/{{fileName}}.html', // Link to the main html file
+	contentTypes: ['text/plain'] // List of mime file types the editor can handle
+};
+// This config is used by both the front-end and the back-end, therefore we need to have this:
+if (typeof exports !== 'undefined') {
+	exports.getEditor = () => editorData;
+}

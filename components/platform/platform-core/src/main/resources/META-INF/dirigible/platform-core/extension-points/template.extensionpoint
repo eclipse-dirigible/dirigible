@@ -1,0 +1,4 @@
+{
+    "name": "platform-templates",
+    "description": "Extension point for templates"
+}

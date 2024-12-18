@@ -2,143 +2,142 @@
 <html lang="en" ng-app="page" ng-controller="PageController">
 
   <head>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="">
-    <meta name="author" content="">
-    <!-- Fake favicon to silent console errors and not waste a get request -->
-    <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
-    <!-- Title directive -->
-    <title>HTML5 (AngularJS)</title>
-    <!-- IDE Core UI -->
-    <script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=ide-view-js"></script>
-    <link type="text/css" rel="stylesheet" href="/services/js/resources-core/services/loader.js?id=ide-view-css" />
-    <theme></theme>
+   <meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<!-- Fake icon -->
+		<link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+		<!-- Title directive that will automatically create a title based on the view config -->
+		<title config-title></title>
+		<!-- View config -->
+		<script type="text/javascript" src="/services/web/platform-samples/configs/view-center.js"></script>
+		<!-- View services and styles -->
+		<script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js">
+		</script>
+		<link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
   </head>
 
-  <body class="dg-vbox">
-    <fd-busy-indicator-extended class="dg-fill-parent" ng-hide="state.error || !state.isBusy" dg-size="l">
+  <body class="bk-vbox">
+    <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">
       {{state.busyText}}
-    </fd-busy-indicator-extended>
-    <fd-toolbar has-title="true" ng-show="!state.error && !state.isBusy">
-      <fd-toolbar-title>Explore:</fd-toolbar-title>
-      <fd-select compact="true" ng-model="explore.value">
-        <fd-option text="Customers" value="'customers'"></fd-option>
-        <fd-option text="Employees" value="'employees'"></fd-option>
-        <fd-option text="Products" value="'products'"></fd-option>
-      </fd-select>
-    </fd-toolbar>
-    <fd-scrollbar class="dg-full-height" ng-show="!state.error && !state.isBusy">
-      <table fd-table display-mode="compact" outer-borders="none" class="dg-list-border-bottom"
+    </bk-busy-indicator-extended>
+    <bk-toolbar has-title="true" ng-show="!state.error && !state.isBusy">
+      <bk-toolbar-title>Explore:</bk-toolbar-title>
+      <bk-select compact="true" ng-model="explore.value">
+        <bk-option text="Customers" value="'customers'"></bk-option>
+        <bk-option text="Employees" value="'employees'"></bk-option>
+        <bk-option text="Products" value="'products'"></bk-option>
+      </bk-select>
+    </bk-toolbar>
+    <bk-scrollbar class="bk-full-height" ng-show="!state.error && !state.isBusy">
+      <table bk-table display-mode="compact" outer-borders="bottom"
         ng-show="explore.value === 'customers'">
-        <thead fd-table-header sticky="true">
-          <tr fd-table-row>
-            <th fd-table-header-cell>Company</th>
-            <th fd-table-header-cell>City</th>
-            <th fd-table-header-cell>Address</th>
+        <thead bk-table-header sticky="true">
+          <tr bk-table-row>
+            <th bk-table-header-cell>Company</th>
+            <th bk-table-header-cell>City</th>
+            <th bk-table-header-cell>Address</th>
           </tr>
         </thead>
-        <tbody fd-table-body>
-          <tr fd-table-row ng-repeat="customer in customers" hoverable="false" activable="false">
-            <td fd-table-cell>{{customer.CompanyName}}</td>
-            <td fd-table-cell>{{customer.City}}</td>
-            <td fd-table-cell>{{customer.Address}}</td>
+        <tbody bk-table-body>
+          <tr bk-table-row ng-repeat="customer in customers" hoverable="false" activable="false">
+            <td bk-table-cell>{{customer.CompanyName}}</td>
+            <td bk-table-cell>{{customer.City}}</td>
+            <td bk-table-cell>{{customer.Address}}</td>
           </tr>
-          <tr ng-if="customers.length === 0" fd-table-row>
-            <td fd-table-cell no-data="true">No data</td>
+          <tr ng-if="customers.length === 0" bk-table-row>
+            <td bk-table-cell no-data="true">No data</td>
           </tr>
         </tbody>
       </table>
 
-      <table fd-table display-mode="compact" outer-borders="none" class="dg-list-border-bottom"
+      <table bk-table display-mode="compact" outer-borders="bottom"
         ng-show="explore.value === 'employees'">
-        <thead fd-table-header sticky="true">
-          <tr fd-table-row>
-            <th fd-table-header-cell>Name</th>
-            <th fd-table-header-cell>Title</th>
-            <th fd-table-header-cell>Country</th>
+        <thead bk-table-header sticky="true">
+          <tr bk-table-row>
+            <th bk-table-header-cell>Name</th>
+            <th bk-table-header-cell>Title</th>
+            <th bk-table-header-cell>Country</th>
           </tr>
         </thead>
-        <tbody fd-table-body>
-          <tr fd-table-row ng-repeat="employee in employees" hoverable="false" activable="false">
-            <td fd-table-cell>{{employee.FirstName}} {{employee.LastName}}</td>
-            <td fd-table-cell>{{employee.Title}}</td>
-            <td fd-table-cell>{{employee.Country}}</td>
+        <tbody bk-table-body>
+          <tr bk-table-row ng-repeat="employee in employees" hoverable="false" activable="false">
+            <td bk-table-cell>{{employee.FirstName}} {{employee.LastName}}</td>
+            <td bk-table-cell>{{employee.Title}}</td>
+            <td bk-table-cell>{{employee.Country}}</td>
           </tr>
-          <tr ng-if="employees.length === 0" fd-table-row>
-            <td fd-table-cell no-data="true">No data</td>
+          <tr ng-if="employees.length === 0" bk-table-row>
+            <td bk-table-cell no-data="true">No data</td>
           </tr>
         </tbody>
       </table>
 
-      <table fd-table display-mode="compact" outer-borders="none" class="dg-list-border-bottom"
+      <table bk-table display-mode="compact" outer-borders="bottom"
         ng-show="explore.value === 'products'">
-        <thead fd-table-header sticky="true">
-          <tr fd-table-row>
-            <th fd-table-header-cell>Name</th>
-            <th fd-table-header-cell>Unit Price</th>
-            <th fd-table-header-cell>Quantity Per Unit</th>
+        <thead bk-table-header sticky="true">
+          <tr bk-table-row>
+            <th bk-table-header-cell>Name</th>
+            <th bk-table-header-cell>Unit Price</th>
+            <th bk-table-header-cell>Quantity Per Unit</th>
           </tr>
         </thead>
-        <tbody fd-table-body>
-          <tr fd-table-row ng-repeat="product in products" hoverable="false" activable="false">
-            <td fd-table-cell>{{product.ProductName}}</td>
-            <td fd-table-cell>${{product.UnitPrice}}</td>
-            <td fd-table-cell>{{product.QuantityPerUnit}}</td>
+        <tbody bk-table-body>
+          <tr bk-table-row ng-repeat="product in products" hoverable="false" activable="false">
+            <td bk-table-cell>{{product.ProductName}}</td>
+            <td bk-table-cell>${{product.UnitPrice}}</td>
+            <td bk-table-cell>{{product.QuantityPerUnit}}</td>
           </tr>
-          <tr ng-if="products.length === 0" fd-table-row>
-            <td fd-table-cell no-data="true">No data</td>
+          <tr ng-if="products.length === 0" bk-table-row>
+            <td bk-table-cell no-data="true">No data</td>
           </tr>
         </tbody>
       </table>
-    </fd-scrollbar>
-    <fd-message-page glyph="sap-icon--error" ng-if="state.error">
-      <fd-message-page-title>Editor encounterd an error!</fd-message-page-title>
-      <fd-message-page-subtitle>{{errorMessage}}</fd-message-page-subtitle>
-    </fd-message-page>
+    </bk-scrollbar>
+    <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+      <bk-message-page-title>Editor encounterd an error!</bk-message-page-title>
+      <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+    </bk-message-page>
 
     <script type="text/javascript">
-      angular.module('page', ['ideUI', 'ideView'])
-        .controller('PageController', function ($scope, $http) {
-            $scope.state = {
-                isBusy: true,
-                error: false,
-                busyText: "Fetching data from server...",
-            };
-            $scope.explore = { value: 'customers' };
+      angular.module('page', ['blimpKit', 'platformView']).controller('PageController', ($scope, $http) => {
+          $scope.state = {
+              isBusy: true,
+              error: false,
+              busyText: 'Fetching data from server...',
+          };
+          $scope.explore = { value: 'customers' };
 
-            $http.get('https://services.odata.org/Northwind/Northwind.svc/Customers', { disableInterceptors: true })
-                .then(function (response) {
-                    $scope.customers = response.data.value;
-                    $scope.state.isBusy = false;
-                }, function (response) {
-                    console.error(response);
-                    $scope.state.error = true;
-                    $scope.errorMessage = "Unable to load customer data";
-                });
+          $http.get('https://services.odata.org/Northwind/Northwind.svc/Customers', { disableInterceptors: true })
+              .then((response) => {
+                  $scope.customers = response.data.value;
+                  $scope.state.isBusy = false;
+              }, (response) => {
+                  console.error(response);
+                  $scope.state.error = true;
+                  $scope.errorMessage = 'Unable to load customer data';
+              });
 
-            $http.get('https://services.odata.org/Northwind/Northwind.svc/Employees', { disableInterceptors: true })
-                .then(function (response) {
-                    $scope.employees = response.data.value;
-                    $scope.state.isBusy = false;
-                }, function (response) {
-                    console.error(response);
-                    $scope.state.error = true;
-                    $scope.errorMessage = "Unable to load employees data";
-                });
+          $http.get('https://services.odata.org/Northwind/Northwind.svc/Employees', { disableInterceptors: true })
+              .then((response) => {
+                  $scope.employees = response.data.value;
+                  $scope.state.isBusy = false;
+              }, (response) => {
+                  console.error(response);
+                  $scope.state.error = true;
+                  $scope.errorMessage = 'Unable to load employees data';
+              });
 
-            $http.get('https://services.odata.org/Northwind/Northwind.svc/Products', { disableInterceptors: true })
-                .then(function (response) {
-                    $scope.products = response.data.value;
-                    $scope.state.isBusy = false;
-                }, function (response) {
-                    console.error(response);
-                    $scope.state.error = true;
-                    $scope.errorMessage = "Unable to load product data";
-                });
+          $http.get('https://services.odata.org/Northwind/Northwind.svc/Products', { disableInterceptors: true })
+              .then((response) => {
+                  $scope.products = response.data.value;
+                  $scope.state.isBusy = false;
+              }, (response) => {
+                  console.error(response);
+                  $scope.state.error = true;
+                  $scope.errorMessage = 'Unable to load product data';
+              });
         });
     </script>
+    <theme></theme>
   </body>
 
 </html>

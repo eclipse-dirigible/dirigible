@@ -36,7 +36,8 @@ public class HttpSecurityURIConfigurator {
             "/services/core/healthcheck/**", //
             "/services/web/resources/**", //
             "/services/web/resources-core/**", //
-            "/services/js/resources-core/**", //
+            "/services/web/platform-core/**", //
+            "/services/js/platform-core/**", //
             "/services/js/resources-core/**", //
             "/services/integrations/**", //
             "/actuator/health/liveness", //

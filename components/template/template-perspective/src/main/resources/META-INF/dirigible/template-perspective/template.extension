@@ -1,0 +1,5 @@
+{
+    "extensionPoint": "platform-templates",
+    "module": "template-perspective/template.js",
+    "description": "Dirigible Perspective Template"
+}

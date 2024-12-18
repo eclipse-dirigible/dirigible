@@ -1,0 +1,131 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<div>
+    <!-- Window -->
+    <bk-dialog ng-if="dialogWindows.length > 0" visible="::true" window-width="{{dialogWindows[0].width}}" window-height="{{dialogWindows[0].height}}" window-max-width="{{dialogWindows[0].maxWidth}}"
+        window-max-height="{{dialogWindows[0].maxHeight}}" window-min-width="{{dialogWindows[0].minWidth}}" window-min-height="{{dialogWindows[0].minHeight}}">
+        <bk-dialog-header ng-if="dialogWindows[0].hasHeader" header="{{dialogWindows[0].header}}" title="{{dialogWindows[0].label}}" subheader="{{dialogWindows[0].subheader}}">
+            <bk-button ng-if="dialogWindows[0].closeButton" glyph="sap-icon--decline" aria-label="Close dialog window" round="::true" compact="::true" ng-click="closeDialogWindow()"></bk-button>
+        </bk-dialog-header>
+        <bk-dialog-body style="padding:0 !important">
+            <iframe title="{{dialogWindows[0].label}}" ng-src="{{ dialogWindows[0].path }}" data-parameters="{{ dialogWindows[0].params }}"></iframe>
+        </bk-dialog-body>
+    </bk-dialog>
+    <!-- Dialog -->
+    <bk-dialog ng-if="dialogs.length > 0" visible="true">
+        <bk-dialog-header header="{{dialogs[0].header}}" title="{{dialogs[0].title}}" subheader="{{dialogs[0].subheader}}">
+            <bk-button ng-if="dialogs[0].closeButton" glyph="sap-icon--decline" aria-label="Close dialog" compact="::true" round="::true" ng-click="closeDialog()"></bk-button>
+        </bk-dialog-header>
+        <bk-dialog-body class="bk-padding{{dialogs[0].preformatted ? ' bk-preformatted' : ''}}">{{dialogs[0].message}}</bk-dialog-body>
+        <bk-dialog-footer compact="::true">
+            <bk-bar-element ng-repeat="button in dialogs[0].buttons track by button.id">
+                <bk-button label="{{button.label}}" decisive="true" ng-click="closeDialog(button.id)" state="{{button.state}}">
+                </bk-button>
+            </bk-bar-element>
+        </bk-dialog-footer>
+    </bk-dialog>
+    <!-- Alert -->
+    <bk-message-box ng-if="messageBoxes.length > 0" visible="::true" title="{{messageBoxes[0].title}}" type="{{messageBoxes[0].type}}">
+        <p class="fd-text{{messageBoxes[0].preformatted ? ' bk-preformatted' : ''}}">{{messageBoxes[0].message}}</p>
+        <bk-message-box-footer compact="true">
+            <bk-bar-element ng-repeat="button in messageBoxes[0].buttons track by button.id">
+                <bk-button label="{{button.label}}" decisive="true" ng-click="closeAlert(button.id)" state="{{button.state}}">
+                </bk-button>
+            </bk-bar-element>
+        </bk-message-box-footer>
+    </bk-message-box>
+    <!-- Form dialog -->
+    <bk-dialog ng-if="formDialogs.length > 0" visible="::true" window-width="{{formDialogs[0].width}}" window-height="{{formDialogs[0].height}}" window-max-width="{{formDialogs[0].maxWidth}}" window-max-height="{{formDialogs[0].maxHeight}}"
+        window-min-width="{{formDialogs[0].minWidth}}" window-min-height="{{formDialogs[0].minHeight}}">
+        <bk-dialog-header header="{{formDialogs[0].header}}" title="{{formDialogs[0].title}}" subheader="{{formDialogs[0].subheader}}">
+        </bk-dialog-header>
+        <bk-dialog-body class="bk-padding">
+            <bk-fieldset ng-form="formDialog.form">
+                <bk-form-group transclude-classes="bk-vbox bk-box--gap">
+                    <!-- Input -->
+                    <bk-form-item ng-repeat-start="(id, item) in formDialogs[0].form track by id" ng-if="item.controlType === 'input' && item.type !== 'number' && formItemVisible(item.visibleOn, item.hiddenOn)">
+                        <bk-form-label for="{{id}}" colon="true">{{item.label}}</bk-form-label>
+                        <bk-form-input-message state="{{formDialog.form['n' + id].$valid ? '' : 'error'}}" message="item.errorMsg || 'Invalid input'" message-fixed="true">
+                            <bk-input id="{{id}}" type="{{item.type}}" ng-attr-placeholder="{{item.placeholder}}" name="{{ 'n' + id }}" ng-trim="false" ng-model="item.value" bk-focus="{{item.focus}}"
+                                state="{{ formDialog.form['n' + id].$valid ? '' : 'error' }}" ng-required="item.required" ng-minlength="item.minlength || 0" ng-disabled="formItemDisabled(item.enabledOn, item.disabledOn)"
+                                ng-maxlength="item.maxlength || -1" ng-attr-min="{{item.min}}" ng-attr-max="{{item.max}}" input-rules="item.inputRules || {}"
+                                ng-keyup="$event.keyCode == 13 && item.submitOnEnter && formDialog.form.$valid && closeFormDialog(true)">
+                            </bk-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
+                    <!-- Number input -->
+                    <bk-form-item ng-if="item.controlType === 'input' && item.type === 'number' && formItemVisible(item.visibleOn, item.hiddenOn)">
+                        <bk-form-label for="{{id}}" colon="true">{{item.label}}</bk-form-label>
+                        <bk-form-input-message inactive="formDialog.form['n' + id].$valid" type="error" message="item.errorMsg || 'Invalid input'" message-fixed="true">
+                            <bk-step-input input-id="{{id}}" type="{{item.type}}" placeholder="{{item.placeholder}}" name="{{ 'n' + id }}" ng-trim="false" ng-model="item.value" bk-focus="{{item.focus}}"
+                                state="{{ formDialog.form['n' + id].$valid ? '' : 'error' }}" ng-disabled="formItemDisabled(item.enabledOn, item.disabledOn)" ng-required="item.required" min="item.min" max="item.max" step="item.step">
+                            </bk-step-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
+                    <!-- Textarea -->
+                    <bk-form-item ng-if="item.controlType === 'textarea' && formItemVisible(item.visibleOn, item.hiddenOn)">
+                        <bk-form-label for="{{id}}" colon="true">{{item.label}}</bk-form-label>
+                        <bk-form-input-message state="{{formDialog.form['n' + id].$valid ? '' : 'error'}}" message="item.errorMsg || 'Invalid input'" message-fixed="true">
+                            <bk-textarea id="{{id}}" ng-attr-placeholder="{{item.placeholder}}" name="{{ 'n' + id }}" ng-trim="false" ng-model="item.value" bk-focus="{{item.focus}}"
+                                state="{{ formDialog.form['n' + id].$valid ? '' : 'error' }}" ng-disabled="formItemDisabled(item.enabledOn, item.disabledOn)" ng-required="item.required" ng-minlength="item.minlength || 0"
+                                ng-attr-rows="{{item.rows || '3'}}" ng-maxlength="item.maxlength || -1" input-rules="item.inputRules || {}">
+                            </bk-textarea>
+                        </bk-form-input-message>
+                    </bk-form-item>
+                    <!-- Checkbox -->
+                    <bk-form-item ng-if="item.controlType === 'checkbox' && formItemVisible(item.visibleOn, item.hiddenOn)">
+                        <bk-checkbox id="{{id}}" name="{{ 'n' + id }}" ng-disabled="formItemDisabled(item.enabledOn, item.disabledOn)" state="{{ formDialog.form['n' + id].$valid ? '' : 'error' }}" ng-model="item.value">
+                        </bk-checkbox>
+                        <bk-checkbox-label for="{{id}}">{{item.label}}</bk-checkbox-label>
+                    </bk-form-item>
+                    <!-- Radio -->
+                    <bk-form-item ng-if="item.controlType === 'radio' && formItemVisible(item.visibleOn, item.hiddenOn)">
+                        <bk-form-label colon="true">{{item.label}}</bk-form-label>
+                        <bk-radio id="{{'ri' + $index}}" name="{{ 'n' + id }}" state="{{ formDialog.form['n' + id].$valid ? '' : 'error' }}" ng-model="item.value" ng-value="option.value" ng-required="item.required"
+                            ng-disabled="formItemDisabled(item.enabledOn, item.disabledOn)" ng-repeat-start="option in item.options track by option.value"></bk-radio>
+                        <bk-radio-label for="{{'ri' + $index}}" ng-repeat-end>{{option.label}}</bk-radio-label>
+                    </bk-form-item>
+                    <!-- Dropdown -->
+                    <bk-form-item ng-if="item.controlType === 'dropdown' && formItemVisible(item.visibleOn, item.hiddenOn)" ng-repeat-end>
+                        <bk-form-label colon="true" required="{{item.required}}" id="{{id}}">
+                            {{ item.label }}
+                        </bk-form-label>
+                        <bk-select placeholder="{{item.placeholder}}" name="{{ 'n' + id }}" label-id="{{ item.id }}" state="{{ formDialog.form['n' + id].$valid ? '' : 'error' }}"
+                            message="formDialog.form['n' + id].$valid ? undefined : item.errorMsg || 'Invalid choice'" ng-required="item.required" is-disabled="formItemDisabled(item.enabledOn, item.disabledOn)" dropdown-fixed="true"
+                            ng-model="item.value" dropdown-fixed="true">
+                            <bk-option text="{{ option.label }}" value="option.value" ng-repeat="option in item.options track by option.value">
+                            </bk-option>
+                        </bk-select>
+                    </bk-form-item>
+                </bk-form-group>
+            </bk-fieldset>
+        </bk-dialog-body>
+        <bk-dialog-footer compact="::true">
+            <bk-bar-element>
+                <bk-button label="{{formDialogs[0].submitLabel || 'Submit'}}" decisive="true" ng-click="closeFormDialog(true)" state="emphasized" type="submit" ng-disabled="!formDialog.form.$valid">
+                </bk-button>
+            </bk-bar-element>
+            <bk-bar-element>
+                <bk-button label="{{formDialogs[0].cancelLabel || 'Cancel'}}" ng-click="closeFormDialog()" state="transparent">
+                </bk-button>
+            </bk-bar-element>
+        </bk-dialog-footer>
+    </bk-dialog>
+    <!-- Busy Dialog -->
+    <bk-dialog ng-if="busyDialog.id !== ''" visible="::true">
+        <bk-dialog-body class="bk-center">
+            <bk-busy-indicator-extended size="l">{{ busyDialog.message }}</bk-busy-indicator-extended>
+        </bk-dialog-body>
+    </bk-dialog>
+</div>

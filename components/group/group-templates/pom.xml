@@ -122,6 +122,18 @@
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-template-typescript</artifactId>
 		</dependency>
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-template-view</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-template-editor</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-template-perspective</artifactId>
+		</dependency>
     	
     </dependencies>
     

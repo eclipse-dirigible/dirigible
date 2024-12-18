@@ -1,0 +1,75 @@
+/*
+ * Copyright (c) 2024 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v2.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ */
+const view = angular.module('view', [
+    'blimpKit',
+    'platformView',
+    'platformDialogs', // Only if the view is expected to work outside the platform
+    'platformContextMenu' // Only if the view is expected to work outside the platform
+]);
+// Initialize controller
+view.controller('ViewController', ($scope, ViewParameters) => {
+    const Dialog = new DialogHub();
+    const ContextMenu = new ContextMenuHub();
+
+    $scope.title = 'This is a Dirigible view!';
+    $scope.dataParameters = ViewParameters.get();
+    if (!$scope.dataParameters.hasOwnProperty('container')) {
+        $scope.subtitle = 'That is opened inside Dirigible!';
+    } else {
+        $scope.subtitle = 'That is opened outside Dirigible!';
+    }
+    $scope.subtitle += '\nRight-click to show context menu.';
+
+    $scope.showContextMenu = (event) => {
+        event.preventDefault();
+        ContextMenu.showContextMenu({
+            ariaLabel: '{{viewName}} contextmenu',
+            posX: event.clientX,
+            posY: event.clientY,
+            icons: true,
+            items: [
+                {
+                    id: AlertTypes.Information,
+                    label: 'Alert (info)',
+                    leftIconClass: 'sap-icon--information',
+                },
+                {
+                    id: AlertTypes.Warning,
+                    label: 'Alert (warn)',
+                    leftIconClass: 'sap-icon--warning',
+                },
+                {
+                    id: AlertTypes.Error,
+                    label: 'Alert (negative)',
+                    leftIconClass: 'sap-icon--error',
+                },
+                {
+                    id: AlertTypes.Success,
+                    label: 'Alert (positive)',
+                    leftIconClass: 'sap-icon--sys-enter-2',
+                    separator: true
+                },
+                {
+                    id: AlertTypes.Confirmation,
+                    label: 'Alert (confirm)',
+                    leftIconClass: 'sap-icon--sys-enter-2',
+                },
+            ]
+        }).then((id) => {
+            if (id) Dialog.showAlert({
+                title: 'Dialog selected',
+                message: `You selected alert dialog with id '${id}'`,
+                type: id
+            });
+        });
+    };
+});

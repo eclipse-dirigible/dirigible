@@ -5,14 +5,14 @@
  */
 export function getTemplate() {
 	return {
-		name: "AngularJS (UI)",
-		description: "HTML5 Template with AngularJS",
+		name: 'View with HTTP data requests (UI)',
+		description: 'Dirigible view with tables and HTTP data requests.',
 		sources: [{
-			location: "/template-html/index.html.template", 
-			action: "generate",
-			rename: "{{fileName}}.html",
-			start : "[[",
-			end : "]]"
+			location: '/template-html/index.html.template',
+			action: 'generate',
+			rename: '{{fileName}}.html',
+			start: '[[',
+			end: ']]'
 		}],
 		parameters: [],
 		order: 30

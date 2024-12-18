@@ -189,13 +189,55 @@
         <module>api/api-pdf</module>
         <module>api/api-junit</module>
 
+		<!-- Platform -->
+		<module>platform/platform-core</module>
+		<module>platform/platform-branding</module>
+		<module>platform/platform-about</module>
+		<module>platform/perspective-settings</module>
+
+		<!-- Platform IDE -->
+		<module>platform-ide/shell-ide</module>
+		<module>platform-ide/perspective-workbench</module>
+		<module>platform-ide/perspective-git</module>
+		<module>platform-ide/perspective-documents</module>
+		<module>platform-ide/view-welcome</module>
+		<module>platform-ide/view-search</module>
+		<module>platform-ide/view-projects</module>
+		<module>platform-ide/view-import</module>
+		<module>platform-ide/view-console</module>
+		<module>platform-ide/view-preview</module>
+		<module>platform-ide/view-problems</module>
+		<module>platform-ide/view-properties</module>
+		<module>platform-ide/view-git-branches</module>
+		<module>platform-ide/view-git-staging</module>
+		<module>platform-ide/view-git-history</module>
+		<module>platform-ide/view-git-projects</module>
+		<module>platform-ide/view-terminal</module>
+		<module>platform-ide/view-debugger</module>
+		<module>platform-ide/service-workspace</module>
+		<module>platform-ide/service-transport</module>
+		<module>platform-ide/service-template</module>
+		<module>platform-ide/service-repository</module>
+		<module>platform-ide/service-registry</module>
+		<module>platform-ide/service-publisher</module>
+		<module>platform-ide/service-generate</module>
+		<module>platform-ide/service-actions</module>
+		<module>platform-ide/service-git</module>
+		<module>platform-ide/editor-monaco</module>
+		<module>platform-ide/editor-monaco-extensions</module>
+		<module>platform-ide/editor-bpm</module>
+		<module>platform-ide/editor-image</module>
+		<module>platform-ide/menu-bpm</module>
+
 		<!-- Resources -->
 		<module>resources/resources-core</module>
 		<module>resources/resources-dev-tools</module>
 		<module>resources/resources-flowable-libs</module>
 		<module>resources/resources-mxgraph</module>
 		<module>resources/resources-resources</module>
-		<module>resources/resources-theme-default</module>
+		<module>resources/resources-theme-blimpkit</module>
+		<module>resources/resources-theme-classic</module>
+		<module>resources/resources-theme-high-contrast</module>
 		<module>resources/resources-theme-quartz-dark</module>
 		<module>resources/resources-theme-quartz-light</module>
 		<module>resources/resources-themes</module>
@@ -231,6 +273,9 @@
 		<module>template/template-listener</module>
 		<module>template/template-websocket</module>
 		<module>template/template-typescript</module>
+		<module>template/template-view</module>
+		<module>template/template-editor</module>
+		<module>template/template-perspective</module>
 
 		<!-- Groups -->
 		<module>group/group-api-core</module>
@@ -243,6 +288,8 @@
 		<module>group/group-ide</module>
 		<module>group/group-resources-core</module>
 		<module>group/group-resources</module>
+		<module>group/group-platform</module>
+		<module>group/group-platform-ide</module>
 		<module>group/group-templates</module>
 
 		<!-- Test -->
@@ -401,6 +448,18 @@
 				<type>pom</type>
 			</dependency>
 
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-group-platform</artifactId>
+				<version>${project.version}</version>
+				<type>pom</type>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-group-platform-ide</artifactId>
+				<version>${project.version}</version>
+				<type>pom</type>
+			</dependency>
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
 				<artifactId>dirigible-components-group-ide</artifactId>
@@ -1041,6 +1100,177 @@
 				<artifactId>dirigible-components-ide-ui-report</artifactId>
 				<version>${project.version}</version>
 			</dependency>
+
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-shell-ide</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-perspective-workbench</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-perspective-git</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-perspective-documents</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-perspective-settings</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-view-welcome</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-view-search</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-view-projects</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-view-import</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-view-console</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-view-preview</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-view-problems</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-view-properties</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-view-git-branches</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-view-git-staging</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-view-git-history</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-view-git-projects</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-view-terminal</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-view-debugger</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-service-workspace</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-service-transport</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-service-template</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-service-repository</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-service-registry</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-service-publisher</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-service-generate</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-service-actions</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-service-git</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-editor-monaco</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-editor-monaco-extensions</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-editor-bpm</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-editor-image</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-menu-bpm</artifactId>
+				<version>${project.version}</version>
+			</dependency>
 			
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
@@ -1153,7 +1383,17 @@
 			</dependency>
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-resources-theme-default</artifactId>
+				<artifactId>dirigible-components-resources-theme-blimpkit</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-resources-theme-classic</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-resources-theme-high-contrast</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
@@ -1171,6 +1411,22 @@
 				<artifactId>dirigible-components-resources-themes</artifactId>
 				<version>${project.version}</version>
 			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-platform-core</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-platform-about</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-platform-branding</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
 				<artifactId>dirigible-components-template-application-angular</artifactId>
@@ -1294,6 +1550,21 @@
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
 				<artifactId>dirigible-components-template-typescript</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-template-view</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-template-editor</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-template-perspective</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			

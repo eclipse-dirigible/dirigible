@@ -1,3 +1,5 @@
 {
-    "guid": "template-application-dao"
+    "guid": "template-application-dao",
+    "dependencies": [],
+    "actions": []
 }

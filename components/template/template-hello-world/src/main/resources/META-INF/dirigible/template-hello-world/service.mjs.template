@@ -1,3 +1,6 @@
 import { response } from "sdk/http";
 
+response.setContentType('text/plain');
 response.println("Hello World!");
+response.flush();
+response.close();

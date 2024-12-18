@@ -1,0 +1,5 @@
+{
+    "module": "{{projectName}}/configs/{{fileName}}-perspective-menu.js",
+    "extensionPoint": "platform-menus",
+    "description": "{{viewName}} perspective menu"
+}

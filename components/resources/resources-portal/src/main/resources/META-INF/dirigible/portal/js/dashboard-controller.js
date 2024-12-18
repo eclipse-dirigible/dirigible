@@ -61,7 +61,7 @@ dashboard.controller('DashboardController', ['$scope', '$http', 'messageHub', fu
         if (widgetData.size == "small") {
             widgetContainer.className = 'fd-col fd-col--6 fd-col-md--3 fd-col-lg--3 fd-col-xl--3';
             iframe.style.width = '100%';
-            iframe.style.height = '120px';
+            iframe.style.height = '160px';
         } else if (widgetData.size == "medium") {
             widgetContainer.className = 'fd-col fd-col--12 fd-col-md--6 fd-col-lg--6 fd-col-xl--6';
             iframe.style.width = '100%';
@@ -69,7 +69,7 @@ dashboard.controller('DashboardController', ['$scope', '$http', 'messageHub', fu
         } else {
             widgetContainer.className = 'fd-col fd-col--12 fd-col-md--6 fd-col-lg--6 fd-col-xl--6';
             iframe.style.width = '100%';
-            iframe.style.height = '320px';
+            iframe.style.height = '340px';
         }
 
         widgetContainer.style.margin = '0.5rem 0'

@@ -194,17 +194,17 @@
 
 		<!-- UI -->
 		<jquery-ui.version>1.13.0</jquery-ui.version>
-		<sap-theming__theming-base-content.version>11.7.0</sap-theming__theming-base-content.version>
+		<sap-theming__theming-base-content.version>11.18.2</sap-theming__theming-base-content.version>
 		<chart.js.version>4.4.3</chart.js.version>
 		<sortablejs.version>1.15.2</sortablejs.version>
-		<fundamental-styles.version>0.30.2</fundamental-styles.version>
+		<fundamental-styles.version>0.38.0</fundamental-styles.version>
 		<angular-aria.version>1.8.2</angular-aria.version>
 		<split.js.version>1.6.5</split.js.version>
 		<diff.version>5.1.0</diff.version>
 		<monaco-editor.version>0.40.0</monaco-editor.version>
 		<requirejs.version>2.3.6</requirejs.version>
 		<jstree.version>3.3.12</jstree.version>
-		<jquery.version>3.6.0</jquery.version>
+		<jquery.version>3.7.1</jquery.version>
 		<jqplot.version>1.0.8r1250</jqplot.version>
 		<es5-shim.version>4.6.7</es5-shim.version>
 		<angular-file-upload.version>2.6.1</angular-file-upload.version>
@@ -427,13 +427,23 @@
 								<exclude>
 									**/src/main/resources/META-INF/dirigible/ide-bpm/**</exclude>
 								<exclude>
+									**/src/main/resources/META-INF/dirigible/editor-bpm/**</exclude>
+								<exclude>
 									**/src/main/resources/META-INF/dirigible/ide-monaco/**</exclude>
+									<exclude>
+									**/src/main/resources/META-INF/dirigible/editor-monaco/**</exclude>
 								<exclude>
 									**/src/main/resources/META-INF/dirigible/ide-swagger/**</exclude>
 								<exclude>
+									**/src/main/resources/META-INF/dirigible/editor-swagger/**</exclude>
+								<exclude>
 									**/src/main/resources/META-INF/dirigible/resources-core/ui/**</exclude>
 								<exclude>
+									**/src/main/resources/META-INF/dirigible/platform-core/ui/**</exclude>
+								<exclude>
 									**/src/main/resources/META-INF/dirigible/ide-terminal/js/**</exclude>
+								<exclude>
+									**/src/main/resources/META-INF/dirigible/view-terminal/js/**</exclude>
 								<exclude>
 									**/src/main/resources/META-INF/dirigible/dev-tools/**</exclude>
 								<exclude>
@@ -442,6 +452,8 @@
 									**/src/main/resources/META-INF/dirigible/utils/jsonpath.js</exclude>
 								<exclude>
 									**/src/main/resources/META-INF/dirigible/ide-designer/designer/**</exclude>
+								<exclude>
+									**/src/main/resources/META-INF/dirigible/editor-designer/designer/**</exclude>
 							</excludes>
 							<skipExistingHeaders>true</skipExistingHeaders>
 						</configuration>

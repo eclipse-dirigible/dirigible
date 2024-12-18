@@ -1,0 +1,6 @@
+{
+    "location": "/ide-monaco-extensions/extensions/api.extensionpoint",
+    "name": "api-modules",
+    "description": "API Modules Extension Point",
+    "createdBy": "system"
+}

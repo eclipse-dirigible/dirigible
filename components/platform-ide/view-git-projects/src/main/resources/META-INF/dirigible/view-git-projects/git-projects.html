@@ -1,0 +1,74 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="gitProjects" ng-controller="GitProjectsController">
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+    <title config-title></title>
+    <script type="text/javascript" src="configs/git-projects.js"></script>
+    <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=editor-js"></script>
+    <script type="text/javascript" src="/services/web/service-git/git.js"></script>
+    <script type="text/javascript" src="/webjars/jstree/jstree.min.js"></script>
+    <link type="text/css" rel="stylesheet" href="/services/web/platform-core/ui/styles/jstree.css" />
+    <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+    <script type="text/javascript" src="js/git-projects.js"></script>
+  </head>
+
+  <body class="bk-vbox">
+    <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">
+      {{state.busyText}}
+    </bk-busy-indicator-extended>
+    <bk-toolbar compact="true" ng-show="!state.error && !state.isBusy">
+      <bk-toolbar-spacer></bk-toolbar-spacer>
+      <bk-button state="transparent" glyph="sap-icon--duplicate" title="Clone" aria-label="Clone" ng-click="cloneDialog()"></bk-button>
+      <bk-button state="transparent" glyph="sap-icon--download" title="Pull all projects" aria-label="Pull all projects" ng-click="pullDialog(true)"></bk-button>
+      <bk-button state="transparent" glyph="sap-icon--upload" title="Push all projects" aria-label="Push all projects" ng-click="pushDialog(true)"></bk-button>
+      <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="reloadProjects()"></bk-button>
+      <bk-toolbar-separator></bk-toolbar-separator>
+      <bk-button state="transparent" toggled="searchVisible" glyph="sap-icon--search" title="Toggle search" aria-label="Toggle search" ng-click="toggleSearch()">
+      </bk-button>
+      <bk-toolbar-separator></bk-toolbar-separator>
+      <bk-popover>
+        <bk-popover-control>
+          <bk-button state="transparent" is-menu="true" label="{{ selectedWorkspace }}" title="Workspace select">
+          </bk-button>
+        </bk-popover-control>
+        <bk-popover-body align="bottom-right" no-arrow="true">
+          <bk-menu aria-label="workspaces menu">
+            <bk-menu-item title="{{ name }}" ng-repeat="name in workspaceNames track by $index" is-selected="isSelectedWorkspace(name)" ng-click="switchWorkspace(name)">
+            </bk-menu-item>
+          </bk-menu>
+        </bk-popover-body>
+      </bk-popover>
+    </bk-toolbar>
+    <bk-toolbar ng-if="searchVisible && !state.error && !state.isBusy">
+      <bk-input type="search" placeholder="Search" ng-keyup="search()" ng-model="searchField.text" bk-focus="true">
+      </bk-input>
+    </bk-toolbar>
+    <div id="dgProjects" class="jstree-fiori--fill jstree-fiori--context-menu" bk-scrollbar ng-on-contextmenu="showContextMenu($event)" ng-show="!state.error && !state.isBusy"></div>
+    <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+      <bk-message-page-title>Something went wrong!</bk-message-page-title>
+      <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+      <bk-message-page-actions>
+        <bk-button compact="::true" label="Reload panel" ng-click="init()">
+        </bk-button>
+      </bk-message-page-actions>
+    </bk-message-page>
+    <theme></theme>
+  </body>
+
+</html>

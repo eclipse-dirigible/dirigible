@@ -1,0 +1,5 @@
+{
+    "module": "perspective-settings/configs/settings.js",
+    "extensionPoint": "platform-perspectives",
+    "description": "Settings perspective"
+}

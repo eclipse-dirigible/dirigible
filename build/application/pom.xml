@@ -175,6 +175,20 @@
 			<type>pom</type>
 		</dependency>
 
+		<!-- Platform -->
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-group-platform</artifactId>
+			<type>pom</type>
+		</dependency>
+
+		<!-- Platform IDE -->
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-group-platform-ide</artifactId>
+			<type>pom</type>
+		</dependency>
+
 		<!-- API -->
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>

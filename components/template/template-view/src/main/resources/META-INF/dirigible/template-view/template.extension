@@ -1,0 +1,5 @@
+{
+    "extensionPoint": "platform-templates",
+    "module": "template-view/template.js",
+    "description": "Dirigible View Template"
+}

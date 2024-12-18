@@ -1,0 +1,5 @@
+{
+    "module": "{{projectName}}/configs/{{fileName}}-view.js",
+    "extensionPoint": "platform-views",
+    "description": "{{viewName}} view"
+}

@@ -1,0 +1,45 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="view" ng-controller="ViewController">
+
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<!-- Fake icon -->
+		<link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+		<!-- Title directive that will automatically create a title based on the view config -->
+		<title config-title></title>
+		<!-- View config -->
+		<script type="text/javascript" src="/services/web/${projectName}/configs/${fileName}-view.js"></script>
+		<!-- View services and styles -->
+		<script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+		<link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+		<!-- View controller -->
+		<script type="text/javascript" src="js/${fileName}.js"></script>
+	</head>
+
+	<body ng-on-contextmenu="showContextMenu($event)">
+		<bk-message-page glyph="sap-icon--information">
+			<bk-message-page-title>{{::title}}</bk-message-page-title>
+			<bk-message-page-subtitle class="bk-preformatted">{{::subtitle}}</bk-message-page-subtitle>
+		</bk-message-page>
+		<!-- In case the view is opened outside of the layout or shell -->
+		<dialogs ng-if="!dataParameters.container"></dialogs>
+		<context-menu ng-if="!dataParameters.container"></context-menu>
+		<!-- Theme support. This must always be placed last -->
+		<theme></theme>
+	</body>
+
+</html>

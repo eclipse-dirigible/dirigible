@@ -1,0 +1,4 @@
+{
+	"description": "Extension Point for the platform theme providers",
+	"name": "platform-themes"
+}

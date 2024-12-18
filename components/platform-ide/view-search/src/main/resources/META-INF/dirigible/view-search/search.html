@@ -1,0 +1,73 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="search" ng-controller="SearchController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="configs/search-view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=editor-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="/services/web/platform-core/ui/platform/editors.js"></script>
+        <script src="js/search.js"></script>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar no-bottom-border="true" compact="true">
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-popover>
+                <bk-popover-control>
+                    <bk-button ng-disabled="uploader.isUploading" state="transparent" is-menu="true" label="{{ selectedWorkspace }}">
+                    </bk-button>
+                </bk-popover-control>
+                <bk-popover-body align="bottom-right" no-arrow="true">
+                    <bk-menu aria-label="workspaces menu">
+                        <bk-menu-item title="{{ name }}" ng-repeat="name in workspaceNames" is-selected="isSelectedWorkspace(name)" ng-click="switchWorkspace(name)">
+                        </bk-menu-item>
+                    </bk-menu>
+                </bk-popover-body>
+            </bk-popover>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="refresh()">
+            </bk-button>
+            <bk-button state="transparent" glyph="sap-icon--clear-filter" title="Clear search" aria-label="Clear search" ng-disabled="search.text === ''" ng-click="clearSearch()">
+            </bk-button>
+        </bk-toolbar>
+        <bk-toolbar compact="true">
+            <bk-input type="search" placeholder="Search..." ng-keyup="searchContent()" ng-model="search.text">
+            </bk-input>
+        </bk-toolbar>
+        <div bk-scrollbar class="bk-fill-parent" ng-on-contextmenu="showContextMenu($event)">
+            <bk-message-page glyph="{{ searchAreaIcon }}" ng-hide="search.searching || search.results.length > 0">
+                <bk-message-page-title>{{ searchAreaTitle }}</bk-message-page-title>
+                <bk-message-page-subtitle>{{ searchAreaSubtitle }}</bk-message-page-subtitle>
+            </bk-message-page>
+            <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="{{ !search.searching }}" size="l">
+                Searching...
+            </bk-busy-indicator-extended>
+            <bk-list compact="true" byline="true" ng-show="search.results.length > 0">
+                <bk-list-item id="{{ $index }}" ng-repeat="item in search.results track by $index" selected="selectedItemIndex === $index" ng-click="itemClick($index)" ng-dblclick="openFile($index);">
+                    <bk-list-content item-title="{{ item.name }}">
+                        {{ item.path }}
+                    </bk-list-content>
+                </bk-list-item>
+            </bk-list>
+        </div>
+        <theme></theme>
+    </body>
+
+</html>

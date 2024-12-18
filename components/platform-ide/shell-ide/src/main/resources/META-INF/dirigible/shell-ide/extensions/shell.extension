@@ -1,0 +1,5 @@
+{
+    "module": "shell-ide/configs/shell.js",
+    "extensionPoint": "platform-shells",
+    "description": "Dirigible IDE Shell"
+}

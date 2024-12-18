@@ -1,0 +1,5 @@
+{
+    "module": "perspective-workbench/configs/menu/perspective-menu.js",
+    "extensionPoint": "platform-menus",
+    "description": "Workbench perspective menu"
+}

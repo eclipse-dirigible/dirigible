@@ -1,0 +1,5 @@
+{
+    "module": "view-problems/configs/problems-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Problems View"
+}

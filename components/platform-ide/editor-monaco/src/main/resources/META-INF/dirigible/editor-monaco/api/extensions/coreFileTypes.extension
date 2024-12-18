@@ -1,0 +1,5 @@
+{
+    "module": "editor-monaco/api/extensions/core.js",
+    "extensionPoint": "platform-file-types",
+    "description": "Core File Types"
+}

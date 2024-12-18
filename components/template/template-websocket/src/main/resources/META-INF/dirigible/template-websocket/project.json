@@ -1,3 +1,5 @@
 {
-    "guid": "template-websocket"
+    "guid": "template-websocket",
+    "dependencies": [],
+    "actions": []
 }

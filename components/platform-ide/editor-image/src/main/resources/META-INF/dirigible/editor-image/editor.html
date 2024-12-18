@@ -1,0 +1,38 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="image-app" ng-controller="ImageViewController">
+
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+		<title config-title></title>
+		<script type="text/javascript" src="/services/web/editor-image/configs/image-editor.js"></script>
+		<script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=editor-js"></script>
+		<link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+		<script type="text/javascript" src="js/editor.js"></script>
+	</head>
+
+	<body class="bk-center" bk-scrollbar>
+		<bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{::state.busyText}}</bk-busy-indicator-extended>
+		<img id="image-view" class="bk-checkered-bg bk-contain-image" style="height:auto" ng-src="{{ imageLink }}" alt="Image" ng-show="!state.error && !state.isBusy" />
+		<bk-message-page glyph="sap-icon--error" ng-if="state.error">
+			<bk-message-page-title>Editor encounterd an error!</bk-message-page-title>
+			<bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+		</bk-message-page>
+		<theme></theme>
+	</body>
+
+</html>

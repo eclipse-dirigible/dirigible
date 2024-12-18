@@ -1,0 +1,132 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="staging" ng-controller="StagingViewController">
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+    <title config-title></title>
+    <script type="text/javascript" src="configs/staging-view.js"></script>
+    <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+    <script type="text/javascript" src="/services/web/service-git/git.js"></script>
+    <script type="text/javascript" src="/webjars/jstree/jstree.min.js"></script>
+    <link type="text/css" rel="stylesheet" href="/services/web/platform-core/ui/styles/jstree.css" />
+    <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+    <script type="text/javascript" src="js/staging.js"></script>
+  </head>
+
+  <body bk-scrollbar class="bk-vbox">
+    <bk-busy-indicator-extended class="bk-fill-parent" size="l" ng-show="loadingGitState">Loading...</bk-busy-indicator-extended>
+    <!-- <div class="bk-center fd-margin-top--tiny">
+      <bk-segmented-button aria-label="View type group">
+        <bk-button compact="true" label="Path" toggled="listType === 'path' ? true : false" ng-click="changeListType('path')">
+        </bk-button>
+        <bk-button compact="true" label="Tree" toggled="listType === 'tree' ? true : false" ng-click="changeListType('tree')">
+        </bk-button>
+      </bk-segmented-button>
+    </div> -->
+    <div class="bk-vbox bk-full-height" ng-hide="loadingGitState">
+      <bk-toolbar no-bottom-border="true" compact="true">
+        <span>Unstaged</span>
+        <bk-toolbar-spacer></bk-toolbar-spacer>
+        <bk-button state="transparent" glyph="sap-icon--add" aria-label="Add to index" title="Add to index" ng-click="addToIndex()">
+        </bk-button>
+        <bk-button state="transparent" glyph="sap-icon--filter-facets" aria-label="Show difference" title="Show difference" ng-click="getSelectedDiff()"></bk-button>
+        <bk-button state="transparent" glyph="sap-icon--reset" aria-label="Revert to last commit" title="Revert to last commit" ng-click="revert()"></bk-button>
+      </bk-toolbar>
+      <div id="unstaged" bk-scrollbar class="jstree-fiori--fill bk-list-border--top bk-list-border--bottom jstree-list-mode" style="flex: 4">
+      </div>
+      <bk-toolbar no-bottom-border="true" compact="true">
+        <span>Staged</span>
+        <bk-toolbar-spacer></bk-toolbar-spacer>
+        <bk-button state="transparent" glyph="sap-icon--less" aria-label="Remove from index" title="Remove from index" ng-click="removeFromIndex()">
+        </bk-button>
+        <bk-button state="transparent" glyph="sap-icon--filter-facets" aria-label="Show difference" title="Show difference" ng-click="getSelectedDiff(false)"></bk-button>
+      </bk-toolbar>
+      <div id="staged" bk-scrollbar class="jstree-fiori--fill bk-list-border--top bk-list-border--bottom jstree-list-mode" style="flex: 4"></div>
+      <!-- <span class="bk-padding--tiny">Commit Message</span>
+      <div class="bk-padding">
+        <bk-textarea compact="true" placeholder="Short description" ng-model="commitData.commitMessage" style="flex: 1"></bk-textarea>
+      </div> -->
+    </div>
+    <div class="fd-container fd-form-layout-grid-container" style="padding: 0.5rem;" ng-hide="loadingGitState" ng-form="forms.credentialsFieldset">
+      <div class="fd-row">
+
+        <div class="fd-col fd-col--wrap">
+          <div class="fd-row">
+            <div class="fd-col">
+              <bk-form-label for="commitMessage" colon="true" title="Commit Message">Commit Message</bk-form-label>
+            </div>
+            <div class="fd-col">
+              <bk-textarea id="commitMessage" placeholder="Short description" ng-model="commitData.commitMessage"></bk-textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="fd-col fd-col-lg--6 fd-col-xl--4 fd-col--wrap">
+          <div class="fd-row">
+            <div class="fd-col fd-col-md--2 fd-col-lg--4 fd-col-xl--12">
+              <bk-form-label for="username" colon="true" title="Username" autocomplete="git-username">Username</bk-form-label>
+            </div>
+            <div class="fd-col fd-col-md--10 fd-col-lg--8 fd-col-xl--12">
+              <bk-input id="username" type="text" placeholder="Username" ng-required="true" ng-model="commitData.username"></bk-input>
+            </div>
+          </div>
+        </div>
+
+        <div class="fd-col fd-col-lg--6 fd-col-xl--4 fd-col--wrap">
+          <div class="fd-row">
+            <div class="fd-col fd-col-md--2 fd-col-lg--4 fd-col-xl--12">
+              <bk-form-label for="email" colon="true" title="Email" autocomplete="git-email">Email</bk-form-label>
+            </div>
+            <div class="fd-col fd-col-md--10 fd-col-lg--8 fd-col-xl--12">
+              <bk-input id="email" type="email" placeholder="email@example.com" ng-required="true" ng-model="commitData.email"></bk-input>
+            </div>
+          </div>
+        </div>
+
+        <div class="fd-col fd-col-lg--6 fd-col-xl--4 fd-col--wrap">
+          <div class="fd-row">
+            <div class="fd-col fd-col-md--2 fd-col-lg--4 fd-col-xl--12">
+              <bk-form-label for="password" colon="true" title="Password or Token" autocomplete="git-pass" style="white-space: break-spaces;">Password or Token</bk-form-label>
+            </div>
+            <div class="fd-col fd-col-md--10 fd-col-lg--8 fd-col-xl--12">
+              <bk-input id="password" type="password" ng-required="true" ng-model="commitData.password"></bk-input>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="fd-container fd-padding-begin-end--tiny" ng-hide="loadingGitState">
+      <div class="fd-row">
+        <div class="fd-col fd-col--6 fd-col-md--4 fd-col-lg--4 fd-col-xl--4">
+          <bk-button class="bk-full-width" label="Commit" ng-click="commit()" ng-disabled="!commitData.commitMessage || !forms.credentialsFieldset.$valid || !stagedFiles.length">
+          </bk-button>
+        </div>
+        <div class="fd-col fd-col--6 fd-col-md--4 fd-col-lg--4 fd-col-xl--4">
+          <bk-button class="bk-full-width" label="Push" ng-click="push()" ng-disabled="!forms.credentialsFieldset.$valid">
+          </bk-button>
+        </div>
+        <div class="fd-col fd-col--12 fd-col-md--4 fd-col-lg--4 fd-col-xl--4">
+          <bk-button class="bk-full-width" state="emphasized" label="Commit & Push" ng-click="commit(true)" ng-disabled="!commitData.commitMessage || !forms.credentialsFieldset.$valid || !stagedFiles.length">
+          </bk-button>
+        </div>
+      </div>
+    </div>
+    <theme></theme>
+  </body>
+
+</html>

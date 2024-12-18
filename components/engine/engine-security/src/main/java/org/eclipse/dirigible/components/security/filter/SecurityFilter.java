@@ -48,14 +48,6 @@ public class SecurityFilter implements Filter {
      */
     private static final Logger logger = LoggerFactory.getLogger(SecurityFilter.class);
     /**
-     * The Constant SKIP_PATH_ANGULAR_ARIA.
-     */
-    private static final String SKIP_PATH_ANGULAR_ARIA = "/services/js/resources-core/services/angular-aria.min.js.map";
-    /**
-     * The Constant SKIP_PATH_SPLIT_JS.
-     */
-    private static final String SKIP_PATH_SPLIT_JS = "/services/js/resources-core/services/split.min.js.map";
-    /**
      * The Constant PATH_WEB_RESOURCES.
      */
     private static final String PATH_WEB_RESOURCES = "/web/resources";
@@ -156,14 +148,6 @@ public class SecurityFilter implements Filter {
                     return;
                 }
             }
-        }
-
-        if (SKIP_PATH_ANGULAR_ARIA.equals(((HttpServletRequest) request).getServletPath())) {
-            return;
-        }
-
-        if (SKIP_PATH_SPLIT_JS.equals(((HttpServletRequest) request).getServletPath())) {
-            return;
         }
 
         chain.doFilter(request, response);

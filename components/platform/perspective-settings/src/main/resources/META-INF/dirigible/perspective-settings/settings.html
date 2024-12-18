@@ -1,0 +1,45 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" ng-app="settings" ng-controller="SettingsController" xmlns="http://www.w3.org/1999/xhtml">
+
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title config-title></title>
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
+        <script type="text/javascript" src="/services/web/perspective-settings/configs/settings.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=perspective-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=perspective-css" />
+        <script type="text/javascript" src="/services/web/perspective-settings/js/settings.js"></script>
+    </head>
+
+    <body>
+        <split direction="horizontal">
+            <split-pane size="20" min-size="280">
+                <bk-list>
+                    <bk-list-item interactive="true" ng-repeat="setting in settings track by setting.id" ng-click="switchSetting(setting.id)" selected="setting.id === activeId">
+                        <bk-list-icon glyph="{{::setting.glyph || 'sap-icon'}}"></bk-list-icon>
+                        <bk-list-title>{{::setting.label}}</bk-list-title>
+                    </bk-list-item>
+                </bk-list>
+            </split-pane>
+            <split-pane size="80" min-size="0">
+                <iframe ng-repeat="setting in settings track by setting.id" ng-show="setting.id === activeId" title="{{::setting.label}}" ng-src="{{::setting.path}}" loading="lazy"></iframe>
+            </split-pane>
+        </split>
+        <theme></theme>
+    </body>
+
+</html>

@@ -1,0 +1,4 @@
+{
+    "name": "platform-windows",
+    "description": "Extension point for dialog windows"
+}

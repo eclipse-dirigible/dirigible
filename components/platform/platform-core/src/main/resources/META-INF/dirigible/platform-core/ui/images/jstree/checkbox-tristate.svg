@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="512"
+   height="512"
+   viewBox="0 0 135.46666 135.46667"
+   version="1.1"
+   id="svg5"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs2">
+    <rect
+       x="627.61184"
+       y="121.77543"
+       width="177.97948"
+       height="167.05091"
+       id="rect20658" />
+    <rect
+       x="-4.6836705"
+       y="17.173458"
+       width="266.96922"
+       height="282.58145"
+       id="rect18876" />
+    <rect
+       x="62.448939"
+       y="37.469364"
+       width="281.02023"
+       height="460.56093"
+       id="rect15709" />
+    <rect
+       x="117.09176"
+       y="143.63256"
+       width="159.2448"
+       height="204.52028"
+       id="rect13120" />
+    <rect
+       x="88.989739"
+       y="138.94889"
+       width="132.704"
+       height="138.94889"
+       id="rect11217" />
+  </defs>
+  <g
+     id="layer1">
+    <text
+       xml:space="preserve"
+       transform="scale(0.26458333)"
+       id="text11215"
+       style="fill:black;fill-opacity:1;line-height:1.25;stroke:none;font-family:sans-serif;font-style:normal;font-weight:normal;font-size:40px;white-space:pre;shape-inside:url(#rect11217)" />
+    <g
+       aria-label=""
+       transform="matrix(3.3866666,0,0,3.3866666,-396.55088,-503.36978)"
+       id="text13118"
+       style="font-size:40px;line-height:1.25;white-space:pre;shape-inside:url(#rect13120)">
+      <text
+         xml:space="preserve"
+         transform="matrix(0.078125,0,0,0.078125,117.0918,148.63281)"
+         id="text15707"
+         style="fill:black;fill-opacity:1;line-height:1.25;stroke:none;font-family:sans-serif;font-style:normal;font-weight:normal;font-size:40px;white-space:pre;shape-inside:url(#rect15709)" />
+      <text
+         xml:space="preserve"
+         transform="matrix(0.078125,0,0,0.078125,117.0918,148.63281)"
+         id="text18874"
+         style="fill:black;fill-opacity:1;line-height:1.25;stroke:none;font-family:sans-serif;font-style:normal;font-weight:normal;font-size:40px;white-space:pre;shape-inside:url(#rect18876)" />
+      <g
+         aria-label=""
+         id="text19058"
+         style="font-size:45.7143px;stroke-width:1.14286">
+        <path
+           d="m 154.23466,148.6328 q 1.16071,0 1.96428,0.80357 0.89286,0.80357 0.89286,2.05358 v 34.28572 q 0,1.25 -0.89286,2.05357 -0.80357,0.80357 -1.96428,0.80357 h -34.28573 q -1.25,0 -2.05357,-0.80357 -0.80357,-0.80357 -0.80357,-2.05357 v -34.28572 q 0,-1.25001 0.80357,-2.05358 0.80357,-0.80357 2.05357,-0.80357 z m 0,2.85715 h -34.28573 v 34.28572 h 34.28573 z"
+           id="path19788" />
+      </g>
+      <text
+         xml:space="preserve"
+         transform="matrix(0.078125,0,0,0.078125,117.0918,148.63281)"
+         id="text20656"
+         style="fill:black;fill-opacity:1;line-height:1.25;stroke:none;font-family:sans-serif;font-style:normal;font-weight:normal;font-size:40px;white-space:pre;shape-inside:url(#rect20658)" />
+      <g
+         aria-label=""
+         id="text20774"
+         style="font-size:3.125px;stroke-width:0.078125"
+         transform="matrix(12.800287,0,0,12.800287,-2035.1539,-1932.3533)">
+        <path
+           d="m 170.4353,163.22038 c 0.0534,0 0.0973,0.0191 0.1316,0.0573 0.0343,0.0381 0.0515,0.0869 0.0515,0.14622 v 1.42409 c 0,0.0551 -0.0171,0.10179 -0.0515,0.13988 -0.0343,0.0424 -0.0783,0.0635 -0.1316,0.0635 h -1.46482 c -0.0496,0 -0.0935,-0.0211 -0.1316,-0.0635 -0.0343,-0.0381 -0.0515,-0.0847 -0.0515,-0.13988 v -1.42412 c 0,-0.0594 0.0172,-0.10812 0.0515,-0.14622 0.0382,-0.0381 0.082,-0.0573 0.1316,-0.0573 z"
+           id="path22638"
+           style="stroke-width:0.0772019" />
+      </g>
+    </g>
+  </g>
+</svg>

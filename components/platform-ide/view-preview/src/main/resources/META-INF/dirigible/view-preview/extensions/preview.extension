@@ -1,0 +1,5 @@
+{
+    "module": "view-preview/configs/preview-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Preview View"
+}

@@ -1,3 +1,5 @@
 {
-    "guid": "template-listener"
+    "guid": "template-listener",
+    "dependencies": [],
+    "actions": []
 }
