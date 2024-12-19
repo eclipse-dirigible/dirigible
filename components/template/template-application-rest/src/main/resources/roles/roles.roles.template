@@ -1,0 +1,12 @@
+[
+#foreach($model in $models)
+    {
+        "name": "${model.name}ReadOnly",
+        "description": "A role that grants read only permission for ${model.name}."
+    },
+    {
+        "name": "${model.name}FullAccess",
+        "description": "A role that grants full access for ${model.name}."
+    }#if($foreach.hasNext),#end
+#end
+]

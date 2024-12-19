@@ -15,6 +15,8 @@ export function generate(model, parameters) {
 };
 
 export function getTemplate(parameters) {
+    console.log(JSON.stringify(parameters));
+
     const daoTemplate = daoTemplateManager.getTemplate(parameters);
 
     let templateSources = [{
@@ -57,12 +59,25 @@ export function getTemplate(parameters) {
         rename: "tsconfig.json",
         engine: "velocity"
     }];
+
+    if (parameters && parameters.generateDefaultRoles) {
+        templateSources.push({
+            location: "/template-application-rest/roles/roles.roles.template",
+            action: "generate",
+            engine: "velocity",
+            rename: "gen/{{genFolderName}}/roles/default-roles.roles"
+        });
+    }
+
     templateSources = templateSources.concat(daoTemplate.sources);
 
     let templateParameters = [];
     templateParameters = templateParameters.concat(daoTemplate.parameters);
-    templateParameters.push
-
+    templateParameters.push({
+        name: "generateDefaultRoles",
+        label: "Do you want to generate default roles",
+        type: "checkbox",
+    });
     templateParameters.push({
         name: "addOpenApiInfo",
         label: "OpenAPI Info (Optional)",
