@@ -14,81 +14,82 @@
 <!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="dashboard" ng-controller="DashboardController">
 
-<head>
-    <meta charset="utf-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
-    <title dg-view-title></title>
-    <script type="text/javascript" src="../services/dashboard.js"></script>
-    <theme></theme>
-    <script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=application-view-js">
-    </script>
-    <link type="text/css" rel="stylesheet"
-        href="/services/js/resources-core/services/loader.js?id=application-view-css" />
-    <script type="text/javascript" src="../js/dashboard-controller.js"></script>
-    <script type="text/javascript" src="/webjars/chart.js/4.4.3/dist/chart.umd.js"></script>
-    <style>
-        .tile-auto-layout {
-            height: auto;
-            width: auto;
-            max-width: 99%;
-            margin: 1px;
-        }
+    <head>
+        <meta charset="utf-8" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title dg-view-title></title>
+        <script type="text/javascript" src="../services/dashboard.js"></script>
+        <theme></theme>
+        <script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=application-view-js">
+        </script>
+        <link type="text/css" rel="stylesheet"
+            href="/services/js/resources-core/services/loader.js?id=application-view-css" />
+        <script type="text/javascript" src="../js/dashboard-controller.js"></script>
+        <script type="text/javascript" src="/webjars/chart.js/4.4.3/dist/chart.umd.js"></script>
+        <style>
+            .tile-auto-layout {
+                height: auto;
+                width: auto;
+                max-width: 99%;
+                margin: 1px;
+            }
 
-        .overflow-h {
-            overflow: hidden;
-        }
-    </style>
-</head>
+            .overflow-h {
+                overflow: hidden;
+            }
 
-<body fd-scrollbar class="fd-padding-begin-end--tiny">
-    <fd-busy-indicator-extended class="dg-fill-parent" ng-hide="state.error || !state.isBusy" dg-size="l">
-        {{state.busyText}}
-    </fd-busy-indicator-extended>
+        </style>
+    </head>
 
-    <div class="fd-container" ng-show="!state.error && !state.isBusy">
-        <h2 fd-title header-size="2" class="fd-margin-top--sm fd-margin-bottom--tiny">
-            Welcome to Dashboard
-        </h2>
+    <body fd-scrollbar class="fd-padding-begin-end--tiny">
+        <fd-busy-indicator-extended class="dg-fill-parent" ng-hide="state.error || !state.isBusy" dg-size="l">
+            {{state.busyText}}
+        </fd-busy-indicator-extended>
 
-        <fd-panel expanded="true" class="fd-col fd-col--12">
-            <fd-panel-header>
-                <fd-panel-expand></fd-panel-expand>
-                <h4 fd-panel-title>Metrics</h4>
-            </fd-panel-header>
-            <fd-panel-content class="overflow-h" aria-label="Small Widgets">
-                <div id="small-widget-container" class="fd-row" style="margin: 0.5rem">
-                </div>
-            </fd-panel-content>
-        </fd-panel>
-        <fd-panel expanded="true" class="fd-col fd-col--12">
-            <fd-panel-header>
-                <fd-panel-expand></fd-panel-expand>
-                <h4 fd-panel-title>Performance</h4>
-            </fd-panel-header>
-            <fd-panel-content class="overflow-h" aria-label="Medium Widgets">
-                <div id="medium-widget-container" class="fd-row" style="margin: 0.5rem">
-                </div>
-            </fd-panel-content>
-        </fd-panel>
-        <fd-panel expanded="true" class="fd-col fd-col--12">
-            <fd-panel-header>
-                <fd-panel-expand></fd-panel-expand>
-                <h4 fd-panel-title>Statistics</h4>
-            </fd-panel-header>
-            <fd-panel-content class="overflow-h" aria-label="Large Widgets">
-                <div id="large-widget-container" class="fd-row" style="margin: 1rem">
-                </div>
-            </fd-panel-content>
-        </fd-panel>
+        <div class="fd-container" ng-show="!state.error && !state.isBusy">
+            <h2 fd-title header-size="2" class="fd-margin-top--sm fd-margin-bottom--tiny">
+                Welcome to Dashboard
+            </h2>
+
+            <fd-panel expanded="true" class="fd-col fd-col--12" ng-show="isWidgetContainerUsed[0]">
+                <fd-panel-header>
+                    <fd-panel-expand></fd-panel-expand>
+                    <h4 fd-panel-title>Metrics</h4>
+                </fd-panel-header>
+                <fd-panel-content class="overflow-h" aria-label="Small Widgets">
+                    <div id="small-widget-container" class="fd-row" style="margin: 0.5rem">
+                    </div>
+                </fd-panel-content>
+            </fd-panel>
+            <fd-panel expanded="true" class="fd-col fd-col--12" ng-show="isWidgetContainerUsed[1]">
+                <fd-panel-header>
+                    <fd-panel-expand></fd-panel-expand>
+                    <h4 fd-panel-title>Performance</h4>
+                </fd-panel-header>
+                <fd-panel-content class="overflow-h" aria-label="Medium Widgets">
+                    <div id="medium-widget-container" class="fd-row" style="margin: 0.5rem">
+                    </div>
+                </fd-panel-content>
+            </fd-panel>
+            <fd-panel expanded="true" class="fd-col fd-col--12" ng-show="isWidgetContainerUsed[2]">
+                <fd-panel-header>
+                    <fd-panel-expand></fd-panel-expand>
+                    <h4 fd-panel-title>Statistics</h4>
+                </fd-panel-header>
+                <fd-panel-content class="overflow-h" aria-label="Large Widgets">
+                    <div id="large-widget-container" class="fd-row" style="margin: 1rem">
+                    </div>
+                </fd-panel-content>
+            </fd-panel>
 
 
-        <fd-message-page glyph="sap-icon--error" ng-if="state.error">
-            <fd-message-page-title>Dashboard encounterd an error!</fd-message-page-title>
-            <fd-message-page-subtitle>{{errorMessage}}</fd-message-page-subtitle>
-        </fd-message-page>
-    </div>
-</body>
+            <fd-message-page glyph="sap-icon--error" ng-if="state.error">
+                <fd-message-page-title>Dashboard encounterd an error!</fd-message-page-title>
+                <fd-message-page-subtitle>{{errorMessage}}</fd-message-page-subtitle>
+            </fd-message-page>
+        </div>
+    </body>
 
 </html>

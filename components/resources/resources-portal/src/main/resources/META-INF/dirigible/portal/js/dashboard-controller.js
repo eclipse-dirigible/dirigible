@@ -22,6 +22,8 @@ dashboard.controller('DashboardController', ['$scope', '$http', 'messageHub', fu
         busyText: "Loading...",
     };
 
+    $scope.isWidgetContainerUsed = [false, false, false];
+
     $http.get("/services/js/portal/api/WidgetsExtension/WidgetService.js")
         .then(function (response) {
             $scope.widgetList = response.data;
@@ -59,14 +61,17 @@ dashboard.controller('DashboardController', ['$scope', '$http', 'messageHub', fu
 
         const widgetContainer = document.createElement('div');
         if (widgetData.size == "small") {
+            $scope.isWidgetContainerUsed[0] = true;
             widgetContainer.className = 'fd-col fd-col--6 fd-col-md--3 fd-col-lg--3 fd-col-xl--3';
             iframe.style.width = '100%';
             iframe.style.height = '160px';
         } else if (widgetData.size == "medium") {
+            $scope.isWidgetContainerUsed[1] = true;
             widgetContainer.className = 'fd-col fd-col--12 fd-col-md--6 fd-col-lg--6 fd-col-xl--6';
             iframe.style.width = '100%';
             iframe.style.height = '200px';
         } else {
+            $scope.isWidgetContainerUsed[2] = true;
             widgetContainer.className = 'fd-col fd-col--12 fd-col-md--6 fd-col-lg--6 fd-col-xl--6';
             iframe.style.width = '100%';
             iframe.style.height = '340px';
