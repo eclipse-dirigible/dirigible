@@ -1,0 +1,5 @@
+{
+    "module": "menu-database/templates/table.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "Table Workbench New Menu Extension"
+}

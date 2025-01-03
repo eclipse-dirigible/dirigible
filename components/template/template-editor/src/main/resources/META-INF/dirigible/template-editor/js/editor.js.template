@@ -83,8 +83,8 @@ editor.controller('EditorController', function ($scope, $window, WorkspaceServic
     };
 
     // If the editor has been focused from the outside, clean the status bar label (or set the proper one).
-    layoutHub.onFocusView((data) => {
-        if (data.params && data.params.resourcePath === $scope.dataParameters.filePath) statusBarHub.showLabel('');
+    layoutHub.onFocusEditor((data) => {
+        if (data.path && data.path === $scope.dataParameters.filePath) statusBarHub.showLabel('');
     });
 
     // If the file changes (rename, move, etc) outside the editor, parameters will be changed and should be reloaded.

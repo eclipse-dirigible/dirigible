@@ -273,6 +273,13 @@ class DialogHub extends MessageHubApi {
     }
 
     /**
+     * Closes the currently shown window. Usually used inside the window itself when the `closeButton` option is set to false.
+     */ // @ts-ignore
+    closeWindow() {
+        this.postMessage({ topic: 'platform.dialog.window', data: { close: true } });
+    }
+
+    /**
      * Triggered when a window should be shown.
      * @param handler - Callback function.
      * @returns - A reference to the listener. In order to remove/disable the listener, you need to use this reference and pass it to the 'removeMessageListener' function.

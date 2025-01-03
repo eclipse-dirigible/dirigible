@@ -1,0 +1,5 @@
+{
+    "module": "view-security/configs/users-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Users View"
+}

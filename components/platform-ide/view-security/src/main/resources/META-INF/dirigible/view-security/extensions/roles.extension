@@ -1,0 +1,5 @@
+{
+    "module": "view-security/configs/roles-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Roles View"
+}

@@ -1,0 +1,5 @@
+{
+    "module": "view-sql/configs/sql.js",
+    "extensionPoint": "platform-views",
+    "description": "SQL Command View"
+}

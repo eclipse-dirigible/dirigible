@@ -106,7 +106,6 @@ registryView.controller('RegistryController', [
 		$scope.jstreeWidget.on('dblclick.jstree', function (event) {
 			let node = $scope.jstreeWidget.jstree(true).get_node(event.target);
 			if (node.type === 'file') {
-				console.log(node);
 				openFile(node, 'monaco'); // Temporarily set monaco
 			}
 		});

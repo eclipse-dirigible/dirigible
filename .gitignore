@@ -30,3 +30,4 @@ host.ser
 package.json
 package-lock.json
 **/logs
+/ttyd.sh

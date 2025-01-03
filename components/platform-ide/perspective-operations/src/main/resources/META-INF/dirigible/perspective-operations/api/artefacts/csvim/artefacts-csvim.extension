@@ -1,0 +1,5 @@
+{
+    "module": "perspective-operations/api/artefacts/csvim/artefacts-csvim.mjs",
+    "extensionPoint": "platform-operations-artefacts",
+    "description": "CSVIM Artefacts Extension"
+}

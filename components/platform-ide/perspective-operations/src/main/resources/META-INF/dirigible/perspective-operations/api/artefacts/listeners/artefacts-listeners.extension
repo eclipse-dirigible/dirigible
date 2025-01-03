@@ -1,0 +1,5 @@
+{
+    "module": "perspective-operations/api/artefacts/listeners/artefacts-listeners.mjs",
+    "extensionPoint": "platform-operations-artefacts",
+    "description": "Listeners Emails Artefacts Extension"
+}

@@ -10,9 +10,8 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const viewData = {
-    id: 'importWindow',
+    id: 'import',
     label: 'Import',
-    autoFocusTab: false,
     path: '/services/web/view-import/import.html'
 };
 if (typeof exports !== 'undefined') {

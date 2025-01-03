@@ -1,0 +1,5 @@
+{
+    "module": "view-logs/configs/logs-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Logs View"
+}

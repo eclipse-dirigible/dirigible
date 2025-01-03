@@ -1,0 +1,61 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="crudDialog" ng-controller="CRUDDialogController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="../configs/crud-dialog.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="crud-dialog.js"></script>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">
+            {{state.busyText}}
+        </bk-busy-indicator-extended>
+        <div class="bk-padding bk-fill-parent" bk-scrollbar ng-show="!state.error && !state.isBusy">
+            <bk-fieldset ng-form="forms.crudForm">
+                <bk-form-group ng-if="dialogType === 'update' || dialogType === 'create'">
+                    <bk-form-item ng-if="!isPrimaryOrSpecialKey(key)" ng-repeat="(key, value) in data.row track by key">
+                        <bk-form-label for="{{key}}" colon="true" required>{{key}}</bk-form-label>
+                        <bk-textarea id="{{key}}" name="{{key}}" placeholder="Enter a {{key}}" ng-model="data.row[key]" ng-required="true" ng-trim="false"></bk-textarea>
+                    </bk-form-item>
+                </bk-form-group>
+                <div ng-if="dialogType === 'delete'">
+                    <p>Are you sure you want to delete this row?</p>
+                    <p><strong>{{data.row | json}}</strong></p>
+                </div>
+            </bk-fieldset>
+        </div>
+        <bk-bar compact="true" bar-design="footer" ng-show="!state.error && !state.isBusy">
+            <bk-bar-right>
+                <bk-bar-element>
+                    <bk-button ng-if="dialogType !== 'delete'" label="Save" ng-click="confirmAction()" state="emphasized" compact="true"></bk-button>
+                    <bk-button ng-if="dialogType === 'delete'" label="Delete" ng-click="confirmAction()" state="negative"></bk-button>
+                </bk-bar-element>
+                <bk-bar-element>
+                    <bk-button label="Cancel" ng-click="cancel()" state="transparent"></bk-button>
+                </bk-bar-element>
+            </bk-bar-right>
+        </bk-bar>
+        </bk-fieldset>
+        <theme></theme>
+    </body>
+
+</html>

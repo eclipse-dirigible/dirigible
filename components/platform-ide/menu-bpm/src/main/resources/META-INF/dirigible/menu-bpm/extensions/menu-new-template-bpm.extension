@@ -1,5 +1,0 @@
-{
-    "module": "menu-bpm/configs/menu-new-template-bpm.js",
-    "extensionPoint": "platform-templates-menu",
-    "description": "Business Process Model Workspace New Menu Extension"
-}

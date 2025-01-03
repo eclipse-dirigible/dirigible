@@ -20,17 +20,13 @@
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
         <title config-title></title>
         <script type="text/javascript" src="configs/projects-view.js"></script>
-        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=editor-js"></script>
-        <script type="text/javascript" src="/services/web/platform-core/ui/platform/editors.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=editor-js,editors-service,jstree-js"></script>
         <script type="text/javascript" src="/services/web/service-publisher/publisher.js"></script>
         <script type="text/javascript" src="/services/web/service-template/templates.js"></script>
         <script type="text/javascript" src="/services/web/service-generate/generate.js"></script>
         <script type="text/javascript" src="/services/web/service-transport/transport.js"></script>
         <script type="text/javascript" src="/services/web/service-actions/actions.js"></script>
-        <script type="text/javascript" src="/webjars/jstree/jstree.min.js"></script>
-        <script type="text/javascript" src="/services/web/platform-core/ui/jstree/indicator.plugin.js"></script>
-        <link type="text/css" rel="stylesheet" href="/services/web/platform-core/ui/styles/jstree.css" />
-        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?ids=view-css,jstree-css" />
         <script type="text/javascript" src="js/projects.js"></script>
     </head>
 
@@ -44,47 +40,37 @@
             <bk-button compact="true" state="transparent" glyph="sap-icon--play" title="Publish all" aria-label="Publish all" ng-click="publishAll()" ng-if="isPublishEnabled()"></bk-button>
             <bk-button compact="true" state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="reloadWorkspace()"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
-            <bk-button state="transparent" toggled="searchVisible" glyph="sap-icon--search" title="Toggle search" aria-label="Toggle search" ng-click="toggleSearch()">
-            </bk-button>
+            <bk-button state="transparent" toggled="searchVisible" glyph="sap-icon--search" title="Toggle search" aria-label="Toggle search" ng-click="toggleSearch()"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-popover>
                 <bk-popover-control>
-                    <bk-button state="transparent" is-menu="true" label="{{ selectedWorkspace }}" title="Workspace select">
-                    </bk-button>
+                    <bk-button state="transparent" is-menu="true" label="{{ selectedWorkspace }}" title="Workspace select"></bk-button>
                 </bk-popover-control>
                 <bk-popover-body align="bottom-right" no-arrow="true">
                     <bk-menu aria-label="workspaces menu">
-                        <bk-menu-item title="{{ name }}" ng-repeat="name in workspaceNames" is-selected="isSelectedWorkspace(name)" ng-click="switchWorkspace(name)">
-                        </bk-menu-item>
+                        <bk-menu-item title="{{ name }}" ng-repeat="name in workspaceNames" is-selected="isSelectedWorkspace(name)" ng-click="switchWorkspace(name)"></bk-menu-item>
                     </bk-menu>
                 </bk-popover-body>
             </bk-popover>
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-toolbar-overflow>
-                <bk-button state="transparent" label="Create project" glyph="sap-icon--create" is-overflow="true" ng-click="createProject()">
-                </bk-button>
-                <bk-button state="transparent" label="Duplicate project" glyph="sap-icon--duplicate" is-overflow="true" ng-click="duplicateProject()">
-                </bk-button>
-                <bk-button state="transparent" label="Export projects" glyph="sap-icon--download-from-cloud" is-overflow="true" ng-click="exportProjects()">
-                </bk-button>
+                <bk-button state="transparent" label="Create project" glyph="sap-icon--create" is-overflow="true" ng-click="createProject()"></bk-button>
+                <bk-button state="transparent" label="Duplicate project" glyph="sap-icon--duplicate" is-overflow="true" ng-click="duplicateProject()"></bk-button>
+                <bk-button state="transparent" label="Export projects" glyph="sap-icon--download-from-cloud" is-overflow="true" ng-click="exportProjects()"></bk-button>
                 <bk-toolbar-separator></bk-toolbar-separator>
-                <bk-button state="transparent" label="Create workspace" glyph="sap-icon--add" is-overflow="true" ng-click="createWorkspace()">
-                </bk-button>
-                <bk-button state="transparent" label="Delete workspace" glyph="sap-icon--delete" is-overflow="true" state="{{ selectedWorkspace === 'workspace' ? 'disabled' : '' }}" ng-click="deleteWorkspace()">
-                </bk-button>
+                <bk-button state="transparent" label="Create workspace" glyph="sap-icon--add" is-overflow="true" ng-click="createWorkspace()"></bk-button>
+                <bk-button state="transparent" label="Delete workspace" glyph="sap-icon--delete" is-overflow="true" state="{{ selectedWorkspace === 'workspace' ? 'disabled' : '' }}" ng-click="deleteWorkspace()"></bk-button>
             </bk-toolbar-overflow>
         </bk-toolbar>
         <bk-toolbar ng-if="searchVisible && !state.error && !state.isBusy">
-            <bk-input type="search" placeholder="Search" ng-keyup="search($event)" bk-focus="true" ng-model="searchField.text">
-            </bk-input>
+            <bk-input type="search" placeholder="Search" ng-keyup="search($event)" bk-focus="true" ng-model="searchField.text"></bk-input>
         </bk-toolbar>
         <div id="pvtree" class="jstree-fiori--fill jstree-fiori--context-menu" bk-scrollbar ng-on-contextmenu="showContextMenu($event)" ng-show="!state.error && !state.isBusy"></div>
         <bk-message-page glyph="sap-icon--error" ng-if="state.error">
             <bk-message-page-title>Something went wrong!</bk-message-page-title>
             <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
             <bk-message-page-actions>
-                <bk-button compact="true" label="Reload panel" ng-click="init()">
-                </bk-button>
+                <bk-button compact="true" label="Reload panel" ng-click="init()"></bk-button>
             </bk-message-page-actions>
         </bk-message-page>
         <theme></theme>

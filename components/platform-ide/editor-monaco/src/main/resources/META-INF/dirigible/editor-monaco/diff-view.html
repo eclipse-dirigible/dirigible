@@ -95,6 +95,12 @@
             }
 
             let editorParameters = getViewParameters();
+            const tabId = window.frameElement?.getAttribute('tab-id');
+            window.addEventListener('focus', () => {
+                layoutHub.focusView({
+                    id: tabId,
+                });
+            });
 
             function FileIO() {
                 let __URL = URL;

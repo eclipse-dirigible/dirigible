@@ -1,0 +1,5 @@
+{
+    "module": "menu-projects/templates/menu-html.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "HTML Workbench New Menu Extension"
+}

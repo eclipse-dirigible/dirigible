@@ -883,8 +883,12 @@ gitProjectsView.controller('GitProjectsController', ($scope, StatusBar, Dialogs,
     };
 
     let to = 0;
-    $scope.search = () => {
+    $scope.search = (event) => {
         if (to) { clearTimeout(to); }
+        if (event.originalEvent.key === 'Escape') {
+            $scope.toggleSearch();
+            return;
+        }
         to = setTimeout(() => {
             jstreeWidget.jstree(true).search($scope.searchField.text);
         }, 250);

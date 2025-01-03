@@ -1,0 +1,5 @@
+{
+    "module": "view-result/configs/result-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Results view"
+}

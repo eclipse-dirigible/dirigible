@@ -1,0 +1,5 @@
+{
+    "module": "perspective-operations/api/artefacts/data-sources/artefacts-data-sources.mjs",
+    "extensionPoint": "platform-operations-artefacts",
+    "description": "Data Sources Artefacts Extension"
+}

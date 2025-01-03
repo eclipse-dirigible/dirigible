@@ -1,0 +1,5 @@
+{
+    "module": "menu-database/templates/view.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "View Workbench New Menu Extension"
+}

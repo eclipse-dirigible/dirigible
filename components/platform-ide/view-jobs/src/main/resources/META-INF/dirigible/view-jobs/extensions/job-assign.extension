@@ -1,0 +1,5 @@
+{
+    "module": "view-jobs/configs/job-assign-window.js",
+    "extensionPoint": "platform-windows",
+    "description": "Assign job window"
+}

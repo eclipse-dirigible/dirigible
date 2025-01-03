@@ -1,0 +1,66 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" ng-app="databases" ng-controller="DatabaseController" xmlns="http://www.w3.org/1999/xhtml">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="configs/databases-view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="js/databases.js"></script>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar type="solid">
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-button state="transparent" glyph="sap-icon--add" title="New" aria-label="New Database" ng-click="newDatabase()"></bk-button>
+        </bk-toolbar>
+        <bk-scrollbar class="bk-full-height">
+            <table bk-table display-mode="compact" outer-borders="bottom">
+                <thead bk-table-header sticky="true">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>Name</th>
+                        <th bk-table-header-cell>Driver</th>
+                        <th bk-table-header-cell>URL</th>
+                        <th bk-table-header-cell>Username</th>
+                        <th bk-table-header-cell>Parameters</th>
+                        <th bk-table-header-cell></th>
+                        <th bk-table-header-cell></th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat="next in list track by $index" hoverable="true" activable="false">
+                        <td bk-table-cell>{{next.name}}</td>
+                        <td bk-table-cell>{{next.driver}}</td>
+                        <td bk-table-cell>{{next.url}}</td>
+                        <td bk-table-cell>{{next.username}}</td>
+                        <td bk-table-cell>{{joinParameters(next.properties)}}</td>
+                        <td bk-table-cell fit-content>
+                            <bk-button state="transparent" glyph="sap-icon--edit" title="Edit" aria-label="Edit Database" ng-click="editDatabase(next)"></bk-button>
+                        </td>
+                        <td bk-table-cell fit-content>
+                            <bk-button state="transparent" glyph="sap-icon--delete" title="Delete" aria-label="Delete Database" ng-click="deleteDatabase(next)"></bk-button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </bk-scrollbar>
+        <theme></theme>
+    </body>
+
+</html>

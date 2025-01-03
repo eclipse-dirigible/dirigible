@@ -1,5 +1,0 @@
-{
-    "module": "/ide-registry/services/unpublish-typescript.js",
-    "extensionPoint": "ide-workspace-after-unpublish",
-    "description": "Unpublish TypeScript"
-}

@@ -1,0 +1,5 @@
+{
+    "module": "menu-websockets/templates/menu-websocket.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "WebSocket Workbench New Menu Extension"
+}

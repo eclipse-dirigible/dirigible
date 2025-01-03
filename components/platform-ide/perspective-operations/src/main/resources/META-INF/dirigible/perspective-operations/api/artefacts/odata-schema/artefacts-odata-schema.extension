@@ -1,0 +1,5 @@
+{
+    "module": "perspective-operations/api/artefacts/odata-schema/artefacts-odata-schema.mjs",
+    "extensionPoint": "platform-operations-artefacts",
+    "description": "OData Schema Artefacts Extension"
+}

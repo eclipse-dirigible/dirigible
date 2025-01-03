@@ -1,0 +1,165 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="jobTrigger" ng-controller="JobTriggerController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-jobs/configs/job-trigger-window.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar has-title="true">
+            <bk-toolbar-title>{{ jobName }}</bk-toolbar-title>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-button compact="true" glyph="sap-icon--play" state="transparent" label="Trigger" ng-click="triggerJob()" ng-disabled="shouldDisableTriggerButton()"></bk-button>
+        </bk-toolbar>
+        <bk-scrollbar class="bk-stretch">
+            <table bk-table display-mode="compact" outer-borders="bottom">
+                <thead bk-table-header sticky="true">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>Name</th>
+                        <th bk-table-header-cell>Value</th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat="parameter in parameters track by $index" hoverable="false" activable="false">
+                        <td bk-table-cell><span>{{parameter.name}}</span></td>
+                        <td bk-table-cell>
+                            <bk-input ng-if="parameter.type === 'string'" compact="true" type="text" placeholder="Enter {{parameter.name}}" ng-model="parameter.value" required="required"></bk-input>
+                            <bk-input ng-if="parameter.type === 'number'" compact="true" type="number" placeholder="Enter {{parameter.name}}" ng-model="parameter.value" required="required"></bk-input>
+                            <bk-form-item ng-if="parameter.type === 'boolean'">
+                                <bk-checkbox compact="true" id="cb-{{ parameter.name }}" ng-model="parameter.value"></bk-checkbox>
+                                <bk-checkbox-label empty="true" compact="true" for="cb-{{ parameter.name }}"></bk-checkbox-label>
+                            </bk-form-item>
+                            <bk-form-item ng-if="parameter.type === 'choice'">
+                                <bk-select ng-model="parameter.value" placeholder="Enter {{parameter.name}}" compact="true" required="required" dropdown-fixed="true" class="bk-full-width">
+                                    <bk-option ng-repeat="choice in parameter.choices.split(',')" text="{{ choice }}" value="choice"></bk-option>
+                                </bk-select>
+                            </bk-form-item>
+                        </td>
+                    </tr>
+                    <tr ng-if="shouldShowMessageRow()" bk-table-row>
+                        <td bk-table-cell no-data="true">{{ getMessageRow() }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </bk-scrollbar>
+        <div class="bk-list-border--top bk-vbox bk-stretch">
+            <bk-toolbar compact="true">
+                <h4>Result</h4>
+                <bk-toolbar-spacer></bk-toolbar-spacer>
+                <bk-button glyph="sap-icon--delete" state="transparent" aria-label="Clear results" ng-click="triggerResults.length = 0" ng-disabled="triggerResults.length === 0">
+                </bk-button>
+            </bk-toolbar>
+            <bk-scrollbar class="bk-stretch">
+                <table bk-table bk-table-group display-mode="compact" outer-borders="bottom">
+                    <tbody bk-table-body>
+                        <tr bk-table-row ng-repeat-start="item in triggerResults track by $index">
+                            <td bk-table-group-cell nesting-level="1" expanded="item.expanded">{{ item.result }}</td>
+                        </tr>
+                        <tr bk-table-row ng-repeat="param in item.parameters track by $index">
+                            <td bk-table-cell nesting-level="2">{{ param.name }}</td>
+                            <td bk-table-cell>{{ param.value }}</td>
+                        </tr>
+                        <tr ng-if="item.parameters.length === 0" bk-table-row ng-repeat-end>
+                            <td bk-table-cell nesting-level="2" colspan="2">No parameters</td>
+                        </tr>
+                        <tr ng-if="triggerResults.length === 0" bk-table-row>
+                            <td bk-table-cell no-data="true">The job has not been triggered yet</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </bk-scrollbar>
+        </div>
+
+        <script type="text/javascript">
+            angular.module('jobTrigger', ['blimpKit', 'platformView']).controller('JobTriggerController', ($scope, $http, ViewParameters) => {
+                function getParameters(jobName) {
+                    $scope.loading = true;
+                    $scope.loadingError = false;
+                    $scope.map = [];
+                    $http.get('/services/jobs/parameters/' + jobName).then((response) => {
+                        $scope.loading = false;
+                        $scope.parameters = response.data.map(p => {
+                            let value;
+                            switch(p.type){
+                                case 'number':
+                                    value = p.value !== undefined ? Number(p.value) : 0; 
+                                    return {
+                                        ...p,
+                                        value: Number.isFinite(value) ? value : null
+                                    };
+                                case 'boolean':
+                                    value = typeof p.value === 'boolean' ? p.value : p.value === 'true';
+                                    return {...p, value };
+                                default:
+                                    return p;
+                            }
+                        });
+                    }, (response) => {
+                        $scope.loading = false;
+                        $scope.loadingError = true;
+                        console.error(response.data);
+                    });
+                }
+
+                $scope.parameters = [];
+                $scope.triggerResults = [];
+
+                $scope.job = ViewParameters.get();
+                $scope.jobName = $scope.job.name;
+                $scope.result = `Job '${$scope.jobName}' has not been triggered yet`;
+                getParameters($scope.jobName);
+
+                $scope.shouldDisableTriggerButton = () => {
+                    if ($scope.loading) return true;
+                    if ($scope.parameters.length === 0) return false;
+                    let isValid = $scope.parameters.every(p => Number.isFinite(p.value) || (p.value !== undefined && p.value !== null));
+                    return !isValid;
+                };
+
+                $scope.shouldShowMessageRow = () => $scope.loading || $scope.loadingError || $scope.parameters.length === 0;
+
+                $scope.getMessageRow = () => {
+                    if ($scope.loading) return 'Loading parameters, please wait...';
+                    if ($scope.loadingError) return 'Loading job parameters has failed!';
+                    if ($scope.parameters.length === 0) return 'No parameters';
+                };
+
+                $scope.triggerJob = () => {
+                    let trigger = {
+                        result: `Triggering job '${$scope.jobName}'...`,
+                        parameters: $scope.parameters.map(({name, value}) => ({ name, value })),
+                        expanded: false
+                    };
+                    $scope.triggerResults.push(trigger);
+                    $http.post('/services/jobs/trigger/' + $scope.jobName, trigger.parameters).then((response) => {
+                        trigger.result = `Job '${$scope.jobName}' has been triggered successfully`;
+                    }, (response) => {
+                        console.error(response.data);
+                        trigger.result = `Triggering job '${$scope.jobName}' has failed`;
+                    });
+                };
+            });
+        </script>
+        <theme></theme>
+    </body>
+
+</html>

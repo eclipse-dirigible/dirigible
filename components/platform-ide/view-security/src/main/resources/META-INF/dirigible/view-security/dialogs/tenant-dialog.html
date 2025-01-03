@@ -1,0 +1,68 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="tenantdialog" ng-controller="TenantDialogController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-security/configs/tenant-dialog.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="/services/web/view-security/dialogs/tenant-dialog.js"></script>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
+        <div class="bk-padding bk-fill-parent" bk-scrollbar ng-show="!state.error && !state.isBusy">
+            <bk-fieldset ng-form="forms.tenantForm">
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="name" colon="true">Name</bk-form-label>
+                        <bk-input id="name" name="name" type="text" placeholder="Enter a name" ng-model="tenant.name" input-rules="inputRules" state="{{ forms.tenantForm['name'].$valid ? '' : 'error' }}" ng-required="true" ng-trim="false">
+                        </bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="subdomain" colon="true">Subdomain</bk-form-label>
+                        <bk-input id="subdomain" name="subdomain" type="text" placeholder="Enter subdomain" ng-model="tenant.subdomain" input-rules="inputRules" ng-trim="false"
+                            state="{{ forms.tenantForm['subdomain'].$valid ? '' : 'error' }}" ng-required="true"></bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+            </bk-fieldset>
+        </div>
+        <bk-bar bar-design="footer" compact="true" ng-show="!state.error && !state.isBusy">
+            <bk-bar-right>
+                <bk-bar-element>
+                    <bk-button label="{{editMode ? 'Save' : 'Create'}}" ng-click="save()" state="emphasized" ng-disabled="!forms.tenantForm.$valid"></bk-button>
+                </bk-bar-element>
+                <bk-bar-element>
+                    <bk-button label="Cancel" ng-click="cancel()" state="transparent"></bk-button>
+                </bk-bar-element>
+            </bk-bar-right>
+        </bk-bar>
+        <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+            <bk-message-page-title>Dialog encounterd an error!</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+            <bk-message-page-actions>
+                <bk-button compact="true" ng-click="cancel()" label="Close" state="emphasized"></bk-button>
+            </bk-message-page-actions>
+        </bk-message-page>
+        <theme></theme>
+    </body>
+
+</html>

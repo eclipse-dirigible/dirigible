@@ -123,7 +123,11 @@ angular.module('platformDialogs', ['blimpKit', 'platformView']).directive('dialo
 
         scope.dialogWindows = [];
         const dialogWindowListener = dialogHub.onWindow((data) => {
-            if (data.id) {
+            if (data.close) {
+                scope.$apply(() => {
+                    scope.closeDialogWindow();
+                });
+            } else if (data.id) {
                 const viewConfig = cachedWindows.find(v => v.id === data.id);
                 scope.$apply(() => {
                     if (!viewConfig) {

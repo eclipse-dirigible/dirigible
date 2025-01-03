@@ -1,0 +1,5 @@
+{
+    "module": "view-websockets/configs/websockets-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Websockets View"
+}

@@ -1,0 +1,69 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="users" ng-controller="UsersController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-security/configs/users-view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="/services/web/view-security/views/users.js"></script>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar type="solid">
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="listUsers()"></bk-button>
+            <bk-button state="transparent" glyph="sap-icon--add" title="New" aria-label="New User" ng-click="newUser()"> </bk-button>
+        </bk-toolbar>
+        <bk-scrollbar class="bk-full-height">
+            <table bk-table display-mode="compact" outer-borders="bottom">
+                <thead bk-table-header sticky="true">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>#</th>
+                        <th bk-table-header-cell>Username</th>
+                        <th bk-table-header-cell>Tenant</th>
+                        <th bk-table-header-cell>Role</th>
+                        <th bk-table-header-cell>Created</th>
+                        <th bk-table-header-cell>Creator</th>
+                        <th bk-table-header-cell></th>
+                        <th bk-table-header-cell></th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat="next in list track by next.id" hoverable="true" activable="false">
+                        <td bk-table-cell fit-content="true">{{next.id}}</td>
+                        <td bk-table-cell>{{next.username}}</td>
+                        <td bk-table-cell>{{next.tenant.name}}</td>
+                        <td bk-table-cell>{{next.rolesNames}}</td>
+                        <td bk-table-cell fit-content="true">{{next.createdAt | date:'yyyy-MM-dd HH:mm:ss' }}</td>
+                        <td bk-table-cell fit-content="true">{{next.createdBy}}</td>
+                        <td bk-table-cell fit-content="true">
+                            <bk-button state="transparent" glyph="sap-icon--edit" title="Edit" aria-label="Edit User" ng-click="editUser(next)"></bk-button>
+                        </td>
+                        <td bk-table-cell fit-content="true">
+                            <bk-button state="transparent" glyph="sap-icon--delete" title="User" aria-label="Delete User" ng-click="deleteUser(next)"></bk-button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </bk-scrollbar>
+        <theme></theme>
+    </body>
+
+</html>

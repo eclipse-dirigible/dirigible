@@ -9,7 +9,7 @@
 		<relativePath>../../pom.xml</relativePath>
 	</parent>
 
-	<name>Components - IDE - Workbench - Documents</name>
+	<name>Components - IDE - Documents - Perspective</name>
 	<artifactId>dirigible-components-perspective-documents</artifactId>
     <packaging>jar</packaging>
 

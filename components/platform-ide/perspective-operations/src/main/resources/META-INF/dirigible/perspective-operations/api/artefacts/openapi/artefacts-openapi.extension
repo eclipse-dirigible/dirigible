@@ -1,0 +1,5 @@
+{
+    "module": "perspective-operations/api/artefacts/openapi/artefacts-openapi.mjs",
+    "extensionPoint": "platform-operations-artefacts",
+    "description": "OpenAPI Artefacts Extension"
+}

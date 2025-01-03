@@ -1,0 +1,126 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" ng-app="result" ng-controller="DatabaseResultController" xmlns="http://www.w3.org/1999/xhtml">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="configs/result-view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="js/result.js"></script>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar type="solid">
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-button ng-if="hasResult" state="transparent" glyph="sap-icon--add" title="New" aria-label="New Row" ng-click="openCreateDialog()"></bk-button>
+        </bk-toolbar>
+        <bk-scrollbar class="bk-full-height" ng-hide="hasMultipleProcedureResults">
+            <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
+            <bk-message-page glyph="sap-icon--information" ng-hide="columns || procedureResults.length || state.error">
+                <bk-message-page-title>{{result || "No results"}}</bk-message-page-title>
+            </bk-message-page>
+            <table bk-table display-mode="compact" ng-hide="hasMultipleProcedureResults || state.error" ng-show="columns" outer-borders="bottom">
+                <thead bk-table-header sticky="true">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell ng-repeat="column in columns">{{column}}</th>
+                        <th bk-table-header-cell style="text-align: center; width: 8em">Actions</th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat="row in rows">
+                        <td bk-table-cell ng-repeat="cell in row">
+                            <div class="tdSingleLine">{{cell}}</div>
+                        </td>
+                        <td bk-table-cell style="text-align: center; width: 8em">
+                            <bk-button state="transparent" glyph="sap-icon--edit" title="Edit" aria-label="Edit" ng-click="openEditDialog(row)"></bk-button>
+                            <bk-button state="transparent" glyph="sap-icon--delete" title="Delete" aria-label="Delete Row" ng-click="openDeleteDialog(row)"></bk-button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+                <bk-message-page-title>Something went wrong</bk-message-page-title>
+                <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+            </bk-message-page>
+        </bk-scrollbar>
+        <bk-icon-tab-bar selected-tab-id="selectedTab" ng-show="hasMultipleProcedureResults">
+            <bk-icon-tab-bar-tablist>
+                <bk-icon-tab-bar-tab ng-repeat="tab in procedureResults track by $index" label="Result {{$index + 1}}" tab-id="pr{{$index}}" ng-click="tabClicked('pr' + $index)">
+                </bk-icon-tab-bar-tab>
+            </bk-icon-tab-bar-tablist>
+            <bk-icon-tab-bar-panel tab-id="pr{{$index}}" ng-show="selectedTab === '{{'pr' + $index}}'" ng-repeat="columns in procedureResults track by $index">
+                <bk-scrollbar class="bk-full-height">
+                    <table bk-table display-mode="compact" outer-borders="bottom">
+                        <thead bk-table-header sticky="true">
+                            <tr bk-table-row>
+                                <th bk-table-header-cell ng-repeat="column in columns.columns track by $index">{{column}}</th>
+                            </tr>
+                        </thead>
+                        <tbody bk-table-body>
+                            <tr bk-table-row ng-repeat="row in columns.rows track by $index">
+                                <td bk-table-cell ng-repeat="cell in row track by $index">{{cell}}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </bk-scrollbar>
+            </bk-icon-tab-bar-panel>
+        </bk-icon-tab-bar>
+        <theme></theme>
+        <!-- <div class="dialog-overlay" ng-show="state.isDialogOpen">
+            <div class="dialog">
+                <h3 ng-if="state.dialogType === 'edit'">Edit Row</h3>
+                <h3 ng-if="state.dialogType === 'delete'">Delete Row</h3>
+                <h3 ng-if="state.dialogType === 'create'">Add New Row</h3>
+
+                <form ng-if="state.dialogType === 'edit' || state.dialogType === 'create'">
+                    <div ng-repeat="(key, value) in (state.dialogType === 'edit' ? data.selectedRow : data.newRow)">
+                        <bk-form-group>
+                            <bk-form-item>
+                                <bk-form-label for="{{key}}" dg-colon="true" dg-required="true">{{key}}</bk-form-label>
+                                <bk-input id="{{key}}" name="{{key}}" type="text" placeholder="Enter a {{key}}"
+                                    ng-model="state.dialogType === 'edit' ? data.selectedRow[key] : data.newRow[key]"
+                                    ng-required="true" ng-trim="false"></bk-input>
+                            </bk-form-item>
+                        </bk-form-group>
+                    </div>
+                </form>
+
+                <div ng-if="state.dialogType === 'delete'">
+                    <p>Are you sure you want to delete this row?</p>
+                    <p><strong>{{data.selectedRow | json}}</strong></p>
+                </div>
+
+                <bk-bar bar-design="footer">
+                    <bk-bar-right>
+                        <bk-bar-element>
+                            <bk-button dg-label="{{state.dialogType | uppercase}}" ng-click="confirmAction()"
+                                dg-type="{{state.dialogType === 'delete' ? 'negative' : 'emphasized'}}" compact="true">
+                            </bk-button>
+                        </bk-bar-element>
+                        <bk-bar-element>
+                            <bk-button dg-label="Cancel" ng-click="closeDialog()" dg-type="transparent" compact="true">
+                            </bk-button>
+                        </bk-bar-element>
+                    </bk-bar-right>
+                </bk-bar>
+            </div>
+        </div> -->
+    </body>
+
+</html>

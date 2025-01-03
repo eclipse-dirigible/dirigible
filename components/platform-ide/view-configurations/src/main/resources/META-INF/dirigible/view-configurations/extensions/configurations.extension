@@ -1,0 +1,5 @@
+{
+    "module": "view-configurations/configs/configurations-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Configurations View"
+}

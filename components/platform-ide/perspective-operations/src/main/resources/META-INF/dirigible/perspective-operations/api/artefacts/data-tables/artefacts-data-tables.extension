@@ -1,0 +1,5 @@
+{
+    "module": "perspective-operations/api/artefacts/data-tables/artefacts-data-tables.mjs",
+    "extensionPoint": "platform-operations-artefacts",
+    "description": "Data Tables Artefacts Extension"
+}

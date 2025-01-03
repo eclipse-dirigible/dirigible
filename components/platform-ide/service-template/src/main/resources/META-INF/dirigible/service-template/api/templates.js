@@ -50,20 +50,12 @@ async function loadTemplates(forMenu = false) {
 	if (forMenu) templateExtensions = extensions.getExtensions('platform-templates-menu');
 	else templateExtensions = extensions.getExtensions('platform-templates');
 	for (let i = 0; i < templateExtensions?.length; i++) {
-		let module = templateExtensions[i];
+		const module = templateExtensions[i];
 		try {
-			try {
-				let templateExtension = await import(`../../${module}`);
-				let template = templateExtension.getTemplate();
-				template.id = module;
-				templates.push(template);
-			} catch (e) {
-				// Fallback for not migrated extensions
-				let templateExtension = dirigibleRequire(module);
-				let template = templateExtension.getTemplate();
-				template.id = module;
-				templates.push(template);
-			}
+			let templateExtension = await import(`../../${module}`);
+			let template = templateExtension.getTemplate();
+			template.id = module;
+			templates.push(template);
 		} catch (error) {
 			console.error('Error occured while loading metadata for the template: ' + module);
 			console.error(error);

@@ -1,0 +1,5 @@
+{
+    "module": "view-result/configs/crud-dialog.js",
+    "extensionPoint": "platform-windows",
+    "description": "Dialog for editing row in database table"
+}

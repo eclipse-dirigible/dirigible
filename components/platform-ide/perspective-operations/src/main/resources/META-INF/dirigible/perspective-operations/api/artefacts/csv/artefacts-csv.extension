@@ -1,0 +1,5 @@
+{
+    "module": "perspective-operations/api/artefacts/csv/artefacts-csv.mjs",
+    "extensionPoint": "platform-operations-artefacts",
+    "description": "CSV Artefacts Extension"
+}

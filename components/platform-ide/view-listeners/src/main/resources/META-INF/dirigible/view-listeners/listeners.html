@@ -1,0 +1,65 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="listeners" ng-controller="ListenersController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="configs/listeners-view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+    </head>
+
+    <body bk-scrollbar>
+        <table bk-table display-mode="compact" outer-borders="bottom">
+            <thead bk-table-header sticky="true">
+                <tr bk-table-row>
+                    <th bk-table-header-cell>Name</th>
+                    <th bk-table-header-cell>Location</th>
+                    <th bk-table-header-cell>Handler</th>
+                    <th bk-table-header-cell>Description</th>
+                    <th bk-table-header-cell>Type</th>
+                    <th bk-table-header-cell>Created</th>
+                    <th bk-table-header-cell>Creator</th>
+                </tr>
+            </thead>
+            <tbody bk-table-body>
+                <tr bk-table-row ng-repeat="listener in listeners track by $index" hoverable="true" activable="false">
+                    <td bk-table-cell>{{::listener.name}}</td>
+                    <td bk-table-cell>{{::listener.location}}</td>
+                    <td bk-table-cell>{{::listener.handler}}</td>
+                    <td bk-table-cell>{{::listener.description}}</td>
+                    <td bk-table-cell fit-content="true">{{::listener.type === 'Q' ? 'Queue' : 'Topic'}}</td>
+                    <td bk-table-cell fit-content="true">{{::view.createdAt}}</td>
+                    <td bk-table-cell fit-content="true">{{::view.createdBy}}</td>
+                </tr>
+                <tr ng-if="listeners.length === 0" bk-table-row>
+                    <td bk-table-cell no-data="true">No Listeners</td>
+                </tr>
+            </tbody>
+        </table>
+        <script type="text/javascript">
+            angular.module('listeners', ['platformView', 'blimpKit']).controller('ListenersController', ($scope, $http) => {
+                $http.get('/services/listeners').then((response) => {
+                    $scope.listeners = response.data;
+                });
+            });
+        </script>
+        <theme></theme>
+    </body>
+
+</html>

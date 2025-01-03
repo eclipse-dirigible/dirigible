@@ -58,7 +58,7 @@ function getViewParameters() {
         const params = JSON.parse(dataParameters);
         const resourcePath = params["filePath"] || "";
         return {
-            resourceType: params["params"] && params["params"]["resourceType"] || "/services/ide/workspaces",
+            resourceType: params["resourceType"] ?? "workspace",
             contentType: params["contentType"] || "",
             readOnly: params["readOnly"] || false,
             gitName: params["gitName"] || "",
@@ -363,7 +363,6 @@ class FileIO {
     #buildFileRequestMetadata(filePath, loadGitMetadata) {
         let url;
         let isGitProject = false;
-
         switch (this.#getResourceType()) {
             case "registry":
                 url = this.#buildRegistryUrl(filePath);

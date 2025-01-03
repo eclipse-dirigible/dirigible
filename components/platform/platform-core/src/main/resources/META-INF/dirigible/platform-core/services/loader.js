@@ -64,7 +64,7 @@ function processScriptRequest(scriptIds) {
     let contentType = ids[0].endsWith('-js') ? 'text/javascript;charset=UTF-8' : 'text/css';
     let responseContent = '';
     for (let i = 0; i < ids.length; i++) {
-        let locations = getLocations(ids[i]);
+        const locations = getLocations(ids[i]);
         if (locations) {
             locations.forEach(function (scriptLocation) {
                 let text = registry.getText(scriptLocation);
@@ -152,6 +152,7 @@ function getLocations(scriptId) {
         '/platform-core/ui/blimpkit/wizard.js',
     ];
     const cookies = '/angularjs/1.8.2/angular-cookies.min.js';
+    const editorsService = '/platform-core/ui/platform/editors.js';
     const viewCss = [
         '/fundamental-styles/0.38.0/dist/fundamental-styles.css',
         '/platform-core/ui/styles/blimpkit.css',
@@ -174,7 +175,7 @@ function getLocations(scriptId) {
                 '/split.js/1.6.5/dist/split.min.js',
                 '/platform-core/ui/platform/split.js',
                 '/service-workspace/workspace-hub.js',
-                '/platform-core/ui/platform/editors.js',
+                editorsService,
                 '/platform-core/ui/platform/layout.js',
             ];
         case 'shell-js':
@@ -204,6 +205,12 @@ function getLocations(scriptId) {
             return ['/ide-monaco/css/embeddable.css', '/monaco-editor/0.40.0/min/vs/editor/editor.main.css'];
         case 'cookies':
             return [cookies];
+        case 'jstree-js':
+            return ['/jstree/3.3.12/jstree.min.js', '/platform-core/ui/jstree/indicator.plugin.js'];
+        case 'jstree-css':
+            return ['/platform-core/ui/styles/jstree.css'];
+        case 'editors-service':
+            return [editorsService];
     }
 }
 

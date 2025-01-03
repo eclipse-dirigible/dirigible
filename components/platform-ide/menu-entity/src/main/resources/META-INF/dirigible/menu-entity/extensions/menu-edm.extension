@@ -1,0 +1,5 @@
+{
+    "module": "menu-entity/templates/menu-edm.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "Entity Data Model Workbench New Menu Extension"
+}

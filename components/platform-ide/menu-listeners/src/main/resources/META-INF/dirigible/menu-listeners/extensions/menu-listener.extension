@@ -1,0 +1,5 @@
+{
+    "module": "menu-listeners/templates/menu-listener.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "Message Listener Workbench New Menu Extension"
+}

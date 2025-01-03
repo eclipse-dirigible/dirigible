@@ -1,0 +1,5 @@
+{
+    "module": "perspective-security/configs/perspective-menu.js",
+    "extensionPoint": "platform-menus",
+    "description": "Security perspective menu"
+}

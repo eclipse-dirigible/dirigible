@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-angular.module('WorkspaceService', []).constant('workspaceStorageKey', `${brandingInfo.keyPrefix || 'DIRIGIBLE'}.workspace.selected`).provider('WorkspaceService', function WorkspaceServiceProvider(workspaceStorageKey) {
+angular.module('WorkspaceService', []).constant('workspaceStorageKey', `${brandingInfo.keyPrefix ?? 'DIRIGIBLE'}.workspace.selected`).provider('WorkspaceService', function WorkspaceServiceProvider(workspaceStorageKey) {
     this.workspacesServiceUrl = '/services/ide/workspaces';
     this.workspaceManagerServiceUrl = '/services/ide/workspace';
     this.workspaceSearchServiceUrl = '/services/ide/workspace-search';

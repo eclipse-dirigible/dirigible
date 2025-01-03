@@ -20,11 +20,9 @@
     <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
     <title config-title></title>
     <script type="text/javascript" src="configs/git-projects.js"></script>
-    <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=editor-js"></script>
+    <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=editor-js,jstree-js"></script>
     <script type="text/javascript" src="/services/web/service-git/git.js"></script>
-    <script type="text/javascript" src="/webjars/jstree/jstree.min.js"></script>
-    <link type="text/css" rel="stylesheet" href="/services/web/platform-core/ui/styles/jstree.css" />
-    <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+    <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?ids=view-css,jstree-css" />
     <script type="text/javascript" src="js/git-projects.js"></script>
   </head>
 
@@ -39,33 +37,28 @@
       <bk-button state="transparent" glyph="sap-icon--upload" title="Push all projects" aria-label="Push all projects" ng-click="pushDialog(true)"></bk-button>
       <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="reloadProjects()"></bk-button>
       <bk-toolbar-separator></bk-toolbar-separator>
-      <bk-button state="transparent" toggled="searchVisible" glyph="sap-icon--search" title="Toggle search" aria-label="Toggle search" ng-click="toggleSearch()">
-      </bk-button>
+      <bk-button state="transparent" toggled="searchVisible" glyph="sap-icon--search" title="Toggle search" aria-label="Toggle search" ng-click="toggleSearch()"></bk-button>
       <bk-toolbar-separator></bk-toolbar-separator>
       <bk-popover>
         <bk-popover-control>
-          <bk-button state="transparent" is-menu="true" label="{{ selectedWorkspace }}" title="Workspace select">
-          </bk-button>
+          <bk-button state="transparent" is-menu="true" label="{{ selectedWorkspace }}" title="Workspace select"></bk-button>
         </bk-popover-control>
         <bk-popover-body align="bottom-right" no-arrow="true">
           <bk-menu aria-label="workspaces menu">
-            <bk-menu-item title="{{ name }}" ng-repeat="name in workspaceNames track by $index" is-selected="isSelectedWorkspace(name)" ng-click="switchWorkspace(name)">
-            </bk-menu-item>
+            <bk-menu-item title="{{ name }}" ng-repeat="name in workspaceNames track by $index" is-selected="isSelectedWorkspace(name)" ng-click="switchWorkspace(name)"></bk-menu-item>
           </bk-menu>
         </bk-popover-body>
       </bk-popover>
     </bk-toolbar>
     <bk-toolbar ng-if="searchVisible && !state.error && !state.isBusy">
-      <bk-input type="search" placeholder="Search" ng-keyup="search()" ng-model="searchField.text" bk-focus="true">
-      </bk-input>
+      <bk-input type="search" placeholder="Search" ng-keyup="search($event)" ng-model="searchField.text" bk-focus="true"></bk-input>
     </bk-toolbar>
     <div id="dgProjects" class="jstree-fiori--fill jstree-fiori--context-menu" bk-scrollbar ng-on-contextmenu="showContextMenu($event)" ng-show="!state.error && !state.isBusy"></div>
     <bk-message-page glyph="sap-icon--error" ng-if="state.error">
       <bk-message-page-title>Something went wrong!</bk-message-page-title>
       <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
       <bk-message-page-actions>
-        <bk-button compact="::true" label="Reload panel" ng-click="init()">
-        </bk-button>
+        <bk-button compact="true" label="Reload panel" ng-click="init()"></bk-button>
       </bk-message-page-actions>
     </bk-message-page>
     <theme></theme>

@@ -34,15 +34,21 @@ angular.module('codeEditor', ['platformTheming'])
                     scope.monacoTheme = 'vs-light';
                     scope.autoListener = false;
                     const theme = Theme.getTheme();
+                    scope.themeId = theme.id;
                     if (theme.type === 'light') scope.monacoTheme = 'vs-light';
-                    else if (theme.type === 'dark') scope.monacoTheme = 'blimpkit-dark';
-                    else {
+                    else if (theme.type === 'dark') {
+                        if (scope.themeId === 'classic-dark') scope.monacoTheme = 'classic-dark';
+                        else scope.monacoTheme = 'blimpkit-dark';
+                    } else {
                         if ($window.matchMedia && $window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                            scope.monacoTheme = 'blimpkit-dark';
+                            if (scope.themeId.startsWith('classic')) scope.monacoTheme = 'classic-dark';
+                            else scope.monacoTheme = 'blimpkit-dark';
                         } else scope.monacoTheme = 'vs-light';
                         $window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
-                            if (event.matches) scope.monacoTheme = 'blimpkit-dark';
-                            else scope.monacoTheme = 'vs-light';
+                            if (event.matches) {
+                                if (scope.themeId.startsWith('classic')) scope.monacoTheme = 'classic-dark';
+                                else scope.monacoTheme = 'blimpkit-dark';
+                            } else scope.monacoTheme = 'vs-light';
                             monaco.editor.setTheme(scope.monacoTheme);
                             scope.autoListener = true;
                         });
@@ -70,6 +76,25 @@ angular.module('codeEditor', ['platformTheming'])
                         }
                     });
 
+                    monaco.editor.defineTheme('classic-dark', {
+                        base: 'vs-dark',
+                        inherit: true,
+                        rules: [{ background: '1c2228' }],
+                        colors: {
+                            'editor.background': '#1c2228',
+                            'breadcrumb.background': '#1c2228',
+                            'minimap.background': '#1c2228',
+                            'editorGutter.background': '#1c2228',
+                            'editorMarkerNavigation.background': '#1c2228',
+                            'input.background': '#29313a',
+                            'input.border': '#8696a9',
+                            'editorWidget.background': '#1c2228',
+                            'editorWidget.border': '#495767',
+                            'editorSuggestWidget.background': '#29313a',
+                            'dropdown.background': '#29313a',
+                        }
+                    });
+
                     const codeEditor = monaco.editor.create(element[0].firstChild, {
                         value: ngModel.$viewValue || '',
                         automaticLayout: true,
@@ -93,7 +118,6 @@ angular.module('codeEditor', ['platformTheming'])
                         outsideChange = false;
                     });
 
-
                     monaco.editor.setTheme(scope.monacoTheme);
 
                     if (scope.actions) {
@@ -103,19 +127,23 @@ angular.module('codeEditor', ['platformTheming'])
                     }
 
                     themingHub.onThemeChange((theme) => {
+                        scope.themeId = theme.id;
                         if (theme.type === 'light') {
                             scope.monacoTheme = 'vs-light';
                             monaco.editor.setTheme(scope.monacoTheme);
                         } else if (theme.type === 'dark') {
-                            scope.monacoTheme = 'blimpkit-dark';
+                            if (scope.themeId === 'classic-dark') monacoTheme = 'classic-dark';
+                            else scope.monacoTheme = 'blimpkit-dark';
                             monaco.editor.setTheme(scope.monacoTheme);
                         } else if (!scope.autoListener) {
                             if ($window.matchMedia && $window.matchMedia('(prefers-color-scheme: dark)').matches) {
                                 scope.monacoTheme = 'blimpkit-dark';
                             } else scope.monacoTheme = 'vs-light';
                             $window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
-                                if (event.matches) scope.monacoTheme = 'blimpkit-dark';
-                                else scope.monacoTheme = 'vs-light';
+                                if (event.matches) {
+                                    if (scope.themeId.startsWith('classic')) scope.monacoTheme = 'classic-dark';
+                                    else scope.monacoTheme = 'blimpkit-dark';
+                                } else scope.monacoTheme = 'vs-light';
                                 monaco.editor.setTheme(scope.monacoTheme);
                                 scope.autoListener = true;
                             });

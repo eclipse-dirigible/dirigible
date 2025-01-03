@@ -1,0 +1,5 @@
+{
+    "module": "menu-bpm/templates/bpm.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "Business Process Model Workbench New Menu Extension"
+}

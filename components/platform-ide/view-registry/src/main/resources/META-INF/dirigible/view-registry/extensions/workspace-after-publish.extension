@@ -1,0 +1,5 @@
+{
+    "module": "/view-registry/services/compile-typescript.js",
+    "extensionPoint": "ide-workspace-after-publish",
+    "description": "Compile TypeScript"
+}

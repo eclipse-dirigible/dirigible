@@ -1,0 +1,5 @@
+{
+    "module": "view-databases/configs/database-dialog.js",
+    "extensionPoint": "platform-windows",
+    "description": "Dialog for creating new or editing an existing database"
+}

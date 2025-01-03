@@ -10,6 +10,9 @@
 package org.eclipse.dirigible.components.ide.workspace.json;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -18,11 +21,16 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.fs.FileSystemRepository;
 import org.eclipse.dirigible.repository.local.LocalWorkspaceMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The Class WorkspaceGitHelper.
  */
 public class WorkspaceGitHelper {
+
+    /** The Constant logger. */
+    private static final Logger logger = LoggerFactory.getLogger(WorkspaceGitHelper.class);
 
     /** The Constant GIT_REPOSITORY_PROJECT_DEPTH. */
     // {workspace}/{userName}/{gitRepositoryName}
@@ -100,7 +108,7 @@ public class WorkspaceGitHelper {
         project.setPath(rootFolder.getPath());
         project.setGit(true);
 
-        List<File> allFiles = Arrays.asList(rootFolder.listFiles());
+        List<File> allFiles = Arrays.asList(listFiles(rootFolder));
         List<File> folders = allFiles.stream()
                                      .filter(e -> !e.isFile())
                                      .collect(Collectors.toList());
@@ -136,7 +144,7 @@ public class WorkspaceGitHelper {
         FolderDescriptor folder = new FolderDescriptor();
         folder.setName(rootFolder.getName());
         folder.setPath(rootFolder.getPath());
-        List<File> allFiles = Arrays.asList(rootFolder.listFiles());
+        List<File> allFiles = Arrays.asList(listFiles(rootFolder));
         List<File> folders = allFiles.stream()
                                      .filter(e -> !e.isFile())
                                      .collect(Collectors.toList());
@@ -157,5 +165,27 @@ public class WorkspaceGitHelper {
         }
 
         return folder;
+    }
+
+    /**
+     * List files including symbolic links.
+     *
+     * @param directory the source directory
+     * @return the list of files
+     */
+    public static final File[] listFiles(File directory) {
+        File[] allFiles;
+        try {
+            allFiles = Files.list(Path.of(directory.getCanonicalPath()))
+                            .map(p -> p.toFile())
+                            .collect(Collectors.toList())
+                            .toArray(new File[] {});
+        } catch (IOException e) {
+            if (logger.isErrorEnabled()) {
+                logger.error(String.format("Error listing directory: %s - %s", directory, e.getMessage()));
+            }
+            allFiles = new File[] {};
+        }
+        return allFiles;
     }
 }
