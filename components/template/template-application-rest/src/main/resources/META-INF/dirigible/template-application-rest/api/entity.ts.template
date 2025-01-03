@@ -208,31 +208,18 @@ class ${name}Service {
 #if($perspectiveRole || $roleRead || $roleWrite || $generateDefaultRoles)
 
     private checkPermissions(operationType: string) {
-#if($perspectiveRole)
-        if (!user.isInRole("${perspectiveRole}")) {
+#if($perspectiveRole || $generateDefaultRoles)
+        if (!user.isInRole("${perspectiveRole}") || !user.isInRole("${model.name}ReadOnly") || !user.isInRole("${model.name}FullAccess")) {
             throw new ForbiddenError();
         }
 #end
-#if($roleRead)
-        if (operationType === "read" && !user.isInRole("${roleRead}")) {
+#if($roleRead || $generateDefaultRoles)
+        if (operationType === "read" && (!user.isInRole("${roleRead}") || !user.isInRole("${model.name}ReadOnly"))) {
             throw new ForbiddenError();
         }
 #end
-#if($roleWrite)
-        if (operationType === "write" && !user.isInRole("${roleWrite}")) {
-            throw new ForbiddenError();
-        }
-#end
-#if($generateDefaultRoles)
-        if (operationType === "write" && !user.isInRole("${roleWrite}")) {
-            throw new ForbiddenError();
-        }
-
-        if (operationType === "read" && !user.isInRole("${roleRead}")) {
-            throw new ForbiddenError();
-        }
-
-        if (!user.isInRole("${perspectiveRole}")) {
+#if($roleWrite || $generateDefaultRoles)
+        if (operationType === "write" && (!user.isInRole("${roleWrite}") || !user.isInRole("${model.name}ReadOnly"))) {
             throw new ForbiddenError();
         }
 #end
