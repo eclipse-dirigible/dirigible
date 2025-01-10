@@ -75,7 +75,7 @@ public class DirigibleCleaner {
 
         DirigibleDataSource systemDataSource = dataSourcesManager.getSystemDataSource();
         deleteAllTablesDataInSchema(systemDataSource);
-        dropAllTablesInSchema(systemDataSource, "QRTZ_");
+        dropAllTablesInSchema(systemDataSource, "QRTZ_", "ACT_");
 
         deleteSchemas(defaultDataSource);
     }
