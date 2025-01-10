@@ -12,6 +12,7 @@ package org.eclipse.dirigible.integration.tests.api.rest;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.tests.DirigibleTestTenant;
+import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -49,6 +50,7 @@ class EnabledMultitenantModeIT extends TenantDeterminationIT {
     void testRegisteredTenantResolution() {
         DirigibleTestTenant tenant1 = new DirigibleTestTenant("test-tenant-1");
         createTenants(tenant1);
+        SleepUtil.sleepSeconds(30);
         waitForTenantProvisioning(tenant1);
 
         testHealthIsAccessible(tenant1.getHost(), null);
