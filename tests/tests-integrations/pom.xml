@@ -42,12 +42,6 @@
 			<artifactId>dirigible-tests-framework</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>io.github.artsok</groupId>
-			<artifactId>rerunner-jupiter</artifactId>
-			<version>2.1.6</version>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
 			<groupId>com.codeborne</groupId>
 			<artifactId>selenide</artifactId>
 			<scope>test</scope>

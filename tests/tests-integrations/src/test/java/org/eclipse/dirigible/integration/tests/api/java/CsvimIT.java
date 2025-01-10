@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.integration.tests.api.java;
 
-import io.github.artsok.RepeatedIfExceptionsTest;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.database.sql.DataType;
@@ -84,7 +83,6 @@ public class CsvimIT extends UserInterfaceIntegrationTest {
      * the table is created, csvim retry should be able to import data in it as well
      */
     @Test
-    @RepeatedIfExceptionsTest(repeats = 3)
     void testImportData() throws SQLException {
         ide.createAndPublishProjectFromResources(TEST_PROJECT_FOLDER_PATH);
 
