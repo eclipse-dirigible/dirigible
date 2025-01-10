@@ -196,9 +196,12 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
                                    .getAsJsonObject()
                                    .get("structures")
                                    .getAsJsonArray();
-        String dataSource = root.getAsJsonObject()
-                                .get("datasource")
-                                .getAsString();
+        JsonElement datasourceJsonElement = root.getAsJsonObject()
+                                                .get("datasource");
+        if (datasourceJsonElement == null) {
+            throw new IllegalArgumentException(String.format("No datasource defined in: " + location + " Content: " + content));
+        }
+        String dataSource = datasourceJsonElement.getAsString();
         result.setDataSource(dataSource);
         for (int i = 0; i < structures.size(); i++) {
             JsonObject structure = structures.get(i)
