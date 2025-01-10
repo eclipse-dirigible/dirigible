@@ -367,8 +367,11 @@ public class BpmProviderFlowable implements BpmProvider {
     public void cleanup() {
         logger.info("Cleaning [{}]...", this.getClass());
         if (null != processEngine) {
-            processEngine.close();
-            ProcessEngines.destroy();
+            try {
+                ProcessEngines.destroy();
+            } catch (Exception ex) {
+                logger.error("Error while cleaning up the process engines", ex);
+            }
             processEngine = null;
         }
     }
