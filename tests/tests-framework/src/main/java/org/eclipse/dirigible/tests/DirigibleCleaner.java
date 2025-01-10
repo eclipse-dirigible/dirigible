@@ -46,10 +46,13 @@ public class DirigibleCleaner {
     }
 
     public void clean() {
+        long startTime = System.currentTimeMillis();
+        LOGGER.info("Cleaning up Dirigible resources...");
         try {
             deleteDatabases();
             deleteCMSFolderFiles();
             unpublishResources();
+            LOGGER.info("Dirigible resources have been cleaned up. It took [{}] ms", System.currentTimeMillis() - startTime);
         } catch (Throwable ex) {
             throw new IllegalStateException("Failed to cleanup resources", ex);
         }
@@ -74,8 +77,8 @@ public class DirigibleCleaner {
         dropAllSequencesInSchema(defaultDataSource);
 
         DirigibleDataSource systemDataSource = dataSourcesManager.getSystemDataSource();
-        deleteAllTablesDataInSchema(systemDataSource, "ACT_");
-        dropAllTablesInSchema(systemDataSource, "QRTZ_");
+        deleteAllTablesDataInSchema(systemDataSource, "ACT_", "FLW_", "ACTIVEMQ_");
+        dropAllTablesInSchema(systemDataSource, "QRTZ_", "ACT_", "FLW_", "ACTIVEMQ_");
 
         deleteSchemas(defaultDataSource);
     }
