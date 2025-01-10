@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.integration.tests.api.java;
 
+import io.github.artsok.RepeatedIfExceptionsTest;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.database.sql.DataType;
@@ -20,8 +21,6 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.retry.annotation.Backoff;
-import org.springframework.retry.annotation.Retryable;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -84,8 +83,8 @@ public class CsvimIT extends UserInterfaceIntegrationTest {
      * Initially the table READERS2 is not defined. However, the other two tables must be imported. Once
      * the table is created, csvim retry should be able to import data in it as well
      */
-    @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 2000)) // Retry 3 times with a 2-second delay
     @Test
+    @RepeatedIfExceptionsTest(repeats = 3)
     void testImportData() throws SQLException {
         ide.createAndPublishProjectFromResources(TEST_PROJECT_FOLDER_PATH);
 
