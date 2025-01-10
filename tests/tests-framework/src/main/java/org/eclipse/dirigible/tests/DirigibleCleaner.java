@@ -74,7 +74,7 @@ public class DirigibleCleaner {
         dropAllSequencesInSchema(defaultDataSource);
 
         DirigibleDataSource systemDataSource = dataSourcesManager.getSystemDataSource();
-        deleteAllTablesDataInSchema(systemDataSource);
+        deleteAllTablesDataInSchema(systemDataSource, "ACT_");
         dropAllTablesInSchema(systemDataSource, "QRTZ_");
 
         deleteSchemas(defaultDataSource);
@@ -224,8 +224,13 @@ public class DirigibleCleaner {
         }
     }
 
-    private void deleteAllTablesDataInSchema(DirigibleDataSource dataSource) {
+    private void deleteAllTablesDataInSchema(DirigibleDataSource dataSource, String... skipTablePrefixes) {
         Set<String> tables = getAllTables(dataSource);
+        for (String skipTablePrefix : skipTablePrefixes) {
+            tables = tables.stream()
+                           .filter(t -> !t.startsWith(skipTablePrefix))
+                           .collect(Collectors.toSet());
+        }
 
         for (int idx = 0; idx < 4; idx++) { // execute it a few times due to constraint violations
             Iterator<String> iterator = tables.iterator();
