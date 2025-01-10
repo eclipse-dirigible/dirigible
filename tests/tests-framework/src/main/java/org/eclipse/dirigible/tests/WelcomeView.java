@@ -38,7 +38,7 @@ public class WelcomeView {
     }
 
     public void selectTemplate(String templateTitle) {
-        browser.clickOnElementContainingText(HtmlElementType.ANCHOR, templateTitle);
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.ROLE, "heading", templateTitle);
     }
 
     public void typeProjectName(String projectName) {

@@ -17,7 +17,6 @@
 	<properties>
 		<license.header.location>../../licensing-header.txt</license.header.location>
 		<parent.pom.folder>../../</parent.pom.folder>
-		<selenide.version>7.0.4</selenide.version>
 	</properties>
 
 	<dependencies>
