@@ -21,6 +21,7 @@ import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
 import org.eclipse.dirigible.components.base.synchronizer.MultitenantBaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
+import org.eclipse.dirigible.components.data.sources.config.DefaultDataSourceName;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.structures.domain.*;
 import org.eclipse.dirigible.components.data.structures.service.SchemaService;
@@ -76,6 +77,7 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
      * The view service.
      */
     private final ViewService viewService;
+    private final String defaultDataSourceName;
 
     /**
      * The datasources manager.
@@ -97,11 +99,12 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
      */
     @Autowired
     public SchemasSynchronizer(SchemaService schemaService, DataSourcesManager datasourcesManager, TableService tableService,
-            ViewService viewService) {
+            ViewService viewService, @DefaultDataSourceName String defaultDataSourceName) {
         this.schemaService = schemaService;
         this.datasourcesManager = datasourcesManager;
         this.tableService = tableService;
         this.viewService = viewService;
+        this.defaultDataSourceName = defaultDataSourceName;
     }
 
     /**
@@ -187,7 +190,7 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
      * @param content the content
      * @return the schema
      */
-    public static Schema parseSchema(String location, String content) {
+    public Schema parseSchema(String location, String content) {
         Schema result = new Schema();
 
         JsonElement root = GsonHelper.parseJson(content);
@@ -198,10 +201,7 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
                                    .getAsJsonArray();
         JsonElement datasourceJsonElement = root.getAsJsonObject()
                                                 .get("datasource");
-        if (datasourceJsonElement == null) {
-            throw new IllegalArgumentException(String.format("No datasource defined in: " + location + " Content: " + content));
-        }
-        String dataSource = datasourceJsonElement.getAsString();
+        String dataSource = datasourceJsonElement == null ? datasourceJsonElement.getAsString() : defaultDataSourceName;
         result.setDataSource(dataSource);
         for (int i = 0; i < structures.size(); i++) {
             JsonObject structure = structures.get(i)
