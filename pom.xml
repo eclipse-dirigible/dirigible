@@ -174,7 +174,7 @@
 
 		<!-- JDBC -->
 		<mongodb.version>3.12.14</mongodb.version>
-		<ngdbc.version>2.22.12</ngdbc.version>
+		<ngdbc.version>2.23.7</ngdbc.version>
 		<snowflake.version>3.20.0</snowflake.version>
 		<mysql.version>8.4.0</mysql.version>
 		
