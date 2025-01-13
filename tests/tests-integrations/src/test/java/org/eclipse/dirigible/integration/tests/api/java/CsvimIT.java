@@ -121,6 +121,12 @@ public class CsvimIT extends UserInterfaceIntegrationTest {
 
     private void verifyDataInTable(String tableName, List<Reader> expectedReaders) {
                await().atMost(30, TimeUnit.SECONDS)
+
+
+
+
+
+
                .pollInterval(1, TimeUnit.SECONDS)
                .until(() -> {
                    try {
