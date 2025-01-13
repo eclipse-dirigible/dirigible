@@ -9,10 +9,6 @@
  */
 package org.eclipse.dirigible.components.ide.workspace.service;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Collectors;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.commons.process.Piper;
 import org.eclipse.dirigible.commons.process.ProcessUtils;
@@ -30,6 +26,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * The Class ActionsService.
@@ -109,6 +110,65 @@ public class ActionsService {
     }
 
     /**
+     * Execute command line.
+     *
+     * @param workingDirectory the working directory
+     * @param commandLine the command line
+     * @return the int
+     * @throws Exception the exception
+     */
+    public int executeCommandLine(String workingDirectory, String commandLine) throws Exception {
+        logger.info("Executing [{}], working dir [{}]", commandLine, workingDirectory);
+        int result = 0;
+        String[] args;
+        try {
+            args = ProcessUtils.translateCommandline(commandLine);
+        } catch (Exception e) {
+            String errorMessage = String.format("Failed to translate [%s]", commandLine);
+            logger.error(errorMessage, e);
+            throw new Exception(errorMessage, e);
+        }
+
+        try {
+            ProcessBuilder processBuilder = ProcessUtils.createProcess(args);
+
+            processBuilder.directory(new java.io.File(workingDirectory));
+
+            processBuilder.redirectErrorStream(true);
+
+            Process process = ProcessUtils.startProcess(args, processBuilder);
+            Piper pipe = new Piper(process.getInputStream(), new LoggingOutputStream(logger, LoggingOutputStream.LogLevel.INFO));
+            new Thread(pipe).start();
+            try {
+                int i = 0;
+                boolean deadYet = false;
+                do {
+                    Thread.sleep(ProcessUtils.DEFAULT_WAIT_TIME);
+                    try {
+                        result = process.exitValue();
+                        deadYet = true;
+                    } catch (IllegalThreadStateException e) {
+                        if (++i >= ProcessUtils.DEFAULT_LOOP_COUNT) {
+                            process.destroy();
+                            throw new RuntimeException(
+                                    "Exceeds timeout - " + ((ProcessUtils.DEFAULT_WAIT_TIME / 1000) * ProcessUtils.DEFAULT_LOOP_COUNT), e);
+                        }
+                    }
+                } while (!deadYet);
+
+            } catch (Exception e) {
+                logger.error(e.getMessage(), e);
+                throw new IOException(e);
+            }
+        } catch (Exception e) {
+            String errorMessage = String.format("Failed to execute [%s], working dir [%s]", commandLine, workingDirectory);
+            logger.error(errorMessage, e);
+            throw new Exception(errorMessage, e);
+        }
+        return result;
+    }
+
+    /**
      * List actions.
      *
      * @param workspace the workspace
@@ -146,68 +206,6 @@ public class ActionsService {
             logger.trace(e.getMessage(), e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, error);
         }
-    }
-
-    /**
-     * Execute command line.
-     *
-     * @param workingDirectory the working directory
-     * @param commandLine the command line
-     * @return the int
-     * @throws Exception the exception
-     */
-    public int executeCommandLine(String workingDirectory, String commandLine) throws Exception {
-        int result = 0;
-        String[] args;
-        try {
-            args = ProcessUtils.translateCommandline(commandLine);
-        } catch (Exception e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
-            throw new Exception(e);
-        }
-
-        try {
-            ProcessBuilder processBuilder = ProcessUtils.createProcess(args);
-
-            processBuilder.directory(new java.io.File(workingDirectory));
-
-            processBuilder.redirectErrorStream(true);
-
-            Process process = ProcessUtils.startProcess(args, processBuilder);
-            Piper pipe = new Piper(process.getInputStream(), new LoggingOutputStream(logger, LoggingOutputStream.LogLevel.INFO));
-            new Thread(pipe).start();
-            try {
-                int i = 0;
-                boolean deadYet = false;
-                do {
-                    Thread.sleep(ProcessUtils.DEFAULT_WAIT_TIME);
-                    try {
-                        result = process.exitValue();
-                        deadYet = true;
-                    } catch (IllegalThreadStateException e) {
-                        if (++i >= ProcessUtils.DEFAULT_LOOP_COUNT) {
-                            process.destroy();
-                            throw new RuntimeException(
-                                    "Exceeds timeout - " + ((ProcessUtils.DEFAULT_WAIT_TIME / 1000) * ProcessUtils.DEFAULT_LOOP_COUNT));
-                        }
-                    }
-                } while (!deadYet);
-
-            } catch (Exception e) {
-                if (logger.isErrorEnabled()) {
-                    logger.error(e.getMessage(), e);
-                }
-                throw new IOException(e);
-            }
-        } catch (Exception e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
-            throw new Exception(e);
-        }
-        return result;
     }
 
 }
