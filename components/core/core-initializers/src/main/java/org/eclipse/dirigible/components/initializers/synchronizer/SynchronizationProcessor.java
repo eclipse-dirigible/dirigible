@@ -167,6 +167,9 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
         }
 
         processing.set(true);
+        if (synchronizationWatcher.isModified()) {
+            synchronizationWatcher.reset();
+        }
 
         try {
 
@@ -397,7 +400,6 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
             definitions.clear();
             artefacts.clear();
 
-            synchronizationWatcher.reset();
             initialized.set(true);
             processing.set(false);
         }
