@@ -1,0 +1,5 @@
+{
+    "module": "menu-extensions/templates/menu-extensionpoint.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "Extension Point Workbench New Menu Extension"
+}

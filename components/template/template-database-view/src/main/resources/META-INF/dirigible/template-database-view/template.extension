@@ -1,5 +1,5 @@
 {
-    "extensionPoint": "ide-template",
+    "extensionPoint": "platform-templates",
     "module": "template-database-view/template.js",
     "description": "Database View Template"
 }

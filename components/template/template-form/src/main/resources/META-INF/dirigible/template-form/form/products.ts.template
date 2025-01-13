@@ -1,0 +1,50 @@
+import { Controller, Get } from "sdk/http"
+
+@Controller
+class ProductsService {
+
+    @Get("/")
+    public getAllProducts() {
+        return [{
+            id: "P0000000001",
+            label: "Product A - Premium Quality Widget"
+        },
+        {
+            id: "P0000000002",
+            label: "Product B - Professional Grade Gadget"
+        },
+        {
+            id: "P0000000003",
+            label: "Product C - Deluxe Widget Set"
+        },
+        {
+            id: "P0000000004",
+            label: "Product D - Ultimate Gadget Package"
+        },
+        {
+            id: "P0000000005",
+            label: "Product E - Advanced Widget Toolkit"
+        },
+        {
+            id: "P0000000006",
+            label: "Product F - Essential Gadget Bundle"
+        },
+        {
+            id: "P0000000007",
+            label: "Product G - Classic Widget Collection"
+        },
+        {
+            id: "P0000000008",
+            label: "Product H - Modern Gadget Assortment"
+        },
+        {
+            id: "P0000000009",
+            label: "Product I - Basic Widget Package"
+        },
+        {
+            id: "P0000000010",
+            label: "Product J - Sleek Gadget Combo"
+        }];
+    }
+
+}

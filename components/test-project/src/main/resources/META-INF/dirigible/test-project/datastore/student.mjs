@@ -1,5 +1,5 @@
-import { store } from "@dirigible/db";
-import { response } from "@dirigible/http";
+import { store } from "sdk/db";
+import { response } from "sdk/http";
 
 let entry = { 'name': 'John', 'address': 'Sofia, Bulgaria' };
 

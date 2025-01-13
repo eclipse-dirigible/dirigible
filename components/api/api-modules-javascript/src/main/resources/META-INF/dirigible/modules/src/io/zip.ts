@@ -12,128 +12,149 @@
 /**
  * API Zip
  */
-import * as bytes from "@dirigible/io/bytes";
+import { Bytes } from "sdk/io/bytes";
+import { InputStream, OutputStream } from "sdk/io/streams";
+
 const ZipFacade = Java.type("org.eclipse.dirigible.components.api.io.ZipFacade");
 
-export function zip(sourcePath, zipTargetPath) {
-    ZipFacade.exportZip(sourcePath, zipTargetPath);
-};
-export function unzip(zipPath, targetPath) {
-    ZipFacade.importZip(zipPath, targetPath);
-};
+export class Zip {
 
-export function createZipInputStream(inputStream) {
-    const native = ZipFacade.createZipInputStream(inputStream.native);
-    return new ZipInputStream(native);
-};
+    public static zip(sourcePath: string, zipTargetPath: string): void {
+        ZipFacade.exportZip(sourcePath, zipTargetPath);
+    }
 
-class ZipInputStream {
+    public static unzip(zipPath: string, targetPath: string): void {
+        ZipFacade.importZip(zipPath, targetPath);
+    }
 
-    constructor(private native) {}
+    public static createZipInputStream(inputStream: InputStream): ZipInputStream {
+        const native = ZipFacade.createZipInputStream(inputStream.native);
+        return new ZipInputStream(native);
+    }
 
-    getNextEntry() {
+    public static createZipOutputStream(outputStream: OutputStream): ZipOutputStream {
+        const native = ZipFacade.createZipOutputStream(outputStream.native);
+        return new ZipOutputStream(native);
+    }
+}
+
+export class ZipInputStream {
+
+    private readonly native: any;
+
+    constructor(native: any) {
+        this.native = native;
+    }
+
+    public getNextEntry(): ZipEntry {
         const native = this.native.getNextEntry();
-        const zipEntry = new ZipEntry(native);
-        return zipEntry;
-    };
+        return new ZipEntry(native);
+    }
 
-    read() {
+    public read(): any[] {
         const native = ZipFacade.readNative(this.native);
-        return bytes.toJavaScriptBytes(native);
-    };
+        return Bytes.toJavaScriptBytes(native);
+    }
 
-    readNative() {
+    public readNative(): any[] {
         return ZipFacade.readNative(this.native);
-    };
+    }
 
-    readText() {
+    public readText(): string {
         return ZipFacade.readText(this.native);
-    };
+    }
 
-    close() {
+    public close(): void {
         this.native.close();
-    };
+    }
 
-};
+}
 
-export function createZipOutputStream(outputStream) {
-    const native = ZipFacade.createZipOutputStream(outputStream.native);
-    return new ZipOutputStream(native);
-};
+export class ZipOutputStream {
 
-class ZipOutputStream {
+    private readonly native: any;
 
-    constructor(private native) {}
+    constructor(native: any) {
+        this.native = native;
+    }
 
-    createZipEntry(name) {
+    public createZipEntry(name: string): ZipEntry {
         const nativeNext = ZipFacade.createZipEntry(name);
         const zipEntry = new ZipEntry(nativeNext);
         this.native.putNextEntry(nativeNext);
         return zipEntry;
-    };
+    }
 
-    write(data) {
-        const native = bytes.toJavaBytes(data);
+    public write(data: any[]): void {
+        const native = Bytes.toJavaBytes(data);
         ZipFacade.writeNative(this.native, native);
-    };
+    }
 
-    writeNative(data) {
+    public writeNative(data: any[]): void {
         ZipFacade.writeNative(this.native, data);
-    };
+    }
 
-    writeText(text) {
+    public writeText(text: string): void {
         ZipFacade.writeText(this.native, text);
-    };
+    }
 
-    closeEntry() {
+    public closeEntry(): void {
         this.native.closeEntry();
-    };
+    }
 
-    close() {
+    public close(): void {
         this.native.finish();
         this.native.flush();
         this.native.close();
-    };
-
-};
+    }
+}
 
 /**
  * ZipEntry object
  */
-class ZipEntry {
+export class ZipEntry {
 
-    constructor(private native) {}
+    private readonly native: any;
 
-    getName() {
+    constructor(native: any) {
+        this.native = native;
+    }
+
+    public getName(): string {
         return this.native.getName();
-    };
+    }
 
-    getSize() {
+    public getSize(): number {
         return this.native.getSize();
-    };
+    }
 
-    getCompressedSize() {
+    public getCompressedSize(): number {
         return this.native.getCompressedSize();
-    };
+    }
 
-    getTime() {
+    public getTime(): number {
         return this.native.getTime();
-    };
+    }
 
-    getCrc() {
+    public getCrc(): number {
         return this.native.getCrc();
-    };
+    }
 
-    getComment() {
+    public getComment(): string {
         return this.native.getComment();
-    };
+    }
 
-    isDirectory() {
+    public isDirectory(): boolean {
         return this.native.isDirectory();
-    };
+    }
 
-    isValid() {
-        return this.native !== null;
-    };
+    public isValid(): boolean {
+        return this.native !== undefined && this.native !== null;
+    }
+}
 
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Zip;
 }

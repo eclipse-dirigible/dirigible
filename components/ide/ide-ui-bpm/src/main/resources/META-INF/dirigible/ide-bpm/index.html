@@ -36,6 +36,7 @@
         <link rel="stylesheet" media="screen" href="editor-app/editor/css/editor.css?v=2" type="text/css" />
         <!-- <link rel="stylesheet" href="editor-app/css/style.css?v=2" type="text/css" /> -->
         <link rel="stylesheet" href="editor-app/theme/style.css?v=2" type="text/css" />
+        <link rel="stylesheet" href="editor-app/theme/stencils.css" type="text/css" />
         <script src="editor-app/theme/theme.js"></script>
 
         <!-- build:css styles/style.css -->
@@ -47,9 +48,6 @@
     </head>
 
     <body ng-app="flowableModeler" ng-cloak>
-
-
-
         <!--[if lt IE 9]>
     <div class="unsupported-browser">
         <p class="alert error">You are using an unsupported browser. Please upgrade your browser in order to use the
@@ -88,7 +86,7 @@
             </div>
         </div>
 
-        <div id="main" class="wrapper full clearfix" ng-view="" ng-cloak ng-style="{height: window.height + 'px'}">
+        <div id="main" class="wrapper full clearfix" ng-view="" ng-cloak>
         </div>
 
         <!--[if lt IE 9]>

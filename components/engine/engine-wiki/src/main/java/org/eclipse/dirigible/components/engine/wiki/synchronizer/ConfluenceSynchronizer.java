@@ -1,30 +1,20 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.engine.wiki.synchronizer;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.text.ParseException;
-import java.util.List;
-
 import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.ArtefactService;
-import org.eclipse.dirigible.components.base.artefact.topology.TopologicalDepleter;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
-import org.eclipse.dirigible.components.base.synchronizer.Synchronizer;
+import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.engine.wiki.domain.Confluence;
@@ -36,14 +26,19 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.text.ParseException;
+import java.util.List;
+
 /**
  * The Class ConfluenceSynchronizer.
- *
- * @param <A> the generic type
  */
 @Component
 @Order(SynchronizersOrder.CONFLUENCE)
-public class ConfluenceSynchronizer<A extends Artefact> implements Synchronizer<Confluence> {
+public class ConfluenceSynchronizer extends BaseSynchronizer<Confluence, Long> {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(ConfluenceSynchronizer.class);
@@ -54,10 +49,10 @@ public class ConfluenceSynchronizer<A extends Artefact> implements Synchronizer<
     private static final String FILE_EXTENSION_CONFLUENCE = ".confluence";
 
     /** The confluence service. */
-    private ConfluenceService confluenceService;
+    private final ConfluenceService confluenceService;
 
     /** The wiki service. */
-    private WikiService wikiService;
+    private final WikiService wikiService;
 
     /** The synchronization callback. */
     private SynchronizerCallback callback;
@@ -72,16 +67,6 @@ public class ConfluenceSynchronizer<A extends Artefact> implements Synchronizer<
     public ConfluenceSynchronizer(ConfluenceService confluenceService, WikiService wikiService) {
         this.confluenceService = confluenceService;
         this.wikiService = wikiService;
-    }
-
-    /**
-     * Gets the service.
-     *
-     * @return the service
-     */
-    @Override
-    public ArtefactService<Confluence> getService() {
-        return confluenceService;
     }
 
     /**
@@ -105,7 +90,9 @@ public class ConfluenceSynchronizer<A extends Artefact> implements Synchronizer<
         return file.toString()
                    .endsWith(FILE_EXTENSION_CONFLUENCE)
                 && file.toString()
-                       .indexOf("webjars") == -1;
+                       .indexOf("webjars") == -1
+                && file.toString()
+                       .indexOf("node_modules") == -1;
     }
 
     /**
@@ -125,10 +112,10 @@ public class ConfluenceSynchronizer<A extends Artefact> implements Synchronizer<
      * @param location the location
      * @param content the content
      * @return the list
-     * @throws ParseException
+     * @throws ParseException the parse exception
      */
     @Override
-    public List<Confluence> parse(String location, byte[] content) throws ParseException {
+    protected List<Confluence> parseImpl(String location, byte[] content) throws ParseException {
         Confluence wiki = new Confluence();
         Configuration.configureObject(wiki);
         wiki.setLocation(location);
@@ -160,6 +147,16 @@ public class ConfluenceSynchronizer<A extends Artefact> implements Synchronizer<
     }
 
     /**
+     * Gets the service.
+     *
+     * @return the service
+     */
+    @Override
+    public ArtefactService<Confluence, Long> getService() {
+        return confluenceService;
+    }
+
+    /**
      * Retrieve.
      *
      * @param location the location
@@ -178,10 +175,10 @@ public class ConfluenceSynchronizer<A extends Artefact> implements Synchronizer<
      * @param error the error
      */
     @Override
-    public void setStatus(Artefact artefact, ArtefactLifecycle lifecycle, String error) {
+    public void setStatus(Confluence artefact, ArtefactLifecycle lifecycle, String error) {
         artefact.setLifecycle(lifecycle);
         artefact.setError(error);
-        getService().save((Confluence) artefact);
+        getService().save(artefact);
     }
 
     /**
@@ -192,33 +189,31 @@ public class ConfluenceSynchronizer<A extends Artefact> implements Synchronizer<
      * @return true, if successful
      */
     @Override
-    public boolean complete(TopologyWrapper<Artefact> wrapper, ArtefactPhase flow) {
-        Confluence wiki = null;
-        if (wrapper.getArtefact() instanceof Confluence) {
-            wiki = (Confluence) wrapper.getArtefact();
-        } else {
-            throw new UnsupportedOperationException(String.format("Trying to process %s as Confluence", wrapper.getArtefact()
-                                                                                                               .getClass()));
-        }
+    protected boolean completeImpl(TopologyWrapper<Confluence> wrapper, ArtefactPhase flow) {
+        Confluence wiki = wrapper.getArtefact();
 
         switch (flow) {
             case CREATE:
                 if (ArtefactLifecycle.NEW.equals(wiki.getLifecycle())) {
                     wikiService.generateContent(wiki.getLocation(), new String(wiki.getContent(), StandardCharsets.UTF_8));
-                    callback.registerState(this, wrapper, ArtefactLifecycle.CREATED, "");
+                    callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
                 }
                 break;
             case UPDATE:
                 if (ArtefactLifecycle.MODIFIED.equals(wiki.getLifecycle())) {
                     wikiService.generateContent(wiki.getLocation(), new String(wiki.getContent(), StandardCharsets.UTF_8));
-                    callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED, "");
+                    callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
+                }
+                if (ArtefactLifecycle.FAILED.equals(wiki.getLifecycle())) {
+                    return false;
                 }
                 break;
             case DELETE:
-                if (ArtefactLifecycle.CREATED.equals(wiki.getLifecycle()) || ArtefactLifecycle.UPDATED.equals(wiki.getLifecycle())) {
+                if (ArtefactLifecycle.CREATED.equals(wiki.getLifecycle()) || ArtefactLifecycle.UPDATED.equals(wiki.getLifecycle())
+                        || ArtefactLifecycle.FAILED.equals(wiki.getLifecycle())) {
                     wikiService.removeGenerated(wiki.getLocation());
                     getService().delete(wiki);
-                    callback.registerState(this, wrapper, ArtefactLifecycle.DELETED, "");
+                    callback.registerState(this, wrapper, ArtefactLifecycle.DELETED);
                 }
                 break;
             case START:
@@ -234,16 +229,13 @@ public class ConfluenceSynchronizer<A extends Artefact> implements Synchronizer<
      * @param wiki the wiki
      */
     @Override
-    public void cleanup(Confluence wiki) {
+    public void cleanupImpl(Confluence wiki) {
         try {
             wikiService.removeGenerated(wiki.getLocation());
             getService().delete(wiki);
         } catch (Exception e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
             callback.addError(e.getMessage());
-            callback.registerState(this, wiki, ArtefactLifecycle.DELETED, e.getMessage());
+            callback.registerState(this, wiki, ArtefactLifecycle.DELETED, e);
         }
     }
 

@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.builders.table;
 
@@ -16,12 +15,7 @@ import org.eclipse.dirigible.database.sql.TableStatements;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -165,7 +159,6 @@ public class CreateTableBuilder<TABLE_BUILDER extends CreateTableBuilder> extend
         this.foreignKeys.add(foreignKey);
         return (TABLE_BUILDER) this;
     }
-
 
     /**
      * Foreign key.
@@ -359,7 +352,7 @@ public class CreateTableBuilder<TABLE_BUILDER extends CreateTableBuilder> extend
             sql.append(COMMA)
                .append(SPACE);
             if (this.primaryKey.getName() != null) {
-                String primaryKeyName = (isCaseSensitive()) ? encapsulate(this.primaryKey.getName()) : this.primaryKey.getName();
+                String primaryKeyName = encapsulate(this.primaryKey.getName());
                 sql.append(KEYWORD_CONSTRAINT)
                    .append(SPACE)
                    .append(primaryKeyName)
@@ -377,7 +370,7 @@ public class CreateTableBuilder<TABLE_BUILDER extends CreateTableBuilder> extend
                 sql.append(COMMA)
                    .append(SPACE);
                 ArrayList<String> keys = new ArrayList<>();
-                allPrimaryKeys.forEach(el -> keys.add(el[0]));
+                allPrimaryKeys.forEach(el -> keys.add(encapsulate(el[0])));
                 sql.append(KEYWORD_PRIMARY)
                    .append(SPACE)
                    .append(KEYWORD_KEY)
@@ -411,14 +404,13 @@ public class CreateTableBuilder<TABLE_BUILDER extends CreateTableBuilder> extend
             sql.append(COMMA)
                .append(SPACE);
             if (foreignKey.getName() != null) {
-                String foreignKeyName = (isCaseSensitive()) ? encapsulate(foreignKey.getName()) : foreignKey.getName();
+                String foreignKeyName = encapsulate(foreignKey.getName());
                 sql.append(KEYWORD_CONSTRAINT)
                    .append(SPACE)
                    .append(foreignKeyName)
                    .append(SPACE);
             }
-            String referencedTableName =
-                    (isCaseSensitive()) ? encapsulate(foreignKey.getReferencedTable(), true) : foreignKey.getReferencedTable();
+            String referencedTableName = encapsulate(foreignKey.getReferencedTable(), true);
             sql.append(KEYWORD_FOREIGN)
                .append(SPACE)
                .append(KEYWORD_KEY)
@@ -454,7 +446,6 @@ public class CreateTableBuilder<TABLE_BUILDER extends CreateTableBuilder> extend
         return indices;
     }
 
-
     /**
      * Generate unique index.
      *
@@ -475,12 +466,12 @@ public class CreateTableBuilder<TABLE_BUILDER extends CreateTableBuilder> extend
             sql.append(KEYWORD_INDEX)
                .append(SPACE);
             if (uniqueIndex.getName() != null) {
-                sql.append(uniqueIndex.getName())
+                sql.append(encapsulate(uniqueIndex.getName()))
                    .append(SPACE);
             }
             sql.append(KEYWORD_ON)
                .append(SPACE)
-               .append(this.getTable());
+               .append(encapsulate(this.getTable()));
             sql.append(SPACE)
                .append(OPEN)
                .append(traverseNames(uniqueIndex.getColumns()))
@@ -517,7 +508,7 @@ public class CreateTableBuilder<TABLE_BUILDER extends CreateTableBuilder> extend
             sql.append(COMMA)
                .append(SPACE);
             if (check.getName() != null) {
-                String checkName = (isCaseSensitive()) ? encapsulate(check.getName()) : check.getName();
+                String checkName = encapsulate(check.getName());
                 sql.append(KEYWORD_CONSTRAINT)
                    .append(SPACE)
                    .append(checkName)
@@ -562,11 +553,11 @@ public class CreateTableBuilder<TABLE_BUILDER extends CreateTableBuilder> extend
             }
             sql.append(KEYWORD_INDEX)
                .append(SPACE)
-               .append(index.getName())
+               .append(encapsulate(index.getName()))
                .append(SPACE)
                .append(KEYWORD_ON)
                .append(SPACE)
-               .append(this.getTable());
+               .append(encapsulate(this.getTable()));
             sql.append(SPACE)
                .append(OPEN)
                .append(traverseNames(index.getColumns()))

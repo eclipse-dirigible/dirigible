@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.websockets.repository;
 
@@ -16,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import java.util.List;
 import java.util.Optional;
 
-import javax.persistence.EntityManager;
+import jakarta.persistence.EntityManager;
 
 import org.eclipse.dirigible.components.websockets.domain.Websocket;
 import org.eclipse.dirigible.components.websockets.repository.WebsocketRepository;
@@ -31,6 +30,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * The Class WebsocketRepositoryTest.
+ */
 @SpringBootTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ComponentScan(basePackages = {"org.eclipse.dirigible.components"})
@@ -38,12 +40,17 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class WebsocketRepositoryTest {
 
+    /** The websocket repository. */
     @Autowired
     private WebsocketRepository websocketRepository;
 
+    /** The entity manager. */
     @Autowired
     EntityManager entityManager;
 
+    /**
+     * Setup.
+     */
     @BeforeEach
     public void setup() {
 
@@ -54,11 +61,19 @@ public class WebsocketRepositoryTest {
         websocketRepository.save(new Websocket("/a/b/c/w3.websocket", "name3", "description", "endpoint3", "handler3", "engine3"));
     }
 
+    /**
+     * Cleanup.
+     */
     @AfterEach
     public void cleanup() {
         websocketRepository.deleteAll();
     }
 
+    /**
+     * Gets the one.
+     *
+     * @return the one
+     */
     @Test
     public void getOne() {
         List<Websocket> all = websocketRepository.findAll();
@@ -79,6 +94,11 @@ public class WebsocketRepositoryTest {
         assertNotNull(websocket.getCreatedAt());
     }
 
+    /**
+     * Gets the reference using entity manager.
+     *
+     * @return the reference using entity manager
+     */
     @Test
     public void getReferenceUsingEntityManager() {
         Long id = websocketRepository.findAll()
@@ -89,6 +109,9 @@ public class WebsocketRepositoryTest {
         assertEquals("/a/b/c/w1.websocket", websocket.getLocation());
     }
 
+    /**
+     * The Class TestConfiguration.
+     */
     @SpringBootApplication
     static class TestConfiguration {
     }

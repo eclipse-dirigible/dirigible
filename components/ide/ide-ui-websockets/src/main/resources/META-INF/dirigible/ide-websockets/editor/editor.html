@@ -1,3 +1,16 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
 <!DOCTYPE html>
 <html lang="en" ng-app="page" ng-controller="PageController">
 
@@ -9,15 +22,15 @@
         <title dg-view-title></title>
         <script type="text/javascript" src="../services/websocket-editor.js"></script>
         <theme></theme>
-        <script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=ide-view-js">
+        <script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=ide-editor-js">
         </script>
         <link type="text/css" rel="stylesheet"
-            href="/services/js/resources-core/services/loader.js?id=ide-view-css" />
+            href="/services/js/resources-core/services/loader.js?id=ide-editor-css" />
         <script type="text/javascript" src="editor.js"></script>
     </head>
 
     <body class="fd-padding dg-vbox dg-center__horizontal" fd-scrollbar dg-shortcut="'ctrl+s'"
-        dg-shortcut-action="save()">
+        dg-shortcut-action="save">
         <fd-busy-indicator-extended class="dg-fill-parent" ng-hide="state.error || !state.isBusy" dg-size="l">
             {{state.busyText}}
         </fd-busy-indicator-extended>

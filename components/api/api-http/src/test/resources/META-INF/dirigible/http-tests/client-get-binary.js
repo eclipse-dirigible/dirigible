@@ -1,19 +1,10 @@
-/*
- * Copyright (c) 2022 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: 2022 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
-var client = require('http/client');
-var assertTrue = require('test/assert').assertTrue;
+import { HttpClient } from 'sdk/http/client';
+import { Assert } from 'test/assert';
 
-var result = client.get('https://raw.githubusercontent.com/eclipse/dirigible/master/NOTICE.txt', {'binary': true});
+const result = HttpClient.get('https://raw.githubusercontent.com/eclipse/dirigible/master/NOTICE.txt', {
+    binary: true
+});
 
 console.log(JSON.stringify(result));
 
-assertTrue((result !== null) && (result !== undefined));
+Assert.assertTrue((result !== null) && (result !== undefined));

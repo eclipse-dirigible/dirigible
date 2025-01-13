@@ -1,0 +1,5 @@
+{
+    "module": "menu-security/templates/menu-access.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "Access Constraints Workbench New Menu Extension"
+}

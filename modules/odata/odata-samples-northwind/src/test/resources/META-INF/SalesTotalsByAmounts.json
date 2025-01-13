@@ -1,10 +1,14 @@
 {
-	"edmType": "Sales_Totals_by_Amount",
-	"edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.SalesTotalsByAmounts",
-	"sqlTable": " PUBLIC.SALES_TOTALS_BY_AMOUNT",
-	"SaleAmount": "SALE_AMOUNT",
-	"OrderID": "ORDER_ID",
-	"CompanyName": "COMPANY_NAME",
-	"ShippedDate": "SHIPPED_DATE",
-	"_pk_": ["ORDER_ID", "COMPANY_NAME"]
+  "edmType": "Sales_Totals_by_Amount",
+  "edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.SalesTotalsByAmounts",
+  "sqlTable": "SALES_TOTALS_BY_AMOUNT",
+  "sqlSchema": "PUBLIC",
+  "SaleAmount": "SALE_AMOUNT",
+  "OrderID": "ORDER_ID",
+  "CompanyName": "COMPANY_NAME",
+  "ShippedDate": "SHIPPED_DATE",
+  "_pk_": [
+    "ORDER_ID",
+    "COMPANY_NAME"
+  ]
 }

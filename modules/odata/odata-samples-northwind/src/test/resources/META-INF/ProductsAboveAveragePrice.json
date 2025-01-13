@@ -1,8 +1,9 @@
 {
-	"edmType": "Products_Above_Average_Price",
-	"edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.ProductsAboveAveragePrice",
-	"sqlTable": " PUBLIC.PRODUCTS_ABOVE_AVERAGE_PRICE",
-	"ProductName": "PRODUCT_NAME",
-    "UnitPrice": "UNIT_PRICE",
-	"_pk_": "PRODUCT_NAME"
+  "edmType": "Products_Above_Average_Price",
+  "edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.ProductsAboveAveragePrice",
+  "sqlTable": "PRODUCTS_ABOVE_AVERAGE_PRICE",
+  "sqlSchema": "PUBLIC",
+  "ProductName": "PRODUCT_NAME",
+  "UnitPrice": "UNIT_PRICE",
+  "_pk_": "PRODUCT_NAME"
 }

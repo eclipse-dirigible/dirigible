@@ -1,24 +1,29 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.api.mail;
 
-import java.util.Properties;
-import java.util.ServiceLoader;
-
 import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.components.base.spring.BeanProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Collection;
+import java.util.Optional;
+import java.util.Properties;
 
 /**
  * The Class MailFacade.
  */
 public class MailFacade {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(MailFacade.class);
 
     /** The Constant DIRIGIBLE_MAIL_CONFIG_PROVIDER. */
     // Dirigible mail properties
@@ -28,9 +33,6 @@ public class MailFacade {
     // Default values
     private static final String DEFAULT_PROVIDER_NAME = "environment";
 
-    /** The Constant MAIL_PROVIDERS. */
-    private static final ServiceLoader<MailConfigurationProvider> MAIL_PROVIDERS = ServiceLoader.load(MailConfigurationProvider.class);
-
     /**
      * Get MailClient with configuration options from the chosen mail configuration provider.
      *
@@ -39,11 +41,18 @@ public class MailFacade {
     public static MailClient getInstance() {
         Properties properties = new Properties();
         String providerName = Configuration.get(DIRIGIBLE_MAIL_CONFIG_PROVIDER, DEFAULT_PROVIDER_NAME);
-        for (MailConfigurationProvider next : MAIL_PROVIDERS) {
-            if (providerName.equals(next.getName())) {
-                properties.putAll(next.getProperties());
-                break;
-            }
+
+        Collection<MailConfigurationProvider> providers = BeanProvider.getBeans(MailConfigurationProvider.class);
+        Optional<MailConfigurationProvider> matchedProvider = providers.stream()
+                                                                       .filter(p -> providerName.equals(p.getName()))
+                                                                       .findFirst();
+        if (matchedProvider.isPresent()) {
+            MailConfigurationProvider provider = matchedProvider.get();
+            LOGGER.info("Will load properties from [{}]", provider);
+            properties.putAll(provider.getProperties());
+        } else {
+            LOGGER.info("Properties will not be loaded from any provider since provider with name [{}] was not found in [{}]", providerName,
+                    providers);
         }
         return getInstance(properties);
     }

@@ -1,0 +1,5 @@
+{
+    "module": "perspective-operations/api/artefacts/camel/artefacts-camel.mjs",
+    "extensionPoint": "platform-operations-artefacts",
+    "description": "Camel Artefacts Extension"
+}

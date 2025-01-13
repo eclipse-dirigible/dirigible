@@ -2,14 +2,11 @@
 
     =======================================================================
 
-    Copyright (c) 2010-2020 SAP and others.
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors.
     All rights reserved. This program and the accompanying materials
     are made available under the terms of the Eclipse Public License v2.0
     which accompanies this distribution, and is available at
     http://www.eclipse.org/legal/epl-v20.html
-
-    Contributors:
-      SAP - initial API and implementation
 
 	=======================================================================
 
@@ -32,7 +29,7 @@
 		mvn -T 1C clean install -Dmaven.test.skip=true -DskipTests -Dmaven.javadoc.skip=true
 
 	Update the years in the license header:
-		mvn license:format -P license
+		mvn license:format -P license -DskipExistingHeaders=false -DskipTCs=true
 
 	Update the version:
 		mvn versions:set -DnewVersion=3.3.1-SNAPSHOT
@@ -46,688 +43,786 @@
 	Upload to Maven Central:
 		mvn javadoc:jar
 		mvn deploy -P release -DskipTests
-		
+
 	Tests coverage report generation
 		mvn clean -B package -P coverage
-		
+
 	Static checks analysis
 		mvn clean install -P spotbugs
 
  -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		 xmlns="http://maven.apache.org/POM/4.0.0"
+		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
-    <parent>
-        <groupId>org.sonatype.oss</groupId>
-        <artifactId>oss-parent</artifactId>
-        <version>9</version>
-    </parent>
+	<modelVersion>4.0.0</modelVersion>
 
-    <name>Dirigible - Parent</name>
-    <description>Dirigible Parent</description>
-    <groupId>org.eclipse.dirigible</groupId>
-    <artifactId>dirigible-parent</artifactId>
-    <version>9.0.0-SNAPSHOT</version>
-    <packaging>pom</packaging>
+	<parent>
+		<groupId>org.sonatype.oss</groupId>
+		<artifactId>oss-parent</artifactId>
+		<version>9</version>
+	</parent>
 
-    <inceptionYear>2010</inceptionYear>
+	<name>Dirigible - Parent</name>
+	<description>Dirigible Parent</description>
+	<groupId>org.eclipse.dirigible</groupId>
+	<artifactId>dirigible-parent</artifactId>
+	<version>11.0.0-SNAPSHOT</version>
+	<packaging>pom</packaging>
 
-    <licenses>
-        <license>
-            <name>Eclipse Public License - v 2.0</name>
-            <url>https://www.eclipse.org/legal/epl-v20.html</url>
-            <distribution>repo</distribution>
-        </license>
-    </licenses>
+	<inceptionYear>2010</inceptionYear>
 
-    <url>http://www.dirigible.io</url>
+	<licenses>
+		<license>
+			<name>Eclipse Public License - v 2.0</name>
+			<url>https://www.eclipse.org/legal/epl-v20.html</url>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
 
-    <organization>
-        <name>Eclipse Foundation</name>
-        <url>http://www.eclipse.org</url>
-    </organization>
+	<url>http://www.dirigible.io</url>
 
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>com.rudikershaw.gitbuildhook</groupId>
-                <artifactId>git-build-hook-maven-plugin</artifactId>
-                <version>${git.build.hook.version}</version>
-                <configuration>
-                    <gitConfig>
-                        <core.hooksPath>hooks/</core.hooksPath>
-                        <custom.configuration>true</custom.configuration>
-                    </gitConfig>
-                </configuration>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>configure</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
+	<organization>
+		<name>Eclipse Foundation</name>
+		<url>http://www.eclipse.org</url>
+	</organization>
 
-    <profiles>
-        <profile>
-            <id>default</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
-            <properties>
-                <maven.javadoc.skip>true</maven.javadoc.skip>
-            </properties>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>net.revelc.code.formatter</groupId>
-                        <artifactId>formatter-maven-plugin</artifactId>
-                        <version>2.23.0</version>
-                        <configuration>
-                            <configFile>${formatter.location}</configFile>
-                            <compilerSource>${formatter.java.version}</compilerSource>
-                            <compilerCompliance>${formatter.java.version}</compilerCompliance>
-                            <compilerTargetPlatform>${formatter.java.version}</compilerTargetPlatform>
-                        </configuration>
-                        <executions>
-                            <execution>
-                                <id>validate-java-code-formatting</id>
-                                <phase>validate</phase>
-                                <goals>
-                                    <goal>validate</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-compiler-plugin</artifactId>
-                        <version>${maven.compiler.plugin.version}</version>
-                        <configuration>
-                            <source>${maven.compiler.source}</source>
-                            <target>${maven.compiler.target}</target>
-                            <debug>true</debug>
-                            <debuglevel>lines,vars,source</debuglevel>
-                        </configuration>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-surefire-plugin</artifactId>
-                        <version>${maven-surefire-plugin.version}</version>
-                        <configuration>
-                            <argLine>
-                                --add-opens java.base/java.lang=ALL-UNNAMED
-                                --add-opens java.base/java.math=ALL-UNNAMED
-                                --add-opens java.base/java.util=ALL-UNNAMED
-                                --add-opens java.base/java.util.concurrent=ALL-UNNAMED
-                                --add-opens java.base/java.net=ALL-UNNAMED
-                                --add-opens java.base/java.text=ALL-UNNAMED
-                            </argLine>
-                        </configuration>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-javadoc-plugin</artifactId>
-                        <version>3.6.2</version>
-                        <configuration>
-                            <source>${java.version}</source>
-                        </configuration>
-                        <executions>
-                            <execution>
-                                <id>attach-javadocs</id>
-                                <goals>
-                                    <goal>jar</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                        <!-- <configuration>
-                            <failOnError>false</failOnError>
-                        </configuration> -->
-                        <dependencies>
-                            <dependency>
-                                <groupId>org.apache.commons</groupId>
-                                <artifactId>commons-lang3</artifactId>
-                                <version>${commons.lang3}</version>
-                            </dependency>
-                        </dependencies>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
+	<properties>
+		<project.title>Eclipse Dirigible</project.title>
+		
+		<!-- Encoding -->
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
-        <profile>
-            <id>license</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>com.mycila</groupId>
-                        <artifactId>license-maven-plugin</artifactId>
-                        <version>${license-maven-plugin.version}</version>
-                        <inherited>true</inherited>
-                        <configuration>
-                            <header>${license.header.location}</header>
-                            <aggregate>true</aggregate>
-                            <properties>
-                                <inceptionYear>${project.inceptionYear}</inceptionYear>
-                                <currentYear>${currentYear}</currentYear>
-                            </properties>
-                            <includes>
-                                <include>src/**/*.java</include>
-                                <include>src/**/*.xml</include>
-                                <include>src/**/*.js</include>
-                            </includes>
-                            <excludes>
-                                <exclude>**/logback.xml</exclude>
-                                <exclude>**/logback-test.xml</exclude>
-                                <exclude>**/src/test/resources/**</exclude>
-                                <exclude>**/src/main/resources/META-INF/dirigible/font-awesome-4.7.0/**</exclude>
-                                <exclude>**/src/main/resources/META-INF/dirigible/font-dirigible/**</exclude>
-                                <exclude>**/src/main/resources/META-INF/dirigible/ide-bpm/**</exclude>
-                                <exclude>**/src/main/resources/META-INF/dirigible/ide-monaco/**</exclude>
-                                <exclude>**/src/main/resources/META-INF/dirigible/ide-swagger/**</exclude>
-                                <exclude>**/src/main/resources/META-INF/dirigible/resources-core/ui/**</exclude>
-                                <exclude>**/src/main/resources/META-INF/dirigible/ide-terminal/js/**</exclude>
-                                <exclude>**/src/main/resources/META-INF/dirigible/dev-tools/**</exclude>
-                                <exclude>
-                                    **/src/main/resources/META-INF/dirigible/template-mobile-hello-world/node_modules/**
-                                </exclude>
-                                <exclude>**/src/main/resources/META-INF/dirigible/utils/jsonpath.js</exclude>
-                            </excludes>
-                            <skipExistingHeaders>true</skipExistingHeaders>
-                        </configuration>
-                        <dependencies>
-                            <dependency>
-                                <groupId>com.mycila</groupId>
-                                <artifactId>license-maven-plugin-git</artifactId>
-                                <version>${license-maven-plugin.version}</version>
-                            </dependency>
-                        </dependencies>
-                        <executions>
-                            <execution>
-                                <id>format-license</id>
-                                <phase>initialize</phase>
-                                <goals>
-                                    <goal>format</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-compiler-plugin</artifactId>
-                        <version>${maven.compiler.plugin.version}</version>
-                        <configuration>
-                            <source>${maven.compiler.source}</source>
-                            <target>${maven.compiler.target}</target>
-                            <debug>true</debug>
-                            <debuglevel>lines,vars,source</debuglevel>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
+		<!-- Java -->
+		<java.version>17</java.version>
+		<maven.compiler.source>17</maven.compiler.source>
+		<maven.compiler.target>17</maven.compiler.target>
 
-        <profile>
-            <id>spotbugs</id>
-            <activation>
-                <activeByDefault>false</activeByDefault>
-            </activation>
-            <build>
-                <plugins>
+		<!-- Maven -->
+		<maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
+		<maven-javadoc-plugin.version>3.11.1</maven-javadoc-plugin.version>
+		<maven-surefire-plugin.version>3.5.1</maven-surefire-plugin.version>
+		<maven-failsafe-plugin.version>3.5.0</maven-failsafe-plugin.version>
+		<maven-source-plugin.version>3.3.1</maven-source-plugin.version>
+		<maven-gpg-plugin.version>3.1.0</maven-gpg-plugin.version>
+		<maven-jacoco-plugin.version>0.8.12</maven-jacoco-plugin.version>
+		<maven-spotbugs-plugin.version>4.8.6.6</maven-spotbugs-plugin.version>
+		<maven-formatter-plugin.version>2.23.0</maven-formatter-plugin.version>
+		<maven-exec-plugin.version>3.3.0</maven-exec-plugin.version>
+		<maven-git-commit-id-plugin.version>4.9.10</maven-git-commit-id-plugin.version>
+		<maven-license-plugin.version>4.6</maven-license-plugin.version>
+    <git.build.hook.version>3.4.1</git.build.hook.version>
 
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-compiler-plugin</artifactId>
-                        <version>${maven.compiler.plugin.version}</version>
-                        <configuration>
-                            <source>${maven.compiler.source}</source>
-                            <target>${maven.compiler.target}</target>
-                            <debug>true</debug>
-                            <debuglevel>lines,vars,source</debuglevel>
-                        </configuration>
-                    </plugin>
+		<!-- Spring -->
+		<spring.boot.version>3.4.0</spring.boot.version>
+		<spring.admin.version>${spring.boot.version}</spring.admin.version>
+		<springdoc.version>2.7.0</springdoc.version>
+		
+		<!-- Webjars -->
+		<webjars.bootstrap.version>5.3.2</webjars.bootstrap.version>
+		<webjars.locator.version>0.52</webjars.locator.version>
+		<webjars.locator.core.version>0.59</webjars.locator.core.version>
 
-                    <plugin>
-                        <groupId>com.github.spotbugs</groupId>
-                        <artifactId>spotbugs-maven-plugin</artifactId>
-                        <version>4.8.1.0</version>
-                        <dependencies>
-                            <!-- overwrite dependency on spotbugs if you want to specify the version of spotbugs -->
-                            <dependency>
-                                <groupId>com.github.spotbugs</groupId>
-                                <artifactId>spotbugs</artifactId>
-                                <version>4.8.1</version>
-                            </dependency>
-                        </dependencies>
-                    </plugin>
+		<!-- GraalVM -->
+		<graalvm.version>24.0.1</graalvm.version>
 
-                </plugins>
+		<!-- Commons -->
+		<commons.io>2.18.0</commons.io>
+		<commons.lang3>3.17.0</commons.lang3>
+		<commons.exec>1.4.0</commons.exec>
+		<commons-csv.version>1.11.0</commons-csv.version>
 
-            </build>
-        </profile>
+		<apache-httpcomponents-httpmime.version>4.5.14</apache-httpcomponents-httpmime.version>
+		<apache-httpcomponents-httpclient.version>4.5.14</apache-httpcomponents-httpclient.version>
+		<apache-httpcomponents-httpasyncclient.version>4.1.5</apache-httpcomponents-httpasyncclient.version>
+		<okhttp.version>4.12.0</okhttp.version>
 
-        <profile>
-            <id>coverage</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.jacoco</groupId>
-                        <artifactId>jacoco-maven-plugin</artifactId>
-                        <version>0.8.11</version>
-                        <executions>
-                            <execution>
-                                <goals>
-                                    <goal>prepare-agent</goal>
-                                </goals>
-                            </execution>
-                            <execution>
-                                <id>generate-code-coverage-report</id>
-                                <phase>test</phase>
-                                <goals>
-                                    <goal>report</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
+		<jaxb.version>2.3.1</jaxb.version>
+		
+		<!-- Lucene -->
+		<lucene.version>9.12.0</lucene.version>
+		
+		<!-- Chemistry -->
+		<chemistry.version>1.1.0</chemistry.version>
+		
+		<!-- Olingo -->
+		<olingo.version>3.1.4</olingo.version>
+		
+		<!-- FTP -->
+		<mina-core.version>2.2.3</mina-core.version>
+		<sshd-core.version>2.14.0</sshd-core.version>
+		<ftpserver.version>1.2.0</ftpserver.version>
+		
+		<!-- ActiveMQ -->
+		<activemq.version>6.1.0</activemq.version>
+		
+		<!-- Camel -->
+		<camel.version>4.8.0</camel.version>
+		
+		<!-- Velocity -->
+		<velocity.version>2.4</velocity.version>
+		
+		<!-- JGit -->
+		<jgit.version>6.10.0.202406032230-r</jgit.version>
 
-        <profile>
-            <id>release</id>
-            <activation>
-                <activeByDefault>false</activeByDefault>
-            </activation>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-compiler-plugin</artifactId>
-                        <version>${maven.compiler.plugin.version}</version>
-                        <configuration>
-                            <source>${maven.compiler.source}</source>
-                            <target>${maven.compiler.target}</target>
-                            <debug>true</debug>
-                            <debuglevel>lines,vars,source</debuglevel>
-                        </configuration>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-source-plugin</artifactId>
-                        <version>3.3.0</version>
-                        <executions>
-                            <execution>
-                                <id>attach-sources</id>
-                                <goals>
-                                    <goal>jar-no-fork</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-javadoc-plugin</artifactId>
-                        <version>3.6.2</version>
-                        <executions>
-                            <execution>
-                                <id>attach-javadocs</id>
-                                <goals>
-                                    <goal>jar</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                        <!-- <configuration>
-                            <failOnError>false</failOnError>
-                        </configuration> -->
-                        <dependencies>
-                            <dependency>
-                                <groupId>org.apache.commons</groupId>
-                                <artifactId>commons-lang3</artifactId>
-                                <version>${commons.lang3}</version>
-                            </dependency>
-                        </dependencies>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-gpg-plugin</artifactId>
-                        <version>3.1.0</version>
-                        <executions>
-                            <execution>
-                                <id>sign-artifacts</id>
-                                <phase>verify</phase>
-                                <goals>
-                                    <goal>sign</goal>
-                                </goals>
-                                <configuration>
-                                    <!-- Prevent gpg from using pinentry programs -->
-                                    <gpgArguments>
-                                        <arg>--pinentry-mode</arg>
-                                        <arg>loopback</arg>
-                                    </gpgArguments>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
+		<!-- Flowable -->
+		<flowable.version>6.8.1</flowable.version>
 
-    </profiles>
+		<!-- Wiki -->
+		<wikitext.version>3.0.48.202308291007</wikitext.version>
+		<flexmark.version>0.64.8</flexmark.version>
 
-    <repositories>
-        <repository>
-            <id>ossrh</id>
-            <url>https://repo1.maven.org/maven2</url>
-            <snapshots>
-                <enabled>false</enabled>
-            </snapshots>
-            <releases>
-                <enabled>true</enabled>
-            </releases>
-        </repository>
-    </repositories>
+		<!-- JDBC -->
+		<mongodb.version>3.12.14</mongodb.version>
+		<ngdbc.version>2.22.12</ngdbc.version>
+		<snowflake.version>3.20.0</snowflake.version>
+		<mysql.version>8.4.0</mysql.version>
+		
+		<!-- QLDB -->
+		<qldb.driver.version>2.3.1</qldb.driver.version>
+		<qldb.sdk.version>1.12.779</qldb.sdk.version>
+		
+		<!-- jETCD -->
+		<jetcd.core.version>0.8.3</jetcd.core.version>
+		
+		<!-- Various -->
+		<c3p0.version>0.10.1</c3p0.version>
+		<guava.version>33.3.1-jre</guava.version>
+		<icu4j.version>76.1</icu4j.version>
+		<classgraph.version>4.8.179</classgraph.version>
+		<logcaptor.version>2.10.0</logcaptor.version>
 
-    <pluginRepositories>
-        <pluginRepository>
-            <id>sonatype-public-repository</id>
-            <url>https://oss.sonatype.org/content/groups/public</url>
-            <snapshots>
-                <enabled>false</enabled>
-            </snapshots>
-            <releases>
-                <enabled>true</enabled>
-            </releases>
-        </pluginRepository>
-    </pluginRepositories>
+		<!-- UI -->
+		<jquery-ui.version>1.13.0</jquery-ui.version>
+		<sap-theming__theming-base-content.version>11.18.2</sap-theming__theming-base-content.version>
+		<chart.js.version>4.4.3</chart.js.version>
+		<sortablejs.version>1.15.2</sortablejs.version>
+		<fundamental-styles.version>0.38.0</fundamental-styles.version>
+		<angular-aria.version>1.8.2</angular-aria.version>
+		<split.js.version>1.6.5</split.js.version>
+		<diff.version>5.1.0</diff.version>
+		<monaco-editor.version>0.40.0</monaco-editor.version>
+		<requirejs.version>2.3.6</requirejs.version>
+		<jstree.version>3.3.12</jstree.version>
+		<jquery.version>3.7.1</jquery.version>
+		<jqplot.version>1.0.8r1250</jqplot.version>
+		<es5-shim.version>4.6.7</es5-shim.version>
+		<angular-file-upload.version>2.6.1</angular-file-upload.version>
+		<angularjs.version>1.8.2</angularjs.version>
+		<fontawesome.version>4.7.0</fontawesome.version>
 
-    <distributionManagement>
-        <snapshotRepository>
-            <id>ossrh</id>
-            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-        </snapshotRepository>
-        <repository>
-            <id>ossrh</id>
-            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2</url>
-        </repository>
-    </distributionManagement>
+		<!-- Tests -->
+		<testcontainers.version>1.20.4</testcontainers.version>
 
-    <issueManagement>
-        <url>http://bugs.dirigible.io</url>
-    </issueManagement>
+		<profile.content.phase>none</profile.content.phase>
 
-    <modules>
-        <module>modules</module>
-        <module>components</module>
-        <module>build</module>
-    </modules>
+		<license.header.location>licensing-header.txt</license.header.location>
 
-    <dependencies>
-        <dependency>
-            <groupId>javax.servlet</groupId>
-            <artifactId>javax.servlet-api</artifactId>
-            <version>4.0.1</version>
-            <scope>provided</scope>
-        </dependency>
+		<parent.pom.folder>./</parent.pom.folder>
+		<formatter.location>${parent.pom.folder}/dirigible-formatter.xml</formatter.location>
+		<formatter.java.version>${java.version}</formatter.java.version>
+	</properties>
 
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>${spring.boot.slf4j.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-core</artifactId>
-            <version>${spring.boot.logback.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-classic</artifactId>
-            <version>${spring.boot.logback.version}</version>
-            <scope>provided</scope>
-        </dependency>
+	<build>
+		<plugins>
+      <plugin>
+          <groupId>com.rudikershaw.gitbuildhook</groupId>
+          <artifactId>git-build-hook-maven-plugin</artifactId>
+          <version>${git.build.hook.version}</version>
+          <configuration>
+              <gitConfig>
+                  <core.hooksPath>hooks/</core.hooksPath>
+                  <custom.configuration>true</custom.configuration>
+              </gitConfig>
+          </configuration>
+          <executions>
+              <execution>
+                  <goals>
+                      <goal>configure</goal>
+                  </goals>
+              </execution>
+          </executions>
+      </plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>net.revelc.code.formatter</groupId>
+				<artifactId>formatter-maven-plugin</artifactId>
+			</plugin>
+		</plugins>
+		<pluginManagement>
+			<plugins>
+				<plugin>
+					<groupId>org.springframework.boot</groupId>
+					<artifactId>spring-boot-maven-plugin</artifactId>
+					<version>${spring.boot.version}</version>
+				</plugin>
+				<plugin>
+					<groupId>pl.project13.maven</groupId>
+					<artifactId>git-commit-id-plugin</artifactId>
+					<version>${maven-git-commit-id-plugin.version}</version>
+				</plugin>
+				<plugin>
+					<groupId>org.codehaus.mojo</groupId>
+					<artifactId>exec-maven-plugin</artifactId>
+					<version>${maven-exec-plugin.version}</version>
+				</plugin>
+				<plugin>
+					<groupId>com.mycila</groupId>
+					<artifactId>license-maven-plugin</artifactId>
+					<version>${maven-license-plugin.version}</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-compiler-plugin</artifactId>
+					<version>${maven-compiler-plugin.version}</version>
+					<configuration>
+						<parameters>true</parameters>
+						<source>${maven.compiler.source}</source>
+						<target>${maven.compiler.target}</target>
+						<debug>true</debug>
+						<debuglevel>lines,vars,source</debuglevel>
+					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-javadoc-plugin</artifactId>
+					<version>${maven-javadoc-plugin.version}</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-surefire-plugin</artifactId>
+					<version>${maven-surefire-plugin.version}</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-failsafe-plugin</artifactId>
+					<version>${maven-failsafe-plugin.version}</version>
+				</plugin>
+				<plugin>
+					<groupId>net.revelc.code.formatter</groupId>
+					<artifactId>formatter-maven-plugin</artifactId>
+					<version>${maven-formatter-plugin.version}</version>
+					<configuration>
+						<configFile>${formatter.location}</configFile>
+						<compilerSource>${formatter.java.version}</compilerSource>
+						<compilerCompliance>${formatter.java.version}</compilerCompliance>
+						<compilerTargetPlatform>${formatter.java.version}</compilerTargetPlatform>
+					</configuration>
+					<executions>
+						<execution>
+							<id>format-java-code</id>
+							<phase>process-sources</phase>
+							<goals>
+								<goal>format</goal>
+							</goals>
+						</execution>
+					</executions>
+				</plugin>
+				<plugin>
+					<groupId>com.github.spotbugs</groupId>
+					<artifactId>spotbugs-maven-plugin</artifactId>
+					<version>${maven-spotbugs-plugin.version}</version>
+				</plugin>
+				<plugin>
+					<groupId>org.jacoco</groupId>
+					<artifactId>jacoco-maven-plugin</artifactId>
+					<version>${maven-jacoco-plugin.version}</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-source-plugin</artifactId>
+					<version>${maven-source-plugin.version}</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-gpg-plugin</artifactId>
+					<version>${maven-gpg-plugin.version}</version>
+				</plugin>
+			</plugins>
+		</pluginManagement>
+	</build>
 
-        <dependency>
-            <groupId>com.google.code.gson</groupId>
-            <artifactId>gson</artifactId>
-            <version>${gson.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-            <version>${commons.io}</version>
-        </dependency>
+	<profiles>
+		<profile>
+			<id>default</id>
+			<activation>
+				<activeByDefault>true</activeByDefault>
+			</activation>
+			<properties>
+				<maven.javadoc.skip>true</maven.javadoc.skip>
+				<skipTCs>true</skipTCs>
+			</properties>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-surefire-plugin</artifactId>
+						<configuration>
+							<argLine>
+								--add-opens java.base/java.lang=ALL-UNNAMED
+								--add-opens java.base/java.math=ALL-UNNAMED
+								--add-opens java.base/java.util=ALL-UNNAMED
+								--add-opens
+								java.base/java.util.concurrent=ALL-UNNAMED
+								--add-opens java.base/java.net=ALL-UNNAMED
+								--add-opens java.base/java.text=ALL-UNNAMED
+							</argLine>
+						</configuration>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-javadoc-plugin</artifactId>
+						<configuration>
+							<source>${java.version}</source>
+						</configuration>
+						<executions>
+							<execution>
+								<id>attach-javadocs</id>
+								<goals>
+									<goal>jar</goal>
+								</goals>
+							</execution>
+						</executions>
+						<!-- <configuration>
+							<failOnError>false</failOnError>
+						</configuration> -->
+						<dependencies>
+							<dependency>
+								<groupId>org.apache.commons</groupId>
+								<artifactId>commons-lang3</artifactId>
+								<version>${commons.lang3}</version>
+							</dependency>
+						</dependencies>
+					</plugin>
+					<plugin>
+						<groupId>com.mycila</groupId>
+						<artifactId>license-maven-plugin</artifactId>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
 
-        <dependency>
-            <groupId>javax.annotation</groupId>
-            <artifactId>jsr250-api</artifactId>
-            <version>${jsr250-api.version}</version>
-        </dependency>
+		<profile>
+			<id>license</id>
+			<activation>
+				<activeByDefault>true</activeByDefault>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>com.mycila</groupId>
+						<artifactId>license-maven-plugin</artifactId>
+						<inherited>true</inherited>
+						<configuration>
+							<header>${license.header.location}</header>
+							<aggregate>true</aggregate>
+							<properties>
+								<inceptionYear>${project.inceptionYear}</inceptionYear>
+								<currentYear>${currentYear}</currentYear>
+							</properties>
+							<includes>
+								<include>src/**/*.java</include>
+								<include>src/**/*.xml</include>
+								<include>src/**/*.html</include>
+								<include>src/**/*.css</include>
+								<include>src/**/*.js</include>
+								<include>src/**/*.mjs</include>
+								<include>src/**/*.cjs</include>
+								<include>src/**/*.properties</include>
+								<include>src/**/project.json</include>
+							</includes>
+							<excludes>
+								<exclude>**/logback.xml</exclude>
+								<exclude>**/logback-test.xml</exclude>
+								<exclude>**/src/test/resources/**</exclude>
+								<exclude>
+									**/src/main/resources/META-INF/dirigible/font-awesome-4.7.0/**</exclude>
+								<exclude>
+									**/src/main/resources/META-INF/dirigible/font-dirigible/**</exclude>
+								<exclude>
+									**/src/main/resources/META-INF/dirigible/ide-bpm/**</exclude>
+								<exclude>
+									**/src/main/resources/META-INF/dirigible/editor-bpm/**</exclude>
+								<exclude>
+									**/src/main/resources/META-INF/dirigible/ide-monaco/**</exclude>
+									<exclude>
+									**/src/main/resources/META-INF/dirigible/editor-monaco/**</exclude>
+								<exclude>
+									**/src/main/resources/META-INF/dirigible/ide-swagger/**</exclude>
+								<exclude>
+									**/src/main/resources/META-INF/dirigible/editor-swagger/**</exclude>
+								<exclude>
+									**/src/main/resources/META-INF/dirigible/resources-core/ui/**</exclude>
+								<exclude>
+									**/src/main/resources/META-INF/dirigible/platform-core/ui/**</exclude>
+								<exclude>
+									**/src/main/resources/META-INF/dirigible/ide-terminal/js/**</exclude>
+								<exclude>
+									**/src/main/resources/META-INF/dirigible/view-terminal/js/**</exclude>
+								<exclude>
+									**/src/main/resources/META-INF/dirigible/dev-tools/**</exclude>
+								<exclude>
+									**/src/main/resources/META-INF/dirigible/template-mobile-hello-world/node_modules/**</exclude>
+								<exclude>
+									**/src/main/resources/META-INF/dirigible/utils/jsonpath.js</exclude>
+								<exclude>
+									**/src/main/resources/META-INF/dirigible/ide-designer/designer/**</exclude>
+								<exclude>
+									**/src/main/resources/META-INF/dirigible/editor-designer/designer/**</exclude>
+							</excludes>
+							<skipExistingHeaders>true</skipExistingHeaders>
+						</configuration>
+						<dependencies>
+							<dependency>
+								<groupId>com.mycila</groupId>
+								<artifactId>license-maven-plugin-git</artifactId>
+								<version>${maven-license-plugin.version}</version>
+							</dependency>
+						</dependencies>
+						<executions>
+							<execution>
+								<id>format-license</id>
+								<phase>initialize</phase>
+								<goals>
+									<goal>format</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
 
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-lang3</artifactId>
-            <version>${commons.lang3}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <version>${jackson.databind.version}</version>
-        </dependency>
+		<profile>
+			<id>spotbugs</id>
+			<activation>
+				<activeByDefault>false</activeByDefault>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>com.github.spotbugs</groupId>
+						<artifactId>spotbugs-maven-plugin</artifactId>
+						<dependencies>
+							<!-- overwrite dependency on spotbugs if you want to
+							specify the version of spotbugs -->
+							<dependency>
+								<groupId>com.github.spotbugs</groupId>
+								<artifactId>spotbugs</artifactId>
+								<version>4.8.6</version>
+							</dependency>
+						</dependencies>
+					</plugin>
 
-        <!-- Java 11 Dependencies -->
-        <dependency>
-            <groupId>javax.xml.bind</groupId>
-            <artifactId>jaxb-api</artifactId>
-            <version>${jaxb.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.sun.xml.bind</groupId>
-            <artifactId>jaxb-core</artifactId>
-            <version>${jaxb.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.sun.xml.bind</groupId>
-            <artifactId>jaxb-impl</artifactId>
-            <version>${jaxb.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>jakarta.xml.ws</groupId>
-            <artifactId>jakarta.xml.ws-api</artifactId>
-            <version>${jaxws.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-            <version>${guava.version}</version>
-        </dependency>
+				</plugins>
 
-        <!-- Test Dependencies -->
-        <dependency>
-            <groupId>com.squareup.okhttp3</groupId>
-            <artifactId>okhttp</artifactId>
-            <version>${okhttp3.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.squareup.okhttp3</groupId>
-            <artifactId>okhttp-urlconnection</artifactId>
-            <version>${okhttp3.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.hamcrest</groupId>
-            <artifactId>hamcrest-all</artifactId>
-            <version>${hamcrest.all.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <version>${mockito.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-inline</artifactId>
-            <version>${mockito-inline.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <!-- End Test Dependencies -->
-    </dependencies>
+			</build>
+		</profile>
 
-    <properties>
-        <project.title>Eclipse Dirigible</project.title>
+		<profile>
+			<id>coverage</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.jacoco</groupId>
+						<artifactId>jacoco-maven-plugin</artifactId>
+						<executions>
+							<execution>
+								<goals>
+									<goal>prepare-agent</goal>
+								</goals>
+							</execution>
+							<execution>
+								<id>generate-code-coverage-report</id>
+								<phase>test</phase>
+								<goals>
+									<goal>report</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
 
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+		<profile>
+			<id>release</id>
+			<activation>
+				<activeByDefault>false</activeByDefault>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-source-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>attach-sources</id>
+								<goals>
+									<goal>jar-no-fork</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-javadoc-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>attach-javadocs</id>
+								<goals>
+									<goal>jar</goal>
+								</goals>
+							</execution>
+						</executions>
+						<!-- <configuration>
+							<failOnError>false</failOnError>
+						</configuration> -->
+						<dependencies>
+							<dependency>
+								<groupId>org.apache.commons</groupId>
+								<artifactId>commons-lang3</artifactId>
+								<version>${commons.lang3}</version>
+							</dependency>
+						</dependencies>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-gpg-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>sign-artifacts</id>
+								<phase>verify</phase>
+								<goals>
+									<goal>sign</goal>
+								</goals>
+								<configuration>
+									<!-- Prevent gpg from using pinentry
+									programs -->
+									<gpgArguments>
+										<arg>--pinentry-mode</arg>
+										<arg>loopback</arg>
+									</gpgArguments>
+								</configuration>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+		<profile>
+			<id>testcontainers</id>
+			<properties>
+				<skipTCs>false</skipTCs>
+			</properties>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-compiler-plugin</artifactId>
+						<version>${maven.compiler.plugin.version}</version>
+						<configuration>
+							<source>${maven.compiler.source}</source>
+							<target>${maven.compiler.target}</target>
+							<debug>true</debug>
+							<debuglevel>lines,vars,source</debuglevel>
+						</configuration>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-surefire-plugin</artifactId>
+						<version>${maven-surefire-plugin.version}</version>
+						<configuration>
+							<argLine>
+								--add-opens java.base/java.lang=ALL-UNNAMED
+								--add-opens java.base/java.math=ALL-UNNAMED
+								--add-opens java.base/java.util=ALL-UNNAMED
+								--add-opens
+								java.base/java.util.concurrent=ALL-UNNAMED
+								--add-opens java.base/java.net=ALL-UNNAMED
+								--add-opens java.base/java.text=ALL-UNNAMED
+							</argLine>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
 
-        <java.version>17</java.version>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+	<repositories>
+		<repository>
+			<id>ossrh</id>
+			<url>https://repo1.maven.org/maven2</url>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+			<releases>
+				<enabled>true</enabled>
+			</releases>
+		</repository>
+	</repositories>
 
-        <maven.resource.plugin.version>3.3.1</maven.resource.plugin.version>
-        <maven.compiler.plugin.version>3.11.0</maven.compiler.plugin.version>
-        <maven-surefire-plugin.version>3.2.2</maven-surefire-plugin.version>
-        <maven.scm.plugin.version>2.0.0</maven.scm.plugin.version>
-        <scmVersionType>branch</scmVersionType>
-        <commons.io>2.15.0</commons.io>
-        <commons.codec>1.16.0</commons.codec>
-        <commons.lang3>3.13.0</commons.lang3>
-        <commons.exec>1.3</commons.exec>
-        <commons.text>1.10.0</commons.text>
-        <gson.version>2.10.1</gson.version>
-        <mockito.version>5.7.0</mockito.version>
-        <mockito-inline.version>5.2.0</mockito-inline.version>
-        <junit.version>4.13.2</junit.version>
-        <hamcrest.all.version>1.3</hamcrest.all.version>
-        <retrofit.version>1.8.0</retrofit.version>
-        <okhttp3.version>4.12.0</okhttp3.version>
-        <commons-dbcp2.version>2.9.0</commons-dbcp2.version>
+	<pluginRepositories>
+		<pluginRepository>
+			<id>sonatype-public-repository</id>
+			<url>https://oss.sonatype.org/content/groups/public</url>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+			<releases>
+				<enabled>true</enabled>
+			</releases>
+		</pluginRepository>
+	</pluginRepositories>
 
-        <h2database.version>2.2.224</h2database.version>
-        <postgresql.version>42.6.0</postgresql.version>
-        <ngdbc.version>2.18.13</ngdbc.version>
-        <snowflake.version>3.14.3</snowflake.version>
+	<distributionManagement>
+		<snapshotRepository>
+			<id>ossrh</id>
+			<url>https://oss.sonatype.org/content/repositories/snapshots</url>
+		</snapshotRepository>
+		<repository>
+			<id>ossrh</id>
+			<url>https://oss.sonatype.org/service/local/staging/deploy/maven2</url>
+		</repository>
+	</distributionManagement>
 
-        <activemq.version>5.18.3</activemq.version>
-        <jsr250-api.version>1.0</jsr250-api.version>
-        <lucene.version>9.8.0</lucene.version>
-        <chemistry.version>1.1.0</chemistry.version>
-        <flowable.version>6.8.0</flowable.version>
-        <jaxb.version>2.3.0</jaxb.version>
-        <jaxws.version>2.3.3</jaxws.version>
-        <jakarta.ws.rs-api.version>2.1.5</jakarta.ws.rs-api.version>
-        <license-maven-plugin.version>4.3</license-maven-plugin.version>
-        <persistence.api.version>2.2.3</persistence.api.version>
-        <jgit.version>6.7.0.202309050840-r</jgit.version>
-        <javax.mail.api.version>1.6.4</javax.mail.api.version>
-        <olingo.version>2.0.13</olingo.version>
-        <kafka.version>3.6.0</kafka.version>
-        <git-commit-id-plugin.version>4.9.10</git-commit-id-plugin.version>
-        <mongodb.version>3.12.14</mongodb.version>
-        <caffeine.version>3.1.8</caffeine.version>
-        <liquibase-core.version>4.24.0</liquibase-core.version>
-        <commons-csv.version>1.10.0</commons-csv.version>
-        <jquery-ui.version>1.13.0</jquery-ui.version>
-        <sap-theming__theming-base-content.version>11.7.0</sap-theming__theming-base-content.version>
-        <fundamental-styles.version>0.30.2</fundamental-styles.version>
-        <angular-aria.version>1.8.2</angular-aria.version>
-        <split.js.version>1.6.5</split.js.version>
-        <diff.version>5.1.0</diff.version>
-        <monaco-editor.version>0.40.0</monaco-editor.version>
-        <requirejs.version>2.3.6</requirejs.version>
-        <jstree.version>3.3.12</jstree.version>
-        <jquery.version>3.6.0</jquery.version>
-        <jqplot.version>1.0.8r1250</jqplot.version>
-        <webjars.bootstrap.version>5.3.2</webjars.bootstrap.version>
-        <webjars.locator.version>0.48</webjars.locator.version>
-        <webjars.locator.core.version>0.55</webjars.locator.core.version>
-        <es5-shim.version>4.6.7</es5-shim.version>
-        <angular-file-upload.version>2.6.1</angular-file-upload.version>
-        <angularjs.version>1.8.2</angularjs.version>
-        <fontawesome.version>4.7.0</fontawesome.version>
-        <classgraph.version>4.8.164</classgraph.version>
-        <commons-compress.version>1.22</commons-compress.version>
-        <testcontainers.elasticsearch.version>1.17.6</testcontainers.elasticsearch.version>
-        <testcontainers.version>1.19.1</testcontainers.version>
-        <testcontainers.rabbitmq.version>1.17.6</testcontainers.rabbitmq.version>
-        <amqp.client.version>5.20.0</amqp.client.version>
-        <elasticsearch.client.version>7.7.1</elasticsearch.client.version>
-        <jetcd.core.version>0.7.6</jetcd.core.version>
-        <jetcd.test.version>0.5.4</jetcd.test.version>
-        <logcaptor.version>2.9.0</logcaptor.version>
-        <exec.maven.plugin>3.0.0</exec.maven.plugin>
-        <jackson.databind.version>2.15.3</jackson.databind.version>
-        <mina-core.version>2.2.3</mina-core.version>
-        <sshd-core.version>2.11.0</sshd-core.version>
+	<issueManagement>
+		<url>http://bugs.dirigible.io</url>
+	</issueManagement>
 
-        <spring.version>5.5.18</spring.version>
-        <spring.boot.version>2.7.5</spring.boot.version>
-        <spring.boot.slf4j.version>1.7.36</spring.boot.slf4j.version>
-        <spring.boot.logback.version>1.2.11</spring.boot.logback.version>
-        <spring-context-support.version>5.3.24</spring-context-support.version>
-        <spring-security.version>5.8.0</spring-security.version>
+	<modules>
+		<module>modules</module>
+		<module>components</module>
+		<module>build</module>
+		<module>dependencies</module>
+		<module>tests</module>
+	</modules>
 
-        <keycloak.keycloak-spring-boot-starter>22.0.5</keycloak.keycloak-spring-boot-starter>
-        <hikaricp.version>5.1.0</hikaricp.version>
-        <validator.version>1.7</validator.version>
-        <quartz.version>2.3.2</quartz.version>
-        <c3p0.version>0.9.5.5</c3p0.version>
-        <graalvm.version>23.1.1</graalvm.version>
-        <guava.version>32.1.3-jre</guava.version>
-        <icu4j.version>74.1</icu4j.version>
-        <commons-collections.version>3.2.2</commons-collections.version>
-        <commons-collections4.version>4.4</commons-collections4.version>
-        <velocity.version>2.3</velocity.version>
-        <wikitext.version>3.0.48.202308291007</wikitext.version>
-        <flexmark.version>0.64.8</flexmark.version>
-        <qldb.driver.version>2.3.1</qldb.driver.version>
-        <qldb.sdk.version>1.12.586</qldb.sdk.version>
-        <cassandra.version>1.17.6</cassandra.version>
-        <cassandra.driver.version>3.11.3</cassandra.driver.version>
-        <jedis.version>5.0.2</jedis.version>
-        <spark.version>3.3.2</spark.version>
-        <javax.websocket-api.version>1.1</javax.websocket-api.version>
-        <camel.version>3.21.2</camel.version>
-        <mina.version>3.0.0-M2</mina.version>
-        <ftpserver.version>1.2.0</ftpserver.version>
+	<dependencies>
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>ch.qos.logback</groupId>
+			<artifactId>logback-core</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>ch.qos.logback</groupId>
+			<artifactId>logback-classic</artifactId>
+		</dependency>
 
-        <org.springdoc.openapi.ui.version>1.7.0</org.springdoc.openapi.ui.version>
-        <swagger-annotations.version>1.6.10</swagger-annotations.version>
-        <junit4.version>4.13.2</junit4.version>
+		<dependency>
+			<groupId>com.google.code.gson</groupId>
+			<artifactId>gson</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>commons-io</groupId>
+			<artifactId>commons-io</artifactId>
+			<version>${commons.io}</version>
+		</dependency>
 
-        <sonar.organization>eclipse</sonar.organization>
-        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-lang3</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+		</dependency>
 
-        <profile.content.phase>none</profile.content.phase>
+		<dependency>
+		    <groupId>jakarta.xml.bind</groupId>
+		    <artifactId>jakarta.xml.bind-api</artifactId>
+		</dependency>
+		<dependency>
+		    <groupId>org.glassfish.jaxb</groupId>
+		    <artifactId>jaxb-runtime</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>jakarta.xml.ws</groupId>
+			<artifactId>jakarta.xml.ws-api</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.google.guava</groupId>
+			<artifactId>guava</artifactId>
+			<version>${guava.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>net.bytebuddy</groupId>
+			<artifactId>byte-buddy</artifactId>
+		</dependency>
 
-        <content.scm.url>https://github.com/dirigiblelabs/${content.repository.name}</content.scm.url>
-        <content.scm.connection>scm:git:https://github.com/dirigiblelabs/${content.repository.name}.git
-        </content.scm.connection>
-        <content.scm.developerConnection>scm:git:https://github.com/dirigiblelabs/${content.repository.name}
-        </content.scm.developerConnection>
-        <content.repository.branch>master</content.repository.branch>
+		<!-- Test Dependencies -->
+		<dependency>
+			<groupId>com.squareup.okhttp3</groupId>
+			<artifactId>okhttp</artifactId>
+			<scope>test</scope>
+            <version>${okhttp.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.squareup.okhttp3</groupId>
+			<artifactId>okhttp-urlconnection</artifactId>
+			<scope>test</scope>
+            <version>${okhttp.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.mockito</groupId>
+			<artifactId>mockito-core</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- End Test Dependencies -->
+	</dependencies>
 
-        <content.scm.server>github</content.scm.server>
-        <content.scm.checkoutDirectory>target</content.scm.checkoutDirectory>
-        <content.source.directory>target/${content.project.name}</content.source.directory>
-        <content.output.directory>${basedir}/src/main/resources/META-INF/dirigible/${content.project.name}
-        </content.output.directory>
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>io.opentelemetry.instrumentation</groupId>
+				<artifactId>opentelemetry-instrumentation-bom</artifactId>
+				<version>2.10.0</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<dependency>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-dependencies</artifactId>
+				<version>${spring.boot.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-application</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.junit.vintage</groupId>
+				<artifactId>junit-vintage-engine</artifactId>
+				<version>5.11.3</version>
+				<scope>test</scope>
+			</dependency>
 
-        <license.header.location>licensing-header.txt</license.header.location>
-
-        <parent.pom.folder>./</parent.pom.folder>
-        <formatter.location>${parent.pom.folder}/dirigible-formatter.xml</formatter.location>
-        <formatter.java.version>${java.version}</formatter.java.version>
-        <git.build.hook.version>3.4.1</git.build.hook.version>
-    </properties>
+			<dependency>
+				<groupId>org.seleniumhq.selenium</groupId>
+				<artifactId>selenium-java</artifactId>
+				<version>4.27.0</version>
+				<scope>test</scope>
+			</dependency>
+			<dependency>
+				<groupId>commons-collections</groupId>
+				<artifactId>commons-collections</artifactId>
+				<version>3.2.2</version>
+			</dependency>
+			<dependency>
+				<groupId>org.dom4j</groupId>
+				<artifactId>dom4j</artifactId>
+				<version>2.1.4</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 
 </project>

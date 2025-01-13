@@ -1,9 +1,0 @@
-{
-  "location":"/test-project/listeners/test.listener",
-  "name":"test_listener",
-  "kind":"Q",
-  "handler":"test-project/listeners/test-handler.js",
-  "description":"My Listener",
-  "createdBy":"system",
-  "createdAt":"2017-07-06T2:53:01+0000"
-}

@@ -1,3 +1,5 @@
 {
-	"guid": "template-database-table"
+	"guid": "template-database-table",
+	"dependencies": [],
+	"actions": []
 }

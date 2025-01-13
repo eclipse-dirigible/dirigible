@@ -1,12 +1,12 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
 let importView = angular.module('import', ['ideUI', 'ideView', 'ideWorkspace', 'ideTransport', 'angularFileUpload']);
@@ -28,9 +28,10 @@ importView.controller('ImportViewController', [
         transportApi,
         FileUploader,
     ) {
-        let projectImportUrl = transportApi.getProjectImportUrl();
+        const projectImportUrl = transportApi.getProjectImportUrl();
         $scope.selectedWorkspace = { name: 'workspace' }; // Default
         $scope.workspaceNames = [];
+        $scope.projectsViewId = undefined;
         $scope.inDialog = false;
         $scope.importRepository = false;
         $scope.inputAccept = '.zip';
@@ -76,6 +77,7 @@ importView.controller('ImportViewController', [
                         if (pathSegments.length <= 2) $scope.uploader.url += '/%252F';
                     }
                 }
+                $scope.projectsViewId = params.projectsViewId;
             } else $scope.reloadWorkspaceList();
         }
 
@@ -99,14 +101,14 @@ importView.controller('ImportViewController', [
                     item.headers = {
                         'Dirigible-Editor': 'Editor'
                     };
-                    item.url = new UriBuilder().path(transportApi.getFileImportUrl().split('/')).path($scope.selectedWorkspace.name).path($scope.uploadPath.split('/')).path(item.name).path('/').build();
+                    item.url = new UriBuilder().path(transportApi.getFileImportUrl().split('/')).path($scope.selectedWorkspace.name).path($scope.uploadPath.split('/')).path(item.name).build();
                 } else if ($scope.inDialog && $scope.importType === 'data') {
                     item.headers = {
                         'Dirigible-Editor': 'Editor'
                     };
-                    item.url = new UriBuilder().path($scope.selectedWorkspace.name).path($scope.uploadPath.split('/')).path(item.name).path('/').build();
+                    item.url = new UriBuilder().path($scope.selectedWorkspace.name).path($scope.uploadPath.split('/')).path(item.name).build();
                 } else {
-                    item.url = new UriBuilder().path(transportApi.getZipImportUrl().split('/')).path($scope.selectedWorkspace.name).path($scope.uploadPath.split('/')).path('/').build();
+                    item.url = new UriBuilder().path(transportApi.getZipImportUrl().split('/')).path($scope.selectedWorkspace.name).path($scope.uploadPath.split('/')).build();
                 }
             }
         };
@@ -116,7 +118,7 @@ importView.controller('ImportViewController', [
                 messageHub.announceRepositoryModified();
             } else if ($scope.inDialog) {
                 // Temporary, publishes all files in the import directory, not just imported ones
-                messageHub.announceWorkspaceChanged({ name: $scope.selectedWorkspace.name, publish: { path: $scope.uploadPath } });
+                messageHub.announceWorkspaceChanged({ name: $scope.selectedWorkspace.name, projectsViewId: $scope.projectsViewId, publish: { path: $scope.uploadPath } });
             } else {
                 messageHub.announceWorkspaceChanged({ name: $scope.selectedWorkspace.name, publish: { workspace: true } });
             }
@@ -143,7 +145,7 @@ importView.controller('ImportViewController', [
         };
 
         $scope.reloadWorkspaceList = function () {
-            let userSelected = JSON.parse(localStorage.getItem('DIRIGIBLE.workspace') || '{}');
+            const userSelected = JSON.parse(localStorage.getItem('DIRIGIBLE.workspace') || '{}');
             if (!userSelected.name) {
                 $scope.selectedWorkspace.name = 'workspace'; // Default
             } else {

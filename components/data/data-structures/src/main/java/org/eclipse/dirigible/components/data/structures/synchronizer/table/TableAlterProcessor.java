@@ -1,37 +1,27 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.structures.synchronizer.table;
 
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import org.eclipse.dirigible.components.data.structures.domain.Table;
+import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
+import org.eclipse.dirigible.components.database.DatabaseNameNormalizer;
+import org.eclipse.dirigible.database.sql.*;
+import org.eclipse.dirigible.database.sql.builders.table.AlterTableBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.components.data.structures.domain.Table;
-import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
-import org.eclipse.dirigible.components.database.DatabaseParameters;
-import org.eclipse.dirigible.components.database.DatabaseNameNormalizer;
-import org.eclipse.dirigible.database.sql.DataType;
-import org.eclipse.dirigible.database.sql.DataTypeUtils;
-import org.eclipse.dirigible.database.sql.ISqlKeywords;
-import org.eclipse.dirigible.database.sql.SqlFactory;
-import org.eclipse.dirigible.database.sql.builders.table.AlterTableBuilder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * The Table Alter Processor.
@@ -42,7 +32,8 @@ public class TableAlterProcessor {
     private static final Logger logger = LoggerFactory.getLogger(TableAlterProcessor.class);
 
     /** The Constant INCOMPATIBLE_CHANGE_OF_TABLE. */
-    private static final String INCOMPATIBLE_CHANGE_OF_TABLE = "Incompatible change of table [%s] by adding a column [%s] which is [%s]"; //$NON-NLS-1$
+    private static final String INCOMPATIBLE_CHANGE_OF_TABLE = "Incompatible change of table [%s] by adding a column [%s] which is [%s]";
+    // $NON-NLS-1$
 
     /**
      * Execute the corresponding statement.
@@ -52,37 +43,34 @@ public class TableAlterProcessor {
      * @throws SQLException the SQL exception
      */
     public static void execute(Connection connection, Table tableModel) throws SQLException {
-        boolean caseSensitive =
-                Boolean.parseBoolean(Configuration.get(DatabaseParameters.DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE, "false"));
-        String tableName = tableModel.getName();
-        if (caseSensitive) {
-            tableName = "\"" + tableName + "\"";
-        }
-        if (logger.isInfoEnabled()) {
-            logger.info("Processing Alter Table: " + tableName);
-        }
+        String tableName = "\"" + tableModel.getName() + "\"";
 
-        Map<String, String> columnDefinitions = new HashMap<String, String>();
+        logger.info("Processing Alter Table: " + tableName);
+
+        Map<String, String> columnDefinitions = new HashMap<>();
         DatabaseMetaData dmd = connection.getMetaData();
-        ResultSet rsColumns = dmd.getColumns(null, null, DatabaseNameNormalizer.normalizeTableName(tableName), null);
+        String schema = connection.getSchema();
+        ResultSet rsColumns = dmd.getColumns(null, schema, DatabaseNameNormalizer.normalizeTableName(tableName), null);
         while (rsColumns.next()) {
-            // String typeName =
-            // nativeDialect.getDataTypeName(DataTypeUtils.getDatabaseType(rsColumns.getInt(5)));
-            String typeName = DataTypeUtils.getDatabaseTypeName(rsColumns.getInt(5));
-            columnDefinitions.put(rsColumns.getString(4)
-                                           .toUpperCase(),
-                    typeName);
+            int columnType = rsColumns.getInt(5);
+            String columnName = rsColumns.getString(4)
+                                         .toUpperCase();
+            try {
+                String typeName = DataTypeUtils.getDatabaseTypeName(columnType);
+                columnDefinitions.put(columnName, typeName);
+            } catch (SqlException ex) {
+                String errorMessage = "Missing type for column [" + columnName + "] and type [" + columnType + "]";
+                throw new SqlException(errorMessage, ex);
+            }
         }
 
-        List<String> modelColumnNames = new ArrayList<String>();
+        List<String> modelColumnNames = new ArrayList<>();
 
         // ADD iteration
         for (TableColumn columnModel : tableModel.getColumns()) {
-            String name = columnModel.getName();
+            String name = "\"" + columnModel.getName() + "\"";
             String nameOriginal = name;
-            if (caseSensitive) {
-                name = "\"" + name + "\"";
-            }
+
             DataType type = DataType.valueOfByName(columnModel.getType());
             String length = columnModel.getLength();
             boolean isNullable = columnModel.isNullable();
@@ -116,7 +104,8 @@ public class TableAlterProcessor {
 
             modelColumnNames.add(name.toUpperCase());
 
-            if (!columnDefinitions.containsKey(nameOriginal.toUpperCase())) {
+            String nameOriginalCanonical = nameOriginal.toUpperCase();
+            if (!columnDefinitions.containsKey(nameOriginalCanonical)) {
 
                 AlterTableBuilder alterTableBuilder = SqlFactory.getNative(connection)
                                                                 .alter()
@@ -134,19 +123,20 @@ public class TableAlterProcessor {
 
                 executeAlterBuilder(connection, alterTableBuilder);
 
-            } else if (!columnDefinitions.get(nameOriginal.toUpperCase())
-                                         .equals(type.toString())) {
-                throw new SQLException(String.format(INCOMPATIBLE_CHANGE_OF_TABLE, tableName, name,
-                        "of type " + columnDefinitions.get(name) + " to be changed to" + type));
+            } else {
+                String typeFromMetadata = columnDefinitions.get(nameOriginalCanonical);
+                String typeFromDefinition = type.toString();
+                if (!DataTypeUtils.getUnifiedDatabaseType(typeFromMetadata)
+                                  .equals(DataTypeUtils.getUnifiedDatabaseType(typeFromDefinition))) {
+                    throw new SQLException(String.format(INCOMPATIBLE_CHANGE_OF_TABLE, tableName, name,
+                            "of type " + typeFromMetadata + " to be changed to " + type));
+                }
             }
         }
 
         // DROP iteration
-
         for (String columnName : columnDefinitions.keySet()) {
-            if (caseSensitive) {
-                columnName = "\"" + columnName + "\"";
-            }
+            columnName = "\"" + columnName + "\"";
             if (!modelColumnNames.contains(columnName.toUpperCase())) {
                 AlterTableBuilder alterTableBuilder = SqlFactory.getNative(connection)
                                                                 .alter()

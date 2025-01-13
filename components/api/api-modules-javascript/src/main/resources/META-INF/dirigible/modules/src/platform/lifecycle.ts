@@ -12,16 +12,20 @@
 
 const LifecycleFacade = Java.type("org.eclipse.dirigible.components.api.platform.LifecycleFacade");
 
-export function publish(user, workspace, project) {
-    if (!project) {
-        project = "*";
-    }
-    return LifecycleFacade.publish(user, workspace, project);
-};
+export class Lifecycle {
 
-export function unpublish(project) {
-    if (!project) {
-        project = "*";
+    public static publish(user: string, workspace: string, project: string = "*"): boolean {
+        return LifecycleFacade.publish(user, workspace, project);
     }
-    return LifecycleFacade.unpublish(project);
-};
+
+    public static unpublish(project: string = "*"): boolean {
+        return LifecycleFacade.unpublish(project);
+    }
+}
+
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Lifecycle;
+}

@@ -12,97 +12,106 @@
 
 const EscapeFacade = Java.type("org.eclipse.dirigible.components.api.utils.EscapeFacade");
 
-export function escapeCsv(input) {
-	return EscapeFacade.escapeCsv(input);
-};
+export class Escape {
 
-/**
- * Escapes a Javascript string
- */
-export function escapeJavascript(input) {
-	return EscapeFacade.escapeJavascript(input);
-};
+	public static escapeCsv(input: string): string {
+		return EscapeFacade.escapeCsv(input);
+	}
 
-/**
- * Escapes a HTML3 string
- */
-export function escapeHtml3(input) {
-	return EscapeFacade.escapeHtml3(input);
-};
+	/**
+	 * Escapes a Javascript string
+	 */
+	public static escapeJavascript(input: string): string {
+		return EscapeFacade.escapeJavascript(input);
+	}
 
-/**
- * Escapes a HTML4 string
- */
-export function escapeHtml4(input) {
-	return EscapeFacade.escapeHtml4(input);
-};
+	/**
+	 * Escapes a HTML3 string
+	 */
+	public static escapeHtml3(input: string): string {
+		return EscapeFacade.escapeHtml3(input);
+	}
 
-/**
- * Escapes a Java string
- */
-export function escapeJava(input) {
-	return EscapeFacade.escapeJava(input);
-};
+	/**
+	 * Escapes a HTML4 string
+	 */
+	public static escapeHtml4(input: string): string {
+		return EscapeFacade.escapeHtml4(input);
+	}
 
-/**
- * Escapes a JSON string
- */
-export function escapeJson(input) {
-	return EscapeFacade.escapeJson(input);
-};
+	/**
+	 * Escapes a Java string
+	 */
+	public static escapeJava(input: string): string {
+		return EscapeFacade.escapeJava(input);
+	}
 
-/**
- * Escapes a XML string
- */
-export function escapeXml(input) {
-	return EscapeFacade.escapeXml(input);
-};
+	/**
+	 * Escapes a JSON string
+	 */
+	public static escapeJson(input: string): string {
+		return EscapeFacade.escapeJson(input);
+	}
 
-/**
- * Unescapes a CSV string
- */
-export function unescapeCsv(input) {
-	return EscapeFacade.unescapeCsv(input);
-};
+	/**
+	 * Escapes a XML string
+	 */
+	public static escapeXml(input: string): string {
+		return EscapeFacade.escapeXml(input);
+	}
 
-/**
- * Unescapes a Javascript string
- */
-export function unescapeJavascript(input) {
-	return EscapeFacade.unescapeJavascript(input);
-};
+	/**
+	 * Unescapes a CSV string
+	 */
+	public static unescapeCsv(input: string): string {
+		return EscapeFacade.unescapeCsv(input);
+	}
 
-/**
- * Unescapes a HTML3 string
- */
-export function unescapeHtml3(input) {
-	return EscapeFacade.unescapeHtml3(input);
-};
+	/**
+	 * Unescapes a Javascript string
+	 */
+	public static unescapeJavascript(input: string): string {
+		return EscapeFacade.unescapeJavascript(input);
+	}
 
-/**
- * Unescapes a HTML4 string
- */
-export function unescapeHtml4(input) {
-	return EscapeFacade.unescapeHtml4(input);
-};
+	/**
+	 * Unescapes a HTML3 string
+	 */
+	public static unescapeHtml3(input: string): string {
+		return EscapeFacade.unescapeHtml3(input);
+	}
 
-/**
- * Unescapes a Java string
- */
-export function unescapeJava(input) {
-	return EscapeFacade.unescapeJava(input);
-};
+	/**
+	 * Unescapes a HTML4 string
+	 */
+	public static unescapeHtml4(input: string): string {
+		return EscapeFacade.unescapeHtml4(input);
+	}
 
-/**
- * Unescapes a JSON string
- */
-export function unescapeJson(input) {
-	return EscapeFacade.unescapeJson(input);
-};
+	/**
+	 * Unescapes a Java string
+	 */
+	public static unescapeJava(input: string): string {
+		return EscapeFacade.unescapeJava(input);
+	}
 
-/**
- * Unescapes a XML string
- */
-export function unescapeXml(input) {
-	return EscapeFacade.unescapeXml(input);
-};
+	/**
+	 * Unescapes a JSON string
+	 */
+	public static unescapeJson(input: string): string {
+		return EscapeFacade.unescapeJson(input);
+	}
+
+	/**
+	 * Unescapes a XML string
+	 */
+	public static unescapeXml(input: string): string {
+		return EscapeFacade.unescapeXml(input);
+	}
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Escape;
+}

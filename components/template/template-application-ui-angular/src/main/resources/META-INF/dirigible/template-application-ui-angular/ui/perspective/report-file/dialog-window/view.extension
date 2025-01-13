@@ -1,0 +1,5 @@
+{
+    "module": "{{projectName}}/gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window/view.js",
+    "extensionPoint": "{{projectName}}-dialog-window",
+    "description": "{{projectName}} - Application Dialog Window"
+}

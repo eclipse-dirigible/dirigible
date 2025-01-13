@@ -1,8 +1,9 @@
 {
-	"edmType": "Region",
-	"edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.Region",
-	"sqlTable": " PUBLIC.REGION",
-	"RegionID": "REGION_ID",
-	"RegionDescription": "REGION_DESCRIPTION",
-	"_pk_": "REGION_ID"
+  "edmType": "Region",
+  "edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.Region",
+  "sqlTable": "REGION",
+  "sqlSchema": "PUBLIC",
+  "RegionID": "REGION_ID",
+  "RegionDescription": "REGION_DESCRIPTION",
+  "_pk_": "REGION_ID"
 }

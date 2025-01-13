@@ -1,0 +1,7 @@
+{
+    "location": "/integration-tests-project/test-topic-listener.listener",
+    "name": "integration-tests-topic",
+    "kind": "T",
+    "handler": "integration-tests-project/background-handler.js",
+    "description": "test-topic-listener description"
+}

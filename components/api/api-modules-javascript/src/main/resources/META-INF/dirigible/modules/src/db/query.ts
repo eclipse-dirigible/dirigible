@@ -16,16 +16,32 @@
 
 const DatabaseFacade = Java.type("org.eclipse.dirigible.components.api.db.DatabaseFacade");
 
-export function execute(sql, parameters, datasourceName) {
-	let resultset: string;
-	if (parameters) {
-		const params = JSON.stringify(parameters);
-		resultset = DatabaseFacade.query(sql,params,datasourceName);
-	} else {
-		resultset = DatabaseFacade.query(sql,null,datasourceName);
-	}
-	if (resultset) {
+export interface QueryParameter {
+	readonly type: string;
+	readonly value: any;
+}
+
+export interface NamedQueryParameter {
+	readonly name: string;
+	readonly type: string;
+	readonly value: any;
+}
+
+export class Query {
+
+	public static execute(sql: string, parameters?: (string | number | boolean | Date | QueryParameter)[], datasourceName?: string): any[] {
+		const resultset = DatabaseFacade.query(sql, parameters ? JSON.stringify(parameters) : undefined, datasourceName);
 		return JSON.parse(resultset);
 	}
-	return resultset;
-};
+	
+	public static executeNamed(sql: string, parameters?: NamedQueryParameter[], datasourceName?: string): any[] {
+		const resultset = DatabaseFacade.queryNamed(sql, parameters ? JSON.stringify(parameters) : undefined, datasourceName);
+		return JSON.parse(resultset);
+	}
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Query;
+}

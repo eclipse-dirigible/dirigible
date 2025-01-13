@@ -1,20 +1,41 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const request = require("http/request");
-const response = require("http/response");
-const registry = require("platform/registry");
-const uuid = require("utils/uuid");
+import { request, response } from "sdk/http";
+import { registry } from "sdk/platform";
+import { uuid } from "sdk/utils";
 
 const COOKIE_PREFIX = "DIRIGIBLE.resources-core.loader.";
+
+const viewJs = [
+    "/jquery/3.7.1/jquery.min.js",
+    "/angularjs/1.8.2/angular.min.js",
+    "/angularjs/1.8.2/angular-resource.min.js",
+    "/angular-aria/1.8.2/angular-aria.min.js",
+    "/split.js/1.6.5/dist/split.min.js",
+    "/resources-core/core/message-hub.js",
+    "/resources-core/core/ide-message-hub.js",
+    "/resources-core/ui/theming.js",
+    "/resources-core/ui/widgets.js",
+    "/resources-core/ui/extensions.js",
+    "/resources-core/ui/view.js",
+    "/resources-core/core/uri-builder.js",
+    "/resources-core/ui/entityApi.js",
+];
+
+const viewCss = [
+    "/fundamental-styles/0.38.0/dist/fundamental-styles.css",
+    "/resources/styles/core.css",
+    "/resources/styles/widgets.css",
+];
 
 let scriptId = request.getParameter("id");
 if (scriptId) {
@@ -79,24 +100,13 @@ function getLocations(scriptId) {
     switch (scriptId) {
         case "application-view-js":
         case "ide-view-js":
-            return [
-                "/jquery/3.6.0/jquery.min.js",
-                "/angularjs/1.8.2/angular.min.js",
-                "/angularjs/1.8.2/angular-resource.min.js",
-                "/angular-aria/1.8.2/angular-aria.min.js",
-                "/split.js/1.6.5/dist/split.min.js",
-                "/resources-core/core/message-hub.js",
-                "/resources-core/core/ide-message-hub.js",
-                "/resources-core/ui/theming.js",
-                "/resources-core/ui/widgets.js",
-                "/resources-core/ui/view.js",
-                "/resources-core/core/uri-builder.js",
-                "/resources-core/ui/entityApi.js",
-            ];
+            return viewJs;
+        case "ide-editor-js":
+            return [...viewJs, "/ide-workspace-service/workspace.js"]
         case "application-perspective-js":
         case "ide-perspective-js":
             return [
-                "/jquery/3.6.0/jquery.min.js",
+                "/jquery/3.7.1/jquery.min.js",
                 "/angularjs/1.8.2/angular.min.js",
                 "/angularjs/1.8.2/angular-resource.min.js",
                 "/angularjs/1.8.2/angular-cookies.min.js",
@@ -109,6 +119,7 @@ function getLocations(scriptId) {
                 "/resources-core/ui/core-modules.js",
                 "/resources-core/ui/theming.js",
                 "/resources-core/ui/widgets.js",
+                "/resources-core/ui/extensions.js",
                 "/resources-core/ui/view.js",
                 "/resources-core/ui/layout.js",
                 "/resources-core/core/uri-builder.js",
@@ -118,22 +129,19 @@ function getLocations(scriptId) {
                 "/es5-shim/4.6.7/es5-shim.min.js",
                 "/angular-file-upload/2.6.1/dist/angular-file-upload.min.js",
             ];
+        case "sanitize-js":
+            return ["/angularjs/1.8.2/angular-sanitize.min.js"];
         case "application-view-css":
+        case "ide-editor-css":
         case "ide-view-css":
-            return [
-                "/fundamental-styles/0.30.2/dist/fundamental-styles.css",
-                "/resources/styles/core.css",
-                "/resources/styles/widgets.css",
-            ];
+            return viewCss;
         case "application-perspective-css":
         case "ide-perspective-css":
-            return [
-                "/fundamental-styles/0.30.2/dist/fundamental-styles.css",
-                "/resources/styles/core.css",
-                "/resources/styles/layout.css",
-                "/resources/styles/widgets.css",
-                "/resources/styles/perspective.css",
-            ];
+            return [...viewCss, "/resources/styles/layout.css", "/resources/styles/perspective.css"]
+        case "code-editor-js":
+            return ["/ide-monaco/embeddable/editor.js", "/monaco-editor/0.40.0/min/vs/loader.js", "/monaco-editor/0.40.0/min/vs/editor/editor.main.nls.js", "/monaco-editor/0.40.0/min/vs/editor/editor.main.js"];
+        case "code-editor-css":
+            return ["/ide-monaco/css/embeddable.css", "/monaco-editor/0.40.0/min/vs/editor/editor.main.css"];
     }
 }
 

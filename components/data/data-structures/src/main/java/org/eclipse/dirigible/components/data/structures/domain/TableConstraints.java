@@ -1,44 +1,31 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.structures.domain;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-
-import javax.annotation.Nullable;
-import javax.persistence.CascadeType;
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.FetchType;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.JoinColumn;
-import javax.persistence.OneToMany;
-import javax.persistence.OneToOne;
-
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.google.gson.annotations.Expose;
+import jakarta.annotation.Nullable;
+import jakarta.persistence.*;
 import org.hibernate.annotations.LazyCollection;
 import org.hibernate.annotations.LazyCollectionOption;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.google.gson.annotations.Expose;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The Class TableConstraints.
  */
 @Entity
-@javax.persistence.Table(name = "DIRIGIBLE_DATA_TABLE_CONSTRAINTS")
+@jakarta.persistence.Table(name = "DIRIGIBLE_DATA_TABLE_CONSTRAINTS")
 public class TableConstraints {
 
     /** The id. */
@@ -98,8 +85,6 @@ public class TableConstraints {
         super();
     }
 
-
-
     /**
      * Gets the id.
      *
@@ -157,6 +142,7 @@ public class TableConstraints {
     /**
      * Get the foreignKey by name.
      *
+     * @param name the name
      * @return the foreignKey
      */
     public TableConstraintForeignKey getForeignKey(String name) {
@@ -193,6 +179,7 @@ public class TableConstraints {
     /**
      * Get the uniqueIndex by name.
      *
+     * @param name the name
      * @return the uniqueIndex
      */
     public TableConstraintUnique getUniqueIndex(String name) {
@@ -229,6 +216,7 @@ public class TableConstraints {
     /**
      * Get the checks by name.
      *
+     * @param name the name
      * @return the checks
      */
     public TableConstraintCheck getCheck(String name) {
@@ -269,10 +257,7 @@ public class TableConstraints {
      */
     @Override
     public String toString() {
-        return "TableConstraints [id=" + id + ", primaryKey=" + primaryKey + ", foreignKeys="
-                + (foreignKeys != null ? Objects.toString(foreignKeys) : "null") + ", uniqueIndexes="
-                + (uniqueIndexes != null ? Objects.toString(uniqueIndexes) : "null") + ", checks="
-                + (checks != null ? Objects.toString(checks) : "null") + ", table=" + table.getName() + "]";
+        return "TableConstraints{" + "id=" + id + ", primaryKey=" + primaryKey + ", foreignKeys=" + foreignKeys + ", uniqueIndexes="
+                + uniqueIndexes + ", checks=" + checks + ", table=" + (table != null ? table.getName() : null) + '}';
     }
-
 }

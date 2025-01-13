@@ -3,19 +3,20 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-exports.getTemplate = function() {
+export function getTemplate() {
 	return {
-		"name": "Database Table",
-		"description": "Database Table Template",
-		"sources": [{
-			"location": "/template-database-table/database.table.template", 
-			"action": "generate",
-			"rename": "{{fileName}}.table"
+		name: 'Database Table (Model)',
+		description: 'Database Table Template',
+		glyph: 'sap-icon--table-view',
+		sources: [{
+			location: '/template-database-table/database.table.template',
+			action: 'generate',
+			rename: '{{fileName}}.table'
 		}],
-		"parameters": [{
-			"name": "tableName",
-			"label": "Table Name"
+		parameters: [{
+			name: 'tableName',
+			label: 'Table Name'
 		}],
-		"order": 10
+		order: 40
 	};
 };

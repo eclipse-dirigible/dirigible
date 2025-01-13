@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.repository.master.fs;
 
@@ -22,9 +21,6 @@ public class FileSystemMasterRepository extends FileSystemRepository implements 
 
     /** The Constant TYPE. */
     public static final String TYPE = "filesystem";
-
-    /** The Constant DIRIGIBLE_MASTER_REPOSITORY_ROOT_FOLDER. */
-    public static final String DIRIGIBLE_MASTER_REPOSITORY_ROOT_FOLDER = "DIRIGIBLE_MASTER_REPOSITORY_ROOT_FOLDER";
 
     /** The Constant DIRIGIBLE_MASTER_ROOT_FOLDER_DEFAULT. */
     private static final String DIRIGIBLE_MASTER_ROOT_FOLDER_DEFAULT = "dirigible_master";
@@ -44,9 +40,7 @@ public class FileSystemMasterRepository extends FileSystemRepository implements 
      *
      * @throws LocalRepositoryException the local repository exception
      */
-    public FileSystemMasterRepository() throws LocalRepositoryException {
-        super();
-    }
+    public FileSystemMasterRepository() throws LocalRepositoryException {}
 
     /**
      * Gets the repository root folder.

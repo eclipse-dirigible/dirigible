@@ -1,188 +1,71 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.jobs.service;
+
+import org.eclipse.dirigible.components.base.artefact.BaseArtefactService;
+import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
+import org.eclipse.dirigible.components.base.tenant.Tenant;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
+import org.eclipse.dirigible.components.jobs.domain.Job;
+import org.eclipse.dirigible.components.jobs.domain.JobLog;
+import org.eclipse.dirigible.components.jobs.domain.JobStatus;
+import org.eclipse.dirigible.components.jobs.email.JobEmailProcessor;
+import org.eclipse.dirigible.components.jobs.repository.JobLogRepository;
+import org.springframework.data.domain.Example;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
-import java.util.Optional;
-
-import org.eclipse.dirigible.components.base.artefact.ArtefactService;
-import org.eclipse.dirigible.components.jobs.domain.Job;
-import org.eclipse.dirigible.components.jobs.domain.JobLog;
-import org.eclipse.dirigible.components.jobs.email.JobEmailProcessor;
-import org.eclipse.dirigible.components.jobs.repository.JobLogRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Example;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * The Class JobLogService.
  */
 @Service
 @Transactional
-public class JobLogService implements ArtefactService<JobLog> {
+public class JobLogService extends BaseArtefactService<JobLog, Long> {
 
-    /** The job log repository. */
-    @Autowired
-    private JobLogRepository jobLogRepository;
-
-    /** The job service. */
-    @Autowired
-    private JobService jobService;
+    /** The date format. */
+    private final String DATE_FORMAT = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX";
 
     /** The job email processor. */
-    @Autowired
-    private JobEmailProcessor jobEmailProcessor;
+    private final JobEmailProcessor jobEmailProcessor;
+
+    /** The job service. */
+    private final JobService jobService;
+
+    /** The tenant context. */
+    private final TenantContext tenantContext;
+
+    /** The default tenant. */
+    private final Tenant defaultTenant;
 
     /**
-     * Gets the all.
+     * Instantiates a new job log service.
      *
-     * @return the all
+     * @param repository the repository
+     * @param jobEmailProcessor the job email processor
+     * @param jobService the job service
+     * @param tenantContext the tenant context
+     * @param defaultTenant the default tenant
      */
-    @Override
-    @Transactional(readOnly = true)
-    public List<JobLog> getAll() {
-        return jobLogRepository.findAll();
+    public JobLogService(JobLogRepository repository, JobEmailProcessor jobEmailProcessor, JobService jobService,
+            TenantContext tenantContext, @DefaultTenant Tenant defaultTenant) {
+        super(repository);
+        this.jobEmailProcessor = jobEmailProcessor;
+        this.jobService = jobService;
+        this.tenantContext = tenantContext;
+        this.defaultTenant = defaultTenant;
     }
-
-    /**
-     * Find all.
-     *
-     * @param pageable the pageable
-     * @return the page
-     */
-    @Override
-    @Transactional(readOnly = true)
-    public Page<JobLog> getPages(Pageable pageable) {
-        return jobLogRepository.findAll(pageable);
-    }
-
-    /**
-     * Find by id.
-     *
-     * @param id the id
-     * @return the job log
-     */
-    @Override
-    @Transactional(readOnly = true)
-    public JobLog findById(Long id) {
-        Optional<JobLog> jobLog = jobLogRepository.findById(id);
-        if (jobLog.isPresent()) {
-            return jobLog.get();
-        } else {
-            throw new IllegalArgumentException("JobLog with id does not exist: " + id);
-        }
-    }
-
-    /**
-     * Find by name.
-     *
-     * @param name the name
-     * @return the job log
-     */
-    @Override
-    @Transactional(readOnly = true)
-    public JobLog findByName(String name) {
-        JobLog filter = new JobLog();
-        filter.setName(name);
-        Example<JobLog> example = Example.of(filter);
-        Optional<JobLog> jobLog = jobLogRepository.findOne(example);
-        if (jobLog.isPresent()) {
-            return jobLog.get();
-        } else {
-            throw new IllegalArgumentException("JobLog with name does not exist: " + name);
-        }
-    }
-
-    /**
-     * Find by name.
-     *
-     * @param name the name
-     * @return the job log
-     */
-    @Transactional(readOnly = true)
-    public List<JobLog> findByJob(String name) {
-        JobLog filter = new JobLog();
-        if (name != null && name.startsWith("/")) {
-            name = name.substring(1);
-        }
-        filter.setJobName(name);
-        filter.setStatus(null);
-        Example<JobLog> example = Example.of(filter);
-        List<JobLog> jobLog = jobLogRepository.findAll(example);
-        return jobLog;
-    }
-
-    /**
-     * Find by location.
-     *
-     * @param location the location
-     * @return the list
-     */
-    @Override
-    @Transactional(readOnly = true)
-    public List<JobLog> findByLocation(String location) {
-        JobLog filter = new JobLog();
-        filter.setLocation(location);
-        Example<JobLog> example = Example.of(filter);
-        List<JobLog> list = jobLogRepository.findAll(example);
-        return list;
-    }
-
-    /**
-     * Find by key.
-     *
-     * @param key the key
-     * @return the job log
-     */
-    @Override
-    @Transactional(readOnly = true)
-    public JobLog findByKey(String key) {
-        JobLog filter = new JobLog();
-        filter.setKey(key);
-        Example<JobLog> example = Example.of(filter);
-        Optional<JobLog> jobLog = jobLogRepository.findOne(example);
-        if (jobLog.isPresent()) {
-            return jobLog.get();
-        }
-        return null;
-    }
-
-    /**
-     * Save.
-     *
-     * @param jobLog the job log
-     * @return the job log
-     */
-    @Override
-    public JobLog save(JobLog jobLog) {
-        return jobLogRepository.saveAndFlush(jobLog);
-    }
-
-    /**
-     * Delete.
-     *
-     * @param jobLog the job log
-     */
-    @Override
-    public void delete(JobLog jobLog) {
-        jobLogRepository.delete(jobLog);
-    }
-
-    private String DATE_FORMAT = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX";
 
     /**
      * Job triggered.
@@ -192,11 +75,11 @@ public class JobLogService implements ArtefactService<JobLog> {
      * @return the job log definition
      */
     public JobLog jobTriggered(String name, String handler) {
-        JobLog jobLog = new JobLog();
+        JobLog jobLog = createJobLog();
         jobLog.setName(name);
         jobLog.setJobName(name);
         jobLog.setHandler(handler);
-        jobLog.setStatus(JobLog.JOB_LOG_STATUS_TRIGGRED);
+        jobLog.setStatus(JobStatus.TRIGGRED);
         jobLog.setTriggeredAt(new Timestamp(new Date().getTime()));
         jobLog.setLocation(new SimpleDateFormat(DATE_FORMAT).format(new Date()));
         jobLog.updateKey();
@@ -205,25 +88,16 @@ public class JobLogService implements ArtefactService<JobLog> {
     }
 
     /**
-     * Job logged.
+     * Creates the job log.
      *
-     * @param name the name
-     * @param handler the handler
-     * @param message the message
-     * @param severity the severity
-     * @return the job log definition
+     * @return the job log
      */
-    private JobLog jobLogged(String name, String handler, String message, short severity) {
+    private JobLog createJobLog() {
         JobLog jobLog = new JobLog();
-        jobLog.setName(name);
-        jobLog.setJobName(name);
-        jobLog.setHandler(handler);
-        jobLog.setMessage(message);
-        jobLog.setStatus(severity);
-        jobLog.setTriggeredAt(new Timestamp(new Date().getTime()));
-        jobLog.setLocation(new SimpleDateFormat(DATE_FORMAT).format(new Date()));
-        jobLog.updateKey();
-        save(jobLog);
+        String tenantId = tenantContext.isNotInitialized() ? defaultTenant.getId()
+                : tenantContext.getCurrentTenant()
+                               .getId();
+        jobLog.setTenantId(tenantId);
         return jobLog;
     }
 
@@ -236,7 +110,30 @@ public class JobLogService implements ArtefactService<JobLog> {
      * @return the job log definition
      */
     public JobLog jobLogged(String name, String handler, String message) {
-        return jobLogged(name, handler, message, JobLog.JOB_LOG_STATUS_LOGGED);
+        return jobLogged(name, handler, message, JobStatus.LOGGED);
+    }
+
+    /**
+     * Job logged.
+     *
+     * @param name the name
+     * @param handler the handler
+     * @param message the message
+     * @param status the status
+     * @return the job log definition
+     */
+    private JobLog jobLogged(String name, String handler, String message, JobStatus status) {
+        JobLog jobLog = createJobLog();
+        jobLog.setName(name);
+        jobLog.setJobName(name);
+        jobLog.setHandler(handler);
+        jobLog.setMessage(message);
+        jobLog.setStatus(status);
+        jobLog.setTriggeredAt(new Timestamp(new Date().getTime()));
+        jobLog.setLocation(new SimpleDateFormat(DATE_FORMAT).format(new Date()));
+        jobLog.updateKey();
+        save(jobLog);
+        return jobLog;
     }
 
     /**
@@ -248,7 +145,7 @@ public class JobLogService implements ArtefactService<JobLog> {
      * @return the job log definition
      */
     public JobLog jobLoggedError(String name, String handler, String message) {
-        return jobLogged(name, handler, message, JobLog.JOB_LOG_STATUS_ERROR);
+        return jobLogged(name, handler, message, JobStatus.ERROR);
     }
 
     /**
@@ -260,7 +157,7 @@ public class JobLogService implements ArtefactService<JobLog> {
      * @return the job log definition
      */
     public JobLog jobLoggedWarning(String name, String handler, String message) {
-        return jobLogged(name, handler, message, JobLog.JOB_LOG_STATUS_WARN);
+        return jobLogged(name, handler, message, JobStatus.WARN);
     }
 
     /**
@@ -272,7 +169,7 @@ public class JobLogService implements ArtefactService<JobLog> {
      * @return the job log definition
      */
     public JobLog jobLoggedInfo(String name, String handler, String message) {
-        return jobLogged(name, handler, message, JobLog.JOB_LOG_STATUS_INFO);
+        return jobLogged(name, handler, message, JobStatus.INFO);
     }
 
     /**
@@ -285,11 +182,11 @@ public class JobLogService implements ArtefactService<JobLog> {
      * @return the job log definition
      */
     public JobLog jobFinished(String name, String handler, long triggeredId, Date triggeredAt) {
-        JobLog jobLog = new JobLog();
+        JobLog jobLog = createJobLog();
         jobLog.setName(name);
         jobLog.setJobName(name);
         jobLog.setHandler(handler);
-        jobLog.setStatus(JobLog.JOB_LOG_STATUS_FINISHED);
+        jobLog.setStatus(JobStatus.FINISHED);
         jobLog.setTriggeredId(triggeredId);
         jobLog.setTriggeredAt(new Timestamp(triggeredAt.getTime()));
         jobLog.setFinishedAt(new Timestamp(new Date().getTime()));
@@ -297,8 +194,8 @@ public class JobLogService implements ArtefactService<JobLog> {
         jobLog.updateKey();
         save(jobLog);
         Job job = jobService.findByName(name);
-        boolean statusChanged = job.getStatus() != JobLog.JOB_LOG_STATUS_FINISHED;
-        job.setStatus(JobLog.JOB_LOG_STATUS_FINISHED);
+        boolean statusChanged = job.getStatus() != JobStatus.FINISHED;
+        job.setStatus(JobStatus.FINISHED);
         job.setMessage("");
         job.setExecutedAt(jobLog.getFinishedAt());
         if (statusChanged) {
@@ -320,11 +217,11 @@ public class JobLogService implements ArtefactService<JobLog> {
      * @return the job log definition
      */
     public JobLog jobFailed(String name, String handler, long triggeredId, Date triggeredAt, String message) {
-        JobLog jobLog = new JobLog();
+        JobLog jobLog = createJobLog();
         jobLog.setName(name);
         jobLog.setJobName(name);
         jobLog.setHandler(handler);
-        jobLog.setStatus(JobLog.JOB_LOG_STATUS_FAILED);
+        jobLog.setStatus(JobStatus.FAILED);
         jobLog.setTriggeredId(triggeredId);
         jobLog.setTriggeredAt(new Timestamp(triggeredAt.getTime()));
         jobLog.setFinishedAt(new Timestamp(new Date().getTime()));
@@ -333,8 +230,8 @@ public class JobLogService implements ArtefactService<JobLog> {
         jobLog.updateKey();
         save(jobLog);
         Job job = jobService.findByName(name);
-        boolean statusChanged = job.getStatus() != JobLog.JOB_LOG_STATUS_FAILED;
-        job.setStatus(JobLog.JOB_LOG_STATUS_FAILED);
+        boolean statusChanged = job.getStatus() != JobStatus.FAILED;
+        job.setStatus(JobStatus.FAILED);
         job.setMessage(message);
         job.setExecutedAt(jobLog.getFinishedAt());
         if (statusChanged) {
@@ -351,14 +248,34 @@ public class JobLogService implements ArtefactService<JobLog> {
      * @param jobName the job name
      */
     public void deleteAllByJobName(String jobName) {
+        // createJobLog() if we want only logs for the current tenant otherwise new JobLog()
         JobLog filter = new JobLog();
         if (jobName != null && jobName.startsWith("/")) {
             jobName = jobName.substring(1);
         }
         filter.setJobName(jobName);
         Example<JobLog> example = Example.of(filter);
-        List<JobLog> jobLogs = jobLogRepository.findAll(example);
-        jobLogRepository.deleteAll(jobLogs);
+        List<JobLog> jobLogs = getRepo().findAll(example);
+        getRepo().deleteAll(jobLogs);
 
+    }
+
+    /**
+     * Find by name.
+     *
+     * @param name the name
+     * @return the job log
+     */
+    @Transactional(readOnly = true)
+    public List<JobLog> findByJob(String name) {
+        // createJobLog() if we want only logs for the current tenant otherwise new JobLog()
+        JobLog filter = new JobLog();
+        if (name != null && name.startsWith("/")) {
+            name = name.substring(1);
+        }
+        filter.setJobName(name);
+        filter.setStatus(null);
+        Example<JobLog> example = Example.of(filter);
+        return getRepo().findAll(example);
     }
 }

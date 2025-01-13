@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.engine.javascript.service;
 
@@ -53,14 +52,42 @@ public class JavascriptHandler {
      * Instantiates a new javascript handler.
      *
      * @param repository the repository
+     * @param sourceProvider the source provider
      */
     public JavascriptHandler(IRepository repository, JavascriptSourceProvider sourceProvider) {
         this.repository = repository;
         this.sourceProvider = sourceProvider;
     }
 
+    /**
+     * Gets the repository.
+     *
+     * @return the repository
+     */
     public IRepository getRepository() {
         return repository;
+    }
+
+    /**
+     * Handle callback.
+     *
+     * @param filePath the file path
+     * @param parameters the parameters
+     * @return the object
+     */
+    public Object handleCallback(String filePath, Map<Object, Object> parameters) {
+        if (filePath == null) {
+            throw new RuntimeException("Path to the file to be executed cannot be null");
+        }
+        Path path = Path.of(filePath);
+        if (path.getNameCount() > 1) {
+            return handleRequest(path.getRoot()
+                                     .toString(),
+                    path.subpath(1, path.getNameCount() - 1)
+                        .toString(),
+                    null, parameters, false);
+        }
+        throw new RuntimeException("Path to the file to be executed must contain a parent folder");
     }
 
     /**
@@ -102,46 +129,22 @@ public class JavascriptHandler {
                               value);
                 return transformValue(value);
             }
-        } catch (Exception e) {
-            if (logger.isErrorEnabled()) {
-                if (e.getMessage() == null) {
-                    logger.error("Null object has been found");
-                    return e.getMessage();
-                } else if (e.getMessage()
-                            .contains("consider publish")) {
-                    logger.error(e.getMessage());
-                    return e.getMessage();
-                } else {
-                    logger.error("Error on processing JavaScript service from project: [{}], and path: [{}], with parameters: [{}]",
-                            projectName, projectFilePath, projectFilePathParam);
-                    logger.error(e.getMessage(), e);
-                    throw new RuntimeException(e);
-                }
+        } catch (Throwable ex) {
+            if (ex.getMessage() == null) {
+                logger.error("Null object has been found", ex);
+                return ex.getMessage();
             }
+            if (ex.getMessage()
+                  .contains("consider publish")) {
+                logger.error(ex.getMessage());
+                return ex.getMessage();
+            }
+            String errorMessage =
+                    String.format("Error on processing JavaScript service from project: [%s], and path: [%s], with parameters: [%s]",
+                            projectName, projectFilePath, projectFilePathParam);
+            logger.error(errorMessage, ex);
+            throw new RuntimeException(ex.getMessage(), ex);
         }
-        return "";
-    }
-
-    /**
-     * Handle callback.
-     *
-     * @param filePath the file path
-     * @param parameters the parameters
-     * @return the object
-     */
-    public Object handleCallback(String filePath, Map<Object, Object> parameters) {
-        if (filePath == null) {
-            throw new RuntimeException("Path to the file to be executed cannot be null");
-        }
-        Path path = Path.of(filePath);
-        if (path.getNameCount() > 1) {
-            return handleRequest(path.getRoot()
-                                     .toString(),
-                    path.subpath(1, path.getNameCount() - 1)
-                        .toString(),
-                    null, parameters, false);
-        }
-        throw new RuntimeException("Path to the file to be executed must contain a parent folder");
     }
 
 }

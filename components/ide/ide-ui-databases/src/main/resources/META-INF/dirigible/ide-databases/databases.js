@@ -1,12 +1,12 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
 const databasesView = angular.module('databases', ['ideUI', 'ideView']);
@@ -18,7 +18,7 @@ databasesView.config(["messageHubProvider", function (messageHubProvider) {
 databasesView.controller('DatabaseController', ['$scope', '$http', 'messageHub', function ($scope, $http, messageHub) {
 
     $scope.listDatabases = function () {
-        $http.get('/services/data/sources/').then(function (response) {
+        $http.get('/services/data/sources').then(function (response) {
             $scope.list = response.data;
         });
     }

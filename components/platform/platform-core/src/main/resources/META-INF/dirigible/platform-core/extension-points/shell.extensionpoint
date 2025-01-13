@@ -1,0 +1,4 @@
+{
+    "name": "platform-shells",
+    "description": "Extension point for shells"
+}

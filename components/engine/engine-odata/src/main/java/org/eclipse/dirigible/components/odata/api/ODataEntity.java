@@ -1,21 +1,20 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.odata.api;
+
+import com.google.gson.annotations.Expose;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import com.google.gson.annotations.Expose;
 
 /**
  * The Class ODataEntityDefinition.
@@ -33,6 +32,9 @@ public class ODataEntity {
     /** The table. */
     @Expose
     private String table;
+
+    @Expose
+    private String schema;
 
     /** The key generated. */
     @Expose
@@ -141,6 +143,14 @@ public class ODataEntity {
      */
     public void setTable(String table) {
         this.table = table;
+    }
+
+    public String getSchema() {
+        return schema;
+    }
+
+    public void setSchema(String schema) {
+        this.schema = schema;
     }
 
     /**
@@ -305,17 +315,12 @@ public class ODataEntity {
         this.aggregationsTypeAndColumn = aggregationsTypeAndColumn;
     }
 
-    /**
-     * To string.
-     *
-     * @return the string
-     */
     @Override
     public String toString() {
-        return "ODataEntity [name=" + name + ", alias=" + alias + ", table=" + table + ", keyGenerated=" + keyGenerated + ", properties="
-                + properties + ", parameters=" + parameters + ", navigations=" + navigations + ", handlers=" + handlers + ", keys=" + keys
-                + ", annotationsEntitySet=" + annotationsEntitySet + ", annotationsEntityType=" + annotationsEntityType
-                + ", aggregationsTypeAndColumn=" + aggregationsTypeAndColumn + "]";
+        return "ODataEntity{" + "name='" + name + '\'' + ", alias='" + alias + '\'' + ", table='" + table + '\'' + ", schema='" + schema
+                + '\'' + ", keyGenerated='" + keyGenerated + '\'' + ", properties=" + properties + ", parameters=" + parameters
+                + ", navigations=" + navigations + ", handlers=" + handlers + ", keys=" + keys + ", annotationsEntitySet="
+                + annotationsEntitySet + ", annotationsEntityType=" + annotationsEntityType + ", aggregationsTypeAndColumn="
+                + aggregationsTypeAndColumn + '}';
     }
-
 }

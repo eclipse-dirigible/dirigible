@@ -1,10 +1,15 @@
 {
-	"edmType": "Sales_by_Category",
-	"edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.SalesByCategory",
-	"sqlTable": " PUBLIC.SALES_BY_CATEGORY",
-	"CategoryID": "CATEGORY_ID",
-	"CategoryName": "CATEGORY_NAME",
-	"ProductName": "PRODUCT_NAME",
-	"ProductSales": "PRODUCT_SALES",
-	"_pk_": ["CATEGORY_ID", "CATEGORY_NAME", "PRODUCT_NAME"]
+  "edmType": "Sales_by_Category",
+  "edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.SalesByCategory",
+  "sqlTable": "SALES_BY_CATEGORY",
+  "sqlSchema": "PUBLIC",
+  "CategoryID": "CATEGORY_ID",
+  "CategoryName": "CATEGORY_NAME",
+  "ProductName": "PRODUCT_NAME",
+  "ProductSales": "PRODUCT_SALES",
+  "_pk_": [
+    "CATEGORY_ID",
+    "CATEGORY_NAME",
+    "PRODUCT_NAME"
+  ]
 }

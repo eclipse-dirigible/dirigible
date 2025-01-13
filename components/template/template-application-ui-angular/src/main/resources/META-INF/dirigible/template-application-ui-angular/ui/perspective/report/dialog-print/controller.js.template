@@ -1,0 +1,107 @@
+#set($dollar = '$')
+angular.module('page', ["ideUI", "ideView", "entityApi"])
+    .config(["messageHubProvider", function (messageHubProvider) {
+        messageHubProvider.eventIdPrefix = '${projectName}.Reports.${name}';
+    }])
+    .config(["entityApiProvider", function (entityApiProvider) {
+        entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
+    }])
+    .controller('PageController', ['$scope', 'messageHub', 'entityApi', 'ViewParameters', function ($scope, messageHub, entityApi, ViewParameters) {
+
+		let params = ViewParameters.get();
+		if (Object.keys(params).length) {         
+            const filterEntity = params.filterEntity ?? {};
+
+			const filter = {
+				$filter: {
+					equals: {},
+					notEquals: {},
+					contains: {},
+					greaterThan: {},
+					greaterThanOrEqual: {},
+					lessThan: {},
+					lessThanOrEqual: {}
+				},
+			};
+#foreach ($property in $properties)
+#if($property.dataTypeTypescript == 'number' || $property.dataTypeTypescript == 'boolean')
+			if (filterEntity.${property.name}) {
+				filter.${dollar}filter.equals.${property.name} = filterEntity.${property.name};
+			}
+#elseif($property.dataTypeTypescript == 'string')
+			if (filterEntity.${property.name}) {
+				filter.${dollar}filter.contains.${property.name} = filterEntity.${property.name};
+			}
+#elseif($property.dataTypeTypescript == 'Date')
+			if (filterEntity.${property.name}From) {
+				filter.${dollar}filter.greaterThanOrEqual.${property.name} = filterEntity.${property.name}From;
+			}
+			if (filterEntity.${property.name}To) {
+				filter.${dollar}filter.lessThanOrEqual.${property.name} = filterEntity.${property.name}To;
+			}
+#end
+#end
+
+            $scope.filter = filter;
+
+    #foreach ($property in $properties)
+        #if($property.widgetType == "DROPDOWN")
+			$scope.options${property.name} = params.options${property.name};
+        #end
+    #end
+		}
+
+        $scope.loadPage = function (filter) {
+            if (!filter && $scope.filter) {
+                filter = $scope.filter;
+            }
+            let request;
+            if (filter) {
+                request = entityApi.search(filter);
+            } else {
+                request = entityApi.list();
+            }
+            request.then(function (response) {
+                if (response.status != 200) {
+                    messageHub.showAlertError("${name}", `Unable to list/filter ${name}: '${response.message}'`);
+                    return;
+                }
+#if($hasDates)
+
+					response.data.forEach(e => {
+#foreach ($property in $properties)
+#if($property.isDateType)
+						if (e.${property.name}) {
+							e.${property.name} = new Date(e.${property.name});
+						}
+#end
+#end
+					});
+
+#end
+                $scope.data = response.data;
+                setTimeout(() => {
+                    window.print();
+
+                }, 250);
+            });
+        };
+        $scope.loadPage($scope.filter);
+
+#foreach ($property in $properties)
+    #if($property.widgetType == "DROPDOWN")
+		${dollar}scope.options${property.name}Value = function (optionKey) {
+			for (let i = 0; i < ${dollar}scope.options${property.name}.length; i++) {
+				if (${dollar}scope.options${property.name}[i].value === optionKey) {
+					return ${dollar}scope.options${property.name}[i].text;
+				}
+			}
+			return null;
+		};
+    #end
+#end
+        window.onafterprint = () => {
+            messageHub.closeDialogWindow("${projectName}-Reports-${name}-print");
+        }
+
+    }]);

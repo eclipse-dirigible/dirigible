@@ -1,0 +1,25 @@
+- route:
+    id: http-route-b123
+    nodePrefixId: http-route-123
+    from:
+      id: from-a460
+      description: Expose path /services/integrations/http-route
+      uri: platform-http
+      parameters:
+        path: http-route
+        httpMethodRestrict: GET
+      steps:
+        - setProperty:
+            id: setProperty-eba5
+            description: Set TS property path
+            name: resource
+            expression:
+              simple:
+                id: simple-a11f
+                expression: http-route-call-dirigible-js-two-steps/handler.ts
+        - to:
+            id: to-7ddb
+            description: Execute TS file
+            uri: class
+            parameters:
+              beanName: org.eclipse.dirigible.components.engine.camel.invoke.Invoker

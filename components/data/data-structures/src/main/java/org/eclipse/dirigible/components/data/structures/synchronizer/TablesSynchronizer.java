@@ -1,46 +1,27 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.structures.synchronizer;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.text.ParseException;
-import java.util.List;
-
 import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.ArtefactService;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
-import org.eclipse.dirigible.components.base.synchronizer.Synchronizer;
+import org.eclipse.dirigible.components.base.synchronizer.MultitenantBaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
-import org.eclipse.dirigible.components.data.structures.domain.Table;
-import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
-import org.eclipse.dirigible.components.data.structures.domain.TableConstraintCheck;
-import org.eclipse.dirigible.components.data.structures.domain.TableConstraintForeignKey;
-import org.eclipse.dirigible.components.data.structures.domain.TableConstraintUnique;
-import org.eclipse.dirigible.components.data.structures.domain.TableIndex;
+import org.eclipse.dirigible.components.data.structures.domain.*;
 import org.eclipse.dirigible.components.data.structures.service.TableService;
-import org.eclipse.dirigible.components.data.structures.synchronizer.table.TableAlterProcessor;
-import org.eclipse.dirigible.components.data.structures.synchronizer.table.TableCreateProcessor;
-import org.eclipse.dirigible.components.data.structures.synchronizer.table.TableDropProcessor;
-import org.eclipse.dirigible.components.data.structures.synchronizer.table.TableForeignKeysCreateProcessor;
-import org.eclipse.dirigible.components.data.structures.synchronizer.table.TableForeignKeysDropProcessor;
+import org.eclipse.dirigible.components.data.structures.synchronizer.table.*;
 import org.eclipse.dirigible.database.sql.SqlFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,14 +29,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.text.ParseException;
+import java.util.List;
+
 /**
  * The Class TablesSynchronizer.
- *
- * @param <A> the generic type
  */
 @Component
 @Order(SynchronizersOrder.TABLE)
-public class TablesSynchronizer<A extends Artefact> implements Synchronizer<Table> {
+public class TablesSynchronizer extends MultitenantBaseSynchronizer<Table, Long> {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(TablesSynchronizer.class);
@@ -64,10 +49,10 @@ public class TablesSynchronizer<A extends Artefact> implements Synchronizer<Tabl
     private static final String FILE_EXTENSION_TABLE = ".table";
 
     /** The table service. */
-    private TableService tableService;
+    private final TableService tableService;
 
     /** The datasources manager. */
-    private DataSourcesManager datasourcesManager;
+    private final DataSourcesManager datasourcesManager;
 
     /** The synchronization callback. */
     private SynchronizerCallback callback;
@@ -82,29 +67,6 @@ public class TablesSynchronizer<A extends Artefact> implements Synchronizer<Tabl
     public TablesSynchronizer(TableService tableService, DataSourcesManager datasourcesManager) {
         this.tableService = tableService;
         this.datasourcesManager = datasourcesManager;
-    }
-
-    /**
-     * Gets the service.
-     *
-     * @return the service
-     */
-    @Override
-    public ArtefactService<Table> getService() {
-        return tableService;
-    }
-
-    /**
-     * Checks if is accepted.
-     *
-     * @param file the file
-     * @param attrs the attrs
-     * @return true, if is accepted
-     */
-    @Override
-    public boolean isAccepted(Path file, BasicFileAttributes attrs) {
-        return file.toString()
-                   .endsWith(getFileExtension());
     }
 
     /**
@@ -124,10 +86,10 @@ public class TablesSynchronizer<A extends Artefact> implements Synchronizer<Tabl
      * @param location the location
      * @param content the content
      * @return the list
-     * @throws ParseException
+     * @throws ParseException the parse exception
      */
     @Override
-    public List<Table> parse(String location, byte[] content) throws ParseException {
+    protected List<Table> parseImpl(String location, byte[] content) throws ParseException {
         Table table = JsonHelper.fromJson(new String(content, StandardCharsets.UTF_8), Table.class);
         Configuration.configureObject(table);
         table.setLocation(location);
@@ -160,6 +122,11 @@ public class TablesSynchronizer<A extends Artefact> implements Synchronizer<Tabl
         }
     }
 
+    /**
+     * Assign parent.
+     *
+     * @param table the table
+     */
     static void assignParent(Table table) {
         table.getColumns()
              .forEach(c -> c.setTable(table));
@@ -197,6 +164,22 @@ public class TablesSynchronizer<A extends Artefact> implements Synchronizer<Tabl
         }
     }
 
+    /**
+     * Gets the service.
+     *
+     * @return the service
+     */
+    @Override
+    public ArtefactService<Table, Long> getService() {
+        return tableService;
+    }
+
+    /**
+     * Reassign ids.
+     *
+     * @param table the table
+     * @param maybe the maybe
+     */
     static void reassignIds(Table table, Table maybe) {
         table.getColumns()
              .forEach(c -> {
@@ -292,33 +275,25 @@ public class TablesSynchronizer<A extends Artefact> implements Synchronizer<Tabl
      * @param error the error
      */
     @Override
-    public void setStatus(Artefact artefact, ArtefactLifecycle lifecycle, String error) {
+    public void setStatus(Table artefact, ArtefactLifecycle lifecycle, String error) {
         artefact.setLifecycle(lifecycle);
         artefact.setError(error);
-        getService().save((Table) artefact);
+        getService().save(artefact);
     }
 
     /**
-     * Complete.
+     * Complete impl.
      *
      * @param wrapper the wrapper
      * @param flow the flow
      * @return true, if successful
      */
     @Override
-    public boolean complete(TopologyWrapper<Artefact> wrapper, ArtefactPhase flow) {
+    protected boolean completeImpl(TopologyWrapper<Table> wrapper, ArtefactPhase flow) {
+        Table table = wrapper.getArtefact();
 
         try (Connection connection = datasourcesManager.getDefaultDataSource()
                                                        .getConnection()) {
-
-            Table table = null;
-            if (wrapper.getArtefact() instanceof Table) {
-                table = (Table) wrapper.getArtefact();
-            } else {
-                throw new UnsupportedOperationException(String.format("Trying to process %s as Table", wrapper.getArtefact()
-                                                                                                              .getClass()));
-            }
-
             switch (flow) {
                 case CREATE:
                     if (ArtefactLifecycle.NEW.equals(table.getLifecycle())) {
@@ -330,16 +305,16 @@ public class TablesSynchronizer<A extends Artefact> implements Synchronizer<Tabl
                                 if (logger.isErrorEnabled()) {
                                     logger.error(e.getMessage(), e);
                                 }
-                                callback.registerState(this, wrapper, ArtefactLifecycle.CREATED, e.getMessage());
+                                callback.registerState(this, wrapper, ArtefactLifecycle.CREATED, e);
                             }
                         } else {
                             if (logger.isWarnEnabled()) {
                                 logger.warn(String.format("Table [%s] already exists during the update process", table.getName()));
                             }
                             executeTableAlter(connection, table);
-                            callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED, "");
+                            callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
                         }
-                        callback.registerState(this, wrapper, ArtefactLifecycle.CREATED, "");
+                        callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
                     }
                     break;
                 case UPDATE:
@@ -357,17 +332,21 @@ public class TablesSynchronizer<A extends Artefact> implements Synchronizer<Tabl
                     }
                     if (ArtefactLifecycle.MODIFIED.equals(table.getLifecycle())) {
                         executeTableUpdate(connection, table);
-                        callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED, "");
+                        callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
+                    }
+                    if (ArtefactLifecycle.FAILED.equals(table.getLifecycle())) {
+                        return false;
                     }
                     break;
                 case DELETE:
-                    if (ArtefactLifecycle.CREATED.equals(table.getLifecycle()) || ArtefactLifecycle.UPDATED.equals(table.getLifecycle())) {
+                    if (ArtefactLifecycle.CREATED.equals(table.getLifecycle()) || ArtefactLifecycle.UPDATED.equals(table.getLifecycle())
+                            || ArtefactLifecycle.FAILED.equals(table.getLifecycle())) {
                         if (SqlFactory.getNative(connection)
                                       .existsTable(connection, table.getName())) {
                             if (SqlFactory.deriveDialect(connection)
                                           .count(connection, table.getName()) == 0) {
                                 executeTableDrop(connection, table);
-                                callback.registerState(this, wrapper, ArtefactLifecycle.DELETED, "");
+                                callback.registerState(this, wrapper, ArtefactLifecycle.DELETED);
                             } else {
                                 String message = String.format(
                                         "Table [%s] cannot be deleted during the update process, because it is not empty", table.getName());
@@ -383,7 +362,7 @@ public class TablesSynchronizer<A extends Artefact> implements Synchronizer<Tabl
                 // if (table.getLifecycle().equals(ArtefactLifecycle.DELETED)) {
                 // if (SqlFactory.getNative(connection).exists(connection, table.getName())) {
                 // executeTableForeignKeysDrop(connection, table);
-                // callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED, "");
+                // callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
                 // }
                 // }
                 case START:
@@ -392,55 +371,43 @@ public class TablesSynchronizer<A extends Artefact> implements Synchronizer<Tabl
 
             return true;
         } catch (SQLException e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
             callback.addError(e.getMessage());
-            callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, e.getMessage());
+            callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, e);
             return false;
         }
     }
 
     /**
-     * Cleanup.
+     * Execute table create.
      *
-     * @param table the table
+     * @param connection the connection
+     * @param tableModel the table model
+     * @throws SQLException the SQL exception
      */
-    @Override
-    public void cleanup(Table table) {
-        try (Connection connection = datasourcesManager.getDefaultDataSource()
-                                                       .getConnection()) {
-            if (SqlFactory.getNative(connection)
-                          .existsTable(connection, table.getName())) {
-                if (SqlFactory.deriveDialect(connection)
-                              .count(connection, table.getName()) == 0) {
-                    executeTableDrop(connection, table);
-                    getService().delete(table);
-                } else {
-                    String message = String.format("Table [%s] cannot be deleted during the update process, because it is not empty",
-                            table.getName());
-                    if (logger.isWarnEnabled()) {
-                        logger.warn(message);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
-            callback.addError(e.getMessage());
-            callback.registerState(this, table, ArtefactLifecycle.DELETED, e.getMessage());
-        }
+    public void executeTableCreate(Connection connection, Table tableModel) throws SQLException {
+        TableCreateProcessor.execute(connection, tableModel, true);
     }
 
     /**
-     * Sets the callback.
+     * Execute table alter.
      *
-     * @param callback the new callback
+     * @param connection the connection
+     * @param tableModel the table model
+     * @throws SQLException the SQL exception
      */
-    @Override
-    public void setCallback(SynchronizerCallback callback) {
-        this.callback = callback;
+    public void executeTableAlter(Connection connection, Table tableModel) throws SQLException {
+        TableAlterProcessor.execute(connection, tableModel);
+    }
+
+    /**
+     * Execute table foreign keys create.
+     *
+     * @param connection the connection
+     * @param tableModel the table model
+     * @throws SQLException the SQL exception
+     */
+    public void executeTableForeignKeysCreate(Connection connection, Table tableModel) throws SQLException {
+        TableForeignKeysCreateProcessor.execute(connection, tableModel);
     }
 
     /**
@@ -468,39 +435,6 @@ public class TablesSynchronizer<A extends Artefact> implements Synchronizer<Tabl
     }
 
     /**
-     * Execute table create.
-     *
-     * @param connection the connection
-     * @param tableModel the table model
-     * @throws SQLException the SQL exception
-     */
-    public void executeTableCreate(Connection connection, Table tableModel) throws SQLException {
-        TableCreateProcessor.execute(connection, tableModel, true);
-    }
-
-    /**
-     * Execute table foreign keys create.
-     *
-     * @param connection the connection
-     * @param tableModel the table model
-     * @throws SQLException the SQL exception
-     */
-    public void executeTableForeignKeysCreate(Connection connection, Table tableModel) throws SQLException {
-        TableForeignKeysCreateProcessor.execute(connection, tableModel);
-    }
-
-    /**
-     * Execute table alter.
-     *
-     * @param connection the connection
-     * @param tableModel the table model
-     * @throws SQLException the SQL exception
-     */
-    public void executeTableAlter(Connection connection, Table tableModel) throws SQLException {
-        TableAlterProcessor.execute(connection, tableModel);
-    }
-
-    /**
      * Execute table drop.
      *
      * @param connection the connection
@@ -509,6 +443,45 @@ public class TablesSynchronizer<A extends Artefact> implements Synchronizer<Tabl
      */
     public void executeTableDrop(Connection connection, Table tableModel) throws SQLException {
         TableDropProcessor.execute(connection, tableModel);
+    }
+
+    /**
+     * Cleanup.
+     *
+     * @param table the table
+     */
+    @Override
+    public void cleanupImpl(Table table) {
+        try (Connection connection = datasourcesManager.getDefaultDataSource()
+                                                       .getConnection()) {
+            if (SqlFactory.getNative(connection)
+                          .existsTable(connection, table.getName())) {
+                if (SqlFactory.deriveDialect(connection)
+                              .count(connection, table.getName()) == 0) {
+                    executeTableDrop(connection, table);
+                    getService().delete(table);
+                } else {
+                    String message = String.format("Table [%s] cannot be deleted during the update process, because it is not empty",
+                            table.getName());
+                    if (logger.isWarnEnabled()) {
+                        logger.warn(message);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            callback.addError(e.getMessage());
+            callback.registerState(this, table, ArtefactLifecycle.DELETED, e);
+        }
+    }
+
+    /**
+     * Sets the callback.
+     *
+     * @param callback the new callback
+     */
+    @Override
+    public void setCallback(SynchronizerCallback callback) {
+        this.callback = callback;
     }
 
     /**

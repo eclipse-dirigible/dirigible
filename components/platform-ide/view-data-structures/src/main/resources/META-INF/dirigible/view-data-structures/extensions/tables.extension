@@ -1,0 +1,5 @@
+{
+    "module": "view-data-structures/configs/tables-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Tables Structures View"
+}

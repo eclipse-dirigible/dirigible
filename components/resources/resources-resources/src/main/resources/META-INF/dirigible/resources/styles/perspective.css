@@ -87,6 +87,7 @@ body {
   scrollbar-width: none;
   -webkit-box-shadow: none;
   box-shadow: none;
+  max-height: calc(100vh - var(--sapToolHeader_Min_Height_Cozy) - var(--dg-status-bar-height));
 }
 
 .dg-sidebar>.fd-vertical-nav::-webkit-scrollbar {

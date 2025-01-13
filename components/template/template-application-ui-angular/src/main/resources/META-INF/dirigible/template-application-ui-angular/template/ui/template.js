@@ -3,30 +3,28 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-const listTemplate = dirigibleRequire("template-application-ui-angular/template/ui/list");
-const manageTemplate = dirigibleRequire("template-application-ui-angular/template/ui/manage");
-const masterDetailsListTemplate = dirigibleRequire("template-application-ui-angular/template/ui/masterDetailsList");
-const masterDetailsManageTemplate = dirigibleRequire("template-application-ui-angular/template/ui/masterDetailsManage");
-// const reportBarTemplate = require("template-application-ui-angular/template/ui/reportBar");
-// const reportLineTemplate = require("template-application-ui-angular/template/ui/reportLine");
-// const reportPieTemplate = require("template-application-ui-angular/template/ui/reportPie");
-// const reportTableTemplate = require("template-application-ui-angular/template/ui/reportTable");
-// const perspective = require("template-application-ui-angular/template/ui/perspective");
-const launchpad = dirigibleRequire("template-application-ui-angular/template/ui/launchpad");
-// const tiles = require("template-application-ui-angular/template/ui/tiles");
-// const menu = require("template-application-ui-angular/template/ui/menu");
+import * as listTemplate from "template-application-ui-angular/template/ui/list";
+import * as manageTemplate from "template-application-ui-angular/template/ui/manage";
+import * as masterDetailsListTemplate from "template-application-ui-angular/template/ui/masterDetailsList";
+import * as masterDetailsManageTemplate from "template-application-ui-angular/template/ui/masterDetailsManage";
+import * as reportTemplate from "template-application-ui-angular/template/ui/report";
+import * as reportChartTemplate from "template-application-ui-angular/template/ui/reportChart";
+import * as reportTableTemplate from "template-application-ui-angular/template/ui/reportTable";
+// import * as perspective from "template-application-ui-angular/template/ui/perspective";
+import * as launchpad from "template-application-ui-angular/template/ui/launchpad";
+// import * as tiles from "template-application-ui-angular/template/ui/tiles";
+// import * as menu from "template-application-ui-angular/template/ui/menu";
 
-exports.getSources = function (parameters) {
+export function getSources(parameters) {
     var sources = [];
     sources = sources.concat(launchpad.getSources(parameters));
     sources = sources.concat(listTemplate.getSources(parameters));
     sources = sources.concat(manageTemplate.getSources(parameters));
     sources = sources.concat(masterDetailsListTemplate.getSources(parameters));
     sources = sources.concat(masterDetailsManageTemplate.getSources(parameters));
-    // sources = sources.concat(reportBarTemplate.getSources(parameters));
-    // sources = sources.concat(reportLineTemplate.getSources(parameters));
-    // sources = sources.concat(reportPieTemplate.getSources(parameters));
-    // sources = sources.concat(reportTableTemplate.getSources(parameters));
+    sources = sources.concat(reportTemplate.getSources(parameters));
+    sources = sources.concat(reportChartTemplate.getSources(parameters));
+    sources = sources.concat(reportTableTemplate.getSources(parameters));
     // sources = sources.concat(perspective.getSources(parameters));
     // sources = sources.concat(tiles.getSources(parameters));
     // sources = sources.concat(menu.getSources(parameters));

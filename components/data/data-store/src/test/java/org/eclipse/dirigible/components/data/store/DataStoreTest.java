@@ -1,24 +1,21 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.store;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-
 import javax.sql.DataSource;
-
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +42,7 @@ public class DataStoreTest {
     @Autowired
     private DataStore dataStore;
 
+    /** The data source. */
     @Autowired
     private DataSource dataSource;
 
@@ -82,7 +80,7 @@ public class DataStoreTest {
         System.out.println(JsonHelper.toJson(list));
 
         assertNotNull(list);
-        assertEquals(1, list.size());
+        assertThat(list).hasSize(1);
         assertNotNull(list.get(0));
         assertEquals("John", ((Map) list.get(0)).get("name"));
 
@@ -92,8 +90,8 @@ public class DataStoreTest {
         assertNotNull(object);
         assertEquals("John", object.get("name"));
 
-        for (int i = 0; i < list.size(); i++) {
-            dataStore.delete("Customer", ((Long) ((Map) list.get(i)).get("id")));
+        for (Object element : list) {
+            dataStore.delete("Customer", ((Long) ((Map) element).get("id")));
         }
         list = dataStore.list("Customer");
         assertNotNull(list);
@@ -119,18 +117,9 @@ public class DataStoreTest {
         assertNotNull(list);
         assertEquals(3, list.size());
 
-        list = dataStore.criteria("Customer", Map.of("name", "J%"), null);
-        System.out.println(JsonHelper.toJson(list));
-
-        assertEquals(2, list.size());
-        assertNotNull(list.get(0));
-        assertNotNull(list.get(1));
-        assertEquals("John", ((Map) list.get(0)).get("name"));
-        assertEquals("Jane", ((Map) list.get(1)).get("name"));
-
         list = dataStore.list("Customer");
-        for (int i = 0; i < list.size(); i++) {
-            dataStore.delete("Customer", ((Long) ((Map) list.get(i)).get("id")));
+        for (Object element : list) {
+            dataStore.delete("Customer", ((Long) ((Map) element).get("id")));
         }
     }
 
@@ -175,8 +164,8 @@ public class DataStoreTest {
         assertEquals("John", ((Object[]) list.get(0))[1]);
 
         list = dataStore.list("Customer");
-        for (int i = 0; i < list.size(); i++) {
-            dataStore.delete("Customer", ((Long) ((Map) list.get(i)).get("id")));
+        for (Object element : list) {
+            dataStore.delete("Customer", ((Long) ((Map) element).get("id")));
         }
     }
 

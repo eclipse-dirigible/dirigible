@@ -1,30 +1,22 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.repository.local;
 
-import static java.text.MessageFormat.format;
+import org.eclipse.dirigible.commons.api.helpers.ContentTypeHelper;
+import org.eclipse.dirigible.repository.api.*;
+import org.eclipse.dirigible.repository.fs.FileSystemRepository;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import org.eclipse.dirigible.commons.api.helpers.ContentTypeHelper;
-import org.eclipse.dirigible.repository.api.ICollection;
-import org.eclipse.dirigible.repository.api.IEntity;
-import org.eclipse.dirigible.repository.api.IRepository;
-import org.eclipse.dirigible.repository.api.IResource;
-import org.eclipse.dirigible.repository.api.RepositoryNotFoundException;
-import org.eclipse.dirigible.repository.api.RepositoryPath;
-import org.eclipse.dirigible.repository.api.RepositoryReadException;
-import org.eclipse.dirigible.repository.api.RepositoryWriteException;
-import org.eclipse.dirigible.repository.fs.FileSystemRepository;
+import static java.text.MessageFormat.format;
 
 /**
  * The file system based implementation of {@link ICollection}.
@@ -78,6 +70,37 @@ public class LocalCollection extends LocalEntity implements ICollection {
         } catch (LocalRepositoryException ex) {
             throw new RepositoryWriteException(format("Could not delete collection {0} ", this.getName()), ex);
         }
+    }
+
+    /**
+     * Gets the folder safe.
+     *
+     * @return the folder safe
+     * @throws RepositoryNotFoundException the repository not found exception
+     */
+    protected LocalFolder getFolderSafe() throws RepositoryNotFoundException {
+        final LocalFolder folder = getFolder();
+        if (folder == null) {
+            throw new RepositoryNotFoundException(String.format("There is no collection at path '%s'.", getPath()));
+        }
+        return folder;
+    }
+
+    /**
+     * Gets the folder.
+     *
+     * @return the folder
+     * @throws RepositoryReadException the repository read exception
+     */
+    public LocalFolder getFolder() throws RepositoryReadException {
+        final LocalObject object = getLocalObject();
+        if (object == null) {
+            return null;
+        }
+        if (!(object instanceof LocalFolder)) {
+            return null;
+        }
+        return (LocalFolder) object;
     }
 
     /**
@@ -274,23 +297,6 @@ public class LocalCollection extends LocalEntity implements ICollection {
     /**
      * Removes the collection.
      *
-     * @param name the name
-     * @throws RepositoryWriteException the repository write exception
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.repository.api.ICollection#removeCollection(java.lang.String)
-     */
-    @Override
-    public void removeCollection(String name) throws RepositoryWriteException {
-        final ICollection collection = getCollection(name);
-        collection.delete();
-    }
-
-    /**
-     * Removes the collection.
-     *
      * @param childCollection the child collection
      * @throws RepositoryWriteException the repository write exception
      */
@@ -303,6 +309,23 @@ public class LocalCollection extends LocalEntity implements ICollection {
     @Override
     public void removeCollection(ICollection childCollection) throws RepositoryWriteException {
         removeCollection(childCollection.getName());
+    }
+
+    /**
+     * Removes the collection.
+     *
+     * @param name the name
+     * @throws RepositoryWriteException the repository write exception
+     */
+    /*
+     * (non-Javadoc)
+     *
+     * @see org.eclipse.dirigible.repository.api.ICollection#removeCollection(java.lang.String)
+     */
+    @Override
+    public void removeCollection(String name) throws RepositoryWriteException {
+        final ICollection collection = getCollection(name);
+        collection.delete();
     }
 
     /**
@@ -354,21 +377,23 @@ public class LocalCollection extends LocalEntity implements ICollection {
     }
 
     /**
-     * Gets the resource.
+     * Creates the resource.
      *
      * @param name the name
-     * @return the resource
-     * @throws RepositoryReadException the repository read exception
+     * @param content the content
+     * @return the i resource
+     * @throws RepositoryWriteException the repository write exception
      */
     /*
      * (non-Javadoc)
      *
-     * @see org.eclipse.dirigible.repository.api.ICollection#getResource(java.lang.String)
+     * @see org.eclipse.dirigible.repository.api.ICollection#createResource(java.lang.String, byte[])
      */
     @Override
-    public IResource getResource(String name) throws RepositoryReadException {
-        final RepositoryPath path = getRepositoryPath().append(name);
-        return new LocalResource(getRepository(), path);
+    public IResource createResource(String name, byte[] content) throws RepositoryWriteException {
+        String contentType = ContentTypeHelper.getContentType(ContentTypeHelper.getExtension(name));
+        boolean isBinary = ContentTypeHelper.isBinary(contentType);
+        return createResource(name, content, isBinary, contentType);
     }
 
     /**
@@ -400,40 +425,21 @@ public class LocalCollection extends LocalEntity implements ICollection {
     }
 
     /**
-     * Creates the resource.
+     * Gets the resource.
      *
      * @param name the name
-     * @param content the content
-     * @return the i resource
-     * @throws RepositoryWriteException the repository write exception
+     * @return the resource
+     * @throws RepositoryReadException the repository read exception
      */
     /*
      * (non-Javadoc)
      *
-     * @see org.eclipse.dirigible.repository.api.ICollection#createResource(java.lang.String, byte[])
+     * @see org.eclipse.dirigible.repository.api.ICollection#getResource(java.lang.String)
      */
     @Override
-    public IResource createResource(String name, byte[] content) throws RepositoryWriteException {
-        String contentType = ContentTypeHelper.getContentType(ContentTypeHelper.getExtension(name));
-        boolean isBinary = ContentTypeHelper.isBinary(contentType);
-        return createResource(name, content, isBinary, contentType);
-    }
-
-    /**
-     * Removes the resource.
-     *
-     * @param name the name
-     * @throws RepositoryWriteException the repository write exception
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.repository.api.ICollection#removeResource(java.lang.String)
-     */
-    @Override
-    public void removeResource(String name) throws RepositoryWriteException {
-        final IResource resource = getResource(name);
-        resource.delete();
+    public IResource getResource(String name) throws RepositoryReadException {
+        final RepositoryPath path = getRepositoryPath().append(name);
+        return new LocalResource(getRepository(), path);
     }
 
     /**
@@ -452,6 +458,23 @@ public class LocalCollection extends LocalEntity implements ICollection {
     @Override
     public void removeResource(IResource resource) throws RepositoryWriteException {
         removeResource(resource.getName());
+    }
+
+    /**
+     * Removes the resource.
+     *
+     * @param name the name
+     * @throws RepositoryWriteException the repository write exception
+     */
+    /*
+     * (non-Javadoc)
+     *
+     * @see org.eclipse.dirigible.repository.api.ICollection#removeResource(java.lang.String)
+     */
+    @Override
+    public void removeResource(String name) throws RepositoryWriteException {
+        final IResource resource = getResource(name);
+        resource.delete();
     }
 
     /**
@@ -492,10 +515,9 @@ public class LocalCollection extends LocalEntity implements ICollection {
         if (obj == this) {
             return true;
         }
-        if (!(obj instanceof LocalCollection)) {
+        if (!(obj instanceof LocalCollection other)) {
             return false;
         }
-        final LocalCollection other = (LocalCollection) obj;
         return getPath().equals(other.getPath());
     }
 
@@ -512,37 +534,6 @@ public class LocalCollection extends LocalEntity implements ICollection {
     @Override
     public int hashCode() {
         return getPath().hashCode();
-    }
-
-    /**
-     * Gets the folder.
-     *
-     * @return the folder
-     * @throws RepositoryReadException the repository read exception
-     */
-    public LocalFolder getFolder() throws RepositoryReadException {
-        final LocalObject object = getLocalObject();
-        if (object == null) {
-            return null;
-        }
-        if (!(object instanceof LocalFolder)) {
-            return null;
-        }
-        return (LocalFolder) object;
-    }
-
-    /**
-     * Gets the folder safe.
-     *
-     * @return the folder safe
-     * @throws RepositoryNotFoundException the repository not found exception
-     */
-    protected LocalFolder getFolderSafe() throws RepositoryNotFoundException {
-        final LocalFolder folder = getFolder();
-        if (folder == null) {
-            throw new RepositoryNotFoundException(format("There is no collection at path ''{0}''.", getPath()));
-        }
-        return folder;
     }
 
 }

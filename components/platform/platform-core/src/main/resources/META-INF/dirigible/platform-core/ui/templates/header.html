@@ -1,0 +1,145 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<div class="main-header">
+    <bk-shellbar>
+        <bk-shellbar-group position="left" style="flex:0">
+            <span ng-if="!collapseMenu" bk-shellbar-logo><img ng-src="{{ ::branding.logo }}" alt="{{ ::branding.brand }}" width="32" height="32"></span>
+            <bk-popover ng-if="collapseMenu">
+                <bk-popover-control>
+                    <bk-button bk-shellbar-button glyph="sap-icon--menu2" aria-label="main menu button">
+                    </bk-button>
+                </bk-popover-control>
+                <bk-popover-body no-arrow="true" can-scroll="false">
+                    <bk-menu aria-label="header menu">
+                        <bk-menu-sublist ng-repeat="menuItem in menus[perspectiveId].items track by $index" title="{{ menuItem.label }}" can-scroll="isScrollable(menuItem.items)">
+                            <submenu sublist="menuItem.items" menu-handler="menuClick"></submenu>
+                        </bk-menu-sublist>
+                        <bk-menu-sublist ng-if="menus[perspectiveId].include.window" title="{{ systemMenus.window.label }}" can-scroll="isScrollable(systemMenus.window.items)">
+                            <submenu sublist="systemMenus.window.items" menu-handler="menuClick"></submenu>
+                        </bk-menu-sublist>
+                        <bk-menu-sublist ng-if="menus[perspectiveId].include.help" title="{{ systemMenus.help.label }}" can-scroll="isScrollable(systemMenus.help.items)">
+                            <submenu sublist="systemMenus.help.items" menu-handler="menuClick"></submenu>
+                        </bk-menu-sublist>
+                    </bk-menu>
+                </bk-popover-body>
+            </bk-popover>
+            <span bk-shellbar-title>{{ ::branding.brand }}</span>
+            <div class="bk-hbox" ng-if="!collapseMenu">
+                <bk-popover ng-repeat="menuItem in menus[perspectiveId].items track by $index">
+                    <bk-popover-control>
+                        <bk-button bk-shellbar-button label="{{ menuItem.label }}" is-menu="true" aria-label="menu button {{ menuItem.label }}">
+                        </bk-button>
+                    </bk-popover-control>
+                    <bk-popover-body no-arrow="true" can-scroll="isScrollable(menus[perspectiveId].items)">
+                        <bk-menu aria-label="header menu">
+                            <bk-menu-item ng-repeat-start="item in menuItem.items track by $index" ng-if="!item.items" title="{{ item.label }}" ng-click="menuClick(item)" has-separator="item.separator">
+                            </bk-menu-item>
+                            <bk-menu-sublist ng-if="item.items" has-separator="item.separator" title="{{ item.label }}" can-scroll="isScrollable(item.items)" ng-repeat-end>
+                                <submenu sublist="item.items" menu-handler="menuClick"></submenu>
+                            </bk-menu-sublist>
+                        </bk-menu>
+                    </bk-popover-body>
+                </bk-popover>
+                <bk-popover ng-show="menus[perspectiveId].include.window">
+                    <bk-popover-control>
+                        <bk-button bk-shellbar-button label="{{ systemMenus.window.label }}" is-menu="true" aria-label="menu button {{ systemMenus.window.label }}">
+                        </bk-button>
+                    </bk-popover-control>
+                    <bk-popover-body no-arrow="true" can-scroll="isScrollable(systemMenus.window.items)">
+                        <bk-menu aria-label="header menu {{ systemMenus.window.label }}">
+                            <bk-menu-item ng-repeat-start="item in systemMenus.window.items track by $index" ng-if="!item.items" title="{{ item.label }}" ng-click="menuClick(item)" has-separator="item.separator">
+                            </bk-menu-item>
+                            <bk-menu-sublist ng-if="item.items" has-separator="item.separator" title="{{ item.label }}" can-scroll="isScrollable(item.items)" ng-repeat-end>
+                                <submenu sublist="item.items" menu-handler="menuClick"></submenu>
+                            </bk-menu-sublist>
+                        </bk-menu>
+                    </bk-popover-body>
+                </bk-popover>
+                <bk-popover ng-show="menus[perspectiveId].include.help || !menus[perspectiveId]">
+                    <bk-popover-control>
+                        <bk-button bk-shellbar-button label="{{ ::systemMenus.help.label }}" is-menu="true" aria-label="menu button {{ ::systemMenus.help.label }}">
+                        </bk-button>
+                    </bk-popover-control>
+                    <bk-popover-body no-arrow="true" can-scroll="::isScrollable(systemMenus.help.items)">
+                        <bk-menu aria-label="header menu {{ ::systemMenus.help.label }}">
+                            <bk-menu-item ng-repeat-start="item in systemMenus.help.items track by $index" ng-if="!item.items" title="{{ ::item.label }}" ng-click="::menuClick(item)" has-separator="::item.separator">
+                            </bk-menu-item>
+                            <bk-menu-sublist ng-if="item.items" has-separator="::item.separator" title="{{ ::item.label }}" can-scroll="::isScrollable(item.items)" ng-repeat-end>
+                                <submenu sublist="::item.items" menu-handler="::menuClick"></submenu>
+                            </bk-menu-sublist>
+                        </bk-menu>
+                    </bk-popover-body>
+                </bk-popover>
+            </div>
+        </bk-shellbar-group>
+        <div style="flex:2;order:2;" id="spacer"></div>
+        <bk-shellbar-group position="right" style="flex:0">
+            <bk-shellbar-action>
+                <bk-popover close-innerclick="false">
+                    <bk-popover-control>
+                        <bk-button bk-shellbar-button glyph="sap-icon--bell" badge="{{notifications.length ? notifications.length : ''}}" aria-label="notification list button" ng-click="notificationsPanelOpen()">
+                        </bk-button>
+                    </bk-popover-control>
+                    <bk-popover-body align="bottom-right" can-scroll="true" class="bk-vbox notification-popover">
+                        <bk-toolbar has-title="true">
+                            <bk-toolbar-title ng-if="notifications.length">Notifications ({{notifications.length}})
+                            </bk-toolbar-title>
+                            <bk-toolbar-spacer></bk-toolbar-spacer>
+                            <bk-button state="transparent" label="Clear all" ng-disabled="notifications.length === 0" ng-click="clearNotifications()">
+                            </bk-button>
+                        </bk-toolbar>
+                        <div ng-if="notifications.length" class="bk-vbox bk-box--gap bk-padding--tiny">
+                            <bk-notification ng-repeat="notification in notifications track by notification.id" ng-click="notificationSelect(notification.id)" is-selected="selectedNotification === notification.id">
+                                <div bk-notification-content>
+                                    <div bk-notification-header>
+                                        <span bk-notification-icon="{{notification.type}}"></span>
+                                        <h4 bk-notification-title>{{notification.title}}</h4>
+                                    </div>
+                                    <p bk-notification-paragraph>{{notification.description}}</p>
+                                    <div bk-notification-footer>
+                                        <span bk-notification-footer-content>{{getLocalTime(notification.id)}}</span>
+                                    </div>
+                                </div>
+                                <div bk-notification-actions>
+                                    <bk-button aria-label="Delete" state="transparent" glyph="sap-icon--delete" ng-click="deleteNotification(notification.id)">
+                                    </bk-button>
+                                </div>
+                            </bk-notification>
+                        </div>
+                        <bk-message-page ng-if="!notifications.length" glyph="sap-icon--bell">
+                            <bk-message-page-title>No Notifications</bk-message-page-title>
+                        </bk-message-page>
+                    </bk-popover-body>
+                </bk-popover>
+            </bk-shellbar-action>
+            <bk-shellbar-action>
+                <bk-popover>
+                    <bk-popover-control>
+                        <bk-avatar title="{{::username}}" glyph="sap-icon--account" shell="true" interactive="true" is-placeholder="true" aria-label="user menu button"></bk-avatar>
+                    </bk-popover-control>
+                    <bk-popover-body align="bottom-right" can-scroll="false">
+                        <div class="bk-padding--tiny bk-vbox bk-box--gap bk-list-border--bottom">
+                            <bk-form-label class="bk-font--small" colon="false">Username:</bk-form-label>
+                            <p class="fd-text">{{::username}}</p>
+                        </div>
+                        <bk-menu class="bk-full-width" has-icons="true" aria-label="user menu">
+                            <bk-menu-item title="Logout" left-icon-class="sap-icon--log" ng-click="logout()">
+                            </bk-menu-item>
+                        </bk-menu>
+                    </bk-popover-body>
+                </bk-popover>
+            </bk-shellbar-action>
+        </bk-shellbar-group>
+    </bk-shellbar>
+</div>

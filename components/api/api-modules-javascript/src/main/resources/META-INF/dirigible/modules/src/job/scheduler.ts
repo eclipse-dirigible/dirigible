@@ -13,111 +13,115 @@
  * API Job
  */
 
-import * as configurations from "@dirigible/core/configurations";
+import { configurations } from "sdk/core";
 const JobFacade = Java.type("org.eclipse.dirigible.components.api.job.JobFacade");
 
-export function getJobs() {
-    let jobs = new Array();
-    let list = JSON.parse(JobFacade.getJobs());
-    for (let i in list) {
-        let data = list[i];
-        let job = new Job(data);
-        jobs.push(job);
+export class Scheduler {
+
+    public static getJobs(): Job[] {
+        const jobs = new Array();
+        const jobDefinitions = JSON.parse(JobFacade.getJobs());
+        for (const definition of jobDefinitions) {
+            jobs.push(new Job(definition));
+        }
+        return jobs;
     }
-    return jobs;
-};
 
-export function getJob(name) {
-    let jobData = JobFacade.getJob(name);
-    let data = JSON.parse(jobData);
-    let job = new Job(data);
-    return job;
-};
+    public static getJob(name: string): Job {
+        const jobDefinition = JSON.parse(JobFacade.getJob(name));
+        return new Job(jobDefinition);
+    }
 
-export function enable(name) {
-    JobFacade.enable(name);
-};
+    public static enable(name: string): void {
+        JobFacade.enable(name);
+    }
 
-export function disable(name) {
-    JobFacade.disable(name);
-};
+    public static disable(name: string): void {
+        JobFacade.disable(name);
+    }
 
-export function trigger(name, parameters) {
-    JobFacade.trigger(name, JSON.stringify(parameters));
-};
+    public static trigger(name: string, parameters: { [key: string]: string } = {}): void {
+        JobFacade.trigger(name, JSON.stringify(parameters));
+    }
 
-export function log(name, message) {
-    JobFacade.log(name, message);
-};
+    public static log(name: string, message: string): void {
+        JobFacade.log(name, message);
+    }
 
-export function error(name, message) {
-    JobFacade.error(name, message);
-};
+    public static error(name: string, message: string): void {
+        JobFacade.error(name, message);
+    }
 
-export function warn(name, message) {
-    JobFacade.warn(name, message);
-};
+    public static warn(name: string, message: string): void {
+        JobFacade.warn(name, message);
+    }
 
-export function info(name, message) {
-    JobFacade.info(name, message);
-};
+    public static info(name: string, message: string): void {
+        JobFacade.info(name, message);
+    }
+
+}
 
 /**
  * Job object
  */
 class Job {
 
-    constructor(private data) { }
+    private data: any;
 
-    getName() {
+    constructor(data: any) {
+        this.data = data;
+    }
+
+    public getName(): string {
         return this.data.name;
-    };
+    }
 
-    getGroup() {
+    public getGroup(): string {
         return this.data.group;
-    };
+    }
 
-    getClazz() {
+    public getClazz(): string {
         return this.data.clazz;
-    };
+    }
 
-    getDescription() {
+    public getDescription(): string {
         return this.data.description;
-    };
+    }
 
-    getExpression() {
+    public getExpression(): string {
         return this.data.expression;
-    };
+    }
 
-    getHandler() {
+    public getHandler(): string {
         return this.data.handler;
-    };
+    }
 
-    getEngine() {
+    public getEngine(): string {
         return this.data.engine;
-    };
+    }
 
-    getSingleton() {
+    public getSingleton(): boolean {
         return this.data.singleton;
-    };
+    }
 
-    getEnabled() {
+    public getEnabled(): boolean {
         return this.data.enabled;
-    };
+    }
 
-    getCreatedBy() {
+    public getCreatedBy(): string {
         return this.data.createdBy;
-    };
+    }
 
-    getCreatedAt() {
+    public getCreatedAt(): number {
         return this.data.createdAt;
-    };
+    }
 
-    getParameters() {
+    public getParameters(): JobParameters {
         return new JobParameters(this.data.parameters);
-    };
+    }
 
-    getParameter(name) {
+    public getParameter(name: string): string {
         if (this.data) {
             for (let i in this.data.parameters) {
                 if (this.data.parameters[i].name === name) {
@@ -129,36 +133,35 @@ class Job {
             console.error("Job is not valid");
         }
         return null;
-    };
+    }
 
-    enable() {
+    public enable(): void {
         JobFacade.enable(this.getName());
-    };
+    }
 
-    disable() {
+    public disable(): void {
         JobFacade.disable(this.getName());
-    };
+    }
 
-    trigger(parameters) {
+    public trigger(parameters: { [key: string]: string } = {}): void {
         JobFacade.trigger(this.getName(), JSON.stringify(parameters));
-    };
+    }
 
-    log(message) {
+    public log(message: string): void {
         JobFacade.log(this.getName(), message);
-    };
+    }
 
-    error(message) {
+    public error(message: string): void {
         JobFacade.error(this.getName(), message);
-    };
+    }
 
-    warn(message) {
+    public warn(message: string): void {
         JobFacade.warn(this.getName(), message);
-    };
+    }
 
-    info(message) {
+    public info(message: string): void {
         JobFacade.info(this.getName(), message);
-    };
-
+    }
 }
 
 /**
@@ -166,16 +169,19 @@ class Job {
  */
 class JobParameters {
 
-    constructor(private data) { }
+    private data: any[]
 
-    get(i) {
+    constructor(data: any[]) {
+        this.data = data;
+    }
+
+    public get(i: number): JobParameter {
         return new JobParameter(this.data[i]);
-    };
+    }
 
-    count() {
+    public count(): number {
         return this.data.length;
-    };
-
+    }
 }
 
 /**
@@ -183,26 +189,36 @@ class JobParameters {
  */
 class JobParameter {
 
-    constructor(private data) { }
+    private data: any;
 
-    getName() {
+    constructor(data: any) {
+        this.data = data;
+    }
+
+    public getName(): string {
         return this.data.name;
-    };
+    }
 
-    getDescription() {
+    public getDescription(): string {
         return this.data.description;
-    };
+    }
 
-    getType() {
+    public getType(): string {
         return this.data.type;
-    };
+    }
 
-    getDefaultValue() {
+    public getDefaultValue(): string {
         return this.data.defaultValue;
-    };
+    }
 
-    getChoices() {
+    public getChoices(): string[] {
         return this.data.choices;
-    };
+    }
 
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Scheduler;
 }

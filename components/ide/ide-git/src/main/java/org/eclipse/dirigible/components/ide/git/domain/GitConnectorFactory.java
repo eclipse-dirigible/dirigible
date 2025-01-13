@@ -1,22 +1,13 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.ide.git.domain;
-
-import static org.eclipse.dirigible.components.ide.git.domain.IGitConnector.GIT_BRANCH;
-import static org.eclipse.dirigible.components.ide.git.domain.IGitConnector.GIT_MASTER;
-import static org.eclipse.dirigible.components.ide.git.domain.IGitConnector.GIT_MERGE;
-import static org.eclipse.dirigible.components.ide.git.domain.IGitConnector.GIT_REFS_HEADS_MASTER;
-
-import java.io.File;
-import java.io.IOException;
 
 import org.eclipse.jgit.api.CloneCommand;
 import org.eclipse.jgit.api.Git;
@@ -28,6 +19,11 @@ import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.lib.RepositoryBuilder;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.eclipse.jgit.util.StringUtils;
+
+import java.io.File;
+import java.io.IOException;
+
+import static org.eclipse.dirigible.components.ide.git.domain.IGitConnector.*;
 
 /**
  * A factory for creating GitConnector objects.
@@ -50,8 +46,9 @@ public class GitConnectorFactory {
             repository.getConfig()
                       .setString(GIT_BRANCH, GIT_MASTER, GIT_MERGE, GIT_REFS_HEADS_MASTER);
             return new GitConnector(repository);
-        } catch (IOException e) {
-            throw new GitConnectorException(e);
+        } catch (IOException ex) {
+            String errorMessage = String.format("Failed to get connector for repository [%s]", repositoryDirectory);
+            throw new GitConnectorException(errorMessage, ex);
         }
     }
 
@@ -84,7 +81,9 @@ public class GitConnectorFactory {
 
             return getConnector(repositoryDirectory);
         } catch (Exception e) {
-            throw new TransportException(e.getMessage());
+            String errorMessage = String.format("Failed to clone repository [%s] to dir [%s] using user [%s]", repositoryUri,
+                    repositoryDirectory, username);
+            throw new TransportException(errorMessage, e);
         }
     }
 
@@ -117,8 +116,9 @@ public class GitConnectorFactory {
 
             initCommand.call();
 
-        } catch (Exception e) {
-            throw new TransportException(e.getMessage());
+        } catch (Exception ex) {
+            String errorMessage = String.format("Failed to init repository [%s]", repositoryDirectory);
+            throw new TransportException(errorMessage, ex);
         }
     }
 

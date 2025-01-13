@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.management.format;
 
@@ -17,7 +16,7 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 
 import org.apache.commons.lang3.ClassUtils;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
@@ -100,6 +99,7 @@ public class ResultSetJsonWriter extends AbstractResultSetWriter<String> {
 
             for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
                 String name = resultSetMetaData.getColumnName(i);
+                String label = resultSetMetaData.getColumnLabel(i);
                 Object value = resultSet.getObject(name);
                 if (value == null && stringify) {
                     value = "[NULL]";
@@ -115,13 +115,15 @@ public class ResultSetJsonWriter extends AbstractResultSetWriter<String> {
                     }
                 }
                 if (value != null && !ClassUtils.isPrimitiveOrWrapper(value.getClass()) && value.getClass() != String.class
-                        && !java.util.Date.class.isAssignableFrom(value.getClass())) {
+                        && !java.util.Date.class.isAssignableFrom(value.getClass())
+                        && !java.math.BigInteger.class.isAssignableFrom(value.getClass())
+                        && !java.math.BigDecimal.class.isAssignableFrom(value.getClass())) {
                     if (stringify) {
                         value = "[BINARY]";
                     }
                 }
 
-                jsonGenerator.writeFieldName(name);
+                jsonGenerator.writeFieldName(label != null ? label : name);
 
                 if (value instanceof String) {
                     jsonGenerator.writeString((String) value);

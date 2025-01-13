@@ -1,14 +1,17 @@
-<!DOCTYPE HTML>
 <!--
-  ~ Copyright (c) 2010-2023 SAP and others.
-  ~ All rights reserved. This program and the accompanying materials
-  ~ are made available under the terms of the Eclipse Public License v2.0
-  ~ which accompanies this distribution, and is available at
-  ~ http://www.eclipse.org/legal/epl-v20.html
-  ~ Contributors:
-  ~ SAP - initial API and implementation
-  -->
 
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="console" ng-controller="ConsoleController as ctrl">
 
     <head>
@@ -52,7 +55,7 @@
             <fd-input type="search" placeholder="Search..." ng-model="search.text" ng-change="selectLogLevel()"
                 style="max-width:30%;"></fd-input>
             <fd-toolbar-separator></fd-toolbar-separator>
-            <fd-button dg-type="transparent" dg-label="Clear log" ng-click="clearLog()"></fd-button>
+            <fd-button dg-type="transparent" dg-label="Clear Console" ng-click="clearLog()"></fd-button>
         </fd-toolbar>
         <div id="logContent" class="dg-stretch" fd-scrollbar>
             <fd-list compact="true" no-border="true">

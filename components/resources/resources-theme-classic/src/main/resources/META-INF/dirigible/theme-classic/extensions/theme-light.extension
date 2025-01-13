@@ -1,0 +1,5 @@
+{
+    "description": "Platform Theme - Classic Light",
+    "extensionPoint": "platform-themes",
+    "module": "theme-classic/extensions/theme-light.js"
+}

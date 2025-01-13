@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.repository.fs;
 
@@ -76,7 +75,10 @@ public abstract class FileSystemRepository implements IRepository {
     private static final String DIRIGIBLE_LOCAL = "dirigible" + IRepository.SEPARATOR + "repository";
 
     /** The Constant PATH_SEGMENT_ROOT. */
-    private static final String PATH_SEGMENT_ROOT = "root";
+    public static final String PATH_SEGMENT_ROOT = "root";
+
+    /** The Constant PATH_SEGMENT_VERSIONS. */
+    public static final String PATH_SEGMENT_VERSIONS = "versions";
 
     /** The Constant DIRIGIBLE_LOCAL_ROOT. */
     private static final String DIRIGIBLE_LOCAL_ROOT = DIRIGIBLE_LOCAL + IRepository.SEPARATOR + PATH_SEGMENT_ROOT;
@@ -90,6 +92,9 @@ public abstract class FileSystemRepository implements IRepository {
     /** The repository searcher. */
     private RepositorySearcher repositorySearcher;
 
+    /** The versioned. */
+    private boolean versioned = false;
+
     /** The parameters. */
     private Map<String, String> parameters = Collections.synchronizedMap(new HashMap<>());
 
@@ -99,7 +104,7 @@ public abstract class FileSystemRepository implements IRepository {
      * @throws LocalRepositoryException in case the repository cannot be created
      */
     public FileSystemRepository() throws LocalRepositoryException {
-        createRepository(null, false);
+        createRepository(null, false, false);
     }
 
     /**
@@ -109,7 +114,7 @@ public abstract class FileSystemRepository implements IRepository {
      * @throws LocalRepositoryException in case the repository cannot be created
      */
     public FileSystemRepository(String rootFolder) throws LocalRepositoryException {
-        createRepository(rootFolder, false);
+        createRepository(rootFolder, false, false);
     }
 
     /**
@@ -120,7 +125,19 @@ public abstract class FileSystemRepository implements IRepository {
      * @throws LocalRepositoryException in case the repository cannot be created
      */
     public FileSystemRepository(String rootFolder, boolean absolute) throws LocalRepositoryException {
-        createRepository(rootFolder, absolute);
+        createRepository(rootFolder, absolute, false);
+    }
+
+    /**
+     * Instantiates a new file system repository.
+     *
+     * @param rootFolder the root folder
+     * @param absolute the absolute
+     * @param versioned the versioned
+     * @throws LocalRepositoryException the local repository exception
+     */
+    public FileSystemRepository(String rootFolder, boolean absolute, boolean versioned) throws LocalRepositoryException {
+        createRepository(rootFolder, absolute, versioned);
     }
 
     /**
@@ -130,6 +147,17 @@ public abstract class FileSystemRepository implements IRepository {
      * @param absolute the absolute
      */
     protected void createRepository(String rootFolder, boolean absolute) {
+        createRepository(rootFolder, absolute, false);
+    }
+
+    /**
+     * Creates the repository.
+     *
+     * @param rootFolder the root folder
+     * @param absolute the absolute
+     * @param versioned the versioned
+     */
+    protected void createRepository(String rootFolder, boolean absolute, boolean versioned) {
         String root;
         if (absolute) {
             if (rootFolder != null) {
@@ -987,6 +1015,15 @@ public abstract class FileSystemRepository implements IRepository {
     @Override
     public String getInternalResourcePath(String resourcePath) {
         return LocalWorkspaceMapper.getMappedName(this, resourcePath);
+    }
+
+    /**
+     * Checks if is versioned.
+     *
+     * @return true, if is versioned
+     */
+    public boolean isVersioned() {
+        return versioned;
     }
 
 }

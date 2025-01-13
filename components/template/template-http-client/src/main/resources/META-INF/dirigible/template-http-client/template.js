@@ -3,16 +3,16 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-exports.getTemplate = function() {
+export function getTemplate() {
 	return {
-		"name": "HTTP Client",
-		"description": "HTTP Client Template",
-		"sources": [{
-			"location": "/template-http-client/service.mjs.template", 
-			"action": "generate",
-			"rename": "{{fileName}}.mjs"
+		name: "HTTP Client (API)",
+		description: "HTTP Client Template",
+		sources: [{
+			location: "/template-http-client/service.mjs.template", 
+			action: "generate",
+			rename: "{{fileName}}.mjs"
 		}],
-		"parameters": [],
-		"order": 20
+		parameters: [],
+		order: 20
 	};
 };

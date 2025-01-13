@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.openapi.endpoint;
 
@@ -138,6 +137,12 @@ public class OpenAPIEndpoint extends BaseEndpoint {
         return new ResponseEntity<>(openAPIJson, HttpStatus.OK);
     }
 
+    /**
+     * Initialize open api.
+     *
+     * @param info the info
+     * @return the open API
+     */
     private OpenAPI initializeOpenApi(Info info) {
         OpenAPI openApi = new OpenAPI();
         openApi.info(info);
@@ -169,7 +174,7 @@ public class OpenAPIEndpoint extends BaseEndpoint {
     /**
      * Populate swagger from contribution.
      *
-     * @param swagger the swagger
+     * @param openApi the open api
      * @param resource the resource
      */
     private void populateOpenApiFromContribution(OpenAPI openApi, IResource resource) {

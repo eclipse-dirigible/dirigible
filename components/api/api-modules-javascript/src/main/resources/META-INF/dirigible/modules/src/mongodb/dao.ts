@@ -11,35 +11,32 @@
  */
 "use strict";
 
-import * as globals from "@dirigible/core/globals";
-import * as mongodb from "./client"
-import * as dirigibleOrm from "@dirigible/db/orm";
-import * as logging from "@dirigible/log/logging";
+import { globals } from "sdk/core"
+import { Client } from "./client"
+import * as dirigibleOrm from "sdk/db/orm";
+import { Logging } from "sdk/log";
+import { Configurations } from "sdk/core";
 
-const mongoClient = mongodb.getClient();
+const dbUri = Configurations.get("DIRIGIBLE_MONGODB_CLIENT_URI", "mongodb://localhost:27017");
+
+const mongoClient = new Client(dbUri, null, null);
 const db = mongoClient.getDB();
 
 export class DAO {
+    private orm: any;
     $log;
 
-    constructor(private orm, logCtxName, dataSourceName, databaseType) {
-        if (orm === undefined) {
-            throw Error('Illegal argument: orm[' + orm + ']');
-        }
-
+    constructor(orm: any, logCtxName: string = 'mongodb.dao') {
         this.orm = dirigibleOrm.get(orm);
 
-        //setup loggerName
-        var loggerName = logCtxName;
-        if (!loggerName) {
-            loggerName = 'mongodb.dao';
-            if (this.orm.table)
-                loggerName = 'mongodb.dao.' + (this.orm.table.toLowerCase());
+        let loggerName = logCtxName;
+        if (this.orm.table) {
+            loggerName = 'mongodb.dao.' + (this.orm.table.toLowerCase());
         }
-        this.$log = logging.getLogger(loggerName);
+        this.$log = Logging.getLogger(loggerName);
     }
 
-    notify(event, ...a) {
+    public notify(event, ...a): void {
         var func = this[event];
         if (!this[event])
             return;
@@ -47,10 +44,10 @@ export class DAO {
             throw Error('Illegal argument. Not a function: ' + func);
         var args = [].slice.call(arguments);
         func.apply(this, args.slice(1));
-    };
-    
+    }
+
     //Prepare a JSON object for insert into DB
-    createNoSQLEntity(entity) {
+    public createNoSQLEntity(entity): any {
         var persistentItem = {};
         var mandatories = this.orm.getMandatoryProperties();
         for (var i = 0; i < mandatories.length; i++) {
@@ -71,9 +68,9 @@ export class DAO {
         var msgIdSegment = persistentItem[this.orm.getPrimaryKey().name] ? "[" + persistentItem[this.orm.getPrimaryKey().name] + "]" : "";
         this.$log.info("Transformation to {} DB JSON object finished", (this.orm.table + msgIdSegment));
         return persistentItem;
-    };
+    }
     
-    validateEntity(entity, skip) {
+    public validateEntity(entity, skip): void {
         if (entity === undefined || entity === null) {
             throw new Error('Illegal argument: entity is ' + entity);
         }
@@ -95,9 +92,9 @@ export class DAO {
                 throw new Error('Illegal ' + propName + ' attribute value in ' + this.orm.table + ' entity: ' + propValue);
             }
         }
-    };
+    }
     
-    insert(_entity) {
+    public insert(_entity) {
     
         var entities = _entity;
         if (_entity.constructor !== Array) {
@@ -158,10 +155,10 @@ export class DAO {
             return ids[0];
         else
             return ids;
-    };
+    }
     
     // update entity from a JSON object. Returns the id of the updated entity.
-    update(entity) {
+    public update(entity) {
     
         this.$log.info('Updating {}[{}] entity', this.orm.table, entity !== undefined ? entity[this.orm.getPrimaryKey().name] : entity);
     
@@ -198,7 +195,7 @@ export class DAO {
     };
     
     // delete entity by id, or array of ids, or delete all (if not argument is provided).
-    remove(id) {
+    public remove(id) {
     
         var ids = [];
         if (arguments.length === 0) {
@@ -243,19 +240,19 @@ export class DAO {
     
         }
     
-    };
+    }
     
-    expand(expansionPath, context) {
+    public expand(expansionPath, context) {
         this.$log.info('Expanding for association path {} and context entity {}', expansionPath, (typeof arguments[1] !== 'object' ? 'id ' : '') + JSON.stringify(arguments[1]));
         throw Error("Not implemented.");
-    };
+    }
     
     /* 
         Reads a single entity by id, parsed into JSON object. 
         If requested as expanded the returned entity will comprise associated (dependent) entities too. Expand can be a string tha tis a valid association name defined in this dao orm or
         an array of such names.
     */
-    find(id, expand, select) {
+    public find(id, expand, select) {
     
         if (typeof arguments[0] === 'object') {
             id = arguments[0].id;
@@ -311,9 +308,9 @@ export class DAO {
             this.$log.error("Finding {}[{}] entitiy failed.", this.orm.table, id);
             throw e;
         }
-    };
+    }
     
-    count() {
+    public count(): number {
     
         this.$log.info('Counting ' + this.orm.table + ' entities');
     
@@ -342,7 +339,7 @@ export class DAO {
      * - $limit
      * - $offset
      */
-    list(settings) {
+    public list(settings) {
     
         settings = settings || {};
     
@@ -426,19 +423,19 @@ export class DAO {
             this.$log.error("Listing {} entities failed.", this.orm.table);
             throw e;
         }
-    };
+    }
     
-    existsTable() {
+    public existsTable(): boolean {
         return true;
-    };
+    }
     
-    createTable() {
-    };
+    public createTable(): void {
+    }
     
-    dropTable(dropIdSequence) {
+    public dropTable(): DAO {
         return this;
-    };
-};
+    }
+}
 
 /**
  * oDefinition can be table definition or standard orm definition object. Or it can be a valid path to
@@ -455,7 +452,7 @@ export function create(oDefinition, logCtxName, dataSourceName, databaseType) {
         globals.set(databaseType + "_" + dataSourceName, productName);
     }
 
-    return new DAO(orm, logCtxName, dataSourceName, databaseType);
+    return new DAO(orm, logCtxName);
 };
 
 export function dao(oDefinition, logCtxName, dataSourceName, databaseType) {

@@ -82,7 +82,7 @@ angular.module('ideTheming', ['ngResource', 'ideMessageHub'])
             }
         }];
     })
-    .factory('Theme', function () {
+    .factory('Theme', ['theming', function (_theming) { // Must be injected to set defaults
         let theme = JSON.parse(localStorage.getItem('DIRIGIBLE.theme') || '{}');
         return {
             reload: function () {
@@ -95,7 +95,7 @@ angular.module('ideTheming', ['ngResource', 'ideMessageHub'])
                 return theme.type || 'light';
             }
         }
-    }).directive('theme', ['Theme', 'messageHub', '$document', function (Theme, messageHub, $document) {
+    }]).directive('theme', ['Theme', 'messageHub', '$document', function (Theme, messageHub, $document) {
         return {
             restrict: 'E',
             replace: true,

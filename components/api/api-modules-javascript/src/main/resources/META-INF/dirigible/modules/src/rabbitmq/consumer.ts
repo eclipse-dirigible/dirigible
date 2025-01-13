@@ -16,10 +16,19 @@
 
 const RabbitMQFacade = Java.type("org.eclipse.dirigible.components.api.rabbitmq.RabbitMQFacade");
 
-export function startListening(queue, handler){
-	return RabbitMQFacade.startListening(queue, handler);
+export class Consumer {
+
+	public static startListening(queue: string, handler: string): void {
+		RabbitMQFacade.startListening(queue, handler);
+	}
+
+	public static stopListening(queue: string, handler: string): void {
+		RabbitMQFacade.stopListening(queue, handler);
+	}
 }
 
-export function stopListening(queue, handler){
-	return RabbitMQFacade.stopListening(queue, handler);
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Consumer;
 }

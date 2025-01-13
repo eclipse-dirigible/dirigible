@@ -30,7 +30,7 @@
         {
             "name": "${model.name}",
             "alias": "${model.name}",
-            "table": "${tablePrefix}_${model.dataName}",
+            "table": "${tablePrefix}${model.dataName}",
             "properties": [
 #foreach($property in $model.properties)
                 {

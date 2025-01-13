@@ -1,1 +1,1 @@
-{"expression":"0/1 * * * * ?","group":"dirigible-defined","handler":"test/handler.js","description":"Control Job","createdBy":"system","createdAt":"2017-07-06T2:53:01+0000"}
+{"expression":"0/1 * * * * ?","group":"defined","handler":"test/handler.js","description":"Control Job","createdBy":"system","createdAt":"2017-07-06T2:53:01+0000"}

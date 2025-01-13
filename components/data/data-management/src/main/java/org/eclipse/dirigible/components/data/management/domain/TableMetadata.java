@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.management.domain;
 
@@ -18,6 +17,7 @@ import java.util.List;
 import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper;
 import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper.ColumnsIteratorCallback;
 import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper.IndicesIteratorCallback;
+import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper.ForeignKeysIteratorCallback;
 
 /**
  * The Table Metadata transport object.
@@ -38,6 +38,9 @@ public class TableMetadata {
 
     /** The indices. */
     private List<IndexMetadata> indices;
+
+    /** The indices. */
+    private List<ForeignKeyMetadata> foreignKeys;
 
     /** The kind. */
     private String kind = "table";
@@ -63,6 +66,7 @@ public class TableMetadata {
 
         this.columns = new ArrayList<ColumnMetadata>();
         this.indices = new ArrayList<IndexMetadata>();
+        this.foreignKeys = new ArrayList<ForeignKeyMetadata>();
 
         if (deep) {
             DatabaseMetadataHelper.iterateTableDefinition(connection, catalogName, schemaName, name, new ColumnsIteratorCallback() {
@@ -79,6 +83,11 @@ public class TableMetadata {
                     indices.add(new IndexMetadata(indexName, indexType, columnName, isNonUnique, indexQualifier, ordinalPosition, sortOrder,
                             cardinality != null ? Integer.parseInt(cardinality) : 0, pagesIndex != null ? Integer.parseInt(pagesIndex) : 0,
                             filterCondition));
+                }
+            }, new ForeignKeysIteratorCallback() {
+                @Override
+                public void onIndex(String fkName) {
+                    foreignKeys.add(new ForeignKeyMetadata(fkName));
                 }
             });
         }

@@ -1,17 +1,17 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const transformer = require("ide-entity/template/transform-edm");
+import * as transformer from "ide-entity/template/transform-edm";
 
-exports.generate = function (model, parameters) {
+export function generate(model, parameters) {
     let workspaceName = parameters.workspaceName;
     let projectName = parameters.projectName;
     let filePath = parameters.filePath;
@@ -22,13 +22,12 @@ exports.generate = function (model, parameters) {
     }]
 };
 
-exports.getTemplate = function () {
-    let template = {
-        "name": "Entity Data to JSON Model Transformer",
-        "description": "Model transformer template",
-        "extension": "edm",
-        "sources": [],
-        "parameters": []
-    };
-    return template;
+export function getTemplate() {
+    return {
+        name: "Entity Data to JSON Model Transformer",
+        description: "Model transformer template",
+        extension: "edm",
+        sources: [],
+        parameters: []
+    }
 }

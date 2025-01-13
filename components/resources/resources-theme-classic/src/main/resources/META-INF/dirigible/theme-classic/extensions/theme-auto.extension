@@ -1,0 +1,5 @@
+{
+    "description": "Platform Theme - Classic",
+    "extensionPoint": "platform-themes",
+    "module": "theme-classic/extensions/theme-auto.js"
+}

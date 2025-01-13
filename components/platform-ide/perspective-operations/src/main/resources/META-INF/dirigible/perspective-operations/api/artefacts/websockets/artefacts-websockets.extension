@@ -1,0 +1,5 @@
+{
+    "module": "perspective-operations/api/artefacts/websockets/artefacts-websockets.mjs",
+    "extensionPoint": "platform-operations-artefacts",
+    "description": "WebSockets Artefacts Extension"
+}

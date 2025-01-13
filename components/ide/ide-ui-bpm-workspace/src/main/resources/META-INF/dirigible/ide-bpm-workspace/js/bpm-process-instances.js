@@ -1,12 +1,12 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
 let ideBpmProcessInstancesView = angular.module('ide-bpm-process-instances', ['ideUI', 'ideView']);
@@ -19,11 +19,12 @@ ideBpmProcessInstancesView.controller('IDEBpmProcessInstancesViewController', ['
 
     this.selectAll = false;
     this.searchText = "";
-    this.filterBy = "";
     this.displaySearch = false;
     this.instancesList = [];
     this.pageSize = 10;
     this.currentPage = 1;
+    this.selectedProcessInstanceId = null;
+    this.selectedProcessDefinitionKey = null;
 
     this.currentFetchDataInstance = null;
 
@@ -32,7 +33,7 @@ ideBpmProcessInstancesView.controller('IDEBpmProcessInstancesViewController', ['
             clearInterval(this.currentFetchDataInstance);
         }
 
-        this.currentFetchDatadInstance = setInterval(() => {
+        this.currentFetchDataInstance = setInterval(() => {
             const pageNumber = (args && args.pageNumber) || this.currentPage;
             const pageSize = (args && args.pageSize) || this.pageSize;
             const limit = pageNumber * pageSize;
@@ -41,7 +42,7 @@ ideBpmProcessInstancesView.controller('IDEBpmProcessInstancesViewController', ['
                 return;
             }
 
-            $http.get('/services/ide/bpm/bpm-processes/instances', { params: { 'condition': this.filterBy, 'limit': limit } })
+            $http.get('/services/bpm/bpm-processes/instances', { params: { 'id': this.searchText, 'key': this.selectedProcessDefinitionKey, 'limit': 100 } })
                 .then((response) => {
                     if (this.instancesList.length < response.data.length) {
                         //messageHub.showAlertInfo("User instances", "A new user task has been added");
@@ -63,6 +64,36 @@ ideBpmProcessInstancesView.controller('IDEBpmProcessInstancesViewController', ['
         this.displaySearch = !this.displaySearch;
     }
 
+    this.retry = function() {
+        this.executeAction({ 'action': 'RETRY'}, 'RETRY');
+    }
+
+    this.skip = function() {
+        this.executeAction({ 'action': 'SKIP'}, 'SKIP');
+    }
+
+    this.executeAction = function(requestBody, actionName) {
+        const apiUrl = '/services/bpm/bpm-processes/instance/' + this.selectedProcessInstanceId;
+
+        $http({
+            method: 'POST',
+            url: apiUrl,
+            data: requestBody,
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then((response) => {
+            messageHub.showAlertSuccess("Action confirmation", actionName + " triggered successfully!")
+            console.log('Successfully executed ' + actionName + ' process instance with id [' + $scope.processInstanceId + ']');
+            $scope.reload();
+        })
+        .catch((error) => {
+            messageHub.showAlertError("Action failed", actionName + ' operation failed. Error message ' + error.message);
+            console.error('Error making POST request:', error);
+        });
+    }
+
     this.selectAllChanged = function () {
         for (let instance of this.instancesList) {
             instance.selected = this.selectAll;
@@ -74,14 +105,20 @@ ideBpmProcessInstancesView.controller('IDEBpmProcessInstancesViewController', ['
         messageHub.postMessage('diagram.instance', { instance: instance.id });
         messageHub.postMessage('instance.selected', { instance: instance.id });
         instance.selected = true;
+        this.selectedProcessInstanceId = instance.id;
 
     }
 
-    this.clearSearch = function () {
-        this.searchText = "";
-        this.filterBy = "";
-        fetchData();
-    }
+        messageHub.onDidReceiveMessage('definition.selected', function (msg) {
+            $scope.$apply(function () {
+                if (msg.data.hasOwnProperty('definition')) {
+                    $scope.instances.selectedProcessDefinitionKey = msg.data.definition;
+                    $scope.instances.applyFilter();
+                } else {
+                    console.log("Process definition is missing from event!")
+                }
+            });
+        });
 
     this.getSelectedCount = function () {
         return this.instancesList.reduce((c, instance) => {
@@ -95,34 +132,23 @@ ideBpmProcessInstancesView.controller('IDEBpmProcessInstancesViewController', ['
     }
 
     this.applyFilter = function () {
-        this.filterBy = this.searchText;
-        fetchData();
+        $http.get('/services/bpm/bpm-processes/instances', { params: { 'id': this.searchText, 'key': this.selectedProcessDefinitionKey, 'limit': 100 } })
+            .then((response) => {
+                this.instancesList = response.data;
+            });
     }
 
     this.getNoDataMessage = function () {
-        return this.filterBy ? 'No instances found.' : 'No instances have been detected.';
+        return this.searchText ? 'No instances found.' : 'No instances have been detected.';
     }
 
     this.inputSearchKeyUp = function (e) {
-        if (this.lastSearchKeyUp) {
-            $timeout.cancel(this.lastSearchKeyUp);
-            this.lastSearchKeyUp = null;
-        }
-
         switch (e.key) {
             case 'Escape':
-                this.searchText = this.filterBy || '';
+                this.searchText = '';
                 break;
             case 'Enter':
                 this.applyFilter();
-                break;
-            default:
-                if (this.filterBy !== this.searchText) {
-                    this.lastSearchKeyUp = $timeout(() => {
-                        this.lastSearchKeyUp = null;
-                        this.applyFilter();
-                    }, 250);
-                }
                 break;
         }
     }

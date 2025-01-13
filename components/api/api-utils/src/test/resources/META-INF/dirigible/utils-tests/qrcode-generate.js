@@ -1,19 +1,7 @@
-/*
- * Copyright (c) 2022 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: 2022 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
-var qrCodeGenerator = require('utils/qrcode');
-var assertTrue      = require('test/assert').assertTrue;
 
-var input           = "Dirigible";
-var expectedResult  = [-119, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 1, 44, 0, 0, 1, 44, 1, 0, 0,
+import { QRCode } from 'sdk/utils/qrcode';
+const input           = "Dirigible";
+const expectedResult  = [-119, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 1, 44, 0, 0, 1, 44, 1, 0, 0,
       0, 0, 81, 6, -77, -40, 0, 0, 1, 42, 73, 68, 65, 84, 120, 94, -19, -42, 75, 14, -62, 48, 12, 4, -48, -80, -30, 24, 61, 106,
       115, -44, 30, -127, 101, 87, 24, 102, -20, 126, 100, 33, 1, 18, 56, -101, -103, 69, -107, 56, -81, -85, 81, 10, -51, 62, -55,
        -83, -27, -55, -53, -120, -91, -120, -91, -120, -91, -120, -91, -120, -91, -120, -91, 124, -57, -42, 22, -103, -42, 11, -74,
@@ -28,7 +16,7 @@ var expectedResult  = [-119, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68
                 -81, -64, -30, 125, -79, 10, -10, 46, 98, 41, 98, 41, 98, 41, 98, 41, 98, 41, 98, 41, 63, 102, 15, 78, -18, -101, -38,
                  49, 35, 78, 66, 0, 0, 0, 0, 73, 69, 78, 68, -82, 66, 96, -126];
 
-var result = qrCodeGenerator.generateQRCode(input);
+const result = QRCode.generateQRCode(input);
 
 function arraysEqual(a, b) {
   if (a === b) return true;
@@ -41,7 +29,7 @@ function arraysEqual(a, b) {
   return true;
 }
 
-var isSame = arraysEqual(result, expectedResult);
+const isSame = arraysEqual(result, expectedResult);
 
 console.log('isSameMe: ' + isSame);
 // TODO - doublecheck results

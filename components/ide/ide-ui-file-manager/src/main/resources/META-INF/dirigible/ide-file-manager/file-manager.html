@@ -1,13 +1,17 @@
-<!DOCTYPE HTML>
 <!--
-  ~ Copyright (c) 2010-2023 SAP and others.
-  ~ All rights reserved. This program and the accompanying materials
-  ~ are made available under the terms of the Eclipse Public License v2.0
-  ~ which accompanies this distribution, and is available at
-  ~ http://www.eclipse.org/legal/epl-v20.html
-  ~ Contributors:
-  ~ SAP - initial API and implementation
-  -->
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="fileManager" ng-controller="FileManagerViewController">
 
     <head>
@@ -36,8 +40,9 @@
                 title="Toggle search" aria-label="Toggle search" ng-click="toggleSearch()">
             </fd-button>
         </fd-toolbar>
-        <fd-toolbar ng-show="searchVisible">
-            <fd-input type="search" placeholder="Search" ng-keyup="search()" ng-model="searchField.text"></fd-input>
+        <fd-toolbar ng-if="searchVisible">
+            <fd-input type="search" placeholder="Search" ng-keyup="search()" ng-model="searchField.text"
+                dg-focus="true"></fd-input>
         </fd-toolbar>
         <div id="dgFileManager" class="jstree-fiori--fill jstree-fiori--context-menu fd-scrollbar"
             dg-contextmenu="contextMenuContent"></div>

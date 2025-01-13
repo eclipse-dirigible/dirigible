@@ -1,25 +1,24 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.builders.records;
+
+import org.eclipse.dirigible.database.sql.ISqlDialect;
+import org.eclipse.dirigible.database.sql.builders.AbstractQuerySqlBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-
-import org.eclipse.dirigible.database.sql.ISqlDialect;
-import org.eclipse.dirigible.database.sql.builders.AbstractQuerySqlBuilder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * The Update Builder.
@@ -33,10 +32,10 @@ public class UpdateBuilder extends AbstractQuerySqlBuilder {
     private String table;
 
     /** The values. */
-    private Map<String, String> values = new LinkedHashMap<String, String>();
+    private final Map<String, String> values = new LinkedHashMap<String, String>();
 
     /** The wheres. */
-    private List<String> wheres = new ArrayList<String>();
+    private final List<String> wheres = new ArrayList<String>();
 
     /**
      * Instantiates a new update builder.
@@ -95,11 +94,6 @@ public class UpdateBuilder extends AbstractQuerySqlBuilder {
      *
      * @return the string
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlBuilder#generate()
-     */
     @Override
     public String generate() {
         StringBuilder sql = new StringBuilder();
@@ -131,7 +125,7 @@ public class UpdateBuilder extends AbstractQuerySqlBuilder {
      * @param sql the sql
      */
     protected void generateTable(StringBuilder sql) {
-        String tableName = (isCaseSensitive()) ? encapsulate(this.getTable(), true) : this.getTable();
+        String tableName = encapsulate(this.getTable(), true);
         sql.append(SPACE)
            .append(tableName);
     }
@@ -145,7 +139,7 @@ public class UpdateBuilder extends AbstractQuerySqlBuilder {
         sql.append(SPACE)
            .append(KEYWORD_SET);
         for (Entry<String, String> next : values.entrySet()) {
-            String columnName = (isCaseSensitive()) ? encapsulate(next.getKey()) : next.getKey();
+            String columnName = encapsulate(next.getKey());
             sql.append(SPACE)
                .append(columnName)
                .append(SPACE)

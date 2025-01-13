@@ -1,9 +1,10 @@
 {
-	"edmType": "Territory",
-	"edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.Territory",
-	"sqlTable": " PUBLIC.TERRITORY",
-	"TerritoryID": "TERRITORY_ID",
-	"TerritoryDescription": "TERRITORY_DESCRIPTION",
-	"RegionID": "REGION_ID",
-	"_pk_": "TERRITORY_ID"
+  "edmType": "Territory",
+  "edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.Territory",
+  "sqlTable": "TERRITORY",
+  "sqlSchema": "PUBLIC",
+  "TerritoryID": "TERRITORY_ID",
+  "TerritoryDescription": "TERRITORY_DESCRIPTION",
+  "RegionID": "REGION_ID",
+  "_pk_": "TERRITORY_ID"
 }

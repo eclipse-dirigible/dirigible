@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.extensions.repository;
 
@@ -15,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.util.Optional;
 
-import javax.persistence.EntityManager;
+import jakarta.persistence.EntityManager;
 
 import org.eclipse.dirigible.components.extensions.domain.ExtensionPoint;
 import org.junit.jupiter.api.AfterEach;
@@ -29,6 +28,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * The Class ExtensionPointRepositoryTest.
+ */
 @SpringBootTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ComponentScan(basePackages = {"org.eclipse.dirigible.components"})
@@ -36,12 +38,19 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class ExtensionPointRepositoryTest {
 
+    /** The extension point repository. */
     @Autowired
     private ExtensionPointRepository extensionPointRepository;
 
+    /** The entity manager. */
     @Autowired
     EntityManager entityManager;
 
+    /**
+     * Setup.
+     *
+     * @throws Exception the exception
+     */
     @BeforeEach
     public void setup() throws Exception {
 
@@ -55,12 +64,22 @@ public class ExtensionPointRepositoryTest {
         extensionPointRepository.save(createExtensionPoint("/a/b/c/e5.extensionpoint", "e5", "description"));
     }
 
+    /**
+     * Cleanup.
+     *
+     * @throws Exception the exception
+     */
     @AfterEach
     public void cleanup() throws Exception {
         extensionPointRepository.deleteAll();
     }
 
 
+    /**
+     * Gets the one.
+     *
+     * @return the one
+     */
     @Test
     public void getOne() {
         Long id = extensionPointRepository.findAll()
@@ -76,6 +95,11 @@ public class ExtensionPointRepositoryTest {
         // assertEquals("extensionpoint:/a/b/c/e1.extensionpoint:e1",extensionPoint.getKey());
     }
 
+    /**
+     * Gets the reference using entity manager.
+     *
+     * @return the reference using entity manager
+     */
     @Test
     public void getReferenceUsingEntityManager() {
         Long id = extensionPointRepository.findAll()
@@ -86,11 +110,22 @@ public class ExtensionPointRepositoryTest {
         assertNotNull(extensionPoint.getLocation());
     }
 
+    /**
+     * Creates the extension point.
+     *
+     * @param location the location
+     * @param name the name
+     * @param description the description
+     * @return the extension point
+     */
     public static ExtensionPoint createExtensionPoint(String location, String name, String description) {
         ExtensionPoint extensionPoint = new ExtensionPoint(location, name, description);
         return extensionPoint;
     }
 
+    /**
+     * The Class TestConfiguration.
+     */
     @SpringBootApplication
     static class TestConfiguration {
     }

@@ -12,16 +12,43 @@
 
 const LogFacade = Java.type("org.eclipse.dirigible.components.api.log.LogFacade");
 
-export function getLogger(loggerName) {
 
-	//"at obj.f2 (:29:9)" - length 8
-	//"at :36:4"		  - length 8
-	//"at Error (native)" - length 6
-	const v8_stack_el_regex = /^\s*at ?(.*?) ((.*?)\s*(?:\()?(?:(.*?))(?::(\d+))?(?::(\d+))(?:\))?|\((native)\))$/;
-	const parseIntoStackTraceElementsV8 = function (stack) {
-		let lines = stack.split("\n");
+export class Logging {
+
+	public static getLogger(loggerName: string): Logger {
+		return new Logger(loggerName);
+	}
+}
+
+class Logger {
+
+	private loggerName: string;
+
+	constructor(loggerName: string) {
+		this.loggerName = loggerName;
+	}
+
+	private resolveError(err: Error): { message: string, stack: any[] } {
+		let stack = [];
+		if (__engine === 'v8') {
+			stack = this.parseIntoStackTraceElementsV8(err.stack);
+		} else if (__engine === 'rhino' && err.stack) {
+			stack = this.parseIntoStackTraceElementsRhino(err.stack);
+		}
+		return {
+			message: err.message,
+			stack: stack
+		};
+	}
+
+	private parseIntoStackTraceElementsV8(stack: string): { fileName: string; lineNumber: string; declaringClass: any; methodName: string; }[] {
+		//"at obj.f2 (:29:9)" - length 8
+		//"at :36:4"		  - length 8
+		//"at Error (native)" - length 6
+		const v8_stack_el_regex = /^\s*at ?(.*?) ((.*?)\s*(?:\()?(?:(.*?))(?::(\d+))?(?::(\d+))(?:\))?|\((native)\))$/;
+		let lines_string = stack.split("\n");
 		let stackLineIdx = 0;
-		lines = lines.map(function (line) {
+		let lines = lines_string.map(line => {
 			if (stackLineIdx > 0 || line.trim().length < 1) {
 				const _segmenets = line.trim().match(v8_stack_el_regex);
 				if (_segmenets === null)
@@ -46,16 +73,16 @@ export function getLogger(loggerName) {
 			}
 			stackLineIdx++;
 			return;
-		}).filter(function (el) {
+		}).filter((el) => {
 			return el !== undefined;
 		});
 		return lines;
-	};
+	}
 
-	//at prj1/svc/a.js:28 (anonymous)
-	//at prj1/svc/a.js:36
-	const rhino_stack_el_regex = /^\s*at (.*?) ?(.*?)(?::(\d+))?(?::(\d+))?\s*(\((.*?)\))?\s*$/;
-	const parseIntoStackTraceElementsRhino = function (stack) {
+	private parseIntoStackTraceElementsRhino(stack) {
+		//at prj1/svc/a.js:28 (anonymous)
+		//at prj1/svc/a.js:36
+		const rhino_stack_el_regex = /^\s*at (.*?) ?(.*?)(?::(\d+))?(?::(\d+))?\s*(\((.*?)\))?\s*$/;
 		let lines = stack.split("\n");
 		lines = lines.map(function (line) {
 			if (line.trim().length < 1)
@@ -72,72 +99,64 @@ export function getLogger(loggerName) {
 		});
 		return lines;
 
-	};
+	}
 
-	const parseIntoStackTraceElementsNashorn = function () {
-		//TODO
-	};
+	public setLevel(level: string) {
+		LogFacade.setLevel(this.loggerName, level);
+		return this;
+	}
 
-	const resolveError = function (err) {
-		let stack = [];
-		if (__engine === 'v8') {
-			stack = parseIntoStackTraceElementsV8(err.stack);
-		} else if (__engine === 'rhino' && err.stack) {
-			stack = parseIntoStackTraceElementsRhino(err.stack);
-		}
-		return {
-			message: err.message,
-			stack: stack
-		};
-	};
-
-	return {
-		setLevel: function(level){
-			LogFacade.setLevel(loggerName, level);
-			return this;
-		},
-		log: function(msg, level){
-			const args = Array.prototype.slice.call(arguments);
-			let msgParameters = [];
-			let errObjectJson = null;
-			if(args.length>2){
-				if(args[2] instanceof Error){
-					const errObject = resolveError(args[2]);
-					if(errObject){
-						errObjectJson = JSON.stringify(errObject);
-					}
+	public log(msg: string, level: string): void {
+		const args = Array.prototype.slice.call(arguments);
+		let msgParameters = [];
+		let errObjectJson = null;
+		if (args.length > 2) {
+			if (args[2] instanceof Error) {
+				const errObject = this.resolveError(args[2]);
+				if (errObject) {
+					errObjectJson = JSON.stringify(errObject);
 				}
-				const sliceIndex = errObjectJson ? 3 : 2;
-				msgParameters = args.slice(sliceIndex).map(function(param){
-					return typeof param === 'object' ? JSON.stringify(param) : param;
-				});
 			}
-			LogFacade.log(loggerName, level, msg, JSON.stringify(msgParameters), errObjectJson);
-		},
-		debug: function(msg, ..._){
-			const args = Array.prototype.slice.call(arguments);
-			args.splice(1, 0, 'DEBUG');//insert DEBUG on second position in arguments array
-			this.log.apply(this, args);
-		},
-		info: function(msg, ..._){
-			const args = Array.prototype.slice.call(arguments);
-			args.splice(1, 0, 'INFO');//insert INFO on second position in arguments array
-			this.log.apply(this, args);
-		},
-		trace: function(msg, ..._){
-			const args = Array.prototype.slice.call(arguments);
-			args.splice(1, 0, 'TRACE');//insert TRACE on second position in arguments array
-			this.log.apply(this, args);
-		},
-		warn: function(msg, ..._){
-			const args = Array.prototype.slice.call(arguments);
-			args.splice(1, 0, 'WARN');//insert WARN on second position in arguments array
-			this.log.apply(this, args);
-		},
-		error: function(msg, ..._){
-			const args = Array.prototype.slice.call(arguments);
-			args.splice(1, 0, 'ERROR');//insert ERROR on second position in arguments array
-			this.log.apply(this, args);
+			const sliceIndex = errObjectJson ? 3 : 2;
+			msgParameters = args.slice(sliceIndex).map(function (param) {
+				return typeof param === 'object' ? JSON.stringify(param) : param;
+			});
 		}
-	};
-};
+		LogFacade.log(this.loggerName, level, msg, JSON.stringify(msgParameters), errObjectJson);
+	}
+
+	public debug(msg: string, ..._): void {
+		const args = Array.prototype.slice.call(arguments);
+		args.splice(1, 0, 'DEBUG');//insert DEBUG on second position in arguments array
+		this.log.apply(this, args);
+	}
+
+	public info(msg: string, ..._): void {
+		const args = Array.prototype.slice.call(arguments);
+		args.splice(1, 0, 'INFO');//insert INFO on second position in arguments array
+		this.log.apply(this, args);
+	}
+
+	public trace(msg: string, ..._): void {
+		const args = Array.prototype.slice.call(arguments);
+		args.splice(1, 0, 'TRACE');//insert TRACE on second position in arguments array
+		this.log.apply(this, args);
+	}
+
+	public warn(msg: string, ..._): void {
+		const args = Array.prototype.slice.call(arguments);
+		args.splice(1, 0, 'WARN');//insert WARN on second position in arguments array
+		this.log.apply(this, args);
+	}
+	public error(msg: string, ..._): void {
+		const args = Array.prototype.slice.call(arguments);
+		args.splice(1, 0, 'ERROR');//insert ERROR on second position in arguments array
+		this.log.apply(this, args);
+	}
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Logging;
+}

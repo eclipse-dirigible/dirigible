@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.anonymize.service;
 
@@ -31,6 +30,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import net.datafaker.Faker;
 
@@ -57,7 +57,7 @@ public class DataAnonymizeService {
     private static final String DIRIGIBLE_DATABASE_TRANSFER_BATCH_SIZE = "DIRIGIBLE_DATABASE_TRANSFER_BATCH_SIZE";
 
     /** The Constant DEFAULT_BATCH_SIZE. */
-    private static final String DEFAULT_BATCH_SIZE = "1000";
+    private static final int DEFAULT_BATCH_SIZE = 1000;
 
     /**
      * Instantiates a new data source endpoint.
@@ -85,7 +85,7 @@ public class DataAnonymizeService {
 
             Faker faker = new Faker();
             try {
-                BATCH_SIZE = Integer.parseInt(Configuration.get(DIRIGIBLE_DATABASE_TRANSFER_BATCH_SIZE, DEFAULT_BATCH_SIZE));
+                BATCH_SIZE = Configuration.getAsInt(DIRIGIBLE_DATABASE_TRANSFER_BATCH_SIZE, DEFAULT_BATCH_SIZE);
             } catch (NumberFormatException e1) {
                 if (logger.isWarnEnabled()) {
                     logger.warn("Wrong configuration for " + DIRIGIBLE_DATABASE_TRANSFER_BATCH_SIZE);
@@ -295,7 +295,7 @@ public class DataAnonymizeService {
                     continue;
                 }
                 JsonElement jsonElement = object.get(name);
-                if (jsonElement == null) {
+                if (jsonElement == null || jsonElement instanceof JsonNull) {
                     continue;
                 }
                 if (jsonElement instanceof JsonArray) {

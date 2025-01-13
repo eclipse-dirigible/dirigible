@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.persistence.test;
 
@@ -37,9 +36,7 @@ public class PersistenceManagerAllDataTypesTest extends AbstractPersistenceManag
     @Test
     public void orderedCrudTests() throws SQLException {
         PersistenceManager<AllDataTypes> persistenceManager = new PersistenceManager<AllDataTypes>();
-        Connection connection = null;
-        try {
-            connection = getDataSource().getConnection();
+        try (Connection connection = getDataSource().getConnection()) {
             // create table
             createTableForPojo(connection, persistenceManager);
             // check whether it is created successfully
@@ -52,11 +49,6 @@ public class PersistenceManagerAllDataTypesTest extends AbstractPersistenceManag
             } finally {
                 // drop the table
                 dropTableForPojo(connection, persistenceManager);
-            }
-
-        } finally {
-            if (connection != null) {
-                connection.close();
             }
         }
     }

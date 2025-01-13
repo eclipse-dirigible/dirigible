@@ -1,20 +1,13 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.api.http;
-
-import java.io.File;
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.http.Header;
@@ -24,27 +17,24 @@ import org.apache.http.NameValuePair;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.entity.EntityBuilder;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpDelete;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpHead;
-import org.apache.http.client.methods.HttpPatch;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpPut;
-import org.apache.http.client.methods.HttpRequestBase;
-import org.apache.http.client.methods.HttpTrace;
+import org.apache.http.client.methods.*;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
-import org.eclipse.dirigible.components.api.http.client.HttpClientHeader;
-import org.eclipse.dirigible.components.api.http.client.HttpClientParam;
-import org.eclipse.dirigible.components.api.http.client.HttpClientProxyUtils;
-import org.eclipse.dirigible.components.api.http.client.HttpClientRequestOptions;
-import org.eclipse.dirigible.components.api.http.client.HttpClientResponse;
+import org.eclipse.dirigible.components.api.http.client.*;
 import org.springframework.stereotype.Component;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
 
 /**
  * Java face for HTTP operations.
@@ -180,10 +170,11 @@ public class HttpClientFacade {
     }
 
     /** The Constant recognizedTextMimeTypes. */
-    private static final HashSet<String> recognizedTextMimeTypes = new HashSet<>(Arrays.asList("application/CSV", "application/csv",
-            "text/csv", ContentType.TEXT_PLAIN.getMimeType(), ContentType.TEXT_HTML.getMimeType(), ContentType.TEXT_XML.getMimeType(),
-            ContentType.APPLICATION_JSON.getMimeType(), ContentType.APPLICATION_ATOM_XML.getMimeType(),
-            ContentType.APPLICATION_XML.getMimeType(), ContentType.APPLICATION_XHTML_XML.getMimeType()));
+    private static final HashSet<String> recognizedTextMimeTypes = new HashSet<>(Arrays.asList("application/json; charset=utf-8",
+            "text/json; charset=utf-8", "text/json", "application/CSV", "application/csv", "text/csv", ContentType.TEXT_PLAIN.getMimeType(),
+            ContentType.TEXT_HTML.getMimeType(), ContentType.TEXT_XML.getMimeType(), ContentType.APPLICATION_JSON.getMimeType(),
+            ContentType.APPLICATION_ATOM_XML.getMimeType(), ContentType.APPLICATION_XML.getMimeType(),
+            ContentType.APPLICATION_XHTML_XML.getMimeType()));
 
     /**
      * Process http client response.

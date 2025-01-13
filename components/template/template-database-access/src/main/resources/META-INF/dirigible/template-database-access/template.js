@@ -3,15 +3,17 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-exports.getTemplate = function() {
+export function getTemplate() {
 	return {
-		"name": "Database Access",
-		"description": "Database Access Template",
-		"sources": [{
-			"location": "/template-database-access/service.mjs.template", 
-			"action": "generate",
-			"rename": "{{fileName}}.mjs"
+		name: 'Database Access (API)',
+		description: 'Database Access Template',
+		glyph: 'sap-icon--database',
+		sources: [{
+			location: '/template-database-access/service.mjs.template',
+			action: 'generate',
+			rename: '{{fileName}}.mjs'
 		}],
-		"parameters": []
+		parameters: [],
+		order: 21
 	};
 };

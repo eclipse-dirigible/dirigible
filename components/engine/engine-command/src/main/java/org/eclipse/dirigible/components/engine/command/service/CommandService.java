@@ -1,21 +1,13 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.engine.command.service;
-
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
-import java.util.Map;
 
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.commons.config.Configuration;
@@ -32,6 +24,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.annotation.RequestScope;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 
 /**
  * The Class WebService.
@@ -111,8 +109,7 @@ public class CommandService {
         String result;
 
         String commandSource = new String(getResourceContent(module), StandardCharsets.UTF_8);
-        String root = registryAccessor.getRepository()
-                                      .getParameter("REPOSITORY_ROOT_FOLDER");
+        String root = getRepositoryRoot();
         String workingDirectory = root + getResource(module).getParent()
                                                             .getPath();
 
@@ -145,6 +142,16 @@ public class CommandService {
             logger.trace("exiting: executeCommand()");
         }
         return result;
+    }
+
+    /**
+     * Gets the repository root.
+     *
+     * @return the repository root
+     */
+    public String getRepositoryRoot() {
+        return registryAccessor.getRepository()
+                               .getParameter("REPOSITORY_ROOT_FOLDER");
     }
 
     /**
@@ -205,8 +212,9 @@ public class CommandService {
                     } catch (IllegalThreadStateException e) {
                         if (++i >= ProcessUtils.DEFAULT_LOOP_COUNT) {
                             process.destroy();
-                            throw new RuntimeException(
-                                    "Exceeds timeout - " + ((ProcessUtils.DEFAULT_WAIT_TIME / 1000) * ProcessUtils.DEFAULT_LOOP_COUNT));
+                            String message =
+                                    "Exceeds timeout - " + ((ProcessUtils.DEFAULT_WAIT_TIME / 1000) * ProcessUtils.DEFAULT_LOOP_COUNT);
+                            throw new RuntimeException(message, e);
                         }
                     }
                 } while (!deadYet);

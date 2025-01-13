@@ -1,16 +1,9 @@
-/*
- * Copyright (c) 2022 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: 2022 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
-const request = require('http/request');
-const separator = require('io/files').separator;
-const assertTrue = require('test/assert').assertTrue;
+import { Request } from 'sdk/http/request';
+import { Files } from 'sdk/io/files';
+import { Assert } from 'test/assert';
 
-assertTrue(request.getPathTranslated().endsWith(`${separator}services${separator}js${separator}http-tests${separator}request-get-path-translated.js`));
+const separator = Files.separator
+
+const expectedPath = `${separator}services${separator}js${separator}http-tests${separator}request-get-path-translated.js`;
+
+Assert.assertTrue(Request.getPathTranslated().endsWith(expectedPath));

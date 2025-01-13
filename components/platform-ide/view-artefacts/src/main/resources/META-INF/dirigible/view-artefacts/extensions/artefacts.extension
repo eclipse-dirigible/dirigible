@@ -1,0 +1,5 @@
+{
+    "module": "view-artefacts/configs/artefacts-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Artefacts View"
+}

@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.dialects.hana;
 
@@ -36,11 +35,6 @@ public class HanaDropBranchingBuilder extends DropBranchingBuilder {
      * @param sequence the sequence
      * @return the drop sequence builder
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.builders.DropBranchingBuilder#sequence(java.lang.String)
-     */
     @Override
     public DropSequenceBuilder sequence(String sequence) {
         return new HanaDropSequenceBuilder(this.getDialect(), sequence);
@@ -57,6 +51,12 @@ public class HanaDropBranchingBuilder extends DropBranchingBuilder {
         return new HanaDropTableTypeBuilder(this.getDialect(), tableType);
     }
 
+    /**
+     * Public synonym.
+     *
+     * @param synonym the synonym
+     * @return the drop synonym builder
+     */
     @Override
     public DropSynonymBuilder publicSynonym(String synonym) {
         return new HanaDropPublicSynonymBuilder(getDialect(), synonym);

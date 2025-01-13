@@ -1,19 +1,17 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.engine.odata2.sql.clause;
 
 import org.apache.olingo.odata2.api.edm.EdmException;
 import org.apache.olingo.odata2.api.edm.EdmStructuralType;
 import org.apache.olingo.odata2.api.uri.KeyPredicate;
-import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.engine.odata2.sql.api.OData2Exception;
 import org.eclipse.dirigible.engine.odata2.sql.api.SQLClause;
 import org.eclipse.dirigible.engine.odata2.sql.builder.SQLContext;
@@ -53,6 +51,7 @@ public final class SQLJoinClause implements SQLClause {
     /** The join type. */
     private final JoinType joinType;
 
+
     /**
      * The left join should be used for expands - we would like to get the properties of an entity even
      * if the expand (lik) or complex type is empty.
@@ -62,6 +61,7 @@ public final class SQLJoinClause implements SQLClause {
         /** The left. */
         LEFT
     }
+
 
     /** The query. */
     private final SQLSelectBuilder query;
@@ -112,7 +112,7 @@ public final class SQLJoinClause implements SQLClause {
 
         } else {
 
-            throw new IllegalArgumentException("Missing manyToManyMappingTable definition in the following json file: " + ""
+            throw new IllegalArgumentException("Missing manyToManyMappingTable definition in the following json file: "
                     + (hasFirstJsonMappingTable ? target.getName() : start.getName())
                     + ". Both json files need to point to the mapping table");
         }
@@ -184,24 +184,22 @@ public final class SQLJoinClause implements SQLClause {
      */
     private void buildJoinClause(List<String> joinColumns, String leftTableAlias, String rightTable, String rightTableAlias,
             List<String> targetKeys, StringBuilder join) throws EdmException {
-        boolean caseSensitive = Boolean.parseBoolean(Configuration.get("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "false"));
-
         join.append(joinType.toString());
 
         join.append(" JOIN ");
-        join.append(getValue(caseSensitive, rightTable));
+        join.append(getValue(rightTable));
         join.append(" AS ");
-        join.append(getValue(caseSensitive, rightTableAlias));
+        join.append(getValue(rightTableAlias));
         join.append(" ON ");
 
         for (int i = 0; i < targetKeys.size(); i++) {
-            join.append(getValue(caseSensitive, rightTableAlias));
+            join.append(getValue(rightTableAlias));
             join.append(".");
-            join.append(getValue(caseSensitive, targetKeys.get(i)));
+            join.append(getValue(targetKeys.get(i)));
             join.append(" = ");
-            join.append(getValue(caseSensitive, leftTableAlias));
+            join.append(getValue(leftTableAlias));
             join.append(".");
-            join.append(getValue(caseSensitive, joinColumns.get(i)));
+            join.append(getValue(joinColumns.get(i)));
             if (i < targetKeys.size() - 1)
                 join.append(" AND ");
         }
@@ -219,8 +217,8 @@ public final class SQLJoinClause implements SQLClause {
                                              .get(0);
 
         if (!firstJsonMappingTable.equals(secondJsonMappingTable)) {
-            throw new IllegalArgumentException("OData manyToManyMappingTable name is different in both json files: " + ""
-                    + (target.getName()) + " and " + (start.getName()) + ". Both json files need to point to the same mapping table");
+            throw new IllegalArgumentException("OData manyToManyMappingTable name is different in both json files: " + (target.getName())
+                    + " and " + (start.getName()) + ". Both json files need to point to the same mapping table");
         }
     }
 
@@ -231,8 +229,8 @@ public final class SQLJoinClause implements SQLClause {
      * @param value the value
      * @return the value
      */
-    private String getValue(boolean caseSensitive, String value) {
-        return caseSensitive ? surroundWithDoubleQuotes(value) : value;
+    private String getValue(String value) {
+        return surroundWithDoubleQuotes(value);
     }
 
     /**
@@ -258,7 +256,6 @@ public final class SQLJoinClause implements SQLClause {
     public boolean isEmpty() {
         return !needsJoinQuery(start, keyPredicates, target);
     }
-
 
     /**
      * To string.
@@ -319,8 +316,8 @@ public final class SQLJoinClause implements SQLClause {
                 if (startPredicates == NO_PREDICATES_USED) {
                     return true;
                 } else {
-                    return ((startPredicates != null && !startPredicates.isEmpty())
-                            && hasKeyPredicatesNonParameterProperty(start, startPredicates)) ? true : false;
+                    return (startPredicates != null && !startPredicates.isEmpty())
+                            && hasKeyPredicatesNonParameterProperty(start, startPredicates);
                 }
             }
         } catch (EdmException e) {
@@ -381,11 +378,9 @@ public final class SQLJoinClause implements SQLClause {
         } else if (!startFqn.equals(other.startFqn))
             return false;
         if (targetFqn == null) {
-            if (other.targetFqn != null)
-                return false;
-        } else if (!targetFqn.equals(other.targetFqn))
-            return false;
-        return true;
+            return other.targetFqn == null;
+        } else
+            return targetFqn.equals(other.targetFqn);
     }
 
 }

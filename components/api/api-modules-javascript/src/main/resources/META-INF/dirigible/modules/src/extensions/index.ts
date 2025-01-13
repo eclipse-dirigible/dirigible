@@ -1,1 +1,2 @@
-export * as extensions from "./extensions";
+export * from "./extensions";
+export { Extensions as extensions } from "./extensions";

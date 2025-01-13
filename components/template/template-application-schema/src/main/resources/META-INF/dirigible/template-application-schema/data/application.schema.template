@@ -1,6 +1,6 @@
 #set ($foreignKeysCount = 0)
 #foreach ($model in $models)
-#if($model.type != "REPORT")
+#if($model.type != "REPORT" && $model.type != "FILTER" && $model.type != "PROJECTION")
 #foreach ($property in $model.properties)
 #if($property.relationshipEntityName)
 #set ($foreignKeysCount = $foreignKeysCount + 1)
@@ -12,9 +12,9 @@
     "schema": {
         "structures": [
 #foreach ($model in $models)
-#if($model.type != "REPORT")
+#if($model.type != "REPORT" && $model.type != "FILTER" && $model.type != "PROJECTION")
             {
-                "name": "${tablePrefix}_${model.dataName}",
+                "name": "${tablePrefix}${model.dataName}",
                 "type": "TABLE",
                 "columns": [
 #foreach ($property in $model.properties)
@@ -59,42 +59,24 @@
             }
 #end
 #end
-#else
-            {
-                "name": "${tablePrefix}_${model.dataName}",
-                "type": "VIEW",
-                "columns": [
-                    {
-                        "query": "${model.dataQuery}"
-                    }
-                ]
-#if($foreach.hasNext)
-            },
-#else
-#if($foreignKeysCount > 0)
-            },
-#else
-            }
-#end
-#end
 #end
 #end
 #foreach ($model in $models)
-#if($model.type != "REPORT")
+#if($model.type != "REPORT" && $model.type != "FILTER")
 #foreach ($property in $model.properties)
 #if($property.relationshipEntityName)
 #set ($foreignKeysCount = $foreignKeysCount - 1)
             {
                 "name": "${property.relationshipName}",
                 "type": "foreignKey",
-                "table": "${tablePrefix}_${model.dataName}",
+                "table": "${tablePrefix}${model.dataName}",
                 "constraintName": "${property.relationshipName}",
                 "columns": "${property.dataName}",
 #foreach ($relationModel in $models)
-#if($relationModel.type != "REPORT" && $relationModel.name != $model.name)
+#if($relationModel.type != "REPORT" && $relationModel.type != "FILTER" && $relationModel.name != $model.name)
 #foreach ($relationProperty in $relationModel.properties)
 #if($property.relationshipEntityName == $relationModel.name)
-                "referencedTable": "${tablePrefix}_${relationModel.dataName}",
+                "referencedTable": "${tablePrefix}${relationModel.dataName}",
                 "referencedColumns": "#foreach ($relationIdProperty in $relationModel.properties)#if ($relationIdProperty.dataPrimaryKey || $relationIdProperty.dataPrimaryKey == "true")${relationIdProperty.dataName}#end#end"
 #break
 #end
@@ -111,5 +93,6 @@
 #end
 #end
         ]
-    }
+    },
+    "datasource": "${dataSource}"
 }

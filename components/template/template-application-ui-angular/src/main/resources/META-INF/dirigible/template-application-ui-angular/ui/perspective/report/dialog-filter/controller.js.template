@@ -1,0 +1,93 @@
+#set($dollar = '$')
+angular.module('page', ["ideUI", "ideView"])
+	.config(["messageHubProvider", function (messageHubProvider) {
+		messageHubProvider.eventIdPrefix = '${projectName}.Reports.${name}';
+	}])
+	.controller('PageController', ['$scope', 'messageHub', 'ViewParameters', function ($scope, messageHub, ViewParameters) {
+
+		$scope.entity = {};
+		$scope.forms = {
+			details: {},
+		};
+
+		let params = ViewParameters.get();
+		if (Object.keys(params).length) {
+#foreach ($property in $properties)
+#if($property.isDateType)
+			if (params?.entity?.${property.name}From) {
+				params.entity.${property.name}From = new Date(params.entity.${property.name}From);
+			}
+			if (params?.entity?.${property.name}To) {
+				params.entity.${property.name}To = new Date(params.entity.${property.name}To);
+			}
+#end
+#end
+			$scope.entity = params.entity ?? {};
+			$scope.selectedMainEntityKey = params.selectedMainEntityKey;
+			$scope.selectedMainEntityId = params.selectedMainEntityId;
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+			$scope.options${property.name} = params.options${property.name};
+#end
+#end
+		}
+
+		$scope.filter = function () {
+			let entity = $scope.entity;
+			const filter = {
+				$filter: {
+					equals: {
+					},
+					notEquals: {
+					},
+					contains: {
+					},
+					greaterThan: {
+					},
+					greaterThanOrEqual: {
+					},
+					lessThan: {
+					},
+					lessThanOrEqual: {
+					}
+				},
+			};
+#foreach ($property in $properties)
+#if($property.dataTypeTypescript == 'number' || $property.dataTypeTypescript == 'boolean')
+			if (entity.${property.name}) {
+				filter.${dollar}filter.equals.${property.name} = entity.${property.name};
+			}
+#elseif($property.dataTypeTypescript == 'string')
+			if (entity.${property.name}) {
+				filter.${dollar}filter.contains.${property.name} = entity.${property.name};
+			}
+#elseif($property.dataTypeTypescript == 'Date')
+			if (entity.${property.name}From) {
+				filter.${dollar}filter.greaterThanOrEqual.${property.name} = entity.${property.name}From;
+			}
+			if (entity.${property.name}To) {
+				filter.${dollar}filter.lessThanOrEqual.${property.name} = entity.${property.name}To;
+			}
+#end
+#end
+			messageHub.postMessage("entitySearch", {
+				entity: entity,
+				filter: filter
+			});
+			$scope.cancel();
+		};
+
+		$scope.resetFilter = function () {
+			$scope.entity = {};
+			$scope.filter();
+		};
+
+		$scope.cancel = function () {
+			messageHub.closeDialogWindow("${name}-Report-filter");
+		};
+
+		$scope.clearErrorMessage = function () {
+			$scope.errorMessage = null;
+		};
+
+	}]);

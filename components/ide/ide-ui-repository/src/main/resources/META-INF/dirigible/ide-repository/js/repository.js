@@ -1,23 +1,25 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-let repositoryView = angular.module('repository', ['ideUI', 'ideView', 'ideEditors', 'ideTransport', 'ideRepository']);
+const repositoryView = angular.module('repository', ['ideUI', 'ideView', 'ideEditors', 'ideTransport', 'ideRepository']);
 repositoryView.controller('RepositoryViewController', [
     '$scope',
+    '$document',
     'messageHub',
     'Editors',
     'transportApi',
     'repositoryApi',
     function (
         $scope,
+        $document,
         messageHub,
         Editors,
         transportApi,
@@ -31,7 +33,7 @@ repositoryView.controller('RepositoryViewController', [
         };
         $scope.renameNodeData;
         $scope.imageFileExts = ['ico', 'bmp', 'png', 'jpg', 'jpeg', 'gif', 'svg'];
-        $scope.modelFileExts = ['extension', 'extensionpoint', 'edm', 'model', 'dsm', 'schema', 'bpmn', 'job', 'listener', 'websocket', 'roles', 'constraints', 'table', 'view'];
+        $scope.modelFileExts = ['extension', 'edm', 'model', 'dsm', 'schema', 'bpmn', 'job', 'listener', 'websocket', 'roles', 'constraints', 'table', 'view'];
 
         $scope.treeData = [];
         $scope.basePath = '/';
@@ -308,51 +310,59 @@ repositoryView.controller('RepositoryViewController', [
         }
 
         function getFileIcon(fileName) {
-            let ext = getFileExtension(fileName);
+            const ext = getFileExtension(fileName);
             let icon;
-            if (ext === 'js' || ext === 'mjs' || ext === 'xsjs' || ext === 'ts' || ext === 'json') {
-                icon = "sap-icon--syntax";
+            if (ext === 'js' || ext === 'mjs' || ext === 'xsjs' || ext === 'ts' || ext === 'tsx' || ext === 'py' || ext === 'json') {
+                icon = 'sap-icon--syntax';
             } else if (ext === 'css' || ext === 'less' || ext === 'scss') {
-                icon = "sap-icon--number-sign";
+                icon = 'sap-icon--number-sign';
             } else if (ext === 'txt') {
-                icon = "sap-icon--text";
+                icon = 'sap-icon--text';
             } else if (ext === 'pdf') {
-                icon = "sap-icon--pdf-attachment";
+                icon = 'sap-icon--pdf-attachment';
+            } else if (ext === 'md') {
+                icon = 'sap-icon--information';
+            } else if (ext === 'access') {
+                icon = 'sap-icon--locked';
+            } else if (ext === 'zip') {
+                icon = 'sap-icon--attachment-zip-file';
+            } else if (ext === 'extensionpoint') {
+                icon = 'sap-icon--puzzle';
             } else if ($scope.imageFileExts.indexOf(ext) !== -1) {
-                icon = "sap-icon--picture";
+                icon = 'sap-icon--picture';
             } else if ($scope.modelFileExts.indexOf(ext) !== -1) {
-                icon = "sap-icon--document-text";
+                icon = 'sap-icon--document-text';
             } else {
                 icon = 'jstree-file';
             }
             return icon;
         }
 
-        function getEditorsForType(node) {
-            let editors = [{
-                id: 'openWith',
-                label: Editors.defaultEditor.label,
-                data: {
-                    node: node,
-                    editorId: Editors.defaultEditor.id,
-                }
-            }];
-            let editorsForContentType = Editors.editorsForContentType;
-            if (Object.keys(editorsForContentType).indexOf(node.data.contentType) > -1) {
-                for (let i = 0; i < editorsForContentType[node.data.contentType].length; i++) {
-                    if (editorsForContentType[node.data.contentType][i].id !== Editors.defaultEditor.id)
-                        editors.push({
-                            id: 'openWith',
-                            label: editorsForContentType[node.data.contentType][i].label,
-                            data: {
-                                node: node,
-                                editorId: editorsForContentType[node.data.contentType][i].id,
-                            }
-                        });
-                }
-            }
-            return editors;
-        }
+        // function getEditorsForType(node) {
+        //     let editors = [{
+        //         id: 'openWith',
+        //         label: Editors.defaultEditor.label,
+        //         data: {
+        //             node: node,
+        //             editorId: Editors.defaultEditor.id,
+        //         }
+        //     }];
+        //     let editorsForContentType = Editors.editorsForContentType;
+        //     if (Object.keys(editorsForContentType).indexOf(node.data.contentType) > -1) {
+        //         for (let i = 0; i < editorsForContentType[node.data.contentType].length; i++) {
+        //             if (editorsForContentType[node.data.contentType][i].id !== Editors.defaultEditor.id)
+        //                 editors.push({
+        //                     id: 'openWith',
+        //                     label: editorsForContentType[node.data.contentType][i].label,
+        //                     data: {
+        //                         node: node,
+        //                         editorId: editorsForContentType[node.data.contentType][i].id,
+        //                     }
+        //                 });
+        //         }
+        //     }
+        //     return editors;
+        // }
 
         function openFile(node, editor) {
             messageHub.openEditor(
@@ -603,6 +613,7 @@ repositoryView.controller('RepositoryViewController', [
             true
         );
 
-        // Initialization
-        $scope.reloadFileTree($scope.basePath, true);
+        angular.element($document[0]).ready(function () {
+            $scope.reloadFileTree($scope.basePath, true);
+        });
     }]);

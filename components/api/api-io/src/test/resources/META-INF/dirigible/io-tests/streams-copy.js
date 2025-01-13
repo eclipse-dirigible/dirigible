@@ -1,20 +1,12 @@
-/*
- * Copyright (c) 2022 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: 2022 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
-var streams = require('io/streams');
-var assertEquals = require('test/assert').assertEquals;
 
-var bais = streams.createByteArrayInputStream([61, 62, 63]);
-var baos = streams.createByteArrayOutputStream();
-streams.copy(bais, baos);
-var result = baos.getBytes();
+import { Streams } from 'sdk/io/streams';
+import { Assert } from 'test/assert';
 
-assertEquals(result[1], 62);
+const bais = Streams.createByteArrayInputStream([61, 62, 63]);
+const baos = Streams.createByteArrayOutputStream();
+
+Streams.copy(bais, baos);
+
+const result = baos.getBytes();
+
+Assert.assertEquals(result[1], 62);

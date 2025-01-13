@@ -14,31 +14,33 @@ const EnginesFacade = Java.type("org.eclipse.dirigible.components.api.platform.E
 const HashMap = Java.type("java.util.HashMap");
 
 /**
- * Get engine by type
- */
-export function getEngine(type) {
-	return new Engine(type);
-}
-
-/**
  * Engine
  */
-class Engine {
-	constructor(private type) { }
+export class Engine {
+	private type: string;
 
-	execute(projectName, projectFilePath, projectFilePathParam, parameters, debug) {
+	constructor(type: string) {
+		this.type = type;
+	}
+
+	public static getTypes(): string[] {
+		return JSON.parse(EnginesFacade.getEngineTypes());
+	}
+
+	public execute(projectName: string, projectFilePath: string, projectFilePathParam: string, parameters: { [key: string]: any }, debug: boolean = false): any {
 		const mapInstance = new HashMap();
 		for (const property in parameters) {
 			if (context.hasOwnProperty(property)) {
 				mapInstance.put(property, context[property]);
 			}
 		}
-		return EnginesFacade.execute(projectName, projectFilePath, projectFilePathParam, mapInstance, debug);
+		return EnginesFacade.execute(this.type, projectName, projectFilePath, projectFilePathParam, mapInstance, debug);
 	}
 
 }
 
-export function getTypes() {
-	const json = EnginesFacade.getEngineTypes();
-	return JSON.parse(json);
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Engine;
 }

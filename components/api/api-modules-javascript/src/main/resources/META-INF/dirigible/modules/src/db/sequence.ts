@@ -12,14 +12,23 @@
 
 const DatabaseFacade = Java.type("org.eclipse.dirigible.components.api.db.DatabaseFacade");
 
-export function nextval(sequence, datasourceName = null, tableName = null) {
-	return DatabaseFacade.nextval(sequence, datasourceName, tableName);
-};
+export class Sequence {
 
-export function create(sequence, datasourceName = null) {
-	DatabaseFacade.createSequence(sequence, datasourceName);
-};
+	public static nextval(sequence: string, tableName?: string, datasourceName?: string): number {
+		return DatabaseFacade.nextval(sequence, datasourceName, tableName);
+	}
 
-export function drop(sequence, datasourceName = null) {
-	DatabaseFacade.dropSequence(sequence, datasourceName);
-};
+	public static create(sequence: string, start?: number, datasourceName?: string): void {
+		DatabaseFacade.createSequence(sequence, start, datasourceName);
+	}
+
+	public static drop(sequence: string, datasourceName?: string): void {
+		DatabaseFacade.dropSequence(sequence, datasourceName);
+	}
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Sequence;
+}

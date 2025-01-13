@@ -1,29 +1,18 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.odata.transformers;
 
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.HashMap;
-import java.util.Map;
-
-import javax.sql.DataSource;
-
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
-import org.eclipse.dirigible.components.data.structures.domain.Table;
-import org.junit.jupiter.api.Assertions;
+import org.eclipse.dirigible.components.database.DirigibleConnection;
+import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -34,6 +23,11 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
+
+import java.sql.DatabaseMetaData;
+import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * The Class DBMetadataUtilTest.
@@ -97,11 +91,11 @@ public class ODataDatabaseMetadataUtilTest {
 
     /** The connection. */
     @Mock
-    private Connection connection;
+    private DirigibleConnection connection;
 
     /** The data source. */
     @Mock
-    private DataSource dataSource;
+    private DirigibleDataSource dataSource;
 
     /** The database meta data. */
     @Mock
@@ -143,6 +137,7 @@ public class ODataDatabaseMetadataUtilTest {
     // testGetTableMetadata_columnTypeConversion("NotSupportedSQLType", null);
     // }
 
+
     /**
      * Test artifact not found.
      *
@@ -162,12 +157,6 @@ public class ODataDatabaseMetadataUtilTest {
     // Mockito.verifyNoMoreInteractions(databaseMetaData);
     // }
 
-    /**
-     * Test get table metadata column type conversion.
-     *
-     * @param sqlType the sql type
-     * @param expectedEdmType the expected edm type
-     */
     // private void testGetTableMetadata_columnTypeConversion(String sqlType, String expectedEdmType) {
     // try {
     // Mockito.when(connection.getMetaData()).thenReturn(databaseMetaData);
@@ -218,12 +207,6 @@ public class ODataDatabaseMetadataUtilTest {
     //
     // }
 
-    /**
-     * Mock DB meta data query no result.
-     *
-     * @param executedResultSet the executed result set
-     * @throws SQLException the SQL exception
-     */
     // private void mockDBMetaDataQuery_noResult(ResultSet executedResultSet) throws SQLException {
     // ResultSet resultSet = Mockito.mock(ResultSet.class);
     // Mockito.when(executedResultSet).thenReturn(resultSet);

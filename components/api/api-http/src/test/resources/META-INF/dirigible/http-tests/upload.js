@@ -1,37 +1,24 @@
-/*
- * Copyright (c) 2022 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: 2022 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
-var upload = require('http/upload');
-var request = require('http/request');
-var response = require('http/response');
+import { Request, Response, Upload } from "sdk/http";
 
-if (request.getMethod() === "POST") {
-	if (upload.isMultipartContent()) {
-		var fileItems = upload.parseRequest();
-		for (i=0; i<fileItems.size(); i++) {
-			var fileItem = fileItems.get(i);
-			if (!fileItem.isFormField()) {
-				response.println("File Name: " + fileItem.getName());
-				response.println("File Bytes (as text): " + String.fromCharCode.apply(null, fileItem.getBytes()));
-			} else {
-				response.println("Field Name: " + fileItem.getFieldName());
-				response.println("Field Text: " + fileItem.getText());
-			}
-		}
-	} else {
-		response.println("The request's content must be 'multipart'");
-	}
-} else if (request.getMethod() === "GET") {
-	response.println("Use POST request.");
+if (Request.getMethod() === "POST") {
+    if (Upload.isMultipartContent()) {
+        const fileItems = Upload.parseRequest();
+        for (let i = 0; i < fileItems.size(); i++) {
+            var fileItem = fileItems.get(i);
+            if (!fileItem.isEmpty()) {
+                Response.println("File Name: " + fileItem.getName());
+                Response.println("File Bytes (as text): " + String.fromCharCode.apply(null, fileItem.getBytes()));
+            } else {
+                Response.println("Field Name: " + fileItem.getName());
+                Response.println("Field Text: " + fileItem.getText());
+            }
+        }
+    } else {
+        Response.println("The request's content must be 'multipart'");
+    }
+} else if (Request.getMethod() === "GET") {
+    Response.println("Use POST Request.");
 }
 
-response.flush();
-response.close();
+Response.flush();
+Response.close();

@@ -1,3 +1,3 @@
-var assertTrue = require('test/assert').assertTrue;
+import { Assert } from 'test/assert';
 
-assertTrue(false);
+Assert.assertTrue(false);

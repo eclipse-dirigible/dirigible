@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.command;
 
@@ -52,6 +51,11 @@ public class CommandDescriptor {
         return command;
     }
 
+    /**
+     * Checks if is compatible with current OS.
+     *
+     * @return true, if is compatible with current OS
+     */
     public boolean isCompatibleWithCurrentOS() {
         if (os == null) {
             return true; // treat as command with no explicit OS set, so use this command as universal
@@ -71,6 +75,11 @@ public class CommandDescriptor {
         }
     }
 
+    /**
+     * To string.
+     *
+     * @return the string
+     */
     @Override
     public String toString() {
         return "CommandLine{" + "os=" + os + ", command='" + command + '\'' + '}';

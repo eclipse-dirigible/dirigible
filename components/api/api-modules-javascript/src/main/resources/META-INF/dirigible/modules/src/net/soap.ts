@@ -9,77 +9,95 @@
  * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import * as streams from "@dirigible/io/streams";
-import * as request from "@dirigible/http/request";
-import * as base64 from "@dirigible/utils/base64";
+import { Request } from "sdk/http/request";
+import { Base64 } from "sdk/utils/base64";
+import { Streams, InputStream } from "sdk/io/streams";
+
 const MessageFactory = Java.type("javax.xml.soap.MessageFactory");
 const MimeHeadersInternal = Java.type("javax.xml.soap.MimeHeaders");
 const SOAPConnectionFactory = Java.type("javax.xml.soap.SOAPConnectionFactory");
 
-export function createMessage() {
-	const internalFactory = MessageFactory.newInstance();
-	const internalMessage = internalFactory.createMessage();
-	return new Message(internalMessage);
-};
+export class SOAP {
 
-export function parseMessage(mimeHeaders, inputStream) {
-	const internalFactory = MessageFactory.newInstance();
-	if (inputStream.native) {
-		try {
-			const internalMessage = internalFactory.createMessage(mimeHeaders.native, inputStream.native);
-			const internalPart = internalMessage.getSOAPPart();
-			internalPart.getEnvelope();
-			return new Message(internalMessage);
-		} catch (e) {
-			console.error(e);
-			throw new Error("Input provided is null or in a worng format. HTTP method used must be POST. " + e.message);
+	/**
+	 * Call a given SOAP endpoint with a given request message
+	 */
+	public static call(message: Message, url: string) {
+		const soapConnectionFactory = SOAPConnectionFactory.newInstance();
+		const internalConnection = soapConnectionFactory.createConnection();
+		const internalResponse = internalConnection.call(message.native, url); // Trying to access private parameter of class Message!
+		return new Message(internalResponse);
+	}
+
+	public static trustAll() {
+		// TODO
+	}
+
+	public static createMessage(): Message {
+		return new Message(MessageFactory.newInstance().createMessage());
+	}
+
+	public static parseMessage(mimeHeaders: MimeHeaders, inputStream: InputStream): Message {
+		const internalFactory = MessageFactory.newInstance();
+		if (inputStream.native) {
+			try {
+				const internalMessage = internalFactory.createMessage(mimeHeaders.native, inputStream.native);
+				const internalPart = internalMessage.getSOAPPart();
+				internalPart.getEnvelope();
+				return new Message(internalMessage);
+			} catch (e) {
+				console.error(e);
+				throw new Error("Input provided is null or in a worng format. HTTP method used must be POST. " + e.message);
+			}
 		}
-	}
-	throw new Error("Input provided is null.");
-};
-
-export function parseRequest() {
-	if (request.getMethod().toUpperCase() !== "POST") {
-		throw new Error("HTTP method used must be POST.");
+		throw new Error("Input provided is null.");
 	}
 
-	const inputStream = request.getInputStream();
-	const mimeHeaders = {};//export function createMimeHeaders();
-	return parseMessage(mimeHeaders, inputStream);
-};
+	public static parseRequest(): Message {
+		if (Request.getMethod().toUpperCase() !== "POST") {
+			throw new Error("HTTP method used must be POST.");
+		}
 
-export function createMimeHeaders() {
-	const internalMimeHeaders = new MimeHeadersInternal();
-	return new MimeHeaders(internalMimeHeaders);
-};
+		const inputStream = Request.getInputStream();
+		const mimeHeaders = this.createMimeHeaders();
 
+		return this.parseMessage(mimeHeaders, inputStream);
+	}
+
+	public static createMimeHeaders(): MimeHeaders {
+		const internalMimeHeaders = new MimeHeadersInternal();
+		return new MimeHeaders(internalMimeHeaders);
+	}
+}
 
 /**
  * SOAP Message
  */
 class Message {
 
-	constructor(private native) { }
+	public readonly native: any;
 
-	getPart() {
-		const internalPart = this.native.getSOAPPart();
-		return new Part(internalPart);
-	};
+	constructor(native: any) {
+		this.native = native;
+	}
 
-	getMimeHeaders() {
-		const internalMimeHeaders = this.native.getMimeHeaders();
-		return new MimeHeaders(internalMimeHeaders);
-	};
+	public getPart(): Part {
+		return new Part(this.native.getSOAPPart());
+	}
 
-	save() {
+	public getMimeHeaders(): MimeHeaders {
+		return new MimeHeaders(this.native.getMimeHeaders());
+	}
+
+	public save(): void {
 		this.native.saveChanges();
-	};
+	}
 
-	getText() {
-		const outputStream = streams.createByteArrayOutputStream();
+	public getText(): string {
+		const outputStream = Streams.createByteArrayOutputStream();
 		this.native.writeTo(outputStream.native);
 		return outputStream.getText();
-	};
+	}
 }
 
 /**
@@ -87,12 +105,15 @@ class Message {
  */
 class Part {
 
-	constructor(private native) { }
+	private readonly native: any;
 
-	getEnvelope() {
-		const internalEnvelope = this.native.getEnvelope();
-		return new Envelope(internalEnvelope);
-	};
+	constructor(native: any) {
+		this.native = native;
+	}
+
+	public getEnvelope(): Envelope {
+		return new Envelope(this.native.getEnvelope());
+	}
 }
 
 /**
@@ -100,141 +121,148 @@ class Part {
  */
 class MimeHeaders {
 
-	constructor(private native) {}
+	public readonly native: any;
 
-	addHeader(name, value) {
+	constructor(native: any) {
+		this.native = native;
+	}
+
+	public addHeader(name: string, value: string): void {
 		this.native.addHeader(name, value);
-	};
+	}
 
-	addBasicAuthenticationHeader(username, password) {
+	public addBasicAuthenticationHeader(username: string, password: string): void {
 		const userAndPassword = `${username}:${password}`;
-		const basicAuth = base64.encode(userAndPassword);
-		this.native.addHeader("Authorization", "Basic " + basicAuth);
-	};
+		const basicAuth = Base64.encode(userAndPassword);
+		this.native.addHeader("Authorization", `Basic ${basicAuth}`);
+	}
 }
 
 /**
  * SOAP Envelope
  */
 class Envelope {
+	private readonly native: any;
 
-	constructor(private native) { }
+	constructor(native: any) {
+		this.native = native;
+	}
 
-	addNamespaceDeclaration(prefix, uri) {
+	public addNamespaceDeclaration(prefix: string, uri: string): void {
 		this.native.addNamespaceDeclaration(prefix, uri);
-	};
+	}
 
-	getBody() {
-		const internalBody = this.native.getBody();
-		return new Body(internalBody);
-	};
+	public getBody(): Body {
+		return new Body(this.native.getBody());
+	}
 
-	getHeader() {
-		const internalHeader = this.native.getHeader();
-		return new Header(internalHeader);
-	};
+	public getHeader(): Header {
+		return new Header(this.native.getHeader());
+	}
 
-	createName(localName, prefix, uri) {
-		const internalName = this.native.createName(localName, prefix, uri);
-		return new Name(internalName);
-	};
+	public createName(localName: string, prefix: string, uri: string): Name {
+		return new Name(this.native.createName(localName, prefix, uri));
+	}
 }
 
 /**
  * SOAP Body
  */
 class Body {
+	private readonly native: any;
 
-	constructor(private native) {
+	constructor(native: any) {
+		this.native = native;
 	}
 
-	addChildElement(localName, prefix) {
-		const internalElement = this.native.addChildElement(localName, prefix);
-		return new Element(internalElement);
-	};
+	public addChildElement(localName: string, prefix: string): Element {
+		return new Element(this.native.addChildElement(localName, prefix));
+	}
 
-	getChildElements() {
+	public getChildElements(): Element[] {
 		const childElements = [];
 		const internalElementsIterator = this.native.getChildElements();
 		while (internalElementsIterator.hasNext()) {
-			const internalElement = internalElementsIterator.next();
-			childElements.push(new Element(internalElement));
+			childElements.push(new Element(internalElementsIterator.next()));
 		}
 		return childElements;
-	};
+	}
 }
 
 /**
  * SOAP Header
  */
 class Header {
+	private readonly native: any;
 
-	constructor(private native) { }
+	constructor(native: any) {
+		this.native = native;
+	}
 
-	addHeaderElement(name) {
-		const internalElement = this.native.addHeaderElement(name.native);
-		return new Element(internalElement);
-	};
+	public addHeaderElement(element: Element): void {
+		this.native.addHeaderElement(element.native);
+	}
 }
 
 /**
  * SOAP Name
  */
 class Name {
+	private readonly native: any;
 
-	constructor(private native) {
+	constructor(native: any) {
+		this.native = native;
 	}
 
-	getLocalName() {
+	public getLocalName(): string {
 		return this.native.getLocalName();
-	};
+	}
 
-	getPrefix() {
+	public getPrefix(): string {
 		return this.native.getPrefix();
-	};
+	}
 
-	getQualifiedName() {
+	public getQualifiedName(): string {
 		return this.native.getQualifiedName();
-	};
+	}
 
-	getURI() {
+	public getURI(): string {
 		return this.native.getURI();
-	};
+	}
 }
 
 /**
  * SOAP Element
  */
 class Element {
+	public readonly native: any;
 
-	constructor(private native) { }
+	constructor(native: any) {
+		this.native = native;
+	}
 
-	addChildElement(localName, prefix) {
-		const internalElement = this.native.addChildElement(localName, prefix);
-		return new Element(internalElement);
-	};
+	public addChildElement(localName: string, prefix: string) {
+		return new Element(this.native.addChildElement(localName, prefix));
+	}
 
-	addTextNode(text) {
-		const internalElement = this.native.addTextNode(text);
-		return new Element(internalElement);
-	};
+	public addTextNode(text: string): Element {
+		return new Element(this.native.addTextNode(text));
+	}
 
-	addAttribute(name, value) {
-		const internalElement = this.native.addAttribute(name.native, value);
-		return new Element(internalElement);
-	};
+	public addAttribute(name: any, value: any): Element {
+		return new Element(this.native.addAttribute(name.native, value));
+	}
 
-	getChildElements() {
+	public getChildElements(): Element[] {
 		const childElements = [];
 		const internalElementsIterator = this.native.getChildElements();
 		while (internalElementsIterator.hasNext()) {
-			const internalElement = internalElementsIterator.next();
-			childElements.push(new Element(internalElement));
+			childElements.push(new Element(internalElementsIterator.next()));
 		}
 		return childElements;
-	};
+	}
 
-	getElementName() {
+	public getElementName(): Name | undefined {
 		try {
 			const internalName = this.native.getElementName();
 			return new Name(internalName);
@@ -242,28 +270,20 @@ class Element {
 			//  can we assume that always an exception here means the element is not an SOAPElement
 			//	console.log(e);
 		}
-		return null;
-	};
+		return undefined;
+	}
 
-	getValue() {
+	public getValue(): any {
 		return this.native.getValue();
-	};
+	}
 
-	isSOAPElement() {
+	public isSOAPElement(): boolean {
 		return this.getElementName() !== null;
-	};
+	}
 }
 
-/**
- * Call a given SOAP endpoint with a given request message
- */
-export function call(message, url) {
-	const soapConnectionFactory = SOAPConnectionFactory.newInstance();
-	const internalConnection = soapConnectionFactory.createConnection();
-	const internalResponse = internalConnection.call(message.native, url);
-	return new Message(internalResponse);
-};
-
-export function trustAll() {
-	// TODO
-};
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = SOAP;
+}

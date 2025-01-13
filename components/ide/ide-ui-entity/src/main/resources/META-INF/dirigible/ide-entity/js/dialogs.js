@@ -1,15 +1,15 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-function openReferEntity(title, message, $scope, graph) {
+function openReferEntity(title, message, $scope, graph, uuid) { // Not used
 	$scope.$parent.dialogTitle = title;
 	$scope.$parent.okReferEntity = function () {
 		if (!$scope.$parent.referencedModel || !$scope.$parent.referencedEntity) {
@@ -25,24 +25,19 @@ function openReferEntity(title, message, $scope, graph) {
 			$scope.$cell.value.projectionReferencedModel = $scope.$parent.referencedModel;
 			$scope.$cell.value.projectionReferencedEntity = $scope.$parent.referencedEntity;
 
-
-			let propertyObject = new Property('propertyName');
-			let property = new mxCell(propertyObject, new mxGeometry(0, 0, 0, 26));
-			property.setVertex(true);
-			property.setConnectable(false);
-
 			$scope.$parent.availableEntities.forEach(entity => {
 				if (entity.name === $scope.$parent.referencedEntity) {
 					entity.properties.forEach(projectionProperty => {
-						let newProperty = property.clone();
-
+						let propertyObject = new Property('propertyName');
+						let property = new mxCell(propertyObject, new mxGeometry(0, 0, 0, 26));
+						property.setId(uuid.generate());
+						property.setVertex(true);
+						property.setConnectable(false);
 						for (let attributeName in projectionProperty) {
-							newProperty.value[attributeName] = projectionProperty[attributeName];
+							property.value[attributeName] = projectionProperty[attributeName];
 						}
-
-						newProperty.style = 'projectionproperty';
-
-						$scope.$cell.insert(newProperty);
+						property.style = 'projectionproperty';
+						$scope.$cell.insert(property);
 					});
 				}
 			});
@@ -62,7 +57,7 @@ function openReferEntity(title, message, $scope, graph) {
 }
 
 
-function openCopiedEntity(title, message, $scope, graph) {
+function openCopiedEntity(title, message, $scope, graph, uuid) { // Not used
 	$scope.$parent.dialogTitle = title;
 	$scope.$parent.okReferEntity = function () {
 		if (!$scope.$parent.referencedModel || !$scope.$parent.referencedEntity) {
@@ -78,24 +73,18 @@ function openCopiedEntity(title, message, $scope, graph) {
 			$scope.$cell.value.projectionReferencedModel = $scope.$parent.referencedModel;
 			$scope.$cell.value.projectionReferencedEntity = $scope.$parent.referencedEntity;
 
-
-			let propertyObject = new Property('propertyName');
-			let property = new mxCell(propertyObject, new mxGeometry(0, 0, 0, 26));
-			property.setVertex(true);
-			property.setConnectable(false);
-
 			$scope.$parent.availableEntities.forEach(entity => {
 				if (entity.name === $scope.$parent.referencedEntity) {
 					entity.properties.forEach(projectionProperty => {
-						let newProperty = property.clone();
-
+						let propertyObject = new Property('propertyName');
+						let property = new mxCell(propertyObject, new mxGeometry(0, 0, 0, 26));
+						property.setId(uuid.generate());
+						property.setVertex(true);
+						property.setConnectable(false);
 						for (let attributeName in projectionProperty) {
-							newProperty.value[attributeName] = projectionProperty[attributeName];
+							property.value[attributeName] = projectionProperty[attributeName];
 						}
-
-						//newProperty.style = 'property';
-
-						$scope.$cell.insert(newProperty);
+						$scope.$cell.insert(property);
 					});
 				}
 			});

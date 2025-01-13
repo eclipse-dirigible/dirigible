@@ -1,25 +1,25 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.engine.template.javascript;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BiConsumer;
-
-import org.eclipse.dirigible.components.engine.javascript.service.JavascriptService;
+import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.engine.template.TemplateEngine;
-import org.eclipse.dirigible.repository.api.RepositoryPath;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.eclipse.dirigible.graalium.core.DirigibleJavascriptCodeRunner;
+import org.eclipse.dirigible.graalium.core.javascript.modules.Module;
+import org.eclipse.dirigible.repository.api.IRepository;
+import org.graalvm.polyglot.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
@@ -28,13 +28,11 @@ import org.springframework.stereotype.Component;
 @Component
 public class JavascriptGenerationEngine implements TemplateEngine {
 
+    /** The Constant LOGGER. */
+    private static final Logger LOGGER = LoggerFactory.getLogger(JavascriptGenerationEngine.class);
+
     /** The Constant ENGINE_NAME. */
     public static final String ENGINE_NAME = "javascript";
-
-
-    /** The javascript service. */
-    @Autowired
-    private JavascriptService javascriptService;
 
     /**
      * Gets the name.
@@ -74,17 +72,23 @@ public class JavascriptGenerationEngine implements TemplateEngine {
     @Override
     public byte[] generate(Map<String, Object> parameters, String location, byte[] input, String sm, String em) throws IOException {
         try {
-            Map<Object, Object> context = new HashMap<Object, Object>();
-            BiConsumer<Object, Object> action = new ContextBiConsumer(context);
-            parameters.forEach(action);
-            RepositoryPath path = new RepositoryPath((String) parameters.get("handler"));
-            Object result = javascriptService.handleRequest(path.getSegments()[0], path.constructPathFrom(1), null, context, false);
-            // String result = ScriptEngineExecutorsManager.evalModule((String) parameters.get("handler"),
-            // context).toString();
-            return (result != null && result instanceof String) ? ((String) result).getBytes(StandardCharsets.UTF_8) : new byte[] {};
+            // Map<Object, Object> context = new HashMap<Object, Object>();
+            // BiConsumer<Object, Object> action = new ContextBiConsumer(context);
+            // parameters.forEach(action);
+
+            try (DirigibleJavascriptCodeRunner runner = createJSCodeRunner()) {
+                String handlerPath = location.startsWith(IRepository.SEPARATOR) ? location.substring(1) : location;
+                Module module = runner.run(handlerPath);
+                Value result = runner.runMethod(module, "generate", GsonHelper.toJson(parameters));
+                return (result != null && result.asString() != null) ? result.asString()
+                                                                             .getBytes()
+                        : new byte[] {};
+            }
+
         } catch (Exception ex) {
-            ex.printStackTrace();
-            throw new IOException("Could not evaluate template by Javascript: " + location, ex);
+            String errorMessage = "Could not evaluate template by Javascript: " + location;
+            LOGGER.error(errorMessage, ex);
+            throw new IOException(errorMessage, ex);
         }
     }
 
@@ -111,9 +115,19 @@ public class JavascriptGenerationEngine implements TemplateEngine {
          * @param k the k
          * @param v the v
          */
+        @Override
         public void accept(Object k, Object v) {
             this.context.put(k, v);
         }
+    }
+
+    /**
+     * Creates the JS code runner.
+     *
+     * @return the dirigible javascript code runner
+     */
+    DirigibleJavascriptCodeRunner createJSCodeRunner() {
+        return new DirigibleJavascriptCodeRunner();
     }
 
 }

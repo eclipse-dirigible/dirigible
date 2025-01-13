@@ -14,12 +14,21 @@
  */
 const SystemUtils = Java.type("org.apache.commons.lang3.SystemUtils")
 
-export function isWindows() {
-	return SystemUtils.IS_OS_WINDOWS;
-};
+export class OS {
 
-export function isUnix() {
-	return SystemUtils.IS_OS_UNIX;
-};
+	public static readonly OS_NAME: string = SystemUtils.OS_NAME;
 
-export const name = SystemUtils.OS_NAME;
+	public static isWindows(): boolean {
+		return SystemUtils.IS_OS_WINDOWS;
+	}
+
+	public static isUnix(): boolean {
+		return SystemUtils.IS_OS_UNIX;
+	}
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = OS;
+}

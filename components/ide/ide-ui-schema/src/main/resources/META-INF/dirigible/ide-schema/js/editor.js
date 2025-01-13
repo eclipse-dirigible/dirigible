@@ -1,19 +1,19 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-angular.module('ui.schema.modeler', ["ideUI", "ideView"])
-	.controller('ModelerCtrl', function ($scope, messageHub, $window, ViewParameters) {
+angular.module('ui.schema.modeler', ["ideUI", "ideView", "ideWorkspace"])
+	.controller('ModelerCtrl', function ($scope, messageHub, workspaceApi, $window, ViewParameters) {
 		let contents;
-		let csrfToken;
-		$scope.errorMessage = 'Аn unknown error was encountered. Please see console for more information.';
+		let schemaFile;
+		$scope.errorMessage = 'An unknown error was encountered. Please see console for more information.';
 		$scope.forms = {
 			editor: {},
 		};
@@ -45,76 +45,33 @@ angular.module('ui.schema.modeler', ["ideUI", "ideView"])
 			messageHub.setStatusCaret('');
 		});
 
-		$scope.checkSchema = function () {
-			let xhr = new XMLHttpRequest();
-			let resourcePath = $scope.dataParameters.file.substring(0, $scope.dataParameters.file.lastIndexOf('.')) + '.schema';
-			xhr.open('HEAD', `/services/ide/workspaces${resourcePath}`, false);
-			xhr.setRequestHeader('X-CSRF-Token', 'Fetch');
-			xhr.send();
-			if (xhr.status === 200) {
-				csrfToken = xhr.getResponseHeader("x-csrf-token");
-				return true;
-			} else {
-				return false;
-			}
-		};
-
 		$scope.showAlert = function (title, message) {
 			messageHub.showAlertError(title, message);
 		};
 
-		function getResource() {
-			let xhr = new XMLHttpRequest();
-			xhr.open('GET', '/services/ide/workspaces' + $scope.dataParameters.file, false);
-			xhr.setRequestHeader('X-CSRF-Token', 'Fetch');
-			xhr.send();
-			if (xhr.status === 200) {
-				csrfToken = xhr.getResponseHeader("x-csrf-token");
-				return xhr.responseText;
-			} else {
-				$scope.state.error = true;
-				$scope.errorMessage = "Unable to load the file. See console, for more information.";
-				messageHub.setStatusError(`Error loading '${$scope.dataParameters.file}'`);
-				return '{}';
-			}
-		}
-
 		function initializeSchemaJson() {
-			if (!$scope.checkSchema()) {
-				let xhr = new XMLHttpRequest();
-				let resourcePath = $scope.dataParameters.file.substring(0, $scope.dataParameters.file.lastIndexOf('.')) + '.schema';
-				xhr.open('POST', '/services/ide/workspaces' + resourcePath);
-				xhr.setRequestHeader('X-CSRF-Token', 'Fetch');
-				xhr.onreadystatechange = function () {
-					if (xhr.readyState === 4) {
-						messageHub.announceFileSaved({
-							name: resourcePath.substring(resourcePath.lastIndexOf('/') + 1),
-							path: resourcePath.substring(resourcePath.indexOf('/', 1)),
-							contentType: $scope.dataParameters.contentType,
-							workspace: resourcePath.substring(1, resourcePath.indexOf('/', 1)),
-						});
-						messageHub.setStatusMessage(`File '${resourcePath}' created`);
-					}
-				};
-				xhr.onerror = function (error) {
-					console.error(`Error creating '${resourcePath}'`, error);
-					messageHub.setStatusError(`Error creating '${resourcePath}'`);
-					messageHub.showAlertError('Error while creating the file', 'Please look at the console for more information');
-					$scope.$apply(function () {
-						$scope.state.isBusy = false;
-					});
-				};
-				xhr.send('');
-			}
+			workspaceApi.createNode('', schemaFile, false, '').then(function (response) {
+				if (response.status === 201) {
+					const fileDescriptor = {
+						name: schemaFile.substring(schemaFile.lastIndexOf('/') + 1),
+						path: schemaFile.substring(schemaFile.indexOf('/', 1)),
+						contentType: $scope.dataParameters.contentType,
+						workspace: schemaFile.substring(1, schemaFile.indexOf('/', 1)),
+					};
+					messageHub.announceFileSaved(fileDescriptor);
+					messageHub.setStatusMessage(`File '${schemaFile}' created`);
+					messageHub.postMessage('projects.tree.refresh', { partial: true, project: fileDescriptor.path.substring(1, fileDescriptor.path.indexOf('/', 1)), workspace: fileDescriptor.workspace }, true);
+				} else {
+					messageHub.setStatusError(`Error saving '${schemaFile}'`);
+					messageHub.showAlertError('Error while saving the file', 'Please look at the console for more information');
+					$scope.state.isBusy = false;
+				}
+			});
 		}
 
 		function saveContents(text, resourcePath) {
-			let xhr = new XMLHttpRequest();
-			xhr.open('PUT', '/services/ide/workspaces' + resourcePath);
-			xhr.setRequestHeader('X-Requested-With', 'Fetch');
-			xhr.setRequestHeader('X-CSRF-Token', csrfToken);
-			xhr.onreadystatechange = function () {
-				if (xhr.readyState === 4) {
+			workspaceApi.saveContent('', resourcePath, text).then(function (response) {
+				if (response.status === 200) {
 					messageHub.announceFileSaved({
 						name: resourcePath.substring(resourcePath.lastIndexOf('/') + 1),
 						path: resourcePath.substring(resourcePath.indexOf('/', 1)),
@@ -122,35 +79,53 @@ angular.module('ui.schema.modeler', ["ideUI", "ideView"])
 						workspace: resourcePath.substring(1, resourcePath.indexOf('/', 1)),
 					});
 					messageHub.setStatusMessage(`File '${resourcePath}' saved`);
-					messageHub.setEditorDirty($scope.dataParameters.file, false);
+					messageHub.setEditorDirty(resourcePath, false);
+					$scope.$apply(function () {
+						$scope.state.isBusy = false;
+					});
+				} else {
+					messageHub.setStatusError(`Error saving '${resourcePath}'`);
+					messageHub.showAlertError('Error while saving the file', 'Please look at the console for more information');
 					$scope.$apply(function () {
 						$scope.state.isBusy = false;
 					});
 				}
-			};
-			xhr.onerror = function (error) {
-				console.error(`Error saving '${resourcePath}'`, error);
-				messageHub.setStatusError(`Error saving '${resourcePath}'`);
-				messageHub.showAlertError('Error while saving the file', 'Please look at the console for more information');
-				$scope.$apply(function () {
-					$scope.state.isBusy = false;
-				});
-			};
-			xhr.send(text);
+			});
 		}
+
+		$scope.checkSchema = function () {
+			workspaceApi.resourceExists(schemaFile).then(function (response) {
+				if (response.status !== 200) initializeSchemaJson();
+			});
+		};
 
 		$scope.load = function () {
 			if (!$scope.state.error) {
-				contents = getResource();
-				initializeSchemaJson();
+				workspaceApi.loadContent('', $scope.dataParameters.file).then(function (response) {
+					if (response.status === 200) {
+						contents = response.data;
+						$scope.checkSchema();
+						main(document.getElementById('graphContainer'),
+							document.getElementById('outlineContainer'),
+							document.getElementById('toolbarContainer'),
+							document.getElementById('sidebarContainer'));
+						$scope.$apply(() => $scope.state.isBusy = false);
+					} else if (response.status === 404) {
+						messageHub.closeEditor($scope.dataParameters.file);
+					} else {
+						$scope.$apply(function () {
+							$scope.state.error = true;
+							$scope.errorMessage = 'There was a problem with loading the file';
+							$scope.state.isBusy = false;
+						});
+					}
+				});
 			}
 		};
 
 		$scope.saveSchema = function () {
-			let schema = createSchema($scope.graph);
-			saveContents(schema, $scope.dataParameters.file);
-			let schemaJson = createSchemaJson($scope.graph);
-			saveContents(schemaJson, $scope.dataParameters.file.substring(0, $scope.dataParameters.file.lastIndexOf('.')) + '.schema');
+			saveContents(createSchema($scope.graph), $scope.dataParameters.file);
+			saveContents(createSchemaJson($scope.graph), schemaFile);
 		};
 
 		$scope.getBoolean = function (value) {
@@ -167,6 +142,16 @@ angular.module('ui.schema.modeler', ["ideUI", "ideView"])
 		messageHub.onEditorFocusGain(function (msg) {
 			if (msg.resourcePath === $scope.dataParameters.file) messageHub.setStatusCaret('');
 		});
+
+		messageHub.onEditorReloadParameters(
+			function (event) {
+				$scope.$apply(() => {
+					if (event.resourcePath === $scope.dataParameters.file) {
+						$scope.dataParameters = ViewParameters.get();
+					}
+				});
+			}
+		);
 
 		messageHub.onDidReceiveMessage(
 			"editor.file.save.all",
@@ -849,7 +834,7 @@ angular.module('ui.schema.modeler', ["ideUI", "ideView"])
 			let doc = mxUtils.parseXml(contents);
 			let codec = new mxCodec(doc.mxGraphModel);
 			codec.decode(doc.documentElement.getElementsByTagName('mxGraphModel')[0], $scope.graph.getModel());
-			$scope.graph.model.addListener(mxEvent.START_EDIT, function (sender, evt) {
+			$scope.graph.model.addListener(mxEvent.START_EDIT, function (_sender, _evt) {
 				messageHub.setEditorDirty($scope.dataParameters.file, true);
 			});
 		};
@@ -862,11 +847,7 @@ angular.module('ui.schema.modeler', ["ideUI", "ideView"])
 			$scope.state.error = true;
 			$scope.errorMessage = "The 'contentType' data parameter is missing.";
 		} else {
+			schemaFile = $scope.dataParameters.file.substring(0, $scope.dataParameters.file.lastIndexOf('.')) + '.schema';
 			$scope.load();
-			main(document.getElementById('graphContainer'),
-				document.getElementById('outlineContainer'),
-				document.getElementById('toolbarContainer'),
-				document.getElementById('sidebarContainer'));
-			$scope.state.isBusy = false;
 		}
 	});

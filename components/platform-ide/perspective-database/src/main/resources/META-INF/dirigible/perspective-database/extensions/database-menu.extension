@@ -1,0 +1,5 @@
+{
+    "module": "perspective-database/configs/menu/database-menu.js",
+    "extensionPoint": "platform-menus",
+    "description": "Database perspective menu"
+}

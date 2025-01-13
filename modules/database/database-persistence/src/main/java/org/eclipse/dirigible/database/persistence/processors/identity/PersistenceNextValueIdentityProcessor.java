@@ -1,16 +1,17 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.persistence.processors.identity;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 
 import org.eclipse.dirigible.database.persistence.IEntityManagerInterceptor;
@@ -19,6 +20,7 @@ import org.eclipse.dirigible.database.persistence.PersistenceManager;
 import org.eclipse.dirigible.database.persistence.model.PersistenceTableModel;
 import org.eclipse.dirigible.database.persistence.parser.Serializer;
 import org.eclipse.dirigible.database.persistence.processors.AbstractPersistenceProcessor;
+import org.eclipse.dirigible.database.sql.SqlFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,13 +47,6 @@ public class PersistenceNextValueIdentityProcessor extends AbstractPersistencePr
      * @param connection the connection
      * @param tableModel the table model
      * @return the string
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see
-     * org.eclipse.dirigible.database.persistence.processors.AbstractPersistenceProcessor#generateScript
-     * (java.sql. Connection, org.eclipse.dirigible.database.persistence.model.PersistenceTableModel)
      */
     @Override
     protected String generateScript(Connection connection, PersistenceTableModel tableModel) {
@@ -90,13 +85,29 @@ public class PersistenceNextValueIdentityProcessor extends AbstractPersistencePr
             persistenceManager.tableCreate(connection, Identity.class);
         }
 
+        int sequenceStart = 0;
+        String countSql = SqlFactory.getNative(connection)
+                                    .select()
+                                    .column("count(*)")
+                                    .from(tableName)
+                                    .build();
+        try (PreparedStatement countPreparedStatement = connection.prepareStatement(countSql)) {
+            ResultSet rs = countPreparedStatement.executeQuery();
+            if (rs.next()) {
+                sequenceStart = rs.getInt(1);
+                sequenceStart++;
+            }
+        } catch (SQLException e) {
+            // Do nothing
+        }
+
         Identity identity = persistenceManager.find(connection, Identity.class, tableName);
         if (identity == null) {
             identity = new Identity();
             identity.setTable(tableName);
-            identity.setValue(1);
+            identity.setValue(sequenceStart);
             persistenceManager.insert(connection, identity);
-            return 1;
+            return sequenceStart;
         }
 
         try {

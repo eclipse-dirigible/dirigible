@@ -1,12 +1,12 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
 angular.module('ideMessageHub', [])
@@ -14,76 +14,90 @@ angular.module('ideMessageHub', [])
         this.eventIdPrefix = '';
         this.eventIdDelimiter = '.';
         this.$get = [function messageHubFactory() {
-            let messageHub = new FramesMessageHub();
-            let trigger = function (eventId, absolute = false) {
+            const messageHub = new FramesMessageHub();
+            const isNullOrUndefined = function (value) {
+                if (value === null || value === undefined) return true;
+                return false;
+            };
+            const isNullOrUndefinedOrEmpty = function (value) {
+                if (value === null || value === undefined || value.trim() === '') return true;
+                return false;
+            };
+            const trigger = function (eventId, absolute = false) {
                 if (!eventId)
                     throw Error('eventId argument must be a valid string, identifying an existing event');
                 if (!absolute && this.eventIdPrefix !== '') eventId = this.eventIdPrefix + this.eventIdDelimiter + eventId;
                 messageHub.post({}, eventId);
             }.bind(this);
-            let post = function (eventId, data, absolute = false) {
+            const post = function (eventId, data, absolute = false) {
                 if (!eventId)
                     throw Error('eventId argument must be a valid string, identifying an existing event');
                 if (!absolute && this.eventIdPrefix !== "") eventId = this.eventIdPrefix + this.eventIdDelimiter + eventId;
                 messageHub.post({ data: data }, eventId);
             }.bind(this);
-            let onMessage = function (eventId, callbackFunc, absolute = false) {
+            const onMessage = function (eventId, callbackFunc, absolute = false) {
                 if (typeof callbackFunc !== 'function')
                     throw Error('Callback argument must be a function');
                 if (!absolute && this.eventIdPrefix !== "") eventId = this.eventIdPrefix + this.eventIdDelimiter + eventId;
                 return messageHub.subscribe(callbackFunc, eventId);
             }.bind(this);
-            let showStatusBusy = function (message) {
+            const showStatusBusy = function (message) {
                 if (!message)
                     throw Error("Status: you must provide a message");
                 messageHub.post({
                     message: message,
                 }, 'ide.status.busy');
             };
-            let hideStatusBusy = function () {
+            const hideStatusBusy = function () {
                 messageHub.post({
                     message: '',
                 }, 'ide.status.busy');
             };
-            let setStatusMessage = function (message) {
-                if (!message)
+            const setStatusMessage = function (message) {
+                if (isNullOrUndefinedOrEmpty(message))
                     throw Error("Status: you must provide a message");
                 messageHub.post({
                     message: message,
                 }, 'ide.status.message');
             };
-            let setStatusError = function (message) {
-                if (!message)
+            const setStatusError = function (message) {
+                if (isNullOrUndefinedOrEmpty(message))
                     throw Error("Status: you must provide a message");
                 messageHub.post({
                     message: message,
                 }, 'ide.status.error');
             };
-            let setStatusCaret = function (text) {
+            const setStatusCaret = function (label) {
+                if (isNullOrUndefined(label))
+                    throw Error("Status: you must provide a label");
                 messageHub.post({
-                    text: text,
+                    text: label,
                 }, 'ide.status.caret');
             };
-            let showAlert = function (title, message, type) {
+            const showAlert = function (title, message, type) {
+                if (isNullOrUndefinedOrEmpty(message))
+                    throw Error("Alert: you must provide a message");
+                if (isNullOrUndefinedOrEmpty(title))
+                    throw Error("Alert: you must provide a title");
                 messageHub.post({
                     title: title,
                     message: message,
                     type: type
                 }, 'ide.alert');
             };
-            let showAlertSuccess = function (title, message) {
+            const showAlertSuccess = function (title, message) {
                 showAlert(title, message, "success");
             };
-            let showAlertInfo = function (title, message) {
+            const showAlertInfo = function (title, message) {
                 showAlert(title, message, "info");
             };
-            let showAlertWarning = function (title, message) {
+            const showAlertWarning = function (title, message) {
                 showAlert(title, message, "warning");
             };
-            let showAlertError = function (title, message) {
+            const showAlertError = function (title, message) {
                 showAlert(title, message, "error");
             };
-            let showDialog = function (
+            const showDialog = function (
                 title = "",
                 body = "",
                 buttons = [{
@@ -110,7 +124,7 @@ angular.module('ideMessageHub', [])
                     callbackTopic: callbackTopic
                 }, 'ide.dialog');
             };
-            let showDialogAsync = function (
+            const showDialogAsync = function (
                 title = "",
                 body = "",
                 buttons = [{
@@ -146,7 +160,7 @@ angular.module('ideMessageHub', [])
                     }, callbackTopic);
                 });
             };
-            let showFormDialog = function (
+            const showFormDialog = function (
                 id,
                 title = "",
                 items = [],
@@ -161,13 +175,13 @@ angular.module('ideMessageHub', [])
                 subheader = "",
                 footer = "",
             ) {
-                if (!id)
+                if (isNullOrUndefinedOrEmpty(id))
                     throw Error("Form Dialog: You must specify a dialog id");
                 if (items.length === 0)
                     throw Error("Form Dialog: There must be at least one form item");
                 if (buttons.length === 0)
                     throw Error("Form Dialog: There must be at least one button");
-                if (!callbackTopic)
+                if (isNullOrUndefinedOrEmpty(callbackTopic))
                     throw Error("Form Dialog: There must be a callback topic");
                 messageHub.post({
                     id: id,
@@ -181,14 +195,14 @@ angular.module('ideMessageHub', [])
                     callbackTopic: callbackTopic,
                 }, 'ide.formDialog.show');
             };
-            let updateFormDialog = function (
+            const updateFormDialog = function (
                 id,
                 items = [],
                 loadingMessage,
                 subheader = "",
                 footer,
             ) {
-                if (!id)
+                if (isNullOrUndefinedOrEmpty(id))
                     throw Error("Form Dialog: You must specify a dialog id");
                 if (items.length === 0)
                     throw Error("Form Dialog: There must be at least one form item");
@@ -200,17 +214,17 @@ angular.module('ideMessageHub', [])
                     loadingMessage: loadingMessage,
                 }, 'ide.formDialog.update');
             };
-            let hideFormDialog = function (id) {
-                if (!id)
+            const hideFormDialog = function (id) {
+                if (isNullOrUndefinedOrEmpty(id))
                     throw Error("Form Dialog: You must specify a dialog id");
                 messageHub.post({ id: id }, 'ide.formDialog.hide');
             };
-            let showLoadingDialog = function (
+            const showLoadingDialog = function (
                 id,
                 title = "",
                 status = ""
             ) {
-                if (!id)
+                if (isNullOrUndefinedOrEmpty(id))
                     throw Error("Loading Dialog: You must specify a dialog id");
                 messageHub.post({
                     id: id,
@@ -218,28 +232,28 @@ angular.module('ideMessageHub', [])
                     status: status
                 }, 'ide.loadingDialog.show');
             };
-            let updateLoadingDialog = function (
+            const updateLoadingDialog = function (
                 id,
                 status = "",
             ) {
-                if (!id)
+                if (isNullOrUndefinedOrEmpty(id))
                     throw Error("Loading Dialog: You must specify a dialog id");
                 messageHub.post({
                     id: id,
                     status: status,
                 }, 'ide.loadingDialog.update');
             };
-            let hideLoadingDialog = function (id) {
-                if (!id)
+            const hideLoadingDialog = function (id) {
+                if (isNullOrUndefinedOrEmpty(id))
                     throw Error("Loading Dialog: You must specify a dialog id");
                 messageHub.post({ id: id }, 'ide.loadingDialog.hide');
             };
-            let showBusyDialog = function (
+            const showBusyDialog = function (
                 id,
                 text = '',
                 callbackTopic = '',
             ) {
-                if (!id)
+                if (isNullOrUndefinedOrEmpty(id))
                     throw Error("Busy Dialog: You must specify a dialog id");
                 messageHub.post({
                     id: id,
@@ -247,25 +261,25 @@ angular.module('ideMessageHub', [])
                     callbackTopic: callbackTopic
                 }, 'ide.busyDialog.show');
             };
-            let hideBusyDialog = function (id) {
-                if (!id)
+            const hideBusyDialog = function (id) {
+                if (isNullOrUndefinedOrEmpty(id))
                     throw Error("Busy Dialog: You must specify a dialog id");
                 messageHub.post({ id: id }, 'ide.busyDialog.hide');
             };
-            let showSelectDialog = function (
+            const showSelectDialog = function (
                 title,
                 listItems,
                 callbackTopic,
                 isSingleChoice = true,
                 hasSearch = false
             ) {
-                if (title === undefined)
+                if (isNullOrUndefinedOrEmpty(title))
                     throw Error("Select dialog: Title must be specified");
-                if (listItems === undefined || !Array.isArray(listItems))
+                if (isNullOrUndefined(listItems) && !Array.isArray(listItems))
                     throw Error("Select dialog: You must provide a list of strings.");
                 else if (listItems.length === 0)
                     throw Error("Select dialog: List is empty");
-                if (callbackTopic === undefined)
+                if (isNullOrUndefinedOrEmpty(callbackTopic))
                     throw Error("Select dialog: Callback topic must pe specified");
                 messageHub.post({
                     title: title,
@@ -275,54 +289,56 @@ angular.module('ideMessageHub', [])
                     hasSearch: hasSearch
                 }, 'ide.selectDialog');
             };
-            let showDialogWindow = function (
+            const showDialogWindow = function (
                 dialogWindowId = "",
-                params,
+                params = {},
                 callbackTopic = null,
                 closable = true,
+                serviceData = null
             ) {
-                if (params !== undefined && !(typeof params === 'object' && !Array.isArray(params) && params !== null))
+                if (isNullOrUndefined(params) || !(typeof params === 'object' && !Array.isArray(params)))
                     throw Error("showDialogWindow: params must be an object");
                 messageHub.post({
                     dialogWindowId: dialogWindowId,
                     params: params,
                     callbackTopic: callbackTopic,
-                    closable: closable
+                    closable: closable,
+                    serviceData: serviceData
                 }, 'ide.dialogWindow');
             };
-            let closeDialogWindow = function (dialogWindowId = "") {
-                if (dialogWindowId === undefined)
+            const closeDialogWindow = function (dialogWindowId = "") {
+                if (isNullOrUndefinedOrEmpty(dialogWindowId))
                     throw Error("closeDialogWindow: you must provide an ID");
                 messageHub.post({
                     dialogWindowId: dialogWindowId,
                 }, 'ide.dialogWindow.close');
             };
-            let openView = function (viewId, params) {
-                if (viewId === undefined)
+            const openView = function (viewId, params) {
+                if (isNullOrUndefinedOrEmpty(viewId))
                     throw Error("openView: viewId must be specified");
-                if (params !== undefined && !(typeof params === 'object' && !Array.isArray(params) && params !== null))
+                if (!isNullOrUndefined(params) && !(typeof params === 'object' && !Array.isArray(params)))
                     throw Error("openView: params must be an object");
                 messageHub.post({
                     viewId: viewId,
                     params: params,
                 }, 'ide-core.openView');
             };
-            let openPerspective = function (link, params) {
-                if (link === undefined)
+            const openPerspective = function (link, params) {
+                if (isNullOrUndefinedOrEmpty(link))
                     throw Error("openPerspective: link must be specified");
                 messageHub.post({
                     link: link,
                     params: params,
                 }, 'ide-core.openPerspective');
             };
-            let openEditor = function (
+            const openEditor = function (
                 resourcePath,
                 resourceLabel,
                 contentType,
                 editorId,
                 extraArgs
             ) {
-                if (resourcePath === undefined)
+                if (isNullOrUndefinedOrEmpty(resourcePath))
                     throw Error("openEditor: resourcePath must be specified");
                 messageHub.post({
                     resourcePath: resourcePath,
@@ -332,56 +348,122 @@ angular.module('ideMessageHub', [])
                     extraArgs: extraArgs,
                 }, 'ide-core.openEditor');
             };
-            let setEditorDirty = function (
+            const isEditorOpen = function (resourcePath) {
+                return new Promise((resolve, reject) => {
+                    if (isNullOrUndefinedOrEmpty(resourcePath))
+                        reject(new Error("isEditorOpen: resourcePath must be specified"));
+
+                    const callbackTopic = `core.editors.isOpen.${new Date().valueOf()}`;
+
+                    messageHub.post({
+                        resourcePath: resourcePath,
+                        callbackTopic: callbackTopic
+                    }, 'core.editors.isOpen');
+
+                    const handler = messageHub.subscribe(function (msg) {
+                        messageHub.unsubscribe(handler);
+                        resolve(msg);
+                    }, callbackTopic);
+                });
+            };
+            /**
+             * Returnes a list of all files whose path starts with 'basePath', from the currently opened editors.
+             * If basePath is not specified, all files will be listed.
+             */
+            const getCurrentlyOpenedFiles = function (basePath = '/') {
+                return new Promise((resolve, reject) => {
+                    if (isNullOrUndefinedOrEmpty(basePath))
+                        reject(new Error("getOpenedFiles: resourcePath cannot be null, undefined or empty"));
+
+                    const callbackTopic = `core.editors.openedFiles.${new Date().valueOf()}`;
+
+                    messageHub.post({
+                        basePath: basePath,
+                        callbackTopic: callbackTopic
+                    }, 'core.editors.openedFiles');
+
+                    const handler = messageHub.subscribe(function (msg) {
+                        messageHub.unsubscribe(handler);
+                        resolve(msg);
+                    }, callbackTopic);
+                });
+            };
+            /**
+             * Trigger the reloading of view parameters for a specific editor.
+             * resourcePath: String - The full file path.
+            */
+            const editorReloadParameters = function (resourcePath) {
+                if (isNullOrUndefinedOrEmpty(resourcePath))
+                    throw Error("editorReloadParameters: resourcePath must be specified");
+                messageHub.post({
+                    resourcePath: resourcePath,
+                }, 'core.editors.reloadParams');
+            };
+            const onEditorReloadParameters = function (callbackFunc) {
+                if (typeof callbackFunc !== 'function')
+                    throw Error('Callback argument must be a function');
+                return messageHub.subscribe(callbackFunc, 'core.editors.reloadParams');
+            };
+            const setEditorDirty = function (
                 resourcePath,
                 isDirty,
             ) {
-                if (resourcePath === undefined)
+                if (isNullOrUndefinedOrEmpty(resourcePath))
                     throw Error("setEditorDirty: resourcePath must be specified");
-                if (isDirty === undefined)
+                if (isNullOrUndefined(isDirty))
                     throw Error("setEditorDirty: isDirty must be specified");
                 messageHub.post({
                     resourcePath: resourcePath,
                     isDirty: isDirty,
                 }, 'ide-core.setEditorDirty');
             };
-            let setFocusedEditor = function (resourcePath) {
-                if (resourcePath === undefined)
+            const setFocusedEditor = function (resourcePath) {
+                if (isNullOrUndefinedOrEmpty(resourcePath))
                     throw Error("setFocusedEditor: resourcePath must be specified");
                 messageHub.post({ resourcePath: resourcePath }, 'ide-core.setFocusedEditor');
             };
-            let setEditorFocusGain = function (resourcePath) {
-                if (resourcePath === undefined)
+            const setEditorFocusGain = function (resourcePath) {
+                if (isNullOrUndefinedOrEmpty(resourcePath))
                     throw Error("setFocusedEditor: resourcePath must be specified");
                 messageHub.post({ resourcePath: resourcePath }, 'ide-core.setEditorFocusGain');
             };
-            let onEditorFocusGain = function (callbackFunc) {
+            const onEditorFocusGain = function (callbackFunc) {
                 if (typeof callbackFunc !== 'function')
                     throw Error('Callback argument must be a function');
                 return messageHub.subscribe(callbackFunc, 'ide-core.setEditorFocusGain');
             };
-            let closeEditor = function (
+            const closeEditor = function (
                 resourcePath,
             ) {
-                if (resourcePath === undefined)
+                if (isNullOrUndefinedOrEmpty(resourcePath))
                     throw Error("closeEditor: resourcePath must be specified");
                 messageHub.post({
                     resourcePath: resourcePath,
                 }, 'ide-core.closeEditor');
             };
-            let closeOtherEditors = function (
+            const closeOtherEditors = function (
                 resourcePath,
             ) {
-                if (resourcePath === undefined)
+                if (isNullOrUndefinedOrEmpty(resourcePath))
                     throw Error("closeEditor: resourcePath must be specified");
                 messageHub.post({
                     resourcePath: resourcePath,
                 }, 'ide-core.closeOtherEditors');
             };
-            let closeAllEditors = function () {
+            const closeAllEditors = function () {
                 messageHub.post({}, 'ide-core.closeAllEditors');
             };
-            let unsubscribe = function (handler) {
+            const setTabFocus = function (tabId) {
+                if (isNullOrUndefinedOrEmpty(tabId))
+                    throw Error("setTabFocusGain: tabId must be specified");
+                messageHub.post({ tabId: tabId }, 'ide-core.setTabFocus');
+            };
+            const onSetTabFocus = function (callbackFunc) {
+                if (typeof callbackFunc !== 'function')
+                    throw Error('Callback argument must be a function');
+                return messageHub.subscribe(callbackFunc, 'ide-core.setTabFocus');
+            };
+            const unsubscribe = function (handler) {
                 messageHub.unsubscribe(handler);
             };
             /**
@@ -393,40 +475,40 @@ angular.module('ideMessageHub', [])
              *   workspace: 'example'
              * }
             */
-            let announceFileSelected = function (fileDescriptor) {
-                if (fileDescriptor !== undefined && !(typeof fileDescriptor === 'object' && !Array.isArray(fileDescriptor) && fileDescriptor !== null))
+            const announceFileSelected = function (fileDescriptor) {
+                if (!isNullOrUndefined(fileDescriptor) && !(typeof fileDescriptor === 'object' && !Array.isArray(fileDescriptor)))
                     throw Error('You must provide an appropriate file descriptor object, containing name, path, contentType and workspace');
                 messageHub.post(fileDescriptor, 'ide.file.selected');
             };
-            let onFileSelected = function (callbackFunc) {
+            const onFileSelected = function (callbackFunc) {
                 if (typeof callbackFunc !== 'function')
                     throw Error('Callback argument must be a function');
                 return messageHub.subscribe(callbackFunc, 'ide.file.selected');
             };
-            let announceFileOpened = function (fileDescriptor) {
+            const announceFileOpened = function (fileDescriptor) {
                 messageHub.post(fileDescriptor, 'ide.file.opened');
             };
-            let onFileOpened = function (callbackFunc) {
+            const onFileOpened = function (callbackFunc) {
                 if (typeof callbackFunc !== 'function')
                     throw Error('Callback argument must be a function');
                 return messageHub.subscribe(callbackFunc, 'ide.file.opened');
             };
-            let announceFileCreated = function (fileDescriptor) {
-                if (fileDescriptor !== undefined && !(typeof fileDescriptor === 'object' && !Array.isArray(fileDescriptor) && fileDescriptor !== null))
+            const announceFileCreated = function (fileDescriptor) {
+                if (!isNullOrUndefined(fileDescriptor) && !(typeof fileDescriptor === 'object' && !Array.isArray(fileDescriptor)))
                     throw Error('You must provide an appropriate file descriptor object, containing name, path, contentType and workspace');
                 messageHub.post(fileDescriptor, 'ide.file.created');
             };
-            let onFileCreated = function (callbackFunc) {
+            const onFileCreated = function (callbackFunc) {
                 if (typeof callbackFunc !== 'function')
                     throw Error('Callback argument must be a function');
                 return messageHub.subscribe(callbackFunc, 'ide.file.created');
             };
-            let announceFileDeleted = function (fileDescriptor) {
-                if (fileDescriptor !== undefined && !(typeof fileDescriptor === 'object' && !Array.isArray(fileDescriptor) && fileDescriptor !== null))
+            const announceFileDeleted = function (fileDescriptor) {
+                if (!isNullOrUndefined(fileDescriptor) && !(typeof fileDescriptor === 'object' && !Array.isArray(fileDescriptor)))
                     throw Error('You must provide an appropriate file descriptor object, containing name, path, contentType and workspace');
                 messageHub.post(fileDescriptor, 'ide.file.deleted');
             };
-            let onFileDeleted = function (callbackFunc) {
+            const onFileDeleted = function (callbackFunc) {
                 if (typeof callbackFunc !== 'function')
                     throw Error('Callback argument must be a function');
                 return messageHub.subscribe(callbackFunc, 'ide.file.deleted');
@@ -442,83 +524,99 @@ angular.module('ideMessageHub', [])
              *   workspace: 'example'
              * }
             */
-            let announceFileRenamed = function (fileDescriptor) {
-                if (fileDescriptor !== undefined && !(typeof fileDescriptor === 'object' && !Array.isArray(fileDescriptor) && fileDescriptor !== null))
+            const announceFileRenamed = function (fileDescriptor) {
+                if (!isNullOrUndefined(fileDescriptor) && !(typeof fileDescriptor === 'object' && !Array.isArray(fileDescriptor)))
                     throw Error('You must provide an appropriate file descriptor object, containing name, path, contentType and workspace');
                 messageHub.post(fileDescriptor, 'ide.file.renamed');
             };
-            let onFileRenamed = function (callbackFunc) {
+            const onFileRenamed = function (callbackFunc) {
                 if (typeof callbackFunc !== 'function')
                     throw Error('Callback argument must be a function');
                 return messageHub.subscribe(callbackFunc, 'ide.file.renamed');
             };
-            let announceFileSaved = function (fileDescriptor) {
-                if (fileDescriptor !== undefined && !(typeof fileDescriptor === 'object' && !Array.isArray(fileDescriptor) && fileDescriptor !== null))
+            const announceFileSaved = function (fileDescriptor) {
+                if (!isNullOrUndefined(fileDescriptor) && !(typeof fileDescriptor === 'object' && !Array.isArray(fileDescriptor)))
                     throw Error('You must provide an appropriate file descriptor object, containing name, path, contentType and workspace');
                 messageHub.post(fileDescriptor, 'ide.file.saved');
             };
-            let onFileSaved = function (callbackFunc) {
+            const onFileSaved = function (callbackFunc) {
                 if (typeof callbackFunc !== 'function')
                     throw Error('Callback argument must be a function');
                 return messageHub.subscribe(callbackFunc, 'ide.file.saved');
             };
-            let announceFileMoved = function (fileDescriptor) {
+            /**
+             * fileDescriptor object for move:
+             * {
+             *   name: 'example.js',
+             *   path: '/project/folder/example.js',
+             *   oldPath: '/project/folder/sample.js',
+             *   workspace: 'example'
+             * }
+            */
+            const announceFileMoved = function (fileDescriptor) {
+                if (!isNullOrUndefined(fileDescriptor) && !(typeof fileDescriptor === 'object' && !Array.isArray(fileDescriptor)))
+                    throw Error('You must provide an appropriate file descriptor object, containing name, path, oldPath and workspace');
                 messageHub.post(fileDescriptor, 'ide.file.moved');
             };
-            let onFileMoved = function (callbackFunc) {
+            const onFileMoved = function (callbackFunc) {
                 if (typeof callbackFunc !== 'function')
                     throw Error('Callback argument must be a function');
                 return messageHub.subscribe(callbackFunc, 'ide.file.moved');
             };
-            let announceFileCopied = function (fileDescriptor) {
+            const announceFileCopied = function (fileDescriptor) {
                 messageHub.post(fileDescriptor, 'ide.file.copied');
             };
-            let onFileCopied = function (callbackFunc) {
+            const onFileCopied = function (callbackFunc) {
                 if (typeof callbackFunc !== 'function')
                     throw Error('Callback argument must be a function');
                 return messageHub.subscribe(callbackFunc, 'ide.file.copied');
             };
-            let announcePublish = function (fileDescriptor) {
+            const announcePublish = function (fileDescriptor) {
                 messageHub.post(fileDescriptor, 'ide.event.publish');
             };
-            let onPublish = function (callbackFunc) {
+            const onPublish = function (callbackFunc) {
                 if (typeof callbackFunc !== 'function')
                     throw Error('Callback argument must be a function');
                 return messageHub.subscribe(callbackFunc, 'ide.event.publish');
             };
-            let announceUnpublish = function (fileDescriptor) {
+            const announceUnpublish = function (fileDescriptor) {
                 messageHub.post(fileDescriptor, 'ide.event.unpublish');
             };
-            let onUnpublish = function (callbackFunc) {
+            const onUnpublish = function (callbackFunc) {
                 if (typeof callbackFunc !== 'function')
                     throw Error('Callback argument must be a function');
                 return messageHub.subscribe(callbackFunc, 'ide.event.unpublish');
             };
-            let announceWorkspaceChanged = function (workspace) {
+            const announceWorkspaceChanged = function (workspace) {
                 if (workspace !== undefined && !(typeof workspace === 'object' && !Array.isArray(workspace) && workspace !== null) && !workspace.hasOwnProperty('name'))
                     throw Error('You must provide an appropriate workspace object, containing the "name" key');
                 messageHub.post({ data: workspace }, 'ide.workspace.changed');
             };
-            let onWorkspaceChanged = function (callbackFunc) {
+            const onWorkspaceChanged = function (callbackFunc) {
                 if (typeof callbackFunc !== 'function')
                     throw Error('Callback argument must be a function');
                 return messageHub.subscribe(callbackFunc, 'ide.workspace.changed');
             };
-            let announceWorkspacesModified = function () {
+            const announceWorkspacesModified = function () {
                 trigger('ide.workspaces.modified', true);
             };
-            let onWorkspacesModified = function (callbackFunc) {
+            const onWorkspacesModified = function (callbackFunc) {
                 if (typeof callbackFunc !== 'function')
                     throw Error('Callback argument must be a function');
                 return messageHub.subscribe(callbackFunc, 'ide.workspaces.modified');
             };
-            let announceRepositoryModified = function () {
+            const announceRepositoryModified = function () {
                 trigger('ide.repository.modified', true);
             };
-            let onRepositoryModified = function (callbackFunc) {
+            const onRepositoryModified = function (callbackFunc) {
                 if (typeof callbackFunc !== 'function')
                     throw Error('Callback argument must be a function');
                 return messageHub.subscribe(callbackFunc, 'ide.repository.modified');
+            };
+            const onThemeChanged = function (callbackFunc) {
+                if (typeof callbackFunc !== 'function')
+                    throw Error('Callback argument must be a function');
+                return messageHub.subscribe(callbackFunc, 'ide.themeChange');
             };
             return {
                 showStatusBusy: showStatusBusy,
@@ -546,6 +644,10 @@ angular.module('ideMessageHub', [])
                 openView: openView,
                 openPerspective: openPerspective,
                 openEditor: openEditor,
+                isEditorOpen: isEditorOpen,
+                getCurrentlyOpenedFiles: getCurrentlyOpenedFiles,
+                editorReloadParameters: editorReloadParameters,
+                onEditorReloadParameters: onEditorReloadParameters,
                 setEditorDirty: setEditorDirty,
                 setFocusedEditor: setFocusedEditor,
                 setEditorFocusGain: setEditorFocusGain,
@@ -553,6 +655,8 @@ angular.module('ideMessageHub', [])
                 closeEditor: closeEditor,
                 closeOtherEditors: closeOtherEditors,
                 closeAllEditors: closeAllEditors,
+                setTabFocus: setTabFocus,
+                onSetTabFocus: onSetTabFocus,
                 triggerEvent: trigger,
                 'postMessage': post,
                 onDidReceiveMessage: onMessage,
@@ -583,6 +687,7 @@ angular.module('ideMessageHub', [])
                 onWorkspacesModified: onWorkspacesModified,
                 announceRepositoryModified: announceRepositoryModified,
                 onRepositoryModified: onRepositoryModified,
+                onThemeChanged: onThemeChanged,
             };
         }];
     });

@@ -13,36 +13,39 @@
  * HTTP API Upload
  *
  */
-import * as streams from "@dirigible/io/streams"
-import * as bytes from "@dirigible/io/bytes"
+import { InputStream } from "sdk/io/streams"
+import { Bytes } from "sdk/io/bytes"
+
 const HttpUploadFacade = Java.type("org.eclipse.dirigible.components.api.http.HttpUploadFacade");
 
-export function isMultipartContent() {
-    return HttpUploadFacade.isMultipartContent();
-}
+export class Upload {
 
-export function parseRequest() {
-    const native = __context.get("files");
-    return new FileItems(native);
+    public static isMultipartContent(): boolean {
+        return HttpUploadFacade.isMultipartContent();
+    }
+
+    public static parseRequest(): FileItems {
+        return new FileItems(__context.get("files"));
+    }
 }
 
 /**
  * FileItems object
  */
-class FileItems {
+export class FileItems {
 
-    private readonly native: any
+    private readonly native: any;
 
     constructor(native: any) {
         this.native = native;
     }
 
-    public get(index) {
+    public get(index: number): FileItem {
         const native = this.native.get(index);
         return new FileItem(native);
     }
 
-    public size() {
+    public size(): number {
         return this.native.size();
     }
 }
@@ -50,7 +53,7 @@ class FileItems {
 /**
  * FileItem object
  */
-class FileItem {
+export class FileItem {
 
     private readonly native: any
 
@@ -58,42 +61,43 @@ class FileItem {
         this.native = native;
     }
 
-    public getName() {
-        return this.native.getName();
-    }
-
-    public getOriginalFilename() {
+    public getName(): string {
         return this.native.getOriginalFilename();
     }
 
-    public getContentType() {
+    public getContentType(): string {
         return this.native.getContentType();
     }
 
-    public isEmpty() {
+    public isEmpty(): boolean {
         return this.native.isEmpty();
     }
 
-    public getSize() {
+    public getSize(): number {
         return this.native.getSize();
     }
 
-    public getBytes() {
+    public getBytes(): any[] {
         const data = this.getBytesNative();
-        return bytes.toJavaScriptBytes(data);
+        return Bytes.toJavaScriptBytes(data);
     }
 
-    public getBytesNative() {
+    public getBytesNative(): any[] {
         return this.native.getBytes();
     }
 
-    public getText() {
+    public getText(): string {
         return String.fromCharCode.apply(null, this.getBytesNative());
     }
 
-    public getInputStream() {
+    public getInputStream(): InputStream {
         const native = this.native.getInputStream();
-        return new streams.InputStream(native);
+        return new InputStream(native);
     }
+}
 
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Upload;
 }

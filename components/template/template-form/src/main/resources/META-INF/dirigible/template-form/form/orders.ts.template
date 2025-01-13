@@ -1,0 +1,16 @@
+import { Controller, Post } from "sdk/http"
+import { uuid } from "sdk/utils"
+
+@Controller
+class OrdersService {
+
+    @Post("/")
+    public createOrder(orderData: any) {
+        console.log(`Order Accepted: ${JSON.stringify(orderData, null, 4)}`);
+        return {
+            orderId: uuid.random(),
+            status: 'Accepted'
+        };
+    }
+
+}

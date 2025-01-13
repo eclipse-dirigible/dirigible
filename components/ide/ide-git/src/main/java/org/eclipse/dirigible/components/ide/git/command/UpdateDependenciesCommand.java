@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.ide.git.command;
 
@@ -37,10 +36,12 @@ public class UpdateDependenciesCommand extends CloneCommand {
      *
      * @param publisherService the publisher service
      * @param projectMetadataManager the project metadata manager
+     * @param commandService the command service
      */
     @Autowired
-    public UpdateDependenciesCommand(PublisherService publisherService, ProjectMetadataManager projectMetadataManager) {
-        super(publisherService, projectMetadataManager);
+    public UpdateDependenciesCommand(PublisherService publisherService, ProjectMetadataManager projectMetadataManager,
+            GitCommandService commandService) {
+        super(publisherService, projectMetadataManager, commandService);
     }
 
     /** The Constant logger. */
@@ -58,18 +59,19 @@ public class UpdateDependenciesCommand extends CloneCommand {
             throws GitConnectorException {
         for (Project selectedProject : projects) {
             String user = UserFacade.getName();
+            String projectName = selectedProject.getName();
             try {
                 Set<String> clonedProjects = new HashSet<String>();
-                cloneDependencies(user, model.getUsername(), model.getPassword(), workspace, clonedProjects, selectedProject.getName());
+                cloneDependencies(user, model.getUsername(), model.getPassword(), workspace, clonedProjects, projectName);
+                cloneNPMDependencies(user, workspace, projectName);
                 if (model.isPublish()) {
                     publishProjects(workspace, clonedProjects);
                 }
                 if (logger.isInfoEnabled()) {
-                    logger.info(String.format("Project's [%s] dependencies has been updated successfully.", selectedProject.getName()));
+                    logger.info(String.format("Project's [%s] dependencies has been updated successfully.", projectName));
                 }
             } catch (IOException | GitConnectorException e) {
-                String errorMessage =
-                        String.format("Error occured while updating dependencies of the project [%s]", selectedProject.getName());
+                String errorMessage = String.format("Error occured while updating dependencies of the project [%s]", projectName);
                 if (logger.isErrorEnabled()) {
                     logger.error(errorMessage, e);
                 }

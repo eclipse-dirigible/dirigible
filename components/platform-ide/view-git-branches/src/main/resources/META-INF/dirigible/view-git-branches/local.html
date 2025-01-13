@@ -1,0 +1,98 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="localBranches" ng-controller="LocalBranchesViewController">
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+    <title config-title></title>
+    <script type="text/javascript" src="configs/local-view.js"></script>
+    <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+    <script type="text/javascript" src="/services/web/service-git/git.js"></script>
+    <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+    <script type="text/javascript" src="js/local.js"></script>
+    <style>
+      .branch-info--multiline {
+        white-space: normal;
+      }
+
+      .branch-info--multiline .fd-text {
+        padding-top: 0.25rem;
+      }
+
+    </style>
+  </head>
+
+  <body class="bk-vbox">
+    <bk-toolbar ng-hide="loadingBranches" compact="true">
+      <bk-toolbar-spacer></bk-toolbar-spacer>
+      <bk-button state="transparent" glyph="sap-icon--add" title="Create branch" aria-label="Create branch" ng-disabled="!branches.length" ng-click="createBranch()"></bk-button>
+      <bk-button state="transparent" glyph="sap-icon--delete" title="Delete branch" aria-label="Delete branch" ng-disabled="!branches.length || activeBranch.name === selectedBranch.name || selectedBranch.index === -1"
+        ng-click="deleteBranch()"></bk-button>
+      <bk-toolbar-separator></bk-toolbar-separator>
+      <bk-button state="transparent" toggled="searchVisible" glyph="sap-icon--search" title="Toggle search" aria-label="Toggle search" ng-disabled="!branches.length" ng-click="toggleSearch()"></bk-button>
+      <bk-toolbar-separator></bk-toolbar-separator>
+      <bk-popover close-innerclick="false">
+        <bk-popover-control>
+          <bk-button bk-list-button state="transparent" glyph="sap-icon--information" aria-label="branch information" ng-disabled="selectedBranch.index === -1"></bk-button>
+        </bk-popover-control>
+        <bk-popover-body align="bottom-right" style="min-width:12rem;width:60vw;max-width:30rem;">
+          <div class="bk-vbox bk-box--gap bk-padding--tiny branch-info--multiline">
+            <div>
+              <bk-form-label colon="true">Short ID</bk-form-label>
+              <p class="fd-text fd-text--hyphenation">{{selectedBranch.commitShortId}}</p>
+            </div>
+            <div>
+              <bk-form-label colon="true">Author</bk-form-label>
+              <p class="fd-text fd-text--hyphenation">{{selectedBranch.commitAuthor}}</p>
+            </div>
+            <div>
+              <bk-form-label colon="true">Date</bk-form-label>
+              <p class="fd-text fd-text--hyphenation">{{selectedBranch.commitDate}}</p>
+            </div>
+            <div>
+              <bk-form-label colon="true">Message</bk-form-label>
+              <p class="fd-text fd-text--hyphenation">{{selectedBranch.commitMessage}}</p>
+            </div>
+          </div>
+        </bk-popover-body>
+      </bk-popover>
+    </bk-toolbar>
+    <bk-toolbar size="cozy" ng-if="searchVisible && !loadingBranches">
+      <bk-input type="search" placeholder="Search" ng-keyup="search($event)" ng-model="searchField.text" bk-focus="true"></bk-input>
+    </bk-toolbar>
+    <bk-scrollbar class="bk-full-height" ng-hide="branches.length || loadingBranches">
+      <bk-message-page glyph="sap-icon--hint">
+        <bk-message-page-title>No branches</bk-message-page-title>
+        <bk-message-page-subtitle>Select a git project to see its branches</bk-message-page-subtitle>
+      </bk-message-page>
+    </bk-scrollbar>
+    <bk-busy-indicator-extended class="bk-fill-parent" size="l" ng-show="loadingBranches">Loading...</bk-busy-indicator-extended>
+    <bk-scrollbar class="bk-full-height" ng-show="branches.length && !loadingBranches">
+      <bk-list list-type="selection" compact="true">
+        <bk-list-item ng-repeat="branch in branches track by branch.name" selected="selectedBranch.index === $index" ng-click="selected($index, branch)" ng-hide="branch.hidden">
+          <bk-list-form-item>
+            <bk-radio id="b{{$index}}" name="branchRadioItem" ng-model="activeBranch.name" ng-value="branch.name" ng-change="checkout($index)"></bk-radio>
+            <bk-radio-label for="b{{$index}}"></bk-radio-label>
+          </bk-list-form-item>
+          <bk-list-title>{{branch.name}}</bk-list-title>
+        </bk-list-item>
+      </bk-list>
+    </bk-scrollbar>
+    <theme></theme>
+  </body>
+
+</html>

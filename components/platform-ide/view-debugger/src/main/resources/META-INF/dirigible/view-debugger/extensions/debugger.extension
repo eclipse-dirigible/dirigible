@@ -1,0 +1,5 @@
+{
+    "module": "view-debugger/configs/debugger-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Debugger View"
+}

@@ -1,0 +1,5 @@
+{
+    "module": "view-listeners/configs/listeners-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Listeners View"
+}

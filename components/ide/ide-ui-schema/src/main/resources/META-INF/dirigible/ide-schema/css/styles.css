@@ -1,12 +1,25 @@
+/**
+ * Copyright (c) 2010-2024 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v2.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ */
 .mx-sidebar-icon {
   font-size: 1.25rem;
   padding: 0.438rem 0.875rem;
   color: var(--sapButton_Lite_TextColor);
 }
+
 .mx-sidebar-icon:hover {
   cursor: pointer;
   background-color: var(--sapButton_Lite_Hover_Background #ebf5fe);
 }
+
 .outlineContainer {
   background: var(--sapBackgroundColor, #f7f7f7);
   box-sizing: border-box;
@@ -15,6 +28,11 @@
   border-top: none;
   border-right: none;
 }
+
+.editorContainer {
+  height: calc(100% - var(--fdToolbar_Height, 2.75rem));
+}
+
 div.mxPopupMenu {
   background-color: var(--sapList_Background, #fff) !important;
   font-size: var(--sapFontSize, 0.875rem);
@@ -36,17 +54,21 @@ div.mxPopupMenu {
   border-radius: var(--sapElement_BorderCornerRadius, 0.25rem);
   opacity: 1;
 }
+
 table.mxPopupMenu {
   margin-top: 3px;
   margin-bottom: 3px;
 }
+
 tr.mxPopupMenuItem {
   color: var(--sapTextColor, #32363a) !important;
 }
+
 tr.mxPopupMenuItemHover {
   color: var(--sapTextColor, #32363a) !important;
   background-color: var(--sapList_Hover_Background, #f5f5f5);
 }
+
 td.mxPopupMenuItem {
   padding: 0.625rem 0.625rem 0.625rem 0px;
   white-space: nowrap;
@@ -54,11 +76,13 @@ td.mxPopupMenuItem {
   font-weight: 400;
   font-size: var(--sapFontSize, 0.875rem);
 }
+
 td.mxPopupMenuIcon {
   padding: 0.625rem !important;
   color: var(--sapTextColor, #32363a);
   background: transparent;
 }
+
 .dsm-table-icon {
   color: var(--sapTextColor, #32363a);
   margin-right: 0.125rem;
@@ -68,9 +92,22 @@ td.mxPopupMenuIcon {
   width: 1rem;
   height: 1rem;
 }
+
 .dsm-table-spacer {
   display: inline-block;
   width: 1rem;
   height: 1px;
   margin-right: 0.125rem;
+}
+
+@media only screen and (min-width: 853px) {
+  .dsmSmallScreen {
+    display: none;
+  }
+}
+
+@media only screen and (max-width: 852px) {
+  .dsmBigScreen {
+    display: none;
+  }
 }

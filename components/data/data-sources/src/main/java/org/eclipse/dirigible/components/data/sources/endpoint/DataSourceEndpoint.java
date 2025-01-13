@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.sources.endpoint;
 
@@ -15,7 +14,7 @@ import java.net.URISyntaxException;
 import java.util.List;
 import java.util.StringTokenizer;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
@@ -160,8 +159,9 @@ public class DataSourceEndpoint extends BaseEndpoint {
     @PutMapping("{id}")
     public ResponseEntity<URI> updateDataSource(@PathVariable("id") Long id, @Valid @RequestBody DataSourceParameter datasourceParameter)
             throws URISyntaxException {
-        DataSource datasource = new DataSource("_", datasourceParameter.getName(), "", datasourceParameter.getDriver(),
-                datasourceParameter.getUrl(), datasourceParameter.getUsername(), datasourceParameter.getPassword());
+        DataSource datasource =
+                new DataSource("API_" + datasourceParameter.getName(), datasourceParameter.getName(), "", datasourceParameter.getDriver(),
+                        datasourceParameter.getUrl(), datasourceParameter.getUsername(), datasourceParameter.getPassword());
         datasource.setId(id);
         datasource.updateKey();
         datasource = datasourceService.save(datasource);

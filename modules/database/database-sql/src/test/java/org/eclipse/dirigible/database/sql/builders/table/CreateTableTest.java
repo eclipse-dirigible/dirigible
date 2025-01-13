@@ -1,26 +1,24 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.builders.table;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-
-import java.util.HashSet;
-import java.util.List;
-
-import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.database.sql.DataType;
 import org.eclipse.dirigible.database.sql.Modifiers;
 import org.eclipse.dirigible.database.sql.SqlFactory;
 import org.junit.Test;
+
+import java.util.HashSet;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 /**
  * The Class CreateTableTest.
@@ -42,7 +40,7 @@ public class CreateTableTest {
 
         assertNotNull(sql);
         assertEquals(
-                "CREATE TABLE CUSTOMERS ( ID INTEGER NOT NULL PRIMARY KEY , FIRST_NAME VARCHAR (20) NOT NULL UNIQUE , LAST_NAME VARCHAR (30) )",
+                "CREATE TABLE \"CUSTOMERS\" ( \"ID\" INTEGER NOT NULL PRIMARY KEY , \"FIRST_NAME\" VARCHAR (20) NOT NULL UNIQUE , \"LAST_NAME\" VARCHAR (30) )",
                 sql);
     }
 
@@ -51,24 +49,18 @@ public class CreateTableTest {
      */
     @Test
     public void createTableCaseSensitiveGeneric() {
-        Configuration.set("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "true");
-        try {
-            String sql = SqlFactory.getDefault()
-                                   .create()
-                                   .table("CUSTOMERS")
-                                   .column("ID", DataType.INTEGER, Modifiers.PRIMARY_KEY, Modifiers.NOT_NULL, Modifiers.NON_UNIQUE)
-                                   .column("FIRST_NAME", DataType.VARCHAR, Modifiers.REGULAR, Modifiers.NOT_NULL, Modifiers.UNIQUE, "(20)")
-                                   .column("LAST_NAME", DataType.VARCHAR, Modifiers.REGULAR, Modifiers.NULLABLE, Modifiers.NON_UNIQUE,
-                                           "(30)")
-                                   .build();
+        String sql = SqlFactory.getDefault()
+                               .create()
+                               .table("CUSTOMERS")
+                               .column("ID", DataType.INTEGER, Modifiers.PRIMARY_KEY, Modifiers.NOT_NULL, Modifiers.NON_UNIQUE)
+                               .column("FIRST_NAME", DataType.VARCHAR, Modifiers.REGULAR, Modifiers.NOT_NULL, Modifiers.UNIQUE, "(20)")
+                               .column("LAST_NAME", DataType.VARCHAR, Modifiers.REGULAR, Modifiers.NULLABLE, Modifiers.NON_UNIQUE, "(30)")
+                               .build();
 
-            assertNotNull(sql);
-            assertEquals(
-                    "CREATE TABLE \"CUSTOMERS\" ( \"ID\" INTEGER NOT NULL PRIMARY KEY , \"FIRST_NAME\" VARCHAR (20) NOT NULL UNIQUE , \"LAST_NAME\" VARCHAR (30) )",
-                    sql);
-        } finally {
-            Configuration.set("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "false");
-        }
+        assertNotNull(sql);
+        assertEquals(
+                "CREATE TABLE \"CUSTOMERS\" ( \"ID\" INTEGER NOT NULL PRIMARY KEY , \"FIRST_NAME\" VARCHAR (20) NOT NULL UNIQUE , \"LAST_NAME\" VARCHAR (30) )",
+                sql);
     }
 
     /**
@@ -85,7 +77,8 @@ public class CreateTableTest {
                                .build();
 
         assertNotNull(sql);
-        assertEquals("CREATE TABLE CUSTOMERS ( ID INTEGER NOT NULL PRIMARY KEY , FIRST_NAME VARCHAR (20) UNIQUE , LAST_NAME VARCHAR (30) )",
+        assertEquals(
+                "CREATE TABLE \"CUSTOMERS\" ( \"ID\" INTEGER NOT NULL PRIMARY KEY , \"FIRST_NAME\" VARCHAR (20) UNIQUE , \"LAST_NAME\" VARCHAR (30) )",
                 sql);
     }
 
@@ -104,7 +97,7 @@ public class CreateTableTest {
 
         assertNotNull(sql);
         assertEquals(
-                "CREATE TABLE CUSTOMERS ( FIRST_NAME VARCHAR (20) , LAST_NAME VARCHAR (30) , CONSTRAINT PRIMARY_KEY PRIMARY KEY ( FIRST_NAME , LAST_NAME ))",
+                "CREATE TABLE \"CUSTOMERS\" ( \"FIRST_NAME\" VARCHAR (20) , \"LAST_NAME\" VARCHAR (30) , CONSTRAINT \"PRIMARY_KEY\" PRIMARY KEY ( \"FIRST_NAME\" , \"LAST_NAME\" ))",
                 sql);
     }
 
@@ -122,7 +115,8 @@ public class CreateTableTest {
                                .build();
 
         assertNotNull(sql);
-        assertEquals("CREATE TABLE CUSTOMERS ( FIRST_NAME VARCHAR (20) , LAST_NAME VARCHAR (30) , PRIMARY KEY ( FIRST_NAME , LAST_NAME ))",
+        assertEquals(
+                "CREATE TABLE \"CUSTOMERS\" ( \"FIRST_NAME\" VARCHAR (20) , \"LAST_NAME\" VARCHAR (30) , PRIMARY KEY ( \"FIRST_NAME\" , \"LAST_NAME\" ))",
                 sql);
     }
 
@@ -142,7 +136,7 @@ public class CreateTableTest {
 
         assertNotNull(sql);
         assertEquals(
-                "CREATE TABLE CUSTOMERS ( FIRST_NAME VARCHAR (20) , LAST_NAME VARCHAR (30) , CONSTRAINT FOREIGN_KEY FOREIGN KEY ( PERSON_ADDRESS_ID ) REFERENCES ADDRESSES( ADDRESS_ID ))",
+                "CREATE TABLE \"CUSTOMERS\" ( \"FIRST_NAME\" VARCHAR (20) , \"LAST_NAME\" VARCHAR (30) , CONSTRAINT \"FOREIGN_KEY\" FOREIGN KEY ( \"PERSON_ADDRESS_ID\" ) REFERENCES \"ADDRESSES\"( \"ADDRESS_ID\" ))",
                 sql);
     }
 
@@ -162,7 +156,7 @@ public class CreateTableTest {
 
         assertNotNull(sql);
         assertEquals(
-                "CREATE TABLE CUSTOMERS ( FIRST_NAME VARCHAR (20) , LAST_NAME VARCHAR (30) , CONSTRAINT FOREIGN_KEY FOREIGN KEY ( PERSON_ADDRESS_ID ) REFERENCES TEST_SCHEMA.ADDRESSES( ADDRESS_ID ))",
+                "CREATE TABLE \"CUSTOMERS\" ( \"FIRST_NAME\" VARCHAR (20) , \"LAST_NAME\" VARCHAR (30) , CONSTRAINT \"FOREIGN_KEY\" FOREIGN KEY ( \"PERSON_ADDRESS_ID\" ) REFERENCES TEST_SCHEMA.\"ADDRESSES\"( \"ADDRESS_ID\" ))",
                 sql);
     }
 
@@ -181,7 +175,7 @@ public class CreateTableTest {
 
         assertNotNull(sql);
         assertEquals(
-                "CREATE TABLE CUSTOMERS ( FIRST_NAME VARCHAR (20) , LAST_NAME VARCHAR (30) ); CREATE UNIQUE INDEX LAST_NAME_UNIQUE ON CUSTOMERS ( LAST_NAME )",
+                "CREATE TABLE \"CUSTOMERS\" ( \"FIRST_NAME\" VARCHAR (20) , \"LAST_NAME\" VARCHAR (30) ); CREATE UNIQUE INDEX \"LAST_NAME_UNIQUE\" ON \"CUSTOMERS\" ( \"LAST_NAME\" )",
                 sql);
     }
 
@@ -200,7 +194,7 @@ public class CreateTableTest {
 
         assertNotNull(sql);
         assertEquals(
-                "CREATE TABLE CUSTOMERS ( FIRST_NAME VARCHAR (20) , LAST_NAME VARCHAR (30) , CONSTRAINT LAST_NAME_CHECK CHECK (LAST_NAME = 'Smith'))",
+                "CREATE TABLE \"CUSTOMERS\" ( \"FIRST_NAME\" VARCHAR (20) , \"LAST_NAME\" VARCHAR (30) , CONSTRAINT \"LAST_NAME_CHECK\" CHECK (LAST_NAME = 'Smith'))",
                 sql);
     }
 
@@ -219,7 +213,8 @@ public class CreateTableTest {
                                .build();
 
         assertNotNull(sql);
-        assertEquals("CREATE TABLE CUSTOMERS ( ID BIGINT IDENTITY , FIRST_NAME VARCHAR (20) , LAST_NAME VARCHAR (30) )", sql);
+        assertEquals("CREATE TABLE \"CUSTOMERS\" ( \"ID\" BIGINT IDENTITY , \"FIRST_NAME\" VARCHAR (20) , \"LAST_NAME\" VARCHAR (30) )",
+                sql);
     }
 
     /**
@@ -235,7 +230,7 @@ public class CreateTableTest {
                                .build();
 
         assertNotNull(sql);
-        assertEquals("CREATE TABLE \"CUSTOMER\" ( FIRST_NAME VARCHAR (20) , LAST_NAME VARCHAR (30) )", sql);
+        assertEquals("CREATE TABLE \"CUSTOMER\" ( \"FIRST_NAME\" VARCHAR (20) , \"LAST_NAME\" VARCHAR (30) )", sql);
     }
 
     /**
@@ -252,7 +247,7 @@ public class CreateTableTest {
 
         assertNotNull(sql);
         assertEquals(
-                "CREATE TABLE \"DBADMIN\".\"hdbtable-itest::incompatible-column-type-change-hana\" ( FIRST_NAME VARCHAR (20) , LAST_NAME VARCHAR (30) )",
+                "CREATE TABLE \"DBADMIN\".\"hdbtable-itest::incompatible-column-type-change-hana\" ( \"FIRST_NAME\" VARCHAR (20) , \"LAST_NAME\" VARCHAR (30) )",
                 sql);
     }
 
@@ -271,7 +266,7 @@ public class CreateTableTest {
 
         assertNotNull(sql);
         assertEquals(
-                "CREATE TABLE CUSTOMERS ( FIRST_NAME VARCHAR (20) , LAST_NAME VARCHAR (30) ); CREATE  INDEX NAMES_INDEX ON CUSTOMERS ( LAST_NAME , FIRST_NAME ) ",
+                "CREATE TABLE \"CUSTOMERS\" ( \"FIRST_NAME\" VARCHAR (20) , \"LAST_NAME\" VARCHAR (30) ); CREATE  INDEX \"NAMES_INDEX\" ON \"CUSTOMERS\" ( \"LAST_NAME\" , \"FIRST_NAME\" ) ",
                 sql);
     }
 

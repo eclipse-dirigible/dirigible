@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.commons.utils.xml2json;
 
@@ -21,7 +20,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -33,7 +31,6 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.TransformerFactoryConfigurationError;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
@@ -42,7 +39,6 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
-
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -119,9 +115,7 @@ public class Xml2Json {
         Gson gson = new GsonBuilder().setPrettyPrinting()
                                      .disableHtmlEscaping()
                                      .create();
-        String json = gson.toJson(rootJson);
-
-        return json;
+        return gson.toJson(rootJson);
     }
 
     /**
@@ -319,8 +313,7 @@ public class Xml2Json {
      */
     private static void reorganizeAddAttributes(Node childNode, Iterator attrs) {
         JsonElement reorganizedJson = REORGANIZED.get(childNode.hashCode() + EMPTY);
-        if (reorganizedJson instanceof JsonObject) {
-            JsonObject objectJson = (JsonObject) reorganizedJson;
+        if (reorganizedJson instanceof JsonObject objectJson) {
             while (attrs.hasNext()) {
                 Entry entry = (Entry) attrs.next();
                 objectJson.addProperty(entry.getKey()
@@ -494,8 +487,7 @@ public class Xml2Json {
                     .append(GT);
             } else if (elementJson instanceof JsonArray) {
                 serializeArrayAsXml(buff, key, elementJson);
-            } else if (elementJson instanceof JsonPrimitive) {
-                JsonPrimitive elementPrimitive = (JsonPrimitive) elementJson;
+            } else if (elementJson instanceof JsonPrimitive elementPrimitive) {
                 if (ATTR_TEXT.equals(key)) {
                     buff.append(elementPrimitive.toString()
                                                 .replace(EQ, EMPTY));

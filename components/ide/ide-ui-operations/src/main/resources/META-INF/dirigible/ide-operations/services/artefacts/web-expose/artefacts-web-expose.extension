@@ -1,5 +1,0 @@
-{
-    "module": "ide-operations/services/artefacts/web-expose/artefacts-web-expose.mjs",
-    "extensionPoint": "ide-operations-artefacts",
-    "description": "Web Expose Artefacts Extension"
-}

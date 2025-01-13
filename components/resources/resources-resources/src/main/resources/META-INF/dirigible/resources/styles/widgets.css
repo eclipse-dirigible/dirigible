@@ -55,6 +55,7 @@ body {
 /* Vertical navigation icon file */
 .dg-nav-item--svg {
   display: inline-block;
+  -webkit-box-sizing: border-box;
   box-sizing: border-box;
 }
 
@@ -97,8 +98,24 @@ body {
 }
 
 /* General helper classes */
+i[rotate="90"]:not(.fd-list__icon) {
+  transform: rotate(90deg);
+}
+
+i.fd-list__icon[rotate="90"]::before {
+  transform: rotate(90deg);
+}
+
 .dg-opacity-7 {
   opacity: .7;
+}
+
+.dg-float-right {
+  float: right;
+}
+
+.dg-float-left {
+  float: left;
 }
 
 .dg-scroll-hidden {
@@ -126,6 +143,9 @@ body {
   -webkit-box-direction: normal;
   -ms-flex-direction: column;
   flex-direction: column;
+  -webkit-box-pack: start;
+  -ms-flex-pack: start;
+  justify-content: flex-start;
 }
 
 .dg-vbox>.fd-container {
@@ -143,6 +163,7 @@ body {
 }
 
 .dg-vbox>.fd-toolbar {
+  -ms-flex-negative: 0;
   flex-shrink: 0;
 }
 
@@ -167,7 +188,26 @@ body {
 }
 
 .dg-hbox>.fd-toolbar {
+  -ms-flex-negative: 0;
   flex-shrink: 0;
+}
+
+.dg-flex-end {
+  -webkit-box-pack: end;
+  -ms-flex-pack: end;
+  justify-content: flex-end;
+}
+
+.dg-flex-between {
+  -webkit-box-pack: end;
+  -ms-flex-pack: end;
+  justify-content: space-between;
+}
+
+.dg-flex-content-center {
+  -webkit-align-content: center;
+  -ms-flex-line-pack: center;
+  align-content: center;
 }
 
 .dg-center {
@@ -205,19 +245,32 @@ body {
   object-fit: contain;
   margin: auto;
   max-width: 100%;
-  height: auto;
 }
 
 .dg-stretch {
   -webkit-box-flex: 1;
   -ms-flex-positive: 1;
   flex-grow: 1;
+  -ms-flex-preferred-size: 0;
   flex-basis: 0;
   min-height: 0;
 }
 
 .dg-flex--nowrap {
+  -ms-flex-wrap: nowrap;
   flex-wrap: nowrap;
+}
+
+.dg-box--stretch-items {
+  justify-content: stretch;
+}
+
+.dg-box--stretch-items>* {
+  width: 100%;
+}
+
+.dg-box--gap {
+  gap: .5rem;
 }
 
 .dg-no-border {
@@ -241,23 +294,23 @@ body {
 }
 
 .dg-list-border {
-  border: solid var(--sapList_BorderWidth, 0.0625rem) var(--sapList_BorderColor, #3a4552);
+  border: solid var(--sapList_BorderWidth, 0.0625rem) var(--sapList_BorderColor, #e5e5e5);
 }
 
 .dg-list-border-top {
-  border-top: solid var(--sapList_BorderWidth, 0.0625rem) var(--sapList_BorderColor, #3a4552);
+  border-top: solid var(--sapList_BorderWidth, 0.0625rem) var(--sapList_BorderColor, #e5e5e5);
 }
 
 .dg-list-border-bottom {
-  border-bottom: solid var(--sapList_BorderWidth, 0.0625rem) var(--sapList_BorderColor, #3a4552);
+  border-bottom: solid var(--sapList_BorderWidth, 0.0625rem) var(--sapList_BorderColor, #e5e5e5);
 }
 
 .dg-list-border-left {
-  border-left: solid var(--sapList_BorderWidth, 0.0625rem) var(--sapList_BorderColor, #3a4552);
+  border-left: solid var(--sapList_BorderWidth, 0.0625rem) var(--sapList_BorderColor, #e5e5e5);
 }
 
 .dg-list-border-right {
-  border-right: solid var(--sapList_BorderWidth, 0.0625rem) var(--sapList_BorderColor, #3a4552);
+  border-right: solid var(--sapList_BorderWidth, 0.0625rem) var(--sapList_BorderColor, #e5e5e5);
 }
 
 .dg-border-bottom {
@@ -376,7 +429,12 @@ body {
 }
 
 .dg-icon-tab-bar {
+  display: -webkit-box;
+  display: -ms-flexbox;
   display: flex;
+  -webkit-box-orient: vertical;
+  -webkit-box-direction: normal;
+  -ms-flex-direction: column;
   flex-direction: column;
   height: 100%;
 }
@@ -384,11 +442,43 @@ body {
 .dg-icon-tab-bar>.dg-icon-tab-bar-panels,
 .dg-icon-tab-bar>.dg-icon-tab-bar-panels>section {
   height: 100%;
+  min-height: 0;
 }
 
 .dg-icon-tab-bar-tab-hidden {
   visibility: hidden !important;
   position: absolute !important;
+}
+
+.dg-icon-tab-hint {
+  opacity: .75;
+  margin-left: 0.5em;
+  white-space: pre;
+  font-size: var(--sapFontSmallSize, .9em);
+  font-style: italic;
+}
+
+/* fd-input additions */
+
+.fd-input[type="color"] {
+  padding: 0;
+}
+
+.fd-input[type="color"]::-moz-color-swatch {
+  border: none;
+}
+
+.fd-input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+  border-radius: 0;
+}
+
+.fd-input[type="color"]::-webkit-color-swatch {
+  border: none;
+}
+
+.dg-form-item--horizontal>.fd-popover {
+  flex: 1;
 }
 
 /* Tool header fixes */
@@ -464,7 +554,7 @@ body {
 
 .fd-form-item>.fd-popover.fd-popover--input-message-group .fd-popover__control.is-expanded>*,
 .fd-popover__control[aria-expanded="true"]>* {
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.1875rem;
 }
 
 /* Dialog padding fixes */

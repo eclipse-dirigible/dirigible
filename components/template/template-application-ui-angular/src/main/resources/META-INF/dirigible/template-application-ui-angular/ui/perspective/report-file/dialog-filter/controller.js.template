@@ -1,0 +1,61 @@
+#set($dollar = '$')
+angular.module('page', ["ideUI", "ideView"])
+	.config(["messageHubProvider", function (messageHubProvider) {
+		messageHubProvider.eventIdPrefix = '${projectName}.Reports.${name}';
+	}])
+	.controller('PageController', ['$scope', 'messageHub', 'ViewParameters', function ($scope, messageHub, ViewParameters) {
+
+		$scope.entity = {};
+		$scope.forms = {
+			details: {},
+		};
+
+		let params = ViewParameters.get();
+		if (Object.keys(params).length) {
+#foreach ($parameter in $parameters)
+#if($parameter.typeTypescript == 'Date')
+			if (params?.entity?.${parameter.name}) {
+				params.entity.${parameter.name} = new Date(params.entity.${parameter.name});
+			}
+#end
+#end
+			$scope.entity = params.entity ?? {};
+			$scope.selectedMainEntityKey = params.selectedMainEntityKey;
+			$scope.selectedMainEntityId = params.selectedMainEntityId;
+		}
+
+		$scope.filter = function () {
+			let entity = $scope.entity;
+			const filter = {
+
+			};
+#foreach($parameter in $parameters)
+			if (entity.${parameter.name}) {
+#if($parameter.typeTypescript == 'Date')
+				filter.${parameter.name} = entity.${parameter.name}?.getTime();
+#else
+				filter.${parameter.name} = entity.${parameter.name};
+#end
+			}
+#end
+			messageHub.postMessage("entitySearch", {
+				entity: entity,
+				filter: filter
+			});
+			$scope.cancel();
+		};
+
+		$scope.resetFilter = function () {
+			$scope.entity = {};
+			$scope.filter();
+		};
+
+		$scope.cancel = function () {
+			messageHub.closeDialogWindow("${name}-Report-filter");
+		};
+
+		$scope.clearErrorMessage = function () {
+			$scope.errorMessage = null;
+		};
+
+	}]);

@@ -1,35 +1,15 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.dialects;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
-
-import org.eclipse.dirigible.database.sql.DataType;
-import org.eclipse.dirigible.database.sql.DatabaseArtifactTypes;
-import org.eclipse.dirigible.database.sql.DatabaseType;
-import org.eclipse.dirigible.database.sql.ISqlDialect;
-import org.eclipse.dirigible.database.sql.ISqlKeywords;
-import org.eclipse.dirigible.database.sql.SqlException;
+import org.eclipse.dirigible.database.sql.*;
 import org.eclipse.dirigible.database.sql.builders.AlterBranchingBuilder;
 import org.eclipse.dirigible.database.sql.builders.CreateBranchingBuilder;
 import org.eclipse.dirigible.database.sql.builders.DropBranchingBuilder;
@@ -40,6 +20,14 @@ import org.eclipse.dirigible.database.sql.builders.records.SelectBuilder;
 import org.eclipse.dirigible.database.sql.builders.records.UpdateBuilder;
 import org.eclipse.dirigible.database.sql.builders.sequence.LastValueIdentityBuilder;
 import org.eclipse.dirigible.database.sql.builders.sequence.NextValueSequenceBuilder;
+
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.sql.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * The Default SQL Dialect.
@@ -58,37 +46,25 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
         implements ISqlDialect<SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, NEXT, LAST> {
 
     /** The Constant FUNCTIONS. */
-    public static final Set<String> FUNCTIONS = Collections.synchronizedSet(new HashSet<String>(Arrays.asList(new String[] {"ascii",
-            "char_length", "character_length", "concat", "concat_ws", "field", "find_in_set", "format", "insert", "instr", "lcase", "left",
-            "length", "locate", "lower", "lpad", "ltrim", "mid", "position", "repeat", "replace", "reverse", "right", "rpad", "rtrim",
-            "space", "strcmp", "substr", "substring", "substring_index", "trim", "ucase", "upper",
-
-            "abs", "acos", "asin", "atan", "atan2", "avg", "ceil", "ceiling", "cos", "cot", "count", "degrees", "div", "exp", "floor",
-            "greatest", "least", "ln", "log", "log10", "log2", "max", "min", "mod", "pi", "pow", "power", "radians", "rand", "round",
-            "sign", "sin", "sqrt", "sum", "tan", "truncate",
-
+    public static final Set<String> FUNCTIONS = Collections.synchronizedSet(new HashSet<String>(Arrays.asList("ascii", "char_length",
+            "character_length", "concat", "concat_ws", "field", "find_in_set", "format", "insert", "instr", "lcase", "left", "length",
+            "locate", "lower", "lpad", "ltrim", "mid", "position", "repeat", "replace", "reverse", "right", "rpad", "rtrim", "space",
+            "strcmp", "substr", "substring", "substring_index", "trim", "ucase", "upper", "abs", "acos", "asin", "atan", "atan2", "avg",
+            "ceil", "ceiling", "cos", "cot", "count", "degrees", "div", "exp", "floor", "greatest", "least", "ln", "log", "log10", "log2",
+            "max", "min", "mod", "pi", "pow", "power", "radians", "rand", "round", "sign", "sin", "sqrt", "sum", "tan", "truncate",
             "adddate", "addtime", "curdate", "current_date", "current_time", "current_timestamp", "curtime", "date", "datediff", "date_add",
             "date_format", "date_sub", "day", "dayname", "dayofmonth", "dayofweek", "dayofyear", "extract", "from_days", "hour", "last_day",
             "localtime", "localtimestamp", "makedate", "maketime", "microsecond", "minute", "month", "monthname", "now", "period_add",
             "period_diff", "quarter", "second", "sec_to_time", "str_to_date", "subdate", "subtime", "sysdate", "time", "time_format",
-            "time_to_sec", "timediff", "timestamp", "to_days", "week", "weekday", "weekofyear", "year", "yearweek",
-
-            "bin", "binary", "case", "cast", "coalesce", "connection_id", "conv", "convert", "current_user", "database", "if", "ifnull",
-            "isnull", "last_insert_id", "nullif", "session_user", "system_user", "user", "version",
-
-            "and", "or", "between", "binary", "case", "div", "in", "is", "not", "null", "like", "rlike", "xor"
-
-    })));
+            "time_to_sec", "timediff", "timestamp", "to_days", "week", "weekday", "weekofyear", "year", "yearweek", "bin", "binary", "case",
+            "cast", "coalesce", "connection_id", "conv", "convert", "current_user", "database", "if", "ifnull", "isnull", "last_insert_id",
+            "nullif", "session_user", "system_user", "user", "version", "and", "or", "between", "binary", "case", "div", "in", "is", "not",
+            "null", "like", "rlike", "xor")));
 
     /**
      * Select.
      *
      * @return the select
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlFactory#select()
      */
     @Override
     public SELECT select() {
@@ -100,11 +76,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      *
      * @return the insert
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlFactory#insert()
-     */
     @Override
     public INSERT insert() {
         return (INSERT) new InsertBuilder(this);
@@ -114,11 +85,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      * Update.
      *
      * @return the update
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlFactory#update()
      */
     @Override
     public UPDATE update() {
@@ -130,11 +96,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      *
      * @return the delete
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlFactory#delete()
-     */
     @Override
     public DELETE delete() {
         return (DELETE) new DeleteBuilder(this);
@@ -144,11 +105,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      * Expression.
      *
      * @return the expression builder
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlFactory#expression()
      */
     @Override
     public ExpressionBuilder expression() {
@@ -160,11 +116,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      *
      * @return the creates the
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlFactory#create()
-     */
     @Override
     public CREATE create() {
         return (CREATE) new CreateBranchingBuilder(this);
@@ -175,11 +126,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      *
      * @return the alter
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlFactory#create()
-     */
     @Override
     public ALTER alter() {
         return (ALTER) new AlterBranchingBuilder(this);
@@ -189,11 +135,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      * Drop.
      *
      * @return the drop
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlFactory#drop()
      */
     @Override
     public DROP drop() {
@@ -206,11 +147,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      * @param sequence the sequence
      * @return the next
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlFactory#nextval(java.lang.String)
-     */
     @Override
     public NEXT nextval(String sequence) {
         return (NEXT) new NextValueSequenceBuilder(this, sequence);
@@ -222,13 +158,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      * @param dataType the data type
      * @return the data type name
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see
-     * org.eclipse.dirigible.database.sql.ISqlDialect#getDataTypeName(org.eclipse.dirigible.database.sql
-     * .DataType)
-     */
     @Override
     public String getDataTypeName(DataType dataType) {
         return dataType.toString();
@@ -238,11 +167,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      * Gets the primary key argument.
      *
      * @return the primary key argument
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlDialect#getPrimaryKeyArgument()
      */
     @Override
     public String getPrimaryKeyArgument() {
@@ -254,11 +178,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      *
      * @return the identity argument
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlDialect#getPrimaryKeyArgument()
-     */
     @Override
     public String getIdentityArgument() {
         return KEYWORD_IDENTITY;
@@ -269,11 +188,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      *
      * @return the not null argument
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlDialect#getNotNullArgument()
-     */
     @Override
     public String getNotNullArgument() {
         return KEYWORD_NOT + SPACE + KEYWORD_NULL;
@@ -283,11 +197,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      * Gets the unique argument.
      *
      * @return the unique argument
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlDialect#getUniqueArgument()
      */
     @Override
     public String getUniqueArgument() {
@@ -301,11 +210,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      * @param table the table
      * @return true, if successful
      * @throws SQLException the SQL exception
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlDialect#exists(java.sql.Connection, java.lang.String)
      */
     @Override
     public boolean existsTable(Connection connection, String table) throws SQLException {
@@ -321,15 +225,9 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      * @return true, if successful
      * @throws SQLException the SQL exception
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlDialect#exists(java.sql.Connection, java.lang.String,
-     * java.lang.int)
-     */
     @Override
     public boolean exists(Connection connection, String table, int type) throws SQLException {
-        return exists(connection, null, table, type);
+        return exists(connection, connection.getSchema(), table, type);
     }
 
     /**
@@ -345,13 +243,13 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
     @Override
     public boolean exists(Connection connection, String schema, String table, int type) throws SQLException {
         boolean exists = false;
-        table = normalizeTableName(table);
+        String normalizeTableName = normalizeTableName(table);
         DatabaseMetaData metadata = connection.getMetaData();
         ResultSet resultSet =
-                metadata.getTables(null, schema, normalizeTableName(table), ISqlKeywords.METADATA_TABLE_TYPES.toArray(new String[] {}));
+                metadata.getTables(null, schema, normalizeTableName, ISqlKeywords.METADATA_TABLE_TYPES.toArray(new String[] {}));
         exists = resultSet != null && resultSet.next();
         if (!exists) {
-            resultSet = metadata.getTables(null, null, normalizeTableName(table.toUpperCase()),
+            resultSet = metadata.getTables(null, schema, normalizeTableName.toUpperCase(),
                     ISqlKeywords.METADATA_TABLE_TYPES.toArray(new String[] {}));
             exists = resultSet != null && resultSet.next();
         }
@@ -405,7 +303,8 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
         String[] tokens = table.split("\\.");
         if (tokens.length == 1) {
             return "\"" + table + "\"";
-        } else if (tokens.length == 2) {
+        }
+        if (tokens.length == 2) {
             return "\"" + tokens[0] + "\".\"" + tokens[1] + "\"";
         }
         return table;
@@ -429,21 +328,13 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
         PreparedStatement statement = connection.prepareStatement(sql);
         statement.setString(1, schema);
         ResultSet resultSet = statement.executeQuery();
-        if (resultSet.next()) {
-            return true;
-        }
-        return false;
+        return resultSet.next();
     }
 
     /**
      * Checks if is schema filter supported.
      *
      * @return true, if is schema filter supported
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlDialect#isSchemaFilterSupported()
      */
     @Override
     public boolean isSchemaFilterSupported() {
@@ -455,11 +346,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      *
      * @return the schema filter script
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlDialect#getSchemaFilterScript()
-     */
     @Override
     public String getSchemaFilterScript() {
         return null;
@@ -469,11 +355,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      * Checks if is catalog for schema.
      *
      * @return true, if is catalog for schema
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlDialect#isCatalogForSchema()
      */
     @Override
     public boolean isCatalogForSchema() {
@@ -485,11 +366,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      *
      * @return the string
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlDialect#functionCurrentDate()
-     */
     @Override
     public String functionCurrentDate() {
         return ISqlKeywords.FUNCTION_CURRENT_DATE;
@@ -500,11 +376,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      *
      * @return the string
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlDialect#functionCurrentTime()
-     */
     @Override
     public String functionCurrentTime() {
         return ISqlKeywords.FUNCTION_CURRENT_TIME;
@@ -514,11 +385,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      * Function current timestamp.
      *
      * @return the string
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlDialect#functionCurrentTimestamp()
      */
     @Override
     public String functionCurrentTimestamp() {
@@ -577,11 +443,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      *
      * @return the functions names
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlDialect#getFunctionsNames()
-     */
     @Override
     public Set<String> getFunctionsNames() {
         return FUNCTIONS;
@@ -602,8 +463,9 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      *
      * @return the escape symbol
      */
-    public String getEscapeSymbol() {
-        return "\"";
+    @Override
+    public char getEscapeSymbol() {
+        return '"';
     }
 
     /**
@@ -614,14 +476,13 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      * @return the int
      * @throws SQLException the SQL exception
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlDialect#count(java.sql.Connection, java.lang.String)
-     */
     @Override
     public int count(Connection connection, String table) throws SQLException {
-        String sql = countQuery(table);
+        return count(connection, null, table);
+    }
+
+    public int count(Connection connection, String schema, String table) throws SQLException {
+        String sql = countQuery(schema, table);
         PreparedStatement statement = connection.prepareStatement(sql);
         ResultSet resultSet = statement.executeQuery();
         if (resultSet.next()) {
@@ -642,8 +503,7 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
     public ResultSet all(Connection connection, String table) throws SQLException {
         String sql = allQuery(table);
         PreparedStatement statement = connection.prepareStatement(sql);
-        ResultSet resultSet = statement.executeQuery();
-        return resultSet;
+        return statement.executeQuery();
     }
 
     /**
@@ -654,11 +514,15 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      */
     @Override
     public String countQuery(String table) {
-        table = normalizeTableName(table);
-        String sql = new SelectBuilder(this).column("COUNT(*)")
-                                            .from(quoteTableName(table))
-                                            .build();
-        return sql;
+        return countQuery(null, table);
+    }
+
+    public String countQuery(String schema, String table) {
+        String normalizeTableName = normalizeTableName(table);
+        return new SelectBuilder(this).column("COUNT(*)")
+                                      .from(quoteTableName(normalizeTableName))
+                                      .schema(schema)
+                                      .build();
     }
 
     /**
@@ -669,10 +533,9 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      */
     @Override
     public String allQuery(String table) {
-        String sql = new SelectBuilder(this).column("*")
-                                            .from(quoteTableName(table))
-                                            .build();
-        return sql;
+        return new SelectBuilder(this).column("*")
+                                      .from(quoteTableName(table))
+                                      .build();
     }
 
     /**
@@ -692,7 +555,7 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      * @param connection the connection
      * @param table the table
      * @param output the output
-     * @throws IOException Signals that an I/O exception has occurred.
+     * @throws Exception the exception
      */
     @Override
     public void exportData(Connection connection, String table, OutputStream output) throws Exception {
@@ -705,13 +568,11 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      * @param connection the connection
      * @param table the table
      * @param input the input
-     * @throws IOException Signals that an I/O exception has occurred.
+     * @throws Exception the exception
      */
     @Override
     public void importData(Connection connection, String table, InputStream input) throws Exception {
         throw new SQLFeatureNotSupportedException();
     }
-
-
 
 }

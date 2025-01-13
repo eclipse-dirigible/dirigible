@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.api.templates;
 
@@ -135,9 +134,6 @@ public class TemplateEnginesFacade implements InitializingBean {
      */
     public static class TemplateEngineFacade {
 
-        /** The Constant LOCATION_API_FACADE. */
-        private static final String LOCATION_API_FACADE = "api-facade";
-
         /** The engine. */
         private TemplateEngine engine;
 
@@ -159,9 +155,9 @@ public class TemplateEnginesFacade implements InitializingBean {
          * @throws IOException Signals that an I/O exception has occurred.
          */
         @SuppressWarnings("unchecked")
-        public String generate(String template, String parametersJson) throws IOException {
+        public String generate(String location, String template, String parametersJson) throws IOException {
             Map<String, Object> parameters = GsonHelper.fromJson(parametersJson, Map.class);
-            byte[] result = engine.generate(parameters, LOCATION_API_FACADE, template.getBytes());
+            byte[] result = engine.generate(parameters, location, template.getBytes());
             return new String(result);
         }
 
@@ -176,9 +172,9 @@ public class TemplateEnginesFacade implements InitializingBean {
          * @throws IOException Signals that an I/O exception has occurred.
          */
         @SuppressWarnings("unchecked")
-        public String generate(String template, String parametersJson, String sm, String em) throws IOException {
+        public String generate(String location, String template, String parametersJson, String sm, String em) throws IOException {
             Map<String, Object> parameters = GsonHelper.fromJson(parametersJson, Map.class);
-            byte[] result = engine.generate(parameters, LOCATION_API_FACADE, template.getBytes(), sm, em);
+            byte[] result = engine.generate(parameters, location, template.getBytes(), sm, em);
             return new String(result);
         }
     }

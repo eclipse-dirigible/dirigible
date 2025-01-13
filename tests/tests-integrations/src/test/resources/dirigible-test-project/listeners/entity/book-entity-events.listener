@@ -1,0 +1,7 @@
+{
+    "location": "/dirigible-test-project/listeners/entity/book-entity-events.listener",
+    "name": "dirigible-test-project-Books-Book",
+    "kind": "T",
+    "handler": "dirigible-test-project/listeners/entity/book-entity-events-handler.ts",
+    "description": "Book entity events listener"
+}

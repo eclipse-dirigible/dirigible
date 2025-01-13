@@ -1,0 +1,7 @@
+{
+    "expression": "0/5 * * * * ?",
+    "group": "defined",
+    "handler": "dirigible-test-project/jobs/test-job-handler.ts",
+    "description": "Testing Job",
+    "parameters": []
+}

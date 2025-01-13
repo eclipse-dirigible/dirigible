@@ -3,17 +3,17 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-const generateUtils = dirigibleRequire("ide-generate-service/template/generateUtils");
-const parameterUtils = dirigibleRequire("ide-generate-service/template/parameterUtils");
+import * as generateUtils from "ide-generate-service/template/generateUtils";
+import * as parameterUtils from "ide-generate-service/template/parameterUtils";
 
-exports.generate = function (model, parameters) {
+export function generate(model, parameters) {
     model = JSON.parse(model).model;
-    let templateSources = exports.getTemplate(parameters).sources;
+    let templateSources = getTemplate(parameters).sources;
     parameterUtils.process(model, parameters)
     return generateUtils.generateFiles(model, parameters, templateSources);
 };
 
-exports.getTemplate = function (parameters) {
+export function getTemplate(parameters) {
     return {
         name: "Application - Schema",
         description: "Application with a Database Schema",
@@ -21,13 +21,19 @@ exports.getTemplate = function (parameters) {
         sources: [{
             location: "/template-application-schema/data/application.schema.template",
             action: "generate",
-            rename: "gen/schema/{{projectName}}.schema",
+            rename: "gen/{{genFolderName}}/schema/{{projectName}}.schema",
             engine: "velocity"
         }],
         parameters: [{
             name: "tablePrefix",
             label: "Table Prefix",
-            placeholder: "Table prefix"
+            placeholder: "Table prefix",
+            required: false
+        }, {
+            name: "dataSource",
+            label: "Data Source",
+            placeholder: "Data Source (DefaultDB)",
+            required: false
         }]
     };
 };

@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.h2;
 
@@ -143,13 +142,7 @@ public class H2Database {
                 String databaseUsername = Configuration.get("DIRIGIBLE_DATABASE_H2_USERNAME");
                 String databasePassword = Configuration.get("DIRIGIBLE_DATABASE_H2_PASSWORD");
 
-                String databaseTimeout = Configuration.get("DIRIGIBLE_DATABASE_DEFAULT_WAIT_TIMEOUT", "180000");
-                int timeout = 180000;
-                try {
-                    timeout = Integer.parseInt(databaseTimeout);
-                } catch (NumberFormatException e) {
-                    timeout = 180000;
-                }
+                int timeout = Configuration.getAsInt("DIRIGIBLE_DATABASE_DEFAULT_WAIT_TIMEOUT", 180000);
 
                 if ((databaseUrl != null) && (databaseUsername != null) && (databasePassword != null)) {
                     HikariConfig config = new HikariConfig();
@@ -157,7 +150,7 @@ public class H2Database {
                     config.setDataSourceClassName("org.h2.jdbcx.JdbcDataSource");
                     config.setPoolName("H2DBHikariPool");
                     config.setConnectionTestQuery("VALUES 1");
-                    config.addDataSourceProperty("URL", databaseUrl + "/" + name);
+                    config.addDataSourceProperty("URL", databaseUrl + "/" + name + ";LOCK_TIMEOUT=10000");
                     config.addDataSourceProperty("user", databaseUsername);
                     config.addDataSourceProperty("password", databasePassword);
                     config.setMinimumIdle(5);

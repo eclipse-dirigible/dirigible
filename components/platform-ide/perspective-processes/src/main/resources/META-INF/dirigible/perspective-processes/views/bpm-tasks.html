@@ -1,0 +1,103 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="tasks" ng-controller="TasksController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/perspective-processes/configs/bpm-tasks-view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="/services/web/perspective-processes/views/js/bpm-tasks.js"></script>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar compact="true">
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="reload()"></bk-button>
+            <bk-button state="emphasized" ng-disabled="selectedClaimTask === null" label="Claim" title="Claim" aria-label="Claim" ng-click="claimTask()"></bk-button>
+            <bk-button state="emphasized" ng-disabled="selectedUnclaimTask === null" label="Unclaim" title="unclaim" aria-label="Unclaim" ng-click="unclaimTask()"></bk-button>
+        </bk-toolbar>
+        <label style="margin: 5px 10px 5px"><b>Candidate tasks</b></label>
+        <bk-scrollbar class="bk-full-height">
+            <table bk-table outer-borders="bottom" display-mode="compact">
+                <thead bk-table-header sticky="true">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>Task Id</th>
+                        <th bk-table-header-cell>Task Name</th>
+                        <th bk-table-header-cell>Assignee</th>
+                        <th bk-table-header-cell>Candidate Users</th>
+                        <th bk-table-header-cell>Candidate Groups</th>
+                        <th bk-table-header-cell>Process Instance Id</th>
+                        <th bk-table-header-cell>Create Time</th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat="next in tasksList track by next.id" hoverable="true" activable="true" selected="next.selected" ng-click="selectionClaimChanged(next)">
+                        <td bk-table-cell>{{next.id}}</td>
+                        <td bk-table-cell>{{next.name}}</td>
+                        <td bk-table-cell>{{next.assignee}}</td>
+                        <td bk-table-cell>{{next.candidateUsers}}</td>
+                        <td bk-table-cell>{{next.candidateGroups}}</td>
+                        <td bk-table-cell>{{next.processInstanceId}}</td>
+                        <td bk-table-cell>{{next.createTime}}</td>
+                        </td>
+                    </tr>
+                    <tr ng-if="tasksList.length === 0" bk-table-row>
+                        <td bk-table-cell no-data="true">No tasks found.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </bk-scrollbar>
+        <label style="margin: 5px 10px 5px"><b>Assigned tasks</b></label>
+        <bk-scrollbar class="bk-full-height">
+            <table bk-table outer-borders="bottom" display-mode="compact">
+                <thead bk-table-header sticky="true">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>Task Id</th>
+                        <th bk-table-header-cell>Task Name</th>
+                        <th bk-table-header-cell>Assignee</th>
+                        <th bk-table-header-cell>Candidate Users</th>
+                        <th bk-table-header-cell>Candidate Groups</th>
+                        <th bk-table-header-cell>Process Instance Id</th>
+                        <th bk-table-header-cell>Create Time</th>
+                        <th bk-table-header-cell>Form Key</th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat="next in tasksListAssignee track by next.id" hoverable="true" activable="true" ng-click="selectionUnclaimChanged(next)">
+                        <td bk-table-cell>{{next.id}}</td>
+                        <td bk-table-cell>{{next.name}}</td>
+                        <td bk-table-cell>{{next.assignee}}</td>
+                        <td bk-table-cell>{{next.candidateUsers}}</td>
+                        <td bk-table-cell>{{next.candidateGroups}}</td>
+                        <td bk-table-cell>{{next.processInstanceId}}</td>
+                        <td bk-table-cell>{{next.createTime}}</td>
+                        <td bk-table-cell>
+                            <bk-button state="emphasized" dg-label="Open Form" title="Open Form" aria-label="Open Form" ng-click="openForm($window.location.origin + next.formKey + '?taskId=' + next.id)"></bk-button>
+                        </td>
+                    </tr>
+                    <tr ng-if="tasksListAssignee.length === 0" bk-table-row>
+                        <td bk-table-cell no-data="true">No tasks found.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </bk-scrollbar>
+        <theme></theme>
+    </body>
+
+</html>

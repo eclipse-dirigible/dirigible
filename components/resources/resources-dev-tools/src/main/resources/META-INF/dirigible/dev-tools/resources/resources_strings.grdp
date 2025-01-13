@@ -394,7 +394,7 @@ as used by Chrome
     Clearing...
   </message>
   <message name="IDS_DEVTOOLS_cd461eb091b5b58a6fe5a1b5edba4c5f" desc="A context menu item in the Application Panel Sidebar of the Application panel">
-    Refresh Caches
+    Refresh Cache
   </message>
   <message name="IDS_DEVTOOLS_ce0540adc848ff5957d4d857984592d1" desc="Text in Clear Storage View of the Application panel">
     Cache storage

@@ -1,19 +1,18 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.commons.api.helpers;
 
+import org.apache.commons.io.FilenameUtils;
+
 import java.util.HashMap;
 import java.util.Map;
-
-import org.apache.commons.io.FilenameUtils;
 
 /**
  * The ContentTypeHelper class is an utility used to map file extensions to mime types.
@@ -433,6 +432,7 @@ public class ContentTypeHelper {
     public static final String APPLICATION_BPMN = "application/bpmn+xml";
 
     public static final String APPLICATION_CAMEL = "application/camel";
+    public static final String APPLICATION_DESIGNER = "application/dirigible-designer";
 
     /** The Constant APPLICATION_SCHEMA. */
     public static final String APPLICATION_SCHEMA = "application/database-schema-model+xml";
@@ -484,6 +484,9 @@ public class ContentTypeHelper {
 
     /** The Constant APPLICATION_JSON_XSACCESS. */
     public static final String APPLICATION_JSON_XSACCESS = "application/json+xsaccess";
+
+    /** The Constant APPLICATION_JSON_VIEW. */
+    public static final String APPLICATION_JSON_REPORT = "application/json+report";
 
     /** The Constant APPLICATION_JSON_HDI. */
     public static final String APPLICATION_JSON_HDI = "application/json+hdi";
@@ -702,6 +705,7 @@ public class ContentTypeHelper {
         TEXT_CONTENT_TYPES.put("command", APPLICATION_JSON_COMMAND); //$NON-NLS-1$
         TEXT_CONTENT_TYPES.put("form", APPLICATION_JSON_FORM); //$NON-NLS-1$
         TEXT_CONTENT_TYPES.put("xsaccess", APPLICATION_JSON_XSACCESS); //$NON-NLS-1$
+        TEXT_CONTENT_TYPES.put("report", APPLICATION_JSON_REPORT); //$NON-NLS-1$
         // TEXT_CONTENT_TYPES.put("entity", APPLICATION_JSON); //$NON-NLS-1$
         // TEXT_CONTENT_TYPES.put("ws", APPLICATION_JSON); //$NON-NLS-1$
         // TEXT_CONTENT_TYPES.put("routes", TEXT_XML); //$NON-NLS-1$
@@ -747,6 +751,7 @@ public class ContentTypeHelper {
         TEXT_CONTENT_TYPES.put("twiki", TEXT_HTML); //$NON-NLS-1$
         TEXT_CONTENT_TYPES.put("bpmn", APPLICATION_BPMN); //$NON-NLS-1$
         TEXT_CONTENT_TYPES.put("camel", APPLICATION_CAMEL); //$NON-NLS-1$
+        TEXT_CONTENT_TYPES.put("designer", APPLICATION_DESIGNER); //$NON-NLS-1$
         TEXT_CONTENT_TYPES.put("dsm", APPLICATION_SCHEMA); //$NON-NLS-1$
         TEXT_CONTENT_TYPES.put("edm", APPLICATION_ENTITY_DATA_MODEL); //$NON-NLS-1$
         TEXT_CONTENT_TYPES.put("hdi", APPLICATION_JSON_HDI); //$NON-NLS-1$

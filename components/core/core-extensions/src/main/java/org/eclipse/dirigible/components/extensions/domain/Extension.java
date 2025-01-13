@@ -1,21 +1,20 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.extensions.domain;
 
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.Table;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
 import org.eclipse.dirigible.components.base.artefact.Artefact;
 
@@ -47,6 +46,11 @@ public class Extension extends Artefact {
     @Expose
     private String module;
 
+    /** The role. */
+    @Column(name = "EXTENSION_ROLE", columnDefinition = "VARCHAR", nullable = true, length = 255)
+    @Expose
+    private String role;
+
 
     /**
      * Instantiates a new extension.
@@ -56,11 +60,13 @@ public class Extension extends Artefact {
      * @param description the description
      * @param extensionPoint the extension point
      * @param module the module
+     * @param role the role
      */
-    public Extension(String location, String name, String description, String extensionPoint, String module) {
+    public Extension(String location, String name, String description, String extensionPoint, String module, String role) {
         super(location, name, ARTEFACT_TYPE, description, null);
         this.extensionPoint = extensionPoint;
         this.module = module;
+        this.role = role;
     }
 
     /**
@@ -87,8 +93,6 @@ public class Extension extends Artefact {
     public void setId(Long id) {
         this.id = id;
     }
-
-
 
     /**
      * Gets the extension point.
@@ -127,15 +131,34 @@ public class Extension extends Artefact {
     }
 
     /**
+     * Gets the role.
+     *
+     * @return the role
+     */
+    public String getRole() {
+        return role;
+    }
+
+    /**
+     * Sets the role.
+     *
+     * @param role the role to set
+     */
+    public void setRole(String role) {
+        this.role = role;
+    }
+
+    /**
      * To string.
      *
      * @return the string
      */
     @Override
     public String toString() {
-        return "Extension [id=" + id + ", extensionPoint=" + extensionPoint + ", module=" + module + ", location=" + location + ", name="
-                + name + ", description=" + description + ", type=" + type + ", key=" + key + ", dependencies=" + dependencies
-                + ", createdBy=" + createdBy + ", createdAt=" + createdAt + ", updatedBy=" + updatedBy + ", updatedAt=" + updatedAt + "]";
+        return "Extension [id=" + id + ", extensionPoint=" + extensionPoint + ", module=" + module + ", role=" + role + ", location="
+                + location + ", name=" + name + ", description=" + description + ", type=" + type + ", key=" + key + ", dependencies="
+                + dependencies + ", createdBy=" + createdBy + ", createdAt=" + createdAt + ", updatedBy=" + updatedBy + ", updatedAt="
+                + updatedAt + "]";
     }
 
 }

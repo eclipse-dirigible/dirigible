@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.terminal.endpoint;
 
@@ -98,7 +97,7 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
                     if (!ttydShell.exists()) {
                         // ttyd binary should be placed in advance to $CATALINA_HOME/bin
 
-                        createShellScript(ttydShell, "./ttyd -p 9000 bash");
+                        createShellScript(ttydShell, "./ttyd -p 9000 -W bash");
                         if (ttydShell.setExecutable(true)) {
                             File ttydExecutable = new File("./ttyd");
                             createExecutable(TerminalWebsocketConfig.class.getResourceAsStream("/ttyd_linux.x86_64_1.6.0"), ttydExecutable);
@@ -122,19 +121,19 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
                         // new Thread(processRunnable).start();
                         // processRunnable.getProcess().waitFor();
 
-                        createShellScript(ttydShell, "ttyd -p 9000 bash");
+                        createShellScript(ttydShell, "ttyd -p 9000 -W bash");
                         ttydShell.setExecutable(true);
                     }
                 } else if (os.indexOf("win") >= 0) {
-                    throw new IllegalStateException("Windows is not yet supported");
+                    logger.error("Windows is not yet supported");
                 } else {
-                    throw new IllegalStateException("Unknown OS: " + os);
+                    logger.error("Unknown OS: " + os);
                 }
 
                 ProcessRunnable processRunnable = new ProcessRunnable(command);
                 new Thread(processRunnable).start();
 
-            } catch (IOException e) {
+            } catch (Exception e) {
                 logger.error(TERMINAL_PREFIX + e.getMessage(), e);
             }
             started = true;

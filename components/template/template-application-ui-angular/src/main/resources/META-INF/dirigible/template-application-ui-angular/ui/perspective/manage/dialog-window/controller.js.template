@@ -4,61 +4,40 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		messageHubProvider.eventIdPrefix = '${projectName}.${perspectiveName}.${name}';
 	}])
 	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/js/${projectName}/gen/api/${perspectiveName}/${name}.js";
+		entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
 	}])
-	.controller('PageController', ['$scope', 'messageHub', 'entityApi', function ($scope, messageHub, entityApi) {
+	.controller('PageController', ['$scope', 'messageHub', 'ViewParameters', 'entityApi', function ($scope, messageHub, ViewParameters, entityApi) {
 
 		$scope.entity = {};
+		$scope.forms = {
+			details: {},
+		};
 		$scope.formHeaders = {
 			select: "${name} Details",
 			create: "Create ${name}",
 			update: "Update ${name}"
 		};
-		$scope.formErrors = {};
 		$scope.action = 'select';
 
-		if (window != null && window.frameElement != null && window.frameElement.hasAttribute("data-parameters")) {
-			let dataParameters = window.frameElement.getAttribute("data-parameters");
-			if (dataParameters) {
-				let params = JSON.parse(dataParameters);
-				$scope.action = params.action;
-				if ($scope.action == "create") {
-					$scope.formErrors = {
-#foreach ($property in $properties)
-#if(!$property.dataAutoIncrement && $property.dataNotNull)
-						${property.name}: true,
-#end
-#end
-					};
-				}
+		let params = ViewParameters.get();
+		if (Object.keys(params).length) {
+			$scope.action = params.action;
 #foreach ($property in $properties)
 #if($property.isDateType)
-				if (params.entity.${property.name}) {
-					params.entity.${property.name} = new Date(params.entity.${property.name});
-				}
+			if (params.entity.${property.name}) {
+				params.entity.${property.name} = new Date(params.entity.${property.name});
+			}
 #end
 #end
-				$scope.entity = params.entity;
-				$scope.selectedMainEntityKey = params.selectedMainEntityKey;
-				$scope.selectedMainEntityId = params.selectedMainEntityId;
+			$scope.entity = params.entity;
+			$scope.selectedMainEntityKey = params.selectedMainEntityKey;
+			$scope.selectedMainEntityId = params.selectedMainEntityId;
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-				$scope.options${property.name} = params.options${property.name};
+			$scope.options${property.name} = params.options${property.name};
 #end
 #end
-			}
 		}
-
-		$scope.isValid = function (isValid, property) {
-			${dollar}scope.formErrors[property] = !isValid ? true : undefined;
-			for (let next in ${dollar}scope.formErrors) {
-				if (${dollar}scope.formErrors[next] === true) {
-					${dollar}scope.isFormValid = false;
-					return;
-				}
-			}
-			${dollar}scope.isFormValid = true;
-		};
 
 		$scope.create = function () {
 			let entity = $scope.entity;
@@ -89,6 +68,50 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 			});
 		};
 
+#foreach ($property in $properties)
+#if ($property.widgetType == "DROPDOWN")
+		${dollar}scope.service${property.name} = "${property.widgetDropdownUrl}";
+#end
+#end
+
+#foreach ($property in $properties)
+#if($property.widgetDependsOnProperty)
+		${dollar}scope.${dollar}watch('entity.${property.widgetDependsOnProperty}', function (newValue, oldValue) {
+			if (newValue !== undefined && newValue !== null) {
+				entityApi.${dollar}http.get(${dollar}scope.service${property.widgetDependsOnProperty} + '/' + newValue).then(function (response) {
+					let valueFrom = response.data.${property.widgetDependsOnValueFrom};
+#if($property.widgetType != "DROPDOWN")
+					$scope.entity.${property.name} = valueFrom;
+#end
+#if($property.widgetType == "DROPDOWN")
+					entityApi.${dollar}http.post("${property.widgetDropdownUrl}/search", {
+						$filter: {
+							equals: {
+								${property.widgetDependsOnFilterBy}: valueFrom
+							}
+						}
+					}).then(function (response) {
+						${dollar}scope.options${property.name} = response.data.map(e => {
+							return {
+								value: e.${property.widgetDropDownKey},
+								text: e.${property.widgetDropDownValue}
+							}
+						});
+						if ($scope.action !== 'select' && newValue !== oldValue) {
+							if (${dollar}scope.options${property.name}.length == 1) {
+								$scope.entity.${property.name} = ${dollar}scope.options${property.name}[0].value;
+							} else {
+								$scope.entity.${property.name} = undefined;
+							}
+						}
+					});
+#end
+				});
+			}
+		});
+
+#end
+#end
 		$scope.cancel = function () {
 			$scope.entity = {};
 			$scope.action = 'select';

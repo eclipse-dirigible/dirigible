@@ -12,19 +12,27 @@
 
 const Xml2JsonFacade = Java.type("org.eclipse.dirigible.components.api.utils.Xml2JsonFacade");
 
-export function fromJson(input) {
-	let data = input;
-	if(typeof data !== "string"){
-		data = JSON.stringify(input);
-	}
-	return Xml2JsonFacade.fromJson(data);
-};
+export class XML {
 
-export function toJson(input) {
-	let data = input;
-	if(typeof data !== "string"){
-		data = JSON.stringify(input);
+	public static fromJson(input: string | any): string {
+		let data = input;
+		if (typeof data !== "string") {
+			data = JSON.stringify(input);
+		}
+		return Xml2JsonFacade.fromJson(data);
 	}
-	return Xml2JsonFacade.toJson(data);
-};
 
+	public static toJson(input: string | any) {
+		let data = input;
+		if (typeof data !== "string") {
+			data = JSON.stringify(input);
+		}
+		return Xml2JsonFacade.toJson(data);
+	}
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = XML;
+}

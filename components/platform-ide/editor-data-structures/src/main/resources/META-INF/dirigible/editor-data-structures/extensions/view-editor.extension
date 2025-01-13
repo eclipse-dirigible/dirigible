@@ -1,0 +1,5 @@
+{
+    "module": "editor-data-structures/configs/view-editor.js",
+    "extensionPoint": "platform-editors",
+    "description": "Database View Editor"
+}

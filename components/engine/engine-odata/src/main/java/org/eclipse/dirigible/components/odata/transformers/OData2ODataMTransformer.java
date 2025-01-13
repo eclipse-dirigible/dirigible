@@ -1,14 +1,23 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.odata.transformers;
+
+import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.components.data.structures.domain.Table;
+import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
+import org.eclipse.dirigible.components.data.structures.domain.TableConstraintForeignKey;
+import org.eclipse.dirigible.components.odata.api.*;
+import org.eclipse.dirigible.components.odata.domain.OData;
+import org.eclipse.dirigible.database.sql.ISqlKeywords;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -16,21 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
-
-import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.components.data.structures.domain.Table;
-import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
-import org.eclipse.dirigible.components.data.structures.domain.TableConstraintForeignKey;
-import org.eclipse.dirigible.components.odata.api.ODataAssociation;
-import org.eclipse.dirigible.components.odata.api.ODataAssociationEnd;
-import org.eclipse.dirigible.components.odata.api.ODataEntity;
-import org.eclipse.dirigible.components.odata.api.ODataParameter;
-import org.eclipse.dirigible.components.odata.api.ODataProperty;
-import org.eclipse.dirigible.components.odata.api.TableMetadataProvider;
-import org.eclipse.dirigible.components.odata.domain.OData;
-import org.eclipse.dirigible.database.sql.ISqlKeywords;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * The Class OData2ODataMTransformer.
@@ -77,7 +71,9 @@ public class OData2ODataMTransformer {
 
         for (ODataEntity entity : model.getEntities()) {
             Table tableMetadata = tableMetadataProvider.getTableMetadata(entity);
-
+            if (null == tableMetadata) {
+                throw new IllegalArgumentException("Cannot find table metadata for entity: " + entity);
+            }
             StringBuilder buff = new StringBuilder();
             buff.append("{\n")
                 .append("\t\"edmType\": \"")
@@ -93,9 +89,13 @@ public class OData2ODataMTransformer {
                 .append("\t\"sqlTable\": \"")
                 .append(entity.getTable())
                 .append("\",\n")
+
                 .append("\t\"dataStructureType\": \"")
                 .append(tableMetadata.getKind())
-                .append("\",\n");
+                .append("\",\n")
+                .append("\t\"sqlSchema\": ");
+            buff.append(null == entity.getSchema() ? "null" : ("\"" + entity.getSchema() + "\""))
+                .append(",\n");
 
             boolean isPretty = Boolean.parseBoolean(Configuration.get(ODataDatabaseMetadataUtil.DIRIGIBLE_GENERATE_PRETTY_NAMES, "true"));
 
@@ -164,7 +164,6 @@ public class OData2ODataMTransformer {
                     .append("],\n");
             }
 
-
             // Process FK relations from DB if they exist
             Map<String, List<TableConstraintForeignKey>> groupRelationsByToTableName = tableMetadata.getConstraints()
                                                                                                     .getForeignKeys()
@@ -206,7 +205,6 @@ public class OData2ODataMTransformer {
                 buff.append(String.join(",\n", assembleRefFromFK))
                     .append(",\n");
             }
-
 
             // Process Associations from .odata file
             List<ODataAssociation> assWhereEntityIsFROMRole = model.getAssociations()
@@ -447,7 +445,6 @@ public class OData2ODataMTransformer {
 
         return refSection;
     }
-
 
 }
 

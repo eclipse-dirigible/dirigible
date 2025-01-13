@@ -1,9 +1,10 @@
 {
-	"edmType": "Summary_of_Sales_by_Quarter",
-	"edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.SummaryOfSalesByQuarters",
-	"sqlTable": " PUBLIC.SUMMARY_OF_SALES_BY_QUARTER",
-	"ShippedDate": "SHIPPED_DATE",
-	"OrderID": "ORDER_ID",
-	"Subtotal": "SUBTOTAL",
-	"_pk_": "ORDER_ID"
+  "edmType": "Summary_of_Sales_by_Quarter",
+  "edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.SummaryOfSalesByQuarters",
+  "sqlTable": "SUMMARY_OF_SALES_BY_QUARTER",
+  "sqlSchema": "PUBLIC",
+  "ShippedDate": "SHIPPED_DATE",
+  "OrderID": "ORDER_ID",
+  "Subtotal": "SUBTOTAL",
+  "_pk_": "ORDER_ID"
 }

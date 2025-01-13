@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.ide.workspace.endpoint;
 
@@ -106,7 +105,7 @@ public class WorkspaceEndpointTest {
         WorkspaceSourceTargetPair pair = new WorkspaceSourceTargetPair();
         pair.setSourceWorkspace("workspace1");
         pair.setTargetWorkspace("workspace1");
-        pair.setSource("project1/folder1/file1.txt");
+        pair.setSources(new String[] {"project1/folder1/file1.txt"});
         pair.setTarget("project1");
         mockMvc.perform(post("/services/ide/workspace/workspace1/copy").contentType(MediaType.APPLICATION_JSON)
                                                                        .content(GsonHelper.toJson(pair))
@@ -136,7 +135,7 @@ public class WorkspaceEndpointTest {
         WorkspaceSourceTargetPair pair = new WorkspaceSourceTargetPair();
         pair.setSourceWorkspace("workspace1");
         pair.setTargetWorkspace("workspace1");
-        pair.setSource("project1/folder1/file1.txt");
+        pair.setSources(new String[] {"project1/folder1/file1.txt"});
         pair.setTarget("project1/file1.txt");
         mockMvc.perform(post("/services/ide/workspace/workspace1/move").contentType(MediaType.APPLICATION_JSON)
                                                                        .content(GsonHelper.toJson(pair))

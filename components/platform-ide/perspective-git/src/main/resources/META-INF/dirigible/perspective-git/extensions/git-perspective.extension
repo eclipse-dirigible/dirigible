@@ -1,0 +1,5 @@
+{
+    "module": "perspective-git/configs/git-perspective.js",
+    "extensionPoint": "platform-perspectives",
+    "description": "Git Perspective"
+}

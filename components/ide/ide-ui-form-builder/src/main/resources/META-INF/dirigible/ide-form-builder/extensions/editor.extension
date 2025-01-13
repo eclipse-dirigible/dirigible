@@ -1,0 +1,5 @@
+{
+    "module": "ide-form-builder/services/editor.js",
+    "extensionPoint": "ide-editor",
+    "description": "Form Builder"
+}

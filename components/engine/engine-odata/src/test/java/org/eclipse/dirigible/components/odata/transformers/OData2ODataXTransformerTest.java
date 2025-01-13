@@ -1,22 +1,19 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.odata.transformers;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
-
 import java.io.IOException;
 import java.sql.SQLException;
-
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.data.structures.domain.Table;
 import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
@@ -26,16 +23,22 @@ import org.eclipse.dirigible.components.odata.domain.OData;
 import org.eclipse.dirigible.components.odata.factory.ODataDefinitionFactoryTest;
 import org.eclipse.dirigible.components.odata.synchronizer.ODataSynchronizer;
 import org.eclipse.dirigible.database.sql.ISqlKeywords;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Answers;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.ComponentScan;
 
 /**
  * The Class OData2ODataXTransformerTest.
  */
+@SpringBootTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@ComponentScan(basePackages = {"org.eclipse.dirigible.components"})
 @ExtendWith(MockitoExtension.class)
 public class OData2ODataXTransformerTest {
 
@@ -44,8 +47,15 @@ public class OData2ODataXTransformerTest {
     private ODataDatabaseMetadataUtil odataDatabaseMetadataUtil;
 
     /** The default table metadata provider. */
-    @InjectMocks
     private DefaultTableMetadataProvider defaultTableMetadataProvider;
+
+    /**
+     * Sets the up.
+     */
+    @BeforeEach
+    void setUp() {
+        this.defaultTableMetadataProvider = new DefaultTableMetadataProvider(odataDatabaseMetadataUtil);
+    }
 
     /**
      * Test transform with incorrect multiplicity.

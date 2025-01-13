@@ -1,0 +1,20 @@
+.fd-avatar--thumbnail {
+    border: 0;
+}
+
+.fd-card {
+    --fdCard_Box_Shadow: var(--sapContent_Shadow0);
+}
+
+.fd-card__header+.fd-card__footer {
+    border-top: none;
+}
+
+.fd-tokenizer {
+    --sapField_Shadow: inset 0 0 0 .0625rem rgba(85, 107, 129, .25);
+}
+
+.fd-tokenizer:hover,
+.fd-tokenizer.is-hover {
+    box-shadow: var(--sapField_Shadow);
+}

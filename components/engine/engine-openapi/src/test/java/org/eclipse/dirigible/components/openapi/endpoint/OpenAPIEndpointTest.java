@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.openapi.endpoint;
 
@@ -16,7 +15,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
 import org.eclipse.dirigible.components.openapi.repository.OpenAPIRepository;
 import org.eclipse.dirigible.components.openapi.synchronizer.OpenAPISynchronizer;
 import org.eclipse.dirigible.components.repository.RepositoryConfig;
@@ -39,6 +37,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
+/**
+ * The Class OpenAPIEndpointTest.
+ */
 @WithMockUser
 @ExtendWith(SpringExtension.class)
 @SpringBootTest(classes = {OpenAPIRepository.class, RepositoryConfig.class})
@@ -48,43 +49,56 @@ import org.springframework.web.context.WebApplicationContext;
 @Transactional
 class OpenAPIEndpointTest {
 
+    /** The open API repository. */
     @Autowired
     private OpenAPIRepository openAPIRepository;
 
+    /** The mock mvc. */
     @Autowired
     private MockMvc mockMvc;
 
+    /** The wac. */
     @Autowired
     protected WebApplicationContext wac;
 
+    /** The spring security filter chain. */
     @Autowired
     private FilterChainProxy springSecurityFilterChain;
 
+    /** The repository. */
     @Autowired
     private IRepository repository;
 
+    /**
+     * Setup.
+     */
     @BeforeEach
     public void setup() {
 
         cleanup();
 
-        try {
-            // Create test OpenAPI
-            openAPIRepository.save(createOpenAPI("/a/b/c/test1.openapi", "test1", "description"));
-            openAPIRepository.save(createOpenAPI("/a/b/c/test2.openapi", "test2", "description"));
-            openAPIRepository.save(createOpenAPI("/a/b/c/test3.openapi", "test3", "description"));
-            openAPIRepository.save(createOpenAPI("/a/b/c/test4.openapi", "test4", "description"));
-            openAPIRepository.save(createOpenAPI("/a/b/c/test5.openapi", "test5", "description"));
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        // Create test OpenAPI
+        openAPIRepository.save(createOpenAPI("/a/b/c/test1.openapi", "test1", "description"));
+        openAPIRepository.save(createOpenAPI("/a/b/c/test2.openapi", "test2", "description"));
+        openAPIRepository.save(createOpenAPI("/a/b/c/test3.openapi", "test3", "description"));
+        openAPIRepository.save(createOpenAPI("/a/b/c/test4.openapi", "test4", "description"));
+        openAPIRepository.save(createOpenAPI("/a/b/c/test5.openapi", "test5", "description"));
+
     }
 
+    /**
+     * Cleanup.
+     */
     @AfterEach
     public void cleanup() {
         openAPIRepository.deleteAll();
     }
 
+    /**
+     * Test get version.
+     *
+     * @throws Exception the exception
+     */
     @Test
     public void testGetVersion() throws Exception {
         String openAPILocation = "/META-INF/dirigible/test/test.openapi";
@@ -99,6 +113,9 @@ class OpenAPIEndpointTest {
                        "{\"openapi\":\"3.0.1\",\"info\":{\"title\":\"Eclipse Dirigible - Applications REST Services API\",\"description\":\"Eclipse Dirigible API of the REST services provided by the applications\",\"contact\":{\"name\":\"Eclipse Dirigible\",\"url\":\"https://www.dirigible.io\",\"email\":\"dirigible-dev@eclipse.org\"},\"license\":{\"name\":\"Eclipse Public License - v 2.0\",\"url\":\"https://www.eclipse.org/legal/epl-v20.html\"},\"version\":\"0.0.1\"},\"servers\":[{\"url\":\"/services/js\"}],\"security\":[],\"tags\":[],\"paths\":{\"/test/openapi/api.mjs/hello-world\":{\"get\":{\"description\":\"Returns Hello World message\",\"responses\":{\"200\":{\"description\":\"Hello World response\",\"content\":{\"application/json\":{\"schema\":{\"$ref\":\"#/components/schemas/HelloWorldModel\"}}}}}}}},\"components\":{\"schemas\":{\"HelloWorldModel\":{\"type\":\"object\",\"properties\":{\"status\":{\"type\":\"string\"}}}},\"responses\":{},\"parameters\":{},\"examples\":{},\"requestBodies\":{},\"headers\":{},\"securitySchemes\":{},\"links\":{},\"callbacks\":{}}}")));
     }
 
+    /**
+     * The Class TestConfiguration.
+     */
     @SpringBootApplication
     static class TestConfiguration {
     }

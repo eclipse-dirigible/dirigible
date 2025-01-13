@@ -1,0 +1,5 @@
+{
+    "description": "Platform Theme - Blimpkit",
+    "extensionPoint": "platform-themes",
+    "module": "theme-blimpkit/extensions/theme-auto.js"
+}

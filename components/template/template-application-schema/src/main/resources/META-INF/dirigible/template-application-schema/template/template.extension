@@ -1,1 +1,5 @@
-{"module":"template-application-schema/template/template.js","extensionPoint":"ide-template","description":"Application Template - Schema"}
+{
+    "module": "template-application-schema/template/template.js",
+    "extensionPoint": "platform-templates",
+    "description": "Application Template - Schema"
+}

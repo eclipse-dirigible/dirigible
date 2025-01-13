@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.dialects.hana;
 
@@ -33,11 +32,6 @@ public class HanaCreateBranchingBuilder extends CreateBranchingBuilder {
      *
      * @param table the table
      * @return the hana create table builder
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.builders.CreateBranchingBuilder#table(java.lang.String)
      */
     @Override
     public HanaCreateTableBuilder table(String table) {
@@ -67,12 +61,6 @@ public class HanaCreateBranchingBuilder extends CreateBranchingBuilder {
      *
      * @param table the table
      * @return the hana create temporary table builder
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.builders.CreateBranchingBuilder#temporaryTable(java.lang.
-     * String)
      */
     public HanaCreateTemporaryTableBuilder temporaryTable(String table) {
         return new HanaCreateTemporaryTableBuilder(this.getDialect(), table);
@@ -109,6 +97,12 @@ public class HanaCreateBranchingBuilder extends CreateBranchingBuilder {
         return new HanaCreateTableTypeBuilder(this.getDialect(), tableType);
     }
 
+    /**
+     * Public synonym.
+     *
+     * @param synonym the synonym
+     * @return the creates the synonym builder
+     */
     @Override
     public CreateSynonymBuilder publicSynonym(String synonym) {
         return new HanaCreatePublicSynonymBuilder(getDialect(), synonym);

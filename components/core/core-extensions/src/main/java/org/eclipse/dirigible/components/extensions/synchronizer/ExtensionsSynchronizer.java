@@ -1,35 +1,25 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.extensions.synchronizer;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.text.ParseException;
-import java.util.List;
-
 import org.apache.commons.io.FilenameUtils;
 import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.ArtefactService;
-import org.eclipse.dirigible.components.base.artefact.topology.TopologicalDepleter;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
-import org.eclipse.dirigible.components.base.synchronizer.Synchronizer;
+import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.extensions.domain.Extension;
-import org.eclipse.dirigible.components.extensions.domain.ExtensionPoint;
 import org.eclipse.dirigible.components.extensions.service.ExtensionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,23 +27,23 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+import java.text.ParseException;
+import java.util.List;
+
 /**
  * The Class ExtensionsSynchronizer.
- *
- * @param <A> the generic type
  */
 @Component
 @Order(SynchronizersOrder.EXTENSION)
-public class ExtensionsSynchronizer<A extends Artefact> implements Synchronizer<Extension> {
-
-    /** The Constant logger. */
-    private static final Logger logger = LoggerFactory.getLogger(ExtensionsSynchronizer.class);
+public class ExtensionsSynchronizer extends BaseSynchronizer<Extension, Long> {
 
     /** The Constant FILE_EXTENSION_EXTENSION. */
     public static final String FILE_EXTENSION_EXTENSION = ".extension";
-
+    /** The Constant logger. */
+    private static final Logger logger = LoggerFactory.getLogger(ExtensionsSynchronizer.class);
     /** The extension service. */
-    private ExtensionService extensionService;
+    private final ExtensionService extensionService;
 
     /** The synchronization callback. */
     private SynchronizerCallback callback;
@@ -66,30 +56,6 @@ public class ExtensionsSynchronizer<A extends Artefact> implements Synchronizer<
     @Autowired
     public ExtensionsSynchronizer(ExtensionService extensionService) {
         this.extensionService = extensionService;
-    }
-
-    /**
-     * Gets the service.
-     *
-     * @return the service
-     */
-    @Override
-    public ArtefactService<Extension> getService() {
-        return extensionService;
-    }
-
-
-    /**
-     * Checks if is accepted.
-     *
-     * @param file the file
-     * @param attrs the attrs
-     * @return true, if is accepted
-     */
-    @Override
-    public boolean isAccepted(Path file, BasicFileAttributes attrs) {
-        return file.toString()
-                   .endsWith(getFileExtension());
     }
 
     /**
@@ -109,10 +75,10 @@ public class ExtensionsSynchronizer<A extends Artefact> implements Synchronizer<
      * @param location the location
      * @param content the content
      * @return the list
-     * @throws ParseException
+     * @throws ParseException the parse exception
      */
     @Override
-    public List<Extension> parse(String location, byte[] content) throws ParseException {
+    protected List<Extension> parseImpl(String location, byte[] content) throws ParseException {
         Extension extension = JsonHelper.fromJson(new String(content, StandardCharsets.UTF_8), Extension.class);
         Configuration.configureObject(extension);
         extension.setLocation(location);
@@ -141,6 +107,16 @@ public class ExtensionsSynchronizer<A extends Artefact> implements Synchronizer<
     }
 
     /**
+     * Gets the service.
+     *
+     * @return the service
+     */
+    @Override
+    public ArtefactService<Extension, Long> getService() {
+        return extensionService;
+    }
+
+    /**
      * Retrieve.
      *
      * @param location the location
@@ -159,10 +135,10 @@ public class ExtensionsSynchronizer<A extends Artefact> implements Synchronizer<
      * @param error the error
      */
     @Override
-    public void setStatus(Artefact artefact, ArtefactLifecycle lifecycle, String error) {
+    public void setStatus(Extension artefact, ArtefactLifecycle lifecycle, String error) {
         artefact.setLifecycle(lifecycle);
         artefact.setError(error);
-        getService().save((Extension) artefact);
+        getService().save(artefact);
     }
 
     /**
@@ -173,38 +149,32 @@ public class ExtensionsSynchronizer<A extends Artefact> implements Synchronizer<
      * @return true, if successful
      */
     @Override
-    public boolean complete(TopologyWrapper<Artefact> wrapper, ArtefactPhase flow) {
-        Extension extension = null;
-        if (wrapper.getArtefact() instanceof Extension) {
-            extension = (Extension) wrapper.getArtefact();
-        } else {
-            throw new UnsupportedOperationException(String.format("Trying to process %s as Extension", wrapper.getArtefact()
-                                                                                                              .getClass()));
-        }
+    protected boolean completeImpl(TopologyWrapper<Extension> wrapper, ArtefactPhase flow) {
+        Extension extension = wrapper.getArtefact();
 
         switch (flow) {
             case CREATE:
                 if (ArtefactLifecycle.NEW.equals(extension.getLifecycle())) {
-                    callback.registerState(this, wrapper, ArtefactLifecycle.CREATED, "");
+                    callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
                 }
                 break;
             case UPDATE:
                 if (ArtefactLifecycle.MODIFIED.equals(extension.getLifecycle())) {
-                    callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED, "");
+                    callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
+                }
+                if (ArtefactLifecycle.FAILED.equals(extension.getLifecycle())) {
+                    return false;
                 }
                 break;
             case DELETE:
-                if (ArtefactLifecycle.CREATED.equals(extension.getLifecycle())
-                        || ArtefactLifecycle.UPDATED.equals(extension.getLifecycle())) {
+                if (ArtefactLifecycle.CREATED.equals(extension.getLifecycle()) || ArtefactLifecycle.UPDATED.equals(extension.getLifecycle())
+                        || ArtefactLifecycle.FAILED.equals(extension.getLifecycle())) {
                     try {
                         getService().delete(extension);
-                        callback.registerState(this, wrapper, ArtefactLifecycle.DELETED, "");
+                        callback.registerState(this, wrapper, ArtefactLifecycle.DELETED);
                     } catch (Exception e) {
-                        if (logger.isErrorEnabled()) {
-                            logger.error(e.getMessage(), e);
-                        }
                         callback.addError(e.getMessage());
-                        callback.registerState(this, wrapper, ArtefactLifecycle.DELETED, e.getMessage());
+                        callback.registerState(this, wrapper, ArtefactLifecycle.DELETED, e);
                     }
                 }
                 break;
@@ -220,15 +190,12 @@ public class ExtensionsSynchronizer<A extends Artefact> implements Synchronizer<
      * @param extension the extension
      */
     @Override
-    public void cleanup(Extension extension) {
+    public void cleanupImpl(Extension extension) {
         try {
             getService().delete(extension);
         } catch (Exception e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
             callback.addError(e.getMessage());
-            callback.registerState(this, extension, ArtefactLifecycle.DELETED, e.getMessage());
+            callback.registerState(this, extension, ArtefactLifecycle.DELETED, e.getMessage(), e);
         }
     }
 

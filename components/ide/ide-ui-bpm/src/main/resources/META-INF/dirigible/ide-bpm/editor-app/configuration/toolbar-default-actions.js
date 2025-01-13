@@ -81,6 +81,7 @@ FLOWABLE.TOOLBAR = {
                             workspace: modelMetaData.modelId.substring(0, modelMetaData.modelId.indexOf('/', 1)),
                         }, 'ide.file.saved');
                         window.messageHub.post({ message: `File '${modelMetaData.modelId}' saved` }, 'ide.status.message');
+                        setEditorDirtyState(false);
                     })
                     .error(function (data, status, headers, config) {
                         if (status === 409) {
@@ -90,22 +91,6 @@ FLOWABLE.TOOLBAR = {
                         }
                     });
             };
-
-            messageHub.subscribe(
-                function () {
-                    saveSilently(services.$http, services.editorManager.getModel(), services.$rootScope.modelData, services.editorManager);
-                },
-                "editor.file.save.all"
-            );
-
-            messageHub.subscribe(
-                function (msg) {
-                    let file = msg.data && typeof msg.data === 'object' && msg.data.file;
-                    if (file && file === services.$rootScope.modelData.modelId)
-                        saveSilently(services.$http, services.editorManager.getModel(), services.$rootScope.modelData, services.editorManager);
-                },
-                "editor.file.save"
-            );
 
             saveSilently(services.$http, services.editorManager.getModel(), services.$rootScope.modelData, services.editorManager);
             // --- workaround for saving silently ends here
@@ -133,6 +118,7 @@ FLOWABLE.TOOLBAR = {
         },
 
         undo: function (services) {
+            setEditorDirtyState(true);
 
             // Get the last commands
             var lastCommands = services.$scope.undoStack.pop();
@@ -191,6 +177,7 @@ FLOWABLE.TOOLBAR = {
         },
 
         redo: function (services) {
+            setEditorDirtyState(true);
 
             // Get the last commands from the redo stack
             var lastCommands = services.$scope.redoStack.pop();
@@ -258,6 +245,8 @@ FLOWABLE.TOOLBAR = {
                     });
                 }
             }
+
+            setEditorDirtyState(true);
         },
 
         copy: function (services) {
@@ -273,14 +262,17 @@ FLOWABLE.TOOLBAR = {
         },
 
         paste: function (services) {
+            setEditorDirtyState(true);
             FLOWABLE.TOOLBAR.ACTIONS._getOryxEditPlugin(services).editPaste();
         },
 
         deleteItem: function (services) {
+            setEditorDirtyState(true);
             FLOWABLE.TOOLBAR.ACTIONS._getOryxEditPlugin(services).editDelete();
         },
 
         addBendPoint: function (services) {
+            setEditorDirtyState(true);
 
             // Show the tutorial the first time
             FLOWABLE_EDITOR_TOUR.sequenceFlowBendpoint(services.$scope, services.$translate, services.$q, true);
@@ -299,6 +291,7 @@ FLOWABLE.TOOLBAR = {
         },
 
         removeBendPoint: function (services) {
+            setEditorDirtyState(true);
 
             // Show the tutorial the first time
             FLOWABLE_EDITOR_TOUR.sequenceFlowBendpoint(services.$scope, services.$translate, services.$q, true);

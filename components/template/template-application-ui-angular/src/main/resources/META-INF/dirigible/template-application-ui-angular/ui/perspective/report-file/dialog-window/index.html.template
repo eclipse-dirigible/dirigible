@@ -1,0 +1,118 @@
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
+
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" href="data:;base64,iVBORw0KGgo=" dg-brand-icon />
+        <title dg-brand-title></title>
+        <theme></theme>
+        <script type="text/javascript"
+            src="/services/js/resources-core/services/loader.js?id=application-view-js"></script>
+        <link type="text/css" rel="stylesheet"
+            href="/services/js/resources-core/services/loader.js?id=application-view-css" />
+        <script type="text/javascript" src="controller.js"></script>
+    </head>
+
+    <body class="dg-vbox">
+        <fd-scrollbar class="dg-full-height">
+            <div class="fd-margin--md fd-message-strip fd-message-strip--error fd-message-strip--dismissible"
+                role="alert" ng-show="errorMessage">
+                <p class="fd-message-strip__text">{{ errorMessage }}</p>
+                <fd-button glyph="sap-icon--decline" compact="true" dg-type="transparent" aria-label="Close" in-msg-strip="true" ng-click="clearErrorMessage()">
+		        </fd-button>
+            </div>
+
+            <fd-fieldset ng-form="formFieldset">
+                <fd-form-group dg-header="${name} Details" name="entityForm" class="fd-container fd-form-layout-grid-container">
+#foreach ($column in $columns)
+#if($column.typeTypescript == 'boolean')
+                    <fd-form-item class="fd-row">
+                    	<div class="fd-col fd-col-md--2"></div>
+                        <div class="fd-col fd-col-md--8">
+							<fd-checkbox id="id${column.alias}" compact="false" ng-model="entity['${column.alias}']"></fd-checkbox>
+                        	<fd-checkbox-label for="id${column.alias}">${column.alias}</fd-checkbox-label>
+                        </div>
+                    </fd-form-item>
+#elseif($column.typeTypescript == 'number')
+                    <fd-form-item class="fd-row">
+                    	<div class="fd-col fd-col-md--2">
+                        	<fd-form-label for="id${column.alias}" dg-colon="true">${column.alias}</fd-form-label>
+                        </div>
+                        <div class="fd-col fd-col-md--4">
+	                        <fd-step-input dg-id="id${column.alias}"
+								class="right-align"
+								name="${column.alias}"
+								ng-model="entity['${column.alias}']"
+								is-readonly="true"
+								placeholder="Enter ${column.alias}"
+								>
+							</fd-step-input>
+	                    </div>
+                    </fd-form-item>
+#elseif($column.typeJava == 'time')
+                    <fd-form-item class="fd-row">
+                    	<div class="fd-col fd-col-md--2">
+                        	<fd-form-label for="id${column.alias}" dg-colon="true">${column.alias}</fd-form-label>
+                        </div>
+                        <div class="fd-col fd-col-md--2">
+	                        <fd-input id="id${column.alias}"
+	                            name="${column.alias}"
+	                            ng-model="entity['${column.alias}']"
+	                            ng-readonly="true"
+	                            type="time">
+	                        </fd-input>
+	                    </div>
+                    </fd-form-item>
+#elseif($column.typeJava == 'timestamp')
+                    <fd-form-item class="fd-row">
+                    	<div class="fd-col fd-col-md--2">
+                        	<fd-form-label for="id${column.alias}" dg-colon="true">${column.alias}</fd-form-label>
+                        </div>
+                        <div class="fd-col fd-col-md--3">
+	                        <fd-input id="id${column.alias}"
+	                            name="${column.alias}"
+	                            ng-model="entity['${column.alias}']"
+	                            ng-readonly="true"
+	                            type="datetime-local">
+	                        </fd-input>
+	                    </div>
+                    </fd-form-item>
+#elseif($column.typeJava == 'date')
+                    <fd-form-item class="fd-row">
+                    	<div class="fd-col fd-col-md--2">
+                        	<fd-form-label for="id${column.alias}" dg-colon="true">${column.alias}</fd-form-label>
+                        </div>
+                        <div class="fd-col fd-col-md--2">
+	                        <fd-input id="id${column.alias}"
+	                            name="${column.alias}"
+	                            ng-model="entity['${column.alias}']"
+	                            ng-readonly="true"
+	                            type="date">
+	                        </fd-input>
+	                    </div>
+                    </fd-form-item>
+#else
+                    <fd-form-item class="fd-row">
+                    	<div class="fd-col fd-col-md--2">
+                        	<fd-form-label for="id${column.alias}" dg-colon="true">${column.alias}</fd-form-label>
+                        </div>
+                        <div class="fd-col fd-col-md--8">
+	                        <fd-input id="id${column.alias}"
+	                            name="${column.alias}"
+	                            ng-model="entity['${column.alias}']"
+	                            ng-readonly="true"
+	                            type="text"
+	                            placeholder="Enter ${column.alias}">
+	                        </fd-input>
+	                    </div>
+                    </fd-form-item>
+#end
+#end
+				</fd-form-group>
+            </fd-fieldset>
+        </fd-scrollbar>
+    </body>
+
+</html>

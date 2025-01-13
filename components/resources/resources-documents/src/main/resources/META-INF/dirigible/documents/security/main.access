@@ -1,0 +1,31 @@
+{
+    "constraints": [
+        {
+            "scope": "HTTP",
+            "path": "/ide-documents/manage",
+            "method": "*",
+            "roles": [
+                "Administrator",
+                "Operator"
+            ]
+        },
+        {
+            "scope": "HTTP",
+            "path": "/ide-documents/read/folder",
+            "method": "*",
+            "roles": [
+                "ReadOnly",
+                "Operator"
+            ]
+        },
+        {
+            "scope": "HTTP",
+            "path": "/ide-documents/read/document",
+            "method": "*",
+            "roles": [
+                "ReadOnly",
+                "Operator"
+            ]
+        }
+    ]
+}

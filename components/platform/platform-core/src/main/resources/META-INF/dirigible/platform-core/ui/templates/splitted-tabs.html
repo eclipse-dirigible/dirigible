@@ -1,0 +1,43 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<div class="bk-splitted-tabs">
+    <split direction="{{direction}}">
+        <split-pane ng-repeat="pane in panes track by $index" size="50" min-size="100">
+            <splitted-tabs ng-if="!!pane.panes" direction="pane.direction" panes="pane.panes" focused-pane="focusedPane" remove-tab="onRemoveTab(pane)" split-tabs="onSplitTabs(direction, pane)">
+            </splitted-tabs>
+
+            <bk-icon-tab-bar ng-if="!!pane.tabs" compact="true" side-padding="sm" unfocused="!isFocused(pane)" selected-tab-id="pane.selectedTab">
+                <bk-icon-tab-bar-tablist ng-show="!hideTabs" bk-tabs-overflowable>
+                    <bk-icon-tab-bar-tab ng-repeat="tab in pane.tabs track by tab.id" label="{{tab.label}}" tab-hint="{{tab.hint}}" title="{{tab.label}}" tab-id="{{::tab.id}}" ng-click="onTabClick(pane, tab.id)" on-close="onRemoveTab(tab)"
+                        closable="::tab.closable" has-badge="tab.dirty" is-hidden="tab.isHidden" ng-attr-data-file-path="{{tab.type === 'editor' ? tab.params.filePath : undefined}}">
+                    </bk-icon-tab-bar-tab>
+                    <bk-icon-tab-bar-overflow label="More" ng-class="isMoreTabsButtonVisible(pane) ? '' : 'bk-invisible'">
+                        <bk-icon-tab-bar-overflow-item ng-if="tab.isHidden" ng-repeat="tab in pane.tabs track by tab.id" label="{{tab.label}}" title="{{tab.label}}" tab-hint="{{tab.hint}}" tab-id="{{::tab.id}}-overflow"
+                            has-badge="tab.dirty" ng-click="pane.selectedTab = tab.id">
+                        </bk-icon-tab-bar-overflow-item>
+                    </bk-icon-tab-bar-overflow>
+                    <bk-icon-tab-bar-buttons ng-if="canSplit(pane)" align="right">
+                        <bk-button state="transparent" compact="true" ng-click="splitVertically(pane)" glyph="sap-icon--screen-split-two" aria-label="Split vertically" glyph-rotate="90">
+                        </bk-button>
+                        <bk-button state="transparent" compact="true" ng-click="splitHorizontally(pane)" glyph="sap-icon--screen-split-two" aria-label="Split horizontally">
+                        </bk-button>
+                    </bk-icon-tab-bar-buttons>
+                </bk-icon-tab-bar-tablist>
+                <bk-icon-tab-bar-panel ng-repeat="tab in pane.tabs track by tab.id" tab-id="{{::tab.id}}" ng-show="pane.selectedTab === tab.id">
+                    <layout-tab-content tab="tab"></layout-tab-content>
+                </bk-icon-tab-bar-panel>
+            </bk-icon-tab-bar>
+        </split-pane>
+    </split>
+</div>

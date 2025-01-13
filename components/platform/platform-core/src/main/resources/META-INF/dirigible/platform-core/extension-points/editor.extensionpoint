@@ -1,0 +1,4 @@
+{
+    "name": "platform-editors",
+    "description": "Extension point for IDE editors"
+}

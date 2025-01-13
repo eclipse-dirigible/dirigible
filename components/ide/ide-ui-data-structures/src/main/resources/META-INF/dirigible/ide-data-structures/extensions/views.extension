@@ -1,0 +1,5 @@
+{
+    "module": "ide-data-structures/services/views-view.js",
+    "extensionPoint": "ide-view",
+    "description": "Views Structures View"
+}

@@ -1,18 +1,18 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.engine.odata2.sql.builder;
 
 import org.apache.olingo.odata2.api.commons.HttpStatusCodes;
 import org.apache.olingo.odata2.api.edm.*;
-import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.database.sql.ISqlDialect;
+import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.eclipse.dirigible.engine.odata2.sql.api.OData2Exception;
 import org.eclipse.dirigible.engine.odata2.sql.api.SQLStatementBuilder;
 import org.eclipse.dirigible.engine.odata2.sql.api.SQLStatementParam;
@@ -57,7 +57,7 @@ public abstract class AbstractQueryBuilder implements SQLStatementBuilder {
     private final List<SQLStatementParam> sqlStatementParams;
 
     /** The where clause. */
-    private SQLWhereClause whereClause;
+    private final SQLWhereClause whereClause;
 
     /**
      * Instantiates a new abstract query builder.
@@ -72,7 +72,6 @@ public abstract class AbstractQueryBuilder implements SQLStatementBuilder {
         this.structuralTypesInJoin = new HashSet<>();
         this.sqlStatementParams = new ArrayList<>();
     }
-
 
     /**
      * Gets the statement params.
@@ -129,7 +128,7 @@ public abstract class AbstractQueryBuilder implements SQLStatementBuilder {
     public void addStatementParam(EdmStructuralType entity, EdmProperty property, Object value) throws EdmException {
         if (property.isSimple()) {
             EdmTableBinding.ColumnInfo info = getSQLTableColumnInfo(entity, property);
-            addStatementParam(new SQLStatementParam(value, (EdmSimpleType) property.getType(), info));
+            addStatementParam(new SQLStatementParam(value, property.getType(), info));
         } else {
             throw new IllegalArgumentException("Not Implemented");
         }
@@ -144,6 +143,27 @@ public abstract class AbstractQueryBuilder implements SQLStatementBuilder {
         return tableBinding;
     }
 
+    public String getSQLTableName(EdmStructuralType target, SQLContext context) {
+        EdmTableBinding mapping = tableBinding.getEdmTableBinding(target);
+
+        ISqlDialect dialect = SqlDialectFactory.getDialect(context.getDatabaseSystem());
+        char escapeSymbol = dialect.getEscapeSymbol();
+
+        Optional<String> schemaName = mapping.getSchemaName();
+
+        return schemaName.isEmpty() ? getTableName(mapping, escapeSymbol)
+                : (escape(schemaName.get(), escapeSymbol) + "." + getTableName(mapping, escapeSymbol));
+    }
+
+    private String getTableName(EdmTableBinding mapping, char escapeSymbol) {
+        String tableName = mapping.getTableName();
+        return escape(tableName, escapeSymbol);
+    }
+
+    private String escape(String str, char escapeSymbol) {
+        return escapeSymbol + str + escapeSymbol;
+    }
+
     /**
      * Gets the SQL table name.
      *
@@ -151,10 +171,20 @@ public abstract class AbstractQueryBuilder implements SQLStatementBuilder {
      * @return the SQL table name
      */
     public String getSQLTableName(final EdmStructuralType target) { // TODO use context
-        boolean caseSensitive = Boolean.parseBoolean(Configuration.get("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "false"));
         EdmTableBinding mapping = tableBinding.getEdmTableBinding(target);
+
+        Optional<String> schemaName = mapping.getSchemaName();
+
+        return schemaName.isEmpty() ? getTableName(mapping) : (escape(schemaName.get()) + "." + getTableName(mapping));
+    }
+
+    private String getTableName(EdmTableBinding mapping) {
         String tableName = mapping.getTableName();
-        return caseSensitive ? ("\"" + tableName + "\"") : tableName;
+        return escape(tableName);
+    }
+
+    private String escape(String str) {
+        return "\"" + str + "\"";
     }
 
     /**
@@ -314,15 +344,9 @@ public abstract class AbstractQueryBuilder implements SQLStatementBuilder {
      */
     public String getSQLTableColumn(final EdmStructuralType targetEnitityType, final EdmProperty p) {
         if (p.isSimple()) {
-            boolean caseSensitive = Boolean.parseBoolean(Configuration.get("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "false"));
-            if (caseSensitive) {
-                return "\"" + getSQLTableAlias(targetEnitityType) + "\".\"" + tableBinding.getEdmTableBinding(targetEnitityType)
-                                                                                          .getColumnName(p)
-                        + "\"";
-            } else {
-                return getSQLTableAlias(targetEnitityType) + "." + tableBinding.getEdmTableBinding(targetEnitityType)
-                                                                               .getColumnName(p);
-            }
+            return "\"" + getSQLTableAlias(targetEnitityType) + "\".\"" + tableBinding.getEdmTableBinding(targetEnitityType)
+                                                                                      .getColumnName(p)
+                    + "\"";
         } else {
             throw new IllegalArgumentException("Unable to get the table column name of complex property " + p);
         }
@@ -337,15 +361,9 @@ public abstract class AbstractQueryBuilder implements SQLStatementBuilder {
      */
     public String getSQLTableColumnNoAlias(final EdmStructuralType targetEnitityType, final EdmProperty p) {
         if (p.isSimple()) {
-            boolean caseSensitive = Boolean.parseBoolean(Configuration.get("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "false"));
-            if (caseSensitive) {
-                return "\"" + tableBinding.getEdmTableBinding(targetEnitityType)
-                                          .getColumnName(p)
-                        + "\"";
-            } else {
-                return tableBinding.getEdmTableBinding(targetEnitityType)
-                                   .getColumnName(p);
-            }
+            return "\"" + tableBinding.getEdmTableBinding(targetEnitityType)
+                                      .getColumnName(p)
+                    + "\"";
         } else {
             throw new IllegalArgumentException("Unable to get the table column name of complex property " + p);
         }
@@ -358,8 +376,7 @@ public abstract class AbstractQueryBuilder implements SQLStatementBuilder {
      * @return the string
      */
     private String fixDatabaseNamesCase(String column) {
-        boolean caseSensitive = Boolean.parseBoolean(Configuration.get("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "false"));
-        return caseSensitive ? "\"" + column + "\"" : column;
+        return "\"" + column + "\"";
     }
 
     /**
@@ -404,17 +421,8 @@ public abstract class AbstractQueryBuilder implements SQLStatementBuilder {
         if (p.isSimple()) {
             ColumnInfo info = tableBinding.getEdmTableBinding((targetEnitityType))
                                           .getColumnInfo(p);
-            boolean caseSensitive = Boolean.parseBoolean(Configuration.get("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "false"));
-            if (caseSensitive) {
-                return new ColumnInfo("\"" + getSQLTableAlias(targetEnitityType) + "\".\"" + info.getColumnName() + "\"",
-                        info.getJdbcType());
-                // return getSQLTableAlias(targetEnitityType) + "." +
-                // tableMappingProvider.getTableMapping(targetEnitityType).getColumnName(p);
-            } else {
-                return new ColumnInfo(getSQLTableAlias(targetEnitityType) + "." + info.getColumnName(), info.getJdbcType());
-                // return getSQLTableAlias(targetEnitityType) + "." +
-                // tableMappingProvider.getTableMapping(targetEnitityType).getColumnName(p);
-            }
+            return new ColumnInfo("\"" + getSQLTableAlias(targetEnitityType) + "\".\"" + info.getColumnName() + "\"", info.getJdbcType());
+
         } else {
             throw new IllegalArgumentException("Unable to get the table column name of complex property " + p);
         }
@@ -571,4 +579,5 @@ public abstract class AbstractQueryBuilder implements SQLStatementBuilder {
                 manyToManyMappingTable);
         return alias;
     }
+
 }

@@ -1,12 +1,12 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
 angular.module('edmDetails', ['ideUI', 'ideView'])
@@ -36,7 +36,10 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
             { value: "PRIMARY", label: "Primary Entity" },
             { value: "DEPENDENT", label: "Dependent Entity" },
             { value: "REPORT", label: "Report Entity" },
-            { value: "SETTING", label: "Setting Entity" }
+            { value: "FILTER", label: "Filter Entity" },
+            { value: "SETTING", label: "Setting Entity" },
+            { value: "PROJECTION", label: "Projection Entity" },
+            { value: "EXTENSION", label: "Extension Entity" }
         ];
         $scope.layoutTypes = [
             { value: "MANAGE", label: "Manage Entities" },
@@ -48,7 +51,10 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
             { value: "REPORT_TABLE", label: "Report in a Table Format" },
             { value: "REPORT_BAR", label: "Report in a Bar Chart Format" },
             { value: "REPORT_LINE", label: "Report in a Line Chart Format" },
-            { value: "REPORT_PIE", label: "Report in a Pie Chart Format" }
+            { value: "REPORT_DOUGHNUT", label: "Report in a Doughnut Chart Format" },
+            { value: "REPORT_PIE", label: "Report in a Pie Chart Format" },
+            { value: "REPORT_POLARAREA", label: "Report in a Polar Area Format" },
+            { value: "REPORT_RADAR", label: "Report in a Radar Format" },
         ];
         $scope.dataTypes = [
             { value: "VARCHAR", label: "VARCHAR" },
@@ -66,6 +72,10 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
             { value: "BLOB", label: "BLOB" },
             { value: "DECIMAL", label: "DECIMAL" },
             { value: "BIT", label: "BIT" }
+        ];
+        $scope.dataOrderByOptions = [
+            { value: "ASC", label: "ASCENDING" },
+            { value: "DESC", label: "DESCENDING" }
         ];
         $scope.widgetTypes = [
             { value: "TEXTBOX", label: "Text Box" },
@@ -85,6 +95,12 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
             { value: "TIME", label: "Time" },
             { value: "URL", label: "URL" },
             { value: "WEEK", label: "Week" }
+        ];
+        $scope.widgetSizes = [
+            { value: "fd-col-md--2 fd-col--3", label: "Small" },
+            { value: "fd-col-md--4 fd-col--6", label: "Medium" },
+            { value: "fd-col-md--6 fd-col--9", label: "Large" },
+            { value: "fd-col-md--8 fd-col--12", label: "XLarge" }
         ];
         $scope.majorTypes = [
             { value: "true", label: "Show in table header" },
@@ -128,6 +144,7 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
                         dataQuery: $scope.dataParameters.dataQuery,
                         title: $scope.dataParameters.title,
                         caption: $scope.dataParameters.caption,
+                        description: $scope.dataParameters.description,
                         tooltip: $scope.dataParameters.tooltip,
                         icon: $scope.dataParameters.icon,
                         menuKey: $scope.dataParameters.menuKey,
@@ -135,6 +152,7 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
                         menuIndex: $scope.dataParameters.menuIndex,
                         layoutType: $scope.dataParameters.layoutType,
                         perspectiveName: $scope.dataParameters.perspectiveName,
+                        perspectiveLabel: $scope.dataParameters.perspectiveLabel,
                         navigationPath: $scope.dataParameters.navigationPath,
                         feedUrl: $scope.dataParameters.feedUrl,
                         feedUsername: $scope.dataParameters.feedUsername,
@@ -143,15 +161,22 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
                         feedPath: $scope.dataParameters.feedPath,
                         roleRead: $scope.dataParameters.roleRead,
                         roleWrite: $scope.dataParameters.roleWrite,
+                        importsCode: $scope.dataParameters.importsCode,
+                        generateReport: $scope.dataParameters.generateReport,
                     }, true);
                 } else {
                     messageHub.postMessage('edm.editor.property', {
                         cellId: $scope.dataParameters.cellId,
                         name: $scope.dataParameters.name,
+                        description: $scope.dataParameters.description,
+                        tooltip: $scope.dataParameters.tooltip,
+                        isRequiredProperty: $scope.dataParameters.isRequiredProperty,
                         isCalculatedProperty: $scope.dataParameters.isCalculatedProperty,
-                        calculatedPropertyExpression: $scope.dataParameters.calculatedPropertyExpression,
+                        calculatedPropertyExpressionCreate: $scope.dataParameters.calculatedPropertyExpressionCreate,
+                        calculatedPropertyExpressionUpdate: $scope.dataParameters.calculatedPropertyExpressionUpdate,
                         dataName: $scope.dataParameters.dataName,
                         dataType: $scope.dataParameters.dataType,
+                        dataOrderBy: $scope.dataParameters.dataOrderBy,
                         dataLength: $scope.dataParameters.dataLength,
                         dataPrimaryKey: $scope.dataParameters.dataPrimaryKey,
                         dataAutoIncrement: $scope.dataParameters.dataAutoIncrement,
@@ -161,6 +186,7 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
                         dataScale: $scope.dataParameters.dataScale,
                         dataDefaultValue: $scope.dataParameters.dataDefaultValue,
                         widgetType: $scope.dataParameters.widgetType,
+                        widgetSize: $scope.dataParameters.widgetSize,
                         widgetLength: $scope.dataParameters.widgetLength,
                         widgetLabel: $scope.dataParameters.widgetLabel,
                         widgetShortLabel: $scope.dataParameters.widgetShortLabel,
@@ -171,6 +197,10 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
                         widgetIsMajor: $scope.dataParameters.widgetIsMajor,
                         widgetDropDownKey: $scope.dataParameters.widgetDropDownKey,
                         widgetDropDownValue: $scope.dataParameters.widgetDropDownValue,
+                        widgetDependsOnProperty: $scope.dataParameters.widgetDependsOnProperty,
+                        widgetDependsOnEntity: $scope.dataParameters.widgetDependsOnEntity,
+                        widgetDependsOnValueFrom: $scope.dataParameters.widgetDependsOnValueFrom,
+                        widgetDependsOnFilterBy: $scope.dataParameters.widgetDependsOnFilterBy,
                         feedPropertyName: $scope.dataParameters.feedPropertyName,
                         roleRead: $scope.dataParameters.roleRead,
                         roleWrite: $scope.dataParameters.roleWrite,

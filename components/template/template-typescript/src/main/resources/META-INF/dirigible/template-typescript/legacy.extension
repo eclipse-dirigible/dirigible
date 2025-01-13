@@ -1,0 +1,5 @@
+{
+    "extensionPoint": "ide-template",
+    "module": "template-typescript/template.js",
+    "description": "TypeScript Sample Template"
+}

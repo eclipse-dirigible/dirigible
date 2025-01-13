@@ -1,0 +1,5 @@
+{
+  "location":"/ide-workspace/ide-workspace-on-save.extensionpoint",
+  "name":"ide-workspace-on-save",
+  "description":"On Save Extension Point"
+}

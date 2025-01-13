@@ -34,9 +34,11 @@ Example:
 	
 ### List of Commands
 
-[General](https://www.mongodb.com/docs/manual/reference/command/)
-[Find](https://docs.mongodb.org/manual/reference/command/find/#dbcmd.find)
-[Update](https://docs.mongodb.org/manual/reference/command/update/#dbcmd.update)
+- [General](https://www.mongodb.com/docs/manual/reference/command/)
+- [Find](https://docs.mongodb.org/manual/reference/command/find/#dbcmd.find)
+- [Update](https://docs.mongodb.org/manual/reference/command/update/#dbcmd.update)
+- [Operators](https://www.mongodb.com/docs/manual/reference/operator/query/)
+
 
 ##### Specify a collection to query
 

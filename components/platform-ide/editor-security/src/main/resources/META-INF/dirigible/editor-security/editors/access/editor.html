@@ -1,0 +1,71 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/editor-security/configs/access-editor.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=editor-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="/services/web/editor-security/editors/access/editor.js"></script>
+    </head>
+
+    <body class="bk-vbox" shortcut="'ctrl+s'" shortcut-action="save">
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
+        <bk-toolbar has-title="true" ng-show="!state.error && !state.isBusy">
+            <bk-toolbar-title>Access constraints:</bk-toolbar-title>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-button compact="true" label="Add" ng-click="addConstraint()"></bk-button>
+            <bk-button compact="true" state="emphasized" label="Save" ng-click="save()" ng-disabled="!changed"></bk-button>
+        </bk-toolbar>
+        <bk-scrollbar ng-show="!state.error && !state.isBusy">
+            <table bk-table outer-borders="bottom">
+                <thead bk-table-header sticky="true">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>Path</th>
+                        <th bk-table-header-cell>Method</th>
+                        <th bk-table-header-cell>Scope</th>
+                        <th bk-table-header-cell>Roles</th>
+                        <th bk-table-header-cell></th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr ng-if="!access.constraints || access.constraints.length === 0" bk-table-row>
+                        <td bk-table-cell no-data="true">There are no constraints</td>
+                    </tr>
+                    <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in access.constraints track by $index">
+                        <td bk-table-cell>{{ item.path }}</td>
+                        <td bk-table-cell>{{ item.method }}</td>
+                        <td bk-table-cell>{{ item.scope }}</td>
+                        <td bk-table-cell>{{ item.roles.join(', ') }}</td>
+                        <td bk-table-cell fit-content="true">
+                            <bk-button compact="true" glyph="sap-icon--edit" state="transparent" aria-label="Edit" ng-click="editConstraint($index)"></bk-button>
+                            <bk-button compact="true" glyph="sap-icon--delete" state="transparent" aria-label="Delete" ng-click="deleteConstraint($index)"></bk-button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </bk-scrollbar>
+        <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+            <bk-message-page-title>Editor encounterd an error!</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+        </bk-message-page>
+        <theme></theme>
+    </body>
+
+</html>

@@ -1,0 +1,15 @@
+{
+  "files": [
+    {
+      "table": "READERS",
+      "schema": "PUBLIC",
+      "file": "/dirigible-test-project/csvim/readers.csv",
+      "header": true,
+      "useHeaderNames": true,
+      "delimField": ",",
+      "delimEnclosing": "\"",
+      "distinguishEmptyFromNull": true,
+      "version": "1.0"
+    }
+  ]
+}

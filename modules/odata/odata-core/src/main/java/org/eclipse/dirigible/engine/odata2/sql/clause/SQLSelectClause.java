@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.engine.odata2.sql.clause;
 
@@ -16,12 +15,14 @@ import org.apache.olingo.odata2.api.exception.ODataException;
 import org.apache.olingo.odata2.api.uri.KeyPredicate;
 import org.apache.olingo.odata2.api.uri.NavigationPropertySegment;
 import org.apache.olingo.odata2.api.uri.SelectItem;
+import org.eclipse.dirigible.components.database.DatabaseSystem;
+import org.eclipse.dirigible.database.sql.ISqlDialect;
+import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.eclipse.dirigible.engine.odata2.sql.api.OData2Exception;
 import org.eclipse.dirigible.engine.odata2.sql.api.SQLStatementParam;
 import org.eclipse.dirigible.engine.odata2.sql.binding.EdmTableBinding;
 import org.eclipse.dirigible.engine.odata2.sql.builder.EdmUtils;
 import org.eclipse.dirigible.engine.odata2.sql.builder.SQLContext;
-import org.eclipse.dirigible.engine.odata2.sql.builder.SQLContext.DatabaseProduct;
 import org.eclipse.dirigible.engine.odata2.sql.builder.SQLUtils;
 
 import java.util.*;
@@ -36,62 +37,28 @@ import static org.eclipse.dirigible.engine.odata2.sql.utils.OData2Utils.*;
  */
 public final class SQLSelectClause {
 
-    /** The Constant EMPTY_STRING. */
-    private static final String EMPTY_STRING = "";
-
-    /**
-     * The Enum EvaluationType.
-     */
-    public enum EvaluationType {
-
-        /** The select column list. */
-        SELECT_COLUMN_LIST,
-        /** The from. */
-        FROM,
-        /** The join. */
-        JOIN,
-        /** The where. */
-        WHERE,
-        /** The select limit. */
-        SELECT_LIMIT,
-        /** The into. */
-        INTO,
-        /** The values. */
-        VALUES,
-        /** The keys. */
-        KEYS,
-        /** The select offset. */
-        SELECT_OFFSET,
-        /** The table. */
-        TABLE
-    }
-
     /** The Constant NOT_SET. */
     public static final int NOT_SET = -1;
-
+    /** The Constant EMPTY_STRING. */
+    private static final String EMPTY_STRING = "";
     /** The column mapping. */
     // Later we would like to bind the columns in the entity set to the correct
     // entities/fields
     private final Map<Integer, EdmTarget> columnMapping;
-
     /** The parameters. */
     private final Collection<EdmTarget> parameters;
-
     /** The query. */
     private final org.eclipse.dirigible.engine.odata2.sql.builder.SQLSelectBuilder query;
-
-    /** The at column. */
-    private int atColumn = 0;
-
-    /** The is count. */
-    private boolean isCount;
-
     /** The selects from target entity. */
     private final List<SelectItem> selectsFromTargetEntity;
-
     /** The expands. */
     private final List<ArrayList<NavigationPropertySegment>> expands;
-
+    /** The statement params. */
+    private final List<SQLStatementParam> statementParams;
+    /** The at column. */
+    private int atColumn = 0;
+    /** The is count. */
+    private boolean isCount;
     /** The top. */
     private int top;
 
@@ -100,10 +67,6 @@ public final class SQLSelectClause {
 
     /** The target. */
     private EdmStructuralType target;
-
-    /** The statement params. */
-    private final List<SQLStatementParam> statementParams;
-
     /** The key predicates. */
     private List<KeyPredicate> keyPredicates;
 
@@ -135,6 +98,196 @@ public final class SQLSelectClause {
         isCount = false;
         top = NOT_SET;
         skip = NOT_SET;
+    }
+
+    /**
+     * The Enum EvaluationType.
+     */
+    public enum EvaluationType {
+
+        /** The select column list. */
+        SELECT_COLUMN_LIST,
+        /** The from. */
+        FROM,
+        /** The join. */
+        JOIN,
+        /** The where. */
+        WHERE,
+        /** The select limit. */
+        SELECT_LIMIT,
+        /** The into. */
+        INTO,
+        /** The values. */
+        VALUES,
+        /** The keys. */
+        KEYS,
+        /** The select offset. */
+        SELECT_OFFSET,
+        /** The table. */
+        TABLE
+    }
+
+
+    /**
+     * The Class SQLSelectBuilder.
+     */
+    public static class SQLSelectBuilder {
+
+        /** The select expression. */
+        private final SQLSelectClause selectExpression;
+
+        /**
+         * Instantiates a new SQL select builder.
+         *
+         * @param select the select
+         */
+        public SQLSelectBuilder(final SQLSelectClause select) {
+            selectExpression = select;
+        }
+
+        /**
+         * Top.
+         *
+         * @param top the top
+         * @return the SQL select clause
+         */
+        public SQLSelectClause top(final int top) {
+            selectExpression.top(top);
+            return selectExpression;
+        }
+
+        /**
+         * Skip.
+         *
+         * @param skip the skip
+         * @return the SQL select clause
+         */
+        public SQLSelectClause skip(final int skip) {
+            selectExpression.skip(skip);
+            return selectExpression;
+        }
+
+        /**
+         * Count.
+         *
+         * @return the SQL select clause
+         */
+        public SQLSelectClause count() {
+            selectExpression.setUsingCount(true);
+            return selectExpression;
+        }
+    }
+
+
+    /**
+     * The Class EdmTarget.
+     */
+    private class EdmTarget {
+
+        /** The edm navigation property. */
+        private final EdmNavigationProperty edmNavigationProperty;
+        /** The edm target type. */
+        private EdmStructuralType edmTargetType;
+        /** The edm property. */
+        private EdmProperty edmProperty;
+
+        /**
+         * Instantiates a new edm target.
+         *
+         * @param edmTargetType the edm target type
+         * @param edmProperty the edm property
+         */
+        public EdmTarget(final EdmStructuralType edmTargetType, final EdmProperty edmProperty) {
+            this.edmTargetType = edmTargetType;
+            this.edmProperty = edmProperty;
+            this.edmNavigationProperty = null;
+        }
+
+        /**
+         * Instantiates a new edm target.
+         *
+         * @param edmTargetType the edm target type
+         * @param edmNavigationProperty the edm navigation property
+         * @param edmProperty the edm property
+         */
+        public EdmTarget(final EdmStructuralType edmTargetType, EdmNavigationProperty edmNavigationProperty,
+                final EdmProperty edmProperty) {
+            this.edmTargetType = edmTargetType;
+            this.edmProperty = edmProperty;
+            this.edmNavigationProperty = edmNavigationProperty;
+        }
+
+        /**
+         * Gets the edm navigation property.
+         *
+         * @return the edm navigation property
+         */
+        public EdmNavigationProperty getEdmNavigationProperty() {
+            return edmNavigationProperty;
+        }
+
+        /**
+         * Gets the edm target type.
+         *
+         * @return the edm target type
+         */
+        public EdmStructuralType getEdmTargetType() {
+            return edmTargetType;
+        }
+
+        /**
+         * Sets the edm target type.
+         *
+         * @param edmTargetType the new edm target type
+         */
+        public void setEdmTargetType(final EdmStructuralType edmTargetType) {
+            this.edmTargetType = edmTargetType;
+        }
+
+        /**
+         * Gets the edm property.
+         *
+         * @return the edm property
+         */
+        public EdmProperty getEdmProperty() {
+            return edmProperty;
+        }
+
+        /**
+         * Sets the edm property.
+         *
+         * @param edmProperty the new edm property
+         */
+        public void setEdmProperty(final EdmProperty edmProperty) {
+            this.edmProperty = edmProperty;
+        }
+
+        /**
+         * To string.
+         *
+         * @return the string
+         */
+        @Override
+        public String toString() {
+            try {
+                if (isInlineTarget()) {
+                    return "EdmTarget [" + edmTargetType.getName() + "." + edmNavigationProperty.getName() + edmProperty.getName() + "]";
+                } else {
+                    return "EdmTarget [" + edmTargetType.getName() + "." + edmProperty.getName() + "]";
+                }
+            } catch (EdmException e) {
+                throw new OData2Exception(HttpStatusCodes.INTERNAL_SERVER_ERROR);
+            }
+        }
+
+        /**
+         * Checks if is inline target.
+         *
+         * @return true, if is inline target
+         */
+        public boolean isInlineTarget() {
+            return edmNavigationProperty != null;
+        }
     }
 
     /**
@@ -372,7 +525,8 @@ public final class SQLSelectClause {
             return EMPTY_STRING;
         String selectPredicate = EMPTY_STRING;
         if (top > 0) {
-            if (context.getDatabaseProduct() == DatabaseProduct.DERBY) {
+            if (context.getDatabaseSystem()
+                       .isDerby()) {
                 // Derby: FETCH { FIRST | NEXT } [integer-literal] {ROW | ROWS} ONLY
                 return String.format("FETCH FIRST %d ROWS ONLY", top);
             } else {
@@ -397,21 +551,31 @@ public final class SQLSelectClause {
         Iterator<String> it = query.getTablesAliasesForEntitiesInQuery();
         while (it.hasNext()) {
             String tableAlias = it.next();
+            char escapeSymbol = getEscapeSymbol(context);
+
+            String escapedTableAlias = (escapeSymbol + tableAlias + escapeSymbol);
             EdmStructuralType type = query.getEntityInQueryForAlias(tableAlias);
             if (isSelectTarget(type)) {
                 boolean isView = EdmTableBinding.DataStructureType.VIEW == targetDataStructureType;
                 boolean isCalculationView = EdmTableBinding.DataStructureType.CALC_VIEW == targetDataStructureType;
-                boolean isHanaDatabase = context.getDatabaseProduct()
-                                                .equals(DatabaseProduct.HANA);
+                boolean isHanaDatabase = context.getDatabaseSystem()
+                                                .isHANA();
                 if ((isView || (isCalculationView && isHanaDatabase)) && !this.parameters.isEmpty()) {
                     addInputParamsAsStatementParams(parameters);
-                    tables.add(query.getSQLTableName(target) + buildTargetParameters() + " AS " + tableAlias);
+                    tables.add(query.getSQLTableName(target, context) + buildTargetParameters() + " AS " + escapedTableAlias);
                 } else {
-                    tables.add(query.getSQLTableName(target) + " AS " + tableAlias);
+                    tables.add(query.getSQLTableName(target, context) + " AS " + escapedTableAlias);
                 }
             }
         }
+
         return SQLUtils.csv(tables);
+    }
+
+    private static char getEscapeSymbol(SQLContext context) {
+        DatabaseSystem databaseSystem = context.getDatabaseSystem();
+        ISqlDialect dialect = SqlDialectFactory.getDialect(databaseSystem);
+        return dialect.getEscapeSymbol();
     }
 
     /**
@@ -593,168 +757,5 @@ public final class SQLSelectClause {
      */
     private Object tableColumnForSelectWithoutAlias(final EdmStructuralType type, final EdmProperty prop) {
         return query.getSQLTableColumn(type, prop);
-    }
-
-    /**
-     * The Class SQLSelectBuilder.
-     */
-    public static class SQLSelectBuilder {
-
-        /** The select expression. */
-        private final SQLSelectClause selectExpression;
-
-        /**
-         * Instantiates a new SQL select builder.
-         *
-         * @param select the select
-         */
-        public SQLSelectBuilder(final SQLSelectClause select) {
-            selectExpression = select;
-        }
-
-        /**
-         * Top.
-         *
-         * @param top the top
-         * @return the SQL select clause
-         */
-        public SQLSelectClause top(final int top) {
-            selectExpression.top(top);
-            return selectExpression;
-        }
-
-        /**
-         * Skip.
-         *
-         * @param skip the skip
-         * @return the SQL select clause
-         */
-        public SQLSelectClause skip(final int skip) {
-            selectExpression.skip(skip);
-            return selectExpression;
-        }
-
-        /**
-         * Count.
-         *
-         * @return the SQL select clause
-         */
-        public SQLSelectClause count() {
-            selectExpression.setUsingCount(true);
-            return selectExpression;
-        }
-    }
-
-    /**
-     * The Class EdmTarget.
-     */
-    private class EdmTarget {
-
-        /** The edm target type. */
-        private EdmStructuralType edmTargetType;
-
-        /** The edm property. */
-        private EdmProperty edmProperty;
-
-        /** The edm navigation property. */
-        private EdmNavigationProperty edmNavigationProperty;
-
-        /**
-         * Instantiates a new edm target.
-         *
-         * @param edmTargetType the edm target type
-         * @param edmProperty the edm property
-         */
-        public EdmTarget(final EdmStructuralType edmTargetType, final EdmProperty edmProperty) {
-            this.edmTargetType = edmTargetType;
-            this.edmProperty = edmProperty;
-            this.edmNavigationProperty = null;
-        }
-
-        /**
-         * Instantiates a new edm target.
-         *
-         * @param edmTargetType the edm target type
-         * @param edmNavigationProperty the edm navigation property
-         * @param edmProperty the edm property
-         */
-        public EdmTarget(final EdmStructuralType edmTargetType, EdmNavigationProperty edmNavigationProperty,
-                final EdmProperty edmProperty) {
-            this.edmTargetType = edmTargetType;
-            this.edmProperty = edmProperty;
-            this.edmNavigationProperty = edmNavigationProperty;
-        }
-
-        /**
-         * Gets the edm navigation property.
-         *
-         * @return the edm navigation property
-         */
-        public EdmNavigationProperty getEdmNavigationProperty() {
-            return edmNavigationProperty;
-        }
-
-        /**
-         * Checks if is inline target.
-         *
-         * @return true, if is inline target
-         */
-        public boolean isInlineTarget() {
-            return edmNavigationProperty != null;
-        }
-
-        /**
-         * Gets the edm target type.
-         *
-         * @return the edm target type
-         */
-        public EdmStructuralType getEdmTargetType() {
-            return edmTargetType;
-        }
-
-        /**
-         * Sets the edm target type.
-         *
-         * @param edmTargetType the new edm target type
-         */
-        public void setEdmTargetType(final EdmStructuralType edmTargetType) {
-            this.edmTargetType = edmTargetType;
-        }
-
-        /**
-         * Gets the edm property.
-         *
-         * @return the edm property
-         */
-        public EdmProperty getEdmProperty() {
-            return edmProperty;
-        }
-
-        /**
-         * Sets the edm property.
-         *
-         * @param edmProperty the new edm property
-         */
-        public void setEdmProperty(final EdmProperty edmProperty) {
-            this.edmProperty = edmProperty;
-        }
-
-        /**
-         * To string.
-         *
-         * @return the string
-         */
-        @Override
-        public String toString() {
-            try {
-                if (isInlineTarget()) {
-                    return "EdmTarget [" + edmTargetType.getName() + "." + edmNavigationProperty.getName() + edmProperty.getName() + "]";
-                } else {
-                    return "EdmTarget [" + edmTargetType.getName() + "." + edmProperty.getName() + "]";
-                }
-            } catch (EdmException e) {
-                throw new OData2Exception(HttpStatusCodes.INTERNAL_SERVER_ERROR);
-            }
-        }
     }
 }

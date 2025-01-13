@@ -1,18 +1,22 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.graalium.core.javascript;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Scope;
+import org.eclipse.dirigible.components.open.telemetry.OpenTelemetryProvider;
 import org.eclipse.dirigible.graalium.core.CodeRunner;
 import org.eclipse.dirigible.graalium.core.graal.ContextCreator;
 import org.eclipse.dirigible.graalium.core.graal.EngineCreator;
+import org.eclipse.dirigible.graalium.core.graal.ValueTransformer;
 import org.eclipse.dirigible.graalium.core.graal.globals.GlobalFunction;
 import org.eclipse.dirigible.graalium.core.graal.globals.GlobalObject;
 import org.eclipse.dirigible.graalium.core.javascript.modules.ModuleResolver;
@@ -85,15 +89,6 @@ public class GraalJSCodeRunner implements CodeRunner<Source, Value> {
     }
 
     /**
-     * Gets the graal context.
-     *
-     * @return the graal context
-     */
-    public Context getGraalContext() {
-        return graalContext;
-    }
-
-    /**
      * Provide on before context created hook.
      *
      * @param onBeforeContextCreatedListeners the on before context created listeners
@@ -127,49 +122,6 @@ public class GraalJSCodeRunner implements CodeRunner<Source, Value> {
     }
 
     /**
-     * Run.
-     *
-     * @param codeFilePath the code file path
-     * @return the source
-     */
-    @Override
-    public Source prepareSource(Path codeFilePath) {
-        Path relativeCodeFilePath = currentWorkingDirectoryPath.resolve(codeFilePath);
-        return graalJSSourceCreator.createSource(relativeCodeFilePath);
-    }
-
-    /**
-     * Run.
-     *
-     * @param codeSource the code source
-     * @return the value
-     */
-    @Override
-    public Value run(Source codeSource) {
-        Value result = graalContext.eval(codeSource);
-        rethrowIfError(result);
-        return result;
-    }
-
-    /**
-     * Gets the graal JS interceptor.
-     *
-     * @return the graal JS interceptor
-     */
-    public GraalJSInterceptor getGraalJSInterceptor() {
-        return graalJSInterceptor;
-    }
-
-    /**
-     * Gets the current working directory path.
-     *
-     * @return the current working directory path
-     */
-    public Path getCurrentWorkingDirectoryPath() {
-        return currentWorkingDirectoryPath;
-    }
-
-    /**
      * Adds the global objects.
      *
      * @param globalObjects the js global objects
@@ -177,77 +129,6 @@ public class GraalJSCodeRunner implements CodeRunner<Source, Value> {
     public void addGlobalObjects(List<GlobalObject> globalObjects) {
         Value contextBindings = graalContext.getBindings("js");
         globalObjects.forEach(global -> contextBindings.putMember(global.getName(), global.getValue()));
-    }
-
-    /**
-     * Adds the global functions.
-     *
-     * @param globalFunctions the js global functions
-     */
-    public void addGlobalFunctions(List<GlobalFunction> globalFunctions) {
-        Value contextBindings = graalContext.getBindings("js");
-        globalFunctions.forEach(global -> contextBindings.putMember(global.getName(), global));
-    }
-
-    /**
-     * Parses the.
-     *
-     * @param codeFilePath the code file path
-     * @return the value
-     */
-    public Value parse(Path codeFilePath) {
-        Path relativeCodeFilePath = currentWorkingDirectoryPath.resolve(codeFilePath);
-        Source codeSource = graalJSSourceCreator.createSource(relativeCodeFilePath);
-        return parse(codeSource);
-    }
-
-    /**
-     * Parses the.
-     *
-     * @param codeSource the code source
-     * @return the value
-     */
-    public Value parse(Source codeSource) {
-        return graalContext.parse(codeSource);
-    }
-
-    /**
-     * Leave.
-     */
-    public void leave() {
-        graalContext.leave();
-    }
-
-    /**
-     * Rethrow if error.
-     *
-     * @param maybeError the maybe error
-     */
-    private static void rethrowIfError(Value maybeError) {
-        if (maybeError.isException()) {
-            throw maybeError.throwException();
-        }
-    }
-
-    /**
-     * New builder.
-     *
-     * @param currentWorkingDirectoryPath the current working directory path
-     * @param cachesPath the caches path
-     * @return the builder
-     */
-    public static Builder newBuilder(Path currentWorkingDirectoryPath, Path cachesPath) {
-        return new Builder(currentWorkingDirectoryPath, cachesPath);
-    }
-
-    /**
-     * Close.
-     */
-    @Override
-    public void close() {
-        if (graalContext != null) {
-            graalContext.close(false);
-        }
     }
 
     /**
@@ -264,42 +145,34 @@ public class GraalJSCodeRunner implements CodeRunner<Source, Value> {
          * The dependencies cache path.
          */
         private final Path dependenciesCachePath;
-
-        /**
-         * The wait for debugger.
-         */
-        private boolean waitForDebugger = false;
-
-        /**
-         * The js module type.
-         */
-        private ModuleType jsModuleType = ModuleType.BASED_ON_FILE_EXTENSION;
-
         /**
          * The js polyfills.
          */
         private final List<JavascriptPolyfill> jsPolyfills = new ArrayList<>();
-
         /**
          * The global objects.
          */
         private final List<GlobalObject> globalObjects = new ArrayList<>();
-
         /**
          * The on before context created listeners.
          */
         private final List<Consumer<Context.Builder>> onBeforeContextCreatedListeners = new ArrayList<>();
-
         /**
          * The on after context created listener.
          */
         private final List<Consumer<Context>> onAfterContextCreatedListener = new ArrayList<>();
-
         /**
          * The module resolvers.
          */
         private final List<ModuleResolver> moduleResolvers = new ArrayList<>();
-
+        /**
+         * The wait for debugger.
+         */
+        private boolean waitForDebugger = false;
+        /**
+         * The js module type.
+         */
+        private ModuleType jsModuleType = ModuleType.BASED_ON_FILE_EXTENSION;
         /**
          * The interceptor *.
          */
@@ -468,5 +341,153 @@ public class GraalJSCodeRunner implements CodeRunner<Source, Value> {
             return new GraalJSCodeRunner(this);
         }
 
+    }
+
+    /**
+     * Gets the graal context.
+     *
+     * @return the graal context
+     */
+    public Context getGraalContext() {
+        return graalContext;
+    }
+
+    /**
+     * Run.
+     *
+     * @param codeFilePath the code file path
+     * @return the source
+     */
+    @Override
+    public Source prepareSource(Path codeFilePath) {
+        Path relativeCodeFilePath = currentWorkingDirectoryPath.resolve(codeFilePath);
+        return graalJSSourceCreator.createSource(relativeCodeFilePath);
+    }
+
+    /**
+     * Run.
+     *
+     * @param codeSource the code source
+     * @return the value
+     */
+
+    @Override
+    public Value run(Source codeSource) {
+        Tracer tracer = OpenTelemetryProvider.get()
+                                             .getTracer("eclipse-dirigible");
+        Span span = tracer.spanBuilder("script_execution")
+                          .startSpan();
+        try (Scope scope = span.makeCurrent()) {
+            span.addEvent("Executing [" + codeSource.getPath() + "]");
+            span.setAttribute("source", codeSource.toString());
+            span.setAttribute("source.name", codeSource.getName());
+
+            Value result = graalContext.eval(codeSource);
+
+            Object convertedResult = ValueTransformer.transformValue(result);
+            String resultAttribute = null == convertedResult ? null : convertedResult.toString();
+            span.setAttribute("result", resultAttribute);
+
+            rethrowIfError(result);
+            span.addEvent("Successfully executed [" + codeSource.getPath() + "]");
+
+            return result;
+        } catch (RuntimeException e) {
+            span.recordException(e);
+
+            span.setStatus(io.opentelemetry.api.trace.StatusCode.ERROR, "Exception occurred");
+            throw e;
+        } finally {
+            span.end();
+        }
+    }
+
+    /**
+     * Rethrow if error.
+     *
+     * @param maybeError the maybe error
+     */
+    private static void rethrowIfError(Value maybeError) {
+        if (maybeError.isException()) {
+            throw maybeError.throwException();
+        }
+    }
+
+    /**
+     * Gets the graal JS interceptor.
+     *
+     * @return the graal JS interceptor
+     */
+    public GraalJSInterceptor getGraalJSInterceptor() {
+        return graalJSInterceptor;
+    }
+
+    /**
+     * Gets the current working directory path.
+     *
+     * @return the current working directory path
+     */
+    public Path getCurrentWorkingDirectoryPath() {
+        return currentWorkingDirectoryPath;
+    }
+
+    /**
+     * Adds the global functions.
+     *
+     * @param globalFunctions the js global functions
+     */
+    public void addGlobalFunctions(List<GlobalFunction> globalFunctions) {
+        Value contextBindings = graalContext.getBindings("js");
+        globalFunctions.forEach(global -> contextBindings.putMember(global.getName(), global));
+    }
+
+    /**
+     * Parses the.
+     *
+     * @param codeFilePath the code file path
+     * @return the value
+     */
+    public Value parse(Path codeFilePath) {
+        Path relativeCodeFilePath = currentWorkingDirectoryPath.resolve(codeFilePath);
+        Source codeSource = graalJSSourceCreator.createSource(relativeCodeFilePath);
+        return parse(codeSource);
+    }
+
+    /**
+     * Parses the.
+     *
+     * @param codeSource the code source
+     * @return the value
+     */
+    public Value parse(Source codeSource) {
+        return graalContext.parse(codeSource);
+    }
+
+    /**
+     * Leave.
+     */
+    public void leave() {
+        graalContext.leave();
+    }
+
+    /**
+     * New builder.
+     *
+     * @param currentWorkingDirectoryPath the current working directory path
+     * @param cachesPath the caches path
+     * @return the builder
+     */
+    public static Builder newBuilder(Path currentWorkingDirectoryPath, Path cachesPath) {
+        return new Builder(currentWorkingDirectoryPath, cachesPath);
+    }
+
+    /**
+     * Close.
+     */
+    @Override
+    public void close() {
+        if (graalContext != null) {
+            graalContext.close(false);
+        }
     }
 }

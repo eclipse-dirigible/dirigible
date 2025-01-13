@@ -1,0 +1,5 @@
+{
+    "extensionPoint": "ide-template",
+    "module": "template-hello-world/template.js",
+    "description": "Hello World Template"
+}

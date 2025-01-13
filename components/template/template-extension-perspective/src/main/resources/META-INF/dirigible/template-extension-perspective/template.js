@@ -3,47 +3,52 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-exports.getTemplate = function() {
+export function getTemplate() {
 	return {
-		"name": "Extension (Perspective)",
-		"description": "Extension perspective for the IDE",
-		"sources": [{
-			"location": "/template-extension-perspective/extensions/menu/help.extension.template", 
-			"action": "generate",
-			"rename": "/extensions/menu/help.extension"
+		name: "Perspective (UI)",
+		description: "Generates a basic perspective",
+		sources: [{
+			location: "/template-extension-perspective/extensions/menu/help.extension.template",
+			action: "generate",
+			rename: "/extensions/menu/help.extension"
 		}, {
-			"location": "/template-extension-perspective/extensions/menu/window.extension.template", 
-			"action": "generate",
-			"rename": "/extensions/menu/window.extension"
+			location: "/template-extension-perspective/extensions/menu/window.extension.template",
+			action: "generate",
+			rename: "/extensions/menu/window.extension"
 		}, {
-			"location": "/template-extension-perspective/extensions/menu/perspective.extension.template", 
-			"action": "generate",
-			"rename": "/extensions/menu/{{fileName}}.extension"
+			location: "/template-extension-perspective/extensions/menu/perspective-menu.extension.template",
+			action: "generate",
+			rename: "/extensions/menu/{{fileName}}.extension"
 		}, {
-			"location": "/template-extension-perspective/extensions/menu/menu-perspective.extensionpoint.template", 
-			"action": "generate",
-			"rename": "/extensions/menu/menu-{{fileName}}.extensionpoint"
+			location: "/template-extension-perspective/extensions/menu/perspective-menu.extensionpoint.template",
+			action: "generate",
+			rename: "/extensions/menu/{{fileName}}-menu.extensionpoint"
 		}, {
-			"location": "/template-extension-perspective/extensions/perspective.extension.template", 
-			"action": "generate",
-			"rename": "/extensions/perspective.extension"
+			location: "/template-extension-perspective/extensions/perspective.extension.template",
+			action: "generate",
+			rename: "/extensions/perspective.extension"
 		}, {
-			"location": "/template-extension-perspective/index.html.template", 
-			"action": "generate",
-			"rename": "index.html"
+			location: "/template-extension-perspective/index.html.template",
+			action: "generate",
+			rename: "index.html"
 		}, {
-			"location": "/template-extension-perspective/perspective/menu/perspective.js.template", 
-			"action": "generate",
-			"rename": "/perspective/menu/{{fileName}}.js"
+			location: "/template-extension-perspective/js/perspective.js.template",
+			action: "generate",
+			rename: "js/perspective.js"
 		}, {
-			"location": "/template-extension-perspective/api/menu-perspective.js.template", 
-			"action": "generate",
-			"rename": "/api/menu-{{fileName}}.js"
+			location: "/template-extension-perspective/services/menu/perspective.js.template",
+			action: "generate",
+			rename: "/services/menu/{{fileName}}.js"
 		}, {
-			"location": "/template-extension-perspective/perspective/perspective.js.template", 
-			"action": "generate",
-			"rename": "/perspective/{{fileName}}.js"
+			location: "/template-extension-perspective/services/perspective.js.template",
+			action: "generate",
+			rename: "/services/{{fileName}}.js"
+		}, {
+			location: "/template-extension-perspective/images/perspective.svg.template",
+			action: "generate",
+			rename: "/images/perspective.svg"
 		}],
-		"parameters": []
+		parameters: [],
+		order: 32
 	};
 };

@@ -17,15 +17,29 @@
 
 	<body class="dg-vbox">
 		<fd-toolbar has-title="true">
-			<fd-toolbar-title>Items ({{dataCount}})</fd-toolbar-title>
+			<fd-toolbar-title>Items <span fd-object-status text="{{dataCount}}" inverted="true"></fd-toolbar-title>
 			<fd-toolbar-spacer></fd-toolbar-spacer>
-			<fd-button compact="true" dg-type="transparent" dg-label="Create"
+			<fd-button compact="true" dg-type="transparent" glyph="sap-icon--add"
 				state="{{action == 'update'? 'disabled' : ''}}" ng-click="createEntity()"></fd-button>
-			<fd-button compact="true" dg-type="transparent" dg-label="Edit"
+			<fd-button compact="true" dg-type="transparent" glyph="sap-icon--edit"
 				state="{{selectedEntity == null ? 'disabled' : ''}}" ng-click="updateEntity()"></fd-button>
-			<fd-button compact="true" dg-type="transparent" dg-label="Delete"
+			<fd-button compact="true" dg-type="transparent" glyph="sap-icon--delete"
 				state="{{selectedEntity == null || action == 'update'? 'disabled' : ''}}" ng-click="deleteEntity()">
 			</fd-button>
+			<fd-popover>
+				<fd-popover-control>
+					<fd-button compact="true" glyph="sap-icon--overflow" dg-type="transparent"
+						aria-label="Header Menu Button">
+					</fd-button>
+				</fd-popover-control>
+				<fd-popover-body dg-align="bottom-right">
+					<fd-menu aria-label="Header Menu" no-backdrop="true" no-shadow="true">
+						<fd-menu-item title="Filter" ng-click="openFilter()"></fd-menu-item>
+						<fd-menu-item ng-repeat="action in pageActions" title="{{action.label}}"
+							ng-click="triggerPageAction(action)"></fd-menu-item>
+					</fd-menu>
+				</fd-popover-body>
+			</fd-popover>
 		</fd-toolbar>
 		<fd-scrollbar>
 			<fd-list list-type="navigation-indication" byline="true" state="disabled">

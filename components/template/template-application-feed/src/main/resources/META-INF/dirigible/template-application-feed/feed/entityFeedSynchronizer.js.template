@@ -1,5 +1,5 @@
 #if($feedUrl)
-var dao = require("${projectName}/gen/dao/${perspectiveName}/${name}");
+var dao = require("${projectName}/gen/${genFolderName}/dao/${perspectiveName}/${name}");
 var httpClient = require("http/client");
 var base64 = require("utils/base64");
 var bytes = require("io/bytes");

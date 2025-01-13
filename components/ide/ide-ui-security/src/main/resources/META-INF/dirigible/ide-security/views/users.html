@@ -1,0 +1,90 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="users" ng-controller="UsersController as controller">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title dg-view-title></title>
+        <script type="text/javascript" src="../services/users-view.js"></script>
+        <script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=ide-view-js"></script>
+        <script type="text/javascript" src="users.js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/resources-core/services/loader.js?id=ide-view-css" />
+        <theme></theme>
+    </head>
+
+    <body class="dg-vbox">
+        <fd-toolbar dg-type="solid">
+            <fd-toolbar-spacer></fd-toolbar-spacer>
+            <fd-button dg-type="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh"
+				ng-click="listUsers()"></fd-button>
+            <fd-button dg-type="transparent" glyph="sap-icon--add" title="New" aria-label="New User"
+                ng-click="newUser()"> </fd-button>
+        </fd-toolbar>
+        <fd-scrollbar class="dg-full-height">
+
+            <table fd-table display-mode="compact" outer-borders="none" class="dg-list-border-bottom">
+                <thead fd-table-header sticky="true">
+                    <tr fd-table-row>
+                        <th fd-table-header-cell width="50px">#</th>
+                        <th fd-table-header-cell>Username</th>
+                        <th fd-table-header-cell>Tenant</th>
+                        <th fd-table-header-cell>Role</th>
+                        <th fd-table-header-cell width="180px">Created</th>
+                        <th fd-table-header-cell width="150px">Creator</th>
+                        <th fd-table-header-cell width="50px"></th>
+                        <th fd-table-header-cell width="50px"></th>
+                    </tr>
+                </thead>
+                <tbody fd-table-body>
+                    <tr fd-table-row ng-repeat="next in list" hoverable="true" activable="false">
+                        <td fd-table-cell width="300px">{{next.id}}</td>
+                        <td fd-table-cell>
+                            <div class="tdSingleLine">{{next.username}}</div>
+                        </td>
+                        <td fd-table-cell>
+                            <div class="tdSingleLine">{{next.tenant.name}}</div>
+                        </td>
+                        <td fd-table-cell>
+                            <div class="tdSingleLine">{{next.rolesNames}}</div>
+                        </td>
+                        <td fd-table-cell width="180px">
+                            <div class="tdSingleLine">{{next.createdAt | date:'yyyy-MM-dd HH:mm:ss' }}</div>
+                        </td>
+                        <td fd-table-cell width="150px">
+                            <div class="tdSingleLine">{{next.createdBy}}</div>
+                        </td>
+                        <td fd-table-cell width="50px">
+                            <div class="tdSingleLine">
+                                <fd-button dg-type="transparent" glyph="sap-icon--edit" title="Edit"
+                                    aria-label="Edit User" ng-click="editUser(next)">
+                                </fd-button>
+                            </div>
+                        </td>
+                        <td fd-table-cell width="50px">
+                            <div class="tdSingleLine">
+                                <fd-button dg-type="transparent" glyph="sap-icon--delete" title="User"
+                                    aria-label="Delete User" ng-click="deleteUser(next)">
+                                </fd-button>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </fd-scrollbar>
+    </body>
+
+</html>

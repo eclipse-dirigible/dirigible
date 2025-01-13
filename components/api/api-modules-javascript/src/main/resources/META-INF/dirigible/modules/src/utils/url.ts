@@ -12,22 +12,31 @@
 
 const UrlFacade = Java.type("org.eclipse.dirigible.components.api.utils.UrlFacade");
 
-export function encode(input, charset) {
-	return UrlFacade.encode(input, charset);
-};
+export class URL {
 
-export function decode(input, charset) {
-	return UrlFacade.decode(input, charset);
-};
+	public static encode(input: string, charset?: string): string {
+		return UrlFacade.encode(input, charset);
+	}
 
-export function escape(input) {
-	return UrlFacade.escape(input);
-};
+	public static decode(input: string, charset?: string): string {
+		return UrlFacade.decode(input, charset);
+	}
 
-export function escapePath(input) {
-	return UrlFacade.escapePath(input);
-};
+	public static escape(input: string): string {
+		return UrlFacade.escape(input);
+	}
 
-export function escapeForm(input) {
-	return UrlFacade.escapeForm(input);
-};
+	public static escapePath(input: string): string {
+		return UrlFacade.escapePath(input);
+	}
+
+	public static escapeForm(input: string): string {
+		return UrlFacade.escapeForm(input);
+	}
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = URL;
+}

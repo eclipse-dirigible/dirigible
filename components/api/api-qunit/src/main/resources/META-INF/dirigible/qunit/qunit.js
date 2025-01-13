@@ -1,12 +1,12 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
 (function (global) {
@@ -81,7 +81,7 @@
 	}
 
 	/**
-	 * Makes a clone of an object using only Array or Object as base,
+	 * Makes a clone of an object using only Array or Objectbase,
 	 * and copies over the own enumerable properties.
 	 *
 	 * @param {Object} obj
@@ -207,7 +207,7 @@
 
 	/**
 	 * Config object: Maintain internal state
-	 * Later exposed as QUnit.config
+	 * Later exposedQUnit.config
 	 * `config` initialized at top of scope
 	 */
 	var config = {
@@ -269,7 +269,7 @@
 			var loggingCallback = function (callback) {
 				if (objectType(callback) !== "function") {
 					throw new Error(
-						"QUnit logging methods require a callback function as their first parameters."
+						"QUnit logging methods require a callback functiontheir first parameters."
 					);
 				}
 
@@ -318,7 +318,7 @@
 				ret = onErrorFnPrev(error, filePath, linerNr);
 			}
 
-			// Treat return value as window.onerror itself does,
+			// Treat return valuewindow.onerror itself does,
 			// Only do our handling if not suppressed.
 			if (ret !== true) {
 				if (QUnit.config.current) {
@@ -1188,7 +1188,7 @@
 		}
 	}
 
-	// Will be exposed as QUnit.test
+	// Will be exposedQUnit.test
 	function test(testName, callback) {
 		if (focused) { return; }
 
@@ -1202,7 +1202,7 @@
 		newTest.queue();
 	}
 
-	// Will be exposed as QUnit.skip
+	// Will be exposedQUnit.skip
 	function skip(testName) {
 		if (focused) { return; }
 
@@ -1214,7 +1214,7 @@
 		test.queue();
 	}
 
-	// Will be exposed as QUnit.only
+	// Will be exposedQUnit.only
 	function only(testName, callback) {
 		var newTest;
 
@@ -1399,7 +1399,7 @@
 
 			// Backwards compatibility fix.
 			// Allows the direct use of global exported assertions and QUnit.assert.*
-			// Although, it's use is not recommended as it can leak assertions
+			// Although, it's use is not recommendedit can leak assertions
 			// to other tests from async tests, because we only get a reference to the current test,
 			// not exactly the test where assertion were intended to be called.
 			if (!currentTest) {
@@ -1659,7 +1659,7 @@
 
 			// Ref #851
 			// If the obj prototype descends from a null constructor, treat it
-			// as a null prototype.
+			//a null prototype.
 			if (protoA && protoA.constructor === null) {
 				protoA = null;
 			}
@@ -1668,7 +1668,7 @@
 			}
 
 			// Allow objects with no prototype to be equivalent to
-			// objects with Object as their constructor.
+			// objects with Objecttheir constructor.
 			if ((protoA === null && protoB === Object.prototype) ||
 				(protoB === null && protoA === Object.prototype)) {
 				return true;
@@ -2333,19 +2333,19 @@
 		{
 			id: "hidepassed",
 			label: "Hide passed tests",
-			tooltip: "Only show tests and assertions that fail. Stored as query-strings."
+			tooltip: "Only show tests and assertions that fail. Storedquery-strings."
 		},
 		{
 			id: "noglobals",
 			label: "Check for Globals",
 			tooltip: "Enabling this will test if any test introduces new properties on the " +
-				"global object (`window` in Browsers). Stored as query-strings."
+				"global object (`window` in Browsers). Storedquery-strings."
 		},
 		{
 			id: "notrycatch",
 			label: "No try-catch",
 			tooltip: "Enabling this will run tests outside of a try-catch block. Makes debugging " +
-				"exceptions in IE reasonable. Stored as query-strings."
+				"exceptions in IE reasonable. Storedquery-strings."
 		}
 	);
 
@@ -3113,7 +3113,7 @@
 
 		// The pushFailure doesn't provide details.expected
 		// when it calls, it's implicit to also not show expected and diff stuff
-		// Also, we need to check details.expected existence, as it can exist and be undefined
+		// Also, we need to check details.expected existence,it can exist and be undefined
 		if (!details.result && hasOwn.call(details, "expected")) {
 			if (details.negative) {
 				expected = "NOT " + QUnit.dump.parse(details.expected);
@@ -3148,14 +3148,14 @@
 			} else if (expected.indexOf("[object Array]") !== -1 ||
 				expected.indexOf("[object Object]") !== -1) {
 				message += "<tr class='test-message'><th>Message: </th><td>" +
-					"Diff suppressed as the depth of object is more than current max depth (" +
+					"Diff suppressedthe depth of object is more than current max depth (" +
 					QUnit.config.maxDepth + ").<p>Hint: Use <code>QUnit.dump.maxDepth</code> to " +
 					" run with a higher max depth or <a href='" +
 					escapeText(setUrl({ maxDepth: -1 })) + "'>" +
 					"Rerun</a> without max depth.</p></td></tr>";
 			} else {
 				message += "<tr class='test-message'><th>Message: </th><td>" +
-					"Diff suppressed as the expected and actual results have an equivalent" +
+					"Diff suppressedthe expected and actual results have an equivalent" +
 					" serialization</td></tr>";
 			}
 
@@ -3280,9 +3280,9 @@
 	/*
 	 * This file is a modified version of google-diff-match-patch's JavaScript implementation
 	 * (https://code.google.com/p/google-diff-match-patch/source/browse/trunk/javascript/diff_match_patch_uncompressed.js),
-	 * modifications are licensed as more fully set forth in LICENSE.txt.
+	 * modifications are licensedmore fully set forth in LICENSE.txt.
 	 *
-	 * The original source of google-diff-match-patch is attributable and licensed as follows:
+	 * The original source of google-diff-match-patch is attributable and licensedfollows:
 	 *
 	 * Copyright 2006 Google Inc.
 	 * https://code.google.com/p/google-diff-match-patch/
@@ -3708,7 +3708,7 @@
 				var seed, j, bestCommon, prefixLength, suffixLength,
 					bestLongtextA, bestLongtextB, bestShorttextA, bestShorttextB;
 
-				// Start with a 1/4 length substring at position i as a seed.
+				// Start with a 1/4 length substring at position ia seed.
 				seed = longtext.substring(i, i + Math.floor(longtext.length / 4));
 				j = -1;
 				bestCommon = "";
@@ -4094,7 +4094,7 @@
 			//   -> <del>abc</del>xxx<ins>def</ins>
 			// e.g: <del>xxxabc</del><ins>defxxx</ins>
 			//   -> <ins>def</ins>xxx<del>abc</del>
-			// Only extract an overlap if it is as big as the edit ahead or behind it.
+			// Only extract an overlap if it isbigthe edit ahead or behind it.
 			pointer = 1;
 			while (pointer < diffs.length) {
 				if (diffs[pointer - 1][0] === DIFF_DELETE &&
@@ -4289,7 +4289,7 @@
 
 		/**
 		 * Reorder and merge like edit sections.  Merge equalities.
-		 * Any edit section can move as long as it doesn't cross an equality.
+		 * Any edit section can movelongit doesn't cross an equality.
 		 * @param {!Array.<!DiffMatchPatch.Diff>} diffs Array of diff tuples.
 		 */
 		DiffMatchPatch.prototype.diffCleanupMerge = function (diffs) {

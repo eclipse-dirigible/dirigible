@@ -4,11 +4,11 @@
  * Do not modify the content as it may be re-generated again.
  */
 const perspectiveData = {
-	id: "home",
-	name: "Home",
-	link: "/services/web/${projectName}/gen/index.html",
-	order: "1",
-	icon: "/services/web/resources/unicons/estate.svg",
+	id: 'home',
+	name: 'Home',
+	link: '/services/web/portal/index.html',
+	icon: '/services/web/resources/unicons/estate.svg',
+	order: 1,
 };
 
 if (typeof exports !== 'undefined') {

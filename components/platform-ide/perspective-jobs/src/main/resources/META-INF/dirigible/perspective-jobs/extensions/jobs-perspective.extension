@@ -1,0 +1,5 @@
+{
+    "module": "perspective-jobs/configs/jobs.js",
+    "extensionPoint": "platform-perspectives",
+    "description": "Jobs Perspective"
+}

@@ -1,8 +1,12 @@
 {
-	"edmType": "Current_Product_List",
-	"edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.CurrentProductList",
-	"sqlTable": " PUBLIC.CURRENT_PRODUCT_LIST",
-	"ProductID": "PRODUCT_ID",
-	"ProductName": "PRODUCT_NAME",
-	"_pk_": ["PRODUCT_ID", "PRODUCT_NAME"]
+  "edmType": "Current_Product_List",
+  "edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.CurrentProductList",
+  "sqlTable": "CURRENT_PRODUCT_LIST",
+  "sqlSchema": "PUBLIC",
+  "ProductID": "PRODUCT_ID",
+  "ProductName": "PRODUCT_NAME",
+  "_pk_": [
+    "PRODUCT_ID",
+    "PRODUCT_NAME"
+  ]
 }

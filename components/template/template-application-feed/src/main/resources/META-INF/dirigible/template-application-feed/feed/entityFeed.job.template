@@ -9,6 +9,6 @@
 #else
 	"expression": "0 0 0 1 * ? *",
 #end
-	"handler": "${projectName}/gen/feed/${perspectiveName}/${name}FeedSynchronizer.js",
+	"handler": "${projectName}/gen/${genFolderName}/feed/${perspectiveName}/${name}FeedSynchronizer.js",
 	"description": "${name}FeedSynchronizer Job"
 }

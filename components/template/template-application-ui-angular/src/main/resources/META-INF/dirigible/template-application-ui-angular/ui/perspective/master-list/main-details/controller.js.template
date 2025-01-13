@@ -1,14 +1,29 @@
 #set($dollar = '$')
-angular.module('page', ["ideUI", "ideView", "entityApi"])
+angular.module('page', ["ideUI", "ideView"])
 	.config(["messageHubProvider", function (messageHubProvider) {
 		messageHubProvider.eventIdPrefix = '${projectName}.${perspectiveName}.${name}';
 	}])
-	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/js/${projectName}/gen/api/${perspectiveName}/${name}.js";
-	}])
-	.controller('PageController', ['$scope', 'messageHub', 'entityApi', function ($scope, messageHub, entityApi) {
+	.controller('PageController', ['$scope', 'Extensions', 'messageHub', function ($scope, Extensions, messageHub) {
 
 		$scope.entity = {};
+
+		//-----------------Custom Actions-------------------//
+		Extensions.get('dialogWindow', '${projectName}-custom-action').then(function (response) {
+			$scope.entityActions = response.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && e.type === "entity");
+		});
+
+		$scope.triggerEntityAction = function (action) {
+			messageHub.showDialogWindow(
+				action.id,
+				{
+					id: $scope.entity.${primaryKeysString}
+				},
+				null,
+				true,
+				action
+			);
+		};
+		//-----------------Custom Actions-------------------//
 
 		//-----------------Events-------------------//
 		messageHub.onDidReceiveMessage("clearDetails", function (msg) {

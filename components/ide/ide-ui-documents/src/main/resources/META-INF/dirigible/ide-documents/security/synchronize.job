@@ -1,1 +1,6 @@
-{"expression":"0/30 * * * * ?","group":"dirigible-defined","handler":"ide-documents/security/synchronize.js","description":"CMIS Security"}
+{
+    "expression": "0 * * * * ?",
+    "group": "defined",
+    "handler": "ide-documents/security/synchronize.js",
+    "description": "CMIS Security"
+}

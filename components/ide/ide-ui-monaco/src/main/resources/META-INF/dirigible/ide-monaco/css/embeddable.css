@@ -1,0 +1,5 @@
+@font-face {
+    font-family: codicon;
+    font-display: block;
+    src: url(/webjars/monaco-editor/min/vs/base/browser/ui/codicons/codicon/codicon.ttf) format("truetype")
+}

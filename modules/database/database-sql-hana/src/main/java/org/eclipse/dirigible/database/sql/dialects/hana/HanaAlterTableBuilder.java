@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.dialects.hana;
 
@@ -15,7 +14,6 @@ import org.eclipse.dirigible.database.sql.builders.table.AlterTableBuilder;
 import org.eclipse.dirigible.database.sql.builders.table.CreateTableUniqueIndexBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 
 /**
  * The Class HanaAlterTableBuilder.
@@ -74,7 +72,7 @@ public class HanaAlterTableBuilder extends AlterTableBuilder {
     protected String traverseColumnNamesForDrop() {
         StringBuilder snippet = new StringBuilder();
         for (String[] column : this.getColumns()) {
-            String columnName = (isCaseSensitive()) ? encapsulate(column[0]) : column[0];
+            String columnName = encapsulate(column[0]);
             snippet.append(KEYWORD_DROP)
                    .append(SPACE)
                    .append(OPEN);
@@ -168,7 +166,7 @@ public class HanaAlterTableBuilder extends AlterTableBuilder {
     protected void generateUniqueIndex(StringBuilder sql, CreateTableUniqueIndexBuilder uniqueIndex) {
         if (uniqueIndex != null) {
             if (uniqueIndex.getName() != null) {
-                String uniqueIndexName = (isCaseSensitive()) ? encapsulate(uniqueIndex.getName()) : uniqueIndex.getName();
+                String uniqueIndexName = encapsulate(uniqueIndex.getName());
                 sql.append(KEYWORD_ADD)
                    .append(SPACE)
                    .append(KEYWORD_CONSTRAINT)

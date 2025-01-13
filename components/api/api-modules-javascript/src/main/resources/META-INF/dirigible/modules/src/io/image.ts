@@ -12,11 +12,20 @@
 /**
  * API Image
  */
-import * as streams from "@dirigible/io/streams";
+import { InputStream } from "sdk/io/streams";
 
 const ImageFacade = Java.type("org.eclipse.dirigible.components.api.io.ImageFacade");
 
-export function resize(original, type, width, height) {
-	const native = ImageFacade.resize(original, type, width, height);
-	return new streams.InputStream(native);
-};
+export class Image {
+
+	public static resize(original: InputStream, type: string, width: number, height: number): InputStream {
+		const native = ImageFacade.resize(original.native, type, width, height);
+		return new InputStream(native);
+	}
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Image;
+}

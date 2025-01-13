@@ -1,20 +1,19 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.componenets.api.etcd;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import java.util.Arrays;
-import java.util.concurrent.ExecutionException;
+import com.google.common.base.Charsets;
+import io.etcd.jetcd.ByteSequence;
+import io.etcd.jetcd.KV;
+import io.etcd.jetcd.kv.GetResponse;
+import io.etcd.jetcd.test.EtcdClusterExtension;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.api.etcd.EtcdFacade;
 import org.junit.Before;
@@ -27,11 +26,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
-import com.google.common.base.Charsets;
-import io.etcd.jetcd.ByteSequence;
-import io.etcd.jetcd.KV;
-import io.etcd.jetcd.kv.GetResponse;
-import io.etcd.jetcd.test.EtcdClusterExtension;
+
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * The Class EtcdFacadeTest.
@@ -57,7 +56,7 @@ public class EtcdFacadeTest {
      */
     @Before
     public void setUp() {
-        cluster.restart();
+        cluster.restart(-1, TimeUnit.SECONDS);
         Configuration.set("DIRIGIBLE_ETCD_CLIENT_ENDPOINT", cluster.clientEndpoints()
                                                                    .get(0)
                                                                    .toString());
@@ -119,7 +118,7 @@ public class EtcdFacadeTest {
         ByteSequence bs = EtcdFacade.byteArrayToByteSequence(arr);
 
         assertNotNull(bs);
-        assertTrue(Arrays.equals(bs.getBytes(), arr));
+        assertArrayEquals(bs.getBytes(), arr);
     }
 
     /**

@@ -1,0 +1,227 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="settings" ng-controller="SettingsController">
+
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+		<title config-title></title>
+		<script type="text/javascript" src="/services/web/editor-monaco/configs/editor-settings.js"></script>
+		<script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=view-js,cookies"></script>
+		<link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+	</head>
+
+	<body class="bk-vbox">
+		<bk-toolbar has-title="true">
+			<bk-toolbar-title>Code Editor</bk-toolbar-title>
+			<bk-toolbar-spacer></bk-toolbar-spacer>
+			<bk-button label="Reset all" state="negative" title="Reset all" aria-label="reset all code editor settings button" ng-click="resetAll()"></bk-button>
+		</bk-toolbar>
+		<bk-scrollbar class="bk-center--horizontal bk-padding bk-box--items-start">
+			<div class="bk-vbox bk-box--gap-xl bk-full-width bk-restrict-width--sm">
+				<bk-card card-type="list" aria-roledescription="code editor setting section">
+					<bk-card-content aria-roledescription="Card content">
+						<bk-list>
+							<bk-list-item interactive="false">
+								<bk-list-title id="afl">Format On Save</bk-list-title>
+								<bk-switch class="bk-margin-inline--none" switch-id="afsw" switch-labelledby="afl" ng-model="switches.autoFormat" ng-change="autoFormatChange()"></bk-switch>
+							</bk-list-item>
+							<bk-list-item interactive="false">
+								<bk-list-title id="acb">Auto Closing Brackets</bk-list-title>
+								<bk-switch class="bk-margin-inline--none" switch-id="acbsw" switch-labelledby="acb" ng-model="switches.autoBrackets" ng-change="autoBracketsChange()"></bk-switch>
+							</bk-list-item>
+							<bk-list-item interactive="false">
+								<bk-list-title id="amm">Autohide Minimap</bk-list-title>
+								<bk-switch class="bk-margin-inline--none" switch-id="ammsw" switch-labelledby="amm" ng-model="switches.minimapAutohide" ng-change="minimapAutohideChange()"></bk-switch>
+							</bk-list-item>
+							<bk-list-item interactive="false">
+								<bk-list-title>Render Whitespace</bk-list-title>
+								<bk-select compact="true" ng-model="selects.whitespace" ng-change="onWhitespaceChange()" dropdown-fixed="true">
+									<bk-option text="All" value="'all'"></bk-option>
+									<bk-option text="None" value="'none'"></bk-option>
+									<bk-option text="Boundary" value="'boundary'"></bk-option>
+									<bk-option text="Selection" value="'selection'"></bk-option>
+									<bk-option text="Trailing" value="'trailing'"></bk-option>
+								</bk-select>
+							</bk-list-item>
+							<bk-list-item interactive="false" class="bk-no-border--bottom">
+								<bk-list-title>Word Wrap</bk-list-title>
+								<bk-select compact="true" ng-model="selects.wordWrap" ng-change="onWordWrapChange()" dropdown-fixed="true">
+									<bk-option text="Off" value="'off'"></bk-option>
+									<bk-option text="On" value="'on'"></bk-option>
+									<bk-option text="Word Wrap Column" value="'wordWrapColumn'"></bk-option>
+									<bk-option text="Column Bounds" value="'bounded'"></bk-option>
+								</bk-select>
+							</bk-list-item>
+						</bk-list>
+					</bk-card-content>
+				</bk-card>
+
+				<div class="bk-vbox bk-box--gap">
+					<div class="bk-hbox bk-box--space-between bk-box--items-center">
+						<span class="fd-text"><b>Auto-format excluded files</b></span>
+						<bk-button glyph="sap-icon--delete" label="Clear all" title="Clear all" ng-disabled="!autoFormatExcluded.length" ng-click="clearExcluded()"></bk-button>
+					</div>
+					<bk-card card-type="list" aria-roledescription="auto format exluded files section">
+						<bk-card-content aria-roledescription="Card content">
+							<div class="bk-padding" style="text-align: center;" ng-if="!autoFormatExcluded.length">No excluded files</div>
+							<bk-list byline="true" ng-if="autoFormatExcluded.length">
+								<bk-list-item interactive="false" ng-repeat="file in autoFormatExcluded track by $index" class="{{$last ? 'bk-no-border--bottom' : ''}}">
+									<bk-list-content item-title="{{file.substring(file.lastIndexOf('/') + 1, file.length)}}">{{file}}</bk-list-content>
+									<bk-button bk-list-button state="transparent" glyph="sap-icon--delete" aria-label="remove" ng-click="clearExcluded(file)"></bk-button>
+								</bk-list-item>
+							</bk-list>
+						</bk-card-content>
+					</bk-card>
+				</div>
+			</div>
+		</bk-scrollbar>
+		<script>
+			const settings = angular.module('settings', ['blimpKit', 'platformView']);
+			settings.controller('SettingsController', ($scope, $window) => {
+				const messageHub = new MessageHubApi();
+				const autoFormatKey = `${brandingInfo.keyPrefix}.code-editor.autoFormat`;
+				const autoFormatExcludedKey = `${brandingInfo.keyPrefix}.code-editor.autoFormat.excluded`;
+				const autoBracketsKey = `${brandingInfo.keyPrefix}.code-editor.autoBrackets`;
+				const minimapAutohideKey = `${brandingInfo.keyPrefix}.code-editor.minimapAutohide`;
+				const whitespaceKey = `${brandingInfo.keyPrefix}.code-editor.whitespace`;
+				const wordWrapKey = `${brandingInfo.keyPrefix}.code-editor.wordWrap`;
+
+				$scope.autoFormatExcluded = JSON.parse($window.localStorage.getItem(autoFormatExcludedKey) || '[]');
+
+				function getAutoFormat() {
+					let autoFormat = $window.localStorage.getItem(autoFormatKey);
+					if (autoFormat === null) {
+						autoFormat = true;
+						$window.localStorage.setItem(autoFormatKey, 'true');
+					} else autoFormat = JSON.parse(autoFormat);
+					return autoFormat;
+				}
+
+				function getAutoBrackets() {
+					let autoBrackets = $window.localStorage.getItem(autoBracketsKey);
+					if (autoBrackets === null) {
+						autoBrackets = true;
+						$window.localStorage.setItem(autoBracketsKey, 'true');
+					} else autoBrackets = JSON.parse(autoBrackets);
+					return autoBrackets;
+				}
+
+				function getMinimapAutohide() {
+					let minimapAutohide = $window.localStorage.getItem(minimapAutohideKey);
+					if (minimapAutohide === null) {
+						minimapAutohide = false;
+						$window.localStorage.setItem(minimapAutohideKey, 'false');
+					} else minimapAutohide = JSON.parse(minimapAutohide);
+					return minimapAutohide;
+				}
+
+				function getWhitespace() {
+					let whitespace = $window.localStorage.getItem(whitespaceKey);
+					if (whitespace === null) {
+						whitespace = 'trailing';
+						$window.localStorage.setItem(whitespaceKey, whitespace);
+					}
+					return whitespace;
+				}
+
+				function getWordWrap() {
+					let wordWrap = $window.localStorage.getItem(wordWrapKey);
+					if (wordWrap === null) {
+						wordWrap = 'off';
+						$window.localStorage.setItem(wordWrapKey, wordWrap);
+					}
+					return wordWrap;
+				}
+
+				$scope.switches = {
+					autoFormat: getAutoFormat(),
+					autoBrackets: getAutoBrackets(),
+					minimapAutohide: getMinimapAutohide(),
+				};
+
+				$scope.selects = {
+					whitespace: getWhitespace(),
+					wordWrap: getWordWrap(),
+				};
+
+				$scope.autoFormatChange = () => {
+					$window.localStorage.setItem(autoFormatKey, `${$scope.switches.autoFormat}`);
+				};
+				$scope.autoBracketsChange = () => {
+					$window.localStorage.setItem(autoBracketsKey, `${$scope.switches.autoBrackets}`);
+					messageHub.postMessage({
+						topic: 'code-editor.settings.update',
+						data: { fromSettings: true, setting: 'autoBrackets', value: $scope.switches.autoBrackets }
+					});
+				};
+
+				$scope.minimapAutohideChange = () => {
+					$window.localStorage.setItem(minimapAutohideKey, `${$scope.switches.minimapAutohide}`);
+					messageHub.postMessage({
+						topic: 'code-editor.settings.update',
+						data: { fromSettings: true, setting: 'minimapAutohide', value: $scope.switches.minimapAutohide }
+					});
+				};
+
+				$scope.onWhitespaceChange = () => {
+					$window.localStorage.setItem(whitespaceKey, $scope.selects.whitespace);
+					messageHub.postMessage({
+						topic: 'code-editor.settings.update',
+						data: { fromSettings: true, setting: 'whitespace', value: $scope.selects.whitespace }
+					});
+				};
+
+				$scope.onWordWrapChange = () => {
+					$window.localStorage.setItem(wordWrapKey, $scope.selects.wordWrap);
+					messageHub.postMessage({
+						topic: 'code-editor.settings.update',
+						data: { fromSettings: true, setting: 'wordWrap', value: $scope.selects.wordWrap }
+					});
+				};
+
+				$scope.clearExcluded = (file) => {
+					if (file) $scope.autoFormatExcluded.splice($scope.autoFormatExcluded.indexOf(file), 1);
+					else $scope.autoFormatExcluded.length = 0;
+					$window.localStorage.setItem(autoFormatExcludedKey, JSON.stringify($scope.autoFormatExcluded));
+					messageHub.postMessage({
+						topic: 'code-editor.settings.update',
+						data: { fromSettings: true, setting: 'autoFormat', fileName: file }
+					});
+				};
+
+				$scope.resetAll = () => {
+					$window.localStorage.setItem(autoFormatKey, 'true');
+					$window.localStorage.setItem(autoBracketsKey, 'true');
+				};
+
+				const updateListener = messageHub.addMessageListener({ topic: 'code-editor.settings.update', handler: (data) => {
+					if (!data.fromSettings) {
+						$scope.$evalAsync(() => {
+							$scope.autoFormatExcluded = JSON.parse($window.localStorage.getItem(autoFormatExcludedKey) || '[]');
+						});
+					}
+				} });
+
+				$scope.$on('$destroy', () => {
+					messageHub.removeMessageListener(updateListener);
+				});
+			});
+		</script>
+		<theme></theme>
+	</body>
+
+</html>

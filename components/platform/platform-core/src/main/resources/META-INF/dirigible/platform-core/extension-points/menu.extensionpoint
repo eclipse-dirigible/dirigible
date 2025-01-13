@@ -1,0 +1,4 @@
+{
+    "name": "platform-menus",
+    "description": "Extension point for the perspective main menus"
+}

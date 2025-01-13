@@ -12,114 +12,94 @@
 
 const EtcdFacade = Java.type("org.eclipse.dirigible.components.api.etcd.EtcdFacade");
 
-export function getClient() {
-    const native = EtcdFacade.getClient();
-    var client = new Client(native);
-    return client;
-};
+export class Client {
 
-class Client {
+    private readonly native: any;
 
-    constructor(private native) { }
-
-    putStringValue(key, value) {
-        if (typeof (key) !== 'string') {
-            return new Error('Key is not a string.');
-        } else if (typeof (value) !== 'string') {
-            return new Error('Value is not a string.');
-        } else {
-            this.native.put(StringToByteSequence(key), StringToByteSequence(value));
-        }
+    constructor() {
+        this.native = EtcdFacade.getClient();
     }
 
-    putByteArrayValue(key, value) {
-        if (typeof (key) !== 'string') {
-            return new Error('Key is not a string.');
-        } else if (!(value instanceof Int8Array)) {
-            return new Error('Value is not a Int8Array.');
-        } else {
-            this.native.put(StringToByteSequence(key), ByteArrayToByteSequence(value));
-        }
+    public putStringValue(key: string, value: string): void {
+        this.native.put(StringToByteSequence(key), StringToByteSequence(value));
     }
 
-    getHeader(key) {
+    public putByteArrayValue(key: string, value: Int8Array): void {
+        this.native.put(StringToByteSequence(key), ByteArrayToByteSequence(value));
+    }
+
+    public getHeader(key: string): Header {
         return this.get(key, this.native).getHeader();
     }
 
-    getKvsStringValue(key) {
-        if (typeof (key) !== 'string') {
-            return new Error('Key is not a string.');
-        } else {
-            return this.get(key, this.native).getKvsString();
-        }
+    public getKvsStringValue(key: string): { [key: string]: string } {
+        return this.get(key, this.native).getKvsString();
     }
 
-    getKvsByteArrayValue(key) {
-        if (typeof (key) !== 'string') {
-            return new Error('Key is not a string.');
-        } else {
-            return this.get(key, this.native).getKvsByteArray();
-        }
+    public getKvsByteArrayValue(key: string): { [key: string]: Int8Array } {
+        return this.get(key, this.native).getKvsByteArray();
     }
 
-    getCount(key) {
+    public getCount(key: string): number {
         return this.get(key, this.native).getCount();
     }
 
-    delete(key) {
-        if (typeof (key) !== 'string') {
-            return new Error('Key is not a string.');
-        } else {
-            this.native.delete(StringToByteSequence(key));
-        }
+    public delete(key: string): void {
+        this.native.delete(StringToByteSequence(key));
     }
 
-    private get(key, native) {
-        var etcdCompletableFuture = native.get(StringToByteSequence(key));
+    private get(key: string, native: any) {
+        const etcdCompletableFuture = native.get(StringToByteSequence(key));
         var native = etcdCompletableFuture.get();
-        var etcdGetReponse = new GetResponse(native);
-        return etcdGetReponse;
+        return new GetResponse(native);
     }
 }
 
 class GetResponse {
+    private readonly native: any;
 
-    constructor(private native) { }
-
-    getHeader() {
-        var native = this.native.getHeader();
-        var header = new Header(native);
-        return header;
+    constructor(native: any) {
+        this.native = native;
     }
 
-    getKvsString() {
+    public getHeader(): Header {
+        var native = this.native.getHeader();
+        return new Header(native);
+    }
+
+    public getKvsString(): { [key: string]: string } {
         return KeyValueObjectString(this.native.getKvs());
     }
 
-    getKvsByteArray() {
+    public getKvsByteArray(): { [key: string]: Int8Array } {
         return KeyValueObjectByteArray(this.native.getKvs());
     }
-    getCount() {
+
+    public getCount(): number {
         return this.native.getCount();
     }
 }
 
 class Header {
-    constructor(private native) { }
+    private readonly native: any;
 
-    getRevision() {
+    constructor(native: any) {
+        this.native = native;
+    }
+
+    public getRevision(): string {
         return this.native.getRevision();
     }
 
-    getClusterId() {
+    public getClusterId(): string {
         return this.native.getClusterId();
     }
 
-    getMemberId() {
+    public getMemberId(): string {
         return this.native.getMemberId();
     }
 
-    getRaftTerm() {
+    public getRaftTerm(): string {
         return this.native.getRaftTerm();
     }
 }
@@ -162,4 +142,10 @@ function BytesToArray(value) {
         result[i] = parseInt(array[i]);
     }
     return result;
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Client;
 }

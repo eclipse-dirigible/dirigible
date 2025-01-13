@@ -1,0 +1,59 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" ng-app="git" ng-controller="GitController" xmlns="http://www.w3.org/1999/xhtml">
+
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title config-title></title>
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
+        <script type="text/javascript" src="/services/web/perspective-git/configs/git-perspective.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=perspective-js">
+        </script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=perspective-css" />
+    </head>
+
+    <body>
+        <layout config="::layoutConfig"></layout>
+        <script type="text/javascript">
+            angular.module('git', ['platformView', 'platformLayout', 'blimpKit']).controller('GitController', ($scope) => {
+                $scope.layoutConfig = {
+                    views: ['gitProjects', 'branchesLocal', 'branchesRemote', 'diff', 'gitStaging', 'gitHistory'],
+                    viewSettings: {
+                        gitProjects: {
+                            expanded: true
+                        },
+                        branchesLocal: {
+                            expanded: true
+                        },
+                        branchesRemote: {
+                            expanded: true
+                        },
+                        diff: {
+                            closable: false
+                        }
+                    },
+                    layoutSettings: {
+                        hideCenterTabs: true,
+                        leftPaneMinSize: 348,
+                        rightPaneMinSize: 240,
+                    },
+                };
+            });
+        </script>
+        <theme></theme>
+    </body>
+
+</html>

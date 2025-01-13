@@ -1,54 +1,60 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.engine.camel.invoke;
 
 import org.apache.camel.Message;
+import org.eclipse.dirigible.components.engine.camel.components.DirigibleJavaScriptInvoker;
 import org.eclipse.dirigible.components.engine.camel.processor.CamelProcessor;
-import org.eclipse.dirigible.components.engine.javascript.service.JavascriptService;
-import org.eclipse.dirigible.repository.api.RepositoryPath;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.config.ConfigurableBeanFactory;
-import org.springframework.context.annotation.Scope;
+import org.eclipse.dirigible.graalium.core.javascript.CalledFromJS;
 import org.springframework.stereotype.Component;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Paths;
-import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Do NOT rename the class name or the package. Otherwise, you will introduce backwards incompatible
+ * change.
+ */
 @Component
 public class Invoker {
-    private final JavascriptService javascriptService;
 
+    private static final String RESOURCE_PATH_PROPERTY_NAME = "resource";
+
+    private final DirigibleJavaScriptInvoker javaScriptInvoker;
     private final CamelProcessor processor;
 
-    @Autowired
-    public Invoker(JavascriptService javascriptService, CamelProcessor processor) {
-        this.javascriptService = javascriptService;
+    public Invoker(DirigibleJavaScriptInvoker javaScriptInvoker, CamelProcessor processor) {
         this.processor = processor;
+        this.javaScriptInvoker = javaScriptInvoker;
     }
 
+    /**
+     * Invoke.
+     *
+     * @param camelMessage the camel message
+     */
     public void invoke(Message camelMessage) {
         String resourcePath = (String) camelMessage.getExchange()
-                                                   .getProperty("resource");
-        RepositoryPath path = new RepositoryPath(resourcePath);
+                                                   .getProperty(RESOURCE_PATH_PROPERTY_NAME);
 
-        String messageBody = camelMessage.getBody(String.class);
-
-        Map<Object, Object> context = new HashMap<>();
-        context.put("camelMessage", messageBody);
-
-        javascriptService.handleRequest(path.getSegments()[0], path.constructPathFrom(1), null, context, false);
+        javaScriptInvoker.invoke(camelMessage, resourcePath);
     }
 
+    /**
+     * Invoke route.
+     *
+     * @param routeId the route id
+     * @param payload the payload
+     * @param headers the headers
+     * @return the object
+     */
+    @CalledFromJS
     public Object invokeRoute(String routeId, Object payload, Map<String, Object> headers) {
         return processor.invokeRoute(routeId, payload, headers);
     }

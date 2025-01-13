@@ -1,23 +1,25 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-let registryView = angular.module('registry', ['ideUI', 'ideView', 'ideRepository', 'ideRegistry']);
+const registryView = angular.module('registry', ['ideUI', 'ideView', 'ideRepository', 'ideRegistry']);
 registryView.controller('RegistryController', [
 	'$scope',
+	'$document',
 	'messageHub',
 	'ViewParameters',
 	'repositoryApi',
 	'registryApi',
 	function (
 		$scope,
+		$document,
 		messageHub,
 		ViewParameters,
 		repositoryApi,
@@ -31,7 +33,7 @@ registryView.controller('RegistryController', [
 		};
 		$scope.renameNodeData;
 		$scope.imageFileExts = ['ico', 'bmp', 'png', 'jpg', 'jpeg', 'gif', 'svg'];
-		$scope.modelFileExts = ['extension', 'extensionpoint', 'edm', 'model', 'dsm', 'schema', 'bpmn', 'job', 'listener', 'websocket', 'roles', 'constraints', 'table', 'view'];
+		$scope.modelFileExts = ['extension', 'edm', 'model', 'dsm', 'schema', 'bpmn', 'job', 'listener', 'websocket', 'roles', 'constraints', 'table', 'view'];
 
 		$scope.treeData = [];
 		$scope.basePath = '/';
@@ -104,7 +106,6 @@ registryView.controller('RegistryController', [
 		$scope.jstreeWidget.on('dblclick.jstree', function (event) {
 			let node = $scope.jstreeWidget.jstree(true).get_node(event.target);
 			if (node.type === 'file') {
-				console.log(node);
 				openFile(node, 'monaco'); // Temporarily set monaco
 			}
 		});
@@ -290,20 +291,28 @@ registryView.controller('RegistryController', [
 		}
 
 		function getFileIcon(fileName) {
-			let ext = getFileExtension(fileName);
+			const ext = getFileExtension(fileName);
 			let icon;
-			if (ext === 'js' || ext === 'mjs' || ext === 'xsjs' || ext === 'ts' || ext === 'json') {
-				icon = "sap-icon--syntax";
+			if (ext === 'js' || ext === 'mjs' || ext === 'xsjs' || ext === 'ts' || ext === 'tsx' || ext === 'py' || ext === 'json') {
+				icon = 'sap-icon--syntax';
 			} else if (ext === 'css' || ext === 'less' || ext === 'scss') {
-				icon = "sap-icon--number-sign";
+				icon = 'sap-icon--number-sign';
 			} else if (ext === 'txt') {
-				icon = "sap-icon--text";
+				icon = 'sap-icon--text';
 			} else if (ext === 'pdf') {
-				icon = "sap-icon--pdf-attachment";
+				icon = 'sap-icon--pdf-attachment';
+			} else if (ext === 'md') {
+				icon = 'sap-icon--information';
+			} else if (ext === 'access') {
+				icon = 'sap-icon--locked';
+			} else if (ext === 'zip') {
+				icon = 'sap-icon--attachment-zip-file';
+			} else if (ext === 'extensionpoint') {
+				icon = 'sap-icon--puzzle';
 			} else if ($scope.imageFileExts.indexOf(ext) !== -1) {
-				icon = "sap-icon--picture";
+				icon = 'sap-icon--picture';
 			} else if ($scope.modelFileExts.indexOf(ext) !== -1) {
-				icon = "sap-icon--document-text";
+				icon = 'sap-icon--document-text';
 			} else {
 				icon = 'jstree-file';
 			}
@@ -555,7 +564,8 @@ registryView.controller('RegistryController', [
 			true
 		);
 
-		// Initialization
-		$scope.reloadFileTree($scope.basePath, true);
+		angular.element($document[0]).ready(function () {
+			$scope.reloadFileTree($scope.basePath, true);
+		});
 		$scope.parameters = ViewParameters.get();
 	}]);

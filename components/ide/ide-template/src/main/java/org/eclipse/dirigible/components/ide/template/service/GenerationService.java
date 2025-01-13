@@ -1,23 +1,15 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.ide.template.service;
 
-import static java.text.MessageFormat.format;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
+import com.google.gson.Gson;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.commons.api.helpers.ContentTypeHelper;
@@ -33,6 +25,8 @@ import org.eclipse.dirigible.components.ide.workspace.domain.Project;
 import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
 import org.eclipse.dirigible.components.ide.workspace.service.PublisherService;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
+import org.eclipse.dirigible.graalium.core.DirigibleJavascriptCodeRunner;
+import org.eclipse.dirigible.graalium.core.javascript.modules.Module;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
 import org.eclipse.dirigible.repository.api.RepositoryPath;
@@ -41,16 +35,21 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import com.google.gson.Gson;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
+import static java.text.MessageFormat.format;
 
 /**
  * Processing the Generation Service incoming requests.
  */
 @Component
 public class GenerationService {
-
-    /** The Constant TEMPLATE_WRAPPER. */
-    private static final String TEMPLATE_WRAPPER = "template-wrapper.js";
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(GenerationService.class);
@@ -117,62 +116,70 @@ public class GenerationService {
             throws IOException {
         Workspace workspaceObject = getWorkspaceService().getWorkspace(workspace);
         Project projectObject = workspaceObject.getProject(project);
-        List<File> generatedFiles = new ArrayList<File>();
+        List<File> generatedFiles = new ArrayList<>();
         if (parameters.getParameters()
-                      .size() == 0) {
+                      .isEmpty()) {
             parameters.getParameters();
         }
         addStandardParameters(workspace, project, path, parameters.getParameters());
 
-        String wrapper = generateWrapper(parameters);
-        projectObject.createFile(TEMPLATE_WRAPPER, wrapper.getBytes());
         getPublisherService().publish(workspace, project, "");
-        // Object metadata =
-        // ScriptEngineExecutorsManager.executeServiceCode(IJavascriptEngineExecutor.JAVASCRIPT_TYPE_DEFAULT,
-        // wrapper, null);
-        Object metadata = getWorkspaceService().getJavascriptService()
-                                               .handleRequest(projectObject.getName(), TEMPLATE_WRAPPER, null, null, false);
-        if (metadata != null) {
-            GenerationTemplateMetadata metadataObject = GsonHelper.fromJson(metadata.toString(), GenerationTemplateMetadata.class);
+        GenerationTemplateMetadata metadata = getTemplateMetadata(parameters);
 
-            for (GenerationTemplateMetadataSource source : metadataObject.getSources()) {
-                String sourcePath = new RepositoryPath().append(IRepositoryStructure.PATH_REGISTRY_PUBLIC)
-                                                        .append(source.getLocation())
-                                                        .build();
-                IResource sourceResource = projectObject.getRepository()
-                                                        .getResource(sourcePath);
-                if (sourceResource.exists()) {
-                    byte[] input = sourceResource.getContent();
-                    if (logger.isTraceEnabled()) {
-                        logger.trace("Generating using template from the Registry: " + sourcePath);
+        for (GenerationTemplateMetadataSource source : metadata.getSources()) {
+            String sourcePath = new RepositoryPath().append(IRepositoryStructure.PATH_REGISTRY_PUBLIC)
+                                                    .append(source.getLocation())
+                                                    .build();
+            IResource sourceResource = projectObject.getRepository()
+                                                    .getResource(sourcePath);
+            if (sourceResource.exists()) {
+                byte[] input = sourceResource.getContent();
+                if (logger.isTraceEnabled()) {
+                    logger.trace("Generating using template from the Registry: " + sourcePath);
+                }
+                generateWithTemplateIterable(parameters, projectObject, generatedFiles, source, input);
+            } else {
+                InputStream in = GenerationService.class.getResourceAsStream("/META-INF/dirigible" + source.getLocation());
+                try {
+                    if (in != null) {
+                        byte[] input = IOUtils.toByteArray(in);
+                        if (logger.isTraceEnabled()) {
+                            logger.trace("Generating using built-in template: " + source.getLocation());
+                        }
+                        generateWithTemplateIterable(parameters, projectObject, generatedFiles, source, input);
+                    } else {
+                        throw new IOException(
+                                format("Invalid source location of [{0}] in template definition file: [{1}] or the resource does not exist",
+                                        source.getLocation(), parameters.getTemplate()));
                     }
-                    generateWithTemplateIterable(parameters, projectObject, generatedFiles, source, input);
-                } else {
-                    InputStream in = GenerationService.class.getResourceAsStream("/META-INF/dirigible" + source.getLocation());
-                    try {
-                        if (in != null) {
-                            byte[] input = IOUtils.toByteArray(in);
-                            if (logger.isTraceEnabled()) {
-                                logger.trace("Generating using built-in template: " + source.getLocation());
-                            }
-                            generateWithTemplateIterable(parameters, projectObject, generatedFiles, source, input);
-                        } else {
-                            throw new IOException(format(
-                                    "Invalid source location of [{0}] in template definition file: [{1}] or the resource does not exist",
-                                    source.getLocation(), parameters.getTemplate()));
-                        }
-                    } finally {
-                        if (in != null) {
-                            in.close();
-                        }
+                } finally {
+                    if (in != null) {
+                        in.close();
                     }
                 }
             }
-            return generatedFiles;
-
         }
+        return generatedFiles;
+    }
 
-        throw new IOException(format("Invalid template definition file: [{0}]", parameters.getTemplate()));
+    /**
+     * Gets the template metadata.
+     *
+     * @param parameters the parameters
+     * @return the template metadata
+     */
+    private static GenerationTemplateMetadata getTemplateMetadata(GenerationTemplateParameters parameters) {
+        String templateModule = parameters.getTemplate();
+        try (DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner()) {
+            Module module = runner.run(Path.of(templateModule));
+            Object res = runner.runMethod(module, "getTemplate", parameters.getParameters())
+                               .as(Object.class);
+            String serializedMetadata = GsonHelper.toJson(res);
+            GenerationTemplateMetadata metadata = GsonHelper.fromJson(serializedMetadata, GenerationTemplateMetadata.class);
+            return Objects.requireNonNull(metadata);
+        } catch (Exception e) {
+            throw new IllegalArgumentException(format("Invalid template definition file: [{0}]", parameters.getTemplate()));
+        }
     }
 
     /**

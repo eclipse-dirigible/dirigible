@@ -1,0 +1,154 @@
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="forms" ng-controller="FormController">
+
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+		<title dg-view-title></title>
+		<script type="text/javascript" src="view.js"></script>
+		<script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=ide-view-js"></script>
+		<link type="text/css" rel="stylesheet" href="/services/js/resources-core/services/loader.js?id=ide-view-css" />
+		<theme></theme>
+		<script type="text/javascript" src="controller.js"></script>
+#foreach($script in $scripts)
+		<script type="text/javascript" src="$script.url"></script>
+#end
+	</head>
+
+	<body class="dg-vbox">
+		<fd-fieldset class="fd-margin--tiny" ng-form="forms.form">
+#macro(formWidgets $elements)
+#foreach($element in $elements)
+	#if($element.controlId == "header")
+			<h5 fd-title header-size="$element.size">$element.title</h5>
+	#elseif($element.controlId == "image")
+			#if($element.link)
+			<a href="$element.link">
+				<img class="dg-contain-image"#if($element.width) width="$element.width"#end#if($element.height) height="$element.height"#end src="$element.imageLink" alt="$element.desc"/>
+			</a>
+			#else
+			<img class="dg-contain-image"#if($element.width) width="$element.width"#end#if($element.height) height="$element.height"#end src="$element.imageLink" alt="$element.desc"/>
+			#end
+	#elseif($element.controlId == "input-textarea")
+			<fd-form-item horizontal="$element.horizontal">
+				<fd-form-label dg-colon="true" dg-required="$element.required" for="$element.id">$element.label</fd-form-label>
+				<fd-form-input-message-group dg-inactive="{{forms.form['$element.id'].$valid}}">
+					<fd-textarea id="$element.id"
+						name="$element.id"
+						ng-model="model.$element.model"
+						ng-required="$element.required"
+						type="text"
+						compact="$element.isCompact"
+						placeholder="$element.placeholder"
+						state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}"
+						ng-trim="false"
+						ng-minlength="$element.minLength"
+						ng-maxlength="$element.maxLength">
+					</fd-textarea>
+					<fd-form-message dg-type="error">$element.errorState</fd-form-message>
+				</fd-form-input-message-group>
+			</fd-form-item>
+	#elseif($element.controlId == "input-textfield")
+				<fd-form-item horizontal="$element.horizontal">
+					<fd-form-label dg-colon="true" dg-required="$element.required" for="$element.id">$element.label</fd-form-label>
+					<fd-form-input-message-group dg-inactive="{{forms.form['$element.id'].$valid}}">
+						<fd-input id="$element.id"
+							name="$element.id"
+							ng-model="model.$element.model"
+							ng-required="$element.required"
+							type="$element.type"
+							compact="$element.isCompact"
+							placeholder="$element.placeholder"
+							state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}"
+		#if($element.validationRegex)
+							dg-input-rules="{ patterns: ['$element.validationRegex'] }"
+		#end
+							ng-trim="false"
+							ng-minlength="$element.minLength"
+							ng-maxlength="$element.maxLength">
+						</fd-input>
+						<fd-form-message dg-type="error">$element.errorState</fd-form-message>
+					</fd-form-input-message-group>
+				</fd-form-item>
+	#elseif($element.controlId == "input-number")
+			<fd-form-item horizontal="$element.horizontal">
+				<fd-form-label dg-colon="true" dg-required="$element.required" for="$element.id">$element.label</fd-form-label>
+				<fd-step-input dg-id="$element.id" name="$element.id" ng-model="model.$element.model" dg-required="$element.required" dg-min="$element.minNum"
+					dg-max="$element.maxNum" dg-step="$element.step" state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}" compact="$element.isCompact">
+				</fd-step-input>
+			</fd-form-item>
+	#elseif($element.controlId == "input-checkbox")
+			<fd-form-item>
+				<fd-checkbox id="$element.id" ng-model="model.$element.model" compact="$element.isCompact"></fd-checkbox>
+				<fd-checkbox-label for="$element.id">$element.label</fd-checkbox-label>
+			</fd-form-item>
+	#elseif($element.controlId == "input-time")
+			<fd-form-item horizontal="$element.horizontal">
+				<fd-form-label dg-colon="true" dg-required="$element.required" for="$element.id">$element.label</fd-form-label>
+				<fd-input id="$element.id" name="$element.id" compact="$element.isCompact" ng-model="model.$element.model" ng-required="$element.required" type="time"></fd-input>
+			</fd-form-item>
+	#elseif($element.controlId == "input-date")
+			<fd-form-item horizontal="$element.horizontal">
+				<fd-form-label dg-colon="true" dg-required="$element.required" for="$element.id">$element.label</fd-form-label>
+				<fd-input id="$element.id" name="$element.id" compact="$element.isCompact" ng-model="model.$element.model" ng-required="$element.required" type="$element.type"></fd-input>
+			</fd-form-item>
+	#elseif($element.controlId == "input-color")
+			<fd-form-item horizontal="$element.horizontal">
+				<fd-form-label dg-colon="true" dg-required="$element.required" for="$element.id">$element.label</fd-form-label>
+				<fd-input id="$element.id" name="$element.id" compact="$element.isCompact" ng-model="model.$element.model" ng-required="$element.required" type="color"></fd-input>
+			</fd-form-item>
+	#elseif($element.controlId == "input-select" && $element.staticData != true)
+			<fd-form-item horizontal="$element.horizontal">
+				<fd-form-label dg-colon="true" dg-required="$element.required" for="$element.id">$element.label</fd-form-label>
+				<fd-select dg-id="$element.id" name="$element.id" label-id="$element.id" compact="$element.isCompact" ng-required="$element.required" ng-model="model.$element.model">
+					<fd-option text="{{ option.$element.optionLabel }}" value="option.$element.optionValue" ng-repeat="option in $element.options track by $index"></fd-option>
+				</fd-select>
+			</fd-form-item>
+	#elseif($element.controlId == "input-select" && $element.staticData)
+			<fd-form-item horizontal="$element.horizontal">
+				<fd-form-label dg-colon="true" dg-required="$element.required" for="$element.id">$element.label</fd-form-label>
+				<fd-select dg-id="$element.id" name="$element.id" label-id="$element.id" compact="$element.isCompact" ng-required="$element.required" ng-model="model.$element.model">
+		#foreach($option in $element.staticOptions)
+					<fd-option text="$option.label" value="'$option.value'"></fd-option>
+		#end
+				</fd-select>
+			</fd-form-item>
+	#elseif($element.controlId == "input-radio" && $element.staticData != true)
+			<fd-form-group dg-header="$element.name">
+				<fd-form-item ng-repeat="option in $element.options track by $index">
+					<fd-radio id="$element.id-{{$index}}" name="$element.id" compact="$element.isCompact" ng-model="model.$element.model" ng-value="'{{option.$element.optionValue}}'" ng-required="$element.required"></fd-radio>
+					<fd-radio-label for="$element.id-{{$index}}">{{option.$element.optionLabel}}</fd-radio-label>
+				</fd-form-item>
+			</fd-form-group>
+	#elseif($element.controlId == "input-radio" && $element.staticData)
+			<fd-form-group dg-header="$element.name">
+		#foreach($option in $element.staticOptions)
+				<fd-form-item>
+					<fd-radio id="$element.id-$foreach.count" name="$element.id" compact="$element.isCompact" ng-model="model.$element.model" value="$option.value" ng-required="$element.required"></fd-radio>
+					<fd-radio-label for="$element.id-$foreach.count">$option.label</fd-radio-label>
+				</fd-form-item>
+		#end
+			</fd-form-group>
+	#elseif($element.controlId == "button")
+			<div>
+				<fd-button#if($element.sizeToText) class="dg-float-right"#else class="dg-full-width"#end #if($element.isSubmit)type="submit"#end dg-label="$element.label" compact="$element.isCompact" dg-type="$element.type"#if($element.callback) ng-click="$element.callback"#end></fd-button>
+			</div>
+	#elseif($element.controlId == "paragraph")
+			<p class="fd-text" ng-class="{'dg-pre-wrap' : $element.format}">#if($element.model){{ model.$element.model }}#else$element.text#end</p>
+	#end
+#if($element.children)
+<div class="#if($element.controlId == "container-vbox") dg-vbox#else dg-hbox#end dg-box--gap dg-box--stretch-items">
+#formWidgets($element.children)
+</div>
+#end
+#end
+#end
+
+#formWidgets($form)
+
+		</fd-fieldset>
+
+	</body>
+
+</html>

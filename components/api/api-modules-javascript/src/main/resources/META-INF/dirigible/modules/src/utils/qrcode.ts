@@ -10,9 +10,18 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 
-import * as bytes from "@dirigible/io/bytes";
+import { Bytes } from "sdk/io/bytes";
 const QRCodeFacade = Java.type("org.eclipse.dirigible.components.api.utils.QRCodeFacade");
 
-export function generateQRCode(text){
-    return bytes.toJavaScriptBytes(QRCodeFacade.generateQRCode(text));
-};
+export class QRCode {
+
+    public static generateQRCode(text: string): any[] {
+        return Bytes.toJavaScriptBytes(QRCodeFacade.generateQRCode(text));
+    }
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+    // @ts-ignore
+    module.exports = QRCode;
+}

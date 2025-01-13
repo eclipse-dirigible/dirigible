@@ -1,0 +1,8 @@
+{
+  "fileName": "trigger-new-process",
+  "genFolderName": "trigger-new-process",
+  "projectName": "${projectName}",
+  "workspaceName": "workspace",
+  "filePath": "trigger-new-process.form",
+  "templateId": "template-form-builder-angularjs/template/template.js"
+}

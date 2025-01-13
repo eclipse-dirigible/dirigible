@@ -1,29 +1,24 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.engine.template.velocity;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
+import org.apache.velocity.VelocityContext;
+import org.apache.velocity.app.VelocityEngine;
+import org.apache.velocity.runtime.RuntimeConstants;
+import org.eclipse.dirigible.components.engine.template.TemplateEngine;
+import org.springframework.stereotype.Component;
+
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.Map;
-
-import org.apache.velocity.VelocityContext;
-import org.apache.velocity.app.VelocityEngine;
-import org.eclipse.dirigible.components.engine.template.TemplateEngine;
-import org.springframework.stereotype.Component;
 
 /**
  * The Class VelocityGenerationEngine.
@@ -35,7 +30,7 @@ public class VelocityGenerationEngine implements TemplateEngine {
     public static final String ENGINE_NAME = "velocity";
 
     /** The engine. */
-    private VelocityEngine engine;
+    private final VelocityEngine engine;
 
     /**
      * Instantiates a new velocity generation engine.
@@ -43,13 +38,13 @@ public class VelocityGenerationEngine implements TemplateEngine {
     public VelocityGenerationEngine() {
         engine = new VelocityEngine();
         try {
+            engine.setProperty(RuntimeConstants.VM_PERM_ALLOW_INLINE_REPLACE_GLOBAL, true);
             engine.init();
         } catch (Throwable e) {
             // if (logger.isErrorEnabled()) {logger.error(e.getMessage(), e);}
             e.printStackTrace();
         }
     }
-
 
     /**
      * Gets the name.

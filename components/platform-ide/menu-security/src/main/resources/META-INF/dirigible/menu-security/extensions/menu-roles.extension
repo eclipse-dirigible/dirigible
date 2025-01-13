@@ -1,0 +1,5 @@
+{
+    "module": "menu-security/templates/menu-roles.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "Roles Definitions Workbench New Menu Extension"
+}

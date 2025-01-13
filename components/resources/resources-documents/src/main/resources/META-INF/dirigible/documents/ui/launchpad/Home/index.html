@@ -1,0 +1,179 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
+
+	<head>
+		<meta charset="utf-8">
+		<meta http-equiv="X-UA-Compatible" content="IE=edge">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="icon" href="data:;base64,iVBORw0KGgo=" dg-brand-icon />
+		<title dg-brand-title></title>
+		<theme></theme>
+		<script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=application-view-js">
+		</script>
+		<link type="text/css" rel="stylesheet"
+			href="/services/js/resources-core/services/loader.js?id=application-view-css" />
+
+		<script type="text/javascript" src="controller.js"></script>
+	</head>
+
+	<body class="dg-vbox" dg-contextmenu="contextMenuContent">
+		<fd-scrollbar class="dg-full-height">
+
+			<section class="fd-section">
+				<div class="fd-section__header">
+					<h3 class="fd-section__title">Applications Portal</h3>
+				</div>
+				<p class="fd-text">All the products available on this instance are listed below</p>
+				<br>
+
+				<div class="fd-row">
+					<h3>General</h3>
+					<div class="fd-row">
+						<div class="fd-container fd-col fd-col--10">
+							<div class="fd-row">
+								<div>
+									<fd-card card-type="list">
+										<fd-card-header ng-click="openView('/services/web/inbox/')">
+											<fd-avatar glyph="sap-icon--letter" aria-label="avatar"></fd-avatar>
+											<fd-card-title>Process Inbox</fd-card-title>
+											<fd-card-subtitle>Execute user tasks from running processes
+											</fd-card-subtitle>
+											<fd-card-status><i class="sap-icon--navigation-right-arrow"></i>
+											</fd-card-status>
+										</fd-card-header>
+									</fd-card>
+								</div>
+								<div>
+									<fd-card card-type="list" style="margin-left: 1em; margin-bottom: 0.2em;">
+										<fd-card-header ng-click="openView('/services/web/documents/')">
+											<fd-avatar glyph="sap-icon--curriculum" aria-label="avatar"></fd-avatar>
+											<fd-card-title>Documents Storage</fd-card-title>
+											<fd-card-subtitle>Browse and manage documents
+											</fd-card-subtitle>
+											<fd-card-status><i class="sap-icon--navigation-right-arrow"></i>
+											</fd-card-status>
+										</fd-card-header>
+									</fd-card>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="fd-row">
+					<h3>Modules</h3>
+					<div class="fd-row">
+
+						<div class="fd-container fd-col fd-col--10">
+
+							<div ng-repeat="group in groups">
+
+								<fd-panel expanded="true">
+
+									<fd-panel-header>
+										<fd-panel-expand></fd-panel-expand>
+										<h4 fd-panel-title>{{group.name}}</h4>
+									</fd-panel-header>
+
+									<fd-panel-content aria-label="{{group.name}} Content">
+										<div class="fd-row">
+											<div>
+												<div>
+													<div ng-repeat="next in group.tiles" ng-if="next.type==='PRIMARY'">
+														<div>
+															<fd-card card-type="object" style="margin-bottom: 0.2em;">
+																<fd-card-header ng-click="openView(next.location)">
+																	<fd-avatar glyph="sap-icon--ipad"
+																		aria-label="avatar"></fd-avatar>
+																	<fd-card-title>{{next.name}}</fd-card-title>
+																	<fd-card-status><i
+																			class="sap-icon--navigation-right-arrow"></i>
+																	</fd-card-status>
+																	<fd-card-subtitle>{{next.caption}}
+																	</fd-card-subtitle>
+																</fd-card-header>
+															</fd-card>
+														</div>
+													</div>
+												</div>
+											</div>
+
+											<div>
+
+
+
+
+												<div class="fd-bar--footer fd-bar--compact">
+													<div ng-repeat="next in group.tiles"
+														ng-if="next.type==='REPORT' || next.report==='true'">
+														<fd-button glyph="sap-icon--vertical-bar-chart"
+															style="margin-left: 1em; margin-bottom: 0.2em;"
+															aria-label="{{next.name}} Report" ng-click="openView(
+															next.location.substring(0,
+															next.location.indexOf('/gen/ui/'))
+															+ '/gen/ui/Reports/index.html?' + next.name )" dg-label="{{next.name}} Report">
+
+														</fd-button>
+													</div>
+												</div>
+											</div>
+
+
+										</div>
+									</fd-panel-content>
+								</fd-panel>
+							</div>
+
+						</div>
+
+						<div class="fd-container fd-col fd-col--2">
+							<fd-panel expanded="true">
+								<fd-panel-header>
+									<fd-panel-expand></fd-panel-expand>
+									<h4 fd-panel-title>Settings</h4>
+								</fd-panel-header>
+								<fd-panel-content aria-label="{{group.name}} Content">
+									<div>
+										<div>
+											<div>
+												<div ng-repeat="next in settings">
+													<button fd-button-internal="" class="fd-button fd-button--compact"
+														compact="true" dg-label="{{next.name}}"
+														style="width: 100%; margin-bottom: 0.2em;"
+														ng-click="openView(next.location)">
+
+														<span ng-class="getTextClasses()"
+															class="fd-button__text">{{next.name}}</span>
+												</div>
+												<div ng-class="getClasses()" ng-style="getStyles()" ng-transclude=""
+													class="fd-toolbar__spacer"></div>
+											</div>
+										</div>
+									</div>
+								</fd-panel-content>
+							</fd-panel>
+						</div>
+
+
+					</div>
+				</div>
+
+
+			</section>
+		</fd-scrollbar>
+	</body>
+
+</html>

@@ -1,0 +1,5 @@
+{
+    "module": "resources-core/services/menus/window.js",
+    "extensionPoint": "ide-bpm-workspace-menu",
+    "description": "Window Menu"
+}

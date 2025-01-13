@@ -1,21 +1,20 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.graalium.core.graal;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.event.Level;
 
 public class Logging {
 
@@ -23,6 +22,10 @@ public class Logging {
 
     private static final Logger SYS_OUT_LOGGER = LoggerFactory.getLogger("app.out");
     private static final Logger SYS_ERR_LOGGER = LoggerFactory.getLogger("app.err");
+
+    static {
+        SYS_ERR_LOGGER.atLevel(Level.ERROR);
+    }
 
     public static OutputStream outputStream() {
         return new PrintStream(new GraalJSLogging(SYS_OUT_LOGGER, false), true);
@@ -78,13 +81,6 @@ public class Logging {
          * The default number of bytes in the buffer. =2048
          */
         public static final int DEFAULT_BUFFER_LENGTH = 2048;
-
-        /**
-         * Instantiates a new GraalJS logging.
-         */
-        private GraalJSLogging() {
-            // illegal
-        }
 
         /**
          * Creates the GraalJS to flush to the given category.

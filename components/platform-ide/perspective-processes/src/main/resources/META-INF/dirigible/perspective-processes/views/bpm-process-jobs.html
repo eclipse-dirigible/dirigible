@@ -1,0 +1,60 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="ide-bpm-process-jobs" ng-controller="IDEBpmProcessJobsViewController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/perspective-processes/configs/bpm-process-jobs-view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="/services/web/perspective-processes/views/js/bpm-process-jobs.js"></script>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-scrollbar class="bk-fill-parent">
+            <table bk-table outer-borders="bottom" display-mode="compact">
+                <thead bk-table-header sticky="true">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>Id</th>
+                        <th bk-table-header-cell>Process Instance Id</th>
+                        <th bk-table-header-cell>Execution Id</th>
+                        <th bk-table-header-cell>Exception message</th>
+                        <th bk-table-header-cell>Stacktrace</th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat="next in jobsList track by next.id" hoverable="false" activable="false">
+                        <td bk-table-cell>{{next.id}}</td>
+                        <td bk-table-cell>{{next.processInstanceId}}</td>
+                        <td bk-table-cell>{{next.executionId}}</td>
+                        <td bk-table-cell>{{next.exceptionMessage}}</td>
+                        <td bk-table-cell>
+                            <bk-button compact="true" state="transparent" label="Show" glyph="sap-icon--show" title="Show" aria-label="Show" ng-click="openDialog(next)"></bk-button>
+                        </td>
+                    </tr>
+                    <tr ng-if="jobsList.length === 0" bk-table-row>
+                        <td bk-table-cell no-data="true">No jobs have been found.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </bk-scrollbar>
+        <theme></theme>
+    </body>
+
+</html>

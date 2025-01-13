@@ -1,25 +1,27 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.repository.local;
 
 import java.io.File;
 import java.io.FileFilter;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
 import org.eclipse.dirigible.commons.api.helpers.ContentTypeHelper;
 import org.eclipse.dirigible.commons.api.helpers.FileSystemUtils;
+import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.RepositoryCache;
 import org.eclipse.dirigible.repository.api.RepositoryWriteException;
 import org.eclipse.dirigible.repository.fs.FileSystemRepository;
@@ -48,6 +50,8 @@ public class LocalRepositoryDao {
 
     /** The cache. */
     private final RepositoryCache cache = new RepositoryCache();
+
+    private SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
 
 
     /**
@@ -79,14 +83,29 @@ public class LocalRepositoryDao {
      */
     public void createFile(String path, byte[] content, boolean isBinary, String contentType) throws LocalRepositoryException {
         try {
-            String workspacePath = LocalWorkspaceMapper.getMappedName(getRepository(), path);
-            FileSystemUtils.saveFile(workspacePath, content);
+            String workspacePath = storeFile(path, content);
             cache.put(workspacePath, content);
             ((LocalRepository) getRepository()).setLastModified(System.currentTimeMillis());
         } catch (IOException e) {
             throw new LocalRepositoryException(e);
         }
 
+    }
+
+    public String storeFile(String path, byte[] content) throws FileNotFoundException, IOException {
+        String workspacePath = LocalWorkspaceMapper.getMappedName(getRepository(), path);
+        FileSystemUtils.saveFile(workspacePath, content);
+        try {
+            if (repository.isVersioned()) {
+                String versionsPath =
+                        workspacePath.replace(IRepository.SEPARATOR + FileSystemRepository.PATH_SEGMENT_ROOT + IRepository.SEPARATOR,
+                                IRepository.SEPARATOR + FileSystemRepository.PATH_SEGMENT_VERSIONS + IRepository.SEPARATOR);
+                FileSystemUtils.saveFile(versionsPath + IRepository.SEPARATOR + formatter.format(new Date()), content);
+            }
+        } catch (Exception ev) {
+            logger.warn("Error while storing version for file: {} with: {}", path, ev.getMessage());
+        }
+        return workspacePath;
     }
 
     /**
@@ -105,8 +124,7 @@ public class LocalRepositoryDao {
      */
     public void setFileContent(LocalFile localFile, byte[] content) {
         try {
-            String workspacePath = LocalWorkspaceMapper.getMappedName(getRepository(), localFile.getPath());
-            FileSystemUtils.saveFile(workspacePath, content);
+            String workspacePath = storeFile(localFile.getPath(), content);
             cache.put(workspacePath, content);
             ((LocalRepository) getRepository()).setLastModified(System.currentTimeMillis());
         } catch (IOException e) {

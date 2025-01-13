@@ -1,22 +1,22 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.management.helpers;
-
-import java.io.OutputStream;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 
 import org.eclipse.dirigible.components.data.management.format.ResultSetCsvWriter;
 import org.eclipse.dirigible.components.data.management.format.ResultSetJsonWriter;
 import org.eclipse.dirigible.components.data.management.format.ResultSetMonospacedWriter;
+
+import java.io.ByteArrayOutputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.sql.ResultSet;
 
 /**
  * The Database Result SetHelper.
@@ -53,6 +53,28 @@ public class DatabaseResultSetHelper {
         writer.setStringified(stringify);
         writer.write(resultSet, output);
         output.flush();
+    }
+
+    /**
+     * used in ABAP functionality - DirigibleDatabaseClient
+     *
+     * @param resultSet
+     * @param limit
+     * @param stringify
+     * @return
+     * @throws Exception
+     */
+    public static String toJson(ResultSet resultSet, int limit, boolean stringify) throws Exception {
+        ResultSetJsonWriter writer = new ResultSetJsonWriter();
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        writer.setLimited(true);
+        writer.setLimit(limit);
+        writer.setStringified(stringify);
+        writer.write(resultSet, outputStream);
+        outputStream.flush();
+
+        return outputStream.toString(StandardCharsets.UTF_8);
     }
 
     /**

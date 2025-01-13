@@ -1,29 +1,31 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-exports.transform = function (workspaceName, projectName, filePath) {
+
+import { Workspace as workspaceManager } from "sdk/platform";
+import { Bytes } from "sdk/io";
+import { XML } from "sdk/utils";
+
+export function transform(workspaceName, projectName, filePath) {
 
     if (!filePath.endsWith('.edm')) {
         return null;
     }
 
-    let workspaceManager = require("platform/workspace");
     let contents = workspaceManager.getWorkspace(workspaceName)
         .getProject(projectName).getFile(filePath).getContent();
 
-    let bytes = require("io/bytes");
-    contents = bytes.byteArrayToText(contents);
+    contents = Bytes.byteArrayToText(contents);
 
-    let xml = require("utils/xml");
-    let raw = JSON.parse(xml.toJson(contents));
+    let raw = JSON.parse(XML.toJson(contents));
 
     let root = {};
     root.model = {};
@@ -112,6 +114,7 @@ exports.transform = function (workspaceName, projectName, filePath) {
                         property.relationshipName = relation['-name'];
                         property.relationshipEntityName = relation['-referenced'];
                         property.relationshipEntityPerspectiveName = relation['-relationshipEntityPerspectiveName'];
+                        property.relationshipEntityPerspectiveLabel = relation['-relationshipEntityPerspectiveLabel'];
                     }
                 });
             }

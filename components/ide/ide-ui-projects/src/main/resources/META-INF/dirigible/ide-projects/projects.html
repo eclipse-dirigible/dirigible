@@ -1,13 +1,17 @@
-<!DOCTYPE HTML>
 <!--
-  ~ Copyright (c) 2010-2023 SAP and others.
-  ~ All rights reserved. This program and the accompanying materials
-  ~ are made available under the terms of the Eclipse Public License v2.0
-  ~ which accompanies this distribution, and is available at
-  ~ http://www.eclipse.org/legal/epl-v20.html
-  ~ Contributors:
-  ~ SAP - initial API and implementation
-  -->
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="projects" ng-controller="ProjectsViewController">
 
     <head>
@@ -32,7 +36,8 @@
         <script type="text/javascript" src="js/projects.js"></script>
     </head>
 
-    <body class="dg-vbox">
+    <body class="dg-vbox" dg-shortcut="'enter|shift+enter|f2|delete|ctrl+f|ctrl+c|ctrl+x|ctrl+v|meta+backspace|down'"
+        dg-shortcut-action="keyboardShortcuts" ignore-inputs>
         <fd-busy-indicator-extended class="dg-fill-parent" ng-hide="state.error || !state.isBusy" dg-size="l">
             {{state.busyText}}
         </fd-busy-indicator-extended>
@@ -41,7 +46,7 @@
             <fd-button compact="true" dg-type="transparent" glyph="sap-icon--save" title="Save all"
                 aria-label="Save all" ng-click="saveAll()"></fd-button>
             <fd-button compact="true" dg-type="transparent" glyph="sap-icon--play" title="Publish all"
-                aria-label="Publish all" ng-click="publishAll()" ng-show="isPublishEnabled()"></fd-button>
+                aria-label="Publish all" ng-click="publishAll()" ng-if="isPublishEnabled()"></fd-button>
             <fd-button compact="true" dg-type="transparent" glyph="sap-icon--refresh" title="Refresh"
                 aria-label="Refresh" ng-click="reloadWorkspace()"></fd-button>
             <fd-toolbar-separator></fd-toolbar-separator>
@@ -71,9 +76,6 @@
                 <fd-button dg-type="transparent" dg-label="Duplicate project" glyph="sap-icon--duplicate"
                     is-overflow="true" ng-click="duplicateProject()">
                 </fd-button>
-                <!-- <fd-button dg-type="transparent" dg-label="Link project" glyph="sap-icon--chain-link"
-                    is-overflow="true" ng-click="linkProject()">
-                </fd-button> -->
                 <fd-button dg-type="transparent" dg-label="Export projects" glyph="sap-icon--download-from-cloud"
                     is-overflow="true" ng-click="exportProjects()">
                 </fd-button>
@@ -86,8 +88,10 @@
                 </fd-button>
             </fd-toolbar-overflow>
         </fd-toolbar>
-        <fd-toolbar ng-show="searchVisible && !state.error && !state.isBusy">
-            <fd-input type="search" placeholder="Search" ng-keyup="search()" ng-model="searchField.text"></fd-input>
+        <fd-toolbar ng-if="searchVisible && !state.error && !state.isBusy">
+            <fd-input type="search" placeholder="Search" ng-keyup="search($event)" dg-focus="true"
+                ng-model="searchField.text">
+            </fd-input>
         </fd-toolbar>
         <div id="dgProjects" class="jstree-fiori--fill jstree-fiori--context-menu fd-scrollbar"
             dg-contextmenu="contextMenuContent" ng-show="!state.error && !state.isBusy"></div>

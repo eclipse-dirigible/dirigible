@@ -1,1 +1,2 @@
-export * as logging from "./logging";
+export { Logging as logging } from "./logging";
+export * from "./logging";

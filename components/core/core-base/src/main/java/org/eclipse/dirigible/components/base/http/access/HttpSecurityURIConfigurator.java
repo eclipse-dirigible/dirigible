@@ -1,21 +1,67 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.base.http.access;
 
+import org.eclipse.dirigible.components.base.http.roles.Roles;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 
 /**
  * The Class HttpSecurityURIConfigurator.
  */
 public class HttpSecurityURIConfigurator {
+
+    /** The Constant PUBLIC_PATTERNS. */
+    private static final String[] PUBLIC_PATTERNS = {//
+            "/", //
+            "/home", //
+            "/index.html", //
+            "/logout", //
+            "/index-busy.html", //
+            "/stomp", //
+            "/error/**", //
+            "/error.html", //
+            "/favicon.ico", //
+            "/public/**", //
+            "/webjars/**", //
+            "/services/core/theme/**", //
+            "/services/core/version/**", //
+            "/services/core/healthcheck/**", //
+            "/services/web/resources/**", //
+            "/services/web/resources-core/**", //
+            "/services/web/platform-core/**", //
+            "/services/js/platform-core/**", //
+            "/services/js/resources-core/**", //
+            "/services/integrations/**", //
+            "/actuator/health/liveness", //
+            "/actuator/health/readiness", //
+            "/actuator/health"};
+
+    /** The Constant AUTHENTICATED_PATTERNS. */
+    private static final String[] AUTHENTICATED_PATTERNS = {//
+            "/services/**", //
+            "/websockets/**", //
+            "/api-docs/swagger-config", //
+            "/api-docs/**", //
+            "/odata/**", //
+            "/swagger-ui/**"};
+
+    /** The Constant DEVELOPER_PATTERNS. */
+    private static final String[] DEVELOPER_PATTERNS = {//
+            "/services/bpm/**", //
+            "/services/ide/**", //
+            "/websockets/ide/**"};
+
+    private static final String[] OPERATOR_PATTERNS = {//
+            "/spring-admin/**", //
+            "/actuator/**"};
 
     /**
      * Configure.
@@ -24,80 +70,34 @@ public class HttpSecurityURIConfigurator {
      * @throws Exception the exception
      */
     public static void configure(HttpSecurity http) throws Exception {
-        http.authorizeRequests()
-            .antMatchers("/")
-            .permitAll()
-            .antMatchers("/home")
-            .permitAll()
-            .antMatchers("/logout")
-            .permitAll()
-            .antMatchers("/index-busy.html")
-            .permitAll()
+        http.authorizeHttpRequests((authz) -> //
+        authz.requestMatchers(PUBLIC_PATTERNS)
+             .permitAll()
 
-            .antMatchers("/stomp")
-            .permitAll()
+             // NOTE!: the order is important - role checks should be before just authenticated paths
 
-            .antMatchers("/error/**")
-            .permitAll()
-            .antMatchers("/error.html")
-            .permitAll()
+             // Fine grained configurations
+             .requestMatchers(HttpMethod.GET, "/services/bpm/bpm-processes/tasks")
+             .authenticated()
 
-            // Public
-            .antMatchers("/favicon.ico")
-            .permitAll()
-            .antMatchers("/public/**")
-            .permitAll()
-            .antMatchers("/webjars/**")
-            .permitAll()
+             .requestMatchers(HttpMethod.POST, "/services/bpm/bpm-processes/tasks/*")
+             .authenticated()
 
-            .antMatchers("/services/core/theme/**")
-            .permitAll()
-            .antMatchers("/services/core/version/**")
-            .permitAll()
-            .antMatchers("/services/core/healthcheck/**")
-            .permitAll()
-            .antMatchers("/services/web/resources/**")
-            .permitAll()
-            .antMatchers("/services/web/resources-core/**")
-            .permitAll()
-            .antMatchers("/services/js/resources-core/**")
-            .permitAll()
-            .antMatchers("/camel/*")
-            .permitAll()
+             // "DEVELOPER" role required
+             .requestMatchers(DEVELOPER_PATTERNS)
+             .hasRole(Roles.DEVELOPER.getRoleName())
 
-            .antMatchers("/actuator/**")
-            .permitAll()
+             // "OPERATOR" role required
+             .requestMatchers(OPERATOR_PATTERNS)
+             .hasRole(Roles.OPERATOR.getRoleName())
 
-            // Authenticated
-            .antMatchers("/services/**")
-            .authenticated()
-            .antMatchers("/websockets/**")
-            .authenticated()
-            .antMatchers("/odata/**")
-            .authenticated()
+             // Authenticated
+             .requestMatchers(AUTHENTICATED_PATTERNS)
+             .authenticated()
 
-            // Swagger UI
-            .antMatchers("/swagger-ui/**")
-            .authenticated()
-            .antMatchers("/v3/api-docs/swagger-config")
-            .authenticated()
-            .antMatchers("/v3/api-docs/**")
-            .authenticated()
-
-            // "Developer" role required
-            .antMatchers("/services/ide/**")
-            .hasRole("Developer")
-            .antMatchers("/websockets/ide/**")
-            .hasRole("Developer")
-
-            // "Operator" role required
-            // .antMatchers("/services/ops/**").hasRole("Operator")
-            // .antMatchers("/services/transport/**").hasRole("Operator")
-            // .antMatchers("/websockets/ops/**").hasRole("Operator")
-
-            // Deny all other requests
-            .anyRequest()
-            .denyAll();
+             // Deny all other requests
+             .anyRequest()
+             .denyAll());
     }
 
 }

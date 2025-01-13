@@ -1,40 +1,31 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.management.helpers;
 
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.List;
-
-import javax.sql.DataSource;
-
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
-import org.eclipse.dirigible.components.data.management.domain.DatabaseMetadata;
-import org.eclipse.dirigible.components.data.management.domain.FunctionMetadata;
-import org.eclipse.dirigible.components.data.management.domain.NoSQLTableMetadata;
-import org.eclipse.dirigible.components.data.management.domain.ProcedureMetadata;
-import org.eclipse.dirigible.components.data.management.domain.SchemaMetadata;
-import org.eclipse.dirigible.components.data.management.domain.TableMetadata;
-import org.eclipse.dirigible.components.database.DatabaseParameters;
+import org.eclipse.dirigible.components.data.management.domain.*;
 import org.eclipse.dirigible.components.database.DatabaseNameNormalizer;
+import org.eclipse.dirigible.components.database.DatabaseParameters;
+import org.eclipse.dirigible.components.database.DatabaseSystem;
+import org.eclipse.dirigible.components.database.DatabaseSystemDeterminer;
 import org.eclipse.dirigible.database.sql.DatabaseType;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.ISqlKeywords;
 import org.eclipse.dirigible.database.sql.SqlFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.sql.DataSource;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The Database Metadata Helper.
@@ -285,6 +276,54 @@ public class DatabaseMetadataHelper implements DatabaseParameters {
         return result;
     }
 
+    /**
+     * List sequences.
+     *
+     * @param connection the connection
+     * @param name the name
+     * @return the list
+     * @throws SQLException the SQL exception
+     */
+    public static List<SequenceMetadata> listSequences(Connection connection, String name) throws SQLException {
+
+        DatabaseMetaData dmd = connection.getMetaData();
+
+        List<SequenceMetadata> result = new ArrayList<SequenceMetadata>();
+
+        String query = null;
+
+        DatabaseSystem databaseSystem = DatabaseSystemDeterminer.determine(connection);
+        if (databaseSystem.isMariaDB() || databaseSystem.isMySQL()) {
+            query = String.format(
+                    "SELECT column_name FROM information_schema.columns WHERE table_schema = '%s' AND extra = 'auto_increment'", name);
+        } else if (databaseSystem.isSnowflake()) {
+            query = "SHOW SEQUENCES";
+        } else if (!databaseSystem.isMongoDB()) {
+            query = "SELECT * FROM information_schema.sequences";
+        }
+
+        ResultSet rs = null;
+        try (PreparedStatement statement = connection.prepareStatement(query)) {
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    String sequenceName;
+                    if (databaseSystem.isMariaDB() || databaseSystem.isMySQL()) {
+                        sequenceName = resultSet.getString("column_name");
+                    } else if (databaseSystem.isSnowflake()) {
+                        sequenceName = resultSet.getString("name");
+                    } else {
+                        sequenceName = resultSet.getString("sequence_name");
+                    }
+                    result.add(new SequenceMetadata(sequenceName));
+                }
+            }
+        } finally {
+            if (rs != null) {
+                rs.close();
+            }
+        }
+        return result;
+    }
 
     /**
      * Describe table.
@@ -418,6 +457,7 @@ public class DatabaseMetadataHelper implements DatabaseParameters {
         void onColumn(String name, String type, String size, boolean isNullable, boolean isKey, int scale);
     }
 
+
     /**
      * The Interface ProceduresColumnsIteratorCallback.
      */
@@ -440,6 +480,7 @@ public class DatabaseMetadataHelper implements DatabaseParameters {
                 String remarks);
     }
 
+
     /**
      * The Interface FunctionColumnsIteratorCallback.
      */
@@ -461,6 +502,7 @@ public class DatabaseMetadataHelper implements DatabaseParameters {
         void onFunctionColumn(String name, int kind, String type, int precision, int length, int scale, int radix, boolean nullable,
                 String remarks);
     }
+
 
     /**
      * The Interface IndicesIteratorCallback.
@@ -485,6 +527,20 @@ public class DatabaseMetadataHelper implements DatabaseParameters {
                 String ordinalPosition, String sortOrder, String cardinality, String pagesIndex, String filterCondition);
     }
 
+
+    /**
+     * The Interface IndicesIteratorCallback.
+     */
+    public interface ForeignKeysIteratorCallback {
+
+        /**
+         * On index.
+         *
+         * @param fkName the index name
+         */
+        void onIndex(String fkName);
+    }
+
     /**
      * Iterate table definition.
      *
@@ -494,10 +550,12 @@ public class DatabaseMetadataHelper implements DatabaseParameters {
      * @param tableName the table name
      * @param columnsIteratorCallback the columns iterator callback
      * @param indicesIteratorCallback the indices iterator callback
+     * @param foreignKeysIteratorCallback the foreign keys iterator callback
      * @throws SQLException the SQL exception
      */
     public static void iterateTableDefinition(Connection connection, String catalogName, String schemaName, String tableName,
-            ColumnsIteratorCallback columnsIteratorCallback, IndicesIteratorCallback indicesIteratorCallback) throws SQLException {
+            ColumnsIteratorCallback columnsIteratorCallback, IndicesIteratorCallback indicesIteratorCallback,
+            ForeignKeysIteratorCallback foreignKeysIteratorCallback) throws SQLException {
 
         DatabaseMetaData dmd = connection.getMetaData();
 
@@ -512,6 +570,11 @@ public class DatabaseMetadataHelper implements DatabaseParameters {
         ResultSet indexes = dmd.getIndexInfo(catalogName, schemaName, DatabaseNameNormalizer.normalizeTableName(tableName), false, false);
         if (indexes == null) {
             throw new SQLException("DatabaseMetaData.getIndexInfo returns null");
+        }
+
+        ResultSet foreignKeys = dmd.getImportedKeys(catalogName, schemaName, DatabaseNameNormalizer.normalizeTableName(tableName));
+        if (foreignKeys == null) {
+            throw new SQLException("DatabaseMetaData.getImportedKeys returns null");
         }
 
         try {
@@ -537,9 +600,15 @@ public class DatabaseMetadataHelper implements DatabaseParameters {
                             indexes.getInt(PAGES_INDEX) + EMPTY, indexes.getString(FILTER_CONDITION));
                 }
             }
+            while (foreignKeys.next()) {
+                if (foreignKeysIteratorCallback != null) {
+                    foreignKeysIteratorCallback.onIndex(foreignKeys.getString(FK_NAME));
+                }
+            }
         } finally {
             columns.close();
             indexes.close();
+            foreignKeys.close();
             pks.close();
         }
     }
@@ -566,7 +635,6 @@ public class DatabaseMetadataHelper implements DatabaseParameters {
         }
 
         try {
-
 
             while (columns.next()) {
                 if (procedureColumnsIteratorCallback != null) {
@@ -603,7 +671,6 @@ public class DatabaseMetadataHelper implements DatabaseParameters {
         }
 
         try {
-
 
             while (columns.next()) {
                 if (functionColumnsIteratorCallback != null) {
@@ -660,9 +727,7 @@ public class DatabaseMetadataHelper implements DatabaseParameters {
      * @throws SQLException the SQL exception
      */
     public static String getTableMetadataAsJson(DataSource dataSource, String schema, String table) throws SQLException {
-        Connection connection = null;
-        try {
-            connection = dataSource.getConnection();
+        try (Connection connection = dataSource.getConnection()) {
             if (SqlFactory.deriveDialect(connection)
                           .getDatabaseType(connection)
                           .equals(DatabaseType.NOSQL.getName())) {
@@ -673,16 +738,6 @@ public class DatabaseMetadataHelper implements DatabaseParameters {
                 TableMetadata tableMetadata = describeTable(connection, null, schema, table);
                 String json = GsonHelper.toJson(tableMetadata);
                 return json;
-            }
-        } finally {
-            if (connection != null) {
-                try {
-                    connection.close();
-                } catch (SQLException e) {
-                    if (logger.isWarnEnabled()) {
-                        logger.warn(e.getMessage(), e);
-                    }
-                }
             }
         }
     }

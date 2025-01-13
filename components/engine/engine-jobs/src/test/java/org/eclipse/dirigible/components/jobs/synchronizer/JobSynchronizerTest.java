@@ -1,27 +1,15 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.jobs.synchronizer;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
-import java.nio.file.Path;
-import java.text.ParseException;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
-
-import javax.persistence.EntityManager;
-
+import jakarta.persistence.EntityManager;
 import org.eclipse.dirigible.components.jobs.domain.Job;
 import org.eclipse.dirigible.components.jobs.domain.JobParameter;
 import org.eclipse.dirigible.components.jobs.repository.JobRepository;
@@ -35,6 +23,14 @@ import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabas
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.nio.file.Path;
+import java.text.ParseException;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * The Class JobSynchronizerTest.
@@ -56,7 +52,15 @@ public class JobSynchronizerTest {
 
     /** The entity manager. */
     @Autowired
-    EntityManager entityManager;
+    private EntityManager entityManager;
+
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Setup.
@@ -87,6 +91,31 @@ public class JobSynchronizerTest {
     }
 
     /**
+     * Creates the job.
+     *
+     * @param jobRepository the job repository
+     * @param name the job name
+     * @param group the job group
+     * @param clazz the job clazz
+     * @param handler the job handler
+     * @param engine the job engine
+     * @param description the job description
+     * @param expression the job expression
+     * @param singleton the singleton
+     * @param parameters the job parameters
+     * @param location the job location
+     * @param dependencies the dependencies
+     * @return the job
+     */
+    public static Job createJob(JobRepository jobRepository, String name, String group, String clazz, String handler, String engine,
+            String description, String expression, boolean singleton, List<JobParameter> parameters, String location,
+            Set<String> dependencies) {
+        Job job = new Job(name, group, clazz, handler, engine, description, expression, singleton, parameters, location, dependencies);
+        jobRepository.save(job);
+        return job;
+    }
+
+    /**
      * Checks if is accepted.
      */
     @Test
@@ -107,46 +136,15 @@ public class JobSynchronizerTest {
     /**
      * Load the artefact.
      *
-     * @throws ParseException
+     * @throws ParseException the parse exception
      */
     @Test
     public void load() throws ParseException {
         String content =
-                "{\"expression\":\"0/1 * * * * ?\",\"group\":\"dirigible-defined\",\"handler\":\"test/handler.js\",\"description\":\"Control Job\",\"createdBy\":\"system\",\"createdAt\":\"2017-07-06T2:53:01+0000\"}";
+                "{\"expression\":\"0/1 * * * * ?\",\"group\":\"defined\",\"handler\":\"test/handler.js\",\"description\":\"Control Job\",\"createdBy\":\"system\",\"createdAt\":\"2017-07-06T2:53:01+0000\"}";
         List<Job> list = jobSynchronizer.parse("/test/control.job", content.getBytes());
         assertNotNull(list);
         assertEquals("/test/control.job", list.get(0)
                                               .getLocation());
-    }
-
-    /**
-     * Creates the job.
-     *
-     * @param jobRepository the job repository
-     * @param name the job name
-     * @param group the job group
-     * @param clazz the job clazz
-     * @param handler the job handler
-     * @param engine the job engine
-     * @param description the job description
-     * @param expression the job expression
-     * @param singleton the singleton
-     * @param parameters the job parameters
-     * @param location the job location
-     * @param dependencies the dependencies
-     */
-    public static Job createJob(JobRepository jobRepository, String name, String group, String clazz, String handler, String engine,
-            String description, String expression, boolean singleton, List<JobParameter> parameters, String location,
-            Set<String> dependencies) {
-        Job job = new Job(name, group, clazz, handler, engine, description, expression, singleton, parameters, location, dependencies);
-        jobRepository.save(job);
-        return job;
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

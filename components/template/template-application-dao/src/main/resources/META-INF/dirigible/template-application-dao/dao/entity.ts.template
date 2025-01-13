@@ -1,0 +1,366 @@
+#if($dataCount)
+import { query } from "sdk/db";
+#end
+import { producer } from "sdk/messaging";
+import { extensions } from "sdk/extensions";
+import { dao as daoApi } from "sdk/db";
+#set($isEntityUtilsEnabled = "false")
+#foreach ($property in $properties)
+#if($property.dataType == "DATE" || $property.dataType == "BOOLEAN")
+#set($isEntityUtilsEnabled = "true")
+#break
+#end
+#end
+#if($isEntityUtilsEnabled == "true")
+import { EntityUtils } from "../utils/EntityUtils";
+#end
+#if($importsCode && $importsCode != "")
+// custom imports
+${importsCode}
+#end
+
+export interface ${name}Entity {
+#foreach ($property in $properties)
+#if($property.dataPrimaryKey)
+    readonly ${property.name}: ${property.dataTypeTypescript};
+#elseif($property.dataNotNull)
+    ${property.name}: ${property.dataTypeTypescript};
+#else
+    ${property.name}?: ${property.dataTypeTypescript};
+#end
+#end
+}
+
+export interface ${name}CreateEntity {
+#foreach ($property in $properties)
+#if(!$property.dataPrimaryKey && !$property.isCalculatedProperty)
+    readonly #if($property.dataNotNull)${property.name}: ${property.dataTypeTypescript};#else${property.name}?: ${property.dataTypeTypescript};#end
+#end
+#end
+}
+
+export interface ${name}UpdateEntity extends ${name}CreateEntity {
+#foreach ($property in $properties)
+#if($property.dataPrimaryKey)
+    readonly ${property.name}: ${property.dataTypeTypescript};
+#end
+#end
+}
+
+export interface ${name}EntityOptions {
+    $filter?: {
+        equals?: {
+#foreach ($property in $properties)
+            ${property.name}?: ${property.dataTypeTypescript} | ${property.dataTypeTypescript}[];
+#end
+        };
+        notEquals?: {
+#foreach ($property in $properties)
+            ${property.name}?: ${property.dataTypeTypescript} | ${property.dataTypeTypescript}[];
+#end
+        };
+        contains?: {
+#foreach ($property in $properties)
+            ${property.name}?: ${property.dataTypeTypescript};
+#end
+        };
+        greaterThan?: {
+#foreach ($property in $properties)
+            ${property.name}?: ${property.dataTypeTypescript};
+#end
+        };
+        greaterThanOrEqual?: {
+#foreach ($property in $properties)
+            ${property.name}?: ${property.dataTypeTypescript};
+#end
+        };
+        lessThan?: {
+#foreach ($property in $properties)
+            ${property.name}?: ${property.dataTypeTypescript};
+#end
+        };
+        lessThanOrEqual?: {
+#foreach ($property in $properties)
+            ${property.name}?: ${property.dataTypeTypescript};
+#end
+        };
+    },
+    $select?: (keyof ${name}Entity)[],
+    $sort?: string | (keyof ${name}Entity)[],
+    $order?: 'asc' | 'desc',
+    $offset?: number,
+    $limit?: number,
+}
+
+interface ${name}EntityEvent {
+    readonly operation: 'create' | 'update' | 'delete';
+    readonly table: string;
+    readonly entity: Partial<${name}Entity>;
+    readonly key: {
+        name: string;
+        column: string;
+#foreach ($property in $properties)
+#if($property.dataPrimaryKey)
+        value: ${property.dataTypeTypescript};
+#end
+#end
+    }
+}
+
+interface ${name}UpdateEntityEvent extends ${name}EntityEvent {
+    readonly previousEntity: ${name}Entity;
+}
+
+export class ${name}Repository {
+
+    private static readonly DEFINITION = {
+        table: "${tablePrefix}${dataName}",
+        properties: [
+#foreach ($property in $properties)
+#if($foreach.isFirst())
+            {
+#else
+            {
+#end
+                name: "${property.name}",
+                column: "${property.dataName}",
+                type: "${property.dataType}",
+#if($property.dataPrimaryKey)
+                id: true,
+#end
+#if($property.dataPrimaryKey)
+#if($property.dataAutoIncrement)
+                autoIncrement: true,
+#else
+                autoIncrement: false,
+#end
+#end
+#if($property.dataNotNull)
+                required: true
+#end
+            }#if($foreach.hasNext),#end
+#end
+        ]
+    };
+
+    private readonly dao;
+
+    constructor(dataSource#if($dataSource) = "${dataSource}"#else?: string#end) {
+        this.dao = daoApi.create(${name}Repository.DEFINITION, null, dataSource);
+    }
+
+    public findAll(options?: ${name}EntityOptions): ${name}Entity[] {
+#foreach ($property in $properties)
+#if ($property.dataOrderBy)
+        // @ts-ignore
+        if (options.$sort === undefined) {
+            // @ts-ignore
+            options.$sort = "";
+        }
+        // @ts-ignore
+        options.$sort += "${property.name},";
+        // @ts-ignore
+        options.$order = "${property.dataOrderBy}";
+#end
+#end
+#if($isEntityUtilsEnabled == "true")
+        return this.dao.list(options).map((e: ${name}Entity) => {
+#foreach ($property in $properties)
+#if($property.dataType == "DATE")
+            EntityUtils.setDate(e, "${property.name}");
+#end
+#if($property.dataType == "BOOLEAN")
+            EntityUtils.setBoolean(e, "${property.name}");
+#end
+#end
+            return e;
+        });
+#else
+        return this.dao.list(options);
+#end
+    }
+
+#foreach ($property in $properties)
+#if($property.dataPrimaryKey)
+    public findById(id: ${property.dataTypeTypescript}): ${name}Entity | undefined {
+#end
+#end
+#if($isEntityUtilsEnabled == "true")
+        const entity = this.dao.find(id);
+#foreach ($property in $properties)
+#if($property.dataType == "DATE")
+        EntityUtils.setDate(entity, "${property.name}");
+#end
+#if($property.dataType == "BOOLEAN")
+        EntityUtils.setBoolean(entity, "${property.name}");
+#end
+#end
+        return entity ?? undefined;
+#else
+        const entity = this.dao.find(id);
+        return entity ?? undefined;
+#end
+    }
+
+#foreach ($property in $properties)
+#if($property.dataPrimaryKey)
+    public create(entity: ${name}CreateEntity): ${property.dataTypeTypescript} {
+#end
+#end
+#if($isEntityUtilsEnabled == "true")
+#foreach ($property in $properties)
+#if($property.dataType == "DATE")
+        EntityUtils.setLocalDate(entity, "${property.name}");
+#end
+#if($property.dataType == "BOOLEAN")
+        EntityUtils.setBoolean(entity, "${property.name}");
+#end
+#end
+#end
+#foreach ($property in $properties)
+#if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
+        // @ts-ignore
+        (entity as ${name}Entity).${property.name} = ${property.calculatedPropertyExpressionCreate};
+#end
+#end
+#foreach ($property in $properties)
+#if($property.dataDefaultValue)
+        if (entity.${property.name} === undefined || entity.${property.name} === null) {
+#if($property.dataTypeTypescript == "string")
+            (entity as ${name}Entity).${property.name} = "${property.dataDefaultValue}";
+#elseif($property.dataTypeTypescript == "Date")
+            (entity as ${name}Entity).${property.name} = new Date("${property.dataDefaultValue}");
+#else
+            (entity as ${name}Entity).${property.name} = ${property.dataDefaultValue};
+#end
+        }
+#end
+#end
+        const id = this.dao.insert(entity);
+        this.triggerEvent({
+            operation: "create",
+            table: "${tablePrefix}${dataName}",
+            entity: entity,
+            key: {
+#foreach ($property in $properties)
+#if($property.dataPrimaryKey)
+                name: "${property.name}",
+                column: "${property.dataName}",
+                value: id
+#end
+#end
+            }
+        });
+        return id;
+    }
+
+    public update(entity: ${name}UpdateEntity): void {
+#if($isEntityUtilsEnabled == "true")
+#foreach ($property in $properties)
+#if($property.dataType == "DATE")
+        // EntityUtils.setLocalDate(entity, "${property.name}");
+#end
+#if($property.dataType == "BOOLEAN")
+        EntityUtils.setBoolean(entity, "${property.name}");
+#end
+#end
+#end
+#foreach ($property in $properties)
+#if($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate)
+        // @ts-ignore
+        (entity as ${name}Entity).${property.name} = ${property.calculatedPropertyExpressionUpdate};
+#end
+#end
+        const previousEntity = this.findById(entity.Id);
+        this.dao.update(entity);
+        this.triggerEvent({
+            operation: "update",
+            table: "${tablePrefix}${dataName}",
+            entity: entity,
+            previousEntity: previousEntity,
+            key: {
+#foreach ($property in $properties)
+#if($property.dataPrimaryKey)
+                name: "${property.name}",
+                column: "${property.dataName}",
+                value: entity.${property.name}
+#end
+#end
+            }
+        });
+    }
+
+#foreach ($property in $properties)
+#if($property.dataPrimaryKey)
+    public upsert(entity: ${name}CreateEntity | ${name}UpdateEntity): ${property.dataTypeTypescript} {
+#end
+#end
+        const id = (entity as ${name}UpdateEntity).#foreach ($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end;
+        if (!id) {
+            return this.create(entity);
+        }
+
+        const existingEntity = this.findById(id);
+        if (existingEntity) {
+            this.update(entity as ${name}UpdateEntity);
+            return id;
+        } else {
+            return this.create(entity);
+        }
+    }
+
+#foreach ($property in $properties)
+#if($property.dataPrimaryKey)
+    public deleteById(id: ${property.dataTypeTypescript}): void {
+#end
+#end
+        const entity = this.dao.find(id);
+        this.dao.remove(id);
+        this.triggerEvent({
+            operation: "delete",
+            table: "${tablePrefix}${dataName}",
+            entity: entity,
+            key: {
+#foreach ($property in $properties)
+#if($property.dataPrimaryKey)
+                name: "${property.name}",
+                column: "${property.dataName}",
+                value: id
+#end
+#end
+            }
+        });
+    }
+
+    public count(options?: ${name}EntityOptions): number {
+        return this.dao.count(options);
+    }
+
+    public customDataCount(): number {
+#if($dataCount)
+        const resultSet = query.execute('${dataCount}');
+        if (resultSet !== null && resultSet[0] !== null) {
+            if (resultSet[0].COUNT !== undefined && resultSet[0].COUNT !== null) {
+                return resultSet[0].COUNT;
+            } else if (resultSet[0].count !== undefined && resultSet[0].count !== null) {
+                return resultSet[0].count;
+            }
+        }
+        return 0;
+#else
+        return this.dao.count(options);
+#end
+    }
+
+    private async triggerEvent(data: ${name}EntityEvent | ${name}UpdateEntityEvent) {
+        const triggerExtensions = await extensions.loadExtensionModules("${projectName}-${perspectiveName}-${name}", ["trigger"]);
+        triggerExtensions.forEach(triggerExtension => {
+            try {
+                triggerExtension.trigger(data);
+            } catch (error) {
+                console.error(error);
+            }            
+        });
+        producer.topic("${projectName}-${perspectiveName}-${name}").send(JSON.stringify(data));
+    }
+}

@@ -12,23 +12,32 @@
 
 const UTF8Facade = Java.type("org.eclipse.dirigible.components.api.utils.UTF8Facade");
 
-/**
- * Encode the input (text or byte array) as text
- */
- export function encode(input) {
-	return UTF8Facade.encode(input);
+export class UTF8 {
+
+	/**
+	 * Encode the input (text or byte array) as text
+	 */
+	public static encode(input: string | any[]): string {
+		return UTF8Facade.encode(input);
+	}
+
+	/**
+	 * Decode the input (text or byte array) as text
+	 */
+	public static decode(input: string | any[]): string {
+		return UTF8Facade.decode(input);
+	}
+
+	/**
+	 * Decode the input byte array as text
+	 */
+	public static bytesToString(bytes: any[], offset: number, length: number) {
+		return UTF8Facade.bytesToString(bytes, offset, length);
+	}
 }
 
-/**
- * Decode the input (text or byte array) as text
- */
-export function decode(input) {
-	return UTF8Facade.decode(input);
-}
-
-/**
- * Decode the input byte array as text
- */
-export function bytesToString(bytes, offset, length) {
-    return UTF8Facade.bytesToString(bytes, offset, length);
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = UTF8;
 }

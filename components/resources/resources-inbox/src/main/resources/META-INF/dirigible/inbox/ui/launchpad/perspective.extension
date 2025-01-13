@@ -1,0 +1,5 @@
+{
+    "module": "inbox/gen/ui/launchpad/perspective.js",
+    "extensionPoint": "inbox",
+    "description": "inbox - Application Perspective"
+}

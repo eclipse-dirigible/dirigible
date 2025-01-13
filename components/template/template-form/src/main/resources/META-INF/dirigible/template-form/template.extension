@@ -1,0 +1,5 @@
+{
+    "extensionPoint": "platform-templates",
+    "module": "template-form/template.js",
+    "description": "Form Sample Template"
+}

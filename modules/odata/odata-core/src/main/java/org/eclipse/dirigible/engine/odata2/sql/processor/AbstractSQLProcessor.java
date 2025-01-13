@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.engine.odata2.sql.processor;
 
@@ -38,9 +37,11 @@ import org.apache.olingo.odata2.api.uri.info.*;
 import org.apache.olingo.odata2.core.commons.ContentType;
 import org.apache.olingo.odata2.core.uri.KeyPredicateImpl;
 import org.apache.olingo.odata2.core.uri.UriInfoImpl;
-import org.eclipse.dirigible.engine.odata2.sql.api.*;
+import org.eclipse.dirigible.engine.odata2.sql.api.OData2EventHandler;
+import org.eclipse.dirigible.engine.odata2.sql.api.SQLProcessor;
+import org.eclipse.dirigible.engine.odata2.sql.api.SQLStatement;
+import org.eclipse.dirigible.engine.odata2.sql.api.SQLStatementParam;
 import org.eclipse.dirigible.engine.odata2.sql.builder.*;
-import org.eclipse.dirigible.engine.odata2.sql.builder.SQLUtils;
 import org.eclipse.dirigible.engine.odata2.sql.utils.OData2Utils;
 import org.eclipse.dirigible.engine.odata2.sql.utils.SingleConnectionDataSource;
 import org.slf4j.Logger;
@@ -52,7 +53,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.*;
 
 import static org.eclipse.dirigible.engine.odata2.sql.builder.EdmUtils.getProperties;
@@ -66,36 +70,26 @@ public abstract class AbstractSQLProcessor extends ODataSingleProcessor implemen
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(AbstractSQLProcessor.class);
-
-    /** The odata 2 event handler. */
-    private final OData2EventHandler odata2EventHandler;
-
-    /** The data source. */
-    private DataSource dataSource;
-
-    /** The result set reader. */
-    private final ResultSetReader resultSetReader;
-
     /** The Constant SQL_BUILDER_CONTEXT_KEY. */
     private static final String SQL_BUILDER_CONTEXT_KEY = "sqlBuilder";
-
     /** The Constant SQL_CONTEXT_CONTEXT_KEY. */
     private static final String SQL_CONTEXT_CONTEXT_KEY = "sqlContext";
-
     /** The Constant DATASOURCE_CONTEXT_KEY. */
     private static final String DATASOURCE_CONTEXT_KEY = "datasource";
-
     /** The Constant ODATA_CONTEXT_CONTEXT_KEY. */
     private static final String ODATA_CONTEXT_CONTEXT_KEY = "oDataContext";
-
     /** The Constant MAPPED_KEYS_CONTEXT_KEY. */
     private static final String MAPPED_KEYS_CONTEXT_KEY = "mappedKeys";
-
     /** The Constant ENTRY_CONTEXT_KEY. */
     private static final String ENTRY_CONTEXT_KEY = "entry";
-
     /** The Constant ENTRY_JSON_CONTEXT_KEY. */
     private static final String ENTRY_JSON_CONTEXT_KEY = "entryJSON";
+    /** The odata 2 event handler. */
+    private final OData2EventHandler odata2EventHandler;
+    /** The result set reader. */
+    private final ResultSetReader resultSetReader;
+    /** The data source. */
+    private DataSource dataSource;
 
     /**
      * Instantiates a new abstract SQL processor.
@@ -158,20 +152,6 @@ public abstract class AbstractSQLProcessor extends ODataSingleProcessor implemen
     }
 
     /**
-     * Read entity complex property.
-     *
-     * @param uriInfo the uri info
-     * @param contentType the content type
-     * @return the o data response
-     * @throws ODataException the o data exception
-     */
-    @Override
-    public ODataResponse readEntityComplexProperty(final GetComplexPropertyUriInfo uriInfo, final String contentType)
-            throws ODataException {
-        throw new ODataException("readEntityComplexProperty not implemented: " + uriInfo.toString());
-    }
-
-    /**
      * Do count entity set.
      *
      * @param sqlQuery the sql query
@@ -184,10 +164,8 @@ public abstract class AbstractSQLProcessor extends ODataSingleProcessor implemen
         // TODO cache the metadata, because it fires a DB query every time
         // TODO do we really need to select the entities?
         String sql = sqlQuery.buildSelect(createSQLContext(connection));
+        logger.info("Counting with sql [{}]", sql);
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
-            if (logger.isInfoEnabled()) {
-                logger.info(sql);
-            }
             setParamsOnStatement(preparedStatement, sqlQuery.getStatementParams());
             try (ResultSet resultSet = preparedStatement.executeQuery()) {
                 // TODO do we need to assert that resultSet.next() == true and subsequently
@@ -206,29 +184,45 @@ public abstract class AbstractSQLProcessor extends ODataSingleProcessor implemen
      * @throws SQLException the SQL exception
      */
     protected SQLContext createSQLContext(final Connection connection) throws SQLException {
-        return new SQLContext(connection.getMetaData(), this.getContext());
+        return new SQLContext(connection, this.getContext());
     }
 
     /**
-     * Creates the select statement.
+     * Sets the params on statement.
      *
-     * @param selectQuery the select query
-     * @param connection the connection
-     * @return the prepared statement
+     * @param preparedStatement the prepared statement
+     * @param params the params
      * @throws SQLException the SQL exception
+     */
+    public void setParamsOnStatement(PreparedStatement preparedStatement, List<SQLStatementParam> params) throws SQLException {
+        if (logger.isDebugEnabled()) {
+            logger.debug("SQL Params: {}", params);
+        }
+        SQLUtils.setParamsOnStatement(preparedStatement, params);
+    }
+
+    /**
+     * Gets the data source.
+     *
+     * @return the data source
+     */
+    @Override
+    public DataSource getDataSource() {
+        return dataSource;
+    }
+
+    /**
+     * Read entity complex property.
+     *
+     * @param uriInfo the uri info
+     * @param contentType the content type
+     * @return the o data response
      * @throws ODataException the o data exception
      */
-    protected PreparedStatement createSelectStatement(SQLSelectBuilder selectQuery, final Connection connection)
-            throws SQLException, ODataException {
-        String sql = selectQuery.buildSelect(createSQLContext(connection));
-        if (logger.isInfoEnabled()) {
-            logger.info(sql);
-        }
-
-        PreparedStatement preparedStatement = connection.prepareStatement(sql);
-
-        setParamsOnStatement(preparedStatement, selectQuery.getStatementParams());
-        return preparedStatement;
+    @Override
+    public ODataResponse readEntityComplexProperty(final GetComplexPropertyUriInfo uriInfo, final String contentType)
+            throws ODataException {
+        throw new ODataException("readEntityComplexProperty not implemented: " + uriInfo.toString());
     }
 
     /**
@@ -272,6 +266,26 @@ public abstract class AbstractSQLProcessor extends ODataSingleProcessor implemen
             throw new ODataException("Unable to read entity", e);
         }
         return ExpandCallBack.writeEntryWithExpand(getContext(), (UriInfo) uriInfo, currentAccumulator, contentType);
+    }
+
+    /**
+     * Creates the select statement.
+     *
+     * @param selectQuery the select query
+     * @param connection the connection
+     * @return the prepared statement
+     * @throws SQLException the SQL exception
+     * @throws ODataException the o data exception
+     */
+    protected PreparedStatement createSelectStatement(SQLSelectBuilder selectQuery, final Connection connection)
+            throws SQLException, ODataException {
+        String sql = selectQuery.buildSelect(createSQLContext(connection));
+        logger.info("Created select statement: [{}]", sql);
+
+        PreparedStatement preparedStatement = connection.prepareStatement(sql);
+
+        setParamsOnStatement(preparedStatement, selectQuery.getStatementParams());
+        return preparedStatement;
     }
 
     /**
@@ -321,7 +335,7 @@ public abstract class AbstractSQLProcessor extends ODataSingleProcessor implemen
                         ResultSetReader.ResultSetEntity currentTargetEntity =
                                 resultSetReader.getResultSetEntity(query, targetEntityType, properties, resultSet, hasGeneratedId);
                         logger.info("Current entity set object is {}", currentTargetEntity);
-                        if (!currentAccumulator.isAccumulatorFor(currentTargetEntity)) {
+                        if (!currentAccumulator.isAccumulatorFor(currentTargetEntity) || currentTargetEntity.keys.isEmpty()) {
                             currentAccumulator = new ResultSetReader.ExpandAccumulator(currentTargetEntity);
                             entitiesFeed.add(currentAccumulator);
                         }
@@ -388,6 +402,19 @@ public abstract class AbstractSQLProcessor extends ODataSingleProcessor implemen
     }
 
     /**
+     * Read entity simple property.
+     *
+     * @param uriInfo the uri info
+     * @param contentType the content type
+     * @return the o data response
+     * @throws ODataException the o data exception
+     */
+    @Override
+    public ODataResponse readEntitySimpleProperty(final GetSimplePropertyUriInfo uriInfo, final String contentType) throws ODataException {
+        return readEntitySimplePropertyValue(uriInfo, contentType);
+    }
+
+    /**
      * Read entity simple property value.
      *
      * @param uriInfo the uri info
@@ -439,19 +466,6 @@ public abstract class AbstractSQLProcessor extends ODataSingleProcessor implemen
         } else {
             return EntityProvider.writePropertyValue(property, data.get(property.getName()));
         }
-    }
-
-    /**
-     * Read entity simple property.
-     *
-     * @param uriInfo the uri info
-     * @param contentType the content type
-     * @return the o data response
-     * @throws ODataException the o data exception
-     */
-    @Override
-    public ODataResponse readEntitySimpleProperty(final GetSimplePropertyUriInfo uriInfo, final String contentType) throws ODataException {
-        return readEntitySimplePropertyValue(uriInfo, contentType);
     }
 
     /**
@@ -618,6 +632,136 @@ public abstract class AbstractSQLProcessor extends ODataSingleProcessor implemen
     }
 
     /**
+     * Creates the insert statement.
+     *
+     * @param builder the builder
+     * @param connection the connection
+     * @return the prepared statement
+     * @throws SQLException the SQL exception
+     * @throws ODataException the o data exception
+     */
+    protected PreparedStatement createInsertStatement(SQLInsertBuilder builder, final Connection connection)
+            throws SQLException, ODataException {
+        return createPreparedStatement(connection, builder.build(createSQLContext(connection)));
+    }
+
+    /**
+     * Creates the prepared statement.
+     *
+     * @param connection the connection
+     * @param statement the statement
+     * @return the prepared statement
+     * @throws ODataException the o data exception
+     * @throws SQLException the SQL exception
+     */
+    protected PreparedStatement createPreparedStatement(Connection connection, SQLStatement statement) throws ODataException, SQLException {
+        String sql = statement.sql();
+        logger.info("Creating prepared statement for [{}]", sql);
+
+        PreparedStatement preparedStatement = connection.prepareStatement(sql);
+        setParamsOnStatement(preparedStatement, statement.getStatementParams());
+        return preparedStatement;
+    }
+
+    /**
+     * Checks if is erroneous response.
+     *
+     * @param response the response
+     * @return true, if is erroneous response
+     */
+    private boolean isErroneousResponse(ODataResponse response) {
+        // erroneous requests are >= 400 (BAD_REQUEST)
+        return response != null && response.getStatus()
+                                           .getStatusCode() >= HttpStatusCodes.BAD_REQUEST.getStatusCode();
+    }
+
+    /**
+     * Check for keys.
+     *
+     * @param entry the entry
+     * @param keyProperties the key properties
+     * @throws ODataException the o data exception
+     */
+    private void checkForKeys(ODataEntry entry, List<EdmProperty> keyProperties) throws ODataException {
+        if (!keyProperties.isEmpty()) {
+            for (EdmProperty keyProperty : keyProperties) {
+                if (entry.getProperties()
+                         .get(keyProperty.getName()) == null) {
+                    throw new ODataException("Missing entity key: " + keyProperty.getName());
+                }
+            }
+        }
+    }
+
+    /**
+     * Update uri info key predicates.
+     *
+     * @param uriInfo the uri info
+     * @param entry the entry
+     * @param keyProperties the key properties
+     * @throws EdmException the edm exception
+     */
+    private void updateUriInfoKeyPredicates(UriInfo uriInfo, ODataEntry entry, List<EdmProperty> keyProperties) throws EdmException {
+        List<KeyPredicate> keyPredicates = new ArrayList<>();
+        if (!keyProperties.isEmpty()) {
+            for (EdmProperty keyProperty : keyProperties) {
+                keyPredicates.add(new KeyPredicateImpl(entry.getProperties()
+                                                            .get(keyProperty.getName())
+                                                            .toString(),
+                        keyProperty));
+            }
+        }
+
+        ((UriInfoImpl) uriInfo).setKeyPredicates(keyPredicates);
+    }
+
+    /**
+     * Initialize event handler context.
+     *
+     * @param context the context
+     * @param connection the connection
+     * @param uriInfo the uri info
+     * @throws SQLException the SQL exception
+     * @throws EdmException the edm exception
+     */
+    private void initializeEventHandlerContext(Map<Object, Object> context, Connection connection, UriInfo uriInfo)
+            throws SQLException, EdmException {
+        context.put(SQL_BUILDER_CONTEXT_KEY, this.getSQLQueryBuilder());
+        context.put(SQL_CONTEXT_CONTEXT_KEY, createSQLContext(connection));
+        context.put(DATASOURCE_CONTEXT_KEY, getDataSource());
+        context.put(ODATA_CONTEXT_CONTEXT_KEY, getContext());
+        context.put(MAPPED_KEYS_CONTEXT_KEY, mapKeys(uriInfo.getKeyPredicates()));
+    }
+
+    /**
+     * Map keys.
+     *
+     * @param keys the keys
+     * @return the map
+     * @throws EdmException the edm exception
+     */
+    public static Map<String, Object> mapKeys(final List<KeyPredicate> keys) throws EdmException {
+        Map<String, Object> keyMap = new HashMap<>();
+        for (final KeyPredicate key : keys) {
+            final EdmProperty property = key.getProperty();
+            final EdmSimpleType type = (EdmSimpleType) property.getType();
+            keyMap.put(property.getName(),
+                    type.valueOfString(key.getLiteral(), EdmLiteralKind.DEFAULT, property.getFacets(), type.getDefaultType()));
+        }
+        return keyMap;
+    }
+
+    /**
+     * Update event handler context.
+     *
+     * @param context the context
+     * @param entry the entry
+     */
+    private void updateEventHandlerContext(Map<Object, Object> context, ODataEntry entry) {
+        context.put(ENTRY_CONTEXT_KEY, entry);
+    }
+
+    /**
      * Delete entity.
      *
      * @param uriInfo the uri info
@@ -668,21 +812,36 @@ public abstract class AbstractSQLProcessor extends ODataSingleProcessor implemen
     }
 
     /**
-     * Map keys.
+     * Creates the delete statement.
      *
-     * @param keys the keys
-     * @return the map
-     * @throws EdmException the edm exception
+     * @param builder the builder
+     * @param connection the connection
+     * @return the prepared statement
+     * @throws SQLException the SQL exception
+     * @throws ODataException the o data exception
      */
-    public static Map<String, Object> mapKeys(final List<KeyPredicate> keys) throws EdmException {
-        Map<String, Object> keyMap = new HashMap<>();
-        for (final KeyPredicate key : keys) {
-            final EdmProperty property = key.getProperty();
-            final EdmSimpleType type = (EdmSimpleType) property.getType();
-            keyMap.put(property.getName(),
-                    type.valueOfString(key.getLiteral(), EdmLiteralKind.DEFAULT, property.getFacets(), type.getDefaultType()));
+    protected PreparedStatement createDeleteStatement(SQLDeleteBuilder builder, final Connection connection)
+            throws SQLException, ODataException {
+        return createPreparedStatement(connection, builder.build(createSQLContext(connection)));
+    }
+
+    /**
+     * Update event handler context.
+     *
+     * @param context the context
+     * @param entitySet the entity set
+     * @throws IOException Signals that an I/O exception has occurred.
+     * @throws ODataBadRequestException the o data bad request exception
+     */
+    private void updateEventHandlerContext(Map<Object, Object> context, EdmEntitySet entitySet)
+            throws IOException, ODataBadRequestException {
+        if (context.containsKey(ENTRY_JSON_CONTEXT_KEY)) {
+            String beforeUpdateEntryJSON = (String) context.get(ENTRY_JSON_CONTEXT_KEY);
+            try (InputStream entryContent = new ByteArrayInputStream(beforeUpdateEntryJSON.getBytes(StandardCharsets.UTF_8))) {
+                ODataEntry parsedEntry = parseEntry(entitySet, entryContent, ContentType.APPLICATION_JSON.toContentTypeString(), false);
+                context.put(ENTRY_CONTEXT_KEY, parsedEntry);
+            }
         }
-        return keyMap;
     }
 
     /**
@@ -766,34 +925,6 @@ public abstract class AbstractSQLProcessor extends ODataSingleProcessor implemen
     }
 
     /**
-     * Creates the insert statement.
-     *
-     * @param builder the builder
-     * @param connection the connection
-     * @return the prepared statement
-     * @throws SQLException the SQL exception
-     * @throws ODataException the o data exception
-     */
-    protected PreparedStatement createInsertStatement(SQLInsertBuilder builder, final Connection connection)
-            throws SQLException, ODataException {
-        return createPreparedStatement(connection, builder.build(createSQLContext(connection)));
-    }
-
-    /**
-     * Creates the delete statement.
-     *
-     * @param builder the builder
-     * @param connection the connection
-     * @return the prepared statement
-     * @throws SQLException the SQL exception
-     * @throws ODataException the o data exception
-     */
-    protected PreparedStatement createDeleteStatement(SQLDeleteBuilder builder, final Connection connection)
-            throws SQLException, ODataException {
-        return createPreparedStatement(connection, builder.build(createSQLContext(connection)));
-    }
-
-    /**
      * Creates the update statement.
      *
      * @param builder the builder
@@ -805,59 +936,6 @@ public abstract class AbstractSQLProcessor extends ODataSingleProcessor implemen
     protected PreparedStatement createUpdateStatement(SQLUpdateBuilder builder, final Connection connection)
             throws SQLException, ODataException {
         return createPreparedStatement(connection, builder.build(createSQLContext(connection)));
-    }
-
-    /**
-     * Creates the prepared statement.
-     *
-     * @param connection the connection
-     * @param statement the statement
-     * @return the prepared statement
-     * @throws ODataException the o data exception
-     * @throws SQLException the SQL exception
-     */
-    protected PreparedStatement createPreparedStatement(Connection connection, SQLStatement statement) throws ODataException, SQLException {
-        String sql = statement.sql();
-        if (logger.isInfoEnabled()) {
-            logger.info("SQL Statement: {}", sql);
-        }
-
-        PreparedStatement preparedStatement = connection.prepareStatement(sql);
-        setParamsOnStatement(preparedStatement, statement.getStatementParams());
-        return preparedStatement;
-    }
-
-    /**
-     * Sets the params on statement.
-     *
-     * @param preparedStatement the prepared statement
-     * @param params the params
-     * @throws SQLException the SQL exception
-     */
-    public void setParamsOnStatement(PreparedStatement preparedStatement, List<SQLStatementParam> params) throws SQLException {
-        if (logger.isDebugEnabled()) {
-            logger.debug("SQL Params: {}", params);
-        }
-        SQLUtils.setParamsOnStatement(preparedStatement, params);
-    }
-
-    /**
-     * Gets the data source.
-     *
-     * @return the data source
-     */
-    @Override
-    public DataSource getDataSource() {
-        return dataSource;
-    }
-
-    /**
-     * Sets the data source.
-     *
-     * @param dataSource the new data source
-     */
-    void setDataSource(DataSource dataSource) {
-        this.dataSource = dataSource;
     }
 
     /**
@@ -920,6 +998,15 @@ public abstract class AbstractSQLProcessor extends ODataSingleProcessor implemen
     }
 
     /**
+     * Sets the data source.
+     *
+     * @param dataSource the new data source
+     */
+    void setDataSource(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    /**
      * Do execute change set.
      *
      * @param handler the handler
@@ -972,104 +1059,5 @@ public abstract class AbstractSQLProcessor extends ODataSingleProcessor implemen
                 }
             }
         }
-    }
-
-    /**
-     * Checks if is erroneous response.
-     *
-     * @param response the response
-     * @return true, if is erroneous response
-     */
-    private boolean isErroneousResponse(ODataResponse response) {
-        // erroneous requests are >= 400 (BAD_REQUEST)
-        return response != null && response.getStatus()
-                                           .getStatusCode() >= HttpStatusCodes.BAD_REQUEST.getStatusCode();
-    }
-
-    /**
-     * Check for keys.
-     *
-     * @param entry the entry
-     * @param keyProperties the key properties
-     * @throws ODataException the o data exception
-     */
-    private void checkForKeys(ODataEntry entry, List<EdmProperty> keyProperties) throws ODataException {
-        if (!keyProperties.isEmpty()) {
-            for (EdmProperty keyProperty : keyProperties) {
-                if (entry.getProperties()
-                         .get(keyProperty.getName()) == null) {
-                    throw new ODataException("Missing entity key: " + keyProperty.getName());
-                }
-            }
-        }
-    }
-
-    /**
-     * Update uri info key predicates.
-     *
-     * @param uriInfo the uri info
-     * @param entry the entry
-     * @param keyProperties the key properties
-     * @throws EdmException the edm exception
-     */
-    private void updateUriInfoKeyPredicates(UriInfo uriInfo, ODataEntry entry, List<EdmProperty> keyProperties) throws EdmException {
-        List<KeyPredicate> keyPredicates = new ArrayList<>();
-        if (!keyProperties.isEmpty()) {
-            for (EdmProperty keyProperty : keyProperties) {
-                keyPredicates.add(new KeyPredicateImpl(entry.getProperties()
-                                                            .get(keyProperty.getName())
-                                                            .toString(),
-                        keyProperty));
-            }
-        }
-
-        ((UriInfoImpl) uriInfo).setKeyPredicates(keyPredicates);
-    }
-
-    /**
-     * Initialize event handler context.
-     *
-     * @param context the context
-     * @param connection the connection
-     * @param uriInfo the uri info
-     * @throws SQLException the SQL exception
-     * @throws EdmException the edm exception
-     */
-    private void initializeEventHandlerContext(Map<Object, Object> context, Connection connection, UriInfo uriInfo)
-            throws SQLException, EdmException {
-        context.put(SQL_BUILDER_CONTEXT_KEY, this.getSQLQueryBuilder());
-        context.put(SQL_CONTEXT_CONTEXT_KEY, createSQLContext(connection));
-        context.put(DATASOURCE_CONTEXT_KEY, getDataSource());
-        context.put(ODATA_CONTEXT_CONTEXT_KEY, getContext());
-        context.put(MAPPED_KEYS_CONTEXT_KEY, mapKeys(uriInfo.getKeyPredicates()));
-    }
-
-    /**
-     * Update event handler context.
-     *
-     * @param context the context
-     * @param entitySet the entity set
-     * @throws IOException Signals that an I/O exception has occurred.
-     * @throws ODataBadRequestException the o data bad request exception
-     */
-    private void updateEventHandlerContext(Map<Object, Object> context, EdmEntitySet entitySet)
-            throws IOException, ODataBadRequestException {
-        if (context.containsKey(ENTRY_JSON_CONTEXT_KEY)) {
-            String beforeUpdateEntryJSON = (String) context.get(ENTRY_JSON_CONTEXT_KEY);
-            try (InputStream entryContent = new ByteArrayInputStream(beforeUpdateEntryJSON.getBytes(StandardCharsets.UTF_8))) {
-                ODataEntry parsedEntry = parseEntry(entitySet, entryContent, ContentType.APPLICATION_JSON.toContentTypeString(), false);
-                context.put(ENTRY_CONTEXT_KEY, parsedEntry);
-            }
-        }
-    }
-
-    /**
-     * Update event handler context.
-     *
-     * @param context the context
-     * @param entry the entry
-     */
-    private void updateEventHandlerContext(Map<Object, Object> context, ODataEntry entry) {
-        context.put(ENTRY_CONTEXT_KEY, entry);
     }
 }

@@ -15,10 +15,24 @@
 
 const EnvFacade = Java.type("org.eclipse.dirigible.components.api.core.EnvFacade");
 
-export function get(name) {
-	return EnvFacade.get(name);
-};
+export interface EnvValues {
+	[key: string]: string;
+}
 
-export function list() {
-	return EnvFacade.list();
-};
+export class Env {
+
+	public static get(name: string): string | undefined {
+		const value = EnvFacade.get(name);
+		return value ?? undefined;
+	}
+
+	public static list(): EnvValues {
+		return JSON.parse(EnvFacade.list());
+	}
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Env;
+}

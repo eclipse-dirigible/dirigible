@@ -12,13 +12,21 @@
 
 const DatabaseFacade = Java.type("org.eclipse.dirigible.components.api.db.DatabaseFacade");
 
-export function execute(sql, parameters, datasourceName) {
-	let result = {};
-	if (parameters) {
-		const params = JSON.stringify(parameters);
-		result = DatabaseFacade.update(sql, params, datasourceName)
-	} else {
-		result = DatabaseFacade.update(sql, null, datasourceName);
+export interface UpdateParameter {
+	readonly type: string;
+	readonly value: any;
+}
+
+export class Update {
+
+	public static execute(sql: string, parameters?: (string | number | boolean | Date | UpdateParameter)[], datasourceName?: string): number {
+		const result = DatabaseFacade.update(sql, parameters ? JSON.stringify(parameters) : undefined, datasourceName);
+		return result;
 	}
-	return result;
-};
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Update;
+}

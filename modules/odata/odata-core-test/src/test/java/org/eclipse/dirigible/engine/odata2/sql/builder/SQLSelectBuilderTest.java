@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.engine.odata2.sql.builder;
 
@@ -26,8 +25,8 @@ import org.apache.olingo.odata2.core.edm.provider.EdmImplProv;
 import org.apache.olingo.odata2.core.ep.entry.ODataEntryImpl;
 import org.apache.olingo.odata2.core.uri.UriParserImpl;
 import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.components.database.DatabaseSystem;
 import org.eclipse.dirigible.engine.odata2.sql.binding.EdmTableBindingProvider;
-import org.eclipse.dirigible.engine.odata2.sql.builder.SQLContext.DatabaseProduct;
 import org.eclipse.dirigible.engine.odata2.sql.clause.SQLSelectClause;
 import org.eclipse.dirigible.engine.odata2.sql.edm.*;
 import org.eclipse.dirigible.engine.odata2.sql.mapping.DefaultEdmTableMappingProvider;
@@ -102,14 +101,13 @@ public class SQLSelectBuilderTest {
     @SuppressWarnings("unchecked")
     public void testMPLCount() throws Exception {
         // MessageProcessingLogs/$count
-        Configuration.set("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "false");
         PathSegment ps1 = new ODataPathSegmentImpl("Entities1", EMPTY_MAP);
         PathSegment ps3 = new ODataPathSegmentImpl("$count", EMPTY_MAP);
         UriInfo uriInfo = uriParser.parse(Arrays.asList(ps1, ps3), EMPTY_MAP);
 
         SQLSelectBuilder q = builder.buildSelectCountQuery(uriInfo, null);
         SQLContext context = new SQLContext();
-        assertEquals("SELECT COUNT(*) FROM MPLHEADER AS T0", q.buildSelect(context));
+        assertEquals("SELECT COUNT(*) FROM \"MPLHEADER\" AS \"T0\"", q.buildSelect(context));
     }
 
     /**
@@ -119,7 +117,6 @@ public class SQLSelectBuilderTest {
      */
     @Test
     public void testCountWithDate() throws Exception {
-        Configuration.set("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "false");
         PathSegment ps1 = createPathSegment();
         PathSegment ps2 = new ODataPathSegmentImpl("$count", Collections.emptyMap());
         Map<String, String> params = new HashMap<>();
@@ -127,8 +124,8 @@ public class SQLSelectBuilderTest {
         UriInfo uriInfo = uriParser.parse(Arrays.asList(ps1, ps2), params);
 
         SQLSelectBuilder q = builder.buildSelectCountQuery(uriInfo, null);
-        assertEquals("T0.STATUS = ? AND T0.LOGEND < ?", q.getWhereClause()
-                                                         .getWhereClause());
+        assertEquals("\"T0\".\"STATUS\" = ? AND \"T0\".\"LOGEND\" < ?", q.getWhereClause()
+                                                                         .getWhereClause());
         assertFalse(q.getJoinWhereClauses()
                      .hasNext());
 
@@ -138,7 +135,8 @@ public class SQLSelectBuilderTest {
         assertTrue(q.getStatementParams()
                     .get(1)
                     .getValue() instanceof Calendar);
-        assertEquals("SELECT COUNT(*) FROM MPLHEADER AS T0 WHERE T0.STATUS = ? AND T0.LOGEND < ?", q.buildSelect(context));
+        assertEquals("SELECT COUNT(*) FROM \"MPLHEADER\" AS \"T0\" WHERE \"T0\".\"STATUS\" = ? AND \"T0\".\"LOGEND\" < ?",
+                q.buildSelect(context));
     }
 
     /**
@@ -148,47 +146,14 @@ public class SQLSelectBuilderTest {
      */
     @Test
     public void testBuildSelectWithFilter() throws Exception {
-        Configuration.set("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "false");
         PathSegment ps1 = createPathSegment();
         Map<String, String> params = new HashMap<>();
         params.put("$filter", "Status eq 'ERROR' and LogEnd lt datetime'2014-10-02T09:14:00'");
         UriInfo uriInfo = uriParser.parse(Collections.singletonList(ps1), params);
 
         SQLSelectBuilder q = builder.buildSelectEntitySetQuery(uriInfo, null);
-        assertEquals("T0.STATUS = ? AND T0.LOGEND < ?", q.getWhereClause()
-                                                         .getWhereClause());
-        assertFalse(q.getJoinWhereClauses()
-                     .hasNext());
-
-        assertEquals("ERROR", q.getStatementParams()
-                               .get(0)
-                               .getValue());
-        assertTrue(q.getStatementParams()
-                    .get(1)
-                    .getValue() instanceof Calendar);
-        // the AlternateWebLink is mapped to MESSAGEID, therefore 2 times MESSAGEID
-        assertEquals("SELECT T0.MESSAGEGUID AS \"MESSAGEGUID_T0\", T0.LOGSTART AS \"LOGSTART_T0\", T0.LOGEND AS \"LOGEND_T0\", "
-                + "T0.SENDER AS \"SENDER_T0\", T0.RECEIVER AS \"RECEIVER_T0\", T0.STATUS AS \"STATUS_T0\", T0.MESSAGEGUID AS \"MESSAGEGUID_T0\" "
-                + "FROM MPLHEADER AS T0 " + "WHERE T0.STATUS = ? AND T0.LOGEND < ? ORDER BY T0.MESSAGEGUID ASC"
-                + SERVER_SIDE_PAGING_DEFAULT_SUFFIX, q.buildSelect(context));
-    }
-
-    /**
-     * Test build select with dynamic filter.
-     *
-     * @throws Exception the exception
-     */
-    @Test
-    public void testBuildSelectWithDynamicFilter() throws Exception {
-        Configuration.set("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "false");
-        PathSegment ps1 = createPathSegment();
-        Map<String, String> params = new HashMap<>();
-        params.put("$filter", "Status eq 'ERROR' and LogEnd lt datetime'2014-10-02T09:14:00'");
-        UriInfo uriInfo = uriParser.parse(Collections.singletonList(ps1), params);
-
-        SQLSelectBuilder q = builder.buildSelectEntitySetQuery(uriInfo, null);
-        assertEquals("T0.STATUS = ? AND T0.LOGEND < ?", q.getWhereClause()
-                                                         .getWhereClause());
+        assertEquals("\"T0\".\"STATUS\" = ? AND \"T0\".\"LOGEND\" < ?", q.getWhereClause()
+                                                                         .getWhereClause());
         assertFalse(q.getJoinWhereClauses()
                      .hasNext());
 
@@ -200,10 +165,45 @@ public class SQLSelectBuilderTest {
                     .getValue() instanceof Calendar);
         // the AlternateWebLink is mapped to MESSAGEID, therefore 2 times MESSAGEID
         assertEquals(
-                "SELECT T0.MESSAGEGUID AS \"MESSAGEGUID_T0\", T0.LOGSTART AS \"LOGSTART_T0\", T0.LOGEND AS \"LOGEND_T0\", "
-                        + "T0.SENDER AS \"SENDER_T0\", T0.RECEIVER AS \"RECEIVER_T0\", T0.STATUS AS \"STATUS_T0\", "
-                        + "T0.MESSAGEGUID AS \"MESSAGEGUID_T0\" " + "FROM MPLHEADER AS T0 "
-                        + "WHERE T0.STATUS = ? AND T0.LOGEND < ? ORDER BY T0.MESSAGEGUID ASC" + SERVER_SIDE_PAGING_DEFAULT_SUFFIX,
+                "SELECT \"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\", \"T0\".\"LOGSTART\" AS \"LOGSTART_T0\", \"T0\".\"LOGEND\" AS \"LOGEND_T0\", "
+                        + "\"T0\".\"SENDER\" AS \"SENDER_T0\", \"T0\".\"RECEIVER\" AS \"RECEIVER_T0\", \"T0\".\"STATUS\" AS \"STATUS_T0\", \"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\" "
+                        + "FROM \"MPLHEADER\" AS \"T0\" "
+                        + "WHERE \"T0\".\"STATUS\" = ? AND \"T0\".\"LOGEND\" < ? ORDER BY \"T0\".\"MESSAGEGUID\" ASC"
+                        + SERVER_SIDE_PAGING_DEFAULT_SUFFIX,
+                q.buildSelect(context));
+    }
+
+    /**
+     * Test build select with dynamic filter.
+     *
+     * @throws Exception the exception
+     */
+    @Test
+    public void testBuildSelectWithDynamicFilter() throws Exception {
+        PathSegment ps1 = createPathSegment();
+        Map<String, String> params = new HashMap<>();
+        params.put("$filter", "Status eq 'ERROR' and LogEnd lt datetime'2014-10-02T09:14:00'");
+        UriInfo uriInfo = uriParser.parse(Collections.singletonList(ps1), params);
+
+        SQLSelectBuilder q = builder.buildSelectEntitySetQuery(uriInfo, null);
+        assertEquals("\"T0\".\"STATUS\" = ? AND \"T0\".\"LOGEND\" < ?", q.getWhereClause()
+                                                                         .getWhereClause());
+        assertFalse(q.getJoinWhereClauses()
+                     .hasNext());
+
+        assertEquals("ERROR", q.getStatementParams()
+                               .get(0)
+                               .getValue());
+        assertTrue(q.getStatementParams()
+                    .get(1)
+                    .getValue() instanceof Calendar);
+        // the AlternateWebLink is mapped to MESSAGEID, therefore 2 times MESSAGEID
+        assertEquals(
+                "SELECT \"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\", \"T0\".\"LOGSTART\" AS \"LOGSTART_T0\", \"T0\".\"LOGEND\" AS \"LOGEND_T0\", "
+                        + "\"T0\".\"SENDER\" AS \"SENDER_T0\", \"T0\".\"RECEIVER\" AS \"RECEIVER_T0\", \"T0\".\"STATUS\" AS \"STATUS_T0\", "
+                        + "\"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\" " + "FROM \"MPLHEADER\" AS \"T0\" "
+                        + "WHERE \"T0\".\"STATUS\" = ? AND \"T0\".\"LOGEND\" < ? ORDER BY \"T0\".\"MESSAGEGUID\" ASC"
+                        + SERVER_SIDE_PAGING_DEFAULT_SUFFIX,
                 q.buildSelect(context));
     }
 
@@ -218,10 +218,11 @@ public class SQLSelectBuilderTest {
         params.put("$orderby", "Status, LogStart desc");
 
         String expectedSelectStatment =
-                "SELECT T0.MESSAGEGUID AS \"MESSAGEGUID_T0\", T0.LOGSTART AS \"LOGSTART_T0\", T0.LOGEND AS \"LOGEND_T0\", "
-                        + "T0.SENDER AS \"SENDER_T0\", T0.RECEIVER AS \"RECEIVER_T0\", T0.STATUS AS \"STATUS_T0\", T0.MESSAGEGUID AS \"MESSAGEGUID_T0\" "
-                        + "FROM MPLHEADER AS T0 " + "ORDER BY T0.STATUS ASC, T0.LOGSTART DESC" + SERVER_SIDE_PAGING_DEFAULT_SUFFIX;
-        testBuildSelectStatement(params, context.getDatabaseProduct(), expectedSelectStatment);
+                "SELECT \"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\", \"T0\".\"LOGSTART\" AS \"LOGSTART_T0\", \"T0\".\"LOGEND\" AS \"LOGEND_T0\", "
+                        + "\"T0\".\"SENDER\" AS \"SENDER_T0\", \"T0\".\"RECEIVER\" AS \"RECEIVER_T0\", \"T0\".\"STATUS\" AS \"STATUS_T0\", \"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\" "
+                        + "FROM \"MPLHEADER\" AS \"T0\" " + "ORDER BY \"T0\".\"STATUS\" ASC, \"T0\".\"LOGSTART\" DESC"
+                        + SERVER_SIDE_PAGING_DEFAULT_SUFFIX;
+        testBuildSelectStatement(params, context.getDatabaseSystem(), expectedSelectStatment);
     }
 
     /**
@@ -234,10 +235,10 @@ public class SQLSelectBuilderTest {
         Map<String, String> params = new HashMap<>();
 
         String expectedSelectStatment =
-                "SELECT T0.MESSAGEGUID AS \"MESSAGEGUID_T0\", T0.LOGSTART AS \"LOGSTART_T0\", T0.LOGEND AS \"LOGEND_T0\", "
-                        + "T0.SENDER AS \"SENDER_T0\", T0.RECEIVER AS \"RECEIVER_T0\", T0.STATUS AS \"STATUS_T0\", T0.MESSAGEGUID AS \"MESSAGEGUID_T0\" "
-                        + "FROM MPLHEADER AS T0 " + "ORDER BY T0.MESSAGEGUID ASC" + SERVER_SIDE_PAGING_DEFAULT_SUFFIX;
-        testBuildSelectStatement(params, context.getDatabaseProduct(), expectedSelectStatment);
+                "SELECT \"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\", \"T0\".\"LOGSTART\" AS \"LOGSTART_T0\", \"T0\".\"LOGEND\" AS \"LOGEND_T0\", "
+                        + "\"T0\".\"SENDER\" AS \"SENDER_T0\", \"T0\".\"RECEIVER\" AS \"RECEIVER_T0\", \"T0\".\"STATUS\" AS \"STATUS_T0\", \"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\" "
+                        + "FROM \"MPLHEADER\" AS \"T0\" " + "ORDER BY \"T0\".\"MESSAGEGUID\" ASC" + SERVER_SIDE_PAGING_DEFAULT_SUFFIX;
+        testBuildSelectStatement(params, context.getDatabaseSystem(), expectedSelectStatment);
     }
 
     /**
@@ -252,11 +253,11 @@ public class SQLSelectBuilderTest {
         params.put("$top", "10");
 
         String expectedSelectStatment =
-                "SELECT T0.MESSAGEGUID AS \"MESSAGEGUID_T0\", T0.LOGSTART AS \"LOGSTART_T0\", T0.LOGEND AS \"LOGEND_T0\", "
-                        + "T0.SENDER AS \"SENDER_T0\", T0.RECEIVER AS \"RECEIVER_T0\", T0.STATUS AS \"STATUS_T0\", "
-                        + "T0.MESSAGEGUID AS \"MESSAGEGUID_T0\" " + "FROM MPLHEADER AS T0 ORDER BY T0.MESSAGEGUID ASC "
-                        + "FETCH FIRST 10 ROWS ONLY";
-        testBuildSelectStatement(params, context.getDatabaseProduct(), expectedSelectStatment);
+                "SELECT \"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\", \"T0\".\"LOGSTART\" AS \"LOGSTART_T0\", \"T0\".\"LOGEND\" AS \"LOGEND_T0\", "
+                        + "\"T0\".\"SENDER\" AS \"SENDER_T0\", \"T0\".\"RECEIVER\" AS \"RECEIVER_T0\", \"T0\".\"STATUS\" AS \"STATUS_T0\", "
+                        + "\"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\" "
+                        + "FROM \"MPLHEADER\" AS \"T0\" ORDER BY \"T0\".\"MESSAGEGUID\" ASC " + "FETCH FIRST 10 ROWS ONLY";
+        testBuildSelectStatement(params, context.getDatabaseSystem(), expectedSelectStatment);
     }
 
     /**
@@ -270,9 +271,10 @@ public class SQLSelectBuilderTest {
         params.put("$select", "Status");
         params.put("$orderby", "Status, LogStart desc");
 
-        String expectedSelectStatment = "SELECT T0.STATUS AS \"STATUS_T0\", T0.MESSAGEGUID AS \"MESSAGEGUID_T0\" FROM MPLHEADER AS T0 "
-                + "ORDER BY T0.STATUS ASC, T0.LOGSTART DESC" + SERVER_SIDE_PAGING_DEFAULT_SUFFIX;
-        testBuildSelectStatement(params, context.getDatabaseProduct(), expectedSelectStatment);
+        String expectedSelectStatment =
+                "SELECT \"T0\".\"STATUS\" AS \"STATUS_T0\", \"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\" FROM \"MPLHEADER\" AS \"T0\" "
+                        + "ORDER BY \"T0\".\"STATUS\" ASC, \"T0\".\"LOGSTART\" DESC" + SERVER_SIDE_PAGING_DEFAULT_SUFFIX;
+        testBuildSelectStatement(params, context.getDatabaseSystem(), expectedSelectStatment);
     }
 
     /**
@@ -287,9 +289,9 @@ public class SQLSelectBuilderTest {
         params.put("$orderby", "Status, LogStart desc");
 
         String expectedSelectStatment =
-                "SELECT T0.MESSAGEGUID AS \"MESSAGEGUID_T0\" FROM MPLHEADER AS T0 ORDER BY T0.STATUS ASC, T0.LOGSTART DESC"
+                "SELECT \"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\" FROM \"MPLHEADER\" AS \"T0\" ORDER BY \"T0\".\"STATUS\" ASC, \"T0\".\"LOGSTART\" DESC"
                         + SERVER_SIDE_PAGING_DEFAULT_SUFFIX;
-        testBuildSelectStatement(params, context.getDatabaseProduct(), expectedSelectStatment);
+        testBuildSelectStatement(params, context.getDatabaseSystem(), expectedSelectStatment);
     }
 
     /**
@@ -305,9 +307,9 @@ public class SQLSelectBuilderTest {
 
         // The primary key is always selected in addition
         String expectedSelectStatment =
-                "SELECT T0.STATUS AS \"STATUS_T0\", T0.MESSAGEGUID AS \"MESSAGEGUID_T0\" FROM MPLHEADER AS T0 ORDER BY T0.STATUS ASC, T0.LOGSTART DESC"
+                "SELECT \"T0\".\"STATUS\" AS \"STATUS_T0\", \"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\" FROM \"MPLHEADER\" AS \"T0\" ORDER BY \"T0\".\"STATUS\" ASC, \"T0\".\"LOGSTART\" DESC"
                         + SERVER_SIDE_PAGING_DEFAULT_SUFFIX;
-        testBuildSelectStatement(params, context.getDatabaseProduct(), expectedSelectStatment);
+        testBuildSelectStatement(params, context.getDatabaseSystem(), expectedSelectStatment);
     }
 
     /**
@@ -318,8 +320,9 @@ public class SQLSelectBuilderTest {
     @Test
     public void testBuildSelectStatementWithSelectTop() throws ODataException {
         String expectedSelectStmnt =
-                "SELECT T0.MESSAGEGUID AS \"MESSAGEGUID_T0\" FROM MPLHEADER AS T0 ORDER BY T0.LOGSTART " + "DESC FETCH FIRST 12 ROWS ONLY";
-        testBuildSelectStatementWithSelectTop(context.getDatabaseProduct(), 12, expectedSelectStmnt);
+                "SELECT \"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\" FROM \"MPLHEADER\" AS \"T0\" ORDER BY \"T0\".\"LOGSTART\" "
+                        + "DESC FETCH FIRST 12 ROWS ONLY";
+        testBuildSelectStatementWithSelectTop(context.getDatabaseSystem(), 12, expectedSelectStmnt);
     }
 
     /**
@@ -330,8 +333,8 @@ public class SQLSelectBuilderTest {
     @Test
     public void testBuildSelectStatementWithSelectTopPostgres() throws ODataException {
         String expectedSelectStatement =
-                "SELECT T0.MESSAGEGUID AS \"MESSAGEGUID_T0\" FROM MPLHEADER AS T0 ORDER BY T0.LOGSTART DESC LIMIT 4";
-        testBuildSelectStatementWithSelectTop(DatabaseProduct.POSTGRE_SQL, 4, expectedSelectStatement);
+                "SELECT \"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\" FROM \"MPLHEADER\" AS \"T0\" ORDER BY \"T0\".\"LOGSTART\" DESC LIMIT 4";
+        testBuildSelectStatementWithSelectTop(DatabaseSystem.POSTGRESQL, 4, expectedSelectStatement);
     }
 
     /**
@@ -340,10 +343,10 @@ public class SQLSelectBuilderTest {
      * @throws ODataException the o data exception
      */
     @Test
-    public void testBuildSelectStatementWithSelectTopSybase() throws ODataException {
+    public void testBuildSelectStatementWithSelectTopH2() throws ODataException {
         String expectedSelectStatement =
-                "SELECT T0.MESSAGEGUID AS \"MESSAGEGUID_T0\" FROM MPLHEADER AS T0 ORDER BY T0.LOGSTART DESC LIMIT 5";
-        testBuildSelectStatementWithSelectTop(DatabaseProduct.SYBASE_ASE, 5, expectedSelectStatement);
+                "SELECT \"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\" FROM \"MPLHEADER\" AS \"T0\" ORDER BY \"T0\".\"LOGSTART\" DESC LIMIT 5";
+        testBuildSelectStatementWithSelectTop(DatabaseSystem.H2, 5, expectedSelectStatement);
     }
 
     /**
@@ -354,26 +357,18 @@ public class SQLSelectBuilderTest {
     @Test
     public void testBuildSelectStatementWithSelectTopHANA() throws ODataException {
         String expectedSelectStatement =
-                "SELECT T0.MESSAGEGUID AS \"MESSAGEGUID_T0\" FROM MPLHEADER AS T0 ORDER BY T0.LOGSTART DESC LIMIT 3";
-        testBuildSelectStatementWithSelectTop(DatabaseProduct.HANA, 3, expectedSelectStatement);
+                "SELECT \"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\" FROM \"MPLHEADER\" AS \"T0\" ORDER BY \"T0\".\"LOGSTART\" DESC LIMIT 3";
+        testBuildSelectStatementWithSelectTop(DatabaseSystem.HANA, 3, expectedSelectStatement);
     }
 
-    /**
-     * Test build select statement with select top.
-     *
-     * @param dbType the db type
-     * @param top the top
-     * @param expectedSelectStatement the expected select statement
-     * @throws ODataException the o data exception
-     */
-    private void testBuildSelectStatementWithSelectTop(DatabaseProduct dbType, Integer top, String expectedSelectStatement)
+    private void testBuildSelectStatementWithSelectTop(DatabaseSystem databaseSystem, Integer top, String expectedSelectStatement)
             throws ODataException {
         Map<String, String> params = new HashMap<>();
         params.put("$select", "MessageGuid");
         params.put("$orderby", "LogStart desc");
         params.put("$top", top.toString());
 
-        testBuildSelectStatement(params, dbType, expectedSelectStatement);
+        testBuildSelectStatement(params, databaseSystem, expectedSelectStatement);
     }
 
     /**
@@ -384,8 +379,8 @@ public class SQLSelectBuilderTest {
     @Test
     public void testBuildSelectStatementWithSelectTopAndSkipHANA() throws ODataException {
         String expectedSelectStatement =
-                "SELECT T0.MESSAGEGUID AS \"MESSAGEGUID_T0\" FROM MPLHEADER AS T0 ORDER BY T0.STATUS ASC, T0.LOGSTART DESC LIMIT 2 OFFSET 5";
-        testBuildSelectStatementWithSelectTopAndSkip(DatabaseProduct.HANA, 2, 5, expectedSelectStatement);
+                "SELECT \"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\" FROM \"MPLHEADER\" AS \"T0\" ORDER BY \"T0\".\"STATUS\" ASC, \"T0\".\"LOGSTART\" DESC LIMIT 2 OFFSET 5";
+        testBuildSelectStatementWithSelectTopAndSkip(DatabaseSystem.HANA, 2, 5, expectedSelectStatement);
     }
 
     /**
@@ -394,10 +389,10 @@ public class SQLSelectBuilderTest {
      * @throws ODataException the o data exception
      */
     @Test
-    public void testBuildSelectStatementWithSelectTopAndSkipSybase() throws ODataException {
+    public void testBuildSelectStatementWithSelectTopAndSkipH2() throws ODataException {
         String expectedSelectStatement =
-                "SELECT T0.MESSAGEGUID AS \"MESSAGEGUID_T0\" FROM MPLHEADER AS T0 ORDER BY T0.STATUS ASC, T0.LOGSTART DESC LIMIT 10 OFFSET 20";
-        testBuildSelectStatementWithSelectTopAndSkip(DatabaseProduct.SYBASE_ASE, 10, 20, expectedSelectStatement);
+                "SELECT \"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\" FROM \"MPLHEADER\" AS \"T0\" ORDER BY \"T0\".\"STATUS\" ASC, \"T0\".\"LOGSTART\" DESC LIMIT 10 OFFSET 20";
+        testBuildSelectStatementWithSelectTopAndSkip(DatabaseSystem.H2, 10, 20, expectedSelectStatement);
     }
 
     /**
@@ -408,20 +403,11 @@ public class SQLSelectBuilderTest {
     @Test
     public void testBuildSelectStatementWithSelectTopAndSkipPostgre() throws ODataException {
         String expectedSelectStatement =
-                "SELECT T0.MESSAGEGUID AS \"MESSAGEGUID_T0\" FROM MPLHEADER AS T0 ORDER BY T0.STATUS ASC, T0.LOGSTART DESC LIMIT 2 OFFSET 6";
-        testBuildSelectStatementWithSelectTopAndSkip(DatabaseProduct.POSTGRE_SQL, 2, 6, expectedSelectStatement);
+                "SELECT \"T0\".\"MESSAGEGUID\" AS \"MESSAGEGUID_T0\" FROM \"MPLHEADER\" AS \"T0\" ORDER BY \"T0\".\"STATUS\" ASC, \"T0\".\"LOGSTART\" DESC LIMIT 2 OFFSET 6";
+        testBuildSelectStatementWithSelectTopAndSkip(DatabaseSystem.POSTGRESQL, 2, 6, expectedSelectStatement);
     }
 
-    /**
-     * Test build select statement with select top and skip.
-     *
-     * @param dbType the db type
-     * @param top the top
-     * @param skip the skip
-     * @param expectedSelectStatement the expected select statement
-     * @throws ODataException the o data exception
-     */
-    private void testBuildSelectStatementWithSelectTopAndSkip(DatabaseProduct dbType, Integer top, Integer skip,
+    private void testBuildSelectStatementWithSelectTopAndSkip(DatabaseSystem databaseSystem, Integer top, Integer skip,
             String expectedSelectStatement) throws ODataException {
         Map<String, String> params = new HashMap<>();
         params.put("$select", "MessageGuid");
@@ -429,24 +415,15 @@ public class SQLSelectBuilderTest {
         params.put("$skip", skip.toString());
         params.put("$top", top.toString());
 
-        testBuildSelectStatement(params, dbType, expectedSelectStatement);
+        testBuildSelectStatement(params, databaseSystem, expectedSelectStatement);
     }
 
-    /**
-     * Test build select statement.
-     *
-     * @param uriParams the uri params
-     * @param dbType the db type
-     * @param expectedSelectStatment the expected select statment
-     * @throws ODataException the o data exception
-     */
-    private void testBuildSelectStatement(Map<String, String> uriParams, DatabaseProduct dbType, String expectedSelectStatment)
+    private void testBuildSelectStatement(Map<String, String> uriParams, DatabaseSystem databaseSystem, String expectedSelectStatment)
             throws ODataException {
-        Configuration.set("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "false");
         PathSegment ps1 = createPathSegment();
         UriInfo uriInfo = uriParser.parse(Collections.singletonList(ps1), uriParams);
         SQLSelectBuilder selectBuilder = builder.buildSelectEntitySetQuery(uriInfo, null);
-        SQLContext context = new SQLContext(dbType);
+        SQLContext context = new SQLContext(databaseSystem);
 
         assertEquals(expectedSelectStatment, selectBuilder.buildSelect(context));
     }
@@ -593,16 +570,16 @@ public class SQLSelectBuilderTest {
      */
     @Test
     public void testSelectWithComposedKey() throws Exception {
-        Configuration.set("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "false");
         Map<String, String> params = new HashMap<>();
         PathSegment ps1 = new ODataPathSegmentImpl("Entities4(Id4_1=11,Id4_2=22)", Collections.emptyMap());
         UriInfo uriInfo = uriParser.parse(Collections.singletonList(ps1), params);
 
         SQLSelectBuilder q = builder.buildSelectEntitySetQuery(uriInfo, null);
         SQLContext context = new SQLContext();
-        String expected =
-                "SELECT T0.ID4_1 AS \"ID4_1_T0\", T0.ID4_2 AS \"ID4_2_T0\", " + "T0.ID4_3 AS \"ID4_3_T0\" " + "FROM ENTITY4_TABLE AS T0 "
-                        + "WHERE T0.ID4_1 = ? AND T0.ID4_2 = ? ORDER BY T0.ID4_1 ASC, T0.ID4_2 ASC " + "FETCH FIRST 1000 ROWS ONLY";
+        String expected = "SELECT \"T0\".\"ID4_1\" AS \"ID4_1_T0\", \"T0\".\"ID4_2\" AS \"ID4_2_T0\", "
+                + "\"T0\".\"ID4_3\" AS \"ID4_3_T0\" " + "FROM \"ENTITY4_TABLE\" AS \"T0\" "
+                + "WHERE \"T0\".\"ID4_1\" = ? AND \"T0\".\"ID4_2\" = ? ORDER BY \"T0\".\"ID4_1\" ASC, \"T0\".\"ID4_2\" ASC "
+                + "FETCH FIRST 1000 ROWS ONLY";
         assertEquals(expected, q.buildSelect(context));
     }
 
@@ -613,20 +590,19 @@ public class SQLSelectBuilderTest {
      */
     @Test
     public void testSelectWithParametersForEntityWhenCalcViewAndHanaDb() throws Exception {
-        Configuration.set("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "true");
         Map<String, String> params = new HashMap<>();
         PathSegment ps = new ODataPathSegmentImpl("Entities6(CurrentEmployeeId=1,CurrentEmployeeName='Ben',ID=3)", Collections.emptyMap());
         UriInfo uriInfo = uriParser.parse(Collections.singletonList(ps), params);
 
         SQLSelectBuilder q = builder.buildSelectEntityQuery(uriInfo, null);
-        SQLContext context = new SQLContext(DatabaseProduct.HANA);
+        SQLContext context = new SQLContext(DatabaseSystem.HANA);
 
         List<String> selectSql = Arrays.asList(q.buildSelect(context)
                                                 .split("SELECT|FROM|WHERE"));
 
         List<String> selectedColumns = Arrays.asList(selectSql.get(1)
                                                               .trim()
-                                                              .split(", "));;
+                                                              .split(", "));
         assertTrue(selectedColumns.contains("\"T0\".\"ID\" AS \"ID_T0\""));
         assertTrue(selectedColumns.contains("\"T0\".\"NAME\" AS \"NAME_T0\""));
         assertTrue(selectedColumns.contains("? AS CurrentEmployeeId_T0"));
@@ -643,7 +619,7 @@ public class SQLSelectBuilderTest {
         assertTrue(targetDbEntityParameters.contains("placeholder.\"$$CurrentEmployeeName$$\" => ?"));
         String targetDbEntityAlias = targetDbEntity.get(2)
                                                    .trim();
-        assertEquals("AS T0", targetDbEntityAlias);
+        assertEquals("AS \"T0\"", targetDbEntityAlias);
 
         String whereClause = selectSql.get(3);
         assertEquals("\"T0\".\"ID\" = ?", whereClause.trim());
@@ -656,20 +632,19 @@ public class SQLSelectBuilderTest {
      */
     @Test
     public void testSelectWithParametersForEntitySetWhenCalcViewAndHanaDb() throws Exception {
-        Configuration.set("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "true");
         Map<String, String> params = new HashMap<>();
         PathSegment ps = new ODataPathSegmentImpl("Entities6(CurrentEmployeeId=1,CurrentEmployeeName='Ben',ID=3)", Collections.emptyMap());
         UriInfo uriInfo = uriParser.parse(Collections.singletonList(ps), params);
 
         SQLSelectBuilder q = builder.buildSelectEntitySetQuery(uriInfo, null);
-        SQLContext context = new SQLContext(DatabaseProduct.HANA);
+        SQLContext context = new SQLContext(DatabaseSystem.HANA);
 
         List<String> selectSql = Arrays.asList(q.buildSelect(context)
                                                 .split("SELECT|FROM|WHERE|ORDER BY|LIMIT"));
 
         List<String> selectedColumns = Arrays.asList(selectSql.get(1)
                                                               .trim()
-                                                              .split(", "));;
+                                                              .split(", "));
         assertTrue(selectedColumns.contains("\"T0\".\"ID\" AS \"ID_T0\""));
         assertTrue(selectedColumns.contains("\"T0\".\"NAME\" AS \"NAME_T0\""));
         assertTrue(selectedColumns.contains("? AS CurrentEmployeeId_T0"));
@@ -686,7 +661,7 @@ public class SQLSelectBuilderTest {
         assertTrue(targetDbEntityParameters.contains("placeholder.\"$$CurrentEmployeeName$$\" => ?"));
         String targetDbEntityAlias = targetDbEntity.get(2)
                                                    .trim();
-        assertEquals("AS T0", targetDbEntityAlias);
+        assertEquals("AS \"T0\"", targetDbEntityAlias);
 
         String whereClause = selectSql.get(3);
         assertEquals("\"T0\".\"ID\" = ?", whereClause.trim());
@@ -712,7 +687,7 @@ public class SQLSelectBuilderTest {
 
         SQLDeleteBuilder deleteBuilder = builder.buildDeleteEntityQuery(uriInfo, mapKeys(uriInfo.getKeyPredicates()), null);
         SQLContext context = new SQLContext();
-        String expected = "DELETE FROM ENTITY4_TABLE WHERE ID4_1=? AND ID4_2=?";
+        String expected = "DELETE FROM \"ENTITY4_TABLE\" WHERE \"ID4_1\"=? AND \"ID4_2\"=?";
         assertEquals(expected, deleteBuilder.build(context)
                                             .sql());
     }
@@ -724,7 +699,6 @@ public class SQLSelectBuilderTest {
      */
     @Test
     public void testInsertWithComposedKey() throws Exception {
-        Configuration.set("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "false");
         Map<String, String> params = new HashMap<>();
         PathSegment ps1 = new ODataPathSegmentImpl("Entities4(Id4_1=11,Id4_2=22)", Collections.emptyMap());
         UriInfo uriInfo = uriParser.parse(Collections.singletonList(ps1), params);
@@ -734,15 +708,8 @@ public class SQLSelectBuilderTest {
         entity4.put("Id4_2", "2");
         ODataEntry entity = new ODataEntryImpl(entity4, null, null, null);
 
-        SQLInsertBuilder insertBuilder = builder.buildInsertEntityQuery(uriInfo, entity, null);
-        SQLContext context = new SQLContext();
-        String expected = "INSERT INTO ENTITY4_TABLE (ID4_1,ID4_2) VALUES (?,?)";
-        assertEquals(expected, insertBuilder.build(context)
-                                            .sql());
-
-        Configuration.set("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "true");
         SQLInsertBuilder insertBuilder2 = builder.buildInsertEntityQuery(uriInfo, entity, null);
-        expected = "INSERT INTO \"ENTITY4_TABLE\" (\"ID4_1\",\"ID4_2\") VALUES (?,?)";
+        String expected = "INSERT INTO \"ENTITY4_TABLE\" (\"ID4_1\",\"ID4_2\") VALUES (?,?)";
         assertEquals(expected, insertBuilder2.build(context)
                                              .sql());
     }

@@ -1,21 +1,17 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.commons.config;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-
 import org.junit.Test;
+
+import static org.junit.Assert.*;
 
 /**
  * The Class ConfigurationTest.
@@ -66,6 +62,7 @@ public class ConfigurationTest {
     // 2. System properties (-D...)
     // 3. Environment properties
     // 4. Deployment properties
+
     /**
      * Config precedence test.
      */
@@ -157,58 +154,26 @@ public class ConfigurationTest {
     @Test
     public void configureObjectTest() {
         Configuration.set("S2_VALUE", "s2");
+        Configuration.set("PORTUNUS_OPENCART_DB_HOST", "localhost");
+        Configuration.set("PORTUNUS_OPENCART_DB_PORT", "3306");
+        Configuration.set("PORTUNUS_OPENCART_DB_NAME", "bitnami_opencart");
+        Configuration.set("projectName", "my-test-project");
+
         class TestObject {
             String s1 = "s1";
             String s2 = "${S2_VALUE}";
             String s3 = "${S3_VALUE}.{s3}";
-
-            /**
-             * @return the s1
-             */
-            public String getS1() {
-                return s1;
-            }
-
-            /**
-             * @param s1 the s1 to set
-             */
-            public void setS1(String s1) {
-                this.s1 = s1;
-            }
-
-            /**
-             * @return the s2
-             */
-            public String getS2() {
-                return s2;
-            }
-
-            /**
-             * @param s2 the s2 to set
-             */
-            public void setS2(String s2) {
-                this.s2 = s2;
-            }
-
-            /**
-             * @return the s3
-             */
-            public String getS3() {
-                return s3;
-            }
-
-            /**
-             * @param s3 the s3 to set
-             */
-            public void setS3(String s3) {
-                this.s3 = s3;
-            }
-
+            String s4 = "jdbc:mariadb://${PORTUNUS_OPENCART_DB_HOST}:${PORTUNUS_OPENCART_DB_PORT}/${PORTUNUS_OPENCART_DB_NAME}";
+            String s5 = "${projectName} ${projectVersion} - Application View";
         }
         TestObject o = new TestObject();
         Configuration.configureObject(o);
-        assertEquals("s1", o.getS1());
-        assertEquals("s2", o.getS2());
-        assertEquals("s3", o.getS3());
+
+        assertEquals("s1", o.s1);
+        assertEquals("s2", o.s2);
+        assertEquals("s3", o.s3);
+        assertEquals("jdbc:mariadb://localhost:3306/bitnami_opencart", o.s4);
+        assertEquals("my-test-project ${projectVersion} - Application View", o.s5);
     }
+
 }

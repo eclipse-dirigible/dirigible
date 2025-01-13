@@ -1,9 +1,0 @@
-DIMENSION_ID,DIMENSION_NAME,DIMENSION_BASEUNIT
-1,Length,m
-2,Mass,kg
-3,Time,s
-4,Area,m2
-5,Volume,m3
-6,Quantity,EA
-7,Energy,J
-8,Proportion,%

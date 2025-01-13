@@ -1,5 +1,5 @@
-import { query } from "@dirigible/db";
-import { response } from "@dirigible/http";
+import { query } from "sdk/db";
+import { response } from "sdk/http";
 
 
 var sql = 'select * from DIRIGIBLE_EXTENSIONS where EXTENSION_EXTENSIONPOINT_NAME = ?';
@@ -7,6 +7,3 @@ var sql = 'select * from DIRIGIBLE_EXTENSIONS where EXTENSION_EXTENSIONPOINT_NAM
 var resultset = query.execute(sql, ['ide-template'], "SystemDB");
 
 response.println(JSON.stringify(resultset));
-
-response.flush();
-response.close();

@@ -1,0 +1,17 @@
+- route:
+    id: http-oute-b0a6
+    nodePrefixId: http-route-52f
+    from:
+      id: from-a460
+      description: Expose path /services/integrations/http-route
+      uri: platform-http
+      parameters:
+        path: http-route
+        httpMethodRestrict: GET
+      steps:
+        - to:
+            id: to-c54d
+            description: Call handler.ts
+            uri: dirigible-java-script
+            parameters:
+              javaScriptPath: http-route-call-dirigible-js-custom-component/handler.ts

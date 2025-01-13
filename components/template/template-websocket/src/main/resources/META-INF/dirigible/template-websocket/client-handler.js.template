@@ -1,15 +1,15 @@
-exports.onOpen = function()  {
+export function onOpen()  {
   console.log("Client connection openned at {{fileName}} client.");
 }
 
-exports.onMessage = function(message) {
+export function onMessage(message) {
   console.log("Message received by the {{fileName}} client: " + message);
 }
 
-exports.onError = function(error) {
+export function onError(error) {
   console.error("Error in {{fileName}} client: " + error);
 }
 
-exports.onClose = function() {
+export function onClose() {
   console.warn("Client connection closed at {{fileName}} client.");
 }

@@ -1,0 +1,94 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="import" ng-controller="ImportViewController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="configs/import-view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=editor-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="/services/web/service-transport/transport.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=file-upload-js"></script>
+        <script type="text/javascript" src="js/import.js"></script>
+    </head>
+
+    <body class="bk-vbox">
+        <input id="input" style="display: none" type="file" nv-file-select="" uploader="uploader" multiple accept="{{ inputAccept }}" />
+        <bk-toolbar compact="::!inDialog">
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-button ng-show="uploader.queue.length > 0 && uploader.isUploading" label="Cancel" title="Cancel" state="transparent" glyph="sap-icon--cancel" ng-click="uploader.cancelAll()">
+            </bk-button>
+            <bk-button ng-if="!importRepository" ng-show="uploader.queue.length > 0 && !uploader.isUploading" ng-disabled="isUploadEnabled()" label="Upload All" title="Upload All" state="transparent" glyph="sap-icon--upload"
+                ng-click="uploader.uploadAll()">
+            </bk-button>
+            <bk-button ng-if="importRepository" ng-show="uploader.queue.length > 0 && !uploader.isUploading" ng-disabled="isUploadEnabled()" label="Upload" title="Upload" state="transparent" glyph="sap-icon--upload"
+                ng-click="uploader.uploadAll()">
+            </bk-button>
+            <bk-toolbar-separator ng-show="uploader.queue.length > 0"></bk-toolbar-separator>
+            <bk-button ng-if="!inDialog" state="transparent" ng-disabled="uploader.isUploading" glyph="sap-icon--add" title="Add files" aria-label="Add files" ng-click="addFiles()">
+            </bk-button>
+            <bk-button ng-if="inDialog" state="transparent" ng-disabled="uploader.isUploading || uploader.queue.length >= queueLength" glyph="sap-icon--add" title="Add files" label="Add" ng-click="addFiles()">
+            </bk-button>
+            <bk-toolbar-separator ng-hide="inDialog"></bk-toolbar-separator>
+            <bk-popover ng-hide="inDialog">
+                <bk-popover-control>
+                    <bk-button ng-disabled="uploader.isUploading" state="transparent" is-menu="true" label="{{ selectedWorkspace }}">
+                    </bk-button>
+                </bk-popover-control>
+                <bk-popover-body align="bottom-right" no-arrow="true">
+                    <bk-menu aria-label="workspaces menu">
+                        <bk-menu-item title="{{ name }}" ng-repeat="name in workspaceNames track by $index" is-selected="isSelectedWorkspace(name)" ng-click="switchWorkspace(name)">
+                        </bk-menu-item>
+                    </bk-menu>
+                </bk-popover-body>
+            </bk-popover>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button state="transparent" ng-disabled="uploader.queue.length === 0" glyph="sap-icon--clear-all" title="Clear list" aria-label="Clear list" ng-click="uploader.clearQueue()">
+            </bk-button>
+        </bk-toolbar>
+
+        <div bk-scrollbar class="bk-fill-parent" nv-file-drop="" uploader="uploader" filters="queueLimit, customFilter">
+            <bk-message-page glyph="sap-icon--upload-to-cloud" ng-hide="uploader.queue.length > 0">
+                <bk-message-page-title>{{ dropAreaTitle }}</bk-message-page-title>
+                <bk-message-page-subtitle>{{ dropAreaSubtitle }}</bk-message-page-subtitle>
+                <bk-message-page-more ng-if="inDialog">{{ dropAreaMore }}</bk-message-page-more>
+            </bk-message-page>
+
+            <bk-list byline="true" ng-show="uploader.queue.length > 0">
+                <bk-list-item ng-repeat="item in uploader.queue">
+                    <bk-list-thumbnail glyph="sap-icon--attachment-zip-file"></bk-list-thumbnail>
+                    <bk-list-content item-title="{{ item.file.name }}">
+                        <bk-progress-indicator ng-show="item.isUploading" min-value="0" max-value="100" current-value="item.progress" state="positive" label="Uploading... ({{ item.progress }}%)" aria-label="uploading in progress">
+                        </bk-progress-indicator>
+                        <span ng-hide="item.isReady || item.isUploading || item.isSuccess" bk-object-status status="positive"
+                            text="{{ item.file.size > 10240 ? (item.file.size/1024/1024|number:2) + ' MB' : (item.file.size/1024|number:1) + ' kB' }}"></span>
+                        <span ng-show="item.isSuccess" bk-object-status status="positive" text="Uploaded"></span>
+                    </bk-list-content>
+                    <bk-button ng-hide="item.isReady || item.isUploading || item.isSuccess" bk-list-button state="transparent" glyph="sap-icon--upload" aria-label="Upload" ng-click="item.upload()">
+                    </bk-button>
+                    <bk-button ng-hide="item.isReady || item.isUploading || item.isSuccess" bk-list-button state="transparent" glyph="sap-icon--decline" aria-label="Remove" ng-click="item.remove()">
+                    </bk-button>
+                    <bk-button ng-show="item.isUploading" bk-list-button state="transparent" glyph="sap-icon--cancel" aria-label="Cancel" ng-click="item.cancel()">
+                    </bk-button>
+                </bk-list-item>
+            </bk-list>
+        </div>
+        <theme></theme>
+    </body>
+
+</html>

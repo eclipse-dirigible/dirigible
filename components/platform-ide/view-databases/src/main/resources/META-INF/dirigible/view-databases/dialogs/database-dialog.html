@@ -1,0 +1,95 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="dbdialog" ng-controller="DBDialogController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="../configs/database-dialog.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="database-dialog.js"></script>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
+        <div class="bk-padding bk-fill-parent" bk-scrollbar ng-show="!state.error && !state.isBusy">
+            <bk-fieldset ng-form="forms.dbForm">
+                <bk-form-group ng-if="!dataParameters.editMode">
+                    <bk-form-item>
+                        <bk-form-label for="name" colon="true" required>Name</bk-form-label>
+                        <bk-input id="name" name="name" type="text" placeholder="Enter a name" ng-model="database.name" input-rules="inputRules" state="{{ forms.dbForm['name'].$valid ? '' : 'error' }}" ng-required="true" ng-trim="false">
+                        </bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+                <bk-form-group horizontal="false">
+                    <bk-form-label for="driver" required colon="true">Driver</bk-form-label>
+                    <bk-select id="driver" class="bk-full-width" placeholder="Select driver" state="{{ database.driver === '' ? 'error' : '' }}" ng-model="database.driver" dropdown-fixed="false" ng-change="driverChanged()">
+                        <bk-option text="{{ driver.text }}" value="driver.value" ng-repeat="driver in drivers track by $index"></bk-option>
+                    </bk-select>
+                </bk-form-group>
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="url" colon="true" required>URL</bk-form-label>
+                        <bk-input id="url" name="url" type="text" placeholder="Enter URL" ng-model="database.url" input-rules="inputRules" state="{{ forms.dbForm['url'].$valid ? '' : 'error' }}" ng-required="true" ng-trim="false">
+                        </bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="username" colon="true" required>Username</bk-form-label>
+                        <bk-input id="username" name="username" type="text" placeholder="Enter username" ng-model="database.username" input-rules="inputRules" ng-trim="false" state="{{ forms.dbForm['username'].$valid ? '' : 'error' }}"
+                            ng-required="true"></bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="password" colon="true">Password</bk-form-label>
+                        <bk-input id="password" name="password" type="password" autocomplete="new-password" placeholder="Enter password" ng-model="database.password"></bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="parameters" colon="true">Parameters</bk-form-label>
+                        <bk-input id="parameters" name="parameters" type="text" state="{{ forms.dbForm['parameters'].$valid ? '' : 'error' }}" input-rules="{patterns: ['^([A-Za-z0-9=,]+)=([A-Za-z0-9]+?)(?=,[^,]+=|$)$']}"
+                            placeholder="Enter parameters, e.g. name1=value1,name2=value2 ..." ng-model="database.parameters" ng-minlength="3"></bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+            </bk-fieldset>
+        </div>
+        <bk-bar bar-design="footer" ng-show="!state.error && !state.isBusy" compact="true">
+            <bk-bar-right>
+                <bk-bar-element>
+                    <bk-button label="{{dataParameters.editMode ? 'Save' : 'Create'}}" ng-click="save()" state="emphasized" ng-disabled="!forms.dbForm.$valid">
+                    </bk-button>
+                </bk-bar-element>
+                <bk-bar-element>
+                    <bk-button label="Cancel" ng-click="cancel()" state="transparent"></bk-button>
+                </bk-bar-element>
+            </bk-bar-right>
+        </bk-bar>
+        <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+            <bk-message-page-title>Dialog encounterd an error!</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+            <bk-message-page-actions>
+                <bk-button compact="true" ng-click="cancel()" label="Close" state="emphasized"></bk-button>
+            </bk-message-page-actions>
+        </bk-message-page>
+        <theme></theme>
+    </body>
+
+</html>

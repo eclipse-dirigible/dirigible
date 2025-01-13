@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.engine.odata2.sql.clause;
 
@@ -64,7 +63,6 @@ public class SQLOrderByClause implements SQLClause {
         this.query = query;
         this.entityType = orderByEntityType;
     }
-
 
     /**
      * Evaluate.
@@ -144,15 +142,13 @@ public class SQLOrderByClause implements SQLClause {
         EdmProperty prop;
         StringBuilder orderByClause = new StringBuilder();
 
-        if (expression instanceof MemberExpression) {
-            MemberExpression memberExpression = (MemberExpression) expression;
+        if (expression instanceof MemberExpression memberExpression) {
             CommonExpression pathExpression = memberExpression.getPath();
             entityType = (EdmStructuralType) pathExpression.getEdmType();
             PropertyExpression propertyExpression = (PropertyExpression) memberExpression.getProperty();
             prop = (EdmProperty) propertyExpression.getEdmProperty();
 
-        } else if (expression instanceof PropertyExpression) {
-            PropertyExpression propertyExpression = (PropertyExpression) expression;
+        } else if (expression instanceof PropertyExpression propertyExpression) {
             prop = (EdmProperty) propertyExpression.getEdmProperty();
             entityType = this.entityType;
         } else {
@@ -166,7 +162,7 @@ public class SQLOrderByClause implements SQLClause {
             throw new OData2Exception(INTERNAL_SERVER_ERROR);
         }
 
-        if ((context == null || context.getDatabaseProduct() != null)) {
+        if ((context == null || context.getDatabaseSystem() != null)) {
             if (isPropertyParameter(prop, query, entityType)) {
                 orderByClause.append(query.getSQLTableColumnAlias(entityType, prop));
             } else {
@@ -174,7 +170,7 @@ public class SQLOrderByClause implements SQLClause {
             }
         } else {
             orderByClause.append(query.getSQLTableColumnAlias(entityType, prop)); // This gives the correct "order by" column name for Open
-                                                                                  // SQL
+            // SQL
         }
         orderByClause.append(" ")
                      .append(orderBy.getSortOrder() == SortOrder.asc ? "ASC" : "DESC");

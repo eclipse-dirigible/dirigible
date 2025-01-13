@@ -1,0 +1,5 @@
+{
+    "module": "inbox/gen/ui/launchpad/menu-help.js",
+    "extensionPoint": "inbox-menu",
+    "description": "inbox - Application Menu"
+}

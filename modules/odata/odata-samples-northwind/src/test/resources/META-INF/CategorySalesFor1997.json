@@ -1,8 +1,11 @@
 {
-	"edmType": "Category_Sales_for_1997",
-	"edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.CategorySalesFor1997",
-	"sqlTable": " PUBLIC.CATEGORY_SALES_FOR_1997",
-	"CategoryName": "CATEGORY_NAME",
-	"CategorySales": "CATEGORY_SALES",
-	"_pk_": ["CATEGORY_NAME"]
+  "edmType": "Category_Sales_for_1997",
+  "edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.CategorySalesFor1997",
+  "sqlTable": "CATEGORY_SALES_FOR_1997",
+  "sqlSchema": "PUBLIC",
+  "CategoryName": "CATEGORY_NAME",
+  "CategorySales": "CATEGORY_SALES",
+  "_pk_": [
+    "CATEGORY_NAME"
+  ]
 }

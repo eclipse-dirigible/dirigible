@@ -1,12 +1,12 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
 let bpmImageView = angular.module('bpm-image-app', ['ideUI', 'ideView']);
@@ -24,12 +24,12 @@ bpmImageView.controller('BpmImageViewController', ['$scope', 'messageHub', funct
     };
 
     $scope.loadDefinitionImageLink = function (definition) {
-        $scope.imageLink = `/services/ide/bpm/bpm-processes/diagram/definition/${definition}`;
+        $scope.imageLink = `/services/bpm/bpm-processes/diagram/definition/${definition}`;
         $scope.state.isBusy = false;
     };
     
     $scope.loadInstanceImageLink = function (instance) {
-        $scope.imageLink = `/services/ide/bpm/bpm-processes/diagram/instance/${instance}`;
+        $scope.imageLink = `/services/bpm/bpm-processes/diagram/instance/${instance}`;
         $scope.state.isBusy = false;
     };
 

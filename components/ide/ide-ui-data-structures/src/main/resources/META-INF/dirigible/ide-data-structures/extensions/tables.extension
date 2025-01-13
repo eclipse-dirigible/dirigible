@@ -1,0 +1,5 @@
+{
+    "module": "ide-data-structures/services/tables-view.js",
+    "extensionPoint": "ide-view",
+    "description": "Tables Structures View"
+}

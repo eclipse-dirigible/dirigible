@@ -1,44 +1,32 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.management.load;
 
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
-import javax.sql.DataSource;
-
-import org.eclipse.dirigible.commons.config.Configuration;
+import com.google.common.base.CaseFormat;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
-import org.eclipse.dirigible.components.data.structures.domain.Table;
-import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
-import org.eclipse.dirigible.components.data.structures.domain.TableConstraint;
-import org.eclipse.dirigible.components.data.structures.domain.TableConstraintCheck;
-import org.eclipse.dirigible.components.data.structures.domain.TableConstraintForeignKey;
-import org.eclipse.dirigible.components.data.structures.domain.TableConstraintUnique;
+import org.eclipse.dirigible.components.data.structures.domain.*;
 import org.eclipse.dirigible.components.database.DatabaseParameters;
+import org.eclipse.dirigible.components.database.DatabaseSystem;
+import org.eclipse.dirigible.components.database.DatabaseSystemDeterminer;
 import org.eclipse.dirigible.database.sql.ISqlKeywords;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import com.google.common.base.CaseFormat;
-
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.*;
 
 /**
  * The Class DataSourceMetadataLoader.
@@ -48,10 +36,6 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(DataSourceMetadataLoader.class);
-
-    /** The Constant IS_CASE_SENSETIVE. */
-    private static final boolean IS_CASE_SENSETIVE =
-            Boolean.parseBoolean(Configuration.get(DatabaseParameters.DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE));
 
     /** The data source service. */
     private final DataSourcesManager datasourceManager;
@@ -140,16 +124,6 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
                 databaseMetadata.getColumns(connection.getCatalog(), schemaPattern, normalizeTableName(tableMetadata.getName()), null);
         if (columns.next()) {
             iterateColumns(tableMetadata, columns);
-        } else if (!IS_CASE_SENSETIVE) {
-            // Fallback for PostgreSQL
-            columns = databaseMetadata.getColumns(connection.getCatalog(), schemaPattern, normalizeTableName(tableMetadata.getName()
-                                                                                                                          .toLowerCase()),
-                    null);
-            if (!columns.next()) {
-                throw new SQLException("Error in getting the information about the columns.");
-            } else {
-                iterateColumns(tableMetadata, columns);
-            }
         }
     }
 
@@ -183,15 +157,6 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
                 databaseMetadata.getPrimaryKeys(connection.getCatalog(), schema, normalizeTableName(tableMetadata.getName()));
         if (primaryKeys.next()) {
             iteratePrimaryKeys(tableMetadata, primaryKeys);
-        } else if (!IS_CASE_SENSETIVE) {
-            // Fallback for PostgreSQL
-            primaryKeys = databaseMetadata.getPrimaryKeys(connection.getCatalog(), schema, normalizeTableName(tableMetadata.getName()
-                                                                                                                           .toLowerCase()));
-            if (!primaryKeys.next()) {
-                return;
-            } else {
-                iteratePrimaryKeys(tableMetadata, primaryKeys);
-            }
         }
     }
 
@@ -239,15 +204,6 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
                 databaseMetadata.getImportedKeys(connection.getCatalog(), schema, normalizeTableName(tableMetadata.getName()));
         if (foreignKeys.next()) {
             iterateForeignKeys(tableMetadata, foreignKeys);
-        } else if (!IS_CASE_SENSETIVE) {
-            // Fallback for PostgreSQL
-            foreignKeys = databaseMetadata.getImportedKeys(connection.getCatalog(), schema, normalizeTableName(tableMetadata.getName()
-                                                                                                                            .toLowerCase()));
-            if (!foreignKeys.next()) {
-                return;
-            } else {
-                iterateForeignKeys(tableMetadata, foreignKeys);
-            }
         }
     }
 
@@ -266,8 +222,6 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
                     tableMetadata.getConstraints());
         } while (foreignKeys.next());
     }
-
-
 
     /**
      * Add indices.
@@ -354,16 +308,6 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
                 databaseMetadata.getTables(connection.getCatalog(), schemaPattern, normalizeTableName(tableMetadata.getName()), null);
         if (tables.next()) {
             iterateTables(tableMetadata, tables);
-        } else if (!IS_CASE_SENSETIVE) {
-            // Fallback for PostgreSQL
-            tables = databaseMetadata.getTables(connection.getCatalog(), schemaPattern, normalizeTableName(tableMetadata.getName()
-                                                                                                                        .toLowerCase()),
-                    null);
-            if (!tables.next()) {
-                throw new SQLException("Error in getting the information about the tables.");
-            } else {
-                iterateTables(tableMetadata, tables);
-            }
         }
     }
 
@@ -410,8 +354,14 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
     public static List<String> getTablesInSchema(DataSource dataSource, String schemaName) throws SQLException {
         List<String> tableNames = new ArrayList<String>();
         try (Connection connection = dataSource.getConnection()) {
+            DatabaseSystem databaseSystem = DatabaseSystemDeterminer.determine(dataSource);
             DatabaseMetaData databaseMetaData = connection.getMetaData();
-            ResultSet schemas = databaseMetaData.getSchemas(null, schemaName);
+            ResultSet schemas;
+            if (!(databaseSystem.isMariaDB() || databaseSystem.isMySQL())) {
+                schemas = databaseMetaData.getSchemas(null, schemaName);
+            } else {
+                schemas = databaseMetaData.getCatalogs();
+            }
             if (schemas.next()) {
 
                 ResultSet rs =

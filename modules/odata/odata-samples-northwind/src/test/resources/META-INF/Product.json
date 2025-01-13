@@ -1,22 +1,27 @@
 {
-	"edmType": "Product",
-	"edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.Product",
-	"sqlTable": " PUBLIC.PRODUCT",
-	"ProductID": "PRODUCT_ID",
-	"ProductName": "PRODUCT_NAME",
-	"SupplierID": "SUPPLIER_ID",
-	"CategoryID": "CATEGORY_ID",
-	"QuantityPerUnit": "QUANTITY_PER_UNIT",
-	"UnitPrice": "UNIT_PRICE",
-	"UnitsInStock": "UNITS_IN_STOCK",
-	"UnitsOnOrder": "UNITS_ON_ORDER",
-	"ReorderLevel": "REORDER_LEVEL",
-	"Discontinued": "DISCONTINUED",
-	"_pk_": "PRODUCT_ID",
-	"_ref_Category" : {
-		"joinColumn" :["CATEGORY_ID"]
-	},
-	"_ref_Supplier" : {
-		"joinColumn" :["SUPPLIER_ID"]
-	}
+  "edmType": "Product",
+  "edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.Product",
+  "sqlTable": "PRODUCT",
+  "sqlSchema": "PUBLIC",
+  "ProductID": "PRODUCT_ID",
+  "ProductName": "PRODUCT_NAME",
+  "SupplierID": "SUPPLIER_ID",
+  "CategoryID": "CATEGORY_ID",
+  "QuantityPerUnit": "QUANTITY_PER_UNIT",
+  "UnitPrice": "UNIT_PRICE",
+  "UnitsInStock": "UNITS_IN_STOCK",
+  "UnitsOnOrder": "UNITS_ON_ORDER",
+  "ReorderLevel": "REORDER_LEVEL",
+  "Discontinued": "DISCONTINUED",
+  "_pk_": "PRODUCT_ID",
+  "_ref_Category": {
+    "joinColumn": [
+      "CATEGORY_ID"
+    ]
+  },
+  "_ref_Supplier": {
+    "joinColumn": [
+      "SUPPLIER_ID"
+    ]
+  }
 }

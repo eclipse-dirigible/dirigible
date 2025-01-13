@@ -1,12 +1,12 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
 const DirigibleSourceProvider = Java.type("org.eclipse.dirigible.graalium.core.modules.DirigibleSourceProvider");
@@ -33,7 +33,6 @@ function _require (initialPath, path) {
         exports: {},
         require: require
     };
-    _loadedModules[path] = moduleInfo;
 
     const compiledWrapper = load({
         name: path,
@@ -47,6 +46,7 @@ function _require (initialPath, path) {
 
     compiledWrapper.apply(moduleInfo.exports, cjsModuleProps);
     moduleInfo.loaded = true;
+    _loadedModules[path] = moduleInfo;
     return moduleInfo;
 };
 
@@ -82,12 +82,14 @@ function fixPath(path, mod) {
         "user",
         "template",
         "utils",
-        "junit"
+        "junit",
+        "integrations",
+        "security"
     ];
 
     let fixedPath = path;
-    if (fixedPath.startsWith("@dirigible")) {
-        fixedPath = fixedPath.substring("@dirigible".length)
+    if (fixedPath.startsWith("sdk")) {
+        fixedPath = fixedPath.substring("sdk".length)
     }
 
     for (const mod of mods) {

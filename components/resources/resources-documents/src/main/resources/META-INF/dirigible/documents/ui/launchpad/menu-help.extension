@@ -1,0 +1,5 @@
+{
+    "module": "documents/gen/ui/launchpad/menu-help.js",
+    "extensionPoint": "documents-menu",
+    "description": "documents - Application Menu"
+}

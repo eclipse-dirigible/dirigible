@@ -8,7 +8,7 @@ const viewData = {
     label: "Home Launchpad",
     factory: "frame",
     region: "center",
-    link: "/services/web/${projectName}/gen/ui/launchpad/Home/index.html",
+    link: "/services/web/${projectName}/gen/${genFolderName}/ui/launchpad/Home/index.html",
     isLaunchpad: true,
 };
 

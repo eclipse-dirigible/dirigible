@@ -1,0 +1,5 @@
+{
+    "module": "${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${masterEntity}/${name}/view.js",
+    "extensionPoint": "#if($hasReferencedProjection)${referencedProjectionProjectName}#else${projectName}#end-view",
+    "description": "${projectName} - Application View - Details"
+}

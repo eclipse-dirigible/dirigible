@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.export.endpoint;
 
@@ -87,7 +86,7 @@ public class DataExportEndpointTest {
         mockMvc.perform(put("/services/data/project/csv/{datasource}/{schema}", "TestDB", "INFORMATION_SCHEMA").with(csrf()))
                .andDo(print())
                .andExpect(status().isOk());
-        Workspace workspace = workspaceService.getWorkspace("INFORMATION_SCHEMA");
+        Workspace workspace = workspaceService.getWorkspace("workspace");
         assertNotNull(workspace);
         Project project = workspace.getProject("INFORMATION_SCHEMA");
         assertNotNull(project);
@@ -103,7 +102,23 @@ public class DataExportEndpointTest {
         mockMvc.perform(put("/services/data/project/metadata/{datasource}/{schema}", "TestDB", "INFORMATION_SCHEMA").with(csrf()))
                .andDo(print())
                .andExpect(status().isOk());
-        Workspace workspace = workspaceService.getWorkspace("INFORMATION_SCHEMA");
+        Workspace workspace = workspaceService.getWorkspace("workspace");
+        assertNotNull(workspace);
+        Project project = workspace.getProject("INFORMATION_SCHEMA");
+        assertNotNull(project);
+    }
+
+    /**
+     * Export schema as model test.
+     *
+     * @throws Exception the exception
+     */
+    @Test
+    public void exportSchemaAsModelTest() throws Exception {
+        mockMvc.perform(put("/services/data/project/model/{datasource}/{schema}", "TestDB", "INFORMATION_SCHEMA").with(csrf()))
+               .andDo(print())
+               .andExpect(status().isOk());
+        Workspace workspace = workspaceService.getWorkspace("workspace");
         assertNotNull(workspace);
         Project project = workspace.getProject("INFORMATION_SCHEMA");
         assertNotNull(project);

@@ -1,0 +1,5 @@
+{
+    "module": "perspective-operations/api/artefacts/jobs/artefacts-jobs.mjs",
+    "extensionPoint": "platform-operations-artefacts",
+    "description": "Jobs Artefacts Extension"
+}

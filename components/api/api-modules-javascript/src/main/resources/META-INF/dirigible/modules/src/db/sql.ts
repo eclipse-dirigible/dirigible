@@ -9,867 +9,523 @@
  * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-/**
- * API SQL
- *
- */
+
+import { Connection } from "./database";
+
 const DatabaseFacade = Java.type("org.eclipse.dirigible.components.api.db.DatabaseFacade");
-
-export function getDialect(connection?) {
-	/**
-	 * Dialect object
-	 */
-	let Dialect = function() {
-
-		let _parameters = [];
-
-		const parameters = function () {
-			return _parameters;
-		};
-
-		const build = function () {
-			return this.native.build();
-		};
-
-		this.select = function() {
-
-			/**
-			 * Select object
-			 */
-			let Select = function() {
-
-				this.distinct = function() {
-					this.native.distinct();
-					return this;
-				};
-
-				this.forUpdate = function() {
-					this.native.forUpdate();
-					return this;
-				};
-
-				this.column = function(column) {
-					this.native.column(column);
-					return this;
-				};
-
-				this.from = function(table, alias) {
-					if (alias !== undefined) {
-						this.native.from(table, alias);
-					} else {
-						this.native.from(table);
-					}
-					return this;
-				};
-
-				this.join = function(table, on, alias) {
-					if (alias !== undefined) {
-						this.native.join(table, on, alias);
-						if(arguments.length>3){
-							if(Array.isArray(arguments[3]))
-								_parameters = _parameters.concat([arguments[3]]);
-							else
-								_parameters.push(arguments[3]);
-						}
-					} else {
-						this.native.join(table, on);
-						if(arguments.length>2){
-							if(Array.isArray(arguments[2]))
-								_parameters = _parameters.concat([arguments[2]]);
-							else
-								_parameters.push(arguments[2]);
-						}
-					}
-					return this;
-				};
-
-				this.innerJoin = function(table, on, alias) {
-					if (alias !== undefined) {
-						this.native.innerJoin(table, on, alias);
-						if(arguments.length>3){
-							if(Array.isArray(arguments[3]))
-								_parameters = _parameters.concat(arguments[3]);
-							else
-								_parameters.push(arguments[3]);
-						}
-					} else {
-						this.native.innerJoin(table, on);
-						if(arguments.length>2){
-							if(Array.isArray(arguments[2]))
-								_parameters = _parameters.concat(arguments[2]);
-							else
-								_parameters.push(arguments[2]);
-						}
-					}
-					return this;
-				};
-
-				this.outerJoin = function(table, on, alias) {
-					if (alias !== undefined) {
-						this.native.outerJoin(table, on, alias);
-						if(arguments.length>3){
-							if(Array.isArray(arguments[3]))
-								_parameters = _parameters.concat(arguments[3]);
-							else
-								_parameters.push(arguments[3]);
-						}
-					} else {
-						this.native.outerJoin(table, on);
-						if(arguments.length>2){
-							if(Array.isArray(arguments[2]))
-								_parameters = _parameters.concat(arguments[2]);
-							else
-								_parameters.push(arguments[2]);
-						}
-					}
-					return this;
-				};
-
-				this.leftJoin = function(table, on, alias) {
-					if (alias !== undefined) {
-						this.native.leftJoin(table, on, alias);
-						if(arguments.length>3){
-							if(Array.isArray(arguments[3]))
-								_parameters = _parameters.concat(arguments[3]);
-							else
-								_parameters.push(arguments[3]);
-						}
-					} else {
-						this.native.leftJoin(table, on);
-						if(arguments.length>2){
-							if(Array.isArray(arguments[2]))
-								_parameters = _parameters.concat(arguments[2]);
-							else
-								_parameters.push(arguments[2]);
-						}
-					}
-					return this;
-				};
-
-				this.rightJoin = function(table, on, alias) {
-					if (alias !== undefined) {
-						this.native.rightJoin(table, on, alias);
-						if(arguments.length>3){
-							if(Array.isArray(arguments[3]))
-								_parameters = _parameters.concat(arguments[3]);
-							else
-								_parameters.push(arguments[3]);
-						}
-					} else {
-						this.native.rightJoin(table, on);
-						if(arguments.length>2){
-							if(Array.isArray(arguments[2]))
-								_parameters = _parameters.concat(arguments[2]);
-							else
-								_parameters.push(arguments[2]);
-						}
-					}
-					return this;
-				};
-
-				this.fullJoin = function(table, on, alias) {
-					if (alias !== undefined) {
-						this.native.fullJoin(table, on, alias);
-						if(arguments.length>3){
-							if(Array.isArray(arguments[3]))
-								_parameters = _parameters.concat(arguments[3]);
-							else
-								_parameters.push(arguments[3]);
-						}
-					} else {
-						this.native.fullJoin(table, on);
-						if(arguments.length>2){
-							if(Array.isArray(arguments[2]))
-								_parameters = _parameters.concat(arguments[2]);
-							else
-								_parameters.push(arguments[2]);
-						}
-					}
-					return this;
-				};
-
-				this.where = function(condition) {
-					this.native.where(condition);
-					if(arguments.length>1){
-						if(Array.isArray(arguments[1]))
-							_parameters = _parameters.concat(arguments[1]);
-						else
-							_parameters.push(arguments[1]);
-					}
-					return this;
-				};
-
-				this.order = function(column, asc) {
-					if (asc !== undefined) {
-						this.native.order(column, asc);
-					} else {
-						this.native.order(column);
-					}
-					return this;
-				};
-
-				this.group = function(column) {
-					this.native.group(column);
-					return this;
-				};
-
-				this.limit = function(limit) {
-					this.native.limit(limit);
-					return this;
-				};
-
-				this.offset = function(offset) {
-					this.native.offset(offset);
-					return this;
-				};
-
-				this.having = function(having) {
-					this.native.having(having);
-					return this;
-				};
-
-				this.union = function(select) {
-					this.native.union(select);
-					return this;
-				};
-
-				this.build = build.bind(this);
-
-				this.parameters = parameters.bind(this);
-
-			}
-
-
-			_parameters = [];
-			const select = new Select();
-			select.native = this.native.select();
-			return select;
-		};
-
-		this.insert = function() {
-
-			/**
-			 * Insert object
-			 */
-			let Insert = function() {
-
-				this.into = function(table) {
-					this.native.into(table);
-					return this;
-				};
-
-				this.column = function(column) {
-					this.native.column(column);
-					return this;
-				};
-
-				this.value = function(value) {
-					this.native.value(value);
-					if(arguments.length>1){
-						if(Array.isArray(arguments[1]))
-							_parameters = _parameters.concat(arguments[1]);
-						else
-							_parameters.push(arguments[1]);
-					}
-					return this;
-				};
-
-				this.select = function(select) {
-					this.native.select(select);
-					return this;
-				};
-
-				this.build = build.bind(this);
-
-				this.parameters = parameters.bind(this);
-
-			};
-
-			_parameters = [];
-			const insert = new Insert();
-			insert.native = this.native.insert();
-			return insert;
-		};
-
-		this.update = function() {
-
-			/**
-			 * Update object
-			 */
-			let Update = function() {
-
-				this.table = function(table) {
-					this.native.table(table);
-					return this;
-				};
-
-				this.set = function(column, value) {
-					this.native.set(column, value);
-					if(arguments.length>2){
-						if(Array.isArray(arguments[2]))
-							_parameters = _parameters.concat(arguments[2]);
-						else
-							_parameters.push(arguments[2]);
-					}
-					return this;
-				};
-
-				this.where = function(condition) {
-					this.native.where(condition);
-					if(arguments.length>1){
-						if(Array.isArray(arguments[1]))
-							_parameters = _parameters.concat(arguments[1]);
-						else
-							_parameters.push(arguments[1]);
-					}
-					return this;
-				};
-
-				this.build = build.bind(this);
-				this.parameters = parameters.bind(this);
-			};
-
-			_parameters = [];
-			const update = new Update();
-			update.native = this.native.update();
-			return update;
-		};
-
-		this.delete = function() {
-
-			/**
-			 * Delete object
-			 */
-			let Delete = function() {
-
-				this.from = function(table) {
-					this.native.from(table);
-					return this;
-				};
-
-				this.where = function(condition) {
-					this.native.where(condition);
-					if(arguments.length>1){
-						if(Array.isArray(arguments[1]))
-							_parameters = _parameters.concat(arguments[1]);
-						else
-							_parameters.push(arguments[1]);
-					}
-					return this;
-				};
-
-				this.build = build.bind(this);
-				this.parameters = parameters.bind(this);
-			}
-
-			_parameters = [];
-			const deleteRows = new Delete();
-			deleteRows.native = this.native.delete();
-			return deleteRows;
-		};
-
-
-		this.nextval = function(name) {
-
-			/**
-			 * Nextval object
-			 */
-			let Nextval = function(name) {
-				this.name = name;
-				this.build = build.bind(this);
-			}
-
-			const nextval = new Nextval(name);
-			nextval.native = this.native.nextval(name);
-			return nextval;
-		};
-
-		this.create = function() {
-
-			/**
-			 * Create object
-			 */
-			let Create = function() {
-
-				this.table = function(table) {
-					/**
-					 * CreateTable object
-					 */
-					let CreateTable = function() {
-
-						this.column = function(column, type, isPrimaryKey, isNullable, isUnique, args) {
-							if (args !== undefined) {
-								this.native.column(column, type, isPrimaryKey, isNullable, isUnique, args);
-							} else {
-								if (isUnique) {
-									this.native.column(column, type, isPrimaryKey, isNullable, isUnique);
-								} else {
-									if (isNullable) {
-										this.native.column(column, type, isPrimaryKey, isNullable);
-									} else {
-										if (isPrimaryKey) {
-											this.native.column(column, type, isPrimaryKey);
-										} else {
-											this.native.column(column, type);
-										}
-									}
-								}
-							}
-
-							return this;
-						};
-
-						this.columnVarchar = function(column, length, isPrimaryKey, isNullable, isUnique, args) {
-							if (args !== undefined) {
-								this.native.columnVarchar(column, length, isPrimaryKey, isNullable, isUnique, args);
-							} else {
-								if (isUnique) {
-									this.native.columnVarchar(column, length, isPrimaryKey, isNullable, isUnique);
-								} else {
-									if (isNullable) {
-										this.native.columnVarchar(column, length, isPrimaryKey, isNullable);
-									} else {
-										if (isPrimaryKey) {
-											this.native.columnVarchar(column, length, isPrimaryKey);
-										} else {
-											this.native.columnVarchar(column, length);
-										}
-									}
-								}
-							}
-
-							return this;
-						};
-
-						this.columnChar = function(column, length, isPrimaryKey, isNullable, isUnique, args) {
-							if (args !== undefined) {
-								this.native.columnChar(column, length, isPrimaryKey, isNullable, isUnique, args);
-							} else {
-								if (isUnique) {
-									this.native.columnChar(column, length, isPrimaryKey, isNullable, isUnique);
-								} else {
-									if (isNullable) {
-										this.native.columnChar(column, length, isPrimaryKey, isNullable);
-									} else {
-										if (isPrimaryKey) {
-											this.native.columnChar(column, length, isPrimaryKey);
-										} else {
-											this.native.columnChar(column, length);
-										}
-									}
-								}
-							}
-
-							return this;
-						};
-
-						this.columnDate = function(column, isPrimaryKey, isNullable, isUnique, args) {
-							if (args !== undefined) {
-								this.native.columnDate(column, isPrimaryKey, isNullable, isUnique, args);
-							} else {
-								if (isUnique) {
-									this.native.columnDate(column, isPrimaryKey, isNullable, isUnique);
-								} else {
-									if (isNullable) {
-										this.native.columnDate(column, isPrimaryKey, isNullable);
-									} else {
-										if (isPrimaryKey) {
-											this.native.columnDate(column, isPrimaryKey);
-										} else {
-											this.native.columnDate(column);
-										}
-									}
-								}
-							}
-
-							return this;
-						};
-
-						this.columnTime = function(column, isPrimaryKey, isNullable, isUnique, args) {
-							if (args !== undefined) {
-								this.native.columnTime(column, isPrimaryKey, isNullable, isUnique, args);
-							} else {
-								if (isUnique) {
-									this.native.columnTime(column, isPrimaryKey, isNullable, isUnique);
-								} else {
-									if (isNullable) {
-										this.native.columnTime(column, isPrimaryKey, isNullable);
-									} else {
-										if (isPrimaryKey) {
-											this.native.columnTime(column, isPrimaryKey);
-										} else {
-											this.native.columnTime(column);
-										}
-									}
-								}
-							}
-
-							return this;
-						};
-
-						this.columnTimestamp = function(column, isPrimaryKey, isNullable, isUnique, args) {
-							if (args !== undefined) {
-								this.native.columnTimestamp(column, isPrimaryKey, isNullable, isUnique, args);
-							} else {
-								if (isUnique) {
-									this.native.columnTimestamp(column, isPrimaryKey, isNullable, isUnique);
-								} else {
-									if (isNullable) {
-										this.native.columnTimestamp(column, isPrimaryKey, isNullable);
-									} else {
-										if (isPrimaryKey) {
-											this.native.columnTimestamp(column, isPrimaryKey);
-										} else {
-											this.native.columnTimestamp(column);
-										}
-									}
-								}
-							}
-
-							return this;
-						};
-
-						this.columnInteger = function(column, isPrimaryKey, isNullable, isUnique, args) {
-							if (args !== undefined) {
-								this.native.columnInteger(column, isPrimaryKey, isNullable, isUnique, args);
-							} else {
-								if (isUnique) {
-									this.native.columnInteger(column, isPrimaryKey, isNullable, isUnique);
-								} else {
-									if (isNullable) {
-										this.native.columnInteger(column, isPrimaryKey, isNullable);
-									} else {
-										if (isPrimaryKey) {
-											this.native.columnInteger(column, isPrimaryKey);
-										} else {
-											this.native.columnInteger(column);
-										}
-									}
-								}
-							}
-
-							return this;
-						};
-
-						this.columnTinyint = function(column, isPrimaryKey, isNullable, isUnique, args) {
-							if (args !== undefined) {
-								this.native.columnTinyint(column, isPrimaryKey, isNullable, isUnique, args);
-							} else {
-								if (isUnique) {
-									this.native.columnTinyint(column, isPrimaryKey, isNullable, isUnique);
-								} else {
-									if (isNullable) {
-										this.native.columnTinyint(column, isPrimaryKey, isNullable);
-									} else {
-										if (isPrimaryKey) {
-											this.native.columnTinyint(column, isPrimaryKey);
-										} else {
-											this.native.columnTinyint(column);
-										}
-									}
-								}
-							}
-
-							return this;
-						};
-
-						this.columnBigint = function(column, isPrimaryKey, isNullable, isUnique, args) {
-							if (args !== undefined) {
-								this.native.columnBigint(column, isPrimaryKey, isNullable, isUnique, args);
-							} else {
-								if (isUnique) {
-									this.native.columnBigint(column, isPrimaryKey, isNullable, isUnique);
-								} else {
-									if (isNullable) {
-										this.native.columnBigint(column, isPrimaryKey, isNullable);
-									} else {
-										if (isPrimaryKey) {
-											this.native.columnBigint(column, isPrimaryKey);
-										} else {
-											this.native.columnBigint(column);
-										}
-									}
-								}
-							}
-
-							return this;
-						};
-
-						this.columnSmallint = function(column, isPrimaryKey, isNullable, isUnique, args) {
-							if (args !== undefined) {
-								this.native.columnSmallint(column, isPrimaryKey, isNullable, isUnique, args);
-							} else {
-								if (isUnique) {
-									this.native.columnSmallint(column, isPrimaryKey, isNullable, isUnique);
-								} else {
-									if (isNullable) {
-										this.native.columnSmallint(column, isPrimaryKey, isNullable);
-									} else {
-										if (isPrimaryKey) {
-											this.native.columnSmallint(column, isPrimaryKey);
-										} else {
-											this.native.columnSmallint(column);
-										}
-									}
-								}
-							}
-
-							return this;
-						};
-
-						this.columnReal = function(column, isPrimaryKey, isNullable, isUnique, args) {
-							if (args !== undefined) {
-								this.native.columnReal(column, isPrimaryKey, isNullable, isUnique, args);
-							} else {
-								if (isUnique) {
-									this.native.columnReal(column, isPrimaryKey, isNullable, isUnique);
-								} else {
-									if (isNullable) {
-										this.native.columnReal(column, isPrimaryKey, isNullable);
-									} else {
-										if (isPrimaryKey) {
-											this.native.columnReal(column, isPrimaryKey);
-										} else {
-											this.native.columnReal(column);
-										}
-									}
-								}
-							}
-
-							return this;
-						};
-
-						this.columnDouble = function(column, isPrimaryKey, isNullable, isUnique, args) {
-							if (args !== undefined) {
-								this.native.columnDouble(column, isPrimaryKey, isNullable, isUnique, args);
-							} else {
-								if (isUnique) {
-									this.native.columnDouble(column, isPrimaryKey, isNullable, isUnique);
-								} else {
-									if (isNullable) {
-										this.native.columnDouble(column, isPrimaryKey, isNullable);
-									} else {
-										if (isPrimaryKey) {
-											this.native.columnDouble(column, isPrimaryKey);
-										} else {
-											this.native.columnDouble(column);
-										}
-									}
-								}
-							}
-
-							return this;
-						};
-
-						this.columnBoolean = function(column, isPrimaryKey, isNullable, isUnique, args) {
-							if (args !== undefined) {
-								this.native.columnBoolean(column, isPrimaryKey, isNullable, isUnique, args);
-							} else {
-								if (isUnique) {
-									this.native.columnBoolean(column, isPrimaryKey, isNullable, isUnique);
-								} else {
-									if (isNullable) {
-										this.native.columnBoolean(column, isPrimaryKey, isNullable);
-									} else {
-										if (isPrimaryKey) {
-											this.native.columnBoolean(column, isPrimaryKey);
-										} else {
-											this.native.columnBoolean(column);
-										}
-									}
-								}
-							}
-
-							return this;
-						};
-
-						this.columnBlob = function(column, precision, scale, isPrimaryKey, isNullable, isUnique, args) {
-							if (args !== undefined) {
-								this.native.columnBlob(column, precision, scale, isPrimaryKey, isNullable, isUnique, args);
-							} else {
-								if (isUnique) {
-									this.native.columnBlob(column, precision, scale, isPrimaryKey, isNullable, isUnique);
-								} else {
-									if (isNullable) {
-										this.native.columnBlob(column, precision, scale, isPrimaryKey, isNullable);
-									} else {
-										if (isPrimaryKey) {
-											this.native.columnBlob(column, precision, scale, isPrimaryKey);
-										} else {
-											this.native.columnBlob(column, precision, scale);
-										}
-									}
-								}
-							}
-
-							return this;
-						};
-
-						this.columnDecimal = function(column, precision, scale, isPrimaryKey, isNullable, isUnique, args) {
-							if (args !== undefined) {
-								this.native.columnDecimal(column, precision, scale, isPrimaryKey, isNullable, isUnique, args);
-							} else {
-								if (isUnique) {
-									this.native.columnDecimal(column, precision, scale, isPrimaryKey, isNullable, isUnique);
-								} else {
-									if (isNullable) {
-										this.native.columnDecimal(column, precision, scale, isPrimaryKey, isNullable);
-									} else {
-										if (isPrimaryKey) {
-											this.native.columnDecimal(column, precision, scale, isPrimaryKey);
-										} else {
-											this.native.columnDecimal(column, precision, scale);
-										}
-									}
-								}
-							}
-
-							return this;
-						};
-
-						this.primaryKey = function(columns, name) {
-							if (name !== undefined) {
-								this.native.primaryKey(name, columns);
-							} else {
-								this.native.primaryKey(columns);
-							}
-							return this;
-						};
-
-						this.foreignKey = function(name, columns, referencedTable, referencedColumns) {
-							this.native.foreignKey(name, columns, referencedTable, referencedColumns);
-							return this;
-						};
-
-						this.unique = function(name, columns) {
-							this.native.unique(name, columns);
-							return this;
-						};
-
-						this.check = function(name, expression) {
-							this.native.check(name, expression);
-							return this;
-						};
-
-						this.build = build.bind(this);
-
-					}
-
-					const createTable = new CreateTable();
-					createTable.native = this.native.table(table);
-					return createTable;
-				};
-
-				this.view = function(view) {
-					/**
-					 * CreateView object
-					 */
-					let CreateView = function() {
-
-						this.column = function(column) {
-							this.native.column(column);
-							return this;
-						};
-
-						this.asSelect = function(select) {
-							this.native.asSelect(select);
-							return this;
-						};
-
-						this.build = build.bind(this);
-					}
-
-					_parameters = [];
-					const createView = new CreateView();
-					createView.native = this.native.view(view);
-					return createView;
-				};
-
-				this.sequence = function(sequence) {
-					/**
-					 * CreateSequence object
-					 */
-					let CreateSequence = function() {
-
-						this.build = build.bind(this);
-					}
-
-					const createSequence = new CreateSequence();
-					createSequence.native = this.native.sequence(sequence);
-					return createSequence;
-				};
-
-			}
-
-			const create = new Create();
-			create.native = this.native.create();
-			return create;
-		};
-
-		this.drop = function() {
-
-			/**
-			 * Drop object
-			 */
-			let Drop = function() {
-
-				this.table = function(table) {
-					/**
-					 * DropTable object
-					 */
-					const DropTable = function () {
-
-						this.build = build.bind(this);
-					};
-
-					const dropTable = new DropTable();
-					dropTable.native = this.native.table(table);
-					return dropTable;
-				};
-
-				this.view = function(view) {
-					/**
-					 * DropView object
-					 */
-					const DropView = function () {
-
-						this.build = build.bind(this);
-					};
-
-					const dropView = new DropView();
-					dropView.native = this.native.view(view);
-					return dropView;
-				};
-
-				this.sequence = function(sequence) {
-					/**
-					 * DropSequence object
-					 */
-					let DropSequence = function() {
-
-						this.build = build.bind(this);
-					}
-
-					const dropSequence = new DropSequence();
-					dropSequence.native = this.native.sequence(sequence);
-					return dropSequence;
-				};
-
-			}
-
-			const drop = new Drop();
-			drop.native = this.native.drop();
-			return drop;
-		};
+const DataTypeEnum = Java.type("org.eclipse.dirigible.database.sql.DataType");
+
+export type DataType =
+	"VARCHAR"
+	| "TEXT"
+	| "CHAR"
+	| "DATE"
+	| "SECONDDATE"
+	| "TIME"
+	| "DATETIME"
+	| "TIMESTAMP"
+	| "INTEGER"
+	| "INT"
+	| "TINYINT"
+	| "BIGINT"
+	| "SMALLINT"
+	| "REAL"
+	| "DOUBLE"
+	| "DOUBLE PRECISIO"
+	| "BOOLEAN"
+	| "BLOB"
+	| "DECIMAL"
+	| "BIT"
+	| "NVARCHAR"
+	| "FLOAT"
+	| "BYTE"
+	| "NCLOB"
+	| "ARRAY"
+	| "VARBINARY"
+	| "BINARY VARYIN"
+	| "SHORTTEXT"
+	| "ALPHANUM"
+	| "CLOB"
+	| "SMALLDECIMAL"
+	| "BINARY"
+	| "ST_POINT"
+	| "ST_GEOMETRY"
+	| "CHARACTER VARYIN"
+	| "BINARY LARG OBJECT"
+	| "CHARACTER LARG OBJECT"
+	| "CHARACTER"
+	| "NCHAR"
+	| "NUMERIC";
+
+abstract class AbstractSQLBuilder {
+
+	public readonly params: any[] = [];
+	protected readonly connection?: Connection;
+	protected native: any;
+
+	constructor(connection?: Connection) {
+		this.connection = connection;
+		this.native = connection ? DatabaseFacade.getNative(connection.native) : DatabaseFacade.getDefault();
+		this.native = this.prepareBuilder(this.native);
 	}
 
-	const dialect = new Dialect();
-	let native;
-	if (connection) {
-		native = DatabaseFacade.getNative(connection.native);
-	} else {
-		native = DatabaseFacade.getDefault();
+	protected prepareBuilder(builder: any): any {
+		return builder;
 	}
-	dialect.native = native;
-	return dialect;
-};
+
+	public parameters(): any[] {
+		return this.params;
+	}
+
+	protected addParameter(value: any | any[]): void {
+		if (Array.isArray(value)) {
+			this.params.push(...value);
+		} else {
+			this.params.push(value);
+		}
+		this.params
+	}
+
+	public build(): string {
+		return this.native.build();
+	}
+}
+
+export class SQLBuilder extends AbstractSQLBuilder {
+
+	public static getDialect(connection?: Connection): SQLBuilder {
+		return new SQLBuilder(connection);
+	}
+
+	public select(): SelectBuilder {
+		return new SelectBuilder(this.connection);
+	}
+
+	public insert(): InsertBuilder {
+		return new InsertBuilder(this.connection);
+	}
+
+	public update(): UpdateBuilder {
+		return new UpdateBuilder(this.connection);
+	}
+
+	public delete(): DeleteBuilder {
+		return new DeleteBuilder(this.connection);
+	}
+
+	public nextval(name: string): NextvalBuilder {
+		return new NextvalBuilder(name, this.connection);
+	}
+
+	public create(): CreateBuilder {
+		return new CreateBuilder(this.connection);
+	}
+
+	public drop(): DropBuilder {
+		return new DropBuilder(this.connection);
+	}
+}
+
+export class SelectBuilder extends AbstractSQLBuilder {
+
+	protected prepareBuilder(builder: any): any {
+		return builder.select();
+	}
+
+	public distinct(): SelectBuilder {
+		this.native.distinct();
+		return this;
+	}
+
+	public forUpdate(): SelectBuilder {
+		this.native.forUpdate();
+		return this;
+	}
+
+	public column(column: string): SelectBuilder {
+		this.native.column(column);
+		return this;
+	}
+
+	public from(table: string, alias?: string): SelectBuilder {
+		this.native.from(table, alias);
+		return this;
+	}
+
+	public join(table: string, on: string, alias?: string): SelectBuilder {
+		this.native.join(table, on, alias);
+		if (arguments.length > 3) {
+			this.addParameter(arguments[3]);
+		} else {
+			this.addParameter(arguments[2]);
+		}
+		return this;
+	}
+
+	public innerJoin(table: string, on: string, alias?: string): SelectBuilder {
+		this.native.innerJoin(table, on, alias);
+		if (arguments.length > 3) {
+			this.addParameter(arguments[3]);
+		} else {
+			this.addParameter(arguments[2]);
+		}
+		return this;
+	}
+
+	public outerJoin(table: string, on: string, alias?: string): SelectBuilder {
+		this.native.outerJoin(table, on, alias);
+		if (arguments.length > 3) {
+			this.addParameter(arguments[3]);
+		} else {
+			this.addParameter(arguments[2]);
+		}
+		return this;
+	}
+
+	public leftJoin(table: string, on: string, alias?: string): SelectBuilder {
+		this.native.leftJoin(table, on, alias);
+		if (arguments.length > 3) {
+			this.addParameter(arguments[3]);
+		} else {
+			this.addParameter(arguments[2]);
+		}
+		return this;
+	}
+
+	public rightJoin(table: string, on: string, alias?: string): SelectBuilder {
+		this.native.rightJoin(table, on, alias);
+		if (arguments.length > 3) {
+			this.addParameter(arguments[3]);
+		} else {
+			this.addParameter(arguments[2]);
+		}
+		return this;
+	}
+
+	public fullJoin(table: string, on: string, alias?: string): SelectBuilder {
+		this.native.fullJoin(table, on, alias);
+		if (arguments.length > 3) {
+			this.addParameter(arguments[3]);
+		} else {
+			this.addParameter(arguments[2]);
+		}
+		return this;
+	}
+
+	public where(condition: string): SelectBuilder {
+		this.native.where(condition);
+		this.addParameter(arguments[1]);
+		return this;
+	}
+
+	public order(column: string, asc?: string): SelectBuilder {
+		this.native.order(column, asc);
+		return this;
+	}
+
+	public group(column: string): SelectBuilder {
+		this.native.group(column);
+		return this;
+	}
+
+	public limit(limit: number): SelectBuilder {
+		this.native.limit(limit);
+		return this;
+	}
+
+	public offset(offset: number): SelectBuilder {
+		this.native.offset(offset);
+		return this;
+	}
+
+	public having(having: string): SelectBuilder {
+		this.native.having(having);
+		return this;
+	}
+
+	public union(select: string): SelectBuilder {
+		this.native.union(select);
+		return this;
+	}
+}
+
+export class InsertBuilder extends AbstractSQLBuilder {
+
+	protected prepareBuilder(builder: any): any {
+		return builder.insert();
+	}
+
+	public into(table: string): InsertBuilder {
+		this.native.into(table);
+		return this;
+	}
+
+	public column(column: string): InsertBuilder {
+		this.native.column(column);
+		return this;
+	}
+
+	public value(value: string): InsertBuilder {
+		this.native.value(value);
+		this.addParameter(arguments[1]);
+		return this;
+	}
+
+	public select(select: string): InsertBuilder {
+		this.native.select(select);
+		return this;
+	}
+}
+
+export class UpdateBuilder extends AbstractSQLBuilder {
+
+	protected prepareBuilder(builder: any): any {
+		return builder.update();
+	}
+
+	public table(table: string): UpdateBuilder {
+		this.native.table(table);
+		return this;
+	}
+
+	public set(column: string, value: string): UpdateBuilder {
+		this.native.set(column, value);
+		this.addParameter(arguments[2]);
+		return this;
+	}
+
+	public where(condition: string): UpdateBuilder {
+		this.native.where(condition);
+		this.addParameter(arguments[1]);
+		return this;
+	}
+}
+
+export class DeleteBuilder extends AbstractSQLBuilder {
+
+	protected prepareBuilder(builder: any): any {
+		return builder.delete();
+	}
+
+	public from(table: string): DeleteBuilder {
+		this.native.from(table);
+		return this;
+	}
+
+	public where(condition: string): DeleteBuilder {
+		this.native.where(condition);
+		this.addParameter(arguments[1]);
+		return this;
+	}
+}
+
+export class NextvalBuilder extends AbstractSQLBuilder {
+
+	private name: string;
+
+	constructor(name: string, connection?: Connection) {
+		super(connection);
+		this.name = name;
+	}
+
+	protected prepareBuilder(builder: any): any {
+		return builder.nextval(this.name);
+	}
+}
+
+export class CreateBuilder extends AbstractSQLBuilder {
+
+	public table(table: string): CreateTableBuilder {
+		console.error(`Table in CreateBuilder is: ${table}`);
+		return new CreateTableBuilder(table, this.connection);
+	}
+
+	public view(view: string): CreateViewBuilder {
+		return new CreateViewBuilder(view, this.connection);
+	}
+
+	public sequence(sequence: string): CreateSequenceBuilder {
+		return new CreateSequenceBuilder(sequence, this.connection)
+	}
+}
+
+export class CreateTableBuilder extends AbstractSQLBuilder {
+
+	constructor(table: string, connection?: Connection) {
+		super(connection);
+		this.native = this.native.create().table(table);
+	}
+
+	public column(name: string, type: DataType, isPrimaryKey = false, isNullable = true, isUnique = false, isIdentity = false, isFuzzyIndexEnabled = false, ...args: string[]): CreateTableBuilder {
+		const dataType = DataTypeEnum.valueOfByName(type);
+		this.native.column(name, dataType, isPrimaryKey, isNullable, isUnique, isIdentity, isFuzzyIndexEnabled, Array.from(args));
+		return this;
+	}
+
+	public columnVarchar(name: string, length: number, isPrimaryKey = false, isNullable = true, isUnique = false, isIdentity = false, ...args: string[]): CreateTableBuilder {
+		this.native.columnVarchar(name, length, isPrimaryKey, isNullable, isUnique, isIdentity, Array.from(args));
+		return this;
+	}
+
+	public columnNvarchar(name: string, length: number, isPrimaryKey = false, isNullable = true, isUnique = false, isIdentity = false, ...args: string[]): CreateTableBuilder {
+		this.native.columnNvarchar(name, length, isPrimaryKey, isNullable, isUnique, isIdentity, Array.from(args));
+		return this;
+	}
+
+	public columnChar(name: string, length: number, isPrimaryKey = false, isNullable = true, isUnique = false, isIdentity = false, ...args: string[]): CreateTableBuilder {
+		this.native.columnChar(name, length, isPrimaryKey, isNullable, isUnique, isIdentity, Array.from(args));
+		return this;
+	}
+
+	public columnDate = function (name: string, isPrimaryKey = false, isNullable = true, isUnique = false, ...args: string[]): CreateTableBuilder {
+		this.native.columnDate(name, isPrimaryKey, isNullable, isUnique, Array.from(args));
+		return this;
+	}
+
+	public columnTime(name: string, isPrimaryKey = false, isNullable = true, isUnique = false, ...args: string[]): CreateTableBuilder {
+		this.native.columnTime(name, isPrimaryKey, isNullable, isUnique, Array.from(args));
+		return this;
+	}
+
+	public columnTimestamp(name: string, isPrimaryKey = false, isNullable = true, isUnique = false, ...args: string[]): CreateTableBuilder {
+		this.native.columnTimestamp(name, isPrimaryKey, isNullable, isUnique, Array.from(args));
+		return this;
+	}
+
+	public columnInteger(name: string, isPrimaryKey = false, isNullable = true, isUnique = false, isIdentity = false, ...args: string[]): CreateTableBuilder {
+		this.native.columnInteger(name, isPrimaryKey, isNullable, isUnique, isIdentity, Array.from(args));
+		return this;
+	}
+
+	public columnTinyint(name: string, isPrimaryKey = false, isNullable = true, isUnique = false, ...args: string[]): CreateTableBuilder {
+		this.native.columnTinyint(name, isPrimaryKey, isNullable, isUnique, Array.from(args));
+		return this;
+	}
+
+	public columnBigint(name: string, isPrimaryKey = false, isNullable = true, isUnique = false, isIdentity = false, ...args: string[]): CreateTableBuilder {
+		this.native.columnBigint(name, isPrimaryKey, isNullable, isUnique, isIdentity, Array.from(args));
+		return this;
+	}
+
+	public columnSmallint(name: string, isPrimaryKey = false, isNullable = true, isUnique = false, ...args: string[]): CreateTableBuilder {
+		this.native.columnSmallint(name, isPrimaryKey, isNullable, isUnique, Array.from(args));
+		return this;
+	}
+
+	public columnReal(name: string, isPrimaryKey = false, isNullable = true, isUnique = false, ...args: string[]): CreateTableBuilder {
+		this.native.columnReal(name, isPrimaryKey, isNullable, isUnique, Array.from(args));
+		return this;
+	}
+
+	public columnDouble(name: string, isPrimaryKey = false, isNullable = true, isUnique = false, ...args: string[]): CreateTableBuilder {
+		this.native.columnDouble(name, isPrimaryKey, isNullable, isUnique, Array.from(args));
+		return this;
+	}
+
+	public columnBoolean(name: string, isPrimaryKey = false, isNullable = true, isUnique = false, ...args: string[]): CreateTableBuilder {
+		this.native.columnBoolean(name, isPrimaryKey, isNullable, isUnique, Array.from(args));
+		return this;
+	}
+
+	public columnBlob(name: string, isNullable = true, ...args: string[]): CreateTableBuilder {
+		this.native.columnBlob(name, isNullable, Array.from(args));
+		return this;
+	}
+
+	public columnDecimal(name: string, precision: number, scale: number, isPrimaryKey = false, isNullable = true, isUnique = false, isIdentity = false, ...args: string[]): CreateTableBuilder {
+		this.native.columnDecimal(name, precision, scale, isPrimaryKey, isNullable, isUnique, isIdentity, Array.from(args));
+		return this;
+	}
+
+	public primaryKey(columns: string[], name?: string): CreateTableBuilder {
+		this.native.primaryKey(name, columns);
+		return this;
+	}
+
+	public foreignKey(name: string, columns: string[], referencedTable: string, referencedColumns: string[], referencedTableSchema?: string): CreateTableBuilder {
+		this.native.foreignKey(name, columns, referencedTable, referencedTableSchema, referencedColumns);
+		return this;
+	}
+
+	public unique(name: string, columns: string[]): CreateTableBuilder {
+		this.native.unique(name, columns);
+		return this;
+	}
+
+	public check(name: string, expression: string): CreateTableBuilder {
+		this.native.check(name, expression);
+		return this;
+	}
+}
+
+export class CreateViewBuilder extends AbstractSQLBuilder {
+
+	constructor(view: string, connection?: Connection) {
+		super(connection);
+		this.native = this.native.create().view(view);
+	}
+
+	public column(column: string): CreateViewBuilder {
+		this.native.column(column);
+		return this;
+	}
+
+	public asSelect(select: string): CreateViewBuilder {
+		this.native.asSelect(select);
+		return this;
+	}
+}
+
+export class CreateSequenceBuilder extends AbstractSQLBuilder {
+
+	constructor(sequence: string, connection?: Connection) {
+		super(connection);
+		this.native = this.native.create().sequence(sequence);
+	}
+}
+
+export class DropBuilder extends AbstractSQLBuilder {
+
+	public table(table: string): DropTableBuilder {
+		return new DropTableBuilder(table, this.connection);
+	}
+
+	public view(view: string): DropViewBuilder {
+		return new DropViewBuilder(view, this.connection);
+	}
+
+	public sequence(sequence: string): DropSequenceBuilder {
+		return new DropSequenceBuilder(sequence, this.connection);
+	};
+
+}
+
+export class DropTableBuilder extends AbstractSQLBuilder {
+
+	constructor(table: string, connection?: Connection) {
+		super(connection);
+		this.native = this.native.drop().table(table);
+	}
+}
+
+export class DropViewBuilder extends AbstractSQLBuilder {
+
+	constructor(view: string, connection?: Connection) {
+		super(connection);
+		this.native = this.native.drop().view(view);
+	}
+}
+
+export class DropSequenceBuilder extends AbstractSQLBuilder {
+
+	constructor(sequence: string, connection?: Connection) {
+		super(connection);
+		this.native = this.native.drop().sequence(sequence);
+	}
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = SQLBuilder;
+}

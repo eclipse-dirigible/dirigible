@@ -15,10 +15,20 @@
 
 const ContextFacade = Java.type("org.eclipse.dirigible.components.api.core.ContextFacade");
 
-export function get(name) {
-	return ContextFacade.get(name);
-};
+export class Context {
 
-export function set(name, value) {
-	ContextFacade.set(name, value);
-};
+	public static get(name: string): any | undefined {
+		const value = ContextFacade.get(name)
+		return value ?? undefined;
+	}
+
+	public static set(name: string, value: any): void {
+		ContextFacade.set(name, value);
+	}
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Context;
+}

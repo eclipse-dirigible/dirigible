@@ -1,16 +1,20 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.graalium.core.graal;
 
+import java.nio.file.Path;
+import java.util.ServiceLoader;
+import java.util.function.Consumer;
+
 import org.eclipse.dirigible.graalium.core.graal.configuration.Configuration;
+import org.eclipse.dirigible.graalium.core.python.PythonCodeRunner;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
 import org.graalvm.polyglot.EnvironmentAccess;
@@ -18,10 +22,7 @@ import org.graalvm.polyglot.HostAccess;
 import org.graalvm.polyglot.io.FileSystem;
 import org.graalvm.polyglot.io.IOAccess;
 
-import javax.annotation.Nullable;
-import java.nio.file.FileSystems;
-import java.nio.file.Path;
-import java.util.function.Consumer;
+import jakarta.annotation.Nullable;
 
 public class ContextCreator {
 
@@ -32,6 +33,11 @@ public class ContextCreator {
     private final @Nullable Consumer<Context.Builder> onBeforeContextCreatedHook;
     private final @Nullable Consumer<Context> onAfterContextCreatedHook;
     private final FileSystem fileSystem;
+
+    /** The Constant PYTHON_ENABLED. */
+    private static final boolean PYTHON_ENABLED = ServiceLoader.load(PythonCodeRunner.class)
+                                                               .iterator()
+                                                               .hasNext();
 
     public ContextCreator(Engine engine, Path workingDirectoryPath, Path projectDirectoryPath, Path pythonModulesPath,
             FileSystem fileSystem) {
@@ -65,14 +71,17 @@ public class ContextCreator {
                                                                  .allowHostSocketAccess(true)
                                                                  .build())
                                                 .option("js.nashorn-compat", "true")
-                                                .option("js.import-assertions", "true")
+                                                .option("js.import-attributes", "true")
                                                 .option("js.json-modules", "true")
                                                 .option("js.operator-overloading", "true")
                                                 .option("js.intl-402", "true")
                                                 .option("js.ecmascript-version", "staging")
-                                                .option("js.esm-eval-returns-exports", "true")
-                                                .option("python.PythonPath", createPythonPath())
-                                                .option("python.ForceImportSite", "true");
+                                                .option("js.esm-eval-returns-exports", "true");
+
+        if (PYTHON_ENABLED) {
+            contextBuilder.option("python.PythonPath", createPythonPath())
+                          .option("python.ForceImportSite", "true");
+        }
 
         if (onBeforeContextCreatedHook != null) {
             onBeforeContextCreatedHook.accept(contextBuilder);

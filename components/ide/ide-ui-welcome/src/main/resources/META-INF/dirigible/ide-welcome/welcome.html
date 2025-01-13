@@ -1,26 +1,29 @@
-<!DOCTYPE html>
 <!--
-  ~ Copyright (c) 2010-2022 SAP and others.
-  ~ All rights reserved. This program and the accompanying materials
-  ~ are made available under the terms of the Eclipse Public License v2.0
-  ~ which accompanies this distribution, and is available at
-  ~ http://www.eclipse.org/legal/epl-v20.html
-  ~ Contributors:
-  ~ SAP - initial API and implementation
-  -->
 
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="welcome" ng-controller="welcomeCtrl">
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" ng-app="welcome" ng-controller="welcomeCtrl" xmlns="http://www.w3.org/1999/xhtml">
 
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="width=device-width, initial-scale=1" name="viewport" />
+    <link href="data:;base64,iVBORw0KGgo=" rel="icon" sizes="any" />
     <title dg-view-title></title>
-    <script type="text/javascript" src="services/welcome-view.js"></script>
-    <script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=ide-view-js"></script>
-    <script type="text/javascript" src="js/welcome.js"></script>
-    <link type="text/css" rel="stylesheet" href="/services/js/resources-core/services/loader.js?id=ide-view-css" />
+    <script src="services/welcome-view.js" type="text/javascript"></script>
+    <script src="/services/js/resources-core/services/loader.js?id=ide-view-js" type="text/javascript"></script>
+    <script src="js/welcome.js" type="text/javascript"></script>
+    <link href="/services/js/resources-core/services/loader.js?id=ide-view-css" rel="stylesheet" type="text/css" />
     <theme></theme>
   </head>
 
@@ -29,7 +32,7 @@
       <div class="fd-section__header">
         <h3 class="fd-section__title">Welcome to Eclipse Dirigible™</h3>
       </div>
-      <p class="fd-text"><a href="http://www.dirigible.io" target="_blank" class="fd-link">Eclipse Dirigible™</a> is a
+      <p class="fd-text"><a class="fd-link" href="http://www.dirigible.io" target="_blank">Eclipse Dirigible™</a> is a
         Cloud
         Development
         Platform providing development tools and runtime environment. It supports full development
@@ -42,16 +45,16 @@
           <h4 class="fd-panel__title">Create a new project</h4>
           <fd-toolbar dg-type="transparent" no-bottom-border="true" style="min-width: 30%;">
             <fd-toolbar-spacer></fd-toolbar-spacer>
-            <fd-input type="text" id="searchInput" ng-model="search.text" ng-change="search.applyFilter()"
-              placeholder="Search tempate by name">
+            <fd-input id="searchInput" ng-change="search.applyFilter()" ng-model="search.text" placeholder="Search template by name"
+              type="text">
             </fd-input>
           </fd-toolbar>
         </div>
-        <div role="region" aria-labelledby="jhqDKYrt" class="fd-panel__content">
+        <div aria-labelledby="jhqDKYrt" class="fd-panel__content" role="region">
           <div class="fd-container">
             <div class="fd-row">
               <span ng-if="templates.length && !filteredTemplates.length">No templates found.</span>
-              <div ng-if="templates.length" class="fd-col fd-col--12 fd-col-md--6 fd-col-lg--4 fd-col-xl--3"
+              <div class="fd-col fd-col--12 fd-col-md--6 fd-col-lg--4 fd-col-xl--3" ng-if="templates.length"
                 ng-repeat="template in filteredTemplates | startFrom:(currentPage-1)*pageSize | limitTo:pageSize">
                 <fd-card card-type="object">
                   <fd-card-header ng-click="openCreateProjectDialog(template)">
@@ -77,20 +80,20 @@
             </div>
           </div>
           <br>
-          <fd-pagination total-items="filteredTemplates.length" items-per-page="pageSize" current-page="currentPage"
-            display-total-items="true"></fd-pagination>
+          <fd-pagination current-page="currentPage" display-total-items="true" items-per-page="pageSize"
+            total-items="filteredTemplates.length"></fd-pagination>
         </div>
       </div>
       <br>
       <p class="fd-text">You can model the database
         schema of your web application, create server-side scripting services by using the <a
-          href="http://www.dirigible.io/api" target="_blank" class="fd-link">Enterprise
+          class="fd-link" href="http://www.dirigible.io/api" target="_blank">Enterprise
           Javascript
           API</a> or just design your web pages in HTML5 by using your favorite client-side framework.
         <br>
-        All source code is licensed under the <a href="https://www.eclipse.org/legal/epl-v20.html" target="_blank"
-          class="fd-link">Eclipse Public License - v 2.0</a> and
-        maintained at <a href="https://github.com/eclipse/dirigible" target="_blank" class="fd-link">GitHub</a>.
+        All source code is licensed under the <a class="fd-link" href="https://www.eclipse.org/legal/epl-v20.html"
+          target="_blank">Eclipse Public License - v 2.0</a> and
+        maintained at <a class="fd-link" href="https://github.com/eclipse/dirigible" target="_blank">GitHub</a>.
       </p>
     </section>
 

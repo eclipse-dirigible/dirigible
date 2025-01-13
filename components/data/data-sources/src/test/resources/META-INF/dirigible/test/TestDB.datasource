@@ -2,7 +2,7 @@
   "location":"/test/TestDB.datasource",
   "name":"TestDB",
   "driver":"org.h2.Driver",
-  "url":"jdbc:h2:~/test",
+  "url":"jdbc:h2:~/test;LOCK_TIMEOUT=10000",
   "username":"sa",
   "password":"",
   "nature":"local"

@@ -1,29 +1,16 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.odata.transformers;
 
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import javax.sql.DataSource;
-
-import org.eclipse.dirigible.commons.config.Configuration;
+import com.google.common.base.CaseFormat;
+import org.eclipse.dirigible.components.base.spring.BeanProvider;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.structures.domain.Table;
 import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
@@ -31,8 +18,12 @@ import org.eclipse.dirigible.components.data.structures.domain.TableConstraintFo
 import org.eclipse.dirigible.components.odata.api.ODataProperty;
 import org.eclipse.dirigible.database.sql.ISqlKeywords;
 
-import com.google.common.base.CaseFormat;
-
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.*;
 
 /**
  * The Class DBMetadataUtil.
@@ -41,9 +32,6 @@ public class ODataDatabaseMetadataUtil {
 
     /** The Constant DIRIGIBLE_GENERATE_PRETTY_NAMES. */
     public static final String DIRIGIBLE_GENERATE_PRETTY_NAMES = "DIRIGIBLE_GENERATE_PRETTY_NAMES";
-
-    /** The Constant IS_CASE_SENSETIVE. */
-    private static final boolean IS_CASE_SENSETIVE = Boolean.parseBoolean(Configuration.get("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE"));
 
     /** The Constant JDBC_COLUMN_NAME_PROPERTY. */
     public static final String JDBC_COLUMN_NAME_PROPERTY = "COLUMN_NAME";
@@ -138,8 +126,8 @@ public class ODataDatabaseMetadataUtil {
      * @return the data source
      */
     protected synchronized DataSource getDataSource() {
-        return DataSourcesManager.get()
-                                 .getDefaultDataSource();
+        DataSourcesManager dataSourcesManager = BeanProvider.getBean(DataSourcesManager.class);
+        return dataSourcesManager.getDefaultDataSource();
     }
 
     /**
@@ -196,12 +184,6 @@ public class ODataDatabaseMetadataUtil {
             throws SQLException {
         ResultSet foreignKeys =
                 databaseMetadata.getImportedKeys(connection.getCatalog(), schemaName, normalizeTableName(tableMetadata.getName()));
-        if (!foreignKeys.isBeforeFirst() && !IS_CASE_SENSETIVE) {
-            // Fallback for PostgreSQL
-            foreignKeys = databaseMetadata.getImportedKeys(connection.getCatalog(), schemaName, normalizeTableName(tableMetadata.getName()
-                                                                                                                                .toLowerCase()));
-        }
-
 
         while (foreignKeys.next()) {
             new TableConstraintForeignKey(foreignKeys.getString(JDBC_FK_NAME_PROPERTY), new String[] {},
@@ -244,11 +226,6 @@ public class ODataDatabaseMetadataUtil {
             throws SQLException {
         ResultSet primaryKeys =
                 databaseMetadata.getPrimaryKeys(connection.getCatalog(), schemaName, normalizeTableName(tableMetadata.getName()));
-        if (!primaryKeys.isBeforeFirst() && !IS_CASE_SENSETIVE) {
-            // Fallback for PostgreSQL
-            primaryKeys = databaseMetadata.getPrimaryKeys(connection.getCatalog(), schemaName, normalizeTableName(tableMetadata.getName()
-                                                                                                                               .toLowerCase()));
-        }
 
         List<String> primaryKeyColumns = new ArrayList<>();
         while (primaryKeys.next()) {
@@ -272,12 +249,6 @@ public class ODataDatabaseMetadataUtil {
             throws SQLException {
         ResultSet columns =
                 databaseMetadata.getColumns(connection.getCatalog(), schemaPattern, normalizeTableName(tableMetadata.getName()), null);
-        if (!columns.isBeforeFirst() && !IS_CASE_SENSETIVE) {
-            // Fallback for PostgreSQL
-            columns = databaseMetadata.getColumns(connection.getCatalog(), schemaPattern, normalizeTableName(tableMetadata.getName()
-                                                                                                                          .toLowerCase()),
-                    null);
-        }
 
         List<String> primaryKeys = getPrimaryKeys(databaseMetadata, connection, tableMetadata, schemaPattern);
 
@@ -356,7 +327,7 @@ public class ODataDatabaseMetadataUtil {
         String columnName = column.getName();
         for (ODataProperty next : properties) {
             if (next.getType() != null) {
-                if (columnName.equals(next.getColumn()) || !IS_CASE_SENSETIVE && columnName.equalsIgnoreCase(next.getColumn())) {
+                if (columnName.equals(next.getColumn())) {
                     return next.getType();
                 }
             }
@@ -400,11 +371,6 @@ public class ODataDatabaseMetadataUtil {
     public String getArtifactType(DatabaseMetaData databaseMetadata, Connection connection, String artifactName, String schemaPattern)
             throws SQLException {
         ResultSet tables = databaseMetadata.getTables(connection.getCatalog(), schemaPattern, normalizeTableName(artifactName), null);
-        if (!tables.isBeforeFirst() && !IS_CASE_SENSETIVE) {
-            // Fallback for PostgreSQL
-            tables = databaseMetadata.getTables(connection.getCatalog(), schemaPattern, normalizeTableName(artifactName.toLowerCase()),
-                    null);
-        }
 
         return tables.next() ? tables.getString("TABLE_TYPE") : null;
     }

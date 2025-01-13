@@ -1,0 +1,73 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" ng-app="app" ng-controller="ApplicationController" xmlns="http://www.w3.org/1999/xhtml">
+
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" href="data:;base64,iVBORw0KGgo=" dg-brand-icon />
+        <title dg-brand-title></title>
+        <script type="text/javascript" src="ui/launchpad/perspective.js"></script>
+        <theme></theme>
+        <script type="text/javascript"
+            src="/services/js/resources-core/services/loader.js?id=application-perspective-js">
+        </script>
+        <link type="text/css" rel="stylesheet"
+            href="/services/js/resources-core/services/loader.js?id=application-perspective-css" />
+    </head>
+
+    <body>
+        <ide-header menu-ext-id="documents-menu"></ide-header>
+
+        <ide-container>
+            <view id="documents-home"></view>
+        </ide-container>
+
+        <ide-dialogs></ide-dialogs>
+        <ide-status-bar></ide-status-bar>
+
+        <script type="text/javascript">
+            angular.module('app', ['ngResource', 'ideLayout', 'ideUI'])
+                .constant('branding', {
+                    name: 'Documents Storage',
+                    brand: 'Eclipse Dirigible',
+                    brandUrl: 'https://dirigible.io',
+                    icons: {
+                        faviconIco: '/services/web/ide-branding/images/favicon.ico',
+                        favicon32: '/services/web/ide-branding/images/favicon-32x32.png',
+                        favicon16: '/services/web/ide-branding/images/favicon-16x16.png',
+                    },
+                    logo: '/services/web/ide-branding/images/logo.svg',
+                })
+                .constant('extensionPoint', {
+                    perspectives: "documents",
+                    views: "documents-view",
+                    dialogWindows: "documents-dialog-window"
+                })
+                .config(["messageHubProvider", function (messageHubProvider) {
+                    messageHubProvider.eventIdPrefix = 'documents.Home';
+                }])
+                .controller('ApplicationController', ["$scope", "messageHub", function ($scope, messageHub) {
+
+                    messageHub.onDidReceiveMessage("openView", function (msg) {
+                        window.location = msg.data.location;
+                    });
+
+                }]);
+        </script>
+    </body>
+
+</html>

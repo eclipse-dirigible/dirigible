@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.registry.endpoint;
 
@@ -29,20 +28,37 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 
+/**
+ * The Class RegistryEndpoint.
+ */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_CORE + "registry")
 public class RegistryEndpoint extends BaseEndpoint {
 
+    /** The registry service. */
     private final RegistryService registryService;
 
+    /** The registry accessor. */
     private final RegistryAccessor registryAccessor;
 
+    /**
+     * Instantiates a new registry endpoint.
+     *
+     * @param registryService the registry service
+     * @param registryAccessor the registry accessor
+     */
     @Autowired
     public RegistryEndpoint(RegistryService registryService, RegistryAccessor registryAccessor) {
         this.registryService = registryService;
         this.registryAccessor = registryAccessor;
     }
 
+    /**
+     * Gets the.
+     *
+     * @param path the path
+     * @return the response entity
+     */
     @GetMapping("/{*path}")
     public ResponseEntity<?> get(@PathVariable("path") String path) {
 

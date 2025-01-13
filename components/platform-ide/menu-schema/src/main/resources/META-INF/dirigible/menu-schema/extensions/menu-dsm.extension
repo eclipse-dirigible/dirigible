@@ -1,0 +1,5 @@
+{
+    "module": "menu-schema/templates/menu-dsm.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "Database Schema Model Workbench New Menu Extension"
+}

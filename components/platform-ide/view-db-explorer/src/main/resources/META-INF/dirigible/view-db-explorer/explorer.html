@@ -1,0 +1,49 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="database" ng-controller="DatabaseController">
+
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+		<title config-title></title>
+		<script type="text/javascript" src="/services/web/view-db-explorer/configs/explorer.js"></script>
+		<script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=view-js,jstree-js"></script>
+		<link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?ids=view-css,jstree-css" />
+		<script type="text/javascript" src="js/explorer.js"></script>
+	</head>
+
+	<body class="bk-vbox">
+		<bk-toolbar compact="true">
+			<bk-toolbar-spacer></bk-toolbar-spacer>
+			<bk-button state="transparent" glyph="sap-icon--play" title="Run" aria-label="Run" ng-click="runSQL()"></bk-button>
+			<bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="refresh()"></bk-button>
+			<bk-toolbar-separator></bk-toolbar-separator>
+			<bk-popover>
+				<bk-popover-control>
+					<bk-button state="transparent" is-menu="true" label="{{ selectedDatasource }}" title="Datasource select"></bk-button>
+				</bk-popover-control>
+				<bk-popover-body align="bottom-right" no-arrow="true">
+					<bk-menu aria-label="datasources menu">
+						<bk-menu-item title="{{ name }}" ng-repeat="name in datasources" is-selected="isSelectedDatasource(name)" ng-click="switchDatasource(name)"></bk-menu-item>
+					</bk-menu>
+				</bk-popover-body>
+			</bk-popover>
+		</bk-toolbar>
+		<div id="dgDatabases" class="jstree-fiori--fill jstree-fiori--context-menu" bk-scrollbar></div>
+		<theme></theme>
+	</body>
+
+</html>

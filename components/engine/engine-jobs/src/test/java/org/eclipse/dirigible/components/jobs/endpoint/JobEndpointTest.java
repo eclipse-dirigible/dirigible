@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.jobs.endpoint;
 
@@ -21,7 +20,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-import javax.persistence.EntityManager;
+import jakarta.persistence.EntityManager;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.jobs.domain.Job;
@@ -59,6 +58,7 @@ import org.springframework.web.context.WebApplicationContext;
 @Transactional
 public class JobEndpointTest {
 
+    /** The entity manager. */
     @Autowired
     private EntityManager entityManager;
 
@@ -70,15 +70,18 @@ public class JobEndpointTest {
     @Autowired
     private JobRepository jobRepository;
 
+    /** The test job. */
     private Job testJob;
 
     /** The mockMvc. */
     @Autowired
     private MockMvc mockMvc;
 
+    /** The wac. */
     @Autowired
     protected WebApplicationContext wac;
 
+    /** The spring security filter chain. */
     @Autowired
     private FilterChainProxy springSecurityFilterChain;
 
@@ -108,13 +111,19 @@ public class JobEndpointTest {
 
     }
 
-    /** Cleanup */
+    /**
+     * Cleanup.
+     */
     @AfterEach
     public void cleanup() {
         jobRepository.deleteAll();
     }
 
-    /** Finds all extension points and checks the location of the first one */
+    /**
+     * Finds all extension points and checks the location of the first one.
+     *
+     * @throws Exception the exception
+     */
     @Test
     public void findAllExtensionPoints() throws Exception {
         mockMvc.perform(get("/services/jobs"))
@@ -123,7 +132,12 @@ public class JobEndpointTest {
         // .andExpect(jsonPath("$.content[0].location").value("/a/b/c/j1.job"));
     }
 
-    /** Gets all extension points */
+    /**
+     * Gets all extension points.
+     *
+     * @return the all extension points
+     * @throws Exception the exception
+     */
     @Test
     public void getAllExtensionPoints() throws Exception {
         mockMvc.perform(get("/services/jobs/pages"))
@@ -131,7 +145,11 @@ public class JobEndpointTest {
                .andExpect(status().is2xxSuccessful());
     }
 
-    /** Enables the job by name */
+    /**
+     * Enables the job by name.
+     *
+     * @throws Exception the exception
+     */
     @Test
     public void enableJob() throws Exception {
         // TODO
@@ -141,7 +159,11 @@ public class JobEndpointTest {
 
     }
 
-    /** Disables the job by name */
+    /**
+     * Disables the job by name.
+     *
+     * @throws Exception the exception
+     */
     @Test
     public void disableJob() throws Exception {
         // TODO

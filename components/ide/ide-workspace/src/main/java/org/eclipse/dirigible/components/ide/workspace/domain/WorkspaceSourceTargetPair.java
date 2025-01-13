@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.ide.workspace.domain;
 
@@ -18,8 +17,8 @@ public class WorkspaceSourceTargetPair {
     /** The source workspace. */
     private String sourceWorkspace;
 
-    /** The source. */
-    private String source;
+    /** The sources. */
+    private String[] sources;
 
     /** The target workspace. */
     private String targetWorkspace;
@@ -46,21 +45,21 @@ public class WorkspaceSourceTargetPair {
     }
 
     /**
-     * Gets the source.
+     * Gets the sources.
      *
-     * @return the source
+     * @return the sources
      */
-    public String getSource() {
-        return source;
+    public String[] getSources() {
+        return sources;
     }
 
     /**
-     * Sets the source.
+     * Sets the sources.
      *
-     * @param source the new source
+     * @param sources the new sources
      */
-    public void setSource(String source) {
-        this.source = source;
+    public void setSources(String[] sources) {
+        this.sources = sources;
     }
 
     /**

@@ -1,18 +1,19 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-let extensions = dirigibleRequire('extensions/extensions');
-let response = dirigibleRequire('http/response');
+import { extensions } from "sdk/extensions";
+import { rs } from "sdk/http";
 
-let rs = dirigibleRequire("http/rs");
+const ideTemplates = await loadTemplates();
+const menuTemplates = await loadTemplates(true);
 
 rs.service()
 	.resource("")
@@ -40,17 +41,29 @@ rs.service()
 	.execute();
 
 function getTemplates(forMenu = false) {
+	return forMenu ? menuTemplates : ideTemplates;
+}
+
+async function loadTemplates(forMenu = false) {
 	let templates = [];
 	let templateExtensions;
 	if (forMenu) templateExtensions = extensions.getExtensions('ide-workspace-menu-new-template');
 	else templateExtensions = extensions.getExtensions('ide-template');
-	for (let i = 0; i < templateExtensions.length; i++) {
+	for (let i = 0; i < templateExtensions?.length; i++) {
 		let module = templateExtensions[i];
 		try {
-			let templateExtension = dirigibleRequire(module);
-			let template = templateExtension.getTemplate();
-			template.id = module;
-			templates.push(template);
+			try {
+				let templateExtension = await import(`../../${module}`);
+				let template = templateExtension.getTemplate();
+				template.id = module;
+				templates.push(template);
+			} catch (e) {
+				// Fallback for not migrated extensions
+				let templateExtension = dirigibleRequire(module);
+				let template = templateExtension.getTemplate();
+				template.id = module;
+				templates.push(template);
+			}
 		} catch (error) {
 			console.error('Error occured while loading metadata for the template: ' + module);
 			console.error(error);

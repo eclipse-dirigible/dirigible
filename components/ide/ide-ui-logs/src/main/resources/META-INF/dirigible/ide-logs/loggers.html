@@ -1,15 +1,18 @@
-<!DOCTYPE html>
 <!--
-  ~ Copyright (c) 2010-2023 SAP and others.
-  ~ All rights reserved. This program and the accompanying materials
-  ~ are made available under the terms of the Eclipse Public License v2.0
-  ~ which accompanies this distribution, and is available at
-  ~ http://www.eclipse.org/legal/epl-v20.html
-  ~ Contributors:
-  ~ SAP - initial API and implementation
-  -->
 
-<html lang="en" ng-app="loggers" ng-controller="LoggersController as controller">
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" ng-app="loggers" ng-controller="LoggersController">
 
     <head>
         <meta charset="utf-8" />
@@ -25,16 +28,19 @@
     </head>
 
     <body class="dg-vbox">
-        <fd-toolbar compact="true" dg-type="solid">
+        <fd-busy-indicator-extended class="dg-fill-parent" ng-hide="state.error || !state.isBusy" dg-size="l">
+            {{state.busyText}}
+        </fd-busy-indicator-extended>
+        <fd-toolbar compact="true" dg-type="solid" ng-show="!state.error && !state.isBusy">
             <fd-toolbar-spacer></fd-toolbar-spacer>
-            <fd-input type="text" placeholder="Enter filter" ng-model="search.name" required="required"
+            <fd-input type="text" placeholder="Filter by name" ng-keyup="searchContent()" ng-model="search.name"
                 style="max-width: 30%">
             </fd-input>
-            <fd-button dg-type="transparent" glyph="sap-icon--clear-all" title="Reset filter" aria-label="Reset filter"
-                ng-click="search.name = ''">
+            <fd-button dg-type="transparent" glyph="sap-icon--clear-filter" title="Reset filter"
+                aria-label="Reset filter" ng-click="clearSearch()" state="{{ search.text ? '' : 'disabled' }}">
             </fd-button>
         </fd-toolbar>
-        <fd-scrollbar class="dg-stretch">
+        <fd-scrollbar class="dg-stretch" ng-show="!state.error && !state.isBusy">
             <table fd-table display-mode="compact" outer-borders="none" class="dg-list-border-bottom">
                 <thead fd-table-header sticky="true">
                     <tr fd-table-row>
@@ -49,92 +55,73 @@
                     </tr>
                 </thead>
                 <tbody fd-table-body>
-                    <tr fd-table-row ng-repeat="logger in loggers | filter: {name: search.name}" hoverable="true"
-                        activable="false">
-                        <td fd-table-cell>{{$index + 1}}</td>
+                    <tr fd-table-row ng-repeat="logger in loggers track by $index" hoverable="true" activable="false"
+                        ng-hide="search.searching && logger.hidden">
+                        <td fd-table-cell>{{::$index + 1}}</td>
                         <td fd-table-cell>
-                            <div class="tdSingleLine">{{logger.name}}</div>
+                            {{::logger.name}}
                         </td>
                         <td fd-table-cell>
-                            <div class="tdSingleLine">{{logger.severity}}</div>
+                            {{logger.severity}}
                         </td>
                         <td fd-table-cell>
-
-                            <div ng-show="logger.severity === ' ALL' || logger.severity==='TRACE'"
-                                class=" tdSingleLine">
-                                <fd-button class="sap-icon--color-negative" dg-type="transparent"
-                                    glyph="sap-icon--connected" title="Disable" aria-label="Disable"
-                                    ng-click="setSeverity(logger.name, 'TRACE')">
-                                </fd-button>
-                            </div>
-                            <div ng-hide="logger.severity === 'ALL' || logger.severity === 'TRACE'"
-                                class="tdSingleLine">
-                                <fd-button class="sap-icon--color-neutral" dg-type="transparent"
-                                    glyph="sap-icon--disconnected" title="Enable" aria-label="Enable"
-                                    ng-click="setSeverity(logger.name, 'TRACE')">
-                                </fd-button>
-                            </div>
+                            <fd-button ng-if="logger.severity === ' ALL' || logger.severity === 'TRACE'"
+                                class="sap-icon--color-negative" dg-type="transparent" glyph="sap-icon--connected"
+                                title="Disable" aria-label="Disable" ng-click="setSeverity($index, 'TRACE')">
+                            </fd-button>
+                            <fd-button ng-if="logger.severity !== ' ALL' && logger.severity !== 'TRACE'"
+                                class="sap-icon--color-neutral" dg-type="transparent" glyph="sap-icon--disconnected"
+                                title="Enable" aria-label="Enable" ng-click="setSeverity($index, 'TRACE')">
+                            </fd-button>
                         </td>
                         <td fd-table-cell>
-                            <div ng-show="logger.severity === 'DEBUG'" class="tdSingleLine">
-                                <fd-button class="sap-icon--color-negative" dg-type="transparent"
-                                    glyph="sap-icon--connected" title="Disable" aria-label="Disable"
-                                    ng-click="setSeverity(logger.name, 'DEBUG')">
-                                </fd-button>
-                            </div>
-                            <div ng-hide="logger.severity === 'DEBUG'" class="tdSingleLine">
-                                <fd-button class="sap-icon--color-neutral" dg-type="transparent"
-                                    glyph="sap-icon--disconnected" title="Enable" aria-label="Enable"
-                                    ng-click="setSeverity(logger.name, 'DEBUG')">
-                                </fd-button>
-                            </div>
+                            <fd-button ng-if="logger.severity === 'DEBUG'" class="sap-icon--color-negative"
+                                dg-type="transparent" glyph="sap-icon--connected" title="Disable" aria-label="Disable"
+                                ng-click="setSeverity($index, 'DEBUG')">
+                            </fd-button>
+                            <fd-button ng-if="logger.severity !== 'DEBUG'" class="sap-icon--color-neutral"
+                                dg-type="transparent" glyph="sap-icon--disconnected" title="Enable" aria-label="Enable"
+                                ng-click="setSeverity($index, 'DEBUG')">
+                            </fd-button>
                         </td>
                         <td fd-table-cell>
-                            <div ng-show="logger.severity === 'INFO'" class="tdSingleLine">
-                                <fd-button class="sap-icon--color-negative" dg-type="transparent"
-                                    glyph="sap-icon--connected" title="Disable" aria-label="Disable"
-                                    ng-click="setSeverity(logger.name, 'INFO')">
-                                </fd-button>
-                            </div>
-                            <div ng-hide="logger.severity === 'INFO'" class="tdSingleLine">
-                                <fd-button class="sap-icon--color-neutral" dg-type="transparent"
-                                    glyph="sap-icon--disconnected" title="Enable" aria-label="Enable"
-                                    ng-click="setSeverity(logger.name, 'INFO')">
-                                </fd-button>
-                            </div>
+                            <fd-button ng-if="logger.severity === 'INFO'" class="sap-icon--color-negative"
+                                dg-type="transparent" glyph="sap-icon--connected" title="Disable" aria-label="Disable"
+                                ng-click="setSeverity($index, 'INFO')">
+                            </fd-button>
+                            <fd-button ng-if="logger.severity !== 'INFO'" class="sap-icon--color-neutral"
+                                dg-type="transparent" glyph="sap-icon--disconnected" title="Enable" aria-label="Enable"
+                                ng-click="setSeverity($index, 'INFO')">
+                            </fd-button>
                         </td>
                         <td fd-table-cell>
-                            <div ng-show="logger.severity === 'WARN'" class="tdSingleLine">
-                                <fd-button class="sap-icon--color-negative" dg-type="transparent"
-                                    glyph="sap-icon--connected" title="Disable" aria-label="Disable"
-                                    ng-click="setSeverity(logger.name, 'WARN')">
-                                </fd-button>
-                            </div>
-                            <div ng-hide="logger.severity === 'WARN'" class="tdSingleLine">
-                                <fd-button class="sap-icon--color-neutral" dg-type="transparent"
-                                    glyph="sap-icon--disconnected" title="Enable" aria-label="Enable"
-                                    ng-click="setSeverity(logger.name, 'WARN')">
-                                </fd-button>
-                            </div>
+                            <fd-button ng-if="logger.severity === 'WARN'" class="sap-icon--color-negative"
+                                dg-type="transparent" glyph="sap-icon--connected" title="Disable" aria-label="Disable"
+                                ng-click="setSeverity($index, 'WARN')">
+                            </fd-button>
+                            <fd-button ng-if="logger.severity !== 'WARN'" class="sap-icon--color-neutral"
+                                dg-type="transparent" glyph="sap-icon--disconnected" title="Enable" aria-label="Enable"
+                                ng-click="setSeverity($index, 'WARN')">
+                            </fd-button>
                         </td>
                         <td fd-table-cell>
-                            <div ng-show="logger.severity === 'ERROR'" class="tdSingleLine">
-                                <fd-button class="sap-icon--color-negative" dg-type="transparent"
-                                    glyph="sap-icon--connected" title="Disable" aria-label="Disable"
-                                    ng-click="setSeverity(logger.name, 'ERROR')">
-                                </fd-button>
-                            </div>
-                            <div ng-hide="logger.severity === 'ERROR'" class="tdSingleLine">
-                                <fd-button class="sap-icon--color-neutral" dg-type="transparent"
-                                    glyph="sap-icon--disconnected" title="Enable" aria-label="Enable"
-                                    ng-click="setSeverity(logger.name, 'ERROR')">
-                                </fd-button>
-                            </div>
+                            <fd-button ng-if="logger.severity === 'ERROR'" class="sap-icon--color-negative"
+                                dg-type="transparent" glyph="sap-icon--connected" title="Disable" aria-label="Disable"
+                                ng-click="setSeverity($index, 'ERROR')">
+                            </fd-button>
+                            <fd-button ng-if="logger.severity !== 'ERROR'" class="sap-icon--color-neutral"
+                                dg-type="transparent" glyph="sap-icon--disconnected" title="Enable" aria-label="Enable"
+                                ng-click="setSeverity($index, 'ERROR')">
+                            </fd-button>
                         </td>
                     </tr>
                 </tbody>
             </table>
         </fd-scrollbar>
+        <fd-message-page glyph="sap-icon--error" ng-if="state.error">
+            <fd-message-page-title>Editor encounterd an error!</fd-message-page-title>
+            <fd-message-page-subtitle>{{errorMessage}}</fd-message-page-subtitle>
+        </fd-message-page>
     </body>
 
 </html>

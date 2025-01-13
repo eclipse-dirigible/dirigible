@@ -9,323 +9,348 @@
  * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import * as bytes from "@dirigible/io/bytes";
+import { Bytes } from "sdk/io/bytes";
+
 const WorkspaceFacade = Java.type("org.eclipse.dirigible.components.api.platform.WorkspaceFacade");
-
-export function createWorkspace(name) {
-	const native = WorkspaceFacade.createWorkspace(name);
-	return new Workspace(native);
-};
-
-export function getWorkspace(name) {
-	const native = WorkspaceFacade.getWorkspace(name);
-	return new Workspace(native);
-};
-
-export function getWorkspacesNames() {
-	const workspacesNames = WorkspaceFacade.getWorkspacesNames();
-	if (workspacesNames) {
-		return JSON.parse(workspacesNames);
-	}
-	return workspacesNames;
-};
-
-export function deleteWorkspace(name) {
-	WorkspaceFacade.deleteWorkspace(name);
-};
 
 /**
  * Workspace object
  */
-class Workspace {
+export class Workspace {
 
-	constructor(private native) { }
+	public static createWorkspace(name: string): Workspace {
+		const native = WorkspaceFacade.createWorkspace(name);
+		return new Workspace(native);
+	}
 
-	getProjects() {
+	public static getWorkspace(name: string): Workspace {
+		const native = WorkspaceFacade.getWorkspace(name);
+		return new Workspace(native);
+	}
+
+	public static getWorkspacesNames(): string[] {
+		const workspacesNames = WorkspaceFacade.getWorkspacesNames();
+		if (workspacesNames) {
+			return JSON.parse(workspacesNames);
+		}
+		return workspacesNames;
+	}
+
+	public static deleteWorkspace(name: string): void {
+		WorkspaceFacade.deleteWorkspace(name);
+	}
+
+	private readonly native: any;
+
+	constructor(native: any) {
+		this.native = native;
+	}
+
+	public getProjects(): Projects {
 		const native = this.native.getProjects();
 		return new Projects(native);
-	};
+	}
 
-	createProject(name) {
+	public createProject(name: string): Project {
 		const native = this.native.createProject(name);
 		return new Project(native);
-	};
+	}
 
-	getProject(name) {
+	public getProject(name: string): Project {
 		const native = this.native.getProject(name);
 		return new Project(native);
-	};
+	}
 
-	deleteProject(name) {
+	public deleteProject(name: string): void {
 		this.native.deleteProject(name);
-	};
+	}
 
-	exists() {
+	public exists(): boolean {
 		return this.native.exists();
-	};
+	}
 
-	existsFolder(path) {
+	public existsFolder(path: string): boolean {
 		return this.native.existsFolder(path);
-	};
+	}
 
-	existsFile(path) {
+	public existsFile(path: string): boolean {
 		return this.native.existsFile(path);
-	};
+	}
 
-	copyProject(source, target) {
+	public copyProject(source: string, target: string): void {
 		this.native.copyProject(source, target);
-	};
+	}
 
-	moveProject(source, target) {
+	public moveProject(source: string, target: string): void {
 		this.native.moveProject(source, target);
-	};
+	}
 
 }
 
 /**
  * Projects object
  */
-class Projects {
+export class Projects {
+	private readonly native: any;
 
-	constructor(private native) { }
+	constructor(native: any) {
+		this.native = native;
+	}
 
-	size() {
+	public size(): number {
 		return this.native.size();
-	};
+	}
 
-	get(index) {
+	public get(index: number): Project {
 		const native = this.native.get(index);
 		return new Project(native);
-	};
+	}
 
 }
 
 /**
  * Project object
  */
-class Project {
+export class Project {
+	private readonly native: any;
 
-	constructor(private native) { }
+	constructor(native: any) {
+		this.native = native;
+	}
 
-	getName() {
+	public getName(): string {
 		const collection = this.native.getInternal();
 		return collection.getName();
-	};
+	}
 
-	getPath() {
+	public getPath(): string {
 		const collection = this.native.getInternal();
 		return collection.getPath();
-	};
+	}
 
-	createFolder(path) {
+	public createFolder(path: string): Folder {
 		const native = this.native.createFolder(path);
 		return new Folder(native);
-	};
+	}
 
-	exists() {
+	public exists(): boolean {
 		return this.native.exists();
-	};
+	}
 
-	existsFolder(path) {
+	public existsFolder(path: string): boolean {
 		return this.native.existsFolder(path);
-	};
+	}
 
-	getFolder(path) {
+	public getFolder(path: string): Folder {
 		const native = this.native.getFolder(path);
 		return new Folder(native);
-	};
+	}
 
-	getFolders(path) {
+	public getFolders(path: string): Folders {
 		const native = this.native.getFolders(path);
 		return new Folders(native);
-	};
+	}
 
-	deleteFolder(path) {
-		return this.native.deleteFolder(path);
-	};
+	public deleteFolder(path: string): void {
+		this.native.deleteFolder(path);
+	}
 
-	createFile(path, input) {
+	public createFile(path: string, input: any[] = []): File {
 		const native = this.native.createFile(path, input);
 		return new File(native);
-	};
+	}
 
-	existsFile(path) {
+	public existsFile(path: string): boolean {
 		return this.native.existsFile(path);
-	};
+	}
 
-	getFile(path) {
+	public getFile(path: string): File {
 		const native = this.native.getFile(path);
 		return new File(native);
-	};
+	}
 
-	getFiles(path) {
+	public getFiles(path: string): Files {
 		const native = this.native.getFiles(path);
 		return new Files(native);
-	};
+	}
 
-	deleteFile(path) {
-		return this.native.deleteFile(path);
-	};
+	public deleteFile(path: string): void {
+		this.native.deleteFile(path);
+	}
 
 }
 
 /**
  * Folders object
  */
-class Folders {
+export class Folders {
+	private readonly native: any;
 
-	constructor(private native) { }
+	constructor(native: any) {
+		this.native = native;
+	}
 
-	size() {
-		const size = this.native.size();
-		return size;
-	};
+	public size(): number {
+		return this.native.size();
+	}
 
-	get(index) {
+	public get(index: number): Folder {
 		const native = this.native.get(index);
 		return new Folder(native);
-	};
+	}
 
 }
 
 /**
  * Files object
  */
-class Files {
+export class Files {
+	private readonly native: any;
 
-	constructor(private native) { }
+	constructor(native: any) {
+		this.native = native;
+	}
 
-	size() {
-		const size = this.native.size();
-		return size;
-	};
+	public size(): number {
+		return this.native.size();
+	}
 
-	get(index) {
+	public get(index: number): File {
 		const native = this.native.get(index);
 		return new File(native);
-	};
+	}
 
 }
 
 /**
  * Folder object
  */
-class Folder {
+export class Folder {
+	private readonly native: any;
 
-	constructor(private native) { }
+	constructor(native: any) {
+		this.native = native;
+	}
 
-	getName() {
+	public getName(): string {
 		const collection = this.native.getInternal();
-		const name = collection.getName();
-		return name;
+		return collection.getName();
 	};
 
-	getPath() {
+	public getPath(): string {
 		const collection = this.native.getInternal();
 		return collection.getPath();
-	};
+	}
 
-	createFolder(path) {
+	public createFolder(path: string): Folder {
 		const native = this.native.createFolder(path);
 		return new Folder(native);
-	};
+	}
 
-	exists() {
+	public exists(): boolean {
 		return this.native.exists();
-	};
+	}
 
-	existsFolder(path) {
+	public existsFolder(path: string): boolean {
 		return this.native.existsFolder(path);
-	};
+	}
 
-	getFolder(path) {
+	public getFolder(path: string): Folder {
 		const native = this.native.getFolder(path);
 		return new Folder(native);
-	};
+	}
 
-	getFolders(path) {
+	public getFolders(path: string): Folders {
 		const native = this.native.getFolders(path);
 		return new Folders(native);
-	};
+	}
 
-	deleteFolder(path) {
-		return this.native.deleteFolder(path);
-	};
+	public deleteFolder(path: string): void {
+		this.native.deleteFolder(path);
+	}
 
-	createFile(path, input) {
+	public createFile(path: string, input: any[] = []): File {
 		const native = this.native.createFile(path, input);
 		return new File(native);
-	};
+	}
 
-	existsFile(path) {
+	public existsFile(path: string): boolean {
 		return this.native.existsFile(path);
-	};
+	}
 
-	getFile(path) {
+	public getFile(path: string): File {
 		const native = this.native.getFile(path);
 		return new File(native);
-	};
+	}
 
-	getFiles(path) {
+	public getFiles(path: string): Files {
 		const native = this.native.getFiles(path);
 		return new Files(native);
-	};
+	}
 
-	deleteFile(path) {
-		return this.native.deleteFile(path);
-	};
+	public deleteFile(path: string): void {
+		this.native.deleteFile(path);
+	}
 
 }
 
 /**
  * File object
  */
-class File {
+export class File {
+	private readonly native: any;
 
-	constructor(private native) { }
+	constructor(native: any) {
+		this.native = native;
+	}
 
-	getName() {
+	public getName(): string {
 		const collection = this.native.getInternal();
 		return collection.getName();
-	};
+	}
 
-	getPath() {
+	public getPath(): string {
 		const collection = this.native.getInternal();
 		return collection.getPath();
-	};
+	}
 
-	getContentType() {
+	public getContentType(): string {
 		return this.native.getContentType();
-	};
+	}
 
-	isBinary() {
+	public isBinary(): boolean {
 		return this.native.isBinary();
-	};
+	}
 
-	getContent() {
+	public getContent(): any[] {
 		const output = WorkspaceFacade.getContent(this.native);
 		if (output) {
 			output;
 		}
 		return output;
-	};
+	}
 
-	getText() {
+	public getText(): string {
 		const bytesOutput = this.getContent();
-		return bytes.byteArrayToText(bytesOutput);
-	};
+		return Bytes.byteArrayToText(bytesOutput);
+	}
 
-	setContent(input) {
-		const output = WorkspaceFacade.setContent(this.native, input);
-		return output;
-	};
+	public setContent(input: any[]): void {
+		WorkspaceFacade.setContent(this.native, input);
+	}
 
-	setText(input) {
-		const bytesInput = bytes.textToByteArray(input);
-		return this.setContent(bytesInput);
-	};
+	public setText(input: string): void {
+		const bytesInput = Bytes.textToByteArray(input);
+		this.setContent(bytesInput);
+	}
 
-	exists() {
+	public exists(): boolean {
 		return this.native.exists();
-	};
+	}
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Workspace;
 }

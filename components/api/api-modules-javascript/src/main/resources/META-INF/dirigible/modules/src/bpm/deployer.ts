@@ -15,11 +15,23 @@
 
 const BpmFacade = Java.type("org.eclipse.dirigible.components.api.bpm.BpmFacade");
 
-export function deployProcess(location) {
-	const processId = BpmFacade.deployProcess(location);
-	return processId;
-};
+export class Deployer {
 
-export function undeployProcess(processId) {
-	BpmFacade.undeployProcess(processId);
-};
+	public static deployProcess(location: string): string {
+		return BpmFacade.deployProcess(location);
+	}
+
+	public static undeployProcess(location: string): void {
+		BpmFacade.undeployProcess(location);
+	}
+
+	public static deleteProcess(id: string, reason: string): void {
+		BpmFacade.deleteProcess(id, reason);
+	}
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Deployer;
+}

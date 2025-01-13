@@ -1,4 +1,4 @@
-declare module "@dirigible/test" {
+declare module "sdk/test" {
     
     module assert {
         /**

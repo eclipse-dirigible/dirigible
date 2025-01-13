@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.builders.sequence;
 
@@ -24,7 +23,7 @@ public class CreateSequenceBuilder extends AbstractCreateSqlBuilder {
     private static final Logger logger = LoggerFactory.getLogger(CreateSequenceBuilder.class);
 
     /** The sequence. */
-    private String sequence;
+    private final String sequence;
 
     /** The start. */
     private Integer start;
@@ -271,13 +270,12 @@ public class CreateSequenceBuilder extends AbstractCreateSqlBuilder {
      * @param sql the sql
      */
     protected void generateSequence(StringBuilder sql) {
-        String sequenceName = (isCaseSensitive()) ? encapsulate(this.sequence, true) : this.sequence;
+        String sequenceName = encapsulate(this.sequence, true);
         sql.append(SPACE)
            .append(KEYWORD_SEQUENCE)
            .append(SPACE)
            .append(sequenceName);
     }
-
 
     /**
      * Generate start.
@@ -367,7 +365,7 @@ public class CreateSequenceBuilder extends AbstractCreateSqlBuilder {
      */
     protected void generateResetBy(StringBuilder sql) {
         if (this.resetBy != null) {
-            generateSequenceParameter(sql, KEYWORD_SEQUENCE_RESET_BY, String.valueOf(this.resetBy));
+            generateSequenceParameter(sql, KEYWORD_SEQUENCE_RESET_BY, this.resetBy);
         }
 
     }

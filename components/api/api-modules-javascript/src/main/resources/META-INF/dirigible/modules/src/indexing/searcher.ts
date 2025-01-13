@@ -16,22 +16,31 @@
 
 const IndexingFacade = Java.type("org.eclipse.dirigible.components.api.indexing.IndexingFacade");
 
-export function search(index, term) {
-	const results = IndexingFacade.search(index, term);
-	return JSON.parse(results);
-};
+export class Searcher {
 
-export function before(index, date) {
-	const results = IndexingFacade.before(index, '' + date.getTime());
-	return JSON.parse(results);
-};
+	public static search(index: string, term: string): { [key: string]: string }[] {
+		const results = IndexingFacade.search(index, term);
+		return JSON.parse(results);
+	}
 
-export function after(index, date) {
-	const results = IndexingFacade.after(index, '' + date.getTime());
-	return JSON.parse(results);
-};
+	public static before(index: string, date: Date): { [key: string]: string }[] {
+		const results = IndexingFacade.before(index, '' + date.getTime());
+		return JSON.parse(results);
+	}
 
-export function between(index, lower, upper) {
-	const results = IndexingFacade.between(index, '' + lower.getTime(), '' + upper.getTime());
-	return JSON.parse(results);
-};
+	public static after(index: string, date: Date): { [key: string]: string }[] {
+		const results = IndexingFacade.after(index, '' + date.getTime());
+		return JSON.parse(results);
+	}
+
+	public static between(index: string, lower: Date, upper: Date): { [key: string]: string }[] {
+		const results = IndexingFacade.between(index, '' + lower.getTime(), '' + upper.getTime());
+		return JSON.parse(results);
+	}
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Searcher;
+}

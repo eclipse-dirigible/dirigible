@@ -1,0 +1,7 @@
+{
+    "location": "/integration-tests-project/test-queue-listener.listener",
+    "name": "integration-tests-queue",
+    "kind": "Q",
+    "handler": "integration-tests-project/background-handler.js",
+    "description": "test-queue-listener description"
+}

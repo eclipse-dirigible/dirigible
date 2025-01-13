@@ -1,0 +1,102 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" ng-app="transfer" ng-controller="TransferController" xmlns="http://www.w3.org/1999/xhtml">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="configs/transfer-view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="js/transfer.js"></script>
+        <style>
+            .logLine {
+                background: var(--fdList_Item_Background_Color);
+            }
+
+            [data-loglevel='INFO'] {
+                color: var(--sapInformativeTextColor);
+            }
+
+            [data-loglevel='WARN'] {
+                color: var(--sapCriticalTextColor);
+            }
+
+            [data-loglevel='ERROR'] {
+                color: var(--sapNegativeTextColor);
+            }
+
+        </style>
+    </head>
+
+    <body class="bk-vbox">
+        <div class="fd-container fd-form-layout-grid-container fd-margin-top--tiny fd-margin-begin-end--tiny">
+            <div class="fd-row">
+                <div class="fd-col fd-col-lg--12 fd-col--wrap">
+                    <div class="fd-row">
+                        <div class="fd-col fd-col--12 fd-col-md--12 fd-col-lg--12">
+                            <div class="fd-row">
+                                <div class="fd-col fd-col--6">
+                                    <label class="fd-form-label" for="input-workspace">Source:</label>
+                                </div>
+                                <div class="fd-col fd-col--6">
+                                    <label class="fd-form-label" for="input-projects">Target:</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="fd-col fd-col--12 fd-col-md--12 fd-col-lg--12">
+                            <div class="fd-row">
+                                <div class="fd-col fd-col--3 fd-col-md--3 fd-col-lg--3 fd-col-xl--3">
+                                    <bk-select class="bk-full-width" ng-model="definition.selectedSourceDatabase" ng-change="databaseSourceChanged()" dropdown-fixed="true">
+                                        <bk-option text="{{ database.text }}" value="database.value" ng-repeat="database in databases track by $index"></bk-option>
+                                    </bk-select>
+                                </div>
+                                <div class="fd-col fd-col--3 fd-col-md--3 fd-col-lg--3 fd-col-xl--3">
+                                    <bk-select class="bk-full-width" ng-model="definition.selectedSourceDatasource" ng-change="datasourceSourceChanged()">
+                                        <bk-option text="{{ datasource.text }}" value="datasource.value" ng-repeat="datasource in sourceDatasources track by $index"></bk-option>
+                                    </bk-select>
+                                </div>
+                                <div class="fd-col fd-col--3 fd-col-md--3 fd-col-lg--3 fd-col-xl--3">
+                                    <bk-select class="bk-full-width" ng-model="definition.selectedTargetDatabase" ng-change="databaseTargetChanged()" dropdown-fixed="true">
+                                        <bk-option text="{{ database.text }}" value="database.value" ng-repeat="database in databases  track by $index"></bk-option>
+                                    </bk-select>
+                                </div>
+                                <div class="fd-col fd-col--3 fd-col-md--3 fd-col-lg--3 fd-col-xl--3">
+                                    <bk-select class="bk-full-width" ng-model="definition.selectedTargetDatasource" ng-change="datasourceTargetChanged()">
+                                        <bk-option text="{{ datasource.text }}" value="datasource.value" ng-repeat="datasource in targetDatasources  track by $index"></bk-option>
+                                    </bk-select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <bk-toolbar compact="true" type="transparent">
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-button state="transparent" glyph="sap-icon--media-play" title="Start Transfer" aria-label="Start Transfer" ng-click="startTransfer()"></bk-button>
+            <bk-button state="transparent" glyph="sap-icon--media-pause" title="Stop Transfer" aria-label="Stop Transfer" ng-click="stopTransfer()"></bk-button>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button state="transparent" glyph="sap-icon--clear-all" title="Clear Log" aria-label="Clear Log" ng-click="clearLog()"></bk-button>
+        </bk-toolbar>
+        <div id="logContent" class="bk-stretch" bk-scrollbar>
+            <div class="fd-text bk-padding--tiny logLine" data-loglevel="{{::log.level}}" ng-repeat="log in logs track by log.id">
+                {{::log.date}} {{::log.message}}
+            </div>
+        </div>
+        <theme></theme>
+    </body>

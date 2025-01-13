@@ -1,0 +1,5 @@
+{
+    "module": "ide-bpm-workspace/services/bpm-historic-process-instances-view.js",
+    "extensionPoint": "ide-view",
+    "description": "Business Historic Process Instances"
+}

@@ -3,9 +3,9 @@
     <div class="fd-panel__expand">
       <i ng-class="{'sap-icon--slim-arrow-right': !view.expanded, 'sap-icon--slim-arrow-down': view.expanded}"></i>
     </div>
-    <h4 class="fd-panel__title">{{view.label}}</h4>
+    <h4 class="fd-panel__title">{{::view.label}}</h4>
   </div>
   <div role="region" class="fd-panel__content" aria-hidden="{{!view.expanded}}" ng-style="view.style">
-    <iframe loading="{{view.loadType}}" ng-src="{{view.path}}" data-parameters="{{getParams()}}"></iframe>
+    <iframe loading="{{::view.loadType}}" ng-src="{{::view.path}}" data-parameters="{{getParams()}}"></iframe>
   </div>
 </div>

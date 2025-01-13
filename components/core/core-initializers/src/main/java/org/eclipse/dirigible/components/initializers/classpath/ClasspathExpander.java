@@ -1,14 +1,22 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.initializers.classpath;
+
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
+import org.eclipse.dirigible.repository.api.IRepository;
+import org.eclipse.dirigible.repository.api.IRepositoryStructure;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.io.IOException;
@@ -21,21 +29,13 @@ import java.util.Enumeration;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.IOUtils;
-import org.eclipse.dirigible.repository.api.IRepository;
-import org.eclipse.dirigible.repository.api.IRepositoryStructure;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 /**
  * The Class ClasspathExpander.
  */
 @Component
 public class ClasspathExpander {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(ClasspathExpander.class);
     /**
      * The Constant logger.
      */
@@ -59,7 +59,7 @@ public class ClasspathExpander {
      */
     public void expandContent() {
         expandContent("dirigible");
-        expandContent("resources" + File.separator + "webjars");
+        // expandContent("resources" + File.separator + "webjars");
     }
 
     /**
@@ -68,6 +68,8 @@ public class ClasspathExpander {
      * @param root the root
      */
     private void expandContent(String root) {
+        long startedAtMillis = System.currentTimeMillis();
+        LOGGER.info("Expanding the content of [{}]...", root);
         try {
             Enumeration<URL> urls = ClasspathExpander.class.getClassLoader()
                                                            .getResources("META-INF");
@@ -87,9 +89,10 @@ public class ClasspathExpander {
                     logDirectoryExpandingError(url.toString(), e);
                 }
             }
-
+            long elapsedMillis = System.currentTimeMillis() - startedAtMillis;
+            LOGGER.info("The content of [{}] has been expanded. It took [{}] millis", root, elapsedMillis);
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Failed to expand content for " + root, e);
         }
     }
 
@@ -105,6 +108,10 @@ public class ClasspathExpander {
         JarURLConnection jarUrlConnection = (JarURLConnection) urlConnection;
         try (JarFile jar = jarUrlConnection.getJarFile()) {
             Enumeration<JarEntry> entries = jar.entries();
+            JarEntry maybeSkip = jar.getJarEntry("META-INF/dirigible/.skip");
+            if (maybeSkip != null) {
+                return;
+            }
             while (entries.hasMoreElements()) {
                 JarEntry entry = entries.nextElement();
                 if (entry.getName()

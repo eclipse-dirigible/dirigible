@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.ide.workspace.service;
 
@@ -18,11 +17,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.dirigible.commons.api.helpers.ContentTypeHelper;
 import org.eclipse.dirigible.commons.api.helpers.FileSystemUtils;
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.api.extensions.ExtensionsFacade;
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.api.utils.UrlFacade;
@@ -242,7 +242,21 @@ public class WorkspaceService {
      */
     public Project createProject(String workspace, String project) {
         Workspace workspaceObject = getWorkspace(workspace);
-        return workspaceObject.createProject(project);
+        Project projectObject = workspaceObject.createProject(project);
+        boolean isTS = Boolean.parseBoolean(Configuration.get("DIRIGIBLE_PROJECT_TYPESCRIPT", "true"));
+        if (isTS) {
+            try {
+                projectObject.createFile("project.json",
+                        String.format(new String(IOUtils.toByteArray(WorkspaceService.class.getResourceAsStream("/project.json_"))),
+                                project)
+                              .getBytes());
+                projectObject.createFile("tsconfig.json",
+                        IOUtils.toByteArray(WorkspaceService.class.getResourceAsStream("/tsconfig.json_")));
+            } catch (IOException e) {
+                logger.error("Error on creating 'project.json' and 'tsconfig' " + e.getMessage());
+            }
+        }
+        return projectObject;
     }
 
     /**
@@ -778,7 +792,7 @@ public class WorkspaceService {
                     }
                 } catch (Exception | Error e) {
                     if (logger.isErrorEnabled()) {
-                        logger.error(e.getMessage(), e);
+                        logger.error("Workspace On Save Extension {} failed with: {}.", module, e.getMessage(), e);
                     }
                 }
             }

@@ -12,30 +12,39 @@
 
 const UserFacade = Java.type("org.eclipse.dirigible.components.api.security.UserFacade");
 
-export function getName() {
-    return UserFacade.getName();
-};
+export class User {
 
-export function isInRole(role) {
-    return UserFacade.isInRole(role);
-};
+    public static getName(): string {
+        return UserFacade.getName();
+    }
 
-export function getTimeout() {
-    return UserFacade.getTimeout();
-};
+    public static isInRole(role: string): boolean {
+        return UserFacade.isInRole(role);
+    }
 
-export function getAuthType() {
-    return UserFacade.getAuthType();
-};
+    public static getTimeout(): number {
+        return UserFacade.getTimeout();
+    }
 
-export function getSecurityToken() {
-    return UserFacade.getSecurityToken();
-};
+    public static getAuthType(): string {
+        return UserFacade.getAuthType();
+    }
 
-export function getInvocationCount() {
-    return UserFacade.getInvocationCount();
-};
+    public static getSecurityToken(): string {
+        return UserFacade.getSecurityToken();
+    }
 
-export function getLanguage() {
-    return UserFacade.getLanguage();
-};
+    public static getInvocationCount(): number {
+        return UserFacade.getInvocationCount();
+    }
+
+    public static getLanguage(): string {
+        return UserFacade.getLanguage();
+    }
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = User;
+}

@@ -1,0 +1,5 @@
+{
+    "module": "perspective-operations/api/artefacts/data-schemas/artefacts-data-schemas.mjs",
+    "extensionPoint": "platform-operations-artefacts",
+    "description": "Data Schemas Artefacts Extension"
+}

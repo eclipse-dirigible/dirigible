@@ -1,22 +1,21 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.commons.api.helpers;
 
 import java.io.InputStreamReader;
 import java.lang.reflect.Type;
-
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
 
 /**
  * The GsonHelper utility class.
@@ -103,7 +102,11 @@ public class GsonHelper {
      * @return the json element
      */
     public static JsonElement parseJson(String src) {
-        return JsonParser.parseString(src);
+        try {
+            return JsonParser.parseString(src);
+        } catch (JsonSyntaxException ex) {
+            throw new JsonSyntaxException("Invalid json content [" + src + "]", ex);
+        }
     }
 
 }

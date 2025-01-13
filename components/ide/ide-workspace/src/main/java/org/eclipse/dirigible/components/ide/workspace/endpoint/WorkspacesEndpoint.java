@@ -1,39 +1,32 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.ide.workspace.endpoint;
 
 import static java.text.MessageFormat.format;
-
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-
-import javax.annotation.Nullable;
-import javax.validation.Valid;
-
 import org.apache.commons.codec.binary.Base64;
-import org.eclipse.dirigible.components.engine.typescript.TypeScriptService;
 import org.eclipse.dirigible.commons.api.helpers.ContentTypeHelper;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
-import org.eclipse.dirigible.components.ide.workspace.domain.*;
+import org.eclipse.dirigible.components.ide.workspace.domain.File;
+import org.eclipse.dirigible.components.ide.workspace.domain.Folder;
+import org.eclipse.dirigible.components.ide.workspace.domain.Project;
+import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
 import org.eclipse.dirigible.components.ide.workspace.json.ProjectDescriptor;
 import org.eclipse.dirigible.components.ide.workspace.json.WorkspaceDescriptor;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
-import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -49,6 +42,8 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import jakarta.annotation.Nullable;
+import jakarta.validation.Valid;
 
 /**
  * The Class WorkspaceEndpoint.
@@ -57,20 +52,45 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_IDE + "workspaces")
 public class WorkspacesEndpoint {
 
-    /** The Constant logger. */
-    private static final Logger logger = LoggerFactory.getLogger(WorkspacesEndpoint.class);
+    /** The Constant FAILED_TO_CREATE_PROJECT_0_IN_WORKSPACE_1. */
+    private static final String FAILED_TO_CREATE_PROJECT_0_IN_WORKSPACE_1 = "Failed to create project: [{0}] in workspace: [{1}]";
+
+    /** The Constant FILE_0_ALREADY_EXISTS_IN_PROJECT_1_IN_WORKSPACE_2. */
+    private static final String FILE_0_ALREADY_EXISTS_IN_PROJECT_1_IN_WORKSPACE_2 =
+            "File: [{0}] already exists in project: [{1}] in workspace: [{2}].";
+
+    /** The Constant FILE_0_DOES_NOT_EXIST_IN_PROJECT_1_IN_WORKSPACE_2. */
+    private static final String FILE_0_DOES_NOT_EXIST_IN_PROJECT_1_IN_WORKSPACE_2 =
+            "File: [{0}] does not exist in project: [{1}] in workspace: [{2}].";
+
+    /** The Constant FOLDER_0_ALREADY_EXISTS_IN_PROJECT_1_IN_WORKSPACE_2. */
+    private static final String FOLDER_0_ALREADY_EXISTS_IN_PROJECT_1_IN_WORKSPACE_2 =
+            "Folder: [{0}] already exists in project: [{1}] in workspace: [{2}].";
+
+    /** The Constant PATH_0_IN_PROJECT_1_IN_WORKSPACE_2_DOES_NOT_EXIST. */
+    private static final String PATH_0_IN_PROJECT_1_IN_WORKSPACE_2_DOES_NOT_EXIST =
+            "Path: [{0}] in project: [{1}] in workspace: [{2}] does not exist";
+
+    /** The Constant FAILED_TO_DELETE_PROJECT_0_IN_WORKSPACE_1_BECAUSE_IT_DOES_NOT_EXIST. */
+    private static final String FAILED_TO_DELETE_PROJECT_0_IN_WORKSPACE_1_BECAUSE_IT_DOES_NOT_EXIST =
+            "Failed to delete project: [{0}] in workspace: [{1}], because it does not exist";
+
+    /** The Constant PROJECT_0_DOES_NOT_EXIST_IN_WORKSPACE_1. */
+    private static final String PROJECT_0_DOES_NOT_EXIST_IN_WORKSPACE_1 = "Project: [{0}] does not exist in workspace: [{1}].";
+
+    /** The Constant FAILED_TO_DELETE_WORKSPACE_0_BECAUSE_IT_DOES_NOT_EXIST. */
+    private static final String FAILED_TO_DELETE_WORKSPACE_0_BECAUSE_IT_DOES_NOT_EXIST =
+            "Failed to delete workspace: [{0}], because it does not exist";
+
+    /** The Constant FAILED_TO_CREATE_WORKSPACE_0. */
+    private static final String FAILED_TO_CREATE_WORKSPACE_0 = "Failed to create workspace: [{0}]";
+
+    /** The Constant WORKSPACE_0_DOES_NOT_EXIST. */
+    private static final String WORKSPACE_0_DOES_NOT_EXIST = "Workspace: [{0}] does not exist.";
 
     /** The workspace service. */
     @Autowired
     private WorkspaceService workspaceService;
-
-    /** The repository. */
-    @Autowired
-    private IRepository repository;
-
-    /** The type script service. */
-    @Autowired
-    private TypeScriptService typeScriptService;
 
     // Workspace
 
@@ -98,7 +118,7 @@ public class WorkspacesEndpoint {
     @GetMapping(value = "/{workspace}", produces = "application/json")
     public ResponseEntity<WorkspaceDescriptor> getWorkspace(@PathVariable("workspace") String workspace) {
         if (!workspaceService.existsWorkspace(workspace)) {
-            String error = format("Workspace {0} does not exist.", workspace);
+            String error = format(WORKSPACE_0_DOES_NOT_EXIST, workspace);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
         }
 
@@ -121,7 +141,7 @@ public class WorkspacesEndpoint {
 
         Workspace workspaceObject = workspaceService.createWorkspace(workspace);
         if (!workspaceObject.exists()) {
-            String error = format("Failed to create workspace {0}", workspace);
+            String error = format(FAILED_TO_CREATE_WORKSPACE_0, workspace);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, error);
         }
 
@@ -138,7 +158,7 @@ public class WorkspacesEndpoint {
     @DeleteMapping("/{workspace}")
     public ResponseEntity<String> deleteWorkspace(@PathVariable("workspace") String workspace) {
         if (!workspaceService.existsWorkspace(workspace)) {
-            String error = format("Failed to delete workspace {0}, because it does not exist", workspace);
+            String error = format(FAILED_TO_DELETE_WORKSPACE_0_BECAUSE_IT_DOES_NOT_EXIST, workspace);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
         }
 
@@ -161,12 +181,12 @@ public class WorkspacesEndpoint {
             @PathVariable("project") String project) {
 
         if (!workspaceService.existsWorkspace(workspace)) {
-            String error = format("Workspace {0} does not exist.", workspace);
+            String error = format(WORKSPACE_0_DOES_NOT_EXIST, workspace);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
         }
 
         if (!workspaceService.existsProject(workspace, project)) {
-            String error = format("Project {0} does not exist in workspace {1}.", project, workspace);
+            String error = format(PROJECT_0_DOES_NOT_EXIST_IN_WORKSPACE_1, project, workspace);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
         }
 
@@ -190,7 +210,7 @@ public class WorkspacesEndpoint {
     public ResponseEntity<URI> createProject(@PathVariable("workspace") String workspace, @PathVariable("project") String project)
             throws URISyntaxException {
         if (!workspaceService.existsWorkspace(workspace)) {
-            String error = format("Workspace {0} does not exist.", workspace);
+            String error = format(WORKSPACE_0_DOES_NOT_EXIST, workspace);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
         }
 
@@ -200,7 +220,7 @@ public class WorkspacesEndpoint {
 
         Project projectObject = workspaceService.createProject(workspace, project);
         if (!projectObject.exists()) {
-            String error = format("Failed to create project {0} in workspace {1}", project, workspace);
+            String error = format(FAILED_TO_CREATE_PROJECT_0_IN_WORKSPACE_1, project, workspace);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, error);
         }
 
@@ -222,12 +242,12 @@ public class WorkspacesEndpoint {
     public ResponseEntity<String> deleteProject(@PathVariable("workspace") String workspace, @PathVariable("project") String project)
             throws IOException {
         if (!workspaceService.existsWorkspace(workspace)) {
-            String error = format("Workspace {0} does not exist.", workspace);
+            String error = format(WORKSPACE_0_DOES_NOT_EXIST, workspace);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
         }
 
         if (!workspaceService.existsProject(workspace, project)) {
-            String error = format("Failed to delete project {0} in workspace {1}, because it does not exist", project, workspace);
+            String error = format(FAILED_TO_DELETE_PROJECT_0_IN_WORKSPACE_1_BECAUSE_IT_DOES_NOT_EXIST, project, workspace);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
         }
 
@@ -256,12 +276,12 @@ public class WorkspacesEndpoint {
             path = path.substring(1);
 
         if (!workspaceService.existsWorkspace(workspace)) {
-            String error = format("Workspace {0} does not exist.", workspace);
+            String error = format(WORKSPACE_0_DOES_NOT_EXIST, workspace);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
         }
 
         if (!workspaceService.existsProject(workspace, project)) {
-            String error = format("Project {0} does not exist in Workspace {1}.", project, workspace);
+            String error = format(PROJECT_0_DOES_NOT_EXIST_IN_WORKSPACE_1, project, workspace);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
         }
 
@@ -269,29 +289,24 @@ public class WorkspacesEndpoint {
         if (!file.exists()) {
             Folder folder = workspaceService.getFolder(workspace, project, path);
             if (!folder.exists()) {
-                String error = format("Path {0} in project {1} in workspace {1} does not exist", path, project, workspace);
+                String error = format(PATH_0_IN_PROJECT_1_IN_WORKSPACE_2_DOES_NOT_EXIST, path, project, workspace);
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
             }
             final HttpHeaders httpHeaders = new HttpHeaders();
             httpHeaders.setContentType(MediaType.APPLICATION_JSON);
-            return new ResponseEntity(workspaceService.renderFolderTree(workspace, folder), httpHeaders, HttpStatus.OK);
+            return new ResponseEntity<>(workspaceService.renderFolderTree(workspace, folder), httpHeaders, HttpStatus.OK);
         }
-        if ((headerContentType != null) && ContentTypeHelper.APPLICATION_JSON.equals(headerContentType)) {
+        if (ContentTypeHelper.APPLICATION_JSON.equals(headerContentType)) {
             final HttpHeaders httpHeaders = new HttpHeaders();
             httpHeaders.setContentType(MediaType.APPLICATION_JSON);
-            return new ResponseEntity(workspaceService.renderFileDescription(workspace, file), httpHeaders, HttpStatus.OK);
+            return new ResponseEntity<>(workspaceService.renderFileDescription(workspace, file), httpHeaders, HttpStatus.OK);
         }
         final HttpHeaders httpHeaders = new HttpHeaders();
         httpHeaders.setContentType(MediaType.valueOf(file.getContentType()));
         if (file.isBinary()) {
-            return new ResponseEntity(file.getContent(), httpHeaders, HttpStatus.OK);
+            return new ResponseEntity<>(file.getContent(), httpHeaders, HttpStatus.OK);
         }
-        if (typeScriptService.isTypeScriptFile(path)) {
-            var tsFile = new TypeScriptFile(repository, workspace, project, path);
-            httpHeaders.setContentType(MediaType.APPLICATION_JSON);
-            return new ResponseEntity<>(tsFile, httpHeaders, HttpStatus.OK);
-        }
-        return new ResponseEntity(new String(file.getContent(), StandardCharsets.UTF_8), httpHeaders, HttpStatus.OK);
+        return new ResponseEntity<>(new String(file.getContent(), StandardCharsets.UTF_8), httpHeaders, HttpStatus.OK);
     }
 
     /**
@@ -317,19 +332,19 @@ public class WorkspacesEndpoint {
         }
 
         if (!workspaceService.existsWorkspace(workspace)) {
-            String error = format("Workspace {0} does not exist.", workspace);
+            String error = format(WORKSPACE_0_DOES_NOT_EXIST, workspace);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
         }
 
         if (!workspaceService.existsProject(workspace, project)) {
-            String error = format("Project {0} does not exist in workspace {1}.", project, workspace);
+            String error = format(PROJECT_0_DOES_NOT_EXIST_IN_WORKSPACE_1, project, workspace);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
         }
 
         if (path.endsWith(IRepositoryStructure.SEPARATOR)) {
             Folder folder = workspaceService.getFolder(workspace, project, path);
             if (folder.exists()) {
-                String error = format("Folder {0} already exists in project {1} in workspace {2}.", path, project, workspace);
+                String error = format(FOLDER_0_ALREADY_EXISTS_IN_PROJECT_1_IN_WORKSPACE_2, path, project, workspace);
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
             }
 
@@ -340,11 +355,11 @@ public class WorkspacesEndpoint {
 
         File file = workspaceService.getFile(workspace, project, path);
         if (file.exists()) {
-            String error = format("File {0} already exists in project {1} in workspace {2}.", path, project, workspace);
+            String error = format(FILE_0_ALREADY_EXISTS_IN_PROJECT_1_IN_WORKSPACE_2, path, project, workspace);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
         }
 
-        if (headerContentTransferEncoding != null && "base64".equals(headerContentTransferEncoding)) {
+        if ("base64".equals(headerContentTransferEncoding)) {
             content = Base64.decodeBase64(content);
         }
         file = workspaceService.createFile(workspace, project, path, content, headerContentType);
@@ -400,19 +415,19 @@ public class WorkspacesEndpoint {
         }
 
         if (!workspaceService.existsWorkspace(workspace)) {
-            String error = format("Workspace {0} does not exist.", workspace);
+            String error = format(WORKSPACE_0_DOES_NOT_EXIST, workspace);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
         }
 
         if (!workspaceService.existsProject(workspace, project)) {
-            String error = format("Project {0} does not exist in workspace {1}.", project, workspace);
+            String error = format(PROJECT_0_DOES_NOT_EXIST_IN_WORKSPACE_1, project, workspace);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
         }
 
         File file = workspaceService.getFile(workspace, project, path);
         if (!file.exists()) {
-            String error = format("File {0} already exists in project {1} in workspace {2}.", path, project, workspace);
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
+            String error = format(FILE_0_DOES_NOT_EXIST_IN_PROJECT_1_IN_WORKSPACE_2, path, project, workspace);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
         }
 
         file = workspaceService.updateFile(workspace, project, path, content);
@@ -456,12 +471,12 @@ public class WorkspacesEndpoint {
     public ResponseEntity<?> deleteFile(@PathVariable("workspace") String workspace, @PathVariable("project") String project,
             @PathVariable("path") String path) throws URISyntaxException {
         if (!workspaceService.existsWorkspace(workspace)) {
-            String error = format("Workspace {0} does not exist.", workspace);
+            String error = format(WORKSPACE_0_DOES_NOT_EXIST, workspace);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
         }
 
         if (!workspaceService.existsProject(workspace, project)) {
-            String error = format("Project {0} does not exist in workspace {1}.", project, workspace);
+            String error = format(PROJECT_0_DOES_NOT_EXIST_IN_WORKSPACE_1, project, workspace);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
         }
 
@@ -469,8 +484,8 @@ public class WorkspacesEndpoint {
         if (!folder.exists()) {
             File file = workspaceService.getFile(workspace, project, path);
             if (!file.exists()) {
-                String error = format("File {0} already exists in project {1} in workspace {2}.", path, project, workspace);
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
+                String error = format(FILE_0_DOES_NOT_EXIST_IN_PROJECT_1_IN_WORKSPACE_2, path, project, workspace);
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
             }
 
             workspaceService.deleteFile(workspace, project, path);

@@ -1,6 +1,35 @@
-angular.module('view', [])
-.controller('ViewController', ['$scope', function ($scope) {
+/*
+ * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v2.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ */
+const viewApp = angular.module('{{fileName}}', ['ideUI', 'ideView']);
 
-	$scope.message = 'World';
+viewApp.controller('ViewController', ['$scope', '$window', 'messageHub', 'ViewParameters', function ($scope, $window, messageHub, ViewParameters) {
+    $scope.state = {
+        isBusy: true,
+        error: false,
+        busyText: 'Loading...',
+    };
+	$scope.viewMessageTitle = 'This is a basic view';
+	$scope.viewMessageSubitle = 'To add more widgets, please see the "HTML5 Widgets (AngularJS)" template.';
+	$scope.errorMessage = '';
 
+	$scope.openView = function () {
+		messageHub.openView('welcome');
+	};
+
+    $scope.dataParameters = ViewParameters.get();
+    if (!$scope.dataParameters.hasOwnProperty('perspectiveId')) {
+        $scope.state.error = true;
+        $scope.errorMessage = 'This view is not opened inside a perspective!';
+    } else {
+        $scope.state.isBusy = false;
+    }
 }]);

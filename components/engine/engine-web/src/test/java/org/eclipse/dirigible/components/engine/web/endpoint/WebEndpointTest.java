@@ -1,36 +1,19 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.engine.web.endpoint;
 
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-
 import org.apache.commons.io.FileUtils;
-import org.eclipse.dirigible.components.engine.web.exposure.ExposeManager;
-import org.eclipse.dirigible.components.engine.web.repository.ExposeRepository;
 import org.eclipse.dirigible.components.initializers.classpath.ClasspathExpander;
 import org.eclipse.dirigible.components.initializers.definition.DefinitionRepository;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationWatcher;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,6 +30,16 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 /**
  * The Class WebEndpointTest.
  */
@@ -58,10 +51,6 @@ import org.springframework.web.context.WebApplicationContext;
 @EntityScan("org.eclipse.dirigible.components")
 @Transactional
 public class WebEndpointTest {
-
-    /** The expose repository. */
-    @Autowired
-    private ExposeRepository exposeRepository;
 
     /** The mock mvc. */
     @Autowired
@@ -92,29 +81,8 @@ public class WebEndpointTest {
     DefinitionRepository definitionRepository;
 
     /** The project json. */
-    private String projectJson = "{\n" + "    \"guid\":\"demo\",\n" + "    \"repository\":{\n" + "        \"type\":\"git\",\n"
-            + "        \"branch\":\"master\",\n" + "        \"url\":\"https://github.com/dirigiblelabs/demo.git\"\n" + "    },\n"
-            + "    \"exposes\": [\n" + "        \"ui\",\n" + "        \"samples\"\n" + "    ]\n" + "}\n" + "";
-
-    /**
-     * Setup.
-     *
-     * @throws Exception the exception
-     */
-    @BeforeEach
-    public void setup() throws Exception {
-        cleanup();
-    }
-
-    /**
-     * Cleanup.
-     *
-     * @throws Exception the exception
-     */
-    @AfterEach
-    public void cleanup() throws Exception {
-        exposeRepository.deleteAll();
-    }
+    private static final String projectJson = "{\n" + "    \"guid\":\"demo\",\n" + "    \"repository\":{\n" + "        \"type\":\"git\",\n"
+            + "        \"branch\":\"master\",\n" + "        \"url\":\"https://github.com/dirigiblelabs/demo.git\"\n" + "    }}";
 
     /**
      * Load the artefact.
@@ -140,17 +108,10 @@ public class WebEndpointTest {
         try {
             synchronizationWatcher.force();
             synchronizationProcessor.processSynchronizers();
-            assertTrue(ExposeManager.listRegisteredProjects()
-                                    .size() > 0);
-            assertTrue(ExposeManager.isPathExposed("demo/ui"));
-            assertFalse(ExposeManager.isPathExposed("demo/hidden"));
             mockMvc.perform(get("/services/web/demo/ui/hello-world.txt"))
                    .andDo(print())
                    .andExpect(content().string(containsString("Hello World!")))
                    .andExpect(status().is2xxSuccessful());
-            mockMvc.perform(get("/services/web/demo/hidden/hidden.txt"))
-                   .andDo(print())
-                   .andExpect(status().isForbidden());
             mockMvc.perform(get("/services/web/demo/ui/not-existing.txt"))
                    .andDo(print())
                    .andExpect(status().isNotFound());

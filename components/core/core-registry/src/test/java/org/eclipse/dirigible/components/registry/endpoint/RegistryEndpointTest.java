@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.registry.endpoint;
 
@@ -31,6 +30,9 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.context.WebApplicationContext;
 
+/**
+ * The Class RegistryEndpointTest.
+ */
 @WithMockUser
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
@@ -38,21 +40,31 @@ import org.springframework.web.context.WebApplicationContext;
 @ComponentScan(basePackages = {"org.eclipse.dirigible.components.*"})
 public class RegistryEndpointTest {
 
+    /** The repository. */
     @Autowired
     private IRepository repository;
 
+    /** The registry service. */
     @Autowired
     private RegistryService registryService;
 
+    /** The mock mvc. */
     @Autowired
     private MockMvc mockMvc;
 
+    /** The wac. */
     @Autowired
     protected WebApplicationContext wac;
 
+    /** The spring security filter chain. */
     @Autowired
     private FilterChainProxy springSecurityFilterChain;
 
+    /**
+     * Setup.
+     *
+     * @throws Exception the exception
+     */
     @BeforeEach
     public void setup() throws Exception {
         repository.createResource("/registry/public/test1.txt");
@@ -60,11 +72,22 @@ public class RegistryEndpointTest {
         repository.createResource("/registry/public/a/test3.txt");
     }
 
+    /**
+     * Gets the resource.
+     *
+     * @return the resource
+     */
     @Test
     public void getResource() {
         assertNotNull(registryService.getResource("test1.txt"));
     }
 
+    /**
+     * Gets the resource by path.
+     *
+     * @return the resource by path
+     * @throws Exception the exception
+     */
     @Test
     public void getResourceByPath() throws Exception {
         mockMvc.perform(get("/services/core/registry/{path}", "a/test2.txt"))
@@ -72,6 +95,9 @@ public class RegistryEndpointTest {
                .andExpect(status().is2xxSuccessful());
     }
 
+    /**
+     * The Class TestConfiguration.
+     */
     @SpringBootApplication
     static class TestConfiguration {
     }

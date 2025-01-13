@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.websockets.endpoint;
 
@@ -33,6 +32,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
+/**
+ * The Class WebsocketEndpointTest.
+ */
 @WithMockUser
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
@@ -40,21 +42,30 @@ import org.springframework.web.context.WebApplicationContext;
 @ComponentScan(basePackages = {"org.eclipse.dirigible.components"})
 @Transactional
 public class WebsocketEndpointTest {
+
+    /** The websocket service. */
     @Autowired
     private WebsocketService websocketService;
 
+    /** The websocket repository. */
     @Autowired
     private WebsocketRepository websocketRepository;
 
+    /** The mock mvc. */
     @Autowired
     private MockMvc mockMvc;
 
+    /** The wac. */
     @Autowired
     protected WebApplicationContext wac;
 
+    /** The spring security filter chain. */
     @Autowired
     private FilterChainProxy springSecurityFilterChain;
 
+    /**
+     * Setup.
+     */
     @BeforeEach
     public void setup() {
 
@@ -65,11 +76,19 @@ public class WebsocketEndpointTest {
         websocketService.save(new Websocket("/a/b/c/w3.websocket", "name3", "description", "endpoint3", "handler3", "engine3"));
     }
 
+    /**
+     * Cleanup.
+     */
     @AfterEach
     public void cleanup() {
         websocketRepository.deleteAll();
     }
 
+    /**
+     * Find all extension points.
+     *
+     * @throws Exception the exception
+     */
     @Test
     public void findAllExtensionPoints() throws Exception {
         mockMvc.perform(get("/services/websockets"))
@@ -78,6 +97,9 @@ public class WebsocketEndpointTest {
         // .andExpect(jsonPath("$.content[0].location").value("/a/b/c/w1.websocket"));
     }
 
+    /**
+     * The Class TestConfiguration.
+     */
     @SpringBootApplication
     static class TestConfiguration {
     }

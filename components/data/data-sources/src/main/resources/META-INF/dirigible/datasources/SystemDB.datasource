@@ -1,10 +1,10 @@
 {
   "location":"/datasources/SystemDB.datasource",
   "name":"SystemDB",
-  "driver":"${DIRIGIBLE_DATASOURCE_SYSTEM_DRIVER}.{org.h2.Driver}",
-  "url":"${DIRIGIBLE_DATASOURCE_SYSTEM_URL}.{jdbc:h2:file:./target/dirigible/h2/SystemDB}",
-  "username":"${DIRIGIBLE_DATASOURCE_SYSTEM_USERNAME}.{sa}",
-  "password":"${DIRIGIBLE_DATASOURCE_SYSTEM_PASSWORD}.{}",
+  "driver":"${DIRIGIBLE_DATABASE_SYSTEM_DRIVER}.{org.h2.Driver}",
+  "url":"${DIRIGIBLE_DATABASE_SYSTEM_URL}.{jdbc:h2:file:./target/dirigible/h2/SystemDB;LOCK_TIMEOUT=10000}",
+  "username":"${DIRIGIBLE_DATABASE_SYSTEM_USERNAME}.{sa}",
+  "password":"${DIRIGIBLE_DATABASE_SYSTEM_PASSWORD}.{}",
   "properties":[
   ]
 }

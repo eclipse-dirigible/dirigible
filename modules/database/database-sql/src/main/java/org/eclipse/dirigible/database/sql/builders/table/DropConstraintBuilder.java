@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.builders.table;
 
@@ -65,11 +64,6 @@ public class DropConstraintBuilder extends AbstractDropSqlBuilder {
      *
      * @return the string
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlBuilder#generate()
-     */
     @Override
     public String generate() {
 
@@ -99,7 +93,7 @@ public class DropConstraintBuilder extends AbstractDropSqlBuilder {
      * @param sql the sql
      */
     protected void generateAlter(StringBuilder sql) {
-        String tableName = (isCaseSensitive()) ? encapsulate(this.getTable(), true) : this.getTable();
+        String tableName = encapsulate(this.getTable(), true);
         sql.append(ALTER)
            .append(SPACE)
            .append(TABLE)
@@ -114,7 +108,7 @@ public class DropConstraintBuilder extends AbstractDropSqlBuilder {
      * @param sql the sql
      */
     protected void generateConstraint(StringBuilder sql) {
-        String constraintName = (isCaseSensitive()) ? encapsulate(this.getConstraint()) : this.getConstraint();
+        String constraintName = encapsulate(this.getConstraint());
         sql.append(SPACE)
            .append(KEYWORD_CONSTRAINT)
            .append(SPACE)

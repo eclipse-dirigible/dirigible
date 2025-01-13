@@ -1,4 +1,4 @@
-declare module "@dirigible/qldb" {
+declare module "sdk/qldb" {
     class QLDBRepository {
         /**
          *  Constructs a repository with given ledger and table.

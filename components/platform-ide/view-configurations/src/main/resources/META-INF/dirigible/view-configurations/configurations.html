@@ -1,0 +1,60 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="configurations" ng-controller="ConfigurationsController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-artefacts/configs/artefacts-view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+    </head>
+
+    <body bk-scrollbar>
+        <table bk-table display-mode="compact" outer-borders="bottom">
+            <thead bk-table-header sticky="true">
+                <tr bk-table-row>
+                    <th bk-table-header-cell>#</th>
+                    <th bk-table-header-cell>Name</th>
+                    <th bk-table-header-cell>Runtime</th>
+                    <th bk-table-header-cell>Environment</th>
+                    <th bk-table-header-cell>Deployment</th>
+                    <th bk-table-header-cell>Module</th>
+                </tr>
+            </thead>
+            <tbody bk-table-body>
+                <tr bk-table-row ng-repeat="configuration in configurations track by $index" hoverable="true" activable="false">
+                    <td bk-table-cell fit-content="true">{{::$index + 1}}</td>
+                    <td bk-table-cell>{{::configuration[0]}}</td>
+                    <td bk-table-cell>{{::configuration[1]}}</td>
+                    <td bk-table-cell>{{::configuration[2]}}</td>
+                    <td bk-table-cell>{{::configuration[3]}}</td>
+                    <td bk-table-cell>{{::configuration[4]}}</td>
+                </tr>
+            </tbody>
+        </table>
+        <script type="text/javascript">
+            angular.module('configurations', ['platformView', 'blimpKit']).controller('ConfigurationsController', ($scope, $http) => {
+                $http.get('/services/core/configurations').then((response) => {
+                    $scope.configurations = response.data;
+                });
+            });
+        </script>
+        <theme></theme>
+    </body>
+
+</html>

@@ -1,0 +1,5 @@
+{
+    "module": "view-search/configs/search-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Search View"
+}

@@ -1,9 +1,13 @@
 {
-	"edmType": "Product_Sales_for_1997",
-	"edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.ProductSalesFor1997",
-	"sqlTable": " PUBLIC.PRODUCT_SALES_FOR_1997",
-	"CategoryName": "CATEGORY_NAME",
-	"ProductName": "PRODUCT_NAME",
-	"ProductSales": "PRODUCT_SALES",
-	"_pk_": ["CATEGORY_NAME", "PRODUCT_NAME"]
+  "edmType": "Product_Sales_for_1997",
+  "edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.ProductSalesFor1997",
+  "sqlTable": "PRODUCT_SALES_FOR_1997",
+  "sqlSchema": "PUBLIC",
+  "CategoryName": "CATEGORY_NAME",
+  "ProductName": "PRODUCT_NAME",
+  "ProductSales": "PRODUCT_SALES",
+  "_pk_": [
+    "CATEGORY_NAME",
+    "PRODUCT_NAME"
+  ]
 }

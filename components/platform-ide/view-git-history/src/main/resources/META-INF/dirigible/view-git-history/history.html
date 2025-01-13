@@ -1,0 +1,66 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="history" ng-controller="HistoryContoller">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="configs/history-view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <script type="text/javascript" src="/services/web/service-git/git.js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="js/history.js"></script>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="!state.isBusy" size="l">Loading...</bk-busy-indicator-extended>
+        <bk-toolbar type="solid" ng-show="!state.isBusy">
+            <bk-toolbar-title ng-if="selectedProject">{{selectedProject}}</bk-toolbar-title>
+            <span ng-if="selectedFile">/{{selectedFile}}</span>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-button glyph="sap-icon--refresh" aria-label="Refresh" state="transparent" ng-disabled="selectedProject === undefined || selectedProject === ''" ng-click="refreshRepository()">
+            </bk-button>
+        </bk-toolbar>
+        <bk-scrollbar class="bk-full-height" ng-show="!state.isBusy">
+            <table bk-table display-mode="compact" outer-borders="bottom">
+                <thead bk-table-header sticky="true">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>Id</th>
+                        <th bk-table-header-cell>Message</th>
+                        <th bk-table-header-cell>Author</th>
+                        <th bk-table-header-cell>Date Time</th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat="next in history track by next.id">
+                        <td bk-table-cell>{{next.shortId}}</td>
+                        <td bk-table-cell>{{next.message}}</td>
+                        <td bk-table-cell>{{next.author}}
+                            <{{next.emailAddress}}>
+                        </td>
+                        <td bk-table-cell>{{next.dateTime}}</td>
+                    </tr>
+                    <tr ng-if="showEmptyRow()" bk-table-row>
+                        <td bk-table-cell no-data="true">{{getNoDataMessage()}}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </bk-scrollbar>
+        <theme></theme>
+    </body>
+
+</html>

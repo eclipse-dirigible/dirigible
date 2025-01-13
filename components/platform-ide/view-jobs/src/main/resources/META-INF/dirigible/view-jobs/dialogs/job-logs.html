@@ -1,0 +1,140 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="jobLogs" ng-controller="JobLogsController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-jobs/configs/job-logs-window.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar has-title="true">
+            <bk-toolbar-title>{{ jobName }}</bk-toolbar-title>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-busy-indicator ng-if="clearingLogs"></bk-busy-indicator>
+            <bk-button compact="true" label="Clear Logs" state="transparent" ng-click="clearLogs()" ng-disabled="loading || clearingLogs"></bk-button>
+        </bk-toolbar>
+        <bk-scrollbar class="bk-stretch">
+            <table display-mode="compact" bk-table outer-borders="bottom">
+                <thead bk-table-header sticky="true">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>Status</th>
+                        <th bk-table-header-cell>Id</th>
+                        <th bk-table-header-cell>Handler</th>
+                        <th bk-table-header-cell>Tenant Id</th>
+                        <th bk-table-header-cell>Triggered</th>
+                        <th bk-table-header-cell>Correlation</th>
+                        <th bk-table-header-cell>Finished</th>
+                        <th bk-table-header-cell>Message</th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr activable="false" bk-table-row hoverable="true" ng-repeat="next in logs track by $index">
+                        <td bk-table-cell fit-content="true"><span ng-class="getIconClasses(next.status)" role="presentation"></span></td>
+                        <td bk-table-cell>{{next.id}}</td>
+                        <td bk-table-cell>{{next.handler}}</td>
+                        <td bk-table-cell>{{next.tenantId}}</td>
+                        <td bk-table-cell>{{next.triggeredAt | date:'yyyy-MM-dd hh:mm:ss'}}</td>
+                        <td bk-table-cell>{{next.triggeredId}}</td>
+                        <td bk-table-cell>{{next.finishedAt | date:'yyyy-MM-dd hh:mm:ss'}}</td>
+                        <td bk-table-cell>{{next.message}}</td>
+                    </tr>
+                    <tr bk-table-row ng-if="shouldShowMessageRow()">
+                        <td bk-table-cell no-data="true">{{ getMessageRow() }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </bk-scrollbar>
+
+        <script type="text/javascript">
+            angular.module('jobLogs', ['blimpKit', 'platformView']).controller('JobLogsController', ($scope, $http, ViewParameters) => {
+                $scope.getIconClasses = (status) => {
+                    let classes = 'sap-icon ';
+                    switch (status) {
+                        case 'TRIGGRED':
+                            classes += 'sap-icon--play';
+                            break;
+                        case 'FINISHED':
+                            classes += 'sap-icon--status-positive sap-icon--color-positive';
+                            break;
+                        case 'FAILED':
+                            classes += 'sap-icon--status-error sap-icon--color-negative';
+                            break;
+                        case 'LOGGED':
+                            classes += 'sap-icon--information';
+                            break;
+                        case 'ERROR':
+                            classes += 'sap-icon--status-error sap-icon--color-negative';
+                            break;
+                        case 'WARN':
+                            classes += 'sap-icon--status-critical sap-icon--color-critical';
+                            break;
+                        case 'INFO':
+                            classes += 'sap-icon--information sap-icon--color-information';
+                            break;
+                        default:
+                            classes += 'sap-icon--question-mark';
+                    }
+                    return classes;
+                };
+
+                function getLogs(name) {
+                    $scope.loading = true;
+                    $scope.loadingError = false;
+                    $http.get(`/services/jobs/logs/${name}`).then((response) => {
+                        $scope.logs = response.data;
+                        $scope.loading = false;                                
+                    }, (response) => {
+                        console.error(response.data);
+                        $scope.loadingError = true;
+                        $scope.loading = false;
+                    });
+                }
+
+                $scope.logs = [];
+
+                $scope.job = ViewParameters.get();
+                $scope.jobName = $scope.job.name;
+                getLogs($scope.jobName);
+
+                $scope.shouldShowMessageRow = () => $scope.loading || $scope.loadingError || $scope.logs.length === 0;
+
+                $scope.getMessageRow = () => {
+                    if ($scope.loading) return 'Loading, please wait...';
+                    if ($scope.loadingError) return 'Loading execution logs has failed!';
+                    if ($scope.logs.length === 0) return 'No logs found';
+                };
+
+                $scope.clearLogs = () => {
+                    $scope.clearingLogs = true;
+                    $http.post('/services/jobs/clear/' + $scope.jobName).then((response) => {
+                        $scope.clearingLogs = false;
+                        getLogs($scope.jobName);
+                    }, (response) => {
+                        console.error(response.data);
+                        $scope.clearingLogs = false;
+                    });
+                };
+            });
+        </script>
+        <theme></theme>
+    </body>
+
+</html>

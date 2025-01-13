@@ -15,34 +15,46 @@
 
 const MessagingFacade = Java.type("org.eclipse.dirigible.components.api.messaging.MessagingFacade");
 
-export function queue(destination) {
-    return new Queue(destination);
-};
+export class Consumer {
 
-export function topic(destination) {
-    return new Topic(destination);
-};
+    public static queue(destination: string): Queue {
+        return new Queue(destination);
+    }
+
+    public static topic(destination: string): Topic {
+        return new Topic(destination);
+    }
+}
 
 class Queue {
 
-    constructor(private destination) { }
-    
-    receive(timeout) {
-        if (!timeout) {
-            timeout = 1000;
-        }
+    private destination: string;
+
+    constructor(destination: string) {
+        this.destination = destination;
+    }
+
+    public receive(timeout: number = 1000) {
         return MessagingFacade.receiveFromQueue(this.destination, timeout);
     };
 }
 
 class Topic {
 
-    constructor(private destination) { }
+    private destination: string;
 
-    receive(timeout) {
-        if (!timeout) {
-            timeout = 1000;
-        }
+    constructor(destination: string) {
+        this.destination = destination;
+    }
+
+    public receive(timeout: number = 1000) {
         return MessagingFacade.receiveFromTopic(this.destination, timeout);
-    };
+    }
+}
+
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+    // @ts-ignore
+    module.exports = Consumer;
 }

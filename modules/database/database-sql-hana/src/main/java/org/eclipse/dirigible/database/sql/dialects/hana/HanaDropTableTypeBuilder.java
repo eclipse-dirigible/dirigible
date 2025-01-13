@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.dialects.hana;
 
@@ -24,7 +23,7 @@ public class HanaDropTableTypeBuilder extends DropTableTypeBuilder {
     private static final Logger logger = LoggerFactory.getLogger(HanaDropTableTypeBuilder.class);
 
     /** The table type. */
-    private String tableType;
+    private final String tableType;
 
     /**
      * Instantiates a new abstract drop sql builder.
@@ -68,7 +67,7 @@ public class HanaDropTableTypeBuilder extends DropTableTypeBuilder {
      * @param sql the sql
      */
     private void generateTableType(StringBuilder sql) {
-        String tableTypeName = (isCaseSensitive()) ? encapsulate(this.getTableType(), true) : this.getTableType();
+        String tableTypeName = encapsulate(this.getTableType(), true);
         sql.append(SPACE)
            .append(KEYWORD_TABLE_TYPE)
            .append(SPACE)

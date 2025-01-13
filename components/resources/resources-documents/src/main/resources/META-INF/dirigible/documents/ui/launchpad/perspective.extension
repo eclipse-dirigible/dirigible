@@ -1,0 +1,5 @@
+{
+    "module": "documents/gen/ui/launchpad/perspective.js",
+    "extensionPoint": "documents",
+    "description": "documents - Application Perspective"
+}

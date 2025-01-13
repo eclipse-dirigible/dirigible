@@ -1,1 +1,2 @@
-export * as cmis from "./cmis"
+export { Cmis as cmis } from "./cmis"
+export * from "./cmis"

@@ -5,9 +5,9 @@
 				<li class="fd-list__navigation-item fd-list__navigation-item--condensed"
 					ng-class="{'fd-list__navigation-item--indicated' : perspective.id === activeId}"
 					ng-repeat="perspective in perspectives track by $index" tabindex="$index">
-					<a href="{{ perspective.link }}" title="{{ perspective.name }}" target="_self">
+					<a href="{{ ::perspective.link }}" title="{{ ::perspective.name }}" target="_self">
 						<ng-include class="dg-perspective-icon" src="getIcon(perspective.icon)"></ng-include>
-						<span class="fd-list__navigation-item-text">{{ perspective.name }}</span>
+						<span class="fd-list__navigation-item-text">{{ ::perspective.name }}</span>
 						<span class="fd-list__navigation-item-indicator" ng-if="perspective.id === activeId"></span>
 					</a>
 				</li>

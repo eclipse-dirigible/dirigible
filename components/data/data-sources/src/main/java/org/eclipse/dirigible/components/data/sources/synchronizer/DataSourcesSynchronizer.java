@@ -1,29 +1,21 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.sources.synchronizer;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.text.ParseException;
-import java.util.List;
-
 import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.ArtefactService;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
-import org.eclipse.dirigible.components.base.synchronizer.Synchronizer;
+import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
@@ -35,23 +27,27 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+import java.text.ParseException;
+import java.util.List;
+import java.util.Set;
+
 /**
  * The Class DataSourcesSynchronizer.
- *
- * @param <A> the generic type
  */
 @Component
 @Order(SynchronizersOrder.DATASOURCE)
-public class DataSourcesSynchronizer<A extends Artefact> implements Synchronizer<DataSource> {
-
-    /** The Constant logger. */
-    private static final Logger logger = LoggerFactory.getLogger(DataSourcesSynchronizer.class);
+public class DataSourcesSynchronizer extends BaseSynchronizer<DataSource, Long> {
 
     /** The Constant FILE_DATASOURCE_EXTENSION. */
     public static final String FILE_DATASOURCE_EXTENSION = ".datasource";
+    /** The Constant logger. */
+    private static final Logger logger = LoggerFactory.getLogger(DataSourcesSynchronizer.class);
 
+    /** The Constant PRESERVED_DATA_SOURCE_LOCATION_PREFIXES. */
+    private static final Set<String> PRESERVED_DATA_SOURCE_LOCATION_PREFIXES = Set.of("API_", "ENV_", "TENANT_");
     /** The datasource service. */
-    private DataSourceService dataSourceService;
+    private final DataSourceService dataSourceService;
 
     /** The synchronization callback. */
     private SynchronizerCallback callback;
@@ -64,30 +60,6 @@ public class DataSourcesSynchronizer<A extends Artefact> implements Synchronizer
     @Autowired
     public DataSourcesSynchronizer(DataSourceService dataSourceService) {
         this.dataSourceService = dataSourceService;
-    }
-
-    /**
-     * Gets the service.
-     *
-     * @return the service
-     */
-    @Override
-    public ArtefactService<DataSource> getService() {
-        return dataSourceService;
-    }
-
-
-    /**
-     * Checks if is accepted.
-     *
-     * @param file the file
-     * @param attrs the attrs
-     * @return true, if is accepted
-     */
-    @Override
-    public boolean isAccepted(Path file, BasicFileAttributes attrs) {
-        return file.toString()
-                   .endsWith(getFileExtension());
     }
 
     /**
@@ -110,7 +82,7 @@ public class DataSourcesSynchronizer<A extends Artefact> implements Synchronizer
      * @throws ParseException the parse exception
      */
     @Override
-    public List<DataSource> parse(String location, byte[] content) throws ParseException {
+    protected List<DataSource> parseImpl(String location, byte[] content) throws ParseException {
         DataSource datasource = JsonHelper.fromJson(new String(content, StandardCharsets.UTF_8), DataSource.class);
         Configuration.configureObject(datasource);
         datasource.setLocation(location);
@@ -147,6 +119,16 @@ public class DataSourcesSynchronizer<A extends Artefact> implements Synchronizer
     }
 
     /**
+     * Gets the service.
+     *
+     * @return the service
+     */
+    @Override
+    public ArtefactService<DataSource, Long> getService() {
+        return dataSourceService;
+    }
+
+    /**
      * Retrieve.
      *
      * @param location the location
@@ -165,60 +147,56 @@ public class DataSourcesSynchronizer<A extends Artefact> implements Synchronizer
      * @param error the error
      */
     @Override
-    public void setStatus(Artefact artefact, ArtefactLifecycle lifecycle, String error) {
+    public void setStatus(DataSource artefact, ArtefactLifecycle lifecycle, String error) {
         artefact.setLifecycle(lifecycle);
         artefact.setError(error);
-        getService().save((DataSource) artefact);
+        getService().save(artefact);
     }
 
     /**
-     * Complete.
+     * Complete impl.
      *
      * @param wrapper the wrapper
      * @param flow the flow
      * @return true, if successful
      */
     @Override
-    public boolean complete(TopologyWrapper<Artefact> wrapper, ArtefactPhase flow) {
+    protected boolean completeImpl(TopologyWrapper<DataSource> wrapper, ArtefactPhase flow) {
         try {
-            DataSource datasource = null;
-            if (wrapper.getArtefact() instanceof DataSource) {
-                datasource = (DataSource) wrapper.getArtefact();
-            } else {
-                throw new UnsupportedOperationException(String.format("Trying to process %s as DataSource", wrapper.getArtefact()
-                                                                                                                   .getClass()));
-            }
-
+            DataSource datasource = wrapper.getArtefact();
 
             switch (flow) {
                 case CREATE:
                     if (datasource.getLifecycle()
                                   .equals(ArtefactLifecycle.NEW)) {
-                        callback.registerState(this, wrapper, ArtefactLifecycle.CREATED, "");
+                        callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
                     }
                     break;
                 case UPDATE:
                     if (datasource.getLifecycle()
                                   .equals(ArtefactLifecycle.MODIFIED)) {
-                        callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED, "");
+                        callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
+                    }
+                    if (datasource.getLifecycle()
+                                  .equals(ArtefactLifecycle.FAILED)) {
+                        return false;
                     }
                     break;
                 case DELETE:
                     if (datasource.getLifecycle()
                                   .equals(ArtefactLifecycle.CREATED)
                             || datasource.getLifecycle()
-                                         .equals(ArtefactLifecycle.UPDATED)) {
-                        callback.registerState(this, wrapper, ArtefactLifecycle.DELETED, "");
+                                         .equals(ArtefactLifecycle.UPDATED)
+                            || datasource.getLifecycle()
+                                         .equals(ArtefactLifecycle.FAILED)) {
+                        callback.registerState(this, wrapper, ArtefactLifecycle.DELETED);
                     }
                     break;
             }
             return true;
         } catch (Exception e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
             callback.addError(e.getMessage());
-            callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, e.getMessage());
+            callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, e);
             return false;
         }
     }
@@ -229,20 +207,20 @@ public class DataSourcesSynchronizer<A extends Artefact> implements Synchronizer
      * @param datasource the datasource
      */
     @Override
-    public void cleanup(DataSource datasource) {
+    public void cleanupImpl(DataSource datasource) {
         try {
-            if (!datasource.getLocation()
-                           .startsWith("API_")
-                    && !datasource.getLocation()
-                                  .startsWith("ENV_")) {
+            Boolean delete = PRESERVED_DATA_SOURCE_LOCATION_PREFIXES.stream()
+                                                                    .filter(p -> datasource.getLocation()
+                                                                                           .startsWith(p))
+                                                                    .findFirst()
+                                                                    .map(p -> Boolean.FALSE)
+                                                                    .orElse(Boolean.TRUE);
+            if (delete) {
                 getService().delete(datasource);
             }
         } catch (Exception e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
             callback.addError(e.getMessage());
-            callback.registerState(this, datasource, ArtefactLifecycle.DELETED, e.getMessage());
+            callback.registerState(this, datasource, ArtefactLifecycle.DELETED, e);
         }
     }
 

@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  ~ Copyright (c) 2018 SAP and others.
+  ~ Copyright (c) 2010-2023 SAP and others.
   ~ All rights reserved. This program and the accompanying materials
   ~ are made available under the terms of the Eclipse Public License v2.0
   ~ which accompanies this distribution, and is available at
@@ -8,75 +8,43 @@
   ~ Contributors:
   ~ SAP - initial API and implementation
   -->
+<html lang="en" ng-app="{{fileName}}" ng-controller="PerspectiveController" xmlns="http://www.w3.org/1999/xhtml">
 
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <!-- 'brandicon' is an AngularJS directive to set the proper favicon. Do this only for perspective and not regular views -->
+        <link rel="icon" href="data:;base64,iVBORw0KGgo=" dg-brand-icon />
+        <!-- The title is set automatically from the perspective data -->
+        <title dg-brand-title></title>
+        <!-- Perspective data -->
+        <script type="text/javascript" src="services/{{fileName}}.js"></script>
+        <!-- Theme support -->
+        <theme></theme>
+        <!-- Perspective services -->
+        <script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=ide-perspective-js">
+        </script>
+        <!-- Perspective styles -->
+        <link type="text/css" rel="stylesheet"
+            href="/services/js/resources-core/services/loader.js?id=ide-perspective-css" />
+        <!-- Perspective controller -->
+        <script type="text/javascript" src="js/perspective.js"></script>
+    </head>
 
-    <title>Eclipse Dirigible &trade; | {{fileName}} </title>
+    <body dg-contextmenu="contextMenuContent">
+        <!-- Top panel with menu support -->
+        <ide-header menu-ext-id="ide-{{fileName}}-menu"></ide-header>
+        <!-- Context menu support -->
+        <ide-contextmenu></ide-contextmenu>
+        <!-- The container which holds the sidebar and the perspective views -->
+        <ide-container>
+            <ide-layout views-layout-model="layoutModel" layout-config="layoutConfig"></ide-layout>
+        </ide-container>
+        <!-- Dialog support -->
+        <ide-dialogs></ide-dialogs>
+        <!-- Status bar -->
+        <ide-status-bar></ide-status-bar>
+    </body>
 
-    <link rel="shortcut icon" type="image/png" href="//services/web/resources/images/favicon.png" />
-	
-	<!-- FontAwesome icon set -->
-    <link type="text/css" href="/webjars/fontawesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
-		
-	<!-- Twitter Bootstrap with Theme Support -->
-	<link type="text/css" rel="stylesheet" href="//services/core/theme/bootstrap.min.css">
-
-	<!-- GoldenLayout with Theme Support -->
-	<link type="text/css" rel="stylesheet" href="//services/web/resources/goldenlayout/1.5.9/goldenlayout-base.css" />
-	<link type="text/css" rel="stylesheet" href="//services/core/theme/goldenlayout-theme.css" />
-	
-	<!-- Custom IDE Styles -->
-	<link type="text/css" rel="stylesheet" href="//services/core/theme/ide.css" />
-</head>
-
-<body ng-app="{{fileName}}" ng-controller="Controller as c">
-
-	<div menu menu-data-url="//services/js/{{projectName}}/api/menu-{{fileName}}.js"></div>
-	
-	<div class="shell">
-		<div class="sidebar list-group" sidebar active="{{fileName}}"></div>
-		<div id="{{fileName}}" class="plane" views-layout views-layout-model="c.layoutModel"></div>
-	</div>
-	<div class="statusbar" status-bar>{{message}}</div>
-	
-	<!-- jQuery -->
-	<script type="text/javascript" src="/webjars/jquery/3.6.0/jquery.min.js"></script>
-	
-	<!-- Twitter Bootstrap with Theme Support -->
-	<script type="text/javascript" src="/webjars/bootstrap/3.3.7/js/bootstrap.min.js"></script>
-	
-	<!-- AngularJS -->
-	<script type="text/javascript" src="/webjars/angularjs/1.8.2/angular.min.js"></script>
-	<script type="text/javascript" src="/webjars/angularjs/1.8.2/angular-resource.min.js"></script>
-
-	<!-- GoldenLayout with Theme Support -->
-	<script type="text/javascript" src="//services/web/resources/goldenlayout/1.5.9/goldenlayout.min.js"></script>
-
-	<script type="text/javascript" src="../ide/ui/message-hub.js"></script>	
-	<script type="text/javascript" src="../ide/ui/ui-layout.js"></script>
-	<script type="text/javascript" src="../ide/ui/ui-core-ng-modules.js"></script>
-	
-	<script type="text/javascript">
-		angular.module('{{fileName}}', ['ngResource', 'ideUiCore'])
-		.config(["messageHubProvider", function(messageHubProvider) {
-			messageHubProvider.evtNamePrefix = '{{fileName}}';
-		}])	
-		.controller('Controller', ['Layouts', function (Layouts) {
-			
-			this.layoutModel = {
-				views: ['editor'],
-				events: {
-					'fileselected': function(msg){
-						Layouts.manager.openEditor(msg.data.path, msg.data.label);
-					}
-				}
-			};
-					
-		}]);
-	</script>
-</body>
-
+</html>

@@ -1,16 +1,16 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
 let messageHub = new FramesMessageHub();
-let sqlPlaceholder = "-- Ctrl+X to execute all or selected text only (Cmd+X for Mac)\n";
+let sqlPlaceholder = "-- Press F8 to execute the selected text\n";
 let csrfToken;
 let loadingOverview = document.getElementById('loadingOverview');
 let loadingMessage = document.getElementById('loadingMessage');
@@ -49,17 +49,18 @@ function createExecuteAction() {
         label: "Execute",
 
         // An optional array of keybindings for the action.
-        keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX],
+        keybindings: [monaco.KeyCode.F8],
 
         // Method that will be executed when the action is triggered.
         // @param editor The editor instance is passed in as a convinience
         run: function (editor) {
             let text = editor.getModel().getValueInRange(editor.getSelection());
-            if (text.length === 0) {
-                text = editor.getModel().getValue();
+            if (text.length > 0) {
+                let sqlCommand = getSQLCommand(text);
+                messageHub.post({ data: sqlCommand }, "database.sql.execute");
+            } else {
+                messageHub.post({ data: "No text selected for execution." }, "database.sql.error");
             }
-            let sqlCommand = getSQLCommand(text);
-            messageHub.post({ data: sqlCommand }, "database.sql.execute");
         },
     };
 }

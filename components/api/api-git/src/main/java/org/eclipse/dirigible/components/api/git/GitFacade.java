@@ -1,28 +1,17 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.api.git;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-
 import org.apache.commons.io.FileUtils;
 import org.eclipse.dirigible.components.api.security.UserFacade;
-import org.eclipse.dirigible.components.ide.git.domain.GitBranch;
-import org.eclipse.dirigible.components.ide.git.domain.GitChangedFile;
-import org.eclipse.dirigible.components.ide.git.domain.GitCommitInfo;
-import org.eclipse.dirigible.components.ide.git.domain.GitConnectorException;
-import org.eclipse.dirigible.components.ide.git.domain.GitConnectorFactory;
-import org.eclipse.dirigible.components.ide.git.domain.IGitConnector;
+import org.eclipse.dirigible.components.ide.git.domain.*;
 import org.eclipse.dirigible.components.ide.git.utils.GitFileUtils;
 import org.eclipse.dirigible.components.ide.workspace.domain.Project;
 import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
@@ -38,6 +27,11 @@ import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * The Class GitFacade.
  */
@@ -48,7 +42,7 @@ public class GitFacade implements InitializingBean {
     private static GitFacade INSTANCE;
 
     /** The workspace service. */
-    private WorkspaceService workspaceService;
+    private final WorkspaceService workspaceService;
 
     /**
      * Instantiates a new git facade.
@@ -87,7 +81,6 @@ public class GitFacade implements InitializingBean {
     public WorkspaceService getWorkspaceService() {
         return workspaceService;
     }
-
 
     /**
      * Inits the repository.
@@ -531,7 +524,7 @@ public class GitFacade implements InitializingBean {
             IGitConnector gitConnector = GitConnectorFactory.getConnector(gitDirectory.getCanonicalPath());
             return gitConnector;
         } catch (IOException e) {
-            throw new GitConnectorException(e);
+            throw new GitConnectorException("Failed to get connector for " + repositoryName, e);
         }
     }
 }

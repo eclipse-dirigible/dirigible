@@ -3,7 +3,7 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-let widgetsView = angular.module('widgets', ['ideUI', 'ideView']);
+const widgetsView = angular.module('widgets', ['ideUI', 'ideView']);
 
 widgetsView.config(["messageHubProvider", function (messageHubProvider) {
     messageHubProvider.eventIdPrefix = 'template';
@@ -311,10 +311,3 @@ widgetsView.controller('WidgetsViewController', ['$scope', 'messageHub', functio
         }
     };
 }]);
-
-widgetsView.filter('startFrom', function () {
-    return function (input, start) {
-        start = +start; //parse to int
-        return input.slice(start);
-    }
-});

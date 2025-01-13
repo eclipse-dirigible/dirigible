@@ -1,0 +1,12 @@
+{
+    "constraints": [
+        {
+            "path": "/services/web/dirigible-test-project/security/protected_page.html",
+            "method": "*",
+            "scope": "HTTP",
+            "roles": [
+                "employee"
+            ]
+        }
+    ]
+}

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+
+	<head>
+		<meta charset="utf-8" />
+		<meta http-equiv="Content-Language" content="en-us">
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+		<title>Code Editor</title>
+		<link type="text/css" rel="stylesheet" href="/services/web/platform-core/ui/styles/fonts.css" />
+		<link type="text/css" rel="stylesheet" href="/services/web/platform-core/ui/styles/blimpkit.css" />
+		<link type="text/css" rel="stylesheet" href="/webjars/fundamental-styles/dist/busy-indicator.css">
+		<link type="text/css" data-name="/webjars/monaco-editor/min/vs/editor/editor.main" rel="stylesheet" href="/webjars/monaco-editor/min/vs/editor/editor.main.css">
+		<link type="text/css" rel="stylesheet" href="css/editor.css" />
+		<script type="text/javascript" src="/services/web/platform-branding/branding.js"></script>
+		<script type="text/javascript" src="/services/web/platform-core/ui/platform/message-hub.js"></script>
+		<script type="text/javascript" src="/services/web/platform-core/ui/platform/layout-hub.js"></script>
+		<script type="text/javascript" src="/services/web/platform-core/ui/platform/status-bar-hub.js"></script>
+		<script type="text/javascript" src="/services/web/platform-core/ui/platform/theming-hub.js"></script>
+		<script type="text/javascript" src="/services/web/service-workspace/workspace-hub.js"></script>
+		<script type="text/javascript" src="/services/web/platform-core/utilities/uri-builder.js"></script>
+		<script type="text/javascript" src="/webjars/monaco-editor/min/vs/loader.js"></script>
+		<script type="text/javascript" src="js/assignmentsParser.js"></script>
+	</head>
+
+	<body spellcheck="false">
+		<div id="loadingOverview" class="fd-busy-indicator-extended">
+			<div class="fd-busy-indicator fd-busy-indicator--l" aria-hidden="false" aria-label="Loading">
+				<div class="fd-busy-indicator__circle"></div>
+				<div class="fd-busy-indicator__circle"></div>
+				<div class="fd-busy-indicator__circle"></div>
+			</div>
+			<div id="loadingMessage" class="fd-busy-indicator-extended__label">Loading data...</div>
+		</div>
+
+		<div id="embeddedEditor"></div>
+		<script type="module" src="js/editor.js"></script>
+	</body>
+
+</html>

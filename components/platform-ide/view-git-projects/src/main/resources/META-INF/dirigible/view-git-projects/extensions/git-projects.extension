@@ -1,0 +1,5 @@
+{
+    "module": "view-git-projects/configs/git-projects.js",
+    "extensionPoint": "platform-views",
+    "description": "Git Projects View"
+}

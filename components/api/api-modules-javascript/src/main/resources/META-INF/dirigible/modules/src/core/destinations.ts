@@ -15,147 +15,155 @@
  * Note: This module is supported only with the Mozilla Rhino engine
  */
 
-import * as config from "./configurations";
-import { httpClient } from "@dirigible/http/client";
-let oauth = dirigibleRequire("security/oauth"); // TODO: check this API
+import { Configurations } from "sdk/core/configurations";
+import { HttpClient } from "sdk/http/client";
+import { OAuthClient } from "sdk/security/oauth";
 
 const JClass = Java.type("java.lang.Class");
 const DestinationsFacade = Java.type("org.eclipse.dirigible.components.api.core.DestinationsFacade");
 
-export function get (name) {
-    if (isCloudEnvironment()) {
-        return JSON.parse(getCloudDestination(name));
-    }
-    return JSON.parse(DestinationsFacade.get(name));
-};
+export class Destinations {
 
-export function set (name, destination) {
-    if (isCloudEnvironment()) {
-        createOrUpdateCloudDestination(name, destination);
-    }
-    DestinationsFacade.set(name, JSON.stringify(destination));
-};
-
-export function remove(name) {
-    if (!isCloudEnvironment()) {
-        throw new Error("The delete destination operation is not supported for non-cloud environments");
-    }
-    deleteCloudDestination(name);
-};
-
-function isCloudEnvironment() {
-    try {
-        JClass.forName("org.eclipse.dirigible.cf.CloudFoundryModule");
-        return true;
-    } catch (e) {
-        // Do nothing
-    }
-    try {
-        JClass.forName("org.eclipse.dirigible.kyma.KymaModule");
-        return true;
-    } catch (e) {
-        // Do nothing
-    }
-    return false;
-}
-
-function getCloudDestination(name) {
-    let token = getOAuthToken();
-
-    let destinationUrl = `${getDestinationsBasePath()}/${name}`;
-
-    let requestOptions = {
-        headers: [{
-            name: "Authorization",
-            value: `${token.token_type} ${token.access_token}`
-        }]
+    public static get(name: string): any {
+        if (this.isCloudEnvironment()) {
+            return JSON.parse(this.getCloudDestination(name));
+        }
+        return JSON.parse(DestinationsFacade.get(name));
     };
 
-    let response = httpClient.get(destinationUrl, requestOptions);
-
-    if (response.statusCode === 404) {
-        throw new Error(`Destination with name '${name}' not found`);
+    public static set(name: string, destination: any) {
+        if (this.isCloudEnvironment()) {
+            this.createOrUpdateCloudDestination(name, destination);
+        }
+        DestinationsFacade.set(name, JSON.stringify(destination));
     };
 
-    return response.text;
-}
+    public static remove(name: string) {
+        if (!this.isCloudEnvironment()) {
+            throw new Error("The delete destination operation is not supported for non-cloud environments");
+        }
+        this.deleteCloudDestination(name);
+    };
 
-function getDestinationsBasePath() {
-    return `${config.get("DIRIGIBLE_DESTINATION_URI")}/destination-configuration/v1/destinations`;
-}
-
-function getInstanceDestinationsBasePath() {
-    return `${config.get("DIRIGIBLE_DESTINATION_URI")}/destination-configuration/v1/instanceDestinations`;
-}
-
-function getSubaccountDestinationsBasePath() {
-    return `${config.get("DIRIGIBLE_DESTINATION_URI")}/destination-configuration/v1/subaccountDestinations`;
-}
-
-function createOrUpdateCloudDestination(name, destination) {
-    let isExistingDestination = true;
-    try {
-        getCloudDestination(name);
-    } catch (e) {
-        isExistingDestination = false;
+    public static isCloudEnvironment() {
+        try {
+            JClass.forName("org.eclipse.dirigible.cf.CloudFoundryModule");
+            return true;
+        } catch (e) {
+            // Do nothing
+        }
+        try {
+            JClass.forName("org.eclipse.dirigible.kyma.KymaModule");
+            return true;
+        } catch (e) {
+            // Do nothing
+        }
+        return false;
     }
 
-    let instanceDestinationUrl = getInstanceDestinationsBasePath();
-    destination.Name = name;
+    private static getCloudDestination(name: string) {
+        let token = this.getOAuthToken();
 
-    let token = getOAuthToken();
-    let requestOptions = {
-        headers: [{
-            name: "Authorization",
-            value: `${token.token_type} ${token.access_token}`
-        }],
-        text: JSON.stringify(destination)
-    };
+        let destinationUrl = `${this.getDestinationsBasePath()}/${name}`;
 
-    if (isExistingDestination) {
-        let response = httpClient.put(instanceDestinationUrl, requestOptions);
+        let requestOptions = {
+            headers: [{
+                name: "Authorization",
+                value: `${token.token_type} ${token.access_token}`
+            }]
+        };
+
+        let response = HttpClient.get(destinationUrl, requestOptions);
+
+        if (response.statusCode === 404) {
+            throw new Error(`Destination with name '${name}' not found`);
+        };
+
+        return response.text;
+
+    }
+
+    private static getDestinationsBasePath() {
+        return `${Configurations.get("DIRIGIBLE_DESTINATION_URI")}/destination-configuration/v1/destinations`;
+    }
+
+    private static getInstanceDestinationsBasePath() {
+        return `${Configurations.get("DIRIGIBLE_DESTINATION_URI")}/destination-configuration/v1/instanceDestinations`;
+    }
+
+    private static getSubaccountDestinationsBasePath() {
+        return `${Configurations.get("DIRIGIBLE_DESTINATION_URI")}/destination-configuration/v1/subaccountDestinations`;
+    }
+
+    private static createOrUpdateCloudDestination(name: string, destination) {
+        let isExistingDestination = true;
+        try {
+            this.getCloudDestination(name);
+        } catch (e) {
+            isExistingDestination = false;
+        }
+
+        let instanceDestinationUrl = this.getInstanceDestinationsBasePath();
+        destination.Name = name;
+
+        let token = this.getOAuthToken();
+        let requestOptions = {
+            headers: [{
+                name: "Authorization",
+                value: `${token.token_type} ${token.access_token}`
+            }],
+            text: JSON.stringify(destination)
+        };
+
+        if (isExistingDestination) {
+            let response = HttpClient.put(instanceDestinationUrl, requestOptions);
+            if (response.statusCode != 200) {
+                throw new Error(`Error occurred while updating destinaton '${name}': ${response.text}`);
+            }
+        } else {
+            let response = HttpClient.post(instanceDestinationUrl, requestOptions);
+            if (response.statusCode != 201) {
+                throw new Error(`Error occurred while creating destinaton '${name}': ${response.text}`);
+            }
+        }
+    }
+
+    private static deleteCloudDestination(name: string) {
+        let token = this.getOAuthToken();
+        let requestOptions = {
+            headers: [{
+                name: "Authorization",
+                value: `${token.token_type} ${token.access_token}`
+            }]
+        };
+        let url = `${this.getInstanceDestinationsBasePath()}/${name}`;
+        let response = HttpClient.del(url, requestOptions);
         if (response.statusCode != 200) {
-            throw new Error(`Error occurred while updating destinaton '${name}': ${response.text}`);
+            throw new Error(`Error occurred while deleting destinaton '${name}': ${response.text}`);
         }
-    } else {
-        let response = httpClient.post(instanceDestinationUrl, requestOptions);
-        if (response.statusCode != 201) {
-            throw new Error(`Error occurred while creating destinaton '${name}': ${response.text}`);
+    }
+
+    private static getOAuthToken() {
+        let oauthClientId = Configurations.get("DIRIGIBLE_DESTINATION_CLIENT_ID");
+        let oauthClientSecret = Configurations.get("DIRIGIBLE_DESTINATION_CLIENT_SECRET");
+        let oauthUrl = Configurations.get("DIRIGIBLE_DESTINATION_URL");
+        let uri = Configurations.get("DIRIGIBLE_DESTINATION_URI");
+
+        if (!oauthClientId || !oauthClientSecret || !oauthUrl || !uri) {
+            throw new Error("Invalid destination configuration");
         }
+
+        const client = new OAuthClient({
+            url: oauthUrl,
+            clientId: oauthClientId,
+            clientSecret: oauthClientSecret
+        });
+        return client.getToken();
     }
 }
 
-function deleteCloudDestination(name) {
-    let token = getOAuthToken();
-    let requestOptions = {
-        headers: [{
-            name: "Authorization",
-            value: `${token.token_type} ${token.access_token}`
-        }]
-    };
-    let url = `${getInstanceDestinationsBasePath()}/${name}`;
-    let response = httpClient.delete(url, requestOptions);
-    if (response.statusCode != 200) {
-        throw new Error(`Error occurred while deleting destinaton '${name}': ${response.text}`);
-    }
-}
-
-function getOAuthToken() {
-    let oauthClientId = config.get("DIRIGIBLE_DESTINATION_CLIENT_ID");
-    let oauthClientSecret = config.get("DIRIGIBLE_DESTINATION_CLIENT_SECRET");
-    let oauthUrl = config.get("DIRIGIBLE_DESTINATION_URL");
-    let uri = config.get("DIRIGIBLE_DESTINATION_URI");
-
-    if (!oauthClientId || !oauthClientSecret || !oauthUrl || !uri) {
-        throw new Error("Invalid destination configuration");
-    }
-
-    let oauthConfig = {
-        url: oauthUrl,
-        clientId: oauthClientId,
-        clientSecret: oauthClientSecret
-    };
-
-    let client = oauth.getClient(oauthConfig);
-    return client.getToken();
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Destinations;
 }

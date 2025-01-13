@@ -1,0 +1,91 @@
+/**
+ * Copyright (c) 2010-2024 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v2.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ */
+.bk-split {
+    height: 100%;
+    display: -webkit-box;
+    display: -ms-flexbox;
+    display: flex;
+}
+
+.bk-split.horizontal {
+    -webkit-box-orient: horizontal;
+    -webkit-box-direction: normal;
+    -ms-flex-direction: row;
+    flex-direction: row;
+}
+
+.bk-split.vertical {
+    -webkit-box-orient: vertical;
+    -webkit-box-direction: normal;
+    -ms-flex-direction: column;
+    flex-direction: column;
+}
+
+.bk-split .gutter {
+    background: transparent;
+    position: relative;
+    overflow: visible;
+    z-index: 1;
+}
+
+.bk-split .gutter-horizontal {
+    background-color: var(--sapGroup_TitleBorderColor, #d9d9d9);
+    cursor: col-resize;
+    z-index: 1;
+}
+
+.bk-split .gutter-vertical {
+    background-color: var(--sapGroup_TitleBorderColor, #d9d9d9);
+    cursor: row-resize;
+    z-index: 0;
+}
+
+.bk-split .gutter.gutter-horizontal::after {
+    content: '';
+    height: 100%;
+    width: calc(100% + 3px);
+    position: absolute;
+    left: -2px;
+}
+
+.bk-split .gutter.gutter-horizontal:hover::after {
+    background-color: var(--sapActiveColor, #0854a0);
+    -webkit-transition: background-color 0.3s ease;
+    -o-transition: background-color 0.3s ease;
+    transition: background-color 0.3s ease;
+    -webkit-transition-delay: 0.3s;
+    -o-transition-delay: 0.3s;
+    transition-delay: 0.3s;
+}
+
+.bk-split .gutter.gutter-vertical::after {
+    content: '';
+    height: calc(100% + 3px);
+    position: absolute;
+    top: -2px;
+    width: 100%;
+}
+
+.bk-split .gutter.gutter-vertical:hover::after {
+    background-color: var(--sapActiveColor, #0854a0);
+    -webkit-transition: background-color 0.3s ease;
+    -o-transition: background-color 0.3s ease;
+    transition: background-color 0.3s ease;
+    -webkit-transition-delay: 0.3s;
+    -o-transition-delay: 0.3s;
+    transition-delay: 0.3s;
+}
+
+.bk-split-pane {
+    overflow: hidden;
+    display: block;
+}

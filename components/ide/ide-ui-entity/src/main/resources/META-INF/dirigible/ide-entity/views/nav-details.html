@@ -1,14 +1,17 @@
-<!DOCTYPE HTML>
 <!--
-  ~ Copyright (c) 2010-2023 SAP and others.
-  ~ All rights reserved. This program and the accompanying materials
-  ~ are made available under the terms of the Eclipse Public License v2.0
-  ~ which accompanies this distribution, and is available at
-  ~ http://www.eclipse.org/legal/epl-v20.html
-  ~ Contributors:
-  ~ SAP - initial API and implementation
-  -->
 
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="edmDetails" ng-controller="DetailsController">
 
     <head>
@@ -32,7 +35,7 @@
                 <fd-form-group ng-if="editElement.editType === 'Add'">
                     <fd-form-item ng-if="tabNumber === 0">
                         <fd-form-label for="navidn" dg-required="true" dg-colon="true">Name</fd-form-label>
-                        <fd-input id="navidn" name="pId" type="text" ng-required="true" dg-input-rules="inputRules"
+                        <fd-input id="navidn" name="pId" type="text" ng-required="true" dg-input-rules="inputRulesName"
                             state="{{ forms.newForm['pId'].$valid ? '' : 'error' }}" ng-model="editElement.id">
                         </fd-input>
                     </fd-form-item>
@@ -67,13 +70,19 @@
                             ng-model="editElement.url">
                         </fd-input>
                     </fd-form-item>
+                    <fd-form-item class="fd-margin-top--tiny">
+                        <fd-form-label for="navidr" dg-required="false" dg-colon="true">Role</fd-form-label>
+                        <fd-input id="navidr" type="text" ng-required="false" ng-model="editElement.role">
+                        </fd-input>
+                    </fd-form-item>
                 </fd-form-group>
                 <fd-form-group ng-if="editElement.editType === 'Update' && tabNumber === 0">
                     <fd-form-item>
                         <fd-form-label for="navidn" dg-required="true" dg-colon="true">Name</fd-form-label>
-                        <fd-input id="navidn" name="pId" type="text" ng-required="true" dg-input-rules="inputRules"
+                        <fd-input id="navidn" name="pId" type="text" ng-required="true" dg-input-rules="inputRulesName"
                             state="{{ forms.newForm['pId'].$valid ? '' : 'error' }}"
-                            ng-model="dataParameters.perspectives[editElement.index].id">
+                            ng-model="dataParameters.perspectives[editElement.index].id"
+                            pattern="[a-zA-Z0-9]+">
                         </fd-input>
                     </fd-form-item>
                     <fd-form-item class="fd-margin-top--tiny">
@@ -95,6 +104,12 @@
                         <fd-step-input dg-id="navido" name="orderNumber" string-to-number dg-required="true"
                             ng-model="dataParameters.perspectives[editElement.index].order" style="max-width: 320px">
                         </fd-step-input>
+                    </fd-form-item>
+                    <fd-form-item class="fd-margin-top--tiny">
+                        <fd-form-label for="navidr" dg-required="false" dg-colon="true">Role</fd-form-label>
+                        <fd-input id="navidr" type="text" ng-required="false"
+                            ng-model="dataParameters.perspectives[editElement.index].role">
+                        </fd-input>
                     </fd-form-item>
                 </fd-form-group>
                 <fd-form-group ng-if="editElement.editType === 'Update' && tabNumber === 1">
@@ -123,6 +138,12 @@
                         <fd-form-label for="sideUrl" dg-required="true" dg-colon="true">URL</fd-form-label>
                         <fd-input id="sideUrl" type="text" ng-required="true"
                             ng-model="dataParameters.navigations[editElement.index].url">
+                        </fd-input>
+                    </fd-form-item>
+                    <fd-form-item class="fd-margin-top--tiny">
+                        <fd-form-label for="sideRole" dg-required="false" dg-colon="true">Role</fd-form-label>
+                        <fd-input id="sideRole" type="text" ng-required="false"
+                            ng-model="dataParameters.navigations[editElement.index].role">
                         </fd-input>
                     </fd-form-item>
                 </fd-form-group>
@@ -158,6 +179,7 @@
                             <th fd-table-header-cell>Label</th>
                             <th fd-table-header-cell>Icon</th>
                             <th fd-table-header-cell>Order</th>
+                            <th fd-table-header-cell>Role</th>
                             <th fd-table-header-cell></th>
                         </tr>
                     </thead>
@@ -171,6 +193,7 @@
                             <td fd-table-cell>{{ item.label }}</td>
                             <td fd-table-cell>{{ item.icon }}</td>
                             <td fd-table-cell>{{ item.order }}</td>
+                            <td fd-table-cell>{{ item.role }}</td>
                             <td fd-table-cell fit-content="true">
                                 <fd-button compact="true" glyph="sap-icon--edit" dg-type="transparent" aria-label="Edit"
                                     ng-click="edit($index)"></fd-button>
@@ -191,6 +214,7 @@
                             <th fd-table-header-cell>Label</th>
                             <th fd-table-header-cell>Icon</th>
                             <th fd-table-header-cell>URL</th>
+                            <th fd-table-header-cell>Role</th>
                             <th fd-table-header-cell></th>
                         </tr>
                     </thead>
@@ -204,6 +228,7 @@
                             <td fd-table-cell>{{ item.label }}</td>
                             <td fd-table-cell>{{ item.icon }}</td>
                             <td fd-table-cell>{{ item.url }}</td>
+                            <td fd-table-cell>{{ item.role }}</td>
                             <td fd-table-cell fit-content="true">
                                 <fd-button compact="true" glyph="sap-icon--edit" dg-type="transparent" aria-label="Edit"
                                     ng-click="edit($index)"></fd-button>

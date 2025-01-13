@@ -1,4 +1,4 @@
-declare module "@dirigible/qunit" {
+declare module "sdk/qunit" {
     module qunit {
         /**
          * Register a module by name

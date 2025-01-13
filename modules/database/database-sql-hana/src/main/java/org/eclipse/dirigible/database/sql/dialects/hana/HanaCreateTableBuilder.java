@@ -1,19 +1,13 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.dialects.hana;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
 
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.builders.table.CreateTableBuilder;
@@ -21,6 +15,9 @@ import org.eclipse.dirigible.database.sql.builders.table.CreateTableIndexBuilder
 import org.eclipse.dirigible.database.sql.builders.table.CreateTableUniqueIndexBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Arrays;
+import java.util.Set;
 
 /**
  * The HANA Create Table Builder.
@@ -51,16 +48,9 @@ public class HanaCreateTableBuilder extends CreateTableBuilder<HanaCreateTableBu
      *
      * @param sql the sql
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see
-     * org.eclipse.dirigible.database.sql.builders.table.CreateTableBuilder#generateTable(java.lang.
-     * StringBuilder)
-     */
     @Override
     protected void generateTable(StringBuilder sql) {
-        String tableName = (isCaseSensitive()) ? encapsulate(this.getTable(), true) : this.getTable();
+        String tableName = encapsulate(this.getTable(), true);
         String tableType = "";
 
         if (this.tableType.equalsIgnoreCase(KEYWORD_COLUMN) || this.tableType.equalsIgnoreCase(KEYWORD_COLUMNSTORE)) {

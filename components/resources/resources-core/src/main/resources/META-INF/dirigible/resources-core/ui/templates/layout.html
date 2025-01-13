@@ -1,10 +1,10 @@
 <div class="dg-perspective-view">
     <split direction="horizontal" state="splitPanesState.side">
         <split-pane ng-if="leftTabs.length > 0" size="{{ layoutSettings.leftPaneSize }}"
-            min-size="layoutSettings.leftPaneMinSize" max-size="layoutSettings.leftPaneMaxSize" snap-offset="0"
+            min-size="::layoutSettings.leftPaneMinSize" max-size="::layoutSettings.leftPaneMaxSize" snap-offset="0"
             class="pane-left">
             <fd-toolbar compact="true">
-                <span>{{ perspectiveName }}</span>
+                <span>{{ ::perspectiveName }}</span>
                 <fd-toolbar__spacer></fd-toolbar__spacer>
                 <fd-popover close-innerclick="false">
                     <fd-popover-control>
@@ -74,7 +74,7 @@
             </split>
         </split-pane>
         <split-pane ng-if="rightTabs.length > 0" size="{{ layoutSettings.rightPaneSize }}"
-            min-size="layoutSettings.rightPaneMinSize" max-size="layoutSettings.rightPaneMaxSize" snap-offset="0"
+            min-size="::layoutSettings.rightPaneMinSize" max-size="::layoutSettings.rightPaneMaxSize" snap-offset="0"
             class="pane-right">
             <accordion>
                 <accordion-pane ng-repeat="view in rightTabs | filter:{hidden:'!true'}" view="view"

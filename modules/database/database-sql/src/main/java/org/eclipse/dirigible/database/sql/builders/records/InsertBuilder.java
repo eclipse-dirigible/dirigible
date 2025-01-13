@@ -1,22 +1,21 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.builders.records;
-
-import java.util.ArrayList;
-import java.util.List;
 
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.builders.AbstractSqlBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The Insert Builder.
@@ -30,10 +29,10 @@ public class InsertBuilder extends AbstractSqlBuilder {
     private String table = null;
 
     /** The columns. */
-    private List<String> columns = new ArrayList<String>();
+    private final List<String> columns = new ArrayList<String>();
 
     /** The values. */
-    private List<String> values = new ArrayList<String>();
+    private final List<String> values = new ArrayList<String>();
 
     /** The select. */
     private String select = null;
@@ -108,11 +107,6 @@ public class InsertBuilder extends AbstractSqlBuilder {
      *
      * @return the string
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlBuilder#generate()
-     */
     @Override
     public String generate() {
 
@@ -148,7 +142,7 @@ public class InsertBuilder extends AbstractSqlBuilder {
      * @param sql the sql
      */
     protected void generateTable(StringBuilder sql) {
-        String tableName = (isCaseSensitive()) ? encapsulate(this.getTable(), true) : this.getTable();
+        String tableName = encapsulate(this.getTable(), true);
         sql.append(SPACE)
            .append(KEYWORD_INTO)
            .append(SPACE)
@@ -212,13 +206,12 @@ public class InsertBuilder extends AbstractSqlBuilder {
     protected String traverseColumns() {
         StringBuilder snippet = new StringBuilder();
         for (String column : this.columns) {
-            String columnName = (isCaseSensitive()) ? encapsulate(column) : column;
+            String columnName = encapsulate(column);
             snippet.append(columnName)
                    .append(COMMA)
                    .append(SPACE);
         }
-        return snippet.toString()
-                      .substring(0, snippet.length() - 2);
+        return snippet.substring(0, snippet.length() - 2);
     }
 
     /**
@@ -233,8 +226,7 @@ public class InsertBuilder extends AbstractSqlBuilder {
                    .append(COMMA)
                    .append(SPACE);
         }
-        return snippet.toString()
-                      .substring(0, snippet.length() - 2);
+        return snippet.substring(0, snippet.length() - 2);
     }
 
     /**
@@ -249,8 +241,7 @@ public class InsertBuilder extends AbstractSqlBuilder {
                    .append(COMMA)
                    .append(SPACE);
         }
-        return snippet.toString()
-                      .substring(0, snippet.length() - 2);
+        return snippet.substring(0, snippet.length() - 2);
     }
 
     /**

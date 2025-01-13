@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.ide.git.command;
 
@@ -100,10 +99,15 @@ public class PullCommand {
      * @throws GitConnectorException in case of exception
      */
     public void execute(final Workspace workspace, GitPullModel model) throws GitConnectorException {
+        if (model.getProjects() == null) {
+            model.setProjects(GitFileUtils.getAllGitProjects(workspace));
+        }
+
         if (model.getProjects()
                  .size() == 0) {
-            logger.warn("No repository is selected for the Pull action");
+            logger.warn("No git aware project is selected for the Pull action");
         }
+
         List<String> pulledProjects = new ArrayList<String>();
         boolean atLeastOne = false;
         for (String repositoryName : model.getProjects()) {

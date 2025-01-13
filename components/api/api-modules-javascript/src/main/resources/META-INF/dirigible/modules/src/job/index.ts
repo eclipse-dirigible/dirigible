@@ -1,1 +1,2 @@
-export * as scheduler from "./scheduler";
+export { Scheduler as scheduler } from "./scheduler";
+export * from "./scheduler";

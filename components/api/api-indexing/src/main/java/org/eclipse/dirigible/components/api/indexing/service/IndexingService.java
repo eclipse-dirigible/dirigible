@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.api.indexing.service;
 
@@ -91,7 +90,7 @@ public class IndexingService {
     static {
         Configuration.loadModuleConfig("/dirigible-indexing.properties");
         ROOT_FOLDER = Configuration.get(DIRIGIBLE_INDEXING_ROOT_FOLDER);
-        MAX_RESULTS = Integer.parseInt(Configuration.get(DIRIGIBLE_INDEXING_MAX_RESULTS, "100"));
+        MAX_RESULTS = Configuration.getAsInt(DIRIGIBLE_INDEXING_MAX_RESULTS, 100);
     }
 
     /**

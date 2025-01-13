@@ -1,24 +1,19 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.engine.web.service;
 
-import java.nio.charset.StandardCharsets;
-
-import javax.servlet.http.HttpServletRequest;
-
+import jakarta.servlet.http.HttpServletRequest;
 import org.eclipse.dirigible.commons.api.helpers.ContentTypeHelper;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.ResourcesCache;
 import org.eclipse.dirigible.commons.config.ResourcesCache.Cache;
-import org.eclipse.dirigible.components.engine.web.exposure.ExposeManager;
 import org.eclipse.dirigible.components.registry.accessor.RegistryAccessor;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -32,6 +27,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.context.annotation.RequestScope;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.nio.charset.StandardCharsets;
 
 /**
  * The Class WebService.
@@ -61,21 +58,19 @@ public class WebService {
      * @return the resource
      */
     public ResponseEntity getResource(@PathVariable("path") String path) {
-        if (ExposeManager.isPathExposed(path)) {
-            if ("".equals(path.trim())) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Listing of web folders is forbidden.");
-            } else if (path.trim()
-                           .endsWith(IRepositoryStructure.SEPARATOR)) {
-                return getResourceByPath(path + INDEX_HTML);
-            }
-            ResponseEntity resourceResponse = getResourceByPath(path);
-            if (!Configuration.isProductiveIFrameEnabled()) {
-                resourceResponse.getHeaders()
-                                .add("X-Frame-Options", "Deny");
-            }
-            return resourceResponse;
+        if (path.trim()
+                .isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Listing of web folders is forbidden.");
+        } else if (path.trim()
+                       .endsWith(IRepositoryStructure.SEPARATOR)) {
+            return getResourceByPath(path + INDEX_HTML);
         }
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requested resource is not exposed.");
+        ResponseEntity resourceResponse = getResourceByPath(path);
+        if (!Configuration.isProductiveIFrameEnabled()) {
+            resourceResponse.getHeaders()
+                            .add("X-Frame-Options", "Deny");
+        }
+        return resourceResponse;
     }
 
     /**
@@ -165,7 +160,7 @@ public class WebService {
     private boolean isCached(String path) {
         String tag = getTag();
         String cachedTag = WEB_CACHE.getTag(path);
-        return tag == null || cachedTag == null ? false : tag.equals(cachedTag);
+        return tag != null && tag.equals(cachedTag);
 
     }
 

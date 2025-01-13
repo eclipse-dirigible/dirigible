@@ -12,11 +12,20 @@
 
 const UuidFacade = Java.type("org.eclipse.dirigible.components.api.utils.UuidFacade");
 
-export function random() {
-	return UuidFacade.random();
-};
+export class UUID {
 
-export function validate(input) {
-	return UuidFacade.validate(input);
-};
+	public static random(): string {
+		return UuidFacade.random();
+	}
 
+	public static validate(input: string): boolean {
+		return UuidFacade.validate(input);
+	}
+
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = UUID;
+}

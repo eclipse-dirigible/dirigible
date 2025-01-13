@@ -1,0 +1,5 @@
+{
+    "module": "view-console/configs/console-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Console View"
+}

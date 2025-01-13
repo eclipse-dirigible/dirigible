@@ -1,22 +1,10 @@
-/*
- * Copyright (c) 2022 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: 2022 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
-var hex = require('utils/hex');
-var assertTrue = require('test/assert').assertTrue;
 
-var input = '414243';
-var result = hex.decode(input);
+import { Hex } from 'sdk/utils/hex';
+import { Assert } from 'test/assert';
+
+const input = '414243';
+const result = Hex.decode(input);
 
 console.log('decoded: ' + result);
 
-assertTrue(result[0] === 65 &&
-result[1] === 66 &&
-result[2] === 67)
+Assert.assertTrue(result[0] === 65 && result[1] === 66 && result[2] === 67)

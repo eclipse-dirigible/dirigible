@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.builders.table;
 
@@ -30,10 +29,10 @@ public class AlterTableBuilder extends AbstractTableBuilder<AlterTableBuilder> {
     private String action = null;
 
     /** The foreign keys. */
-    private List<CreateTableForeignKeyBuilder> foreignKeys = new ArrayList<CreateTableForeignKeyBuilder>();
+    private final List<CreateTableForeignKeyBuilder> foreignKeys = new ArrayList<CreateTableForeignKeyBuilder>();
 
     /** The unique indices. */
-    private List<CreateTableUniqueIndexBuilder> uniqueIndices = new ArrayList<CreateTableUniqueIndexBuilder>();
+    private final List<CreateTableUniqueIndexBuilder> uniqueIndices = new ArrayList<CreateTableUniqueIndexBuilder>();
 
     /**
      * Instantiates a new creates the table builder.
@@ -54,7 +53,6 @@ public class AlterTableBuilder extends AbstractTableBuilder<AlterTableBuilder> {
         this.action = KEYWORD_ADD;
         return this;
     }
-
 
     /**
      * Alter.
@@ -168,11 +166,6 @@ public class AlterTableBuilder extends AbstractTableBuilder<AlterTableBuilder> {
      *
      * @return the string
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlBuilder#generate()
-     */
     @Override
     public String generate() {
 
@@ -218,7 +211,6 @@ public class AlterTableBuilder extends AbstractTableBuilder<AlterTableBuilder> {
                 generateColumnsForAlter(sql);
             }
         }
-
 
         String generated = sql.append(SEMICOLON)
                               .toString()
@@ -278,7 +270,7 @@ public class AlterTableBuilder extends AbstractTableBuilder<AlterTableBuilder> {
             snippet.append(SPACE)
                    .append(KEYWORD_CONSTRAINT)
                    .append(SPACE)
-                   .append(foreignKey.getName())
+                   .append(encapsulate(foreignKey.getName()))
                    .append(SPACE)
                    .append(KEYWORD_FOREIGN)
                    .append(SPACE)
@@ -290,7 +282,7 @@ public class AlterTableBuilder extends AbstractTableBuilder<AlterTableBuilder> {
                    .append(SPACE)
                    .append(KEYWORD_REFERENCES)
                    .append(SPACE)
-                   .append(foreignKey.getReferencedTable())
+                   .append(encapsulate(foreignKey.getReferencedTable()))
                    .append(SPACE)
                    .append(OPEN)
                    .append(traverseNames(foreignKey.getReferencedColumns()))
@@ -322,7 +314,7 @@ public class AlterTableBuilder extends AbstractTableBuilder<AlterTableBuilder> {
     protected void generateUniqueIndex(StringBuilder sql, CreateTableUniqueIndexBuilder uniqueIndex) {
         if (uniqueIndex != null) {
             if (uniqueIndex.getName() != null) {
-                String uniqueIndexName = (isCaseSensitive()) ? encapsulate(uniqueIndex.getName()) : uniqueIndex.getName();
+                String uniqueIndexName = encapsulate(uniqueIndex.getName());
                 sql.append(KEYWORD_CONSTRAINT)
                    .append(SPACE)
                    .append(uniqueIndexName)
@@ -335,6 +327,5 @@ public class AlterTableBuilder extends AbstractTableBuilder<AlterTableBuilder> {
                .append(CLOSE);
         }
     }
-
 
 }

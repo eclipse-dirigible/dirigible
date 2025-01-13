@@ -16,56 +16,60 @@
 
 const HttpSessionFacade = Java.type("org.eclipse.dirigible.components.api.http.HttpSessionFacade");
 
-export function isValid() {
-	return HttpSessionFacade.isValid();
-};
+export class Session {
 
-export function getAttribute(name) {
-	return HttpSessionFacade.getAttribute(name);
-};
-
-export function getAttributeNames() {
-	const attrNames = HttpSessionFacade.getAttributeNamesJson();
-	if (attrNames) {
-		return JSON.parse(attrNames);
+	public static isValid(): boolean {
+		return HttpSessionFacade.isValid();
 	}
-	return attrNames;
-};
 
-export function getCreationTime() {
-	const time = HttpSessionFacade.getCreationTime();
-	return new Date(time);
-};
+	public static getAttribute(name: string): string {
+		return HttpSessionFacade.getAttribute(name);
+	}
 
-export function getId() {
-	return HttpSessionFacade.getId();
-};
+	public static getAttributeNames(): string[] {
+		const attrNames = HttpSessionFacade.getAttributeNamesJson();
+		return attrNames ? JSON.parse(attrNames) : [];
+	}
 
-export function getLastAccessedTime() {
-	const time = HttpSessionFacade.getLastAccessedTime();
-	return new Date(time);
-};
+	public static getCreationTime(): Date {
+		return new Date(HttpSessionFacade.getCreationTime());
+	}
 
-export function getMaxInactiveInterval() {
-	return HttpSessionFacade.getMaxInactiveInterval();
-};
+	public static getId(): string {
+		return HttpSessionFacade.getId();
+	}
 
-export function invalidate() {
-	HttpSessionFacade.invalidate();
-};
+	public static getLastAccessedTime(): Date {
+		return new Date(HttpSessionFacade.getLastAccessedTime());
+	}
 
-export function isNew() {
-	return HttpSessionFacade.isNew();
-};
+	public static getMaxInactiveInterval(): number {
+		return HttpSessionFacade.getMaxInactiveInterval();
+	}
 
-export function setAttribute(name, value) {
-	HttpSessionFacade.setAttribute(name, value);
-};
+	public static invalidate(): void {
+		HttpSessionFacade.invalidate();
+	}
 
-export function removeAttribute(name) {
-	HttpSessionFacade.removeAttribute(name);
-};
+	public static isNew(): boolean {
+		return HttpSessionFacade.isNew();
+	}
 
-export function setMaxInactiveInterval(interval) {
-	HttpSessionFacade.setMaxInactiveInterval(interval);
-};
+	public static setAttribute(name: string, value: any): void {
+		HttpSessionFacade.setAttribute(name, value);
+	}
+
+	public static removeAttribute(name: string): void {
+		HttpSessionFacade.removeAttribute(name);
+	}
+
+	public static setMaxInactiveInterval(interval: number): void {
+		HttpSessionFacade.setMaxInactiveInterval(interval);
+	}
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Session;
+}

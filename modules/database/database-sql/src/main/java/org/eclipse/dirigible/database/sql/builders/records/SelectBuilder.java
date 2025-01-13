@@ -1,22 +1,21 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.builders.records;
-
-import java.util.ArrayList;
-import java.util.List;
 
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.builders.AbstractQuerySqlBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The Select Builder.
@@ -27,25 +26,25 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
     private static final Logger logger = LoggerFactory.getLogger(SelectBuilder.class);
 
     /** The columns. */
-    private List<String> columns = new ArrayList<String>();
+    private final List<String> columns = new ArrayList<String>();
 
     /** The tables. */
-    private List<String> tables = new ArrayList<String>();
+    private final List<String> tables = new ArrayList<String>();
 
     /** The joins. */
-    private List<String> joins = new ArrayList<String>();
+    private final List<String> joins = new ArrayList<String>();
 
     /** The wheres. */
-    private List<String> wheres = new ArrayList<String>();
+    private final List<String> wheres = new ArrayList<String>();
 
     /** The orders. */
-    private List<String> orders = new ArrayList<String>();
+    private final List<String> orders = new ArrayList<String>();
 
     /** The groups. */
-    private List<String> groups = new ArrayList<String>();
+    private final List<String> groups = new ArrayList<String>();
 
     /** The unions. */
-    private List<String> unions = new ArrayList<String>();
+    private final List<String> unions = new ArrayList<String>();
 
     /** The distinct. */
     private boolean distinct = false;
@@ -139,12 +138,12 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
             logger.trace("from: " + table + ", alias: " + alias);
         }
         StringBuilder snippet = new StringBuilder();
-        snippet.append(table);
+        snippet.append(encapsulate(table));
         if (alias != null) {
             snippet.append(SPACE)
                    .append(KEYWORD_AS)
                    .append(SPACE)
-                   .append(alias);
+                   .append(encapsulate(alias));
         }
         this.tables.add(snippet.toString());
         return this;
@@ -163,8 +162,6 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
         this.schema = schema;
         return this;
     }
-
-
 
     /**
      * Join.
@@ -354,8 +351,8 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
             logger.trace("genericJoin: " + type + ", table: " + table + ", on: " + on + ", alias: " + alias);
         }
         StringBuilder snippet = new StringBuilder();
-        String schemaName = (isCaseSensitive()) ? encapsulate(schema, true) : schema;
-        String tableName = (isCaseSensitive()) ? encapsulate(table, true) : table;
+        String schemaName = encapsulate(schema, true);
+        String tableName = encapsulate(table, true);
         if (schema != null) {
             snippet.append(type)
                    .append(SPACE)
@@ -372,7 +369,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
                    .append(tableName);
         }
         if (alias != null) {
-            String aliasName = (isCaseSensitive()) ? encapsulate(alias) : alias;
+            String aliasName = encapsulate(alias);
             snippet.append(SPACE)
                    .append(KEYWORD_AS)
                    .append(SPACE)
@@ -381,7 +378,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
         snippet.append(SPACE)
                .append(KEYWORD_ON)
                .append(SPACE)
-               .append(on);
+               .append(traverseOn(on));
         this.joins.add(snippet.toString());
         return this;
     }
@@ -410,7 +407,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
         if (logger.isTraceEnabled()) {
             logger.trace("order: " + column);
         }
-        String columnName = (isCaseSensitive()) ? encapsulate(column) : column;
+        String columnName = encapsulate(column);
         return order(columnName, true);
     }
 
@@ -425,7 +422,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
         if (logger.isTraceEnabled()) {
             logger.trace("order: " + column + ", asc: " + asc);
         }
-        String columnName = (isCaseSensitive()) ? encapsulate(column) : column;
+        String columnName = encapsulate(column);
         if (asc) {
             this.orders.add(columnName + SPACE + KEYWORD_ASC);
         } else {
@@ -536,11 +533,6 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      *
      * @return the string
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlBuilder#generate()
-     */
     @Override
     public String generate() {
         StringBuilder sql = new StringBuilder();
@@ -614,7 +606,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
             sql.append(SPACE)
                .append(KEYWORD_HAVING)
                .append(SPACE)
-               .append(this.having);
+               .append(traverseHaving(having));
         }
     }
 
@@ -699,13 +691,12 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
         if (!this.columns.isEmpty()) {
             StringBuilder snippet = new StringBuilder();
             for (String column : this.columns) {
-                String columnName = (isCaseSensitive()) ? encapsulate(column) : column;
+                String columnName = encapsulate(column);
                 snippet.append(columnName)
                        .append(COMMA)
                        .append(SPACE);
             }
-            return snippet.toString()
-                          .substring(0, snippet.length() - 2);
+            return snippet.substring(0, snippet.length() - 2);
         }
         return STAR;
     }
@@ -718,8 +709,8 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
     protected String traverseTables() {
         StringBuilder snippet = new StringBuilder();
         for (String table : this.tables) {
-            String schemaName = (isCaseSensitive()) ? encapsulate(schema, true) : schema;
-            String tableName = (isCaseSensitive()) ? encapsulate(table, true) : table;
+            String schemaName = encapsulate(schema, true);
+            String tableName = encapsulate(table, true);
             if (schema != null) {
                 snippet.append(schemaName)
                        .append(DOT)
@@ -732,8 +723,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
                        .append(SPACE);
             }
         }
-        return snippet.toString()
-                      .substring(0, snippet.length() - 2);
+        return snippet.substring(0, snippet.length() - 2);
     }
 
     /**
@@ -748,8 +738,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
                    .append(COMMA)
                    .append(SPACE);
         }
-        return snippet.toString()
-                      .substring(0, snippet.length() - 2);
+        return snippet.substring(0, snippet.length() - 2);
     }
 
     /**
@@ -760,13 +749,12 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
     protected String traverseGroups() {
         StringBuilder snippet = new StringBuilder();
         for (String group : this.groups) {
-            String groupName = (isCaseSensitive()) ? encapsulate(group) : group;
+            String groupName = encapsulate(group);
             snippet.append(groupName)
                    .append(COMMA)
                    .append(SPACE);
         }
-        return snippet.toString()
-                      .substring(0, snippet.length() - 2);
+        return snippet.substring(0, snippet.length() - 2);
     }
 
     /**
@@ -776,13 +764,11 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      */
     protected String traverseUnions() {
         StringBuilder snippet = new StringBuilder();
-        for (String union : this.unions) {
-            String unionName = (isCaseSensitive()) ? encapsulate(union) : union;
-            snippet.append(unionName)
+        for (String unionSQL : this.unions) {
+            snippet.append(unionSQL)
                    .append(SPACE);
         }
-        return snippet.toString()
-                      .substring(0, snippet.length() - 1);
+        return snippet.substring(0, snippet.length() - 1);
     }
 
     /**

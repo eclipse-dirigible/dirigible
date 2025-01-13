@@ -1,0 +1,186 @@
+#set($dollar = '$')
+#set($hasDropdowns = false)
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+#set($hasDropdowns = true)
+#end
+#end
+#foreach ($property in $filter.properties)
+#if($property.widgetType == "DROPDOWN")
+#set($hasDropdowns = true)
+#end
+#end
+angular.module('page', ["ideUI", "ideView", "entityApi"])
+	.config(["messageHubProvider", function (messageHubProvider) {
+		messageHubProvider.eventIdPrefix = '${projectName}.${perspectiveName}.${name}';
+	}])
+	.config(["entityApiProvider", function (entityApiProvider) {
+		entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
+	}])
+	.controller('PageController', ['${dollar}scope',#if($hasDropdowns) '${dollar}http',#end 'messageHub', 'entityApi', function (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end messageHub, entityApi) {
+
+		$scope.filter = {};
+
+		const ctx = document.getElementById('myChart');
+		const myChart = new Chart(ctx, {
+#if($layoutType == "REPORT_BAR")
+			type: 'bar',
+#elseif($layoutType == "REPORT_LINE")
+			type: 'line',
+#elseif($layoutType == "REPORT_PIE")
+			type: 'pie',
+#elseif($layoutType == "REPORT_DOUGHNUT")
+			type: 'doughnut',
+#elseif($layoutType == "REPORT_POLARAREA")
+			type: 'polarArea',
+#elseif($layoutType == "REPORT_RADAR")
+			type: 'radar',
+#end
+			data: {
+				labels: [],
+				datasets: []
+			}
+		});
+
+		//-----------------Events-------------------//
+		messageHub.onDidReceiveMessage("filter", function (msg) {
+			$scope.filter = msg.data;
+			${dollar}scope.loadPage();
+		});
+		//-----------------Events-------------------//
+
+		$scope.loadPage = function () {
+			entityApi.count($scope.filter).then(function (response) {
+				if (response.status != 200) {
+					messageHub.showAlertError("${name}", `Unable to count ${name}: '${response.message}'`);
+					return;
+				}
+				$scope.dataCount = response.data;
+				entityApi.list($scope.filter).then(function (response) {
+					if (response.status != 200) {
+						messageHub.showAlertError("${name}", `Unable to list ${name}: '${response.message}'`);
+						return;
+					}
+#if($hasDates)
+
+					response.data.forEach(e => {
+#foreach ($property in $properties)
+#if($property.isDateType)
+						if (e.${property.name}) {
+							e.${property.name} = new Date(e.${property.name});
+						}
+#end
+#end
+					});
+
+#end
+					$scope.data = response.data;
+					myChart.data.labels = ${dollar}scope.data.map(e => #foreach($property in $properties)#if($property.dataPrimaryKey)e.${property.name}#end#end);
+					myChart.data.datasets = [
+#foreach ($property in $properties)
+#if(!$property.dataPrimaryKey)
+						{
+#if($property.widgetLabel)
+							label: '${property.widgetLabel}',
+#else
+							label: '${property.name}',
+#end
+							data: ${dollar}scope.data.map(e => e.${property.name}),
+#if($layoutType == "REPORT_LINE")
+							fill: true,
+#end
+							borderWidth: 1
+						},
+#end
+#end
+					];
+					myChart.canvas.parentNode.style.height = '90%';
+					myChart.update();
+				});
+			});
+		};
+		$scope.loadPage();
+
+		$scope.openFilter = function () {
+			messageHub.showDialogWindow("${name}-details-filter", {
+				action: "filter",
+				filter: $scope.filter,
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+				options${property.name}: $scope.options${property.name},
+#end
+#end
+#foreach ($property in $filter.properties)
+#if($property.widgetType == "DROPDOWN")
+				options${property.name}: $scope.options${property.name},
+#end
+#end
+			});
+		};
+
+#if($hasDropdowns)
+		//----------------Dropdowns-----------------//
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+		$scope.options${property.name} = [];
+#end
+#end
+#foreach ($property in $filter.properties)
+#if($property.widgetType == "DROPDOWN")
+		$scope.options${property.name} = [];
+#end
+#end
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+
+		${dollar}http.get("${property.widgetDropdownUrl}").then(function (response) {
+			${dollar}scope.options${property.name} = response.data.map(e => {
+				return {
+					value: e.${property.widgetDropDownKey},
+					text: e.${property.widgetDropDownValue}
+				}
+			});
+		});
+#end
+#end
+#foreach ($property in $filter.properties)
+#if($property.widgetType == "DROPDOWN")
+
+		${dollar}http.get("${property.widgetDropdownUrl}").then(function (response) {
+			${dollar}scope.options${property.name} = response.data.map(e => {
+				return {
+					value: e.${property.widgetDropDownKey},
+					text: e.${property.widgetDropDownValue}
+				}
+			});
+		});
+#end
+#end
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+		${dollar}scope.options${property.name}Value = function (optionKey) {
+			for (let i = 0; i < ${dollar}scope.options${property.name}.length; i++) {
+				if (${dollar}scope.options${property.name}[i].value === optionKey) {
+					return ${dollar}scope.options${property.name}[i].text;
+				}
+			}
+			return null;
+		};
+#end
+#end
+#foreach ($property in $filter.properties)
+#if($property.widgetType == "DROPDOWN")
+		${dollar}scope.options${property.name}Value = function (optionKey) {
+			for (let i = 0; i < ${dollar}scope.options${property.name}.length; i++) {
+				if (${dollar}scope.options${property.name}[i].value === optionKey) {
+					return ${dollar}scope.options${property.name}[i].text;
+				}
+			}
+			return null;
+		};
+#end
+#end
+		//----------------Dropdowns-----------------//
+#end
+
+	}]);

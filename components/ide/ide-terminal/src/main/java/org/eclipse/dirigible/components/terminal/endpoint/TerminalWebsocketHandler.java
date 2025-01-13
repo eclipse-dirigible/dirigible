@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.terminal.endpoint;
 
@@ -78,11 +77,11 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
         try {
             TerminalWebsocketClientEndpoint clientEndPoint = startClientWebsocket(session);
             SESSION_TO_CLIENT.put(session.getId(), clientEndPoint);
-        } catch (URISyntaxException e) {
+        } catch (Exception e) {
             logger.error(TERMINAL_PREFIX + e.getMessage(), e);
             try {
                 session.close();
-            } catch (IOException e1) {
+            } catch (Exception e1) {
                 logger.error(TERMINAL_PREFIX + e.getMessage(), e);
             }
         }
@@ -125,7 +124,7 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
         if (logger.isInfoEnabled()) {
             logger.info(String.format("[ws:terminal] Session %s error %s", session.getId(), throwable.getMessage()));
         }
-        logger.error(TERMINAL_PREFIX + throwable.getMessage(), throwable);
+        // logger.error(TERMINAL_PREFIX + throwable.getMessage(), throwable);
     }
 
     /**
@@ -147,7 +146,7 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
                 clientEndPoint.getSession()
                               .close();
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             logger.error(TERMINAL_PREFIX + e.getMessage(), e);
         }
     }

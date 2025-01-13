@@ -1,32 +1,21 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.csvim.domain;
 
-import java.util.Set;
-
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.FetchType;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.JoinColumn;
-import javax.persistence.ManyToOne;
-import javax.persistence.Table;
-
+import com.google.gson.annotations.Expose;
+import jakarta.persistence.*;
 import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
-import com.google.gson.annotations.Expose;
+import java.util.Set;
 
 /**
  * The Class CsvFile.
@@ -97,6 +86,12 @@ public class CsvFile extends Artefact {
     @Expose
     private String delimEnclosing;
 
+    /**
+     * The imported.
+     */
+    @Column(name = "CSV_FILE_IMPORTED", columnDefinition = "BOOLEAN", nullable = false)
+    private boolean imported;
+
     /** The sequence. */
     @Column(name = "CSV_FILE_SEQUENCE", columnDefinition = "VARCHAR")
     @Expose
@@ -108,6 +103,11 @@ public class CsvFile extends Artefact {
     @Column(name = "CSV_FILE_DISTINGUISH_EMPTY_FROM_NULL", columnDefinition = "BOOLEAN")
     @Expose
     private Boolean distinguishEmptyFromNull;
+
+    /** The upsert. */
+    @Column(name = "CSV_FILE_UPSERT", columnDefinition = "boolean", nullable = false)
+    @Expose
+    private Boolean upsert = true; // default true
 
     /**
      * The csvim.
@@ -335,7 +335,6 @@ public class CsvFile extends Artefact {
         this.delimEnclosing = delimEnclosing;
     }
 
-
     /**
      * Gets the sequence.
      *
@@ -388,5 +387,43 @@ public class CsvFile extends Artefact {
      */
     public void setCsvim(Csvim csvim) {
         this.csvim = csvim;
+    }
+
+    /**
+     * Gets the upsert.
+     *
+     * @return the upsert
+     */
+    public Boolean getUpsert() {
+        return upsert;
+    }
+
+    /**
+     * Sets the upsert.
+     *
+     * @param upsert the new upsert
+     */
+    public void setUpsert(Boolean upsert) {
+        this.upsert = upsert;
+    }
+
+    @Override
+    public void updateKey() {
+        if ((this.type == null) || (this.location == null) || (this.name == null) || (this.table == null)) {
+            String errMessage =
+                    String.format("Attempt to generate an artefact key by type=[%s], location=[%s], name=[%s], table [%s], schema=[%s]",
+                            this.type, this.location, this.name, this.table, this.schema);
+            throw new IllegalArgumentException(errMessage);
+        }
+        this.key = this.type + KEY_SEPARATOR + this.location + KEY_SEPARATOR + this.name + KEY_SEPARATOR + this.table + KEY_SEPARATOR
+                + this.schema;
+    }
+
+    public boolean isImported() {
+        return imported;
+    }
+
+    public void setImported(boolean imported) {
+        this.imported = imported;
     }
 }

@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.eclipse.dirigible</groupId>
 		<artifactId>dirigible-components-parent</artifactId>
-		<version>9.0.0-SNAPSHOT</version>
+		<version>11.0.0-SNAPSHOT</version>
 		<relativePath>../../pom.xml</relativePath>
 	</parent>
 
@@ -99,6 +99,16 @@
 			<groupId>org.webjars.npm</groupId>
 			<artifactId>sap-theming__theming-base-content</artifactId>
 			<version>${sap-theming__theming-base-content.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.webjars.npm</groupId>
+			<artifactId>chart.js</artifactId>
+			<version>${chart.js.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.webjars.npm</groupId>
+			<artifactId>sortablejs</artifactId>
+			<version>${sortablejs.version}</version>
 		</dependency>
     </dependencies>
     

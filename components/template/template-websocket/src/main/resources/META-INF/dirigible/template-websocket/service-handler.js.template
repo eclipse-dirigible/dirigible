@@ -1,15 +1,15 @@
-exports.onOpen = function()  {
+export function onOpen()  {
   console.log("Service connection openned at {{fileName}} service.");
 }
 
-exports.onMessage = function(message) {
+export function onMessage(message) {
   console.log("Message received by the {{fileName}} service: " + message);
 }
 
-exports.onError = function(error) {
+export function onError(error) {
   console.error("Error in {{fileName}} service: " + error);
 }
 
-exports.onClose = function() {
+export function onClose() {
   console.warn("Service connection closed at {{fileName}} service.");
 }

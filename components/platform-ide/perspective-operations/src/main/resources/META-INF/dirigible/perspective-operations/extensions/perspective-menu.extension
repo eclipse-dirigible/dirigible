@@ -1,0 +1,5 @@
+{
+    "module": "perspective-operations/configs/perspective-menu.js",
+    "extensionPoint": "platform-menus",
+    "description": "Operations perspective menu"
+}

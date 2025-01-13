@@ -15,14 +15,28 @@
 
 const GlobalsFacade = Java.type("org.eclipse.dirigible.components.api.core.GlobalsFacade");
 
-export function get(name) {
-	return GlobalsFacade.get(name);
-};
+export interface GlobalsValues {
+	[key: string]: string;
+}
 
-export function set(name, value) {
-	GlobalsFacade.set(name, value);
-};
+export class Globals {
 
-export function list() {
-	return GlobalsFacade.list();
-};
+	public static get(name: string): string | undefined {
+		const value = GlobalsFacade.get(name);
+		return value ?? undefined;
+	}
+
+	public static set(name: string, value: string): void {
+		GlobalsFacade.set(name, value);
+	}
+
+	public static list(): GlobalsValues {
+		return JSON.parse(GlobalsFacade.list());
+	}
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Globals;
+}

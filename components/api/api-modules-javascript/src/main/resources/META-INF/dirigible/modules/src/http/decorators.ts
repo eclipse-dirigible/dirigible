@@ -10,12 +10,12 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 
-import * as rs from "@dirigible/http/rs"
+import * as rs from "sdk/http/rs"
 
 const router = rs.service();
 let instance = null;
 
-export function Controller(ctr: {new()}, context: ClassDecoratorContext): void {
+export function Controller(ctr: { new() }, context: ClassDecoratorContext): void {
     instance = new ctr();
     router.execute();
 }
@@ -29,15 +29,12 @@ export const Head = createRequestDecorator("head")
 export const Options = createRequestDecorator("options")
 
 function createRequestDecorator(httpMethod) {
-    return function (path: string): any {
+    return function (path: string, consumesMimeTypes: undefined | string | string[] = ['*/*'], producesMimeTypes: undefined | string | string[] = ['application/json']): any {
         return function (target, propertyKey, descriptor) {
             const handler = descriptor ? descriptor.value : target;
-            router[httpMethod](
-                path,
-                (ctx, req, res) => {
-                    handleRequest(req, res, ctx, handler);
-                }
-            );
+            router.resource(path)[httpMethod]((ctx, req, res) => {
+                handleRequest(req, res, ctx, handler);
+            }).consumes(consumesMimeTypes).produces(producesMimeTypes);
         };
     }
 }

@@ -1,0 +1,5 @@
+{
+    "module": "editor-report/configs/report-editor.js",
+    "extensionPoint": "platform-editors",
+    "description": "Report Editor"
+}

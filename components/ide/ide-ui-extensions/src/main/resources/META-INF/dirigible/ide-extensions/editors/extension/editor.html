@@ -1,3 +1,16 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
 <!DOCTYPE html>
 <html lang="en" ng-app="page" ng-controller="PageController">
 
@@ -9,14 +22,14 @@
         <title dg-view-title></title>
         <script type="text/javascript" src="../../services/extension-editor.js"></script>
         <theme></theme>
-        <script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=ide-view-js">
+        <script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=ide-editor-js">
         </script>
         <link type="text/css" rel="stylesheet"
-            href="/services/js/resources-core/services/loader.js?id=ide-view-css" />
+            href="/services/js/resources-core/services/loader.js?id=ide-editor-css" />
         <script type="text/javascript" src="editor.js"></script>
     </head>
 
-    <body class="dg-vbox dg-center__horizontal" fd-scrollbar dg-shortcut="'ctrl+s'" dg-shortcut-action="save()">
+    <body class="dg-vbox dg-center__horizontal" fd-scrollbar dg-shortcut="'ctrl+s'" dg-shortcut-action="save">
         <fd-busy-indicator-extended class="dg-fill-parent" ng-hide="state.error || !state.isBusy" dg-size="l">
             {{state.busyText}}
         </fd-busy-indicator-extended>
@@ -41,6 +54,20 @@
                                 ng-model="extension.module" ng-maxlength="255"
                                 dg-input-rules="{ patterns: ['^[a-zA-Z0-9_.-/$-]*$'] }" type="text"
                                 placeholder="Enter module path">
+                            </fd-input>
+                            <fd-form-message dg-type="error">Allowed characters include all letters, numbers,
+                                '_', '.', '-', '/', and '$'. Maximum length is 255.</fd-form-message>
+                        </fd-form-input-message-group>
+                    </fd-form-item>
+                    <fd-form-item horizontal="false">
+                        <fd-form-label for="idRole" dg-required="true" dg-colon="true">Role</fd-form-label>
+                        <fd-form-input-message-group
+                            dg-inactive="{{ forms.editor['role'].$valid ? 'true' : 'false' }}">
+                            <fd-input id="idRole" name="role"
+                                state="{{ forms.editor['role'].$valid ? '' : 'error' }}" ng-required="false"
+                                ng-model="extension.role" ng-maxlength="255"
+                                dg-input-rules="{ patterns: ['^[a-zA-Z0-9_.-/$-]*$'] }" type="text"
+                                placeholder="Enter role name">
                             </fd-input>
                             <fd-form-message dg-type="error">Allowed characters include all letters, numbers,
                                 '_', '.', '-', '/', and '$'. Maximum length is 255.</fd-form-message>

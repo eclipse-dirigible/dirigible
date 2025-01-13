@@ -1,2 +1,4 @@
-export * as consumer from "./consumer";
-export * as producer from "./producer";
+export * from "./consumer";
+export { Consumer as consumer } from "./consumer";
+export * from "./producer";
+export { Producer as producer } from "./producer";

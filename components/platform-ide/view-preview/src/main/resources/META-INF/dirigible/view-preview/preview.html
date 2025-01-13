@@ -1,0 +1,59 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="preview" ng-controller="PreviewController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-preview/configs/preview-view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <script type="text/javascript" src="/services/web/service-workspace/workspace-hub.js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script src="js/preview.js"></script>
+
+    </head>
+
+    <body class="bk-vbox">
+        <bk-bar compact="true">
+            <bk-bar-left>
+                <bk-bar-element>
+                    <bk-button glyph="sap-icon--arrow-left" aria-label="Go back" title="Go back" state="transparent" ng-disabled="!hasBack()" ng-click="goBack()"></bk-button>
+                </bk-bar-element>
+                <bk-bar-element>
+                    <bk-button glyph="sap-icon--arrow-right" aria-label="Go forward" title="Go forward" state="transparent" ng-disabled="!hasForward()" ng-click="goForward()"></bk-button>
+                </bk-bar-element>
+                <bk-bar-element>
+                    <bk-button glyph="sap-icon--refresh" aria-label="Reload" state="transparent" ng-disabled="!getCurrentUrl()" ng-click="reload()"></bk-button>
+                </bk-bar-element>
+                <bk-bar-element class="bk-stretch">
+                    <bk-input-group state="{{urlLocked ? 'warning' : undefined}}">
+                        <bk-input type="text" ng-model="previewUrl.value" ng-keyup="inputUrlKeyUp($event)" placeholder="http://..."></bk-input>
+                        <bk-input-group-addon has-button="true">
+                            <bk-button label="{{ urlLocked ? 'Locked' : 'Unlocked'}}" glyph="{{ urlLocked ? 'sap-icon--locked' : 'sap-icon--unlocked'}}" state="transparent" ng-click="urlLockedToggle()"></bk-button>
+                        </bk-input-group-addon>
+                    </bk-input-group>
+                </bk-bar-element>
+                <bk-bar-element>
+                    <bk-button glyph="sap-icon--customize" aria-label="Set custom view parameters" title="Set custom view parameters" state="transparent" ng-click="customizeParameters()"></bk-button>
+                </bk-bar-element>
+            </bk-bar-left>
+        </bk-bar>
+        <iframe id="preview-iframe" data-parameters="{{getParams()}}"></iframe>
+        <theme></theme>
+    </body>
+
+</html>

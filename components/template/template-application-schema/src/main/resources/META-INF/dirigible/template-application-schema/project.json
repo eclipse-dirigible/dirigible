@@ -1,1 +1,5 @@
-{"guid":"template-application-schema"}
+{
+    "guid": "template-application-schema",
+    "dependencies": [],
+    "actions": []
+}

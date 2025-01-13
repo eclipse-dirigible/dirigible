@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.commons.timeout;
 
@@ -34,7 +33,7 @@ public class TimeLimited {
     private static final String DIRIGIBLE_JOB_DEFAULT_TIMEOUT = "DIRIGIBLE_JOB_DEFAULT_TIMEOUT";
 
     /** The Constant DEFAULT_TIMEOUT. */
-    private static final String DEFAULT_TIMEOUT = "3";
+    private static final int DEFAULT_TIMEOUT = 3;
 
     /**
      * Run with timeout.
@@ -91,15 +90,7 @@ public class TimeLimited {
      * @return the timeout
      */
     public static final int getTimeout() {
-        String defaultTimeout = Configuration.get(DIRIGIBLE_JOB_DEFAULT_TIMEOUT, DEFAULT_TIMEOUT);
-        try {
-            return Integer.parseInt(defaultTimeout);
-        } catch (NumberFormatException e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
-            return Integer.parseInt(DEFAULT_TIMEOUT);
-        }
+        return Configuration.getAsInt(DIRIGIBLE_JOB_DEFAULT_TIMEOUT, DEFAULT_TIMEOUT);
     }
 
     /**

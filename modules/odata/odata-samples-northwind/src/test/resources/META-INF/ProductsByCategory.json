@@ -1,11 +1,16 @@
 {
-	"edmType": "Products_by_Category",
-	"edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.ProductsByCategory",
-	"sqlTable": " PUBLIC.PRODUCTS_BY_CATEGORY",
-	"CategoryName": "CATEGORY_NAME",
-	"ProductName": "PRODUCT_NAME",
-	"QuantityPerUnit": "QUANTITY_PERUNIT",
-	"UnitsInStock": "UNITS_IN_STOCK",
-	"Discontinued": "DISCONTINUED",
-	"_pk_": ["CATEGORY_NAME", "PRODUCT_NAME", "DISCONTINUED"]
+  "edmType": "Products_by_Category",
+  "edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.ProductsByCategory",
+  "sqlTable": "PRODUCTS_BY_CATEGORY",
+  "sqlSchema": "PUBLIC",
+  "CategoryName": "CATEGORY_NAME",
+  "ProductName": "PRODUCT_NAME",
+  "QuantityPerUnit": "QUANTITY_PERUNIT",
+  "UnitsInStock": "UNITS_IN_STOCK",
+  "Discontinued": "DISCONTINUED",
+  "_pk_": [
+    "CATEGORY_NAME",
+    "PRODUCT_NAME",
+    "DISCONTINUED"
+  ]
 }

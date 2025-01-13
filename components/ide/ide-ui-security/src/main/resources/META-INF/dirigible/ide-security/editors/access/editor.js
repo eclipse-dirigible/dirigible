@@ -1,19 +1,18 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-angular.module('page', ["ideUI", "ideView"])
-    .controller('PageController', function ($scope, messageHub, $window, ViewParameters) {
+angular.module('page', ["ideUI", "ideView", "ideWorkspace"])
+    .controller('PageController', function ($scope, messageHub, workspaceApi, $window, ViewParameters) {
         let contents;
-        let csrfToken;
-        $scope.errorMessage = 'Аn unknown error was encountered. Please see console for more information.';
+        $scope.errorMessage = 'An unknown error was encountered. Please see console for more information.';
         $scope.state = {
             isBusy: true,
             error: false,
@@ -39,38 +38,30 @@ angular.module('page', ["ideUI", "ideView"])
             messageHub.setStatusCaret('');
         });
 
-        function getResource(resourcePath) {
-            let xhr = new XMLHttpRequest();
-            xhr.open('GET', resourcePath, false);
-            xhr.setRequestHeader('X-CSRF-Token', 'Fetch');
-            xhr.send();
-            if (xhr.status === 200) {
-                csrfToken = xhr.getResponseHeader("x-csrf-token");
-                return xhr.responseText;
-            } else {
-                $scope.state.error = true;
-                $scope.errorMessage = "Unable to load the file. See console, for more information.";
-                messageHub.setStatusError(`Error loading '${$scope.dataParameters.file}'`);
-                return '{}';
-            }
-        }
-
-        $scope.load = function () {
+        function load() {
             if (!$scope.state.error) {
-                contents = getResource('/services/ide/workspaces' + $scope.dataParameters.file);
-                $scope.access = JSON.parse(contents);
-                contents = JSON.stringify($scope.access, null, 4);
-                $scope.state.isBusy = false;
+                workspaceApi.loadContent('', $scope.dataParameters.file).then(function (response) {
+                    if (response.status === 200) {
+                        if (response.data === '') $scope.access = {};
+                        else $scope.access = response.data;
+                        contents = JSON.stringify($scope.access, null, 4);
+                        $scope.$apply(() => $scope.state.isBusy = false);
+                    } else if (response.status === 404) {
+                        messageHub.closeEditor($scope.dataParameters.file);
+                    } else {
+                        $scope.$apply(function () {
+                            $scope.state.error = true;
+                            $scope.errorMessage = 'There was a problem with loading the file';
+                            $scope.state.isBusy = false;
+                        });
+                    }
+                });
             }
         };
 
         function saveContents(text) {
-            let xhr = new XMLHttpRequest();
-            xhr.open('PUT', '/services/ide/workspaces' + $scope.dataParameters.file);
-            xhr.setRequestHeader('X-Requested-With', 'Fetch');
-            xhr.setRequestHeader('X-CSRF-Token', csrfToken);
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState === 4) {
+            workspaceApi.saveContent('', $scope.dataParameters.file, text).then(function (response) {
+                if (response.status === 200) {
                     messageHub.announceFileSaved({
                         name: $scope.dataParameters.file.substring($scope.dataParameters.file.lastIndexOf('/') + 1),
                         path: $scope.dataParameters.file.substring($scope.dataParameters.file.indexOf('/', 1)),
@@ -82,20 +73,18 @@ angular.module('page', ["ideUI", "ideView"])
                     $scope.$apply(function () {
                         $scope.state.isBusy = false;
                     });
+                } else {
+                    messageHub.setStatusError(`Error saving '${$scope.dataParameters.file}'`);
+                    messageHub.showAlertError('Error while saving the file', 'Please look at the console for more information');
+                    $scope.$apply(function () {
+                        $scope.state.isBusy = false;
+                    });
                 }
-            };
-            xhr.onerror = function (error) {
-                console.error(`Error saving '${$scope.dataParameters.file}'`, error);
-                messageHub.setStatusError(`Error saving '${$scope.dataParameters.file}'`);
-                messageHub.showAlertError('Error while saving the file', 'Please look at the console for more information');
-                $scope.$apply(function () {
-                    $scope.state.isBusy = false;
-                });
-            };
-            xhr.send(text);
+            });
         }
 
-        $scope.save = function () {
+        $scope.save = function (_keySet, event) {
+            if (event) event.preventDefault();
             if (!$scope.state.error) {
                 $scope.state.busyText = "Saving...";
                 $scope.state.isBusy = true;
@@ -107,6 +96,16 @@ angular.module('page', ["ideUI", "ideView"])
         messageHub.onEditorFocusGain(function (msg) {
             if (msg.resourcePath === $scope.dataParameters.file) messageHub.setStatusCaret('');
         });
+
+        messageHub.onEditorReloadParameters(
+            function (event) {
+                $scope.$apply(() => {
+                    if (event.resourcePath === $scope.dataParameters.file) {
+                        $scope.dataParameters = ViewParameters.get();
+                    }
+                });
+            }
+        );
 
         messageHub.onDidReceiveMessage(
             "editor.file.save.all",
@@ -172,9 +171,8 @@ angular.module('page', ["ideUI", "ideView"])
         );
 
         $scope.$watch('access', function () {
-            if (!$scope.state.error) {
-                let access = JSON.stringify($scope.access, null, 4);
-                messageHub.setEditorDirty($scope.dataParameters.file, contents !== access);
+            if (!$scope.state.error && !$scope.state.isBusy) {
+                messageHub.setEditorDirty($scope.dataParameters.file, contents !== JSON.stringify($scope.access, null, 4));
             }
         }, true);
 
@@ -185,13 +183,13 @@ angular.module('page', ["ideUI", "ideView"])
                 [{
                     id: "aeciPath",
                     type: "input",
-                    label: "Path",
+                    label: "Ant path pattern",
                     required: true,
                     placeholder: "Enter path",
                     minlength: 1,
                     maxlength: 255,
                     inputRules: {
-                        patterns: ['^[a-zA-Z0-9_.-/$-]*$'],
+                        patterns: ['^(?:\\/?(?:[^/*?]*(?:\\*\\*\\/?|\\/?[^/*?]*)*|\\*|\\*\\*)\\/?)*$'],
                     },
                     value: '',
                 },
@@ -242,13 +240,13 @@ angular.module('page', ["ideUI", "ideView"])
                 [{
                     id: "aeciPath",
                     type: "input",
-                    label: "Path",
+                    label: "Ant path pattern",
                     required: true,
                     placeholder: "Enter path",
                     minlength: 1,
                     maxlength: 255,
                     inputRules: {
-                        patterns: ['^[a-zA-Z0-9_.-/$-]*$'],
+                        patterns: ['^(?:\\/?(?:[^/*?]*(?:\\*\\*\\/?|\\/?[^/*?]*)*|\\*|\\*\\*)\\/?)*$'],
                     },
                     value: $scope.access.constraints[index].path,
                 },
@@ -321,5 +319,5 @@ angular.module('page', ["ideUI", "ideView"])
         } else if (!$scope.dataParameters.hasOwnProperty('contentType')) {
             $scope.state.error = true;
             $scope.errorMessage = "The 'contentType' data parameter is missing.";
-        } else $scope.load();
+        } else load();
     });

@@ -1,28 +1,25 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.ide.git.endpoint;
 
 import static java.text.MessageFormat.format;
-
 import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.List;
-
-import javax.validation.Valid;
-
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.ide.git.domain.GitCommitInfo;
 import org.eclipse.dirigible.components.ide.git.domain.GitConnectorException;
+import org.eclipse.dirigible.components.ide.git.domain.GitUrlInput;
+import org.eclipse.dirigible.components.ide.git.domain.GitUrlOutput;
 import org.eclipse.dirigible.components.ide.git.model.BaseGitModel;
 import org.eclipse.dirigible.components.ide.git.model.GitCheckoutModel;
 import org.eclipse.dirigible.components.ide.git.model.GitCloneModel;
@@ -42,8 +39,6 @@ import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.api.errors.InvalidRefNameException;
 import org.eclipse.jgit.api.errors.RefAlreadyExistsException;
 import org.eclipse.jgit.api.errors.RefNotFoundException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -57,8 +52,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
-
-import com.google.gson.JsonObject;
+import jakarta.validation.Valid;
 
 /**
  * Front facing REST service serving the Git commands.
@@ -67,12 +61,8 @@ import com.google.gson.JsonObject;
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_IDE + "git/{workspace}")
 public class GitEndpoint {
 
-
-    /** The Constant logger. */
-    private static final Logger logger = LoggerFactory.getLogger(GitEndpoint.class);
-
     /** The git service. */
-    private GitService gitService;
+    private final GitService gitService;
 
     /**
      * Instantiates a new git endpoint.
@@ -581,9 +571,8 @@ public class GitEndpoint {
         ProjectOriginUrls originUrls = gitService.getOriginUrls(workspace, project);
         if (originUrls != null) {
             return ResponseEntity.ok(originUrls);
-        } else {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Not a git project");
         }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Not a git project");
     }
 
     /**
@@ -591,7 +580,7 @@ public class GitEndpoint {
      *
      * @param workspace the workspace
      * @param project the project
-     * @param url the new fetch URL
+     * @param input the input
      * @return the response
      * @throws GitConnectorException Git Connector Exception
      * @throws GitAPIException Git API Exception
@@ -599,13 +588,12 @@ public class GitEndpoint {
      */
     @PostMapping(value = {"/{project}/fetch-url"}, produces = {"application/json"})
     public ResponseEntity<?> setFetchUrl(@PathVariable("workspace") String workspace, @PathVariable("project") String project,
-            @Valid @RequestBody JsonObject url) throws GitConnectorException, GitAPIException, URISyntaxException {
-        String newurl = url.get("url")
-                           .getAsString();
+            @Valid @RequestBody GitUrlInput input) throws GitConnectorException, GitAPIException, URISyntaxException {
+        String newurl = input.getUrl();
         gitService.setFetchUrl(workspace, project, newurl);
-        JsonObject res = new JsonObject();
-        res.addProperty("status", "success");
-        res.addProperty("url", newurl);
+        GitUrlOutput res = new GitUrlOutput();
+        res.setStatus("success");
+        res.setUrl(newurl);
         return ResponseEntity.ok(res);
     }
 
@@ -614,7 +602,7 @@ public class GitEndpoint {
      *
      * @param workspace the workspace
      * @param project the project
-     * @param url the new fetch URL
+     * @param input the input
      * @return the response
      * @throws GitConnectorException Git Connector Exception
      * @throws GitAPIException Git API Exception
@@ -622,13 +610,12 @@ public class GitEndpoint {
      */
     @PostMapping(value = {"/{project}/push-url"}, produces = {"application/json"})
     public ResponseEntity<?> setPushUrl(@PathVariable("workspace") String workspace, @PathVariable("project") String project,
-            @Valid @RequestBody JsonObject url) throws GitConnectorException, GitAPIException, URISyntaxException {
-        String newurl = url.get("url")
-                           .getAsString();
+            @Valid @RequestBody GitUrlInput input) throws GitConnectorException, GitAPIException, URISyntaxException {
+        String newurl = input.getUrl();
         gitService.setPushUrl(workspace, project, newurl);
-        JsonObject res = new JsonObject();
-        res.addProperty("status", "success");
-        res.addProperty("url", newurl);
+        GitUrlOutput res = new GitUrlOutput();
+        res.setStatus("success");
+        res.setUrl(newurl);
         return ResponseEntity.ok(res);
     }
 
@@ -651,9 +638,8 @@ public class GitEndpoint {
         GitDiffModel diff = gitService.getFileDiff(workspace, repositoryName, path);
         if (diff != null) {
             return ResponseEntity.ok(GsonHelper.toJson(diff));
-        } else {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Not a git project");
         }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Not a git project");
     }
 
     /**
@@ -671,9 +657,8 @@ public class GitEndpoint {
         List<GitCommitInfo> history = gitService.getHistory(workspace, project, path);
         if (history != null) {
             return ResponseEntity.ok(GsonHelper.toJson(history));
-        } else {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Not a git project");
         }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Not a git project");
     }
 
     /**

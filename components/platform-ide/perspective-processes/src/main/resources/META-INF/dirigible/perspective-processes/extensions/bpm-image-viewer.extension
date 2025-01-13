@@ -1,0 +1,5 @@
+{
+    "module": "perspective-processes/configs/bpm-image-viewer.js",
+    "extensionPoint": "platform-views",
+    "description": "Business Process Inspector"
+}

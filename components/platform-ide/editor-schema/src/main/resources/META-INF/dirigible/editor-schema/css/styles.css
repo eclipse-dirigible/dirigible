@@ -1,0 +1,121 @@
+/**
+ * Copyright (c) 2010-2024 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v2.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ */
+body {
+  background-color: var(--sapBackgroundColor, #f7f7f7) !important;
+  color: var(--sapTextColor, #303030) !important;
+}
+
+.mx-sidebar-icon {
+  font-size: 1.25rem;
+  padding: 0.438rem 0.875rem;
+  color: var(--sapButton_Lite_TextColor, #303030);
+}
+
+.mx-sidebar-icon:hover {
+  cursor: pointer;
+  background-color: var(--sapButton_Lite_Hover_Background, #e6e6e6);
+}
+
+.outlineContainer {
+  background: var(--sapBackgroundColor, #f7f7f7);
+  box-sizing: border-box;
+  top: var(--fdToolbar_Height, 2.75rem) !important;
+  border: solid 0.0625rem var(--sapGroup_TitleBorderColor, #d9d9d9);
+  border-top: none;
+  border-right: none;
+}
+
+.editorContainer {
+  height: calc(100% - var(--fdToolbar_Height, 2.75rem));
+}
+
+div.mxPopupMenu {
+  background-color: var(--sapList_Background, #fff) !important;
+  font-size: var(--sapFontLargeSize, 1rem);
+  line-height: var(--sapContent_LineHeight, 1.4);
+  color: var(--sapTextColor, #303030);
+  font-family: var(--sapFontFamily, "72", "72full", Arial, Helvetica);
+  font-weight: 400;
+  -webkit-box-sizing: border-box;
+  box-sizing: border-box;
+  padding: 0;
+  border: 0;
+  border-style: none;
+  border-width: 0;
+  border-color: transparent;
+  -webkit-box-shadow: var(--sapContent_Shadow1, 0 0 0 0.0625rem rgba(0, 0, 0, 0.1), 0 0.125rem 0.5rem 0 rgba(0, 0, 0, 0.2));
+  box-shadow: var(--sapContent_Shadow1, 0 0 0 0.0625rem rgba(0, 0, 0, 0.1), 0 0.125rem 0.5rem 0 rgba(0, 0, 0, 0.2));
+  border-radius: .188rem;
+  opacity: 1 !important;
+}
+
+tr.mxPopupMenuItem {
+  color: var(--sapTextColor, #303030) !important;
+}
+
+tr.mxPopupMenuItemHover>*,
+tr.mxPopupMenuItem>* {
+  padding-top: .375rem !important;
+  padding-bottom: .375rem !important;
+}
+
+tr.mxPopupMenuItemHover {
+  color: var(--sapTextColor, #303030) !important;
+  background-color: var(--sapList_Hover_Background, #f2f2f2);
+}
+
+td.mxPopupMenuItem {
+  padding: 0.625rem 0.625rem 0.625rem 0px;
+  white-space: nowrap;
+  font-family: var(--sapFontFamily, "72", "72full", Arial, Helvetica);
+  font-weight: 400;
+  font-size: var(--sapFontSize, 0.875rem) !important;
+}
+
+td.mxPopupMenuIcon {
+  padding-left: 0.625rem !important;
+  color: var(--sapContent_NonInteractiveIconColor, #656565) !important;
+  background-color: transparent !important;
+}
+
+td.mxPopupMenuIcon>i.sap-icon {
+  color: inherit;
+}
+
+.dsm-table-icon {
+  color: var(--sapTextColor, #303030);
+  margin-right: 0.125rem;
+  font-family: var(--sapFontFamily, "72", "72full", Arial, Helvetica);
+  font-weight: 400;
+  font-size: 0.75rem;
+  width: 1rem;
+  height: 1rem;
+}
+
+.dsm-table-spacer {
+  display: inline-block;
+  width: 1rem;
+  height: 1px;
+  margin-right: 0.125rem;
+}
+
+@media only screen and (min-width: 853px) {
+  .dsmSmallScreen {
+    display: none;
+  }
+}
+
+@media only screen and (max-width: 852px) {
+  .dsmBigScreen {
+    display: none;
+  }
+}

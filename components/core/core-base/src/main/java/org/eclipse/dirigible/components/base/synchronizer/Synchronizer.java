@@ -1,19 +1,13 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.base.synchronizer;
-
-import java.nio.file.Path;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.text.ParseException;
-import java.util.List;
 
 import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
@@ -21,19 +15,23 @@ import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.ArtefactService;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
 
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.text.ParseException;
+import java.util.List;
+
 /**
  * The Interface Synchronizer.
  *
- * @param <A> the generic type
  */
-public interface Synchronizer<A extends Artefact> {
+public interface Synchronizer<A extends Artefact, ID> {
 
     /**
      * Gets the service.
      *
      * @return the service
      */
-    ArtefactService<A> getService();
+    ArtefactService<A, ID> getService();
 
     /**
      * Checks if is accepted.
@@ -77,7 +75,7 @@ public interface Synchronizer<A extends Artefact> {
      * @param lifecycle the lifecycle
      * @param message the message
      */
-    void setStatus(Artefact artefact, ArtefactLifecycle lifecycle, String message);
+    void setStatus(A artefact, ArtefactLifecycle lifecycle, String message);
 
     /**
      * Complete.
@@ -86,7 +84,7 @@ public interface Synchronizer<A extends Artefact> {
      * @param flow the flow
      * @return true, if successful
      */
-    boolean complete(TopologyWrapper<Artefact> wrapper, ArtefactPhase flow);
+    boolean complete(TopologyWrapper<A> wrapper, ArtefactPhase flow);
 
     /**
      * Cleanup.
@@ -115,5 +113,12 @@ public interface Synchronizer<A extends Artefact> {
      * @return the artefact type
      */
     String getArtefactType();
+
+    /**
+     * Checks if current syncronizer must have multitenant processing.
+     *
+     * @return true, if the execution must be multitenant
+     */
+    boolean multitenantExecution();
 
 }

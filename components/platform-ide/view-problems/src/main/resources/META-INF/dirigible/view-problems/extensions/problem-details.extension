@@ -1,0 +1,5 @@
+{
+    "module": "view-problems/configs/problem-details-window.js",
+    "extensionPoint": "platform-windows",
+    "description": "Problem details window"
+}

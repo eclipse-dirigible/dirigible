@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.websockets.synchronizer;
 
@@ -28,26 +27,42 @@ import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabas
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 
+/**
+ * The Class WebsocketsSynchronizerTest.
+ */
 @SpringBootTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ComponentScan(basePackages = {"org.eclipse.dirigible.components"})
 @EntityScan("org.eclipse.dirigible.components")
 public class WebsocketsSynchronizerTest {
+
+    /** The websockets synchronizer. */
     @Autowired
     private WebsocketsSynchronizer websocketsSynchronizer;
 
 
+    /**
+     * Checks if is accepted path.
+     */
     @Test
     public void isAcceptedPath() {
         assertTrue(websocketsSynchronizer.isAccepted(Path.of("/a/b/c/e1.websocket"), null));
     }
 
+    /**
+     * Checks if is accepted artefact.
+     */
     @Test
     public void isAcceptedArtefact() {
         assertTrue(websocketsSynchronizer.isAccepted(
                 new Websocket("/a/b/c/w1.websocket", "name1", "description", "endpoint1", "handler1", "engine1").getType()));
     }
 
+    /**
+     * Load.
+     *
+     * @throws ParseException the parse exception
+     */
     @Test
     public void load() throws ParseException {
         String content =
@@ -58,6 +73,9 @@ public class WebsocketsSynchronizerTest {
                                                  .getLocation());
     }
 
+    /**
+     * The Class TestConfiguration.
+     */
     @SpringBootApplication
     static class TestConfiguration {
     }

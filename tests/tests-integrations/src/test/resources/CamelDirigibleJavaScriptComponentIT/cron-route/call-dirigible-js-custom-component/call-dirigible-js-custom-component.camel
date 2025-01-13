@@ -1,0 +1,34 @@
+- route:
+    id: route-6ab8
+    nodePrefixId: route-bce
+    from:
+      id: from-8bd2
+      uri: cron
+      parameters:
+        schedule: 0/5 * * ? * *
+        name: TriggerCustomComponent
+      steps:
+        - log:
+            id: log-d4d8
+            description: Log started
+            message: Execution started...
+            loggingLevel: INFO
+            logName: CustomComponentLogger
+        - setBody:
+            id: setBody-0cb6
+            expression:
+              simple:
+                id: simple-1892
+                expression: My test body
+        - to:
+            id: to-7444
+            description: Invoke handler.ts
+            uri: dirigible-java-script
+            parameters:
+              javaScriptPath: call-dirigible-js-custom-component/handler.ts
+        - log:
+            id: log-9803
+            description: Log completed
+            message: 'Completed execution. Body: [${body}]'
+            loggingLevel: INFO
+            logName: CustomComponentLogger

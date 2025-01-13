@@ -1,32 +1,21 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.structures.synchronizer;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.text.ParseException;
-import java.util.List;
-
 import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.ArtefactService;
-import org.eclipse.dirigible.components.base.artefact.topology.TopologicalDepleter;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
-import org.eclipse.dirigible.components.base.synchronizer.Synchronizer;
+import org.eclipse.dirigible.components.base.synchronizer.MultitenantBaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
@@ -41,14 +30,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.text.ParseException;
+import java.util.List;
+
 /**
  * The Class ViewsSynchronizer.
- *
- * @param <A> the generic type
  */
 @Component
 @Order(SynchronizersOrder.VIEW)
-public class ViewsSynchronizer<A extends Artefact> implements Synchronizer<View> {
+public class ViewsSynchronizer extends MultitenantBaseSynchronizer<View, Long> {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(ViewsSynchronizer.class);
@@ -57,10 +50,10 @@ public class ViewsSynchronizer<A extends Artefact> implements Synchronizer<View>
     private static final String FILE_EXTENSION_VIEW = ".view";
 
     /** The view service. */
-    private ViewService viewService;
+    private final ViewService viewService;
 
     /** The datasources manager. */
-    private DataSourcesManager datasourcesManager;
+    private final DataSourcesManager datasourcesManager;
 
     /** The synchronization callback. */
     private SynchronizerCallback callback;
@@ -75,29 +68,6 @@ public class ViewsSynchronizer<A extends Artefact> implements Synchronizer<View>
     public ViewsSynchronizer(ViewService viewService, DataSourcesManager datasourcesManager) {
         this.viewService = viewService;
         this.datasourcesManager = datasourcesManager;
-    }
-
-    /**
-     * Gets the service.
-     *
-     * @return the service
-     */
-    @Override
-    public ArtefactService<View> getService() {
-        return viewService;
-    }
-
-    /**
-     * Checks if is accepted.
-     *
-     * @param file the file
-     * @param attrs the attrs
-     * @return true, if is accepted
-     */
-    @Override
-    public boolean isAccepted(Path file, BasicFileAttributes attrs) {
-        return file.toString()
-                   .endsWith(getFileExtension());
     }
 
     /**
@@ -117,10 +87,10 @@ public class ViewsSynchronizer<A extends Artefact> implements Synchronizer<View>
      * @param location the location
      * @param content the content
      * @return the list
-     * @throws ParseException
+     * @throws ParseException the parse exception
      */
     @Override
-    public List<View> parse(String location, byte[] content) throws ParseException {
+    protected List<View> parseImpl(String location, byte[] content) throws ParseException {
         View view = JsonHelper.fromJson(new String(content, StandardCharsets.UTF_8), View.class);
         Configuration.configureObject(view);
         view.setLocation(location);
@@ -152,6 +122,16 @@ public class ViewsSynchronizer<A extends Artefact> implements Synchronizer<View>
     }
 
     /**
+     * Gets the service.
+     *
+     * @return the service
+     */
+    @Override
+    public ArtefactService<View, Long> getService() {
+        return viewService;
+    }
+
+    /**
      * Retrieve.
      *
      * @param location the location
@@ -170,32 +150,24 @@ public class ViewsSynchronizer<A extends Artefact> implements Synchronizer<View>
      * @param error the error
      */
     @Override
-    public void setStatus(Artefact artefact, ArtefactLifecycle lifecycle, String error) {
+    public void setStatus(View artefact, ArtefactLifecycle lifecycle, String error) {
         artefact.setLifecycle(lifecycle);
         artefact.setError(error);
-        getService().save((View) artefact);
+        getService().save(artefact);
     }
 
     /**
-     * Complete.
+     * Complete impl.
      *
      * @param wrapper the wrapper
      * @param flow the flow
      * @return true, if successful
      */
     @Override
-    public boolean complete(TopologyWrapper<Artefact> wrapper, ArtefactPhase flow) {
-
+    protected boolean completeImpl(TopologyWrapper<View> wrapper, ArtefactPhase flow) {
+        View view = wrapper.getArtefact();
         try (Connection connection = datasourcesManager.getDefaultDataSource()
                                                        .getConnection()) {
-
-            View view = null;
-            if (wrapper.getArtefact() instanceof View) {
-                view = (View) wrapper.getArtefact();
-            } else {
-                throw new UnsupportedOperationException(String.format("Trying to process %s as View", wrapper.getArtefact()
-                                                                                                             .getClass()));
-            }
 
             switch (flow) {
                 case CREATE:
@@ -204,37 +176,38 @@ public class ViewsSynchronizer<A extends Artefact> implements Synchronizer<View>
                                        .existsTable(connection, view.getName())) {
                             try {
                                 executeViewCreate(connection, view);
-                                callback.registerState(this, wrapper, ArtefactLifecycle.CREATED, "");
+                                callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
                             } catch (Exception e) {
-                                if (logger.isErrorEnabled()) {
-                                    logger.error(e.getMessage(), e);
-                                }
-                                callback.registerState(this, wrapper, ArtefactLifecycle.CREATED, e.getMessage());
+                                callback.registerState(this, wrapper, ArtefactLifecycle.CREATED, e);
                             }
                         } else {
                             if (logger.isWarnEnabled()) {
                                 logger.warn(String.format("View [%s] already exists during the update process", view.getName()));
                             }
                             executeViewUpdate(connection, view);
-                            callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED, "");
+                            callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
                         }
-                        callback.registerState(this, wrapper, ArtefactLifecycle.CREATED, "");
+                        callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
                     }
                     break;
                 case UPDATE:
                     if (ArtefactLifecycle.MODIFIED.equals(view.getLifecycle())) {
                         executeViewUpdate(connection, view);
-                        callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED, "");
+                        callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
+                    }
+                    if (ArtefactLifecycle.FAILED.equals(view.getLifecycle())) {
+                        return false;
                     }
                     break;
                 case DELETE:
-                    if (ArtefactLifecycle.CREATED.equals(view.getLifecycle())) {
+                    if (ArtefactLifecycle.CREATED.equals(view.getLifecycle()) || ArtefactLifecycle.UPDATED.equals(view.getLifecycle())
+                            || ArtefactLifecycle.FAILED.equals(view.getLifecycle())) {
                         if (SqlFactory.getNative(connection)
                                       .existsTable(connection, view.getName())) {
                             executeViewDrop(connection, view);
-                            callback.registerState(this, wrapper, ArtefactLifecycle.DELETED, "");
+                            callback.registerState(this, wrapper, ArtefactLifecycle.DELETED);
                         }
-                        callback.registerState(this, wrapper, ArtefactLifecycle.DELETED, "");
+                        callback.registerState(this, wrapper, ArtefactLifecycle.DELETED);
                     }
                     break;
                 case START:
@@ -243,42 +216,21 @@ public class ViewsSynchronizer<A extends Artefact> implements Synchronizer<View>
 
             return true;
         } catch (SQLException e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
             callback.addError(e.getMessage());
-            callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, e.getMessage());
+            callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, e);
             return false;
         }
     }
 
     /**
-     * Cleanup.
+     * Execute view create.
      *
-     * @param view the view
+     * @param connection the connection
+     * @param viewModel the view model
+     * @throws SQLException the SQL exception
      */
-    @Override
-    public void cleanup(View view) {
-        try (Connection connection = datasourcesManager.getDefaultDataSource()
-                                                       .getConnection()) {
-            getService().delete(view);
-        } catch (Exception e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
-            callback.addError(e.getMessage());
-            callback.registerState(this, view, ArtefactLifecycle.DELETED, e.getMessage());
-        }
-    }
-
-    /**
-     * Sets the callback.
-     *
-     * @param callback the new callback
-     */
-    @Override
-    public void setCallback(SynchronizerCallback callback) {
-        this.callback = callback;
+    public void executeViewCreate(Connection connection, View viewModel) throws SQLException {
+        ViewCreateProcessor.execute(connection, viewModel);
     }
 
     /**
@@ -302,17 +254,6 @@ public class ViewsSynchronizer<A extends Artefact> implements Synchronizer<View>
     }
 
     /**
-     * Execute view create.
-     *
-     * @param connection the connection
-     * @param viewModel the view model
-     * @throws SQLException the SQL exception
-     */
-    public void executeViewCreate(Connection connection, View viewModel) throws SQLException {
-        ViewCreateProcessor.execute(connection, viewModel);
-    }
-
-    /**
      * Execute view drop.
      *
      * @param connection the connection
@@ -321,6 +262,32 @@ public class ViewsSynchronizer<A extends Artefact> implements Synchronizer<View>
      */
     public void executeViewDrop(Connection connection, View viewModel) throws SQLException {
         ViewDropProcessor.execute(connection, viewModel);
+    }
+
+    /**
+     * Cleanup.
+     *
+     * @param view the view
+     */
+    @Override
+    public void cleanupImpl(View view) {
+        try (Connection connection = datasourcesManager.getDefaultDataSource()
+                                                       .getConnection()) {
+            getService().delete(view);
+        } catch (Exception e) {
+            callback.addError(e.getMessage());
+            callback.registerState(this, view, ArtefactLifecycle.DELETED, e);
+        }
+    }
+
+    /**
+     * Sets the callback.
+     *
+     * @param callback the new callback
+     */
+    @Override
+    public void setCallback(SynchronizerCallback callback) {
+        this.callback = callback;
     }
 
     /**

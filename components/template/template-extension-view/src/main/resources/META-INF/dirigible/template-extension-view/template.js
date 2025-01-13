@@ -3,30 +3,32 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-exports.getTemplate = function() {
+export function getTemplate() {
 	return {
-		"name": "Extension (View)",
-		"description": "Extension view for the IDE",
-		"sources": [{
-			"location": "/template-extension-view/views/view/index.html.template", 
-			"action": "copy",
-			"rename": "views/{{fileName}}/index.html"
+		name: "View (UI)",
+		description: "Generates a basic view",
+		sources: [{
+			location: "/template-extension-view/views/view/index.html.template",
+			action: "generate",
+			engine: "velocity",
+			rename: "index.html"
 		}, {
-			"location": "/template-extension-view/views/view/controller.js.template", 
-			"action": "generate",
-			"rename": "views/{{fileName}}/controller.js"
+			location: "/template-extension-view/views/view/controller.js.template",
+			action: "generate",
+			rename: "js/{{fileName}}.js"
 		}, {
-			"location": "/template-extension-view/views/view/view.js.template", 
-			"action": "generate",
-			"rename": "views/{{fileName}}/view.js"
+			location: "/template-extension-view/views/view/view.js.template",
+			action: "generate",
+			rename: "services/{{fileName}}-view.js"
 		}, {
-			"location": "/template-extension-view/extensions/views/view.extension.template", 
-			"action": "generate",
-			"rename": "extensions/views/{{fileName}}.extension"
+			location: "/template-extension-view/extensions/views/view.extension.template",
+			action: "generate",
+			rename: "extensions/{{fileName}}.extension"
 		}],
-		"parameters": [{
-			"name": "viewName",
-			"label": "Name"
-		}]
+		parameters: [{
+			name: "viewName",
+			label: "Name"
+		}],
+		order: 33
 	};
 };

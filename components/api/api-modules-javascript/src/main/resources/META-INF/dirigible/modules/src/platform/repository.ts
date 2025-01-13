@@ -9,262 +9,281 @@
  * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import * as bytes from "@dirigible/io/bytes";
+import { Bytes } from "sdk/io/bytes";
+
 const RepositoryFacade = Java.type("org.eclipse.dirigible.components.api.platform.RepositoryFacade");
 
-export function getResource(path) {
-	const resourceInstance = RepositoryFacade.getResource(path);
-	return new Resource(resourceInstance);
-};
+export class Repository {
 
-export function createResource(path, content, contentType) {
-	const resourceInstance = RepositoryFacade.createResource(path, content, contentType);
-	return new Resource(resourceInstance);
-};
+	public static getResource(path: string): Resource {
+		const resourceInstance = RepositoryFacade.getResource(path);
+		return new Resource(resourceInstance);
+	}
 
-export function createResourceNative(path, content, contentType) {
-	const resourceInstance = RepositoryFacade.createResourceNative(path, content, contentType);
-	return new Resource(resourceInstance);
-};
+	public static createResource(path: string, content: string, contentType: string): Resource {
+		const resourceInstance = RepositoryFacade.createResource(path, content, contentType);
+		return new Resource(resourceInstance);
+	}
 
-export function updateResource(path, content) {
-	const resourceInstance = RepositoryFacade.updateResource(path, content);
-	return new Resource(resourceInstance);
-};
+	public static createResourceNative(path: string, content: any[], contentType: string): Resource {
+		const resourceInstance = RepositoryFacade.createResourceNative(path, content, contentType);
+		return new Resource(resourceInstance);
+	}
 
-export function updateResourceNative(path, content) {
-	const resourceInstance = RepositoryFacade.updateResourceNative(path, content);
-	return new Resource(resourceInstance);
-};
+	public static pdateResource(path: string, content: string): Resource {
+		const resourceInstance = RepositoryFacade.updateResource(path, content);
+		return new Resource(resourceInstance);
+	}
 
-export function deleteResource(path) {
-	RepositoryFacade.deleteResource(path);
-};
+	public static updateResourceNative(path: string, content: any[]): Resource {
+		const resourceInstance = RepositoryFacade.updateResourceNative(path, content);
+		return new Resource(resourceInstance);
+	}
 
-export function getCollection(path) {
-	const collectionInstance = RepositoryFacade.getCollection(path);
-	return new Collection(collectionInstance);
-};
+	public static deleteResource(path: string): void {
+		RepositoryFacade.deleteResource(path);
+	}
 
-export function createCollection(path) {
-	const collectionInstance = RepositoryFacade.createCollection(path);
-	return new Collection(collectionInstance);
-};
-
-export function deleteCollection(path) {
-	RepositoryFacade.deleteCollection(path);
-};
-
-export function find(path, pattern) {
-	return JSON.parse(RepositoryFacade.find(path, pattern));
-};
-
-class Resource {
-
-	constructor(private native) { }
-
-	getName() {
-		return this.native.getName();
-	};
-
-	getPath() {
-		return this.native.getPath();
-	};
-
-	getParent() {
-		const collectionInstance = this.native.getParent();
+	public static getCollection(path: string): Collection {
+		const collectionInstance = RepositoryFacade.getCollection(path);
 		return new Collection(collectionInstance);
-	};
+	}
 
-	getInformation() {
-		const informationInstance = this.native.getInformation();
-		return new EntityInformation(informationInstance);
-	};
+	public static createCollection(path: string): Collection {
+		const collectionInstance = RepositoryFacade.createCollection(path);
+		return new Collection(collectionInstance);
+	}
 
-	create() {
-		this.native.create();
-	};
+	public static deleteCollection(path: string): void {
+		RepositoryFacade.deleteCollection(path);
+	}
 
-	delete() {
-		this.native.delete();
-	};
-
-	renameTo(name) {
-		this.native.renameTo(name);
-	};
-
-	moveTo(path) {
-		this.native.moveTo(path);
-	};
-
-	copyTo(path) {
-		this.native.copyTo(path);
-	};
-
-	exists() {
-		return this.native.exists();
-	};
-
-	isEmpty() {
-		return this.native.isEmpty();
-	};
-
-	getText() {
-		return bytes.byteArrayToText(this.getContent());
-	};
-
-	getContent() {
-		let nativeContent = this.native.getContent();
-		return bytes.toJavaScriptBytes(nativeContent);
-	};
-
-	getContentNative() {
-		return this.native.getContent();
-	};
-
-	setText(text) {
-		let content = bytes.textToByteArray(text);
-		this.setContent(content);
-	};
-
-	setContent(content) {
-		let nativeContent = bytes.toJavaBytes(content);
-		this.native.setContent(nativeContent);
-	};
-
-	setContentNative(content) {
-		this.native.setContent(content);
-	};
-
-	isBinary() {
-		this.native.isBinary();
-	};
-
-	getContentType() {
-		this.native.getContentType();
-	};
+	public static find(path: string, pattern: string): string[] {
+		return JSON.parse(RepositoryFacade.find(path, pattern));
+	}
 }
 
-class Collection {
+export class Resource {
+	private readonly native: any;
 
-	constructor(private native) { }
+	constructor(native: any) {
+		this.native = native;
+	}
 
-	getName() {
+	public getName(): string {
 		return this.native.getName();
-	};
+	}
 
-	getPath() {
+	public getPath(): string {
 		return this.native.getPath();
-	};
+	}
 
-	getParent() {
+	public getParent(): Collection {
 		const collectionInstance = this.native.getParent();
 		return new Collection(collectionInstance);
-	};
+	}
 
-	getInformation() {
+	public getInformation(): EntityInformation {
 		const informationInstance = this.native.getInformation();
 		return new EntityInformation(informationInstance);
-	};
+	}
 
-	create() {
+	public create(): void {
 		this.native.create();
-	};
+	}
 
-	delete() {
+	public delete(): void {
 		this.native.delete();
-	};
+	}
 
-	renameTo(name) {
+	public renameTo(name: string): void {
 		this.native.renameTo(name);
-	};
+	}
 
-	moveTo(path) {
+	public moveTo(path: string): void {
 		this.native.moveTo(path);
-	};
+	}
 
-	copyTo(path) {
+	public copyTo(path: string): void {
 		this.native.copyTo(path);
-	};
+	}
 
-	exists() {
+	public exists(): boolean {
 		return this.native.exists();
-	};
+	}
 
-	isEmpty() {
+	public isEmpty(): boolean {
 		return this.native.isEmpty();
-	};
+	}
 
-	getCollectionsNames() {
+	public getText(): string {
+		return Bytes.byteArrayToText(this.getContent());
+	}
+
+	public getContent(): any[] {
+		const nativeContent = this.native.getContent();
+		return Bytes.toJavaScriptBytes(nativeContent);
+	}
+
+	public getContentNative(): any[] {
+		return this.native.getContent();
+	}
+
+	public setText(text: string): void {
+		const content = Bytes.textToByteArray(text);
+		this.setContent(content);
+	}
+
+	public setContent(content: any[]): void {
+		const nativeContent = Bytes.toJavaBytes(content);
+		this.native.setContent(nativeContent);
+	}
+
+	public setContentNative(content: any[]): void {
+		this.native.setContent(content);
+	}
+
+	public isBinary(): boolean {
+		return this.native.isBinary();
+	}
+
+	public getContentType(): string {
+		return this.native.getContentType();
+	}
+}
+
+export class Collection {
+	private readonly native: any;
+
+	constructor(native: any) {
+		this.native = native;
+	}
+
+	public getName(): string {
+		return this.native.getName();
+	}
+
+	public getPath(): string {
+		return this.native.getPath();
+	}
+
+	public getParent(): Collection {
+		const collectionInstance = this.native.getParent();
+		return new Collection(collectionInstance);
+	}
+
+	public getInformation(): EntityInformation {
+		const informationInstance = this.native.getInformation();
+		return new EntityInformation(informationInstance);
+	}
+
+	public create(): void {
+		this.native.create();
+	}
+
+	public delete(): void {
+		this.native.delete();
+	}
+
+	public renameTo(name: string): void {
+		this.native.renameTo(name);
+	}
+
+	public moveTo(path: string): void {
+		this.native.moveTo(path);
+	}
+
+	public copyTo(path: string): void {
+		this.native.copyTo(path);
+	}
+
+	public exists(): boolean {
+		return this.native.exists();
+	}
+
+	public isEmpty(): boolean {
+		return this.native.isEmpty();
+	}
+
+	public getCollectionsNames(): string[] {
 		return this.native.getCollectionsNames();
-	};
+	}
 
-	createCollection(name) {
+	public createCollection(name: string): Collection {
 		const collectionInstance = this.native.createCollection(name);
 		return new Collection(collectionInstance);
-	};
+	}
 
-	getCollection(name) {
+	public getCollection(name: string): Collection {
 		const collectionInstance = this.native.getCollection(name);
 		return new Collection(collectionInstance);
-	};
+	}
 
-	removeCollection(name) {
+	public removeCollection(name: string): void {
 		this.native.removeCollection(name);
-	};
+	}
 
-	getResourcesNames() {
+	public getResourcesNames(): string[] {
 		return this.native.getResourcesNames();
-	};
+	}
 
-	getResource(name) {
+	public getResource(name: string): Resource {
 		const resourceInstance = this.native.getResource(name);
 		return new Resource(resourceInstance);
-	};
+	}
 
-	removeResource(name) {
+	public removeResource(name: string): void {
 		this.native.removeResource(name);
-	};
+	}
 
-	createResource(name, content) {
+	public createResource(name: string, content: string): Resource {
 		const resourceInstance = this.native.createResource(name, content);
 		return new Resource(resourceInstance);
-	};
+	}
 }
 
-class EntityInformation {
+export class EntityInformation {
+	private readonly native: any;
 
-	constructor(private native) { }
+	constructor(native: any) {
+		this.native = native;
+	}
 
-	getName() {
+	public getName(): string {
 		return this.native.getName();
-	};
+	}
 
-	getPath() {
+	public getPath(): string {
 		return this.native.getPath();
-	};
+	}
 
-	getPermissions() {
+	public getPermissions(): number {
 		return this.native.getPermissions();
-	};
+	}
 
-	getSize() {
+	public getSize(): number {
 		return this.native.getSize();
-	};
+	}
 
-	getCreatedBy() {
+	public getCreatedBy(): string {
 		return this.native.getCreatedBy();
-	};
+	}
 
-	getCreatedAt() {
+	public getCreatedAt(): Date {
 		return this.native.getCreatedAt();
-	};
+	}
 
-	getModifiedBy() {
+	public getModifiedBy(): string {
 		return this.native.getModifiedBy();
-	};
+	}
 
-	getModifiedAt() {
+	public getModifiedAt(): Date {
 		return this.native.getModifiedAt();
-	};
+	}
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Repository;
 }

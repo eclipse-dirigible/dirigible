@@ -1,24 +1,22 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.base.synchronizer;
-
-import java.util.List;
 
 import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
 
+import java.util.Set;
+
 /**
  * The Interface SynchronizerCallback.
- *
  */
 public interface SynchronizerCallback {
 
@@ -34,7 +32,7 @@ public interface SynchronizerCallback {
      *
      * @return the errors
      */
-    List<String> getErrors();
+    Set<String> getErrors();
 
     /**
      * Register errors.
@@ -42,15 +40,17 @@ public interface SynchronizerCallback {
      * @param remained the remained
      * @param lifecycle the lifecycle
      */
-    void registerErrors(List<TopologyWrapper<? extends Artefact>> remained, ArtefactLifecycle lifecycle);
+    void registerErrors(Set<TopologyWrapper<? extends Artefact>> remained, ArtefactLifecycle lifecycle);
 
     /**
      * Register errors.
      *
      * @param remained the remained
-     * @param lifecycle the lifecycle
      */
-    void registerFatals(List<TopologyWrapper<? extends Artefact>> remained, ArtefactLifecycle lifecycle);
+    void registerFatals(Set<TopologyWrapper<? extends Artefact>> remained);
+
+    void registerState(Synchronizer<? extends Artefact, ?> synchronizer, TopologyWrapper<? extends Artefact> wrapper,
+            ArtefactLifecycle lifecycle);
 
     /**
      * Register errors.
@@ -60,8 +60,16 @@ public interface SynchronizerCallback {
      * @param lifecycle the lifecycle
      * @param message the message
      */
-    void registerState(Synchronizer<? extends Artefact> synchronizer, TopologyWrapper<? extends Artefact> wrapper,
+    void registerState(Synchronizer<? extends Artefact, ?> synchronizer, TopologyWrapper<? extends Artefact> wrapper,
             ArtefactLifecycle lifecycle, String message);
+
+    void registerState(Synchronizer<? extends Artefact, ?> synchronizer, TopologyWrapper<? extends Artefact> wrapper,
+            ArtefactLifecycle lifecycle, String message, Throwable cause);
+
+    void registerState(Synchronizer<? extends Artefact, ?> synchronizer, TopologyWrapper<? extends Artefact> wrapper,
+            ArtefactLifecycle lifecycle, Throwable cause);
+
+    void registerState(Synchronizer<? extends Artefact, ?> synchronizer, Artefact artefact, ArtefactLifecycle lifecycle);
 
     /**
      * Register errors.
@@ -71,6 +79,11 @@ public interface SynchronizerCallback {
      * @param lifecycle the lifecycle
      * @param message the message
      */
-    void registerState(Synchronizer<? extends Artefact> synchronizer, Artefact artefact, ArtefactLifecycle lifecycle, String message);
+    void registerState(Synchronizer<? extends Artefact, ?> synchronizer, Artefact artefact, ArtefactLifecycle lifecycle, String message);
+
+    void registerState(Synchronizer<? extends Artefact, ?> synchronizer, Artefact artefact, ArtefactLifecycle lifecycle, Throwable cause);
+
+    void registerState(Synchronizer<? extends Artefact, ?> synchronizer, Artefact artefact, ArtefactLifecycle lifecycle, String message,
+            Throwable cause);
 
 }

@@ -1,30 +1,19 @@
-/*
- * Copyright (c) 2022 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: 2022 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
-var workspace = require("platform/workspace");
-var lifecycle = require("platform/lifecycle");
-var bytes = require("io/bytes");
-var assertTrue = require('test/assert').assertTrue;
+import { Workspace } from "sdk/platform/workspace";
+import { Lifecycle } from "sdk/platform/lifecycle";
+import { Bytes } from "sdk/io/bytes";
+import { Assert } from 'test/assert';
 
-var user = "dirigible";
-var workspaceName = "workspace";
-var projectName = "project";
+const user = "dirigible";
+const workspaceName = "workspace";
+const projectName = "project";
 
-var myWorkspace = workspace.createWorkspace(workspaceName);
-var myProject = myWorkspace.createProject("project");
-var myFile = myProject.createFile(projectName);
-myFile.setContent(bytes.textToByteArray("console.log('Hello World!');"));
+const myWorkspace = Workspace.createWorkspace(workspaceName);
+const myProject = myWorkspace.createProject("project");
+const myFile = myProject.createFile(projectName);
+myFile.setContent(Bytes.textToByteArray("console.log('Hello World!');"));
 
-var publishResult = lifecycle.publish(user, workspaceName, projectName);
-var unpublishResult = lifecycle.unpublish(user, workspaceName, projectName);
+const publishResult = Lifecycle.publish(user, workspaceName, projectName);
+const unpublishResult = Lifecycle.unpublish(user, workspaceName, projectName);
 
-assertTrue(publishResult);
-assertTrue(unpublishResult);
+Assert.assertTrue(publishResult);
+Assert.assertTrue(unpublishResult);

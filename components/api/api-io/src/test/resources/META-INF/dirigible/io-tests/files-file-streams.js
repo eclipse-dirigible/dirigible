@@ -1,33 +1,23 @@
-/*
- * Copyright (c) 2022 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: 2022 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
-var files = require('io/files');
-var streams = require('io/streams');
-var assertEquals = require('test/assert').assertEquals;
 
-var tempFile1 = files.createTempFile("dirigible", ".txt");
+import { Files } from 'sdk/io/files';
+import { Streams } from 'sdk/io/streams';
+import { Assert } from 'test/assert';
+
+const tempFile1 = Files.createTempFile("dirigible", ".txt");
 console.log('Temp file 1: ' + tempFile1);
-files.writeText(tempFile1, "Eclipse Dirigible");
+Files.writeText(tempFile1, "Eclipse Dirigible");
 
-var tempFile2 = files.createTempFile("dirigible", ".txt");
+const tempFile2 = Files.createTempFile("dirigible", ".txt");
 console.log('Temp file 2: ' + tempFile2);
 
-var input = files.createInputStream(tempFile1);
-var output = files.createOutputStream(tempFile2);
+const input = Files.createInputStream(tempFile1);
+const output = Files.createOutputStream(tempFile2);
 
-streams.copy(input, output);
+Streams.copy(input, output);
 
-var result = files.readText(tempFile2);
+const result = Files.readText(tempFile2);
 
-files.deleteFile(tempFile1);
-files.deleteFile(tempFile2);
+Files.deleteFile(tempFile1);
+Files.deleteFile(tempFile2);
 
-assertEquals(result, "Eclipse Dirigible");
+Assert.assertEquals(result, "Eclipse Dirigible");

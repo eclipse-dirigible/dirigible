@@ -12,20 +12,29 @@
 
 const DataStoreFacade = Java.type("org.eclipse.dirigible.components.api.db.DataStoreFacade");
 
-export function save(name, entry) {
-	DataStoreFacade.save(name, JSON.stringify(entry));
-};
+export class Store {
 
-export function list(name) {
-	let result = DataStoreFacade.list(name);
-	return JSON.parse(result);
-};
+	public static save(name: string, entry: any): void {
+		DataStoreFacade.save(name, JSON.stringify(entry));
+	}
 
-export function get(name, id) {
-	let result = DataStoreFacade.get(name, id);
-	return JSON.parse(result);
-};
+	public static list(name: string): any[] {
+		const result = DataStoreFacade.list(name);
+		return JSON.parse(result);
+	}
 
-export function remove(name, id) {
-	DataStoreFacade.deleteEntry(name, id);
-};
+	public static get(name: string, id: string): any | undefined {
+		const result = DataStoreFacade.get(name, id);
+		return JSON.parse(result);
+	};
+
+	public static remove(name: string, id: string): void {
+		DataStoreFacade.deleteEntry(name, id);
+	}
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Store;
+}

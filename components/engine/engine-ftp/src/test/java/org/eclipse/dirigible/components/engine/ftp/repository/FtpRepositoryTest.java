@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.engine.ftp.repository;
 
@@ -17,7 +16,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import javax.persistence.EntityManager;
+import jakarta.persistence.EntityManager;
 
 import org.apache.ftpserver.ftplet.Authority;
 import org.eclipse.dirigible.components.engine.ftp.domain.FtpUser;
@@ -136,6 +135,7 @@ public class FtpRepositoryTest {
      * @param auths the auths
      * @param maxIdleTime the max idle time
      * @param homeDirectory the home directory
+     * @param admin the admin
      * @return the ftp user
      */
     public static FtpUser createFtpUser(String username, String password, boolean enabled, List<? extends Authority> auths, int maxIdleTime,

@@ -1,5 +1,0 @@
-{
-	"module": "{{projectName}}/perspective/menu/{{fileName}}",
-	"extensionPoint": "ide-{{fileName}}-menu",
-	"description": "{{fileName}} Menu"
-}

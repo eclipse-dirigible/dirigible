@@ -1,26 +1,13 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.dialects.hana;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.when;
-
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 
 import org.eclipse.dirigible.database.sql.DatabaseArtifactTypes;
 import org.eclipse.dirigible.database.sql.ISqlKeywords;
@@ -29,6 +16,11 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
+
+import java.sql.*;
+
+import static org.junit.Assert.*;
+import static org.mockito.Mockito.when;
 
 /**
  * The Class SynonymTest.
@@ -64,9 +56,8 @@ public class SynonymTest {
                                .build();
 
         assertNotNull(sql);
-        assertEquals("CREATE SYNONYM CUSTOMERS_SEQUENCE FOR CUSTOMERS", sql);
+        assertEquals("CREATE SYNONYM \"CUSTOMERS_SEQUENCE\" FOR \"CUSTOMERS\"", sql);
     }
-
 
     /**
      * Execute drop synonym.
@@ -79,7 +70,7 @@ public class SynonymTest {
                                .build();
 
         assertNotNull(sql);
-        assertEquals("DROP SYNONYM CUSTOMERS_SEQUENCE", sql);
+        assertEquals("DROP SYNONYM \"CUSTOMERS_SEQUENCE\"", sql);
     }
 
     /**

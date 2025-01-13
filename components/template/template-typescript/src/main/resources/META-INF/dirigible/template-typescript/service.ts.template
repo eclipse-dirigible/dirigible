@@ -1,0 +1,26 @@
+import { response } from "sdk/http";
+import { user } from "sdk/security";
+
+interface HelloWorldMessage {
+    readonly message: string;
+    readonly user: string;
+    readonly date: Date;
+}
+
+class HelloWorld {
+
+    public getMessage(): HelloWorldMessage {
+        return {
+            message: "Hello World",
+            user: user.getName(),
+            date: new Date()
+        };
+    }
+
+    public printMessage(): void {
+        const message = this.getMessage();
+        response.println(JSON.stringify(message, null, 2));
+    }
+}
+
+new HelloWorld().printMessage();

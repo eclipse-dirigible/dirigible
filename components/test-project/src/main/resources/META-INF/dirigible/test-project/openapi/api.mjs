@@ -1,4 +1,4 @@
-import { rs } from '@dirigible/http';
+import { rs } from 'sdk/http';
 
 rs.service()
     .resource("/hello-world")

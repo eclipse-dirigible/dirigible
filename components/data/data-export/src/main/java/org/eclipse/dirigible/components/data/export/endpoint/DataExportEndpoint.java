@@ -1,20 +1,17 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-
 package org.eclipse.dirigible.components.data.export.endpoint;
 
 import static java.text.MessageFormat.format;
 
 import java.io.OutputStreamWriter;
-import java.io.StringWriter;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.sql.SQLException;
@@ -106,6 +103,30 @@ public class DataExportEndpoint {
         }
 
         dataExportService.exportSchemaInCsvs(datasource, schema);
+
+        return ResponseEntity.ok(new URI("/" + BaseEndpoint.PREFIX_ENDPOINT_IDE + "workspaces" + "/" + schema));
+    }
+
+    /**
+     * Export schema data in project as model.
+     *
+     * @param datasource the datasource
+     * @param schema the schema name
+     * @return the response
+     * @throws SQLException the SQL exception
+     * @throws URISyntaxException the URI syntax exception
+     */
+
+    @PutMapping(value = "/model/{datasource}/{schema}")
+    public ResponseEntity<URI> exportSchemaAsModel(@PathVariable("datasource") String datasource, @PathVariable("schema") String schema)
+            throws SQLException, URISyntaxException {
+
+        if (!databaseMetadataService.existsDataSourceMetadata(datasource)) {
+            String error = format("Datasource {0} does not exist.", datasource);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
+        }
+
+        dataExportService.exportSchemaAsModel(datasource, schema);
 
         return ResponseEntity.ok(new URI("/" + BaseEndpoint.PREFIX_ENDPOINT_IDE + "workspaces" + "/" + schema));
     }

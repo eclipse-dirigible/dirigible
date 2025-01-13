@@ -1,0 +1,140 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" ng-app="documents" ng-controller="DocumentsController" xmlns="http://www.w3.org/1999/xhtml">
+
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title config-title></title>
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
+        <script type="text/javascript" src="/services/web/perspective-documents/configs/documents.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=view-js,split-js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=file-upload-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css,split-css" />
+        <link type="text/css" rel="stylesheet" href="/services/web/perspective-documents/styles/documents.css" />
+        <script type="text/javascript" src="/services/web/perspective-documents/js/documents.js"></script>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-busy-indicator-extended class="bk-fill-parent" size="l" ng-show="loading">Loading...</bk-busy-indicator-extended>
+        <bk-toolbar type="solid" ng-hide="loading">
+            <bk-button glyph="sap-icon--arrow-left" aria-label="Go back" title="Go back" state="transparent" ng-disabled="!hasBack()" ng-click="goBack()"></bk-button>
+            <bk-button glyph="sap-icon--arrow-right" aria-label="Go forward" title="Go forward" state="transparent" ng-disabled="!hasForward()" ng-click="goForward()"></bk-button>
+            <nav aria-label="products breadcrumbs">
+                <bk-breadcrumb>
+                    <bk-breadcrumb-item ng-if="!($last)" ng-repeat="path in breadcrumbs.crumbs track by $index">
+                        <bk-link href="#" ng-click="crumbsChanged(path)">{{ path.name }}</bk-link>
+                    </bk-breadcrumb-item>
+                    <bk-breadcrumb-item aria-current="page">{{ breadcrumbs.crumbs.at(-1).name }}</bk-breadcrumb-item>
+                </bk-breadcrumb>
+            </nav>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-button glyph="sap-icon--search" aria-label="Find item" title="Find item" state="transparent" ng-click="search.displaySearch = !search.displaySearch" toggled="search.displaySearch"></bk-button>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button glyph="sap-icon--add-folder" aria-label="New folder" title="New folder" state="transparent" ng-click="showNewFolderDialog()"></bk-button>
+            <bk-button glyph="sap-icon--delete" aria-label="Delete selected items" title="Delete selected items" state="transparent" ng-click="showDeleteItemsDialog($event)" ng-disabled="!isDeleteItemsButtonEnabled()"></bk-button>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <a bk-button glyph="sap-icon--download-from-cloud" state="transparent" aria-label="Download zip" title="Download zip" href="{{ downloadZipPath }}?path={{ folder.path }}"></a>
+            <bk-popover>
+                <bk-popover-control>
+                    <bk-button is-menu="true" glyph="sap-icon--upload-to-cloud" aria-label="Upload file" title="Upload file" state="transparent"></bk-button>
+                </bk-popover-control>
+                <bk-popover-body align="bottom-right">
+                    <bk-menu aria-label="upload options menu">
+                        <bk-menu-item title="Upload files" ng-click="showUploadFileDialog()"></bk-menu-item>
+                        <bk-menu-item title="Upload zip contents" ng-click="showUploadFileDialog({ unpackZip: true })"></bk-menu-item>
+                    </bk-menu>
+                </bk-popover-body>
+            </bk-popover>
+            <input id="fileUpload" type="file" nv-file-select="" uploader="uploader" ng-hide="true" multiple />
+        </bk-toolbar>
+        <bk-toolbar ng-if="search.displaySearch" has-title="false" type="solid" ng-hide="loading">
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-input-group compact="true" style="max-width: 50%;">
+                <bk-input-group-addon has-button="true">
+                    <span class="sap-icon--search" role="presentation"></span>
+                </bk-input-group-addon>
+                <bk-input type="search" ng-model="search.filterBy" ng-change="clearSelection()" ng-keyup="keyEvent($event)" placeholder="Find in folder" bk-focus="true"></bk-input>
+                <bk-input-group-addon ng-if="search.filterBy" has-button="true">
+                    <bk-button glyph="sap-icon--clear-filter" state="transparent" ng-click="search.filterBy = ''" aria-label="Clear filter"></bk-button>
+                </bk-input-group-addon>
+            </bk-input-group>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+        </bk-toolbar>
+        <div class="bk-stretch" ng-hide="loading">
+            <split direction="horizontal">
+                <split-pane size="50" min-size="340">
+                    <div ng-show="showDropZone" class="drop-zone-backdrop"></div>
+                    <bk-scrollbar class="bk-fill-parent docs-file-drop" nv-file-drop="" uploader="uploader" filters="queueLimit, customFilter">
+                        <table bk-table inner-borders="horizontal" outer-borders="none" display-mode="compact">
+                            <thead bk-table-header sticky="true">
+                                <tr bk-table-row>
+                                    <th bk-table-header-cell content-type="checkbox">
+                                        <bk-checkbox compact="true" id="cb-all" ng-model="selection.allSelected" ng-change="selectAllChanged()"></bk-checkbox>
+                                        <bk-checkbox-label empty="true" compact="true" for="cb-all"></bk-checkbox-label>
+                                    </th>
+                                    <th bk-table-header-cell>Name</th>
+                                    <th bk-table-header-cell></th>
+                                    <th bk-table-header-cell></th>
+                                </tr>
+                            </thead>
+                            <tbody bk-table-body>
+                                <tr bk-table-row ng-repeat="single in filteredItems = (folder.children | filter: search.filterBy | orderBy: ['-type', 'name'])" selected="single.selected">
+                                    <td bk-table-cell content-type="checkbox">
+                                        <bk-checkbox id="cb-{{single.name}}" compact="true" ng-model="single.selected" ng-change="selectionChanged()" aria-labelledby="lbl-{{single.name}"></bk-checkbox>
+                                        <bk-checkbox-label empty="true" compact="true" for="cb-{{single.name}}"></bk-checkbox-label>
+                                    </td>
+                                    <td bk-table-cell hoverable="true" activable="true" ng-click="handleExplorerClick(single, $event)">
+                                        <span class="{{ isFolder(single) ? 'sap-icon--folder-blank' : getFileIcon(single.name) }} fd-margin-end--tiny"></span>
+                                        <bk-link href="#">{{ single.name }}</bk-link>
+                                    </td>
+                                    <td bk-table-cell fit-content="true" style="text-align: right">
+                                        <bk-button ng-click="showRenameItemDialog(single, $event)" bk-list-button ng-disabled="!writeAccessAllowed(single)" state="transparent" compact="true" glyph="sap-icon--edit" aria-label="Rename"
+                                            title="Rename">
+                                        </bk-button>
+                                        <bk-button ng-click="showDeleteSingleItemDialog(single, $event)" bk-list-button ng-disabled="!writeAccessAllowed(single)" state="transparent" compact="true" glyph="sap-icon--delete"
+                                            aria-label="Delete" title="Delete">
+                                        </bk-button>
+                                    </td>
+                                    <td bk-table-cell fit-content="true" navigated="selectedFile === single">
+                                        <i ng-if="isFolder(single)" bk-table-icon navigation="true" glyph="sap-icon--slim-arrow-right">></i>
+                                    </td>
+                                </tr>
+                                <tr ng-if="filteredItems.length === 0" bk-table-row>
+                                    <td bk-table-cell no-data="true">{{ getNoDataMessage() }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div ng-show="showDropZone" class="drop-zone">
+                            <bk-message-page glyph="sap-icon--upload-to-cloud" style="pointer-events: none">
+                                <bk-message-page-title>Drop files here</bk-message-page-title>
+                            </bk-message-page>
+                        </div>
+                    </bk-scrollbar>
+                </split-pane>
+                <split-pane size="50">
+                    <iframe id="preview-iframe" ng-show="selectedFile && canPreview && !previewLoading" src="about:blank"></iframe>
+                    <bk-busy-indicator-extended class="bk-fill-parent" ng-show="selectedFile && canPreview && previewLoading" size="l" ng-show="loading">Loading preview...</bk-busy-indicator-extended>
+                    <bk-message-page ng-if="!selectedFile || !canPreview" glyph="sap-icon--detail-view">
+                        <bk-message-page-title>File Preview</bk-message-page-title>
+                        <bk-message-page-subtitle>{{ canPreview ? "Click on a file to see its preview" : "This file cannot be previewed" }}</bk-message-page-subtitle>
+                    </bk-message-page>
+                </split-pane>
+            </split>
+        </div>
+        <theme></theme>
+    </body>
+
+</html>

@@ -1,12 +1,13 @@
 /*
- * Copyright (c) 2010-2023 SAP and others.
+ * Copyright (c) 2024 Eclipse Dirigible contributors
+ *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * Contributors:
- *   SAP - initial API and implementation
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
  */
 angular.module('ideUI', ['ngAria', 'ideMessageHub'])
     .constant('ScreenEdgeMargin', {
@@ -16,6 +17,8 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
     }).constant('SplitPaneState', {
         EXPANDED: 0,
         COLLAPSED: 1
+    }).constant('platform', {
+        isMac: navigator.userAgent.includes('Mac')
     }).config(function config($compileProvider) {
         if ($compileProvider.debugInfoEnabled())
             $compileProvider.debugInfoEnabled(false);
@@ -30,7 +33,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
             }
         };
     }).factory('backdrop', function ($document) {
-        let backdrop = $document[0].createElement('div');
+        const backdrop = $document[0].createElement('div');
         backdrop.classList.add('dg-backdrop');
         $document[0].body.appendChild(backdrop);
         function contextmenuEvent(event) {
@@ -38,13 +41,13 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
         }
         backdrop.addEventListener('contextmenu', contextmenuEvent);
 
-        let activate = function () {
+        const activate = function () {
             $document[0].body.classList.add('dg-backdrop--active');
         };
-        let deactivate = function () {
+        const deactivate = function () {
             $document[0].body.classList.remove('dg-backdrop--active');
         };
-        let cleanUp = function () {
+        const cleanUp = function () {
             backdrop.removeEventListener('contextmenu', contextmenuEvent);
         }
         return {
@@ -79,28 +82,27 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
             return classes.join(' ');
         }
         return classNames;
-    }).factory('shortcuts', ['$document', function ($document) {
+    }).factory('shortcuts', ['$document', 'platform', function ($document, platform) {
         // Factory is based on example code from zachsnow
         let shortcuts = [];
         let ignoreInputs = false;
         let separateCtrl = false;
-        let isMac = navigator.userAgent.indexOf('Mac') >= 0;
-        let charKeyCodes = { "0": 58, "1": 49, "2": 50, "3": 51, "4": 52, "5": 53, "6": 54, "7": 55, "8": 56, "9": 57, "delete": 8, "tab": 9, "enter": 13, "return": 13, "esc": 27, "space": 32, "left": 37, "up": 38, "right": 39, "down": 40, ";": 186, "=": 187, ",": 188, "-": 189, ".": 190, "/": 191, "`": 192, "[": 219, "\\": 220, "]": 221, "'": 222, "a": 65, "b": 66, "c": 67, "d": 68, "e": 69, "f": 70, "g": 71, "h": 72, "i": 73, "j": 74, "k": 75, "l": 76, "m": 77, "n": 78, "o": 79, "p": 80, "q": 81, "r": 82, "s": 83, "t": 84, "u": 85, "v": 86, "w": 87, "x": 88, "y": 89, "z": 90 };
-        let keyCodeChars = { 8: "delete", 9: "tab", 13: "return", 27: "esc", 32: "space", 37: "left", 38: "up", 39: "right", 40: "down", 49: "1", 50: "2", 51: "3", 52: "4", 53: "5", 54: "6", 55: "7", 56: "8", 57: "9", 58: "0", 65: "a", 66: "b", 67: "c", 68: "d", 69: "e", 70: "f", 71: "g", 72: "h", 73: "i", 74: "j", 75: "k", 76: "l", 77: "m", 78: "n", 79: "o", 80: "p", 81: "q", 82: "r", 83: "s", 84: "t", 85: "u", 86: "v", 87: "w", 88: "x", 89: "y", 90: "z", 186: ";", 187: "=", 188: ",", 189: "-", 190: ".", 191: "/", 192: "`", 219: "[", 220: "\\", 221: "]", 222: "'" };
-        let modifierKeys = { 'shift': 'shift', 'ctrl': 'ctrl', 'meta': 'meta', 'alt': 'alt' };
+        const charKeyCodes = { 'f1': 112, 'f2': 113, 'f3': 114, 'f4': 115, 'f5': 116, 'f6': 117, 'f7': 118, 'f8': 119, 'f9': 120, 'f10': 121, 'f11': 122, 'f12': 123, '0': 58, '1': 49, '2': 50, '3': 51, '4': 52, '5': 53, '6': 54, '7': 55, '8': 56, '9': 57, 'backspace': 8, 'delete': 46, 'tab': 9, 'enter': 13, 'return': 13, 'esc': 27, 'space': 32, 'left': 37, 'up': 38, 'right': 39, 'down': 40, ';': 186, '=': 187, ',': 188, '-': 189, '.': 190, '/': 191, '`': 192, '[': 219, '\\': 220, ']': 221, "'": 222, 'a': 65, 'b': 66, 'c': 67, 'd': 68, 'e': 69, 'f': 70, 'g': 71, 'h': 72, 'i': 73, 'j': 74, 'k': 75, 'l': 76, 'm': 77, 'n': 78, 'o': 79, 'p': 80, 'q': 81, 'r': 82, 's': 83, 't': 84, 'u': 85, 'v': 86, 'w': 87, 'x': 88, 'y': 89, 'z': 90 };
+        const keyCodeChars = { 112: 'f1', 113: 'f2', 114: 'f3', 115: 'f4', 116: 'f5', 117: 'f6', 118: 'f7', 119: 'f8', 120: 'f9', 121: 'f10', 122: 'f11', 123: 'f12', 8: 'backspace', 46: 'delete', 9: 'tab', 13: 'return', 27: 'esc', 32: 'space', 37: 'left', 38: 'up', 39: 'right', 40: 'down', 49: '1', 50: '2', 51: '3', 52: '4', 53: '5', 54: '6', 55: '7', 56: '8', 57: '9', 58: '0', 65: 'a', 66: 'b', 67: 'c', 68: 'd', 69: 'e', 70: 'f', 71: 'g', 72: 'h', 73: 'i', 74: 'j', 75: 'k', 76: 'l', 77: 'm', 78: 'n', 79: 'o', 80: 'p', 81: 'q', 82: 'r', 83: 's', 84: 't', 85: 'u', 86: 'v', 87: 'w', 88: 'x', 89: 'y', 90: 'z', 186: ';', 187: '=', 188: ',', 189: '-', 190: '.', 191: '/', 192: '`', 219: '[', 220: '\\', 221: ']', 222: "'" };
+        const modifierKeys = { 'shift': 'shift', 'ctrl': 'ctrl', 'meta': 'meta', 'alt': 'alt' };
 
         function parseKeySet(keySet) {
             let names;
             let keys = {};
-            if (isMac && !separateCtrl) {
-                keySet = keySet.replaceAll('ctrl', 'meta');
+            if (platform.isMac && !separateCtrl) {
+                keySet = keySet.replaceAll('ctrl', 'meta').toLowerCase();
                 names = keySet.split('+');
             } else names = keySet.split('+');
             for (const name in modifierKeys) {
                 keys[modifierKeys[name]] = false;
             }
             for (const name in names) {
-                let modifierKey = modifierKeys[names[name]];
+                const modifierKey = modifierKeys[names[name]];
                 if (modifierKey) keys[modifierKey] = true;
                 else {
                     keys.keyCode = charKeyCodes[names[name]];
@@ -137,8 +139,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
             for (let i = 0; i < shortcuts.length; i++) {
                 shortcut = shortcuts[i];
                 if (match(eventKeys, shortcut.keys)) {
-                    e.preventDefault();
-                    shortcut.action();
+                    if (shortcut.action) shortcut.action(shortcut.keySet, e);
                     return;
                 }
             }
@@ -162,14 +163,16 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 overwriteWithout(shortcuts, shortcut);
             }
         };
-    }]).directive('dgShortcut', ['$parse', 'shortcuts', function ($parse, shortcuts) {
+    }]).directive('dgShortcut', ['shortcuts', function (shortcuts) {
         /**
          * Directive is based on example code from zachsnow 
          * How to use:
-         * <div dg-shortcut="'ctrl+s|ctrl+k'" dg-shortcut-action="save()" ignore-inputs separate-ctrl>
+         * <div dg-shortcut="'ctrl+s|ctrl+k'" dg-shortcut-action="save" ignore-inputs separate-ctrl>
          * Options:
          * * dg-shortcut - String containing the shortcut or shortcuts. There can be multiple shortcuts for a single action. You can separate the shortcuts using '|'.
-         * * dg-shortcut-action - Reference to a function that will get called when the shortcut is activated.
+         * * dg-shortcut-action - The name of the function that will get called. It has two parameters:
+         * * * keySet - The keyboard shortcut activated.
+         * * * event - The JavaScript key event.
          * * ignore-inputs - If this attribute is present, then events from 'input' and 'textarea' controls will be ignored.
          * * separate-ctrl - On macOS, by default, the ctrl key is replaced with the meta (cmd) key, so shortcuts like 'Ctrl+S' are automatically translated to 'Cmd+S'.
          * If you want the ctrl key to match the ctrl and be separate from the meta on a mac, then use this attribute.
@@ -177,36 +180,41 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
          */
         return {
             restrict: 'A',
-            link: function (scope, element, attrs) {
+            link: function (scope, _element, attrs) {
                 let shortcutKeySets = scope.$eval(attrs.dgShortcut);
-                let ignoreInputs = 'ignoreInputs' in attrs;
-                let separateCtrl = 'separateCtrl' in attrs;
+                const ignoreInputs = 'ignoreInputs' in attrs;
+                const separateCtrl = 'separateCtrl' in attrs;
                 shortcuts.ignoreInputs(ignoreInputs);
                 shortcuts.separateCtrl(separateCtrl);
-                if (shortcutKeySets === undefined) return;
-                shortcutKeySets = shortcutKeySets.split('|');
-                let action;
-                if (attrs.dgShortcutAction) {
-                    let fn = $parse(attrs.dgShortcutAction);
-                    action = function () {
-                        scope.$apply(function () {
-                            fn(scope);
-                        });
-                    };
-                }
-                for (let i = 0; i < shortcutKeySets.length; i++) {
-                    let shortcut = shortcuts.register({
-                        keySet: shortcutKeySets[i],
-                        action: action,
-                        description: attrs.dgShortcutDescription || ''
-                    });
-                    scope.$on("$destroy", function () {
-                        shortcuts.unregister(shortcut);
+                if (shortcutKeySets !== undefined) {
+                    shortcutKeySets = shortcutKeySets.split('|');
+                    const action = scope.$eval(attrs.dgShortcutAction);
+                    let shortcutList = [];
+                    for (let i = 0; i < shortcutKeySets.length; i++) {
+                        shortcutList.push(shortcuts.register({
+                            keySet: shortcutKeySets[i],
+                            action: action,
+                            description: attrs.dgShortcutDescription || ''
+                        }));
+                    }
+                    scope.$on('$destroy', function () {
+                        for (let i = 0; i < shortcutList.length; i++) {
+                            shortcuts.unregister(shortcutList[i]);
+                        }
                     });
                 }
             }
         }
-    }]).directive('dgInputRules', function ($parse) {
+    }]).directive('dgFocus', function ($timeout) {
+        return {
+            restrict: 'A',
+            link: function (_scope, element, attrs) {
+                attrs.$observe('dgFocus', function (newValue) {
+                    if (newValue === 'true') $timeout(function () { element.focus() });
+                });
+            }
+        };
+    }).directive('dgInputRules', function ($parse) {
         /**
          * How to use:
          * <input ng-model="inputModel" ng-required dg-input-rules="inputRules">
@@ -217,13 +225,15 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
          * }
          */
         return {
+            restrict: 'A',
             require: 'ngModel',
             link: function (scope, element, attr, controller) {
                 let parseFn = $parse(attr.dgInputRules);
                 scope.inputRules = parseFn(scope);
 
                 function validation(modelValue, viewValue) {
-                    if (viewValue) {
+                    if (!attr.required && (viewValue === undefined || viewValue === null || viewValue === '')) return true;
+                    else if (viewValue !== undefined || viewValue !== null || viewValue !== '') {
                         let isValid = true;
                         if (scope.inputRules.excluded) isValid = !scope.inputRules.excluded.includes(viewValue);
                         if (isValid && scope.inputRules.patterns) {
@@ -310,14 +320,14 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     return $scope.panes.map(pane => pane.size === 'auto' ? autoSize : Number(pane.size));
                 }
 
-                $scope.$watch('direction', function (newDirection, oldDirection) {
+                const directionWatch = $scope.$watch('direction', function (newDirection, oldDirection) {
                     if (oldDirection)
                         $element.removeClass(oldDirection);
 
                     $element.addClass(newDirection || 'horizontal');
                 });
 
-                $scope.$watchCollection('panes', function () {
+                const panesWatch = $scope.$watchCollection('panes', function () {
                     if ($scope.split) {
                         $scope.split.destroy();
                         $scope.split = null;
@@ -360,7 +370,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     });
                 });
 
-                $scope.$watchCollection('state', function (newState, oldState) {
+                const stateWatch = $scope.$watchCollection('state', function (newState, oldState) {
                     if (newState.length === oldState.length) {
                         //Process the collapsing first
                         for (let i = 0; i < newState.length; i++) {
@@ -392,6 +402,12 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                         }
                     }
                 });
+                function cleanUp() {
+                    directionWatch();
+                    panesWatch();
+                    stateWatch();
+                }
+                $scope.$on('$destroy', cleanUp);
             }],
             template: '<div class="dg-split" ng-transclude></div>'
         };
@@ -631,6 +647,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
             link: function (scope) {
                 scope.getClasses = () => classNames({
                     'fd-form-item--horizontal': scope.horizontal,
+                    'dg-form-item--horizontal': scope.horizontal, // see widgets.css
                     'fd-list__form-item': scope.inList,
                 });
             },
@@ -739,7 +756,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     };
                 },
             },
-            template: `<div class="fd-input-group" ng-class="getClasses()" ng-transclude></div>`,
+            template: `<div class="fd-input-group" ng-class="getClasses()" tabindex="-1" ng-transclude></div>`,
         }
     }]).directive('fdInputGroupAddon', [function () {
         /**
@@ -794,7 +811,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                             scope.$apply(scope.togglePopover());
                     }
                     element.on('focusout', focusoutEvent);
-                    scope.$watch('dgInactive', function () {
+                    const inactiveWatch = scope.$watch('dgInactive', function () {
                         if (scope.dgInactive === "true") {
                             if (!scope.popoverControl) {
                                 scope.popoverControl = element[0].querySelector(`[aria-controls="${scope.popoverId}"]`);
@@ -833,12 +850,13 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     };
                     function cleanUp() {
                         element.off('focusout', focusoutEvent);
+                        inactiveWatch();
                     }
                     scope.$on('$destroy', cleanUp);
                 },
             },
-            template: `<div class="fd-popover fd-popover--input-message-group">
-                <div class="fd-popover__control" aria-controls="{{ popoverId }}" aria-expanded="false" aria-haspopup="true" ng-click="togglePopover()" ng-transclude="{{ isTextarea ? 'textarea' : 'input'}}"></div>
+            template: `<div class="fd-popover fd-popover--input-message-group" tabindex="-1">
+                <div class="fd-popover__control" aria-controls="{{ popoverId }}" aria-expanded="false" aria-haspopup="true" ng-click="togglePopover()" ng-transclude="{{ isTextarea ? 'textarea' : 'input'}}" tabindex="-1"></div>
                 <div class="fd-popover__body fd-popover__body--no-arrow" aria-hidden="true" id="{{ popoverId }}" ng-style="getStyle()" ng-transclude="message"></div>
             </div>`,
         }
@@ -868,7 +886,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
          * compact: Boolean - Input size.
          * dgId: String - The input id.
          * dgDisabled: Boolean - If the input is disabled.
-         * dgReqired: Boolen - If the input is required.
+         * dgRequired: Boolen - If the input is required.
          * dgMin: Number - Minimum input value.
          * dgMin: Number - Maximum input value.
          * dgStep: Number - Input step.
@@ -898,8 +916,9 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
             link: function (scope, element, attrs, ngModel) {
                 let input = element[0].querySelector(`input`);
                 scope.value;
+                let valueWatch;
                 if (ngModel) {
-                    scope.$watch('value', function (value) {
+                    valueWatch = scope.$watch('value', function (value) {
                         ngModel.$setViewValue(value);
                         ngModel.$validate();
                     });
@@ -934,6 +953,10 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     input.stepUp();
                     scope.value = Number(input.value);
                 };
+                function cleanUp() {
+                    if (ngModel) valueWatch();
+                }
+                scope.$on('$destroy', cleanUp);
             },
             template: `<div class="fd-step-input" ng-class="getClasses()"><button aria-label="Step down" class="fd-button fd-button--transparent fd-step-input__button" ng-class="getButtonClasses()" tabindex="-1" type="button" ng-click="stepDown()"><i class="sap-icon--less"></i></button>
 <input ng-attr-id="{{dgId}}" class="fd-input fd-input--no-number-spinner fd-step-input__input" ng-class="getClasses(true)" type="number" ng-attr-name="{{name}}" placeholder="{{placeholder}}" ng-disabled="dgDisabled" ng-required="dgRequired" ng-model="value" ng-attr-max="{{dgMax}}" ng-attr-min="{{dgMin}}" ng-attr-step="{{dgStep}}" ng-readonly="isReadonly === true"/>
@@ -1005,7 +1028,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
             },
             template: `<label class="fd-checkbox__label" ng-class="getClasses()">
                 <span class="fd-checkbox__checkmark" aria-hidden="true"></span>
-                <div ng-if="empty!=='true'" class="fd-checkbox__label-container"><span class="fd-checkbox__text" ng-transclude></span></div>
+                <div ng-if="empty !== true" class="fd-checkbox__label-container"><span class="fd-checkbox__text" ng-transclude></span></div>
             </label>`,
         }
     }]).directive('fdRadio', [function () {
@@ -1021,7 +1044,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 compact: '<?',
                 state: '@?',
             },
-            link: function (scope, elem, attrs) {
+            link: function (scope, _elem, attrs) {
                 scope.getClasses = function () {
                     let classList = [];
                     if (scope.compact === true) classList.push('fd-radio--compact');
@@ -1434,7 +1457,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
             },
             template: '<div class="fd-popover__control" ng-transclude></div>',
         }
-    }]).directive('fdPopoverBody', ['$window', 'ScreenEdgeMargin', 'classNames', function ($window, ScreenEdgeMargin, classNames) {
+    }]).directive('fdPopoverBody', ['$window', '$timeout', 'ScreenEdgeMargin', 'classNames', function ($window, $timeout, ScreenEdgeMargin, classNames) {
         /**
          * dgAlign: String - Relative position of the popover. Possible values are:
          * - "top-left": Alings the popover to the top left side of the control.
@@ -1473,17 +1496,18 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
             },
             link: {
                 pre: function (scope, element) {
+                    scope.defaultHeight = 16;
                     scope.setDefault = function () {
                         if (!angular.isDefined(scope.canScroll))
                             scope.canScroll = true;
                         let rect = element[0].getBoundingClientRect();
                         scope.defaultHeight = $window.innerHeight - ScreenEdgeMargin.FULL - rect.top;
                     };
-                    scope.setDefault();
                     function resizeEvent() {
                         scope.$apply(function () { scope.setDefault() });
                     }
-                    $window.addEventListener('resize', resizeEvent);
+                    if (scope.maxHeight)
+                        $window.addEventListener('resize', resizeEvent);
                     if (scope.$parent && scope.$parent.popoverId)
                         scope.popoverId = scope.$parent.popoverId;
                     else if (scope.$parent && scope.$parent.$parent && scope.$parent.$parent.popoverId)
@@ -1508,6 +1532,12 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                         $window.removeEventListener('resize', resizeEvent);
                     }
                     scope.$on('$destroy', cleanUp);
+                    const contentLoaded = scope.$watch('$viewContentLoaded', function () {
+                        $timeout(() => {
+                            scope.setDefault();
+                            contentLoaded();
+                        }, 0);
+                    });
                 },
             },
             template: `<div id="{{ popoverId }}" class="fd-popover__body" ng-class="getClasses()" aria-hidden="true">
@@ -1515,7 +1545,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 <ng-transclude ng-if="!canScroll"></ng-transclude>
             </div>`,
         }
-    }]).directive('fdMenu', ['$window', 'backdrop', 'classNames', function ($window, backdrop, classNames) {
+    }]).directive('fdMenu', ['$window', '$timeout', 'backdrop', 'classNames', function ($window, $timeout, backdrop, classNames) {
         /**
          * maxHeight: Number - Maximum height in pixels before it starts scrolling. Default is the height of the window.
          * canScroll: Boolean - Enable/disable scroll menu support. Default is false.
@@ -1550,15 +1580,18 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                         scope.noShadow = true;
                         scope.closeOnOuterClick = false;
                     } else scope.closeOnOuterClick = true;
-                    let rect = element[0].getBoundingClientRect();
-                    scope.defaultHeight = $window.innerHeight - rect.top;
+                    scope.defaultHeight = 16;
                 },
                 post: function (scope, element) {
-                    function resizeEvent() {
+                    scope.setDefault = function () {
                         let rect = element[0].getBoundingClientRect();
                         scope.defaultHeight = $window.innerHeight - rect.top;
+                    };
+                    function resizeEvent() {
+                        scope.$apply(function () { scope.setDefault() });
                     }
-                    $window.addEventListener('resize', resizeEvent);
+                    if (scope.maxHeight)
+                        $window.addEventListener('resize', resizeEvent);
                     scope.backdropClickEvent = function () {
                         scope.$apply(function () { scope.show = false; });
                     };
@@ -1566,7 +1599,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                         event.stopPropagation();
                         scope.$apply(function () { scope.show = false; });
                     };
-                    scope.$watch('show', function () {
+                    const showWatch = scope.$watch('show', function () {
                         if (!scope.noBackdrop) {
                             if (scope.show) {
                                 backdrop.activate();
@@ -1596,11 +1629,18 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                         backdrop.element.removeEventListener('click', scope.backdropClickEvent);
                         backdrop.element.removeEventListener('contextmenu', scope.backdropRightClickEvent);
                         backdrop.cleanUp();
+                        showWatch();
                     }
                     scope.$on('$destroy', cleanUp);
+                    const contentLoaded = scope.$watch('$viewContentLoaded', function () {
+                        $timeout(() => {
+                            scope.setDefault();
+                            contentLoaded();
+                        }, 0);
+                    });
                 },
             },
-            template: `<nav class="fd-menu" ng-show="show" ng-class="getMenuClasses()"><ul ng-class="getListClasses()" role="menu" ng-transclude></ul></nav>`
+            template: `<nav class="fd-menu" ng-show="show" ng-class="getMenuClasses()"><ul ng-class="getListClasses()" role="menu" tabindex="-1" ng-transclude></ul></nav>`
         }
     }]).directive('fdMenuItem', [function () {
         /**
@@ -1639,7 +1679,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     return '';
                 };
             },
-            template: `<li class="fd-menu__item" ng-class="getItemClasses()" role="presentation">
+            template: `<li class="fd-menu__item" ng-class="getItemClasses()" role="presentation" tabindex="-1">
                 <span class="fd-menu__link" ng-class="getClasses()" role="menuitem" tabindex="{{ isDisabled ? -1 : 0 }}">
                     <span ng-if="iconBefore" class="fd-menu__addon-before">
                         <i class="{{ iconBefore }}" ng-if="iconBefore !== 'none'" role="presentation"></i>
@@ -1690,6 +1730,11 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                             scope.$apply(scope.hideSubmenu());
                         }
                     };
+                    function focusoutEvent(event) {
+                        if (!element[0].contains(event.relatedTarget)) {
+                            scope.$apply(scope.hideSubmenu());
+                        }
+                    }
                     function pointerupEvent(e) {
                         let listItem;
                         let list;
@@ -1745,6 +1790,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                         scope.menu.style.removeProperty('top');
                         scope.menu.style.removeProperty('left');
                         scope.menu.classList.remove('dg-submenu--left');
+                        element.off('focusout', focusoutEvent);
                         $window.removeEventListener('pointerup', scope.pointerHandler);
                     };
                     scope.hide = function (event) {
@@ -1762,15 +1808,22 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                             }
                         }
                     };
+
+                    scope.focus = function () {
+                        element.on('focusout', focusoutEvent);
+                        scope.show();
+                    };
+
                     function cleanUp() {
                         element.off('pointerup', pointerupEvent);
+                        element.off('focusout', focusoutEvent);
                         $window.removeEventListener('resize', resizeEvent);
                         $window.removeEventListener('pointerup', scope.pointerHandler);
                     }
                     scope.$on('$destroy', cleanUp);
                 }
             },
-            template: `<li class="fd-menu__item" ng-class="getItemClasses()" role="presentation" ng-mouseenter="show()" ng-mouseleave="hide($event)">
+            template: `<li class="fd-menu__item" ng-class="getItemClasses()" role="presentation" ng-mouseenter="show()" ng-mouseleave="hide($event)" tabindex="0" ng-focus="focus()">
                 <span class="fd-menu__link has-child" aria-controls="{{sublistId}}" aria-expanded="{{isExpanded}}" aria-haspopup="true" role="menuitem" ng-class="getClasses()">
                     <span ng-if="icon" class="fd-menu__addon-before"><i class="{{icon}}" role="presentation"></i></span>
                     <span class="fd-menu__title">{{title}}</span>
@@ -2181,7 +2234,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     scope.expanded = !scope.expanded;
                 };
 
-                scope.$watch('expanded', function () {
+                const expandedWatch = scope.$watch('expanded', function () {
                     tableGroupCtrl.setGroupRowExpanded(element.parent()[0], scope.expanded);
                 });
 
@@ -2191,6 +2244,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
 
                 scope.$on('$destroy', function () {
                     tableGroupCtrl.removeRow(rowEl);
+                    expandedWatch();
                 });
             },
             template: `<td class="fd-table__cell fd-table__cell--group fd-table__cell--expand" colspan="100%" ng-click="toggleExpanded()">
@@ -2256,8 +2310,8 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     if (scope.hasTitle) classList.push('fd-toolbar--title');
                     if (scope.noBottomBorder) classList.push('fd-toolbar--clear');
                     if (scope.active) classList.push('fd-toolbar--active');
-                    if (scope.compact) classList.push('is-compact');
-                    if (scope.hasTitle && scope.compact) console.error("fd-toolbar: There cannot be a title in compact mode!");
+                    if (scope.compact === true) classList.push('is-compact');
+                    if (scope.hasTitle === true && scope.compact === true) console.error("fd-toolbar: There cannot be a title in compact mode!");
                     return classList.join(' ');
                 };
             },
@@ -2353,7 +2407,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 scope.getClasses = function () {
                     let classList = ['fd-list'];
 
-                    if (scope.compact) {
+                    if (scope.compact === true) {
                         classList.push('fd-list--compact');
                     }
 
@@ -2410,7 +2464,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                         height === 'false' ? false : height;
                 };
             },
-            template: `<ul ng-class="getClasses()" ng-style="getStyles()" role="{{getRole()}}" ng-transclude>`
+            template: `<ul ng-class="getClasses()" ng-style="getStyles()" role="{{getRole()}}" tabindex="-1" ng-transclude>`
         }
     }]).directive('fdListItem', [function () {
         /**
@@ -2428,11 +2482,15 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 dgSelected: '<?'
             },
             controller: ['$scope', '$element', '$attrs', function ($scope, $element, $attrs) {
+                $scope.focusable = true;
                 this.addClass = function (className) {
                     $element.addClass(className);
                 }
                 this.setRole = function (role) {
                     $element.attr('role', role);
+                }
+                this.canFocus = function (focusable) {
+                    $scope.focusable = focusable;
                 }
 
                 if (!$attrs.role)
@@ -2454,15 +2512,19 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     return classList.join(' ');
                 }
 
-                $scope.$watch('dgSelected', function () {
+                const selectedWatch = $scope.$watch('dgSelected', function () {
                     if ($scope.dgSelected) {
                         $element[0].setAttribute('aria-selected', 'true');
                     } else {
                         $element[0].removeAttribute('aria-selected');
                     }
-                })
+                });
+
+                $scope.$on('$destroy', function () {
+                    selectedWatch();
+                });
             }],
-            template: `<li ng-class="getClasses()" ng-transclude></li>`
+            template: `<li ng-class="getClasses()" tabindex="{{::focusable ? 0 : -1}}" ng-transclude></li>`
         }
     }]).directive('fdListTitle', [function () {
         return {
@@ -2528,6 +2590,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
             },
             link: function (scope, element, attrs, listItemCtrl) {
                 listItemCtrl.addClass('fd-list__item--link');
+                listItemCtrl.canFocus(false);
 
                 scope.getClasses = function () {
                     let classList = ['fd-list__link'];
@@ -2780,7 +2843,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
 
                 element.addClass('fd-object-status');
 
-                scope.$watch('status', function (newStatus, oldStatus) {
+                const statusWatch = scope.$watch('status', function (newStatus, oldStatus) {
                     if (newStatus && !statuses.includes(newStatus)) {
                         console.error(`fd-object-status error: 'status' must be one of: ${statuses.join(', ')}`);
                     }
@@ -2792,7 +2855,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     }
                 });
 
-                scope.$watch('clickable', function () {
+                const clickableWatch = scope.$watch('clickable', function () {
                     const isLink = element[0].tagName === 'A';
                     if (scope.clickable || isLink) {
                         element.addClass(`fd-object-status--link`);
@@ -2804,7 +2867,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     }
                 });
 
-                scope.$watch('inverted', function () {
+                const invertedWatch = scope.$watch('inverted', function () {
                     if (scope.inverted) {
                         element.addClass('fd-object-status--inverted');
                     } else {
@@ -2812,7 +2875,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     }
                 });
 
-                scope.$watch('large', function () {
+                const largeWatch = scope.$watch('large', function () {
                     if (scope.large) {
                         element.addClass('fd-object-status--large');
                     } else {
@@ -2820,7 +2883,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     }
                 });
 
-                scope.$watch('truncate', function () {
+                const truncateWatch = scope.$watch('truncate', function () {
                     if (scope.truncate) {
                         element.addClass('fd-object-status--truncate');
                     } else {
@@ -2828,7 +2891,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     }
                 });
 
-                scope.$watch('indication', function (indication, oldIndication) {
+                const indicationWatch = scope.$watch('indication', function (indication, oldIndication) {
                     if (oldIndication) {
                         element.removeClass(`fd-object-status--indication-${oldIndication}`);
                     }
@@ -2840,13 +2903,23 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
 
                     element.addClass(`fd-object-status--indication-${indication}`);
                 });
+
+                scope.$on('$destroy', function () {
+                    statusWatch();
+                    clickableWatch();
+                    invertedWatch();
+                    largeWatch();
+                    truncateWatch();
+                    indicationWatch();
+                });
             }],
             template: `<i ng-if="glyph" ng-class="getIconClasses()" role="presentation"></i>
                        <span ng-if="text" ng-class="getTextClasses()">{{text}}</span>`
         }
-    }]).directive('fdSelect', ['uuid', '$window', 'ScreenEdgeMargin', function (uuid, $window, ScreenEdgeMargin) {
+    }]).directive('fdSelect', ['uuid', '$window', '$timeout', 'ScreenEdgeMargin', function (uuid, $window, $timeout, ScreenEdgeMargin) {
         /**
-         * dgSize: String - The size of the select. One of 'compact' or 'large'. 
+         * dgSize: String - The size of the select dropdown. The only option is 'large'.
+         * compact: Boolean - Select size.
          * dgDisabled: Boolean - Disable the select
          * ngModel: Any - The value of the currently selected item
          * state: String - Optional semantic state. Could be one of 'success', 'error', 'warning' or 'information'
@@ -2877,6 +2950,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
             require: '?ngModel',
             scope: {
                 dgSize: '@?',
+                compact: '<?',
                 dgDisabled: '<?',
                 selectedValue: '=?',
                 state: '@?',
@@ -2888,17 +2962,21 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 placement: '@?',
                 isReadonly: '<?',
             },
-            link: function (scope, element, attrs, ngModel) {
+            link: function (scope, _element, _attrs, ngModel) {
+                let selectedValWatch;
                 if (ngModel) {
-                    scope.$watch('selectedValue', function (value) {
+                    selectedValWatch = scope.$watch('selectedValue', function (value) {
                         ngModel.$setViewValue(value);
                         ngModel.$validate();
                     });
 
                     ngModel.$render = function () {
                         scope.selectedValue = ngModel.$viewValue;
-                    }
+                    };
                 }
+                scope.$on('$destroy', function () {
+                    selectedValWatch();
+                });
             },
             controller: ['$scope', '$element', function ($scope, $element) {
                 let control = $element[0].querySelector(`.fd-popover__control`);
@@ -2912,7 +2990,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     $scope.$apply(function () { $scope.setDefault() });
                 }
                 $window.addEventListener('resize', resizeEvent);
-                $scope.defaultHeight = 0;
+                $scope.defaultHeight = 16;
                 $scope.items = [];
                 $scope.bodyExpanded = false;
                 $scope.buttonId = `select-btn-${uuid.generate()}`;
@@ -2927,7 +3005,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 $scope.getClasses = function () {
                     let classList = ['fd-select'];
 
-                    if ($scope.dgSize === 'compact') {
+                    if ($scope.compact === true) {
                         classList.push('fd-select--compact');
                     }
 
@@ -3009,13 +3087,12 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                         classList.push('fd-list--has-message');
                     }
 
-                    switch ($scope.dgSize) {
-                        case 'compact':
-                            classList.push('fd-list--compact');
-                            break;
-                        case 'large':
-                            classList.push('fd-list--large-dropdown');
-                            break;
+                    if ($scope.compact === true) {
+                        classList.push('fd-list--compact');
+                    }
+
+                    if ($scope.dgSize === 'large') {
+                        classList.push('fd-list--large-dropdown');
                     }
 
                     return classList.join(' ');
@@ -3125,6 +3202,12 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     $element.off('focusout', focusoutEvent);
                 }
                 $scope.$on('$destroy', cleanUp);
+                const contentLoaded = $scope.$watch('$viewContentLoaded', function () {
+                    $timeout(() => {
+                        $scope.setDefault();
+                        contentLoaded();
+                    }, 0);
+                });
             }],
             template: `<div class="fd-popover">
                 <div class="fd-popover__control" aria-disabled="{{ !!dgDisabled }}">
@@ -3156,17 +3239,17 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
          */
         return {
             restrict: 'EA',
+            require: '^fdSelect',
             replace: true,
             transclude: true,
             scope: {
                 text: '@',
-                secondaryText: '@',
+                secondaryText: '@?',
                 value: '<',
-                glyph: '@',
-                noWrap: '<'
+                glyph: '@?',
+                noWrap: '<?'
             },
-            require: '^fdSelect',
-            link: function (scope, element, attrs, selectCtrl) {
+            link: function (scope, _element, _attrs, selectCtrl) {
                 scope.optionId = `select-option-${uuid.generate()}`;
 
                 scope.isSelected = function () {
@@ -3382,7 +3465,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                         classList.push('is-active');
                     }
 
-                    if (scope.compact) {
+                    if (scope.compact === true) {
                         classList.push('fd-button--compact');
                     }
 
@@ -3392,7 +3475,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 scope.getArrowButtonClassess = function () {
                     let classList = ['fd-button', 'fd-button--transparent', 'fd-pagination__button'];
 
-                    if (scope.compact) {
+                    if (scope.compact === true) {
                         classList.push('fd-button--compact');
                     }
 
@@ -3411,7 +3494,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     return `${scope.totalItems} Results`;
                 }
 
-                scope.$watch('itemsPerPage', function (newVal, oldVal) {
+                const itemsWatch = scope.$watch('itemsPerPage', function (newVal, oldVal) {
                     if (newVal !== oldVal) {
                         if (scope.itemsPerPageChange)
                             scope.itemsPerPageChange({ itemsPerPage: scope.itemsPerPage });
@@ -3422,11 +3505,15 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                         scope.gotoPage(pageCount);
                     }
                 });
+
+                scope.$on('$destroy', function () {
+                    itemsWatch();
+                });
             },
             template: `<div ng-class="getClasses()">
                 <div ng-if="itemsPerPageOptions" class="fd-pagination__per-page">
                     <label class="fd-form-label fd-pagination__per-page-label" id="{{ itemsPerPageLabelId }}">Results per page: </label>
-                    <fd-select selected-value="$parent.itemsPerPage" dg-size="{{ compact ? 'compact' : null }}" label-id="{{ itemsPerPageLabelId }}" placement="{{ itemsPerPagePlacement }}">
+                    <fd-select selected-value="$parent.itemsPerPage" compact="compact" label-id="{{ itemsPerPageLabelId }}" placement="{{ itemsPerPagePlacement }}">
                         <fd-option ng-repeat="option in itemsPerPageOptions" text="{{ option }}" value="option"></fd-option>
                     </fd-select>
                 </div>
@@ -3471,7 +3558,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     console.error(`fd-bar error: 'bar-design' must be one of: ${barDesigns.join(', ')}`);
                 }
 
-                if (scope.padding && scope.compact) {
+                if (scope.padding && scope.compact === true) {
                     console.error("fd-bar error: 'padding' and 'compact' attributes are incompatible.");
                 }
 
@@ -3481,7 +3568,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
 
                 scope.getClasses = () => classNames('fd-bar', {
                     [`fd-bar--${scope.barDesign}`]: barDesigns.includes(scope.barDesign),
-                    'fd-bar--compact': scope.compact,
+                    'fd-bar--compact': scope.compact === true,
                     'fd-bar--page': scope.inPage,
                     'fd-bar--page-s': scope.padding === 's',
                     'fd-bar--page-m_l': scope.padding === 'm_l',
@@ -3544,7 +3631,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
         }
     }]).directive('fdTitle', [function () {
         /**
-         * headerSize: Boolean - If specified overrides the size of the heading element. Must be a number between 1 and 6 inclusive
+         * headerSize: Number - If specified overrides the size of the heading element. Must be a number between 1 and 6 inclusive
          * dgWrap: Boolean - Whether or not the title should wrap
          */
         return {
@@ -3555,20 +3642,24 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
             },
             link: function (scope, element) {
                 element.addClass('fd-title');
+                if (scope.dgWrap) element.addClass(`fd-title--wrap`);
 
-                if (scope.headerSize) {
-                    if (scope.headerSize >= 1 && scope.headerSize <= 6)
-                        element.addClass(`fd-title--h${scope.headerSize}`);
-                    else
-                        console.error(`fd-title error: 'header-size' must be a number between 1 and 6 inclusive`);
+                function setHeaderSize(newSize, oldSize) {
+                    if (scope.headerSize) {
+                        if (scope.headerSize >= 1 && scope.headerSize <= 6) {
+                            if (oldSize) element.removeClass(`fd-title--h${oldSize}`);
+                            element.addClass(`fd-title--h${scope.headerSize}`);
+                        } else
+                            console.error(`fd-title error: 'header-size' must be a number between 1 and 6 inclusive`);
+                    }
                 }
-
-                if (scope.dgWrap) {
-                    element.addClass(`fd-title--wrap`);
-                }
+                let headerSizeWatcher = scope.$watch('headerSize', setHeaderSize);
+                scope.$on('$destroy', function () {
+                    headerSizeWatcher();
+                });
             }
         }
-    }]).directive('fdComboboxInput', ['uuid', 'classNames', '$window', function (uuid, classNames, $window) {
+    }]).directive('fdComboboxInput', ['uuid', 'classNames', '$window', '$timeout', function (uuid, classNames, $window, $timeout) {
         /**
          * dropdownItems: Array[{ text: String, secondaryText: String, value: Any }] - Items to be filtered in the search input.
          * ngModel: Any|Array[Any] - The value of the selected item. If multiSelect is set to true this must be an array 
@@ -3599,6 +3690,8 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 maxBodyHeight: '@?'
             },
             link: function (scope, element, attrs, ngModel) {
+                scope.defaultHeight = 16;
+                let collectionWatch;
                 if (ngModel) {
                     const onSelectedValueChanged = function (value) {
                         if (!angular.equals(value, ngModel.$viewValue)) {
@@ -3608,13 +3701,13 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     }
 
                     if (scope.multiSelect) {
-                        scope.$watchCollection('selectedValue', onSelectedValueChanged);
+                        collectionWatch = scope.$watchCollection('selectedValue', onSelectedValueChanged);
                     } else {
                         scope.$watch('selectedValue', onSelectedValueChanged);
                     }
 
                     ngModel.$isEmpty = function (value) {
-                        return !value || (scope.multiSelect && value.length === 0);
+                        return (value === null || value === undefined || value === '') || (scope.multiSelect && value.length === 0);
                     }
 
                     ngModel.$render = function () {
@@ -3656,7 +3749,6 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 }
 
                 scope.search = { term: '' };
-
                 scope.dropdownItems = scope.dropdownItems || [];
                 scope.filteredDropdownItems = scope.dropdownItems;
                 scope.bodyId = `cb-body-${uuid.generate()}`;
@@ -3827,7 +3919,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 }
                 element.on('focusout', focusoutEvent);
 
-                scope.$watchCollection('dropdownItems', function (items) {
+                const dropdownWatch = scope.$watchCollection('dropdownItems', function (items) {
                     if (items === undefined || items === null)
                         scope.dropdownItems = [];
 
@@ -3838,7 +3930,6 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     let rect = element[0].getBoundingClientRect();
                     scope.defaultHeight = $window.innerHeight - rect.bottom;
                 };
-                scope.setDefault();
                 function resizeEvent() {
                     scope.$apply(function () { scope.setDefault() });
                 }
@@ -3846,20 +3937,28 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 function cleanUp() {
                     element.off('focusout', focusoutEvent);
                     $window.removeEventListener('resize', resizeEvent);
+                    dropdownWatch();
+                    if (ngModel && scope.multiSelect) collectionWatch();
                 }
                 scope.$on('$destroy', cleanUp);
+                const contentLoaded = scope.$watch('$viewContentLoaded', function () {
+                    $timeout(() => {
+                        scope.setDefault();
+                        contentLoaded();
+                    }, 0);
+                });
             },
             template: `<div class="fd-popover" ng-keydown="onKeyDown($event)">
-                <div class="fd-popover__control" ng-attr-disabled="{{isDisabled()}}" ng-attr-aria-disabled="{{isDisabled()}}" aria-expanded="{{ isBodyExpanded() }}" aria-haspopup="true" aria-controls="{{ bodyId }}">
-                    <fd-input-group compact="compact" class="fd-input-group--control" dg-disabled="isDisabled()" state="{{ state }}">
+                <div class="fd-popover__control" ng-attr-disabled="{{isDisabled()}}" ng-attr-aria-disabled="{{isDisabled()}}" aria-expanded="{{ isBodyExpanded() }}" aria-haspopup="true" aria-controls="{{ bodyId }}"  >
+                    <fd-input-group compact="compact" class="fd-input-group--control" dg-disabled="isDisabled()" state="{{ state }}" tabindex="{{ isDisabled() ? -1 : 0 }}">
                         <fd-tokenizer ng-if="multiSelect">
-                            <fd-token ng-repeat="item in getSelectedItems()" close-clicked="onTokenClick(item)" dg-text="{{item.text}}" close-button-aria-label="unselect option: {{item.text}}" tabindex="0"></fd-token>
+                            <fd-token ng-repeat="item in getSelectedItems()" close-clicked="onTokenClick(item)" dg-text="{{item.text}}" close-button-aria-label="unselect option: {{item.text}}" tabindex="{{ isDisabled() ? -1 : 0 }}"></fd-token>
                             <fd-token-indicator></fd-token-indicator>
                             <fd-input ng-attr-id="{{ inputId }}" type="text" class="fd-tokenizer__input" autocomplete="off" placeholder="{{ dgPlaceholder }}" in-group="true" ng-focus="openDropdown()" ng-change="onInputChange()" ng-model="search.term" ng-keydown="onSearchKeyDown($event)"></fd-input>
                         </fd-tokenizer>
-                        <fd-input ng-if="!multiSelect" ng-attr-id="{{ inputId }}" type="text" autocomplete="off" placeholder="{{ dgPlaceholder }}" in-group="true" ng-focus="openDropdown()" ng-change="onInputChange()" ng-model="search.term"></fd-input>
+                        <fd-input ng-if="!multiSelect" ng-attr-id="{{ inputId }}" type="text" autocomplete="off" placeholder="{{ dgPlaceholder }}" in-group="true" ng-focus="openDropdown()" ng-change="onInputChange()" ng-model="search.term" tabindex="{{ isDisabled() ? -1 : 0 }}"></fd-input>
                         <fd-input-group-addon has-button="true">
-                            <fd-button class="fd-select__button" in-group="true" glyph="sap-icon--navigation-down-arrow" dg-type="transparent" state="{{ isBodyExpanded() ? 'expanded' : '' }}" ng-click="onControllClick()"
+                            <fd-button class="fd-select__button" in-group="true" glyph="sap-icon--navigation-down-arrow" dg-type="transparent" state="{{ isBodyExpanded() ? 'expanded' : '' }}" tabindex="{{ isDisabled() ? -1 : 0 }}" ng-click="onControllClick()"
                                 ng-attr-aria-label="{{ dgAriaLabel }}"
                                 aria-controls="{{ bodyId }}"
                                 aria-haspopup="true"></fd-button>
@@ -3869,12 +3968,12 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 <div ng-if="!dgDisabled" id="{{ bodyId }}" class="fd-popover__body fd-popover__body--no-arrow fd-popover__body--dropdown fd-popover__body--dropdown-fill" aria-hidden="{{ !isBodyExpanded() }}" ng-attr-aria-label="{{ dgAriaLabel }}">
                     <div class="fd-popover__wrapper fd-scrollbar" style="max-height:{{ maxBodyHeight || defaultHeight }}px;">
                         <fd-list-message ng-if="message" state="{{ state }}">{{ message }}</fd-list-message>
-                        <fd-list class="{{getListClasses()}}" dropdown-mode="true" compact="compact" has-message="!!message">
+                        <fd-list class="{{getListClasses()}}" dropdown-mode="true" compact="compact" has-message="!!message" tabindex="-1">
                             <fd-list-item ng-repeat="item in filteredDropdownItems" role="option" tabindex="0" dg-selected="isSelected(item)" ng-click="onItemClick(item)">
                                 <fd-list-form-item ng-if="multiSelect">
                                     <fd-checkbox id="{{getCheckboxId(item.value)}}" compact="compact" ng-checked="isSelected(item)">
                                     </fd-checkbox>
-                                    <fd-checkbox-label empty="true" compact="compact" for="{{getCheckboxId(item.value)}}" ng-click="$event.preventDefault()"></fd-checkbox-label>
+                                    <fd-checkbox-label empty="true" compact="compact" for="{{getCheckboxId(item.value)}}" ng-click="$event.preventDefault()" tabindex="-1"></fd-checkbox-label>
                                 </fd-list-form-item>
                                 <fd-list-title>
                                     <span ng-if="shouldRendedHighlightedText(item.text)" class="fd-list__bold">{{ getHighlightedText(item.text) }}</span>{{ getLabel(item.text) }}
@@ -3899,11 +3998,11 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 cardType: '@?',
                 compact: '<?'
             },
-            link: function (scope, element) {
+            link: function (scope) {
                 scope.getClasses = () => classNames('fd-card', {
                     'fd-card--object': scope.cardType === 'object',
                     'fd-card--table': scope.cardType === 'table',
-                    'fd-card--compact': scope.compact
+                    'fd-card--compact': scope.compact === true
                 });
             },
             template: `<div ng-class="getClasses()" role="region" ng-transclude></div>`
@@ -3922,9 +4021,9 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 'avatar': '?fdAvatar'
             },
             scope: {
-                interactive: '<'
+                interactive: '<?'
             },
-            link: function (scope, element, attributes, controller, $transclude) {
+            link: function (scope, element, _attributes, _controller, $transclude) {
                 if (scope.interactive === undefined)
                     scope.interactive = true;
 
@@ -3937,24 +4036,28 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     'fd-card__header--non-interactive': !scope.interactive
                 });
             },
-            template: `<a ng-class="getClasses()">
-                <ng-transclude ng-transclude-slot="avatar"></ng-transclude>
-                <div class="fd-card__header-text">
-                    <div class="fd-card__title-area">
-                        <ng-transclude ng-transclude-slot="title"></ng-transclude>
+            template: `<div ng-class="getClasses()" role="group">
+                <div class="fd-card__header-main">
+                    <div class="fd-card__header-main-container" ng-attr-role="{{ interactive === true ? 'button' : undefined}}" ng-attr-tabindex="{{ interactive === true ? 0 : undefined}}" aria-description="{{description}}">
+                        <ng-transclude ng-if="isAvatarFilled()" ng-transclude-slot="avatar"></ng-transclude>
+                        <div class="fd-card__header-text">
+                            <div class="fd-card__title-area"><ng-transclude ng-transclude-slot="title"></ng-transclude></div>
+                            <div ng-if="isSubtitleFilled()" class="fd-card__subtitle-area" ng-transclude="subtitle"></div>
+                        </div>
+                    </div>
+                    <div class="fd-card__header-main-actions">
+                        <ng-transclude></ng-transclude>
                         <ng-transclude ng-transclude-slot="status"></ng-transclude>
                     </div>
-                    <div ng-if="isSubtitleFilled()" class="fd-card__subtitle-area" ng-transclude="subtitle">
-                    </div>
                 </div>
-            </a>`
+            </div>`,
         }
     }]).directive('fdCardTitle', [function () {
         return {
             restrict: 'EA',
-            replace: false,
+            replace: true,
             transclude: true,
-            template: `<div class="fd-card__title" ng-transclude></div>`
+            template: `<div class="fd-card__title" role="heading" aria-level="3" ng-transclude></div>`
         }
     }]).directive('fdCardSubtitle', [function () {
         return {
@@ -4311,7 +4414,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 }
 
                 $scope.getClasses = () => classNames('fd-panel', {
-                    'fd-panel--compact': $scope.compact,
+                    'fd-panel--compact': $scope.compact === true,
                     'fd-panel--fixed': $scope.fixed
                 });
             }],
@@ -4729,7 +4832,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 }
 
                 $scope.getClasses = () => classNames('fd-tokenizer', {
-                    'fd-tokenizer--compact': $scope.compact,
+                    'fd-tokenizer--compact': $scope.compact === true,
                     'is-focus': $scope.focusable,
                     'fd-tokenizer--scrollable': $scope.scrollable
                 });
@@ -4755,9 +4858,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     });
                 }
             }],
-            template: `<div ng-class="getClasses()">
-            <div class="fd-tokenizer__inner" tabindex="0" ng-transclude></div>
-        </div>`
+            template: `<div ng-class="getClasses()"><div class="fd-tokenizer__inner" tabindex="-1" ng-transclude></div></div>`
         }
     }]).directive('fdToken', ['classNames', function (classNames) {
         /**
@@ -4778,7 +4879,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 closeButtonAriaLabel: '@',
                 closeClicked: '&'
             },
-            link: function (scope, element, attr, tokenizerCtrl) {
+            link: function (scope, element, _attr, tokenizerCtrl) {
                 if (tokenizerCtrl) {
                     tokenizerCtrl.addToken(element);
 
@@ -4788,13 +4889,13 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 }
 
                 scope.getClasses = () => classNames('fd-token', {
-                    'fd-token--compact': scope.compact,
+                    'fd-token--compact': scope.compact === true,
                     'fd-token--readonly': scope.dgReadOnly
                 });
 
                 scope.isVisible = () => tokenizerCtrl ? tokenizerCtrl.isTokenVisible(element) : true;
             },
-            template: `<span ng-show="isVisible()" ng-class="getClasses()" role="button">
+            template: `<span ng-show="isVisible()" ng-class="getClasses()" role="button" tabindex="0">
                 <span class="fd-token__text">{{dgText}}</span>
                 <button ng-if="!dgReadOnly" class="fd-token__close" aria-label="{{closeButtonAriaLabel}}" ng-click="closeClicked()"></button>
             </span>`
@@ -4804,7 +4905,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
             restrict: 'EA',
             replace: true,
             require: '^fdTokenizer',
-            link: function (scope, element, attr, tokenizerCtrl) {
+            link: function (scope, _element, _attr, tokenizerCtrl) {
                 scope.getNumberOfHiddenTokens = () => tokenizerCtrl.getNumberOfHiddenTokens();
                 scope.getText = () => `${tokenizerCtrl.getNumberOfHiddenTokens()} more`;
             },
@@ -4836,7 +4937,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
         return {
             restrict: 'A',
             link: {
-                pre: function (scope, element) {
+                pre: function (_scope, element) {
                     element.addClass('fd-tool-header__group');
                 }
             },
@@ -5299,7 +5400,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     }
                 }
 
-                $scope.$watch('selectedTabId', function (newSelectedTabId, oldSelectedTabId) {
+                const selectedWatch = $scope.$watch('selectedTabId', function (newSelectedTabId, oldSelectedTabId) {
                     if (newSelectedTabId !== oldSelectedTabId) {
                         if ($scope.updateLastSelectedTabId) {
                             $scope.lastSelectedTabId = oldSelectedTabId;
@@ -5310,6 +5411,10 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
 
                         fireEvent(c => c.tabSelected(newSelectedTabId));
                     }
+                });
+
+                $scope.$on('$destroy', function () {
+                    selectedWatch();
                 });
             }],
             template: `<div class="fd-icon-tab-bar dg-icon-tab-bar" ng-class="getClasses()"><ng-transclude ng-transclude-slot="tabs"></ng-transclude><ng-transclude ng-transclude-slot="panels" class="dg-icon-tab-bar-panels"></ng-transclude><ng-transclude ng-transclude-slot="buttons"></ng-transclude></div>`
@@ -5406,6 +5511,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
          * dgIcon: String - Icon class.
          * dgHref: String - Link.
          * tabId: String - The id of the tab.
+         * tabHint: String - Show a small text hint next to the label. This is ignored in icon and process mode. 
          * dgState: String - State of the tab. Possible options are 'positive', 'negative', 'critical' and 'informative'.
          * isLastStep: Boolean - If the tabs is the last step of a process.
          * onClose: Function - Function that will be called when the tab close button is clicked. The tab will have an "X" button and on click, the tab ID will be passed as a parameter.
@@ -5424,6 +5530,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 dgIcon: '@?',
                 dgHref: '@?',
                 tabId: '@',
+                tabHint: '@?',
                 dgState: '@?',
                 isLastStep: '<?',
                 onClose: '&?',
@@ -5459,7 +5566,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     });
                 }
             },
-            template: `<li role="presentation" class="fd-icon-tab-bar__item" ng-class="getClasses()">
+            template: `<li role="presentation" class="fd-icon-tab-bar__item" ng-class="getClasses()" tabindex="0">
                 <a role="tab" class="fd-icon-tab-bar__tab" ng-attr-href="{{dgHref || undefined}}" aria-selected="{{isSelected(tabId)}}" id="{{tabId}}">
                     <div ng-if="dgIcon" class="fd-icon-tab-bar__container">
                         <span class="fd-icon-tab-bar__icon"><i class="{{dgIcon}}" role="presentation"></i></span>
@@ -5468,7 +5575,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     </div>
                     <span ng-if="counter && !dgIcon" class="fd-icon-tab-bar__counter">{{counter}}</span>
                     <span ng-if="hasBadge && !dgIcon" class="fd-icon-tab-bar__badge"></span>
-                    <span ng-if="label && !dgIcon" class="fd-icon-tab-bar__tag">{{label}}</span>
+                    <span ng-if="label && !dgIcon" class="fd-icon-tab-bar__tag">{{label}}<span class="dg-icon-tab-hint" ng-if="tabHint">{{tabHint}}</span></span>
                     <div ng-if="label && isFilter()" class="fd-icon-tab-bar__label">{{label}}</div>
                     <div ng-if="dgIcon && description" class="fd-icon-tab-bar__details">
                         <span class="fd-icon-tab-bar__counter">{{counter}}</span>
@@ -5476,7 +5583,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                     </div>
                 </a>
                 <div ng-if="onClose" class="fd-icon-tab-bar__button-container">
-                    <fd-button glyph="sap-icon--decline" class="fd-icon-tab-bar__button" aria-label="close tab" dg-type="transparent" ng-click="close($event)"></fd-button>
+                    <fd-button glyph="sap-icon--decline" class="fd-icon-tab-bar__button" aria-label="close tab" dg-type="transparent" ng-click="close($event)" tabindex="0"></fd-button>
                 </div>
                 <span ng-if="isProcess() && !isLastStep" class="fd-icon-tab-bar__separator"><i class="sap-icon--process" role="presentation"></i></span>
             </li>`
@@ -5557,6 +5664,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
          * dgIcon: String - Icon class.
          * dgHref: String - Link.
          * tabId: String - The id of the tab.
+         * tabHint: String - Show a small text hint next to the label. This is ignored in icon and process mode. 
          * dgState: String - State of the tab. Possible options are 'positive', 'negative', 'critical' and 'informative'.
          * onClose: Function - Function that will be called when the tab close button is clicked. The tab will have an "X" button and on click, the tab ID will be passed as a parameter.
          */
@@ -5571,6 +5679,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                 dgIcon: '@?',
                 dgHref: '@?',
                 tabId: '@',
+                tabHint: '@?',
                 dgState: '@?',
                 onClose: '&?',
             },
@@ -5596,7 +5705,7 @@ angular.module('ideUI', ['ngAria', 'ideMessageHub'])
                             <i class="{{dgIcon}}" role="presentation"></i>
                         </span>
                     </span>
-                    <span class="fd-list__title fd-icon-tab-bar__list-item-title">{{label}}</span>
+                    <span class="fd-list__title fd-icon-tab-bar__list-item-title">{{label}}<span class="dg-icon-tab-hint" ng-if="tabHint">{{tabHint}}</span></span>
                     <span ng-if="counter" class="fd-list__counter fd-icon-tab-bar__list-item-counter">{{counter}}</span>
                     <span ng-if="hasBadge" class="fd-icon-tab-bar__badge"></span>
                 </a>

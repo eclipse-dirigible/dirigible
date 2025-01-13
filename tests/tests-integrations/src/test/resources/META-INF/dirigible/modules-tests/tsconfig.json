@@ -1,0 +1,26 @@
+{
+    "compilerOptions": {
+        "module": "ES2022",
+        "target": "es6",
+        "esModuleInterop": true,
+        "moduleResolution": "node",
+        "sourceMap": true,
+        "lib": [
+            "ES2022",
+            "DOM"
+        ],
+        "declaration": true,
+        "types": [
+            "./types"
+        ],
+        "paths": {
+            "sdk/*": [
+                "./src/*",
+                "./../../../../../../../../components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules/src/*"
+            ]
+        }
+    },
+    "include": [
+        "src/**/*"
+    ]
+}

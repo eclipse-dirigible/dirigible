@@ -1,14 +1,21 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.dialects.snowflake;
+
+import org.eclipse.dirigible.database.sql.builders.AlterBranchingBuilder;
+import org.eclipse.dirigible.database.sql.builders.DropBranchingBuilder;
+import org.eclipse.dirigible.database.sql.builders.records.DeleteBuilder;
+import org.eclipse.dirigible.database.sql.builders.records.InsertBuilder;
+import org.eclipse.dirigible.database.sql.builders.records.SelectBuilder;
+import org.eclipse.dirigible.database.sql.builders.records.UpdateBuilder;
+import org.eclipse.dirigible.database.sql.dialects.DefaultSqlDialect;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -19,24 +26,15 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.eclipse.dirigible.database.sql.builders.AlterBranchingBuilder;
-import org.eclipse.dirigible.database.sql.builders.CreateBranchingBuilder;
-import org.eclipse.dirigible.database.sql.builders.DropBranchingBuilder;
-import org.eclipse.dirigible.database.sql.builders.records.DeleteBuilder;
-import org.eclipse.dirigible.database.sql.builders.records.InsertBuilder;
-import org.eclipse.dirigible.database.sql.builders.records.SelectBuilder;
-import org.eclipse.dirigible.database.sql.builders.records.UpdateBuilder;
-import org.eclipse.dirigible.database.sql.dialects.DefaultSqlDialect;
-
 /**
  * The Snowflake SQL Dialect.
  */
 public class SnowflakeSqlDialect extends
-        DefaultSqlDialect<SelectBuilder, InsertBuilder, UpdateBuilder, DeleteBuilder, CreateBranchingBuilder, AlterBranchingBuilder, DropBranchingBuilder, SnowflakeNextValueSequenceBuilder, SnowflakeLastValueIdentityBuilder> {
+        DefaultSqlDialect<SelectBuilder, InsertBuilder, UpdateBuilder, DeleteBuilder, SnowflakeCreateBranchingBuilder, AlterBranchingBuilder, DropBranchingBuilder, SnowflakeNextValueSequenceBuilder, SnowflakeLastValueIdentityBuilder> {
 
     /** The Constant FUNCTIONS. */
-    public static final Set<String> FUNCTIONS = Collections.synchronizedSet(new HashSet<String>(Arrays.asList(new String[] {"ABS", "ACOS",
-            "ACOSH", "ADD_MONTHS", "ALERT_HISTORY", "ALL_USER_NAMES", "ANY_VALUE", "APPROX_COUNT_DISTINCT", "APPROX_PERCENTILE",
+    public static final Set<String> FUNCTIONS = Collections.synchronizedSet(new HashSet<String>(Arrays.asList("ABS", "ACOS", "ACOSH",
+            "ADD_MONTHS", "ALERT_HISTORY", "ALL_USER_NAMES", "ANY_VALUE", "APPROX_COUNT_DISTINCT", "APPROX_PERCENTILE",
             "APPROX_PERCENTILE_ACCUMULATE", "APPROX_PERCENTILE_COMBINE", "APPROX_PERCENTILE_ESTIMATE", "APPROX_TOP_K",
             "APPROX_TOP_K_ACCUMULATE", "APPROX_TOP_K_COMBINE", "APPROX_TOP_K_ESTIMATE", "APPROXIMATE_JACCARD_INDEX",
             "APPROXIMATE_SIMILARITY", "ARRAY_AGG", "ARRAY_APPEND", "ARRAY_CAT", "ARRAY_COMPACT", "ARRAY_CONSTRUCT",
@@ -135,18 +133,13 @@ public class SnowflakeSqlDialect extends
             "TRY_TO_DECIMAL", "TRY_TO_NUMBER", "TRY_TO_NUMERIC", "TRY_TO_DOUBLE", "TRY_TO_GEOGRAPHY", "TRY_TO_GEOMETRY", "TRY_TO_TIME",
             "TRY_TO_TIMESTAMP", "TYPEOF", "UNICODE", "UNIFORM", "UPPER", "UUID_STRING", "VALIDATE", "VALIDATE_PIPE_LOAD", "VAR_POP",
             "VAR_SAMP", "VARIANCE", "VARIANCE_SAMP", "VARIANCE_POP", "WAREHOUSE_LOAD_HISTORY", "WAREHOUSE_METERING_HISTORY", "WIDTH_BUCKET",
-            "XMLGET", "YEAR", "DAY", "WEEK", "MONTH", "QUARTER", "ZEROIFNULL", "ZIPF"})));
+            "XMLGET", "YEAR", "DAY", "WEEK", "MONTH", "QUARTER", "ZEROIFNULL", "ZIPF", "AND", "OR")));
 
     /**
      * Nextval.
      *
      * @param sequence the sequence
      * @return the h 2 next value sequence builder
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.dialects.DefaultSqlDialect#nextval(java.lang.String)
      */
     @Override
     public SnowflakeNextValueSequenceBuilder nextval(String sequence) {
@@ -159,11 +152,6 @@ public class SnowflakeSqlDialect extends
      * @param args the args
      * @return the h 2 last value identity builder
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.dialects.DefaultSqlDialect#nextval(java.lang.String)
-     */
     @Override
     public SnowflakeLastValueIdentityBuilder lastval(String... args) {
         return new SnowflakeLastValueIdentityBuilder(this);
@@ -173,11 +161,6 @@ public class SnowflakeSqlDialect extends
      * Checks if is synonym supported.
      *
      * @return true, if is synonym supported
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlDialect#isSynonymSupported()
      */
     @Override
     public boolean isSynonymSupported() {
@@ -189,11 +172,6 @@ public class SnowflakeSqlDialect extends
      *
      * @return the functions names
      */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlDialect#getFunctionsNames()
-     */
     @Override
     public Set<String> getFunctionsNames() {
         return FUNCTIONS;
@@ -203,11 +181,6 @@ public class SnowflakeSqlDialect extends
      * Creates the.
      *
      * @return the h 2 create branching builder
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.dialects.DefaultSqlDialect#create()
      */
     @Override
     public SnowflakeCreateBranchingBuilder create() {
@@ -232,10 +205,7 @@ public class SnowflakeSqlDialect extends
         PreparedStatement statement = connection.prepareStatement(sql);
         statement.setString(1, schema);
         ResultSet resultSet = statement.executeQuery();
-        if (resultSet.next()) {
-            return true;
-        }
-        return false;
+        return resultSet.next();
     }
 
 }

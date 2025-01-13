@@ -1,21 +1,42 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
 // Deprecated, do not edit.
 
-let extensions = require('extensions/extensions');
-let response = require('http/response');
-let uuid = require('utils/uuid');
+import { extensions } from "sdk/extensions";
+import { response, rs } from "sdk/http";
+import { uuid } from "sdk/utils";
 
-let rs = require("http/rs");
+const templates = [];
+const templateExtensions = extensions.getExtensions('ide-template');
+for (let i = 0; i < templateExtensions?.length; i++) {
+	const module = templateExtensions[i];
+	try {
+		try {
+			const templateExtension = await import(`../../${module}`);
+			const template = templateExtension.getTemplate();
+			template.id = module;
+			templates.push(template);
+		} catch (e) {
+			// Fallback for not migrated extensions
+			const templateExtension = dirigibleRequire(module);
+			const template = templateExtension.getTemplate();
+			template.id = module;
+			templates.push(template);
+		}
+	} catch (error) {
+		console.error('Error occured while loading metadata for the template: ' + module);
+		console.error(error);
+	}
+}
 
 rs.service()
 	.resource("")
@@ -46,7 +67,7 @@ rs.service()
 		response.println(JSON.stringify(count));
 	})
 	.resource("countFileTemplates")
-	.get(function (ctx, request, response) {
+	.get(async function (ctx, request, response) {
 		let templates = getTemplates();
 		let count = 0;
 		templates.forEach(template => { if (template.extension) count++; });
@@ -58,20 +79,6 @@ rs.service()
 	.execute();
 
 function getTemplates() {
-	let templates = [];
-	let templateExtensions = extensions.getExtensions('ide-template');
-	for (let i = 0; i < templateExtensions.length; i++) {
-		let module = templateExtensions[i];
-		try {
-			let templateExtension = require(module);
-			let template = templateExtension.getTemplate();
-			template.id = module;
-			templates.push(template);
-		} catch (error) {
-			console.error('Error occured while loading metadata for the template: ' + module);
-			console.error(error);
-		}
-	}
 	return templates;
 }
 

@@ -12,78 +12,82 @@
 
 const RedisFacade = Java.type("org.eclipse.dirigible.components.api.redis.RedisFacade");
 
-export function getClient() {
-    const native = RedisFacade.getClient();
-    return new Client(native);
-};
+export class Client {
+    private readonly native: any;
 
-class Client {
-    
-    constructor(private native) {}
+    constructor() {
+        this.native = RedisFacade.getClient();
+    }
 
-    append(key, value) {
+    public append(key: string, value: string): number {
         return this.native.append(key, value);
-    };
+    }
 
-    bitcount(key) {
+    public bitcount(key: string): number {
         return this.native.bitcount(key);
-    };
+    }
 
-    decr(key) {
+    public decr(key: string): number {
         return this.native.decr(key);
-    };
+    }
 
-    del(key) {
+    public del(key: string): number {
         return this.native.del(key);
-    };
+    }
 
-    exists(key) {
+    public exists(key: string): boolean {
         return this.native.exists(key);
-    };
+    }
 
-    get(key) {
+    public get(key: string): string {
         return this.native.get(key);
-    };
+    }
 
-    incr(key) {
+    public incr(key: string): number {
         return this.native.incr(key);
-    };
+    }
 
-    keys(pattern) {
+    public keys(pattern: string): string[] {
         return this.native.keys(pattern);
-    };
+    }
 
-    set(key, value) {
+    public set(key: string, value: string): string {
         return this.native.set(key, value);
-    };
+    }
 
     // Lists
 
-    lindex(key, index) {
+    public lindex(key: string, index: number): string {
         return this.native.lindex(key, index);
-    };
+    }
 
-    llen(key) {
+    public llen(key: string): number {
         return this.native.llen(key);
-    };
+    }
 
-    lpop(key) {
+    public lpop(key: string): string {
         return this.native.lpop(key);
-    };
+    }
 
-    lpush(key, value) {
+    public lpush(key: string, ...value: string[]) {
         return this.native.lpush(key, value);
-    };
+    }
 
-    lrange(key, start, stop) {
+    public lrange(key: string, start: number, stop: number): string[] {
         return this.native.lrange(key, start, stop);
-    };
+    }
 
-    rpop(key) {
+    public rpop(key: string): string {
         return this.native.rpop(key);
-    };
+    }
 
-    rpush(key, value) {
+    public rpush(key: string, ...value: string[]): number {
         return this.native.rpush(key, value);
-    };
+    }
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+    // @ts-ignore
+    module.exports = Client;
 }

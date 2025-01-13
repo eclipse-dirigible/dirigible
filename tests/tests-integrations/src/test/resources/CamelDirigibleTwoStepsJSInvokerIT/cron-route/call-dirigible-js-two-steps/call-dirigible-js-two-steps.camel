@@ -1,0 +1,42 @@
+- route:
+    id: route-wre
+    nodePrefixId: route-gda
+    from:
+      id: from-8bd2
+      uri: cron
+      parameters:
+        schedule: 0/5 * * ? * *
+        name: TriggerTwoSteps
+      steps:
+        - log:
+            id: log-d4d8
+            description: Log started
+            message: Execution started...
+            loggingLevel: INFO
+            logName: TwoStepsLogger
+        - setBody:
+            id: setBody-0cb6
+            expression:
+              simple:
+                id: simple-1892
+                expression: This is a test body
+        - setProperty:
+            id: setProperty-5681
+            description: Set resource property
+            name: resource
+            expression:
+              simple:
+                id: simple-2782
+                expression: call-dirigible-js-two-steps/handler.ts
+        - to:
+            id: to-9e30
+            description: Execute JS
+            uri: class
+            parameters:
+              beanName: org.eclipse.dirigible.components.engine.camel.invoke.Invoker
+        - log:
+            id: log-9803
+            description: Log completed
+            message: 'Completed execution. Body: [${body}]'
+            loggingLevel: INFO
+            logName: TwoStepsLogger

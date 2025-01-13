@@ -3,20 +3,16 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-exports.getTemplate = function() {
+export function getTemplate() {
 	return {
-		"name": "Hello World",
-		"description": "Hello World Template",
-		"sources": [{
-			"location": "/template-hello-world/service.mjs.template", 
-			"action": "generate",
-			"rename": "{{fileName}}.mjs"
-		},{
-			"location": "/template-hello-world/service.js.template", 
-			"action": "generate",
-			"rename": "{{fileName}}.js"
+		name: 'Hello World',
+		description: 'Basic Dirigible service',
+		sources: [{
+			location: '/template-hello-world/service.mjs.template',
+			action: 'copy',
+			rename: '{{fileName}}.mjs'
 		}],
-		"parameters": [],
-		"order": -1
+		parameters: [],
+		order: 0,
 	};
 };

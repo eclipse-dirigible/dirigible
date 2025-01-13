@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.eclipse.dirigible</groupId>
+        <artifactId>dirigible-components-parent</artifactId>
+        <version>11.0.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <name>Components - API - S3</name>
+    <artifactId>dirigible-components-api-s3</artifactId>
+    <packaging>jar</packaging>
+
+    <dependencies>
+        <!-- Helpers -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-commons-helpers</artifactId>
+            <version>11.0.0-SNAPSHOT</version>
+        </dependency>
+
+        <!-- Libs -->
+        <dependency>
+            <groupId>commons-net</groupId>
+            <artifactId>commons-net</artifactId>
+            <version>3.11.1</version>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3-transfer-manager</artifactId>
+            <version>2.29.27</version>
+        </dependency>
+
+        <!-- Test -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-api-test</artifactId>
+            <version>11.0.0-SNAPSHOT</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>localstack</artifactId>
+            <version>1.20.4</version>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+            <plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<environmentVariables>
+			            <AWS_ACCESS_KEY_ID>localstack</AWS_ACCESS_KEY_ID>
+			            <AWS_SECRET_ACCESS_KEY>localstack</AWS_SECRET_ACCESS_KEY>
+			            <DIRIGIBLE_S3_PROVIDER>test</DIRIGIBLE_S3_PROVIDER>
+			            <DIRIGIBLE_S3_BUCKET>test-cmis-bucket</DIRIGIBLE_S3_BUCKET>
+			        </environmentVariables>
+			        <skip>${skipTCs}</skip>
+				</configuration>
+			</plugin>
+        </plugins>
+    </build>
+	
+    <properties>
+        <license.header.location>../../../licensing-header.txt</license.header.location>
+        <parent.pom.folder>../../../</parent.pom.folder>
+    </properties>
+
+</project>

@@ -1,5 +1,5 @@
-import { rs } from "@dirigible/http";
-import { tasks as tasksService} from "@dirigible/bpm";
+import { rs } from "sdk/http";
+import { tasks as tasksService} from "sdk/bpm";
 
 rs.service()
     .resource("tasks")

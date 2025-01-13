@@ -1,0 +1,5 @@
+{
+    "module": "perspective-operations/api/artefacts/bpmn/artefacts-bpmn.mjs",
+    "extensionPoint": "platform-operations-artefacts",
+    "description": "BPMN Artefacts Extension"
+}

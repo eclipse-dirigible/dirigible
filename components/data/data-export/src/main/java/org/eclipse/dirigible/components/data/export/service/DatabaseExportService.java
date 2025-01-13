@@ -1,27 +1,22 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.export.service;
 
-
-import java.io.IOException;
-import java.io.OutputStream;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
-
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper;
 import org.eclipse.dirigible.components.data.management.service.DatabaseExecutionService;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.slf4j.Logger;
@@ -29,9 +24,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
  * The Class DataSourceMetadataService.
@@ -73,17 +71,15 @@ public class DatabaseExportService {
      * @param output the output
      */
     public void exportStructure(String datasource, String schema, String structure, OutputStream output) {
-        javax.sql.DataSource dataSource = datasourceManager.getDataSource(datasource);
+        DirigibleDataSource dataSource = datasourceManager.getDataSource(datasource);
         if (dataSource != null) {
             String structureName = "\"" + schema + "\".\"" + structure + "\"";
             String sql = "SELECT * FROM " + structureName;
-            String productName = null;
             try (Connection connection = dataSource.getConnection()) {
-                ISqlDialect dialect = SqlDialectFactory.getDialect(connection);
+                ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
                 sql = dialect.allQuery(structureName);
-                productName = connection.getMetaData()
-                                        .getDatabaseProductName();
-                if ("MongoDB".equals(productName)) {
+                if (dataSource.getDatabaseSystem()
+                              .isMongoDB()) {
                     dialect.exportData(connection, structure, output);
                     return;
                 }
@@ -104,13 +100,12 @@ public class DatabaseExportService {
      * @return the string
      */
     public String structureExportType(String datasource, String schema, String structure) {
-        javax.sql.DataSource dataSource = datasourceManager.getDataSource(datasource);
+        DirigibleDataSource dataSource = datasourceManager.getDataSource(datasource);
         if (dataSource != null) {
             String productName = null;
-            try (Connection connection = dataSource.getConnection()) {
-                productName = connection.getMetaData()
-                                        .getDatabaseProductName();
-                if ("MongoDB".equals(productName)) {
+            try {
+                if (dataSource.getDatabaseSystem()
+                              .isMongoDB()) {
                     return "json";
                 }
             } catch (Exception e) {
@@ -135,7 +130,7 @@ public class DatabaseExportService {
             try {
                 zipOutputStream = new ZipOutputStream(output);
 
-                javax.sql.DataSource dataSource = datasourceManager.getDataSource(datasource);
+                DirigibleDataSource dataSource = datasourceManager.getDataSource(datasource);
                 if (dataSource != null) {
                     String metadata = DatabaseMetadataHelper.getMetadataAsJson(dataSource);
                     JsonElement database = GsonHelper.parseJson(metadata);
@@ -159,8 +154,8 @@ public class DatabaseExportService {
                                                    .getAsString();
                             String artifactName = "\"" + schema + "\".\"" + artifact + "\"";
                             String sql = "SELECT * FROM " + artifactName;
-                            try (Connection connection = dataSource.getConnection()) {
-                                sql = SqlDialectFactory.getDialect(connection)
+                            try {
+                                sql = SqlDialectFactory.getDialect(dataSource)
                                                        .allQuery(artifactName);
                             } catch (Exception e) {
                                 logger.error(e.getMessage(), e);

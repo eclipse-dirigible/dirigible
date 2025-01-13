@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.jobs.endpoint;
 
@@ -14,7 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 
 import org.eclipse.dirigible.commons.api.helpers.NameValuePair;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
@@ -149,7 +148,7 @@ public class JobEndpoint extends BaseEndpoint {
      * @param job the job
      * @return the response entity
      */
-    @GetMapping(value = "/clear/{*job}", produces = "application/json")
+    @PostMapping(value = "/clear/{*job}", produces = "application/json")
     public ResponseEntity<?> clearJobLogs(@PathVariable("job") String job) {
         jobLogService.deleteAllByJobName(job);
         return ResponseEntity.noContent()

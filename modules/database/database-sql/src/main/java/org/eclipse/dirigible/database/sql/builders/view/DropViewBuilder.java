@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.builders.view;
 
@@ -24,7 +23,8 @@ public class DropViewBuilder extends AbstractDropSqlBuilder {
     private static final Logger logger = LoggerFactory.getLogger(DropViewBuilder.class);
 
     /** The view. */
-    private String view = null;
+    private final String view;
+    private final String schema;
 
     /**
      * Instantiates a new drop view builder.
@@ -32,8 +32,9 @@ public class DropViewBuilder extends AbstractDropSqlBuilder {
      * @param dialect the dialect
      * @param view the view
      */
-    public DropViewBuilder(ISqlDialect dialect, String view) {
+    public DropViewBuilder(ISqlDialect dialect, String schema, String view) {
         super(dialect);
+        this.schema = schema;
         this.view = view;
     }
 
@@ -41,11 +42,6 @@ public class DropViewBuilder extends AbstractDropSqlBuilder {
      * Generate.
      *
      * @return the string
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlBuilder#generate()
      */
     @Override
     public String generate() {
@@ -73,11 +69,16 @@ public class DropViewBuilder extends AbstractDropSqlBuilder {
      * @param sql the sql
      */
     protected void generateView(StringBuilder sql) {
-        String viewName = (isCaseSensitive()) ? encapsulate(this.getView(), true) : this.getView();
         sql.append(SPACE)
            .append(KEYWORD_VIEW)
-           .append(SPACE)
-           .append(viewName);
+           .append(SPACE);
+        if (schema != null) {
+            String schemaName = encapsulate(this.getView(), true);
+            sql.append(schemaName)
+               .append(".");
+        }
+        String viewName = encapsulate(this.getView(), true);
+        sql.append(viewName);
     }
 
     /**

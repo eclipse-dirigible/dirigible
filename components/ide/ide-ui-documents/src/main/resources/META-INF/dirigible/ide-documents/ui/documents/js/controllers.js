@@ -1,12 +1,12 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
 let uploader = null;
@@ -73,7 +73,8 @@ documentsApp.controller('DocServiceCtrl', ['$scope', '$http', '$timeout', '$elem
 	$scope.goForward = () => $scope.history.goForward(path => loadFolder(path));
 
 	$scope.getFullPath = function (itemName) {
-		return ($scope.folder.path + '/' + itemName).replace(/\/\//g, '/');
+		const path = $scope.folder.path ? ($scope.folder.path + '/' + itemName) : itemName;
+		return path.replace(/\/\//g, '/');
 	};
 
 	$scope.isDocument = (item) => item && item.type === 'cmis:document';
@@ -378,7 +379,7 @@ documentsApp.controller('DocServiceCtrl', ['$scope', '$http', '$timeout', '$elem
 		if (folderPath) {
 			requestUrl += '?path=' + folderPath;
 		}
-
+		console.log(requestUrl)
 		return $http.get(requestUrl);
 	};
 
@@ -555,7 +556,10 @@ documentsApp.controller('DocServiceCtrl', ['$scope', '$http', '$timeout', '$elem
 		let crumbs = [];
 		for (let i = 0; i < folders.length; i++) {
 			let crumbPath = folders.slice(0, i + 1).join('/');
-			let crumb = { name: folders[i], path: crumbPath };
+			let crumb = {
+				name: folders[i],
+				path: crumbPath + "/"
+			};
 			crumbs.push(crumb);
 		}
 		crumbs.splice(0, 0, { name: 'Home', path: '/' });

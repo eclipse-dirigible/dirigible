@@ -1,49 +1,46 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.api.mail;
 
 import com.google.gson.Gson;
-import com.sun.mail.smtp.SMTPSSLTransport;
-import com.sun.mail.smtp.SMTPTransport;
+import jakarta.activation.DataHandler;
+import jakarta.mail.*;
+import jakarta.mail.internet.*;
+import jakarta.mail.util.ByteArrayDataSource;
+import org.eclipse.angus.mail.smtp.SMTPSSLTransport;
+import org.eclipse.angus.mail.smtp.SMTPTransport;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import javax.activation.DataHandler;
-import javax.mail.*;
-import javax.mail.internet.*;
-import javax.mail.util.ByteArrayDataSource;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 
 /**
  * The Class MailClient.
  */
 public class MailClient {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(MailClient.class);
+
     /** The Constant MAIL_USER. */
     // Mail properties
     private static final String MAIL_USER = "mail.user";
-
+    private static final String MAIL_TRANSPORT_PROTOCOL = "mail.transport.protocol";
     /** The Constant MAIL_PASSWORD. */
     private static final String MAIL_PASSWORD = "mail.password";
-
     /** The Constant SMTP_TRANSPORT. */
     private static final String SMTP_TRANSPORT = "smtp";
-
     /** The Constant SMTPS_TRANSPORT. */
     private static final String SMTPS_TRANSPORT = "smtps";
-
     /** The properties. */
     private final Properties properties;
 
@@ -67,53 +64,55 @@ public class MailClient {
      * @param parts the mail parts
      * @return the map
      * @throws MessagingException the messaging exception
-     * @throws IOException Signals that an I/O exception has occurred.
      */
-    public Map send(String from, String[] to, String[] cc, String[] bcc, String subject, List<Map> parts)
-            throws MessagingException, IOException {
-        Session session = getSession(this.properties);
-        SMTPTransport transport;
-        String transportProperty = properties.getProperty("mail.transport.protocol")
-                                             .toLowerCase();
-
-        switch (transportProperty) {
-            case SMTP_TRANSPORT:
-                transport = (SMTPTransport) session.getTransport();
-                break;
-            case SMTPS_TRANSPORT:
-                transport = (SMTPSSLTransport) session.getTransport();
-                break;
-            default:
-                throw new IllegalStateException("Unexpected transport property: " + transportProperty);
-        }
-
+    public Map send(String from, String[] to, String[] cc, String[] bcc, String subject, List<Map> parts) throws MessagingException {
         try {
-            String proxyType = this.properties.getProperty("ProxyType");
-            if (proxyType != null && proxyType.equals("OnPremise")) {
-                Socket socket = new ConnectivitySocks5ProxySocket(getTransportProperty(transportProperty, "socks.host"),
-                        getTransportProperty(transportProperty, "socks.port"), getTransportProperty(transportProperty, "proxy.user"),
-                        getTransportProperty(transportProperty, "proxy.password", " "));
-
-                socket.connect(new InetSocketAddress(getTransportProperty(transportProperty, "host"),
-                        Integer.parseInt(getTransportProperty(transportProperty, "port"))));
-
-                transport.connect(socket);
-            } else {
-                transport.connect(this.properties.getProperty(MAIL_USER), this.properties.getProperty(MAIL_PASSWORD));
+            Session session = getSession(this.properties);
+            SMTPTransport transport;
+            String protocol = properties.getProperty(MAIL_TRANSPORT_PROTOCOL);
+            if (null == protocol) {
+                throw new IllegalStateException("Missing property " + MAIL_TRANSPORT_PROTOCOL);
             }
+            String transportProperty = protocol.toLowerCase();
 
-            MimeMessage mimeMessage = createMimeMessage(session, from, to, cc, bcc, subject, parts);
-            mimeMessage.saveChanges();
-            String messageId = mimeMessage.getMessageID();
-            transport.sendMessage(mimeMessage, mimeMessage.getAllRecipients());
-            String finalReply = transport.getLastServerResponse();
-            Map mailResult = new HashMap();
-            mailResult.put("messageId", messageId);
-            mailResult.put("finalReply", finalReply);
+            transport = switch (transportProperty) {
+                case SMTP_TRANSPORT -> (SMTPTransport) session.getTransport();
+                case SMTPS_TRANSPORT -> (SMTPSSLTransport) session.getTransport();
+                default -> throw new IllegalStateException("Unexpected transport property: " + transportProperty);
+            };
 
-            return mailResult;
-        } finally {
-            transport.close();
+            try {
+                String proxyType = this.properties.getProperty("ProxyType");
+                if (proxyType != null && proxyType.equals("OnPremise")) {
+                    Socket socket = new ConnectivitySocks5ProxySocket(getTransportProperty(transportProperty, "socks.host"),
+                            getTransportProperty(transportProperty, "socks.port"), getTransportProperty(transportProperty, "proxy.user"),
+                            getTransportProperty(transportProperty, "proxy.password", " "));
+
+                    socket.connect(new InetSocketAddress(getTransportProperty(transportProperty, "host"),
+                            Integer.parseInt(getTransportProperty(transportProperty, "port"))));
+
+                    transport.connect(socket);
+                } else {
+                    transport.connect(this.properties.getProperty(MAIL_USER), this.properties.getProperty(MAIL_PASSWORD));
+                }
+
+                MimeMessage mimeMessage = createMimeMessage(session, from, to, cc, bcc, subject, parts);
+                mimeMessage.saveChanges();
+                String messageId = mimeMessage.getMessageID();
+                transport.sendMessage(mimeMessage, mimeMessage.getAllRecipients());
+                String finalReply = transport.getLastServerResponse();
+                Map mailResult = new HashMap();
+                mailResult.put("messageId", messageId);
+                mailResult.put("finalReply", finalReply);
+
+                return mailResult;
+            } finally {
+                transport.close();
+            }
+        } catch (MessagingException | IOException | RuntimeException ex) {
+            String message = "Failed to send email from [" + from + "] to " + Arrays.toString(to);
+            LOGGER.error(message, ex); // log the message since the js may not log it properly
+            throw new MessagingException(message, ex);
         }
 
     }
@@ -128,6 +127,7 @@ public class MailClient {
         String user = properties.getProperty(MAIL_USER);
         String password = properties.getProperty(MAIL_PASSWORD);
         Authenticator authenticator = new Authenticator() {
+            @Override
             protected PasswordAuthentication getPasswordAuthentication() {
                 return new PasswordAuthentication(user, password);
             }
@@ -148,7 +148,7 @@ public class MailClient {
      * @return the mime message
      * @throws MessagingException the messaging exception
      */
-    private static MimeMessage createMimeMessage(Session smtpSession, String from, String to[], String cc[], String bcc[],
+    private static MimeMessage createMimeMessage(Session smtpSession, String from, String[] to, String[] cc, String[] bcc,
             String subjectText, List<Map> parts) throws MessagingException {
 
         MimeMessage mimeMessage = new MimeMessage(smtpSession);
@@ -259,4 +259,5 @@ public class MailClient {
     private String getTransportProperty(String transport, String prop, String defaultValue) {
         return this.properties.getProperty("mail." + transport + "." + prop, defaultValue);
     }
+
 }

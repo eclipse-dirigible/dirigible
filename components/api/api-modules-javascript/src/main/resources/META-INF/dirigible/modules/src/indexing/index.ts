@@ -1,2 +1,4 @@
-export * as searcher from "./searcher";
-export * as writer from "./writer";
+export * from "./searcher";
+export { Searcher as searcher } from "./searcher";
+export * from "./writer";
+export { Writer as writer } from "./writer";

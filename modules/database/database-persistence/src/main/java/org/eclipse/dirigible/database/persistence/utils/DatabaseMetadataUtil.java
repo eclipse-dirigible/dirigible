@@ -1,15 +1,22 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.persistence.utils;
 
+import com.google.common.base.CaseFormat;
+import org.eclipse.dirigible.database.persistence.model.PersistenceTableColumnModel;
+import org.eclipse.dirigible.database.persistence.model.PersistenceTableIndexModel;
+import org.eclipse.dirigible.database.persistence.model.PersistenceTableModel;
+import org.eclipse.dirigible.database.persistence.model.PersistenceTableRelationModel;
+import org.eclipse.dirigible.database.sql.ISqlKeywords;
+
+import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
@@ -17,28 +24,10 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.sql.DataSource;
-
-import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.database.persistence.model.PersistenceTableColumnModel;
-import org.eclipse.dirigible.database.persistence.model.PersistenceTableIndexModel;
-import org.eclipse.dirigible.database.persistence.model.PersistenceTableModel;
-import org.eclipse.dirigible.database.persistence.model.PersistenceTableRelationModel;
-import org.eclipse.dirigible.database.sql.ISqlKeywords;
-
-import com.google.common.base.CaseFormat;
-
-
 /**
  * The Class DatabaseMetadataUtil.
  */
 public class DatabaseMetadataUtil {
-
-    /** The Constant DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE. */
-    public static final String DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE = "DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE";
-
-    /** The Constant IS_CASE_SENSETIVE. */
-    private static final boolean IS_CASE_SENSETIVE = Boolean.parseBoolean(Configuration.get(DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE));
 
     /** The Constant JDBC_COLUMN_NAME_PROPERTY. */
     public static final String JDBC_COLUMN_NAME_PROPERTY = "COLUMN_NAME";
@@ -143,15 +132,6 @@ public class DatabaseMetadataUtil {
                 databaseMetadata.getImportedKeys(connection.getCatalog(), schema, normalizeTableName(tableMetadata.getTableName()));
         if (foreignKeys.next()) {
             iterateForeignKeys(tableMetadata, foreignKeys);
-        } else if (!IS_CASE_SENSETIVE) {
-            // Fallback for PostgreSQL
-            foreignKeys = databaseMetadata.getImportedKeys(connection.getCatalog(), schema, normalizeTableName(tableMetadata.getTableName()
-                                                                                                                            .toLowerCase()));
-            if (!foreignKeys.next()) {
-                return;
-            } else {
-                iterateForeignKeys(tableMetadata, foreignKeys);
-            }
         }
     }
 
@@ -188,15 +168,6 @@ public class DatabaseMetadataUtil {
                 databaseMetadata.getPrimaryKeys(connection.getCatalog(), schema, normalizeTableName(tableMetadata.getTableName()));
         if (primaryKeys.next()) {
             iteratePrimaryKeys(tableMetadata, primaryKeys);
-        } else if (!IS_CASE_SENSETIVE) {
-            // Fallback for PostgreSQL
-            primaryKeys = databaseMetadata.getPrimaryKeys(connection.getCatalog(), schema, normalizeTableName(tableMetadata.getTableName()
-                                                                                                                           .toLowerCase()));
-            if (!primaryKeys.next()) {
-                return;
-            } else {
-                iteratePrimaryKeys(tableMetadata, primaryKeys);
-            }
         }
 
     }
@@ -287,16 +258,6 @@ public class DatabaseMetadataUtil {
                 databaseMetadata.getColumns(connection.getCatalog(), schemaPattern, normalizeTableName(tableMetadata.getTableName()), null);
         if (columns.next()) {
             iterateFields(tableMetadata, columns);
-        } else if (!IS_CASE_SENSETIVE) {
-            // Fallback for PostgreSQL
-            columns = databaseMetadata.getColumns(connection.getCatalog(), schemaPattern, normalizeTableName(tableMetadata.getTableName()
-                                                                                                                          .toLowerCase()),
-                    null);
-            if (!columns.next()) {
-                throw new SQLException("Error in getting the information about the columns.");
-            } else {
-                iterateFields(tableMetadata, columns);
-            }
         }
 
     }
@@ -355,16 +316,6 @@ public class DatabaseMetadataUtil {
                 databaseMetadata.getTables(connection.getCatalog(), schemaPattern, normalizeTableName(tableMetadata.getTableName()), null);
         if (tables.next()) {
             iterateTables(tableMetadata, tables);
-        } else if (!IS_CASE_SENSETIVE) {
-            // Fallback for PostgreSQL
-            tables = databaseMetadata.getTables(connection.getCatalog(), schemaPattern, normalizeTableName(tableMetadata.getTableName()
-                                                                                                                        .toLowerCase()),
-                    null);
-            if (!tables.next()) {
-                throw new SQLException("Error in getting the information about the tables.");
-            } else {
-                iterateTables(tableMetadata, tables);
-            }
         }
     }
 

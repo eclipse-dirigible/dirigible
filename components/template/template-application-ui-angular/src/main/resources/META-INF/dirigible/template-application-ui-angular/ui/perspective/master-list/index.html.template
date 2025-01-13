@@ -17,7 +17,22 @@
 
 	<body class="dg-vbox">
 		<fd-toolbar has-title="true">
-			<fd-toolbar-title>Items ({{dataCount}})</fd-toolbar-title>
+			<fd-toolbar-title>Items <span fd-object-status text="{{dataCount}}" inverted="true"></fd-toolbar-title>
+			<fd-toolbar-spacer></fd-toolbar-spacer>
+			<fd-popover>
+				<fd-popover-control>
+					<fd-button compact="true" glyph="sap-icon--overflow" dg-type="transparent"
+						aria-label="Header Menu Button">
+					</fd-button>
+				</fd-popover-control>
+				<fd-popover-body dg-align="bottom-right">
+					<fd-menu aria-label="Header Menu" no-backdrop="true" no-shadow="true">
+						<fd-menu-item title="Filter" ng-click="openFilter()"></fd-menu-item>
+						<fd-menu-item ng-repeat="action in pageActions" title="{{action.label}}"
+							ng-click="triggerPageAction(action)"></fd-menu-item>
+					</fd-menu>
+				</fd-popover-body>
+			</fd-popover>
 		</fd-toolbar>
 		<fd-scrollbar>
 			<fd-list list-type="navigation-indication" byline="true" state="disabled">

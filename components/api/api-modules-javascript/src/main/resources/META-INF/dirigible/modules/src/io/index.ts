@@ -1,5 +1,10 @@
-export * as bytes from "./bytes";
-export * as files from "./files";
-export * as image from "./image";
-export * as streams from "./streams";
-export * as zip from "./zip";
+export * from "./bytes";
+export { Bytes as bytes } from "./bytes";
+export * from "./files";
+export { Files as files } from "./files";
+export * from "./image";
+export { Image as image } from "./image";
+export * from "./streams";
+export { Streams as streams } from "./streams";
+export * from "./zip";
+export { Zip as zip } from "./zip";

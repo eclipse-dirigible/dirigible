@@ -1,0 +1,5 @@
+{
+    "module": "view-import/configs/import-dialog.js",
+    "extensionPoint": "platform-windows",
+    "description": "Import Dialog"
+}

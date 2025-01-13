@@ -1,0 +1,73 @@
+#set($dollar = '$')
+const formView = angular.module('forms', ['ideUI', 'ideView']);
+
+formView.controller('FormController', ['$scope', '$http', function ($scope, $http) {
+
+    $scope.forms = {
+        form: {}
+    };
+
+#foreach($feed in $feeds)
+    ${dollar}http.get('$feed.url').then(response => {
+        $scope.$feed.name = response.data;
+    }).catch(e => {
+        console.error(e);
+    });
+
+#end
+    $scope.model = {};
+#macro(formWidgets $elements)
+#foreach($element in $elements)
+	#if($element.controlId == "input-number")
+    $scope.model.$element.model = 0;
+	#elseif($element.controlId == "input-checkbox")
+    $scope.model.$element.model = false;
+    #elseif($element.controlId == "input-radio")
+        #set ($hasDefault = false)
+        #if ($element.staticOptions)
+            #foreach($radio in $element.staticOptions)
+                #if ($radio.isDefault == true)
+                #set ($hasDefault = true)
+    $scope.model.$element.model = '$radio.value';
+                #break
+                #end
+            #end
+        #end
+        #if (!$hasDefault)
+    $scope.model.$element.model = '';
+        #end
+    #elseif($element.controlId == "input-select")
+        #set ($hasDefault = false)
+        #if ($element.staticOptions)
+            #foreach($select in $element.staticOptions)
+                #if ($select.isDefault == true)
+                #set ($hasDefault = true)
+    $scope.model.$element.model = '$select.value';
+                #break
+                #end
+            #end
+        #end
+        #if (!$hasDefault)
+    $scope.model.$element.model = '';
+        #end
+	#elseif($element.controlId == "input-color")
+    $scope.model.$element.model = '#ffbe6f';
+	#elseif($element.controlId == "paragraph")
+    #if($element.model && $element.text)
+        $scope.model.$element.model = `$element.text`;
+    #elseif($element.model)
+        $scope.model.$element.model = null;
+    #end
+	#end
+    #if($element.children)
+        #formWidgets($element.children)
+    #end
+#end
+#end
+#formWidgets($form)
+#if($code)
+
+$code
+
+#end
+}]);

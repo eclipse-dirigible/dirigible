@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.api.http;
 
@@ -15,8 +14,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 
-import javax.servlet.ServletInputStream;
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.ServletInputStream;
+import jakarta.servlet.http.HttpServletRequest;
 
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.commons.api.context.InvalidStateException;
@@ -65,7 +64,6 @@ public class HttpRequestFacade {
      * made.
      *
      * @return the HTTP method of the request
-     * @see HttpServletRequest#getMethod()
      */
     public static final String getMethod() {
         HttpServletRequest request = getRequest();
@@ -79,7 +77,6 @@ public class HttpRequestFacade {
      * Returns the login of the user making the request or null if the user hasn't been authenticated.
      *
      * @return the login of the user making the request
-     * @see HttpServletRequest#getRemoteUser()
      */
     public static final String getRemoteUser() {
         HttpServletRequest request = getRequest();
@@ -94,7 +91,6 @@ public class HttpRequestFacade {
      * request.
      *
      * @return the path info
-     * @see HttpServletRequest#getPathInfo()
      */
     public static final String getPathInfo() {
         HttpServletRequest request = getRequest();
@@ -109,7 +105,6 @@ public class HttpRequestFacade {
      * translates it to a real path.
      *
      * @return the path translated
-     * @see HttpServletRequest#getPathTranslated()
      */
     public static final String getPathTranslated() {
         HttpServletRequest request = getRequest();
@@ -125,7 +120,6 @@ public class HttpRequestFacade {
      *
      * @param name the header name
      * @return the header value
-     * @see HttpServletRequest#getHeader(String)
      */
     public static final String getHeader(String name) {
         HttpServletRequest request = getRequest();
@@ -140,7 +134,6 @@ public class HttpRequestFacade {
      *
      * @param role the role
      * @return true, if is user in role
-     * @see HttpServletRequest#isUserInRole(String)
      */
     public static final boolean isUserInRole(String role) {
         return UserRequestVerifier.isUserInRole(role);
@@ -151,7 +144,6 @@ public class HttpRequestFacade {
      *
      * @param name the name
      * @return the attribute
-     * @see HttpServletRequest#getAttribute(String)
      */
     public static final String getAttribute(String name) {
         HttpServletRequest request = getRequest();
@@ -167,7 +159,6 @@ public class HttpRequestFacade {
      * Returns the auth type.
      *
      * @return the auth type
-     * @see HttpServletRequest#getAuthType()
      */
     public static final String getAuthType() {
         HttpServletRequest request = getRequest();

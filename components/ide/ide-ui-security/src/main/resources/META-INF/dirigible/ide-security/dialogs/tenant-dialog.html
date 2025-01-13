@@ -1,0 +1,74 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="tenantdialog" ng-controller="TenantDialogController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title dg-view-title></title>
+        <script type="text/javascript" src="../services/tenant-dialog.js"></script>
+        <script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=ide-view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/resources-core/services/loader.js?id=ide-view-css" />
+        <theme></theme>
+        <script type="text/javascript" src="tenant-dialog.js"></script>
+    </head>
+
+    <body class="dg-vbox">
+        <fd-busy-indicator-extended class="dg-fill-parent" ng-hide="state.error || !state.isBusy" dg-size="l">
+            {{state.busyText}}
+        </fd-busy-indicator-extended>
+        <div class="fd-padding dg-fill-parent" fd-scrollbar ng-show="!state.error && !state.isBusy">
+            <fd-fieldset ng-form="forms.tenantForm">
+                <fd-form-group>
+                    <fd-form-item>
+                        <fd-form-label for="name" dg-colon="true" dg-required="true">Name</fd-form-label>
+                        <fd-input id="name" name="name" type="text" placeholder="Enter a name" ng-model="tenant.name"
+                            dg-input-rules="inputRules" state="{{ forms.tenantForm['name'].$valid ? '' : 'error' }}"
+                            ng-required="true" ng-trim="false"></fd-input>
+                    </fd-form-item>
+                </fd-form-group>
+                <fd-form-group>
+                    <fd-form-item>
+                        <fd-form-label for="subdomain" dg-colon="true" dg-required="true">Subdomain</fd-form-label>
+                        <fd-input id="subdomain" name="subdomain" type="text" placeholder="Enter subdomain"
+                            ng-model="tenant.subdomain" dg-input-rules="inputRules" ng-trim="false"
+                            state="{{ forms.tenantForm['subdomain'].$valid ? '' : 'error' }}" ng-required="true"></fd-input>
+                    </fd-form-item>
+                </fd-form-group>
+            </fd-fieldset>
+        </div>
+        <fd-bar bar-design="footer" ng-show="!state.error && !state.isBusy">
+            <fd-bar-right>
+                <fd-bar-element>
+                    <fd-button dg-label="{{editMode ? 'Save' : 'Create'}}" ng-click="save()" dg-type="emphasized"
+                        compact="true" state="{{ !forms.tenantForm.$valid ? 'disabled' : ''  }}">
+                    </fd-button>
+                </fd-bar-element>
+                <fd-bar-element>
+                    <fd-button dg-label="Cancel" ng-click="cancel()" dg-type="transparent" compact="true"></fd-button>
+                </fd-bar-element>
+            </fd-bar-right>
+        </fd-bar>
+        <fd-message-page glyph="sap-icon--error" ng-if="state.error">
+            <fd-message-page-title>Dialog encounterd an error!</fd-message-page-title>
+            <fd-message-page-subtitle>{{errorMessage}}</fd-message-page-subtitle>
+            <fd-message-page-actions>
+                <fd-button compact="true" ng-click="cancel()" dg-label="Close" dg-type="emphasized"></fd-button>
+            </fd-message-page-actions>
+        </fd-message-page>
+    </body>
+
+</html>

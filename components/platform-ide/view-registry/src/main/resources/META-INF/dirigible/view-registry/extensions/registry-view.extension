@@ -1,0 +1,5 @@
+{
+    "module": "view-registry/configs/registry-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Registry View"
+}

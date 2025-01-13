@@ -1,35 +1,32 @@
 #set($dollar = '$')
 angular.module('page', ["ideUI", "ideView"])
-	.controller('PageController', ['$scope', function ($scope) {
+	.controller('PageController', ['$scope', 'ViewParameters', function ($scope, ViewParameters) {
 
 		$scope.entity = {};
 
-		if (window != null && window.frameElement != null && window.frameElement.hasAttribute("data-parameters")) {
-			let dataParameters = window.frameElement.getAttribute("data-parameters");
-			if (dataParameters) {
-				let params = JSON.parse(dataParameters);
+		let params = ViewParameters.get();
+		if (Object.keys(params).length) {
 #if($hasDates)
 
 #foreach ($property in $properties)
 #if($property.isDateType)
-				if (params.entity.${property.name}) {
-					params.entity.${property.name} = new Date(params.entity.${property.name});
-				}
+			if (params.entity.${property.name}) {
+				params.entity.${property.name} = new Date(params.entity.${property.name});
+			}
 #end
 #end
 #end
 
-				$scope.entity = params.entity;
-				$scope.selectedMainEntityKey = params.selectedMainEntityKey;
-				$scope.selectedMainEntityId = params.selectedMainEntityId;
+			$scope.entity = params.entity;
+			$scope.selectedMainEntityKey = params.selectedMainEntityKey;
+			$scope.selectedMainEntityId = params.selectedMainEntityId;
 #if($hasDropdowns)
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-				$scope.options${property.name} = params.options${property.name};
+			$scope.options${property.name} = params.options${property.name};
 #end
 #end
 #end
-			}
 		}
 
 	}]);

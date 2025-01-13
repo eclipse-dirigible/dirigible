@@ -1,0 +1,271 @@
+#set($dollar = '$' )
+#foreach ($property in $properties)
+#if($property.roleRead || $property.roleWrite)
+#set($isEntityPropertySecurityEnabled = "true")
+#break
+#end
+#end
+import { Controller, Get, Post, Put, Delete, response } from "sdk/http"
+import { Extensions } from "sdk/extensions"
+import { ${name}Repository, ${name}EntityOptions } from "../../dao/${perspectiveName}/${name}Repository";
+#if($perspectiveRole || $roleRead || $roleWrite || $isEntityPropertySecurityEnabled)
+import { user } from "sdk/security"
+#end
+#if($perspectiveRole || $roleRead || $roleWrite)
+import { ForbiddenError } from "../utils/ForbiddenError";
+#end
+import { ValidationError } from "../utils/ValidationError";
+import { HttpUtils } from "../utils/HttpUtils";
+#if($importsCode && $importsCode != "")
+// custom imports
+${importsCode}
+#end
+
+const validationModules = await Extensions.loadExtensionModules("${projectName}-${perspectiveName}-${name}", ["validate"]);
+
+@Controller
+class ${name}Service {
+
+    private readonly repository = new ${name}Repository();
+
+    @Get("/")
+    public getAll(_: any, ctx: any) {
+        try {
+#if($perspectiveRole || $roleRead || $roleWrite)
+            this.checkPermissions("read");
+#end
+            const options: ${name}EntityOptions = {
+                $limit: ctx.queryParameters["$limit"] ? parseInt(ctx.queryParameters["$limit"]) : undefined,
+                $offset: ctx.queryParameters["$offset"] ? parseInt(ctx.queryParameters["$offset"]) : undefined
+            };
+#if($layoutType == "MANAGE_DETAILS" || $layoutType == "LIST_DETAILS")
+
+            let ${masterEntityId} = parseInt(ctx.queryParameters.${masterEntityId});
+            ${masterEntityId} = isNaN(${masterEntityId}) ? ctx.queryParameters.${masterEntityId} : ${masterEntityId};
+
+            if (${masterEntityId} !== undefined) {
+                options.$filter = {
+                    equals: {
+                        ${masterEntityId}: ${masterEntityId}
+                    }
+                };
+            }
+#end
+
+#if($isEntityPropertySecurityEnabled)
+            return this.repository.findAll(options).map(e => this.transformEntity("read", e));
+#else
+            return this.repository.findAll(options);
+#end
+        } catch (error: any) {
+            this.handleError(error);
+        }
+    }
+
+    @Post("/")
+    public create(entity: any) {
+        try {
+#if($perspectiveRole || $roleRead || $roleWrite)
+            this.checkPermissions("write");
+#end
+            this.validateEntity(entity);
+#if($isEntityPropertySecurityEnabled)
+            const originalEntity = this.repository.findById(#foreach($property in $properties)#if($property.dataPrimaryKey)entity.${property.name}#end#end);
+            const modifiedEntity = this.transformEntity("write", entity);
+            entity = { ...originalEntity, ...modifiedEntity };
+#end
+            entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = this.repository.create(entity);
+            response.setHeader("Content-Location", "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts/" + entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end);
+            response.setStatus(response.CREATED);
+            return entity;
+        } catch (error: any) {
+            this.handleError(error);
+        }
+    }
+
+    @Get("/count")
+    public count() {
+        try {
+#if($perspectiveRole || $roleRead || $roleWrite)
+            this.checkPermissions("read");
+#end
+            return this.repository.count();
+        } catch (error: any) {
+            this.handleError(error);
+        }
+    }
+
+    @Post("/count")
+    public countWithFilter(filter: any) {
+        try {
+#if($perspectiveRole || $roleRead || $roleWrite)
+            this.checkPermissions("read");
+#end
+            return this.repository.count(filter);
+        } catch (error: any) {
+            this.handleError(error);
+        }
+    }
+
+    @Post("/search")
+    public search(filter: any) {
+        try {
+#if($perspectiveRole || $roleRead || $roleWrite)
+            this.checkPermissions("read");
+#end
+#if($isEntityPropertySecurityEnabled)
+            return this.repository.findAll(filter).map(e => this.transformEntity("read", e));
+#else
+            return this.repository.findAll(filter);
+#end
+        } catch (error: any) {
+            this.handleError(error);
+        }
+    }
+
+    @Get("/:id")
+    public getById(_: any, ctx: any) {
+        try {
+#if($perspectiveRole || $roleRead || $roleWrite)
+            this.checkPermissions("read");
+#end
+#foreach ($property in $properties)
+#if($property.dataPrimaryKey)
+#if($property.dataTypeTypescript == "number")
+            const id = parseInt(ctx.pathParameters.id);
+#elseif($property.dataTypeTypescript == "Date")
+            const id = new Date(parseInt(ctx.pathParameters.id));
+#elseif($property.dataTypeTypescript == "boolean")
+            const id = ctx.pathParameters.id === "true";
+#else
+            const id = ctx.pathParameters.id;
+#end
+#end
+#end
+            const entity = this.repository.findById(id);
+            if (entity) {
+#if($isEntityPropertySecurityEnabled)
+                return this.transformEntity("read", entity);
+#else
+                return entity;
+#end
+            } else {
+                HttpUtils.sendResponseNotFound("${name} not found");
+            }
+        } catch (error: any) {
+            this.handleError(error);
+        }
+    }
+
+    @Put("/:id")
+    public update(entity: any, ctx: any) {
+        try {
+#if($perspectiveRole || $roleRead || $roleWrite)
+            this.checkPermissions("write");
+#end
+            entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = ctx.pathParameters.id;
+            this.validateEntity(entity);
+#if($isEntityPropertySecurityEnabled)
+            const originalEntity = this.repository.findById(#foreach($property in $properties)#if($property.dataPrimaryKey)entity.${property.name}#end#end);
+            const modifiedEntity = this.transformEntity("write", entity);
+            entity = { ...originalEntity, ...modifiedEntity };
+#end
+            this.repository.update(entity);
+            return entity;
+        } catch (error: any) {
+            this.handleError(error);
+        }
+    }
+
+    @Delete("/:id")
+    public deleteById(_: any, ctx: any) {
+        try {
+#if($perspectiveRole || $roleRead || $roleWrite)
+            this.checkPermissions("write");
+#end
+            const id = ctx.pathParameters.id;
+            const entity = this.repository.findById(id);
+            if (entity) {
+                this.repository.deleteById(id);
+                HttpUtils.sendResponseNoContent();
+            } else {
+                HttpUtils.sendResponseNotFound("${name} not found");
+            }
+        } catch (error: any) {
+            this.handleError(error);
+        }
+    }
+
+    private handleError(error: any) {
+        if (error.name === "ForbiddenError") {
+            HttpUtils.sendForbiddenRequest(error.message);
+        } else if (error.name === "ValidationError") {
+            HttpUtils.sendResponseBadRequest(error.message);
+        } else {
+            HttpUtils.sendInternalServerError(error.message);
+        }
+    }
+#if($perspectiveRole || $roleRead || $roleWrite)
+
+    private checkPermissions(operationType: string) {
+#if($perspectiveRole)
+        if (!user.isInRole("${perspectiveRole}")) {
+            throw new ForbiddenError();
+        }
+#end
+#if($roleRead)
+        if (operationType === "read" && !user.isInRole("${roleRead}")) {
+            throw new ForbiddenError();
+        }
+#end
+#if($roleWrite)
+        if (operationType === "write" && !user.isInRole("${roleWrite}")) {
+            throw new ForbiddenError();
+        }
+#end
+    }
+#end
+
+    private validateEntity(entity: any): void {
+#foreach ($property in $properties)
+#if($property.isRequiredProperty)
+        if (entity.${property.name} === null || entity.${property.name} === undefined) {
+            throw new ValidationError(`The '${property.name}' property is required, provide a valid value`);
+        }
+#end
+#if($property.dataTypeTypescript == "string")
+        if (entity.${property.name}?.length > ${property.dataLength}) {
+            throw new ValidationError(`The '${property.name}' exceeds the maximum length of [${property.dataLength}] characters`);
+        }
+#end
+#if($property.widgetPattern && $property.widgetPattern != "")
+        if (!RegExp(/${property.widgetPattern}/).test(entity.${property.name})) {
+            throw new ValidationError(`The value provided for the '${property.name}' property ('[${dollar}{entity.${property.name}}]') doesn't match the required pattern '${property.widgetPattern}'`);
+        }
+#end
+#end
+        for (const next of validationModules) {
+            next.validate(entity);
+        }
+    }
+
+#if($isEntityPropertySecurityEnabled)
+    private transformEntity(operationType: string, originalEntity: any) {
+        const entity = { ...originalEntity };
+#foreach ($property in $properties)
+#if($property.roleRead)
+        if (operationType === "read" && !user.isInRole("${property.roleRead}")) {
+            delete entity.${property.name};
+        }
+#end
+#if($property.roleWrite)
+        if (operationType === "write" && !user.isInRole("${property.roleWrite}")) {
+            delete entity.${property.name};
+        }
+#end
+#end
+        return entity;
+    }
+
+#end
+}

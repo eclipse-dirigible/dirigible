@@ -1,0 +1,417 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" ng-app="page" ng-controller="PageController">
+
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" href="data:;base64,iVBORw0KGgo=" dg-brand-icon />
+        <title dg-view-title></title>
+        <script type="text/javascript" src="../../services/report-editor.js"></script>
+        <theme></theme>
+        <script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=ide-editor-js">
+        </script>
+        <link type="text/css" rel="stylesheet"
+            href="/services/js/resources-core/services/loader.js?id=ide-editor-css" />
+        <script type="text/javascript" src="editor.js"></script>
+    </head>
+
+    <body class="dg-vbox" dg-shortcut="'ctrl+s'" dg-shortcut-action="save">
+        <fd-busy-indicator-extended class="dg-fill-parent" ng-hide="state.error || !state.isBusy" dg-size="l">
+            {{state.busyText}}
+        </fd-busy-indicator-extended>
+        <fd-toolbar class="dg-full-width" has-title="true" ng-show="!state.error && !state.isBusy">
+            <fd-toolbar-title>Report:</fd-toolbar-title>
+            <fd-toolbar-spacer></fd-toolbar-spacer>
+            <fd-button compact="true" dg-label="Save" ng-click="save()"
+                state="{{ forms.editor.$valid && isFileChanged ? '' : 'disabled'  }}">
+            </fd-button>
+        </fd-toolbar>
+        <fd-scrollbar class="dg-full-width" ng-show="!state.error && !state.isBusy">
+            <fd-fieldset ng-form="forms.editor">
+                <fd-form-group name="entityForm">
+
+                    <!-- Begin General Section-->
+                    <fd-panel expanded="true">
+                        <fd-panel-header>
+                            <fd-panel-expand></fd-panel-expand>
+                            <h4 fd-panel-title>General</h4>
+                        </fd-panel-header>
+                        <fd-panel-content aria-label="General Content">
+                            <fd-form-item horizontal="false">
+                                <fd-form-label for="Name" dg-required="true" dg-colon="true">Name</fd-form-label>
+                                <fd-form-input-message-group
+                                    dg-inactive="{{ forms.editor['name'].$valid ? 'true' : 'false' }}">
+                                    <fd-input id="idName" name="name"
+                                        state="{{ forms.editor['name'].$valid ? '' : 'error' }}" ng-required="true"
+                                        ng-model="report.name" ng-maxlength="255" dg-input-rules="nameRegex" type="text"
+                                        placeholder="Enter name">
+                                    </fd-input>
+                                    <fd-form-message dg-type="error">Allowed characters include all letters, numbers,
+                                        '_', '-', '.', ':' and '"'. Maximum length is 255.</fd-form-message>
+                                </fd-form-input-message-group>
+                            </fd-form-item>
+                        </fd-panel-content>
+                    </fd-panel>
+                    <!-- End General Section-->
+
+                    <!-- Begin Base Table Section-->
+                    <fd-panel expanded="true">
+                        <fd-panel-header>
+                            <fd-panel-expand></fd-panel-expand>
+                            <h4 fd-panel-title>Base Table</h4>
+                        </fd-panel-header>
+                        <fd-panel-content aria-label="Base Table Content">
+                            <fd-toolbar no-bottom-border="true">
+                                <fd-toolbar-spacer></fd-toolbar-spacer>
+                                <fd-button compact="true" dg-label="Set from Tables" ng-click="setBaseTable()">
+                                </fd-button>
+                            </fd-toolbar>
+                            <fd-form-item horizontal="false">
+                                <fd-form-label for="Alias" dg-required="true" dg-colon="true">Alias</fd-form-label>
+                                <fd-form-input-message-group
+                                    dg-inactive="{{ forms.editor['alias'].$valid ? 'true' : 'false' }}">
+                                    <fd-input id="idAlias" name="alias"
+                                        state="{{ forms.editor['alias'].$valid ? '' : 'error' }}" ng-required="true"
+                                        ng-model="report.alias" ng-maxlength="255" dg-input-rules="nameRegex"
+                                        type="text" placeholder="Enter alias name">
+                                    </fd-input>
+                                    <fd-form-message dg-type="error">Allowed characters include all letters, numbers,
+                                        '_', '-', '.', ':' and '"'. Maximum length is 255.</fd-form-message>
+                                </fd-form-input-message-group>
+                            </fd-form-item>
+                            <fd-form-item horizontal="false">
+                                <fd-form-label for="Table" dg-required="true" dg-colon="true">Table</fd-form-label>
+                                <fd-form-input-message-group message-fixed="true"
+                                    dg-inactive="{{ forms.editor['table'].$valid ? 'true' : 'false' }}">
+                                    <fd-input id="idTable" name="table"
+                                        state="{{ forms.editor['table'].$valid ? '' : 'error' }}" ng-required="true"
+                                        ng-model="report.table" ng-maxlength="255" dg-input-rules="nameRegex"
+                                        type="text" placeholder="Enter table name">
+                                    </fd-input>
+                                    <fd-form-message dg-type="error">Allowed characters include all letters, numbers,
+                                        '_', '-', '.', ':' and '"'. Maximum length is 255.</fd-form-message>
+                                </fd-form-input-message-group>
+                            </fd-form-item>
+                        </fd-panel-content>
+                    </fd-panel>
+                    <!-- End Base Table Section-->
+
+                    <!-- Begin Columns -->
+                    <fd-panel expanded="true">
+                        <fd-panel-header>
+                            <fd-panel-expand></fd-panel-expand>
+                            <h4 fd-panel-title>Columns</h4>
+                        </fd-panel-header>
+                        <fd-panel-content aria-label="Columns Content" class="dg-padding-top--none">
+                            <fd-toolbar no-bottom-border="true">
+                                <fd-toolbar-spacer></fd-toolbar-spacer>
+                                <fd-button compact="true" dg-label="Add" ng-click="addColumn()"></fd-button>
+                            </fd-toolbar>
+                            <table fd-table outer-borders="all">
+                                <thead fd-table-header>
+                                    <tr fd-table-row>
+                                        <th fd-table-header-cell>Table Alias</th>
+                                        <th fd-table-header-cell>Column Alias</th>
+                                        <th fd-table-header-cell>Column Name</th>
+                                        <th fd-table-header-cell>Column Type</th>
+                                        <th fd-table-header-cell>Aggregate Function</th>
+                                        <th fd-table-header-cell>Select</th>
+                                        <th fd-table-header-cell>Grouping</th>
+                                        <th fd-table-header-cell></th>
+                                    </tr>
+                                </thead>
+                                <tbody fd-table-body>
+                                    <tr ng-if="report.columns.length === 0" fd-table-row>
+                                        <td fd-table-cell no-data="true">Report has no columns</td>
+                                    </tr>
+                                    <tr fd-table-row hoverable="false" activable="false"
+                                        ng-repeat="item in report.columns track by $index">
+                                        <td fd-table-cell>{{item.table}}</td>
+                                        <td fd-table-cell>{{item.alias}}</td>
+                                        <td fd-table-cell>{{item.name}}</td>
+                                        <td fd-table-cell>{{item.type}}</td>
+                                        <td fd-table-cell>{{item.aggregate}}</td>
+                                        <td fd-table-cell>
+                                            <span fd-object-status status="{{ item.select ? 'positive' : 'negative' }}"
+                                                text="{{ item.select ? 'True' : 'False' }}"></span>
+                                        </td>
+                                        <td fd-table-cell>
+                                            <span fd-object-status
+                                                status="{{ item.grouping ? 'positive' : 'negative' }}"
+                                                text="{{ item.grouping ? 'True' : 'False' }}"></span>
+                                        </td>
+                                        <td fd-table-cell fit-content="true">
+                                            <fd-button compact="true" glyph="sap-icon--edit" dg-type="transparent"
+                                                aria-label="Edit" ng-click="editColumn($index)"></fd-button>
+                                            <fd-button compact="true" glyph="sap-icon--delete" dg-type="transparent"
+                                                aria-label="Delete" ng-click="deleteColumn($index)"></fd-button>
+                                            </fd-button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </fd-panel-content>
+                    </fd-panel>
+                    <!-- End Columns -->
+
+                    <!-- Begin Joins -->
+                    <fd-panel expanded="true">
+                        <fd-panel-header>
+                            <fd-panel-expand></fd-panel-expand>
+                            <h4 fd-panel-title>Joins</h4>
+                        </fd-panel-header>
+                        <fd-panel-content aria-label="Joins Content" class="dg-padding-top--none">
+                            <fd-toolbar no-bottom-border="true">
+                                <fd-toolbar-spacer></fd-toolbar-spacer>
+                                <fd-button compact="true" dg-label="Add" ng-click="addJoin()"></fd-button>
+                                <fd-button compact="true" dg-label="Add from Tables" ng-click="addFromTables()">
+                                </fd-button>
+                            </fd-toolbar>
+                            <table fd-table outer-borders="all">
+                                <thead fd-table-header>
+                                    <tr fd-table-row>
+                                        <th fd-table-header-cell>Alias</th>
+                                        <th fd-table-header-cell>Name</th>
+                                        <th fd-table-header-cell>Type</th>
+                                        <th fd-table-header-cell>Condition</th>
+                                        <th fd-table-header-cell></th>
+                                    </tr>
+                                </thead>
+                                <tbody fd-table-body>
+                                    <tr ng-if="report.joins.length === 0" fd-table-row>
+                                        <td fd-table-cell no-data="true">Report has no joins</td>
+                                    </tr>
+                                    <tr fd-table-row hoverable="false" activable="false"
+                                        ng-repeat="item in report.joins track by $index">
+                                        <td fd-table-cell>{{item.alias}}</td>
+                                        <td fd-table-cell>{{item.name}}</td>
+                                        <td fd-table-cell>{{item.type}}</td>
+                                        <td fd-table-cell>{{item.condition}}</td>
+                                        <td fd-table-cell fit-content="true">
+                                            <fd-button compact="true" glyph="sap-icon--edit" dg-type="transparent"
+                                                aria-label="Edit" ng-click="editJoin($index)"></fd-button>
+                                            <fd-button compact="true" glyph="sap-icon--delete" dg-type="transparent"
+                                                aria-label="Delete" ng-click="deleteJoin($index)"></fd-button>
+                                            </fd-button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </fd-panel-content>
+                    </fd-panel>
+                    <!-- End Joins -->
+
+                    <!-- Begin Conditions -->
+                    <fd-panel expanded="true">
+                        <fd-panel-header>
+                            <fd-panel-expand></fd-panel-expand>
+                            <h4 fd-panel-title>Conditions</h4>
+                        </fd-panel-header>
+                        <fd-panel-content aria-label="Conditions Content" class="dg-padding-top--none">
+                            <fd-toolbar no-bottom-border="true">
+                                <fd-toolbar-spacer></fd-toolbar-spacer>
+                                <fd-button compact="true" dg-label="Add" ng-click="addCondition()"></fd-button>
+                            </fd-toolbar>
+                            <table fd-table outer-borders="all">
+                                <thead fd-table-header>
+                                    <tr fd-table-row>
+                                        <th fd-table-header-cell>Left</th>
+                                        <th fd-table-header-cell>Operation</th>
+                                        <th fd-table-header-cell>Right</th>
+                                        <th fd-table-header-cell></th>
+                                    </tr>
+                                </thead>
+                                <tbody fd-table-body>
+                                    <tr ng-if="report.conditions.length === 0" fd-table-row>
+                                        <td fd-table-cell no-data="true">Report has no conditions</td>
+                                    </tr>
+                                    <tr fd-table-row hoverable="false" activable="false"
+                                        ng-repeat="item in report.conditions track by $index">
+                                        <td fd-table-cell>{{item.left}}</td>
+                                        <td fd-table-cell>{{item.operation}}</td>
+                                        <td fd-table-cell>{{item.right}}</td>
+                                        <td fd-table-cell fit-content="true">
+                                            <fd-button compact="true" glyph="sap-icon--edit" dg-type="transparent"
+                                                aria-label="Edit" ng-click="editCondition($index)"></fd-button>
+                                            <fd-button compact="true" glyph="sap-icon--delete" dg-type="transparent"
+                                                aria-label="Delete" ng-click="deleteCondition($index)"></fd-button>
+                                            </fd-button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </fd-panel-content>
+                    </fd-panel>
+                    <!-- End Conditions -->
+
+                    <!-- Begin Havings -->
+                    <fd-panel expanded="false">
+                        <fd-panel-header>
+                            <fd-panel-expand></fd-panel-expand>
+                            <h4 fd-panel-title>Havings</h4>
+                        </fd-panel-header>
+                        <fd-panel-content aria-label="Havings Content" class="dg-padding-top--none">
+                            <fd-toolbar no-bottom-border="true">
+                                <fd-toolbar-spacer></fd-toolbar-spacer>
+                                <fd-button compact="true" dg-label="Add" ng-click="addHaving()"></fd-button>
+                            </fd-toolbar>
+                            <table fd-table outer-borders="all">
+                                <thead fd-table-header>
+                                    <tr fd-table-row>
+                                        <th fd-table-header-cell>Left</th>
+                                        <th fd-table-header-cell>Operation</th>
+                                        <th fd-table-header-cell>Right</th>
+                                        <th fd-table-header-cell></th>
+                                    </tr>
+                                </thead>
+                                <tbody fd-table-body>
+                                    <tr ng-if="report.havings.length === 0" fd-table-row>
+                                        <td fd-table-cell no-data="true">Report has no havings</td>
+                                    </tr>
+                                    <tr fd-table-row hoverable="false" activable="false"
+                                        ng-repeat="item in report.havings track by $index">
+                                        <td fd-table-cell>{{item.left}}</td>
+                                        <td fd-table-cell>{{item.operation}}</td>
+                                        <td fd-table-cell>{{item.right}}</td>
+                                        <td fd-table-cell fit-content="true">
+                                            <fd-button compact="true" glyph="sap-icon--edit" dg-type="transparent"
+                                                aria-label="Edit" ng-click="editHaving($index)"></fd-button>
+                                            <fd-button compact="true" glyph="sap-icon--delete" dg-type="transparent"
+                                                aria-label="Delete" ng-click="deleteHaving($index)"></fd-button>
+                                            </fd-button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </fd-panel-content>
+                    </fd-panel>
+                    <!-- End Conditions -->
+
+                    <!-- Begin Ordering -->
+                    <fd-panel expanded="false">
+                        <fd-panel-header>
+                            <fd-panel-expand></fd-panel-expand>
+                            <h4 fd-panel-title>Ordering</h4>
+                        </fd-panel-header>
+                        <fd-panel-content aria-label="Ordering Content" class="dg-padding-top--none">
+                            <fd-toolbar no-bottom-border="true">
+                                <fd-toolbar-spacer></fd-toolbar-spacer>
+                                <fd-button compact="true" dg-label="Add" ng-click="addOrdering()"></fd-button>
+                            </fd-toolbar>
+                            <table fd-table outer-borders="all">
+                                <thead fd-table-header>
+                                    <tr fd-table-row>
+                                        <th fd-table-header-cell>Column</th>
+                                        <th fd-table-header-cell>Direction</th>
+                                        <th fd-table-header-cell></th>
+                                    </tr>
+                                </thead>
+                                <tbody fd-table-body>
+                                    <tr ng-if="report.orderings.length === 0" fd-table-row>
+                                        <td fd-table-cell no-data="true">Report has no ordering</td>
+                                    </tr>
+                                    <tr fd-table-row hoverable="false" activable="false"
+                                        ng-repeat="item in report.orderings track by $index">
+                                        <td fd-table-cell>{{item.column}}</td>
+                                        <td fd-table-cell>{{item.direction}}</td>
+                                        <td fd-table-cell fit-content="true">
+                                            <fd-button compact="true" glyph="sap-icon--edit" dg-type="transparent"
+                                                aria-label="Edit" ng-click="editOrdering($index)"></fd-button>
+                                            <fd-button compact="true" glyph="sap-icon--delete" dg-type="transparent"
+                                                aria-label="Delete" ng-click="deleteOrdering($index)"></fd-button>
+                                            </fd-button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </fd-panel-content>
+                    </fd-panel>
+                    <!-- End Ordering -->
+
+                    <!-- Begin Parameters -->
+                    <fd-panel expanded="true">
+                        <fd-panel-header>
+                            <fd-panel-expand></fd-panel-expand>
+                            <h4 fd-panel-title>Parameters</h4>
+                        </fd-panel-header>
+                        <fd-panel-content aria-label="Parameters Content" class="dg-padding-top--none">
+                            <fd-toolbar no-bottom-border="true">
+                                <fd-toolbar-spacer></fd-toolbar-spacer>
+                                <fd-button compact="true" dg-label="Add" ng-click="addParameter()"></fd-button>
+                            </fd-toolbar>
+                            <table fd-table outer-borders="all">
+                                <thead fd-table-header>
+                                    <tr fd-table-row>
+                                        <th fd-table-header-cell>Parameter Name</th>
+                                        <th fd-table-header-cell>Parameter Type</th>
+                                        <th fd-table-header-cell>Initial Value</th>
+                                        <th fd-table-header-cell></th>
+                                    </tr>
+                                </thead>
+                                <tbody fd-table-body>
+                                    <tr ng-if="report.parameters.length === 0" fd-table-row>
+                                        <td fd-table-cell no-data="true">Report has no parameters</td>
+                                    </tr>
+                                    <tr fd-table-row hoverable="false" activable="false"
+                                        ng-repeat="item in report.parameters track by $index">
+                                        <td fd-table-cell>{{item.name}}</td>
+                                        <td fd-table-cell>{{item.type}}</td>
+                                        <td fd-table-cell>{{item.initial}}</td>
+                                        <td fd-table-cell fit-content="true">
+                                            <fd-button compact="true" glyph="sap-icon--edit" dg-type="transparent"
+                                                aria-label="Edit" ng-click="editParameter($index)"></fd-button>
+                                            <fd-button compact="true" glyph="sap-icon--delete" dg-type="transparent"
+                                                aria-label="Delete" ng-click="deleteParameter($index)"></fd-button>
+                                            </fd-button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </fd-panel-content>
+                    </fd-panel>
+                    <!-- End Parameters -->
+
+                    <!-- Begin Query -->
+                    <fd-panel expanded="false">
+                        <fd-panel-header>
+                            <fd-panel-expand></fd-panel-expand>
+                            <h4 fd-panel-title>Query</h4>
+                        </fd-panel-header>
+                        <fd-panel-content aria-label="Query Content">
+
+                            <fd-form-item horizontal="false">
+                                <fd-form-label for="idQuery" dg-required="false" dg-colon="true">Generated Query
+                                </fd-form-label>
+                                <fd-textarea id="idQuery" name="query" ng-required="false" ng-model="query" rows="10"
+                                    ng-readonly="true">
+                                </fd-textarea>
+                            </fd-form-item>
+
+                        </fd-panel-content>
+                    </fd-panel>
+                    <!-- End Query -->
+
+                </fd-form-group>
+            </fd-fieldset>
+        </fd-scrollbar>
+        <fd-message-page glyph="sap-icon--error" ng-if="state.error">
+            <fd-message-page-title>Editor encounterd an error!</fd-message-page-title>
+            <fd-message-page-subtitle>{{errorMessage}}</fd-message-page-subtitle>
+        </fd-message-page>
+    </body>
+
+</html>

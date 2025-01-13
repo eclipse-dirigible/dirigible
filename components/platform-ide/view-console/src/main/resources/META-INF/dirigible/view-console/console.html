@@ -1,0 +1,88 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="console" ng-controller="ConsoleController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-console/configs/console-view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script src="js/console.js"></script>
+        <style>
+            .logLine {
+                background: var(--fdList_Item_Background_Color);
+            }
+
+            [data-loglevel='INFO'] {
+                color: var(--sapInformativeTextColor);
+            }
+
+            [data-loglevel='WARN'] {
+                color: var(--sapCriticalTextColor);
+            }
+
+            [data-loglevel='ERROR'] {
+                color: var(--sapNegativeTextColor);
+            }
+
+        </style>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar has-title="false" type="solid">
+            <bk-popover close-innerclick="false">
+                <bk-popover-control>
+                    <bk-button label="{{ getLogLevelLabel() }}" is-menu="true" state="transparent">
+                    </bk-button>
+                </bk-popover-control>
+                <bk-popover-body no-arrow="true">
+                    <bk-list list-type="selection" compact="true">
+                        <bk-list-item ng-repeat="(key, logLevel) in logLevels track by key" ng-if="logLevel.name" ng-click="toggleLogInfoLevel(key, $event)">
+                            <bk-list-form-item>
+                                <bk-checkbox id="loglevel_{{::key}}_checkbox" ng-model="logLevel.enabled" aria-labelledby="loglevel_{{::key}}_title">
+                                </bk-checkbox>
+                                <bk-checkbox-label empty="true" for="loglevel_{{::key}}_checkbox">
+                                </bk-checkbox-label>
+                            </bk-list-form-item>
+                            <bk-list-title id="loglevel_{{::key}}_title" data-loglevel="{{::key}}">
+                                {{ ::logLevel.name }}
+                            </bk-list-title>
+                        </bk-list-item>
+                    </bk-list>
+                </bk-popover-body>
+            </bk-popover>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-input-group compact="true" style="max-width:30%;">
+                <bk-input-group-addon>
+                    <span class="sap-icon--search" role="presentation"></span>
+                </bk-input-group-addon>
+                <bk-input type="search" ng-model="search.text" ng-change="selectLogLevel()" placeholder="Search...">
+                </bk-input>
+            </bk-input-group>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button state="transparent" label="Clear" ng-click="clearLog()"></bk-button>
+        </bk-toolbar>
+        <div id="logContent" class="bk-stretch" bk-scrollbar>
+            <div class="fd-text bk-padding--tiny logLine" data-loglevel="{{::log.level}}" ng-repeat="log in logs track by log.id">
+                {{::log.date}} [{{::log.level}}] {{::log.message}}
+            </div>
+        </div>
+        <theme></theme>
+    </body>
+
+</html>

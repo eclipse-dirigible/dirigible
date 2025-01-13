@@ -1,0 +1,106 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="jobAssign" ng-controller="JobAssignController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-jobs/configs/job-assign-window.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar has-title="true">
+            <bk-toolbar-title>{{ job.name }}</bk-toolbar-title>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-form-item style="width: 20rem">
+                <bk-form-input-message state="{{job.email && !isEmailValid() ? 'error' : undefined }}" message="errorMsg">
+                    <bk-input id="fimg" compact="true" type="text" placeholder="Enter email..." state="{{job.email && !isEmailValid() ? 'error' : undefined }}" ng-model="job.email"></bk-input>
+                </bk-form-input-message>
+            </bk-form-item>
+            <bk-button compact="true" state="transparent" label="Add" ng-click="addEmail()" ng-disabled="!isAddButtonEnabled()"></bk-button>
+        </bk-toolbar>
+        <bk-scrollbar class="bk-stretch bk-center">
+            <bk-list class="bk-full-height" ng-if="emails.length > 0">
+                <bk-list-item ng-repeat="email in emails track by $index">
+                    <bk-list-icon glyph="sap-icon--email"></bk-list-icon>
+                    <bk-list-title>{{email.email}}</bk-list-title>
+                    <bk-button bk-list-button state="transparent" glyph="sap-icon--delete" aria-label="delete" ng-click="removeEmail(email.id)"></bk-button>
+                </bk-list-item>
+            </bk-list>
+            <bk-message-page ng-if="emails.length === 0" glyph="sap-icon--email">
+                <bk-message-page-title>This list is empty</bk-message-page-title>
+                <bk-message-page-subtitle style="text-align: center;">Enter an email address of the administrators who will be notified for this jobs events</bk-message-page-subtitle>
+            </bk-message-page>
+        </bk-scrollbar>
+        <script type="text/javascript">
+            angular.module('jobAssign', ['blimpKit', 'platformView']).controller('JobAssignController', ($scope, $http, ViewParameters) => {
+                const dialogHub = new DialogHub()
+                $scope.errorMsg = 'Please, enter a valid email address';
+                $scope.emails = [];
+                function getEmails (job) {
+                    $http.get(`/services/jobs/emails/${job.name}`).then((response) => {
+                        $scope.emails = response.data;
+                    }, (response) => {
+                        console.error(response.data);
+                        dialogHub.showAlert({
+                            title: 'Could not load emails',
+                            message: 'There was an error while loading the email list. Check console for errors.',
+                            type: AlertTypes.Error,
+                            preformatted: false,
+                        });
+                    });
+                }
+
+                $scope.job = ViewParameters.get();
+                getEmails($scope.job);
+
+                $scope.isEmailValid = () => /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/.test($scope.job.email);
+
+                $scope.isAddButtonEnabled = () => $scope.job.email && $scope.isEmailValid();
+
+                $scope.addEmail = () => $http.post(`/services/jobs/emailadd/${$scope.job.name}`, $scope.job.email).then((response) => {
+                    $scope.job.email= '';
+                    getEmails($scope.job);
+                }, (response) => {
+                    console.error(response.data);
+                    dialogHub.showAlert({
+                        title: 'Could not add email',
+                        message: 'There was an error while adding the new email. Check console for errors.',
+                        type: AlertTypes.Error,
+                        preformatted: false,
+                    });
+                });
+
+                $scope.removeEmail = (id) => $http.delete(`/services/jobs/emailremove/${id}`).then((response) => {
+                    getEmails($scope.job);
+                }, (response) => {
+                    console.error(response.data);
+                    dialogHub.showAlert({
+                        title: 'Could not remove email',
+                        message: 'There was an error while removing the email. Check console for errors.',
+                        type: AlertTypes.Error,
+                        preformatted: false,
+                    });
+                });
+            });
+        </script>
+        <theme></theme>
+    </body>
+
+</html>

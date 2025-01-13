@@ -1,0 +1,4 @@
+{
+    "name": "dashboard-widgets",
+    "description": "Extension Point For the Widgets Shown on the Dashboard"
+}

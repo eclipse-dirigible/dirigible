@@ -1,0 +1,5 @@
+{
+    "module": "menu-projects/templates/menu-mjs.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "JavaScript ESM Workbench New Menu Extension"
+}

@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql;
 
@@ -17,6 +16,9 @@ public enum DataType {
 
     /** The varchar. */
     VARCHAR("VARCHAR"),
+
+    /** The text. */
+    TEXT("TEXT"),
 
     /** The char. */
     CHAR("CHAR"),
@@ -30,11 +32,17 @@ public enum DataType {
     /** The time. */
     TIME("TIME"),
 
+    /** The datetime. */
+    DATETIME("DATETIME"),
+
     /** The timestamp. */
     TIMESTAMP("TIMESTAMP"),
 
     /** The integer. */
     INTEGER("INTEGER"),
+
+    /** The int. */
+    INT("INT"),
 
     /** The tinyint. */
     TINYINT("TINYINT"),
@@ -127,7 +135,7 @@ public enum DataType {
     NUMERIC("NUMERIC");
 
     /** The name. */
-    private String name;
+    private final String name;
 
     /**
      * Instantiates a new data type.
@@ -152,6 +160,7 @@ public enum DataType {
      *
      * @return the string
      */
+    @Override
     public String toString() {
         return name;
     }
@@ -172,5 +181,14 @@ public enum DataType {
         throw new IllegalArgumentException("DataType not found: " + name);
     }
 
+    /**
+     * Checks if is of type.
+     *
+     * @param dataType the data type
+     * @return true, if is of type
+     */
+    public boolean isOfType(String dataType) {
+        return name.equalsIgnoreCase(null != dataType ? dataType.trim() : dataType);
+    }
 
 }

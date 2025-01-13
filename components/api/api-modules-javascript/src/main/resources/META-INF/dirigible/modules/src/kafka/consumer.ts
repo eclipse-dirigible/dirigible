@@ -12,19 +12,34 @@
 
 const KafkaFacade = Java.type("org.eclipse.dirigible.components.api.kafka.KafkaFacade");
 
-export function topic(destination, configuration) {
-    return new Topic(destination, configuration);
-};
+
+export class Consumer {
+
+    public static topic(destination: string, configuration: { [key: string]: string } = {}): Topic {
+        return new Topic(destination, configuration);
+    }
+}
 
 class Topic {
+    private destination: string;
+    private configuration: { [key: string]: string } = {};
 
-    constructor(private destination, private configuration) { }
+    constructor(destination: string, configuration: { [key: string]: string } = {}) {
+        this.destination = destination;
+        this.configuration = configuration;
+    }
 
-    startListening(handler, timeout) {
-        KafkaFacade.startListening(this.destination, handler, timeout, this.configuration);
-    };
+    public startListening(handler: string, timeout: number): void {
+        KafkaFacade.startListening(this.destination, handler, timeout, JSON.stringify(this.configuration));
+    }
 
-    stopListening(handler, timeout) {
-        KafkaFacade.stopListening(this.destination, this.configuration);
-    };
-};
+    public stopListening(): void {
+        KafkaFacade.stopListening(this.destination, JSON.stringify(this.configuration));
+    }
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+    // @ts-ignore
+    module.exports = Consumer;
+}

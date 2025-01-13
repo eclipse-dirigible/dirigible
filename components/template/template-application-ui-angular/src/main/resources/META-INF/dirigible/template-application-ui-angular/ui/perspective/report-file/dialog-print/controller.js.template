@@ -1,0 +1,71 @@
+#set($dollar = '$')
+angular.module('page', ["ideUI", "ideView", "entityApi"])
+    .config(["messageHubProvider", function (messageHubProvider) {
+        messageHubProvider.eventIdPrefix = '${projectName}.Reports.${name}';
+    }])
+    .config(["entityApiProvider", function (entityApiProvider) {
+        entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
+    }])
+    .controller('PageController', ['$scope', 'messageHub', 'entityApi', 'ViewParameters', function ($scope, messageHub, entityApi, ViewParameters) {
+
+		let params = ViewParameters.get();
+		if (Object.keys(params).length) {         
+            const filterEntity = params.filterEntity ?? {};
+
+			const filter = {
+			};
+#foreach ($parameter in $parameters)
+			if (filterEntity.${parameter.name}) {
+#if($parameter.typeTypescript == 'Date')
+				filter.${parameter.name} = new Date(filterEntity.${parameter.name});
+#else
+				filter.${parameter.name} = filterEntity.${parameter.name};
+#end
+			}
+#end
+
+            $scope.filter = filter;
+		}
+
+        $scope.loadPage = function (filter) {
+            if (!filter && $scope.filter) {
+                filter = $scope.filter;
+            }
+            let request;
+            if (filter) {
+                request = entityApi.search(filter);
+            } else {
+                request = entityApi.list();
+            }
+            request.then(function (response) {
+                if (response.status != 200) {
+                    messageHub.showAlertError("${name}", `Unable to list/filter ${name}: '${response.message}'`);
+                    return;
+                }
+#if($hasDates)
+
+                response.data.forEach(e => {
+#foreach ($column in $columns)
+#if($column.typeTypescript == 'Date')
+                    if (e['${column.alias}']) {
+                        e['${column.alias}'] = new Date(e['${column.alias}']);
+                    }
+#end
+#end
+                });
+
+#end
+                $scope.data = response.data;
+                setTimeout(() => {
+                    window.print();
+
+                }, 250);
+            });
+        };
+        $scope.loadPage($scope.filter);
+
+        window.onafterprint = () => {
+            messageHub.closeDialogWindow("${projectName}-Reports-${name}-print");
+        }
+
+    }]);

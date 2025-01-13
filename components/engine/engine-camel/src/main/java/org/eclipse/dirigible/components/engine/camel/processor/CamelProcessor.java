@@ -1,52 +1,65 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.engine.camel.processor;
 
-import org.apache.camel.CamelContext;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
 import org.apache.camel.FluentProducerTemplate;
+import org.apache.camel.component.platform.http.springboot.CamelRequestHandlerMapping;
+import org.apache.camel.impl.engine.DefaultRoutesLoader;
 import org.apache.camel.spi.Resource;
 import org.apache.camel.spi.RoutesLoader;
-
 import org.apache.camel.spring.boot.SpringBootCamelContext;
 import org.apache.camel.support.ResourceHelper;
 import org.eclipse.dirigible.components.engine.camel.domain.Camel;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
-import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
-import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
+/**
+ * The Class CamelProcessor.
+ */
 @Component
 public class CamelProcessor {
+
+    /** The context. */
     private final SpringBootCamelContext context;
 
-    private final RequestMappingHandlerMapping camelMapping;
+    /** The camel request handler mapping. */
+    private final CamelRequestHandlerMapping camelRequestHandlerMapping;
 
+    /** The loader. */
     private final RoutesLoader loader;
 
+    /** The camels. */
     private final Map<Long, Resource> camels = new HashMap<>();
 
+    /**
+     * Instantiates a new camel processor.
+     *
+     * @param context the context
+     * @param camelRequestHandlerMapping the camel request handler mapping
+     */
     @Autowired
-    public CamelProcessor(CamelContext context, @Qualifier("platformHttpEngineRequestMapping") RequestMappingHandlerMapping camelMapping) {
-        this.context = context.adapt(SpringBootCamelContext.class);
-        this.camelMapping = camelMapping;
-        loader = this.context.getRoutesLoader();
+    public CamelProcessor(SpringBootCamelContext context, CamelRequestHandlerMapping camelRequestHandlerMapping) {
+        this.context = context;
+        this.camelRequestHandlerMapping = camelRequestHandlerMapping;
+        loader = new DefaultRoutesLoader(context);
     }
 
+    /**
+     * On create or update.
+     *
+     * @param camel the camel
+     */
     public void onCreateOrUpdate(Camel camel) {
         Resource resource = ResourceHelper.fromBytes("any.yaml", camel.getContent());
         camels.put(camel.getId(), resource);
@@ -54,12 +67,20 @@ public class CamelProcessor {
         addAllRoutes();
     }
 
+    /**
+     * On remove.
+     *
+     * @param camel the camel
+     */
     public void onRemove(Camel camel) {
         camels.remove(camel.getId());
         removeAllRoutes();
         addAllRoutes();
     }
 
+    /**
+     * Adds the all routes.
+     */
     private void addAllRoutes() {
         camels.values()
               .forEach(routesResource -> {
@@ -71,26 +92,30 @@ public class CamelProcessor {
               });
     }
 
+    /**
+     * Removes the all routes.
+     */
     private void removeAllRoutes() {
         try {
             context.stopAllRoutes();
             context.removeAllRoutes();
-            unregisterEndpoints();
-
+            camelRequestHandlerMapping.getHandlerMethods()
+                                      .forEach((info, method) -> camelRequestHandlerMapping.unregisterMapping(info));
         } catch (Exception e) {
             throw new CamelProcessorException(e);
         }
     }
 
-    private void unregisterEndpoints() {
-        List<RequestMappingInfo> mappingsToRemove = new ArrayList<>();
-        camelMapping.getHandlerMethods()
-                    .forEach((info, method) -> mappingsToRemove.add(info));
-        mappingsToRemove.forEach(info -> camelMapping.unregisterMapping(info));
-    }
-
+    /**
+     * Invoke route.
+     *
+     * @param routeId the route id
+     * @param payload the payload
+     * @param headers the headers
+     * @return the object
+     */
     public Object invokeRoute(String routeId, Object payload, Map<String, Object> headers) {
-        try (FluentProducerTemplate producer = context.createFluentProducerTemplate();) {
+        try (FluentProducerTemplate producer = context.createFluentProducerTemplate()) {
             return producer.withHeaders(headers)
                            .withBody(payload)
                            .to(routeId)

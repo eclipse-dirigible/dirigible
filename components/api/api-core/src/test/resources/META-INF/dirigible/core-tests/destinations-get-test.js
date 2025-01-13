@@ -9,13 +9,12 @@
  * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
+import { Destinations } from 'sdk/core/destinations';
+import { Assert } from 'test/assert';
 
-var destinations = require('core/destinations');
-var assertTrue = require('test/assert').assertTrue;
-
-var destination = {};
+const destination = {};
 destination.name1 = 'value1';
-destinations.set('destination1', destination);
-var result = destinations.get('destination1');
+Destinations.set('destination1', destination);
+const result = Destinations.get('destination1');
 
-assertTrue(result.name1 === 'value1');
+Assert.assertTrue(result.name1 === 'value1');

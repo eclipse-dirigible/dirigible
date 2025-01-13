@@ -1,0 +1,33 @@
+{
+    "name": "TEST_TABLE_READERS3",
+    "type": "TABLE",
+    "columns": [
+        {
+            "name": "READER_ID",
+            "type": "INTEGER",
+            "length": "0",
+            "nullable": false,
+            "primaryKey": true,
+            "defaultValue": "",
+            "unique": false
+        },
+        {
+            "name": "READER_FIRST_NAME",
+            "type": "VARCHAR",
+            "length": "50",
+            "nullable": false,
+            "primaryKey": false,
+            "defaultValue": "",
+            "unique": false
+        },
+        {
+            "name": "READER_LAST_NAME",
+            "type": "VARCHAR",
+            "length": "50",
+            "nullable": false,
+            "primaryKey": false,
+            "defaultValue": "",
+            "unique": false
+        }
+    ]
+}

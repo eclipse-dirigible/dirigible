@@ -1,0 +1,101 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="loggers" ng-controller="LoggersController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="configs/loggers-view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="js/loggers.js"></script>
+        <style>
+            [title='Enable'] {
+                color: var(--sapTextColor);
+            }
+
+            [title='Disable'] {
+                color: var(--sapNegativeTextColor);
+            }
+
+        </style>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{::state.busyText}}</bk-busy-indicator-extended>
+        <bk-toolbar compact="true" type="solid" ng-show="!state.error && !state.isBusy">
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-input type="text" placeholder="Filter by name" ng-keyup="searchContent()" ng-model="search.name" style="max-width: 30%"></bk-input>
+            <bk-button state="transparent" glyph="sap-icon--clear-filter" title="Reset filter" aria-label="Reset filter" ng-click="clearSearch()" ng-disabled="search.text === ''"></bk-button>
+        </bk-toolbar>
+        <bk-scrollbar class="bk-stretch" ng-show="!state.error && !state.isBusy">
+            <table bk-table display-mode="compact" outer-borders="bottom">
+                <thead bk-table-header sticky="true">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>#</th>
+                        <th bk-table-header-cell>Name</th>
+                        <th bk-table-header-cell>Severity</th>
+                        <th bk-table-header-cell>Trace</th>
+                        <th bk-table-header-cell>Debug</th>
+                        <th bk-table-header-cell>Info</th>
+                        <th bk-table-header-cell>Warning</th>
+                        <th bk-table-header-cell>Error</th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat="logger in loggers track by $index" hoverable="true" activable="false" ng-hide="search.searching && logger.hidden">
+                        <td bk-table-cell>{{::$index + 1}}</td>
+                        <td bk-table-cell>{{::logger.name}}</td>
+                        <td bk-table-cell>{{logger.severity || '-'}}</td>
+                        <td bk-table-cell>
+                            <bk-button state="transparent" glyph="{{ logger.severity === ' ALL' || logger.severity === 'TRACE' ? 'sap-icon--connected' : 'sap-icon--disconnected' }}"
+                                title="{{ logger.severity !== ' ALL' && logger.severity !== 'TRACE' ? 'Enable' : 'Disable' }}" aria-label="{{ logger.severity !== ' ALL' || logger.severity !== 'TRACE' ? 'Enable' : 'Disable' }}"
+                                ng-click="setSeverity($index, 'TRACE')">
+                            </bk-button>
+                        </td>
+                        <td bk-table-cell>
+                            <bk-button state="transparent" glyph="{{ logger.severity === 'DEBUG' ? 'sap-icon--connected' : 'sap-icon--disconnected' }}" title="{{ logger.severity !== 'DEBUG' ? 'Enable' : 'Disable' }}"
+                                aria-label="{{ logger.severity !== 'DEBUG' ? 'Enable' : 'Disable' }}" ng-click="setSeverity($index, 'DEBUG')">
+                            </bk-button>
+                        </td>
+                        <td bk-table-cell>
+                            <bk-button state="transparent" glyph="{{ logger.severity === 'INFO' ? 'sap-icon--connected' : 'sap-icon--disconnected' }}" title="{{ logger.severity !== 'INFO' ? 'Enable' : 'Disable' }}"
+                                aria-label="{{ logger.severity !== 'INFO' ? 'Enable' : 'Disable' }}" ng-click="setSeverity($index, 'INFO')">
+                            </bk-button>
+                        </td>
+                        <td bk-table-cell>
+                            <bk-button state="transparent" glyph="{{ logger.severity === 'WARN' ? 'sap-icon--connected' : 'sap-icon--disconnected' }}" title="{{ logger.severity !== 'WARN' ? 'Enable' : 'Disable' }}"
+                                aria-label="{{ logger.severity !== 'WARN' ? 'Enable' : 'Disable' }}" ng-click="setSeverity($index, 'WARN')">
+                            </bk-button>
+                        </td>
+                        <td bk-table-cell>
+                            <bk-button state="transparent" glyph="{{ logger.severity === 'ERROR' ? 'sap-icon--connected' : 'sap-icon--disconnected' }}" title="{{ logger.severity !== 'ERROR' ? 'Enable' : 'Disable' }}"
+                                aria-label="{{ logger.severity !== 'ERROR' ? 'Enable' : 'Disable' }}" ng-click="setSeverity($index, 'ERROR')">
+                            </bk-button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </bk-scrollbar>
+        <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+            <bk-message-page-title>Something went wrong!</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+        </bk-message-page>
+        <theme></theme>
+    </body>
+
+</html>

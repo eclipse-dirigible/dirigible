@@ -1,0 +1,5 @@
+{
+    "module": "view-transfer/configs/transfer-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Transfer view"
+}

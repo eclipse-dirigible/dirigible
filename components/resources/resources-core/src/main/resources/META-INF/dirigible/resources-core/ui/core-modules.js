@@ -1,31 +1,33 @@
 /*
- * Copyright (c) 2010-2023 SAP and others.
+ * Copyright (c) 2024 Eclipse Dirigible contributors
+ *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * Contributors:
- *   SAP - initial API and implementation
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
  */
 /*
  * Provides key microservices for constructing and managing the IDE UI
  */
-angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideTheming', 'ideMessageHub'])
+
+function isEmbedded() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const embedded = urlParams.get('embedded');
+    if (embedded !== null && embedded !== undefined) return true;
+    return false;
+}
+angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideExtensions', 'ideTheming', 'ideMessageHub'])
     .constant('branding', brandingInfo)
     .constant('perspective', perspectiveData)
     .constant('extensionPoint', {})
+    .constant('isEmbedded', isEmbedded())
     .config(function config($compileProvider) {
         $compileProvider.debugInfoEnabled(false);
-    }).service('Perspectives', ['$resource', "extensionPoint", function ($resource, extensionPoint) {
-        let url = '/services/js/resources-core/services/perspectives.js';
-        if (extensionPoint && extensionPoint.perspectives) {
-            url = `${url}?extensionPoint=${extensionPoint.perspectives}`;
-        }
-        return $resource(url);
-    }]).service('Menu', ['$resource', function ($resource) {
-        return $resource('/services/js/resources-core/services/menu.js');
-    }]).service('User', ['$http', function ($http) {
+        $compileProvider.commentDirectivesEnabled(false);
+    }).factory('User', ['$http', function ($http) {
         return {
             get: function () {
                 let user = { name: undefined };
@@ -38,12 +40,6 @@ angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideTheming', 'ideM
                 return user;
             }
         };
-    }]).service('DialogWindows', ['$resource', "extensionPoint", function ($resource, extensionPoint) {
-        let url = '/services/js/resources-core/services/dialog-windows.js';
-        if (extensionPoint && extensionPoint.dialogWindows) {
-            url = `${url}?extensionPoint=${extensionPoint.dialogWindows}`;
-        }
-        return $resource(url);
     }]).filter('removeSpaces', [function () {
         return function (string) {
             if (!angular.isString(string)) return string;
@@ -58,7 +54,7 @@ angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideTheming', 'ideM
                 scope.name = branding.name;
                 scope.perspective = perspective;
             },
-            template: '<title>{{perspective.name || "Loading..."}} | {{name}}</title>'
+            template: '<title>{{::perspective.name || "Loading..."}} | {{::name}}</title>'
         };
     }]).directive('dgBrandIcon', ['branding', function (branding) {
         return {
@@ -68,10 +64,14 @@ angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideTheming', 'ideM
             link: function (scope) {
                 scope.icon = branding.icons.faviconIco;
             },
-            template: `<link rel="icon" type="image/x-icon" ng-href="{{icon}}">`
+            template: `<link rel="icon" type="image/x-icon" ng-href="{{::icon}}">`
         };
-    }]).directive('ideContextmenu', ['messageHub', '$window', function (messageHub, $window) {
-        return {
+    }]).directive('ideContextmenu', ['messageHub', '$window', 'isEmbedded', function (messageHub, $window, isEmbedded) {
+        if (isEmbedded) return {
+            restrict: 'E',
+            replace: false
+        };
+        else return {
             restrict: 'E',
             replace: true,
             link: function (scope, element) {
@@ -91,6 +91,7 @@ angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideTheming', 'ideM
                     menu.classList.add('dg-invisible');
                     openedMenuId = '';
                     scope.hideAllSubmenus();
+                    scope.menuItems.length = 0;
                 });
 
                 element.on('contextmenu', function (event) {
@@ -100,6 +101,7 @@ angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideTheming', 'ideM
                     menu.classList.add('dg-invisible');
                     openedMenuId = '';
                     scope.hideAllSubmenus();
+                    scope.menuItems.length = 0;
                 });
 
                 scope.hideAllSubmenus = function () {
@@ -111,7 +113,8 @@ angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideTheming', 'ideM
                         submenusLinks[i].setAttribute("aria-expanded", false);
                         submenusLinks[i].classList.remove("is-expanded");
                     }
-                }
+                    messageHub.triggerEvent('ide-contextmenu.close', true);
+                };
 
                 scope.menuHovered = function () {
                     if (openedMenuId !== "") {
@@ -235,8 +238,12 @@ angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideTheming', 'ideM
             },
             templateUrl: '/services/web/resources-core/ui/templates/contextmenuSubmenu.html'
         };
-    }]).directive('ideHeader', ['$cookies', 'branding', 'theming', 'User', 'Menu', 'messageHub', function ($cookies, branding, theming, User, Menu, messageHub) {
-        return {
+    }]).directive('ideHeader', ['$cookies', '$http', 'branding', 'theming', 'User', 'Extensions', 'messageHub', 'isEmbedded', function ($cookies, $http, branding, theming, User, Extensions, messageHub, isEmbedded) {
+        if (isEmbedded) return {
+            restrict: 'E',
+            replace: false
+        };
+        else return {
             restrict: 'E',
             replace: true,
             scope: {
@@ -263,10 +270,9 @@ angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideTheming', 'ideM
                     scope.user = User.get();
 
                     function loadMenu() {
-                        Menu.query({ id: scope.menuExtId }).$promise
-                            .then(function (data) {
-                                scope.menu = data;
-                            });
+                        Extensions.get('menu', scope.menuExtId).then(function (data) {
+                            scope.menu = data;
+                        });
                     }
 
                     scope.branding = branding;
@@ -288,19 +294,42 @@ angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideTheming', 'ideM
                         theming.setTheme(themeId);
                     };
 
-                    scope.resetTheme = function () {
-                        scope.resetViews();
-                        for (let cookie in $cookies.getAll()) {
-                            if (cookie.startsWith("DIRIGIBLE")) {
-                                $cookies.remove(cookie, { path: "/" });
+                    scope.resetAll = function () {
+                        messageHub.showDialogAsync(
+                            `Reset ${scope.branding.brand}`,
+                            ['This will clear all settings, open tabs and cache.', `${scope.branding.brand} will then reload.`, 'Do you wish to continue?'],
+                            [{
+                                id: 'btnConfirm',
+                                type: 'emphasized',
+                                label: 'Yes',
+                            }, {
+                                id: 'btnCancel',
+                                type: 'transparent',
+                                label: 'No',
+                            }],
+                        ).then(function (msg) {
+                            if (msg.data === "btnConfirm") {
+                                messageHub.showBusyDialog(
+                                    'ideResetDialogBusy',
+                                    'Resetting',
+                                    'ide.dialog.reset.all.done'
+                                );
+                                localStorage.clear();
+                                theming.reset();
+                                $http.get('/services/js/resources-core/services/clear-cache.js').then(function () {
+                                    for (let cookie in $cookies.getAll()) {
+                                        if (cookie.startsWith('DIRIGIBLE')) {
+                                            $cookies.remove(cookie, { path: '/' });
+                                        }
+                                    }
+                                    location.reload();
+                                }, function (error) {
+                                    console.log(error);
+                                    messageHub.hideBusyDialog('ideResetDialogBusy');
+                                    messageHub.showAlertError('Failed to reset', 'There was an error during the reset process. Please refresh manually.');
+                                });
                             }
-                        }
-                    };
-
-                    scope.resetViews = function () {
-                        localStorage.clear();
-                        theming.reset();
-                        location.reload();
+                        });
                     };
 
                     scope.logout = function () {
@@ -334,17 +363,17 @@ angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideTheming', 'ideM
             template: `<div fd-tool-header-element ng-repeat="menuItem in menuList track by $index">
                 <fd-popover>
                     <fd-popover-control>
-                        <fd-button fd-tool-header-button compact="true" dg-label="{{ menuItem.label }}" dg-type="transparent"
-                            is-menu="true" aria-label="menu button {{ menuItem.label }}">
+                        <fd-button fd-tool-header-button compact="true" dg-label="{{ ::menuItem.label }}" dg-type="transparent"
+                            is-menu="true" aria-label="menu button {{ ::menuItem.label }}">
                         </fd-button>
                     </fd-popover-control>
-                    <fd-popover-body no-arrow="true" can-scroll="isScrollable()">
+                    <fd-popover-body no-arrow="true" can-scroll="::isScrollable()">
                         <fd-menu aria-label="header menu">
                             <fd-menu-item ng-repeat-start="item in menuItem.items track by $index" ng-if="!item.items"
-                                title="{{ item.label }}" ng-click="menuHandler(item)" has-separator="item.divider">
+                                title="{{ ::item.label }}" ng-click="::menuHandler(item)" has-separator="::item.divider">
                             </fd-menu-item>
-                            <fd-menu-sublist ng-if="item.items" has-separator="item.divider" title="{{ item.label }}" can-scroll="isScrollable(item.items)" ng-repeat-end>
-                                <header-submenu sublist="item.items" menu-handler="menuHandler"></header-submenu>
+                            <fd-menu-sublist ng-if="item.items" has-separator="::item.divider" title="{{ ::item.label }}" can-scroll="::isScrollable(item.items)" ng-repeat-end>
+                                <header-submenu sublist="::item.items" menu-handler="::menuHandler"></header-submenu>
                             </fd-menu-sublist>
                         </fd-menu>
                     </fd-popover-body>
@@ -367,16 +396,17 @@ angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideTheming', 'ideM
                     return true;
                 };
             },
-            template: `<fd-menu-item ng-repeat-start="item in sublist track by $index" ng-if="!item.items" has-separator="item.divider" title="{{ item.label }}" ng-click="menuHandler(item)"></fd-menu-item>
-<fd-menu-sublist ng-if="item.items" has-separator="item.divider" title="{{ item.label }}" can-scroll="isScrollable($index)" ng-repeat-end><header-submenu sublist="item.items" menu-handler="menuHandler"></header-submenu></fd-menu-sublist>`,
+            template: `<fd-menu-item ng-repeat-start="item in sublist track by $index" ng-if="!item.items" has-separator="::item.divider" title="{{ ::item.label }}" ng-click="::menuHandler(item)"></fd-menu-item>
+<fd-menu-sublist ng-if="item.items" has-separator="::item.divider" title="{{ ::item.label }}" can-scroll="::isScrollable($index)" ng-repeat-end><header-submenu sublist="::item.items" menu-handler="::menuHandler"></header-submenu></fd-menu-sublist>`,
         };
-    }).directive('ideContainer', ['perspective', function (perspective) {
+    }).directive('ideContainer', ['perspective', 'isEmbedded', function (perspective, isEmbedded) {
         return {
             restrict: 'E',
             transclude: true,
             replace: true,
             link: {
                 pre: function (scope) {
+                    scope.withSidebar = !isEmbedded;
                     scope.shouldLoad = true;
                     if (!perspective.id || !perspective.name) {
                         console.error('<ide-container> requires perspective service data');
@@ -384,19 +414,18 @@ angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideTheming', 'ideM
                     }
                 },
             },
-            template: `<div class="dg-main-container">
-                <ide-sidebar></ide-sidebar>
-                <ng-transclude ng-if="shouldLoad" class="dg-perspective-container"></ng-transclude>
-            </div>`
+            template: `<div class="dg-main-container"><ide-sidebar ng-if="withSidebar"></ide-sidebar><ng-transclude ng-if="shouldLoad" class="dg-perspective-container"></ng-transclude></div>`
         }
-    }]).directive('ideSidebar', ['Perspectives', 'perspective', 'messageHub', function (Perspectives, perspective, messageHub) {
+    }]).directive('ideSidebar', ['Extensions', 'extensionPoint', 'perspective', 'messageHub', function (Extensions, extensionPoint, perspective, messageHub) {
         return {
             restrict: 'E',
             replace: true,
             link: {
                 pre: function (scope) {
                     scope.activeId = perspective.id;
-                    scope.perspectives = Perspectives.query();
+                    Extensions.get('perspective', extensionPoint.perspectives).then(function (response) {
+                        scope.perspectives = response;
+                    });
                     scope.getIcon = function (icon) {
                         if (icon) return icon;
                         return "/services/web/resources/images/unknown.svg";
@@ -426,12 +455,61 @@ angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideTheming', 'ideM
     /**
      * Used for Dialogs and Window Dialogs
      */
-    .directive('ideDialogs', ['messageHub', 'DialogWindows', 'perspective', function (messageHub, DialogWindows, perspective) {
-        return {
+    .directive('ideDialogs', ['messageHub', 'Extensions', 'extensionPoint', 'perspective', 'isEmbedded', function (messageHub, Extensions, extensionPoint, perspective, isEmbedded) {
+        if (isEmbedded) return {
+            restrict: 'E',
+            replace: false,
+            link: {
+                pre: function () {
+                    let dialogWindows;
+                    Extensions.get('dialogWindow', extensionPoint.dialogWindows).then(function (data) {
+                        dialogWindows = data;
+                    });
+                    messageHub.onDidReceiveMessage(
+                        'ide.dialogWindow',
+                        function (data) {
+                            if (!data.serviceData) {
+                                let found = false;
+                                for (let i = 0; i < dialogWindows.length; i++) {
+                                    if (dialogWindows[i].id === data.dialogWindowId) {
+                                        found = true;
+                                        messageHub.postMessage('ide.embedded.dialogWindow', {
+                                            params: data.params,
+                                            callbackTopic: data.callbackTopic,
+                                            closable: data.closable,
+                                            serviceData: dialogWindows[i]
+                                        });
+                                        break;
+                                    }
+                                }
+                                if (!found) console.error(
+                                    `Dialog Window Error: There is no window dialog with such id: ${data.dialogWindowId}`
+                                );
+                            }
+                        },
+                        true
+                    );
+                }
+            }
+        };
+        else return {
             restrict: 'E',
             replace: true,
+            scope: {
+                extensionPoints: '<?' // List of extension points. Internal use only, do not document!
+            },
             link: function (scope, element) {
-                let dialogWindows = DialogWindows.query();
+                let dialogWindows;
+                Extensions.get('dialogWindow', extensionPoint.dialogWindows).then(function (data) {
+                    dialogWindows = data;
+                    if (scope.extensionPoints) {
+                        for (let i = 0; i < scope.extensionPoints.length; i++) {
+                            Extensions.get('dialogWindow', scope.extensionPoints[i]).then(function (data) {
+                                dialogWindows = dialogWindows.concat(data);
+                            });
+                        }
+                    }
+                });
                 let messageBox = element[0].querySelector("#dgIdeAlert");
                 let ideDialog = element[0].querySelector("#dgIdeDialog");
                 let ideBusyDialog = element[0].querySelector("#dgIdeBusyDialog");
@@ -1022,41 +1100,79 @@ angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideTheming', 'ideM
                     true
                 );
 
+                function getDialogParams(params) {
+                    if (params) {
+                        params['container'] = 'dialog';
+                        params['perspectiveId'] = perspective.id;
+                    } else {
+                        params = {
+                            container: 'layout',
+                            perspectiveId: perspective.id,
+                        };
+                    }
+                    return JSON.stringify(params);
+                }
+
+                messageHub.onDidReceiveMessage(
+                    "ide.embedded.dialogWindow",
+                    function (msg) {
+                        scope.$apply(function () {
+                            windows.push({
+                                title: msg.data.serviceData.label,
+                                dialogWindowId: msg.data.serviceData.id,
+                                callbackTopic: msg.data.callbackTopic,
+                                link: msg.data.serviceData.link,
+                                params: getDialogParams(msg.data.params),
+                                closable: msg.data.closable,
+                            });
+                            if (!scope.activeDialog && windows.length < 2) {
+                                scope.showWindow();
+                            }
+                        });
+                    },
+                    true
+                );
+
                 messageHub.onDidReceiveMessage(
                     "ide.dialogWindow",
                     function (data) {
                         scope.$apply(function () {
-                            let found = false;
-                            for (let i = 0; i < dialogWindows.length; i++) {
-                                if (dialogWindows[i].id === data.dialogWindowId) {
-                                    if (data.params) {
-                                        data.params['container'] = 'dialog';
-                                        data.params['perspectiveId'] = perspective.id;
-                                    } else {
-                                        data.parameters = {
-                                            container: 'layout',
-                                            perspectiveId: perspective.id,
-                                        };
-                                    }
-                                    found = true;
-                                    windows.push({
-                                        title: dialogWindows[i].label,
-                                        dialogWindowId: dialogWindows[i].id,
-                                        callbackTopic: data.callbackTopic,
-                                        link: dialogWindows[i].link,
-                                        params: JSON.stringify(data.params),
-                                        closable: data.closable,
-                                    });
-                                    break;
-                                }
-                            }
-                            if (found) {
+                            if (data.serviceData) {
+                                windows.push({
+                                    title: data.serviceData.label,
+                                    dialogWindowId: data.dialogWindowId,
+                                    callbackTopic: data.callbackTopic,
+                                    link: data.serviceData.link,
+                                    params: getDialogParams(data.params),
+                                    closable: data.closable,
+                                });
                                 if (!scope.activeDialog && windows.length < 2) {
                                     scope.showWindow();
                                 }
-                            } else console.error(
-                                "Dialog Window Error: There is no window dialog with such id: " + data.dialogWindowId
-                            );
+                            } else {
+                                let found = false;
+                                for (let i = 0; i < dialogWindows.length; i++) {
+                                    if (dialogWindows[i].id === data.dialogWindowId) {
+                                        found = true;
+                                        windows.push({
+                                            title: dialogWindows[i].label,
+                                            dialogWindowId: dialogWindows[i].id,
+                                            callbackTopic: data.callbackTopic,
+                                            link: dialogWindows[i].link,
+                                            params: getDialogParams(data.params),
+                                            closable: data.closable,
+                                        });
+                                        break;
+                                    }
+                                }
+                                if (found) {
+                                    if (!scope.activeDialog && windows.length < 2) {
+                                        scope.showWindow();
+                                    }
+                                } else console.error(
+                                    `Dialog Window Error: There is no window dialog with such id: ${data.dialogWindowId}`
+                                );
+                            }
                         });
                     },
                     true
@@ -1067,6 +1183,7 @@ angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideTheming', 'ideM
                     function (data) {
                         scope.$apply(function () {
                             if (data.dialogWindowId === scope.window.dialogWindowId) {
+                                if (windows.length > 1 && windows[1].dialogWindowId === data.dialogWindowId) windows.splice(1, 1);
                                 scope.hideWindow();
                             } else {
                                 for (let i = 0; i < windows.length; i++) {
@@ -1083,8 +1200,12 @@ angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideTheming', 'ideM
             },
             templateUrl: '/services/web/resources-core/ui/templates/ideDialogs.html'
         }
-    }]).directive('ideStatusBar', ['messageHub', function (messageHub) {
-        return {
+    }]).directive('ideStatusBar', ['messageHub', 'isEmbedded', function (messageHub, isEmbedded) {
+        if (isEmbedded) return {
+            restrict: 'E',
+            replace: false
+        };
+        else return {
             restrict: 'E',
             replace: true,
             link: function (scope) {

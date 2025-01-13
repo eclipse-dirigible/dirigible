@@ -1,0 +1,29 @@
+apiVersion: 1
+
+datasources:
+  - name: Jaeger
+    uid: traces
+    type: jaeger
+    url: http://jaeger:16686
+    editable: true
+    isDefault: false
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: logs-loki
+        customQuery: true
+        query: '{service_name=~".+"}'
+        spanEndTimeShift: 10s
+        spanStartTimeShift: "-10s"
+#      Open search config
+#      tracesToLogsV2:
+#        customQuery: false
+#        datasourceUid: logs-opensearch
+#        spanEndTimeShift: 10s
+#        spanStartTimeShift: "-10s"
+#        tags:
+#          - key: service.namespace
+#            value: resource.service.namespace
+      tracesToMetrics:
+        datasourceUid: metrics
+        spanEndTimeShift: 1m
+        spanStartTimeShift: "-1m"

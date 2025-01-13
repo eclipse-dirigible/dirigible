@@ -12,76 +12,84 @@
 
 const WebsocketsFacade = Java.type("org.eclipse.dirigible.components.api.websockets.WebsocketsFacade");
 
-export function createWebsocket(uri, handler) {
-	const session = WebsocketsFacade.createWebsocket(uri, handler);
-	return new WebsocketClient(session, uri, handler);
-};
+export class Websockets {
 
-export function getClients() {
-	const json = WebsocketsFacade.getClientsAsJson();
-	return JSON.parse(json);
-};
-
-export function getClient(id) {
-	const native = WebsocketsFacade.getClient(id);
-	if (native === null) {
-		return null;
+	public static createWebsocket(uri: string, handler: string): WebsocketClient {
+		const session = WebsocketsFacade.createWebsocket(uri, handler);
+		return new WebsocketClient(session, uri, handler);
 	}
-	return new WebsocketClient(native.getSession(), native.getSession().getRequestURI(), native.getHandler());
-};
 
-export function getClientByHandler(handler) {
-	const native = WebsocketsFacade.getClientByHandler(handler);
-	if (native === null) {
-		return null;
+	public static getClients(): { uri: string, handler: string }[] {
+		return JSON.parse(WebsocketsFacade.getClientsAsJson());
 	}
-	return new WebsocketClient(native.getSession(), native.getSession().getRequestURI(), native.getHandler());
-};
 
-export function getMessage() {
-	return __context.get('message');
-};
+	public static getClient(id: string): WebsocketClient | undefined {
+		const native = WebsocketsFacade.getClient(id);
+		return native ? new WebsocketClient(native.getSession(), native.getSession().getRequestURI(), native.getHandler()) : undefined;
+	}
 
-export function getError() {
-	return __context.get('error');
-};
+	public static getClientByHandler(handler: string): WebsocketClient | undefined {
+		const native = WebsocketsFacade.getClientByHandler(handler);
+		return native ? new WebsocketClient(native.getSession(), native.getSession().getRequestURI(), native.getHandler()) : undefined;
+	}
 
-export function getMethod() {
-	return __context.get('method');
-};
+	public static getMessage(): any {
+		return __context.get('message');
+	}
 
-export function isOnOpen() {
-	return getMethod() === "onopen";
-};
+	public static getError(): any {
+		return __context.get('error');
+	}
 
-export function isOnMessage() {
-	return getMethod() === "onmessage";
-};
+	public static getMethod(): any {
+		return __context.get('method');
+	}
 
-export function isOnError() {
-	return getMethod() === "onerror";
-};
+	public static isOnOpen(): boolean {
+		return this.getMethod() === "onopen";
+	}
 
-export function isOnClose() {
-	return getMethod() === "onclose";
-};
+	public static isOnMessage(): boolean {
+		return this.getMethod() === "onmessage";
+	}
+
+	public static isOnError(): boolean {
+		return this.getMethod() === "onerror";
+	}
+
+	public static isOnClose(): boolean {
+		return this.getMethod() === "onclose";
+	}
+}
 
 /**
  * WebsocketClient
  */
 class WebsocketClient {
+	private session: null | any;
+	private uri: string;
+	private handler: string;
 
-	constructor(private session, private uri, private handler) { }
+	constructor(session: null | any, uri: string, handler: string) {
+		this.session = session;
+		this.uri = uri;
+		this.handler = handler;
+	}
 
-	send(text) {
+	public send(text: string): void {
 		if (!this.session || this.session === null) {
 			console.error("Websocket Session is null");
 		}
 		this.session.send(this.uri, text);
 	};
 
-	close() {
+	public close(): void {
 		this.session.close();
-	};
+	}
+}
 
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Websockets;
 }

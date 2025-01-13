@@ -1,44 +1,53 @@
-<!DOCTYPE html>
+#set($dollar = '$')
+<!DOCTYPE HTML>
 <!--
-  ~ Copyright (c) 2010-2020 SAP and others.
-  ~ All rights reserved. This program and the accompanying materials
-  ~ are made available under the terms of the Eclipse Public License v2.0
-  ~ which accompanies this distribution, and is available at
-  ~ http://www.eclipse.org/legal/epl-v20.html
-  ~ Contributors:
-  ~ SAP - initial API and implementation
-  -->
+~ Copyright (c) 2010-2023 SAP and others.
+~ All rights reserved. This program and the accompanying materials
+~ are made available under the terms of the Eclipse Public License v2.0
+~ which accompanies this distribution, and is available at
+~ http://www.eclipse.org/legal/epl-v20.html
+~ Contributors:
+~ SAP - initial API and implementation
+-->
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="${fileName}" ng-controller="ViewController">
 
-<html lang="en" ng-app="view">
-<head>
-    <meta charset="utf-8">
+  <head>
+    <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Fake favicon to silent console errors -->
+    <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+    <!-- The title is set automatically from the perspective data -->
+    <title dg-view-title></title>
+    <!-- View data -->
+    <script type="text/javascript" src="services/${fileName}-view.js"></script>
+    <!-- Theme support -->
+    <theme></theme>
+    <!-- Dirigible Core UI -->
+    <script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=ide-view-js"></script>
+    <!-- Dirigible Core Styles -->
+    <link type="text/css" rel="stylesheet" href="/services/js/resources-core/services/loader.js?id=ide-view-css" />
+    <!-- View controller -->
+    <script type="text/javascript" src="js/${fileName}.js"></script>
+  </head>
 
-    <title>Eclipse Dirigible &trade; | View </title>
-
-    <link rel="shortcut icon" type="image/png" href="//services/web/resources/images/favicon.png" />
-	
-	<!-- FontAwesome icon set -->
-    <link type="text/css" href="/webjars/fontawesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
-		
-	<!-- Twitter Bootstrap with Theme Support -->
-	<link type="text/css" rel="stylesheet" href="//services/core/theme/bootstrap.min.css">
-	
-	<!-- jQuery -->
-	<script src="/webjars/jquery/3.6.0/jquery.min.js"></script>
-
-	<!-- AngularJS -->
-	<script src="/webjars/angularjs/1.8.2/angular.min.js"></script>
-	<script src="/webjars/angularjs/1.8.2/angular-resource.min.js"></script>
-	<script src="/webjars/angularjs/1.8.2/angular-animate.min.js"></script>
-	<script src="/webjars/angularjs/1.8.2/angular-sanitize.min.js"></script>
-
-	<script src="controller.js"></script>
-</head>
-
-<body ng-controller="ViewController">
-	<h1>Hello {{message}}!</h1>
-</body>
+  <body class="dg-vbox">
+    <fd-busy-indicator-extended class="dg-fill-parent" ng-hide="state.error || !state.isBusy" dg-size="l">
+      {{state.busyText}}
+    </fd-busy-indicator-extended>
+    <fd-scrollbar class="dg-fill-parent" ng-show="!state.error && !state.isBusy">
+      <fd-message-page glyph="sap-icon--message-information">
+        <fd-message-page-title>{{viewMessageTitle}}</fd-message-page-title>
+        <fd-message-page-subtitle>{{viewMessageSubitle}}</fd-message-page-subtitle>
+        <fd-message-page-actions>
+          <fd-button dg-label="Open 'Welcome' view" ng-click="openView()"></fd-button>
+        </fd-message-page-actions>
+      </fd-message-page>
+    </fd-scrollbar>
+    <fd-message-page glyph="sap-icon--error" ng-if="state.error">
+      <fd-message-page-title>Editor encounterd an error!</fd-message-page-title>
+      <fd-message-page-subtitle>{{errorMessage}}</fd-message-page-subtitle>
+    </fd-message-page>
+  </body>
 
 </html>

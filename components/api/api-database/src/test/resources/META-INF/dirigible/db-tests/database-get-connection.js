@@ -1,34 +1,23 @@
-/*
- * Copyright (c) 2022 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: 2022 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
-var database = require('db/database');
-var update = require('db/update');
-var assertTrue = require('test/assert').assertTrue;
+import { Database } from 'sdk/db/database';
+import { Update } from 'sdk/db/update';
+import { Assert } from 'test/assert';
 
-update.execute("CREATE TABLE T (A INT, B VARCHAR(10))");
-update.execute("INSERT INTO T VALUES (1, 'ABC')");
-update.execute("INSERT INTO T VALUES (2, 'DEF')");
+Update.execute("CREATE TABLE T (A INT, B VARCHAR(10))");
+Update.execute("INSERT INTO T VALUES (1, 'ABC')");
+Update.execute("INSERT INTO T VALUES (2, 'DEF')");
 
-var sql = "SELECT * FROM T WHERE A = ?";
+const sql = "SELECT * FROM T WHERE A = ?";
 
-var value;
-var connection = database.getConnection();
+let value;
+const connection = Database.getConnection();
 try {
-	var statement = connection.prepareStatement(sql);
+	const statement = connection.prepareStatement(sql);
 	try {
 		statement.setInt(1, 2);
-		var resultset = statement.executeQuery();
+		const resultset = statement.executeQuery();
 		try {
 			while (resultset.next()) {
-				var value = resultset.getString('B');
+				value = resultset.getString('B');
 				console.log('B: ' + value);
 			}
 		} finally {
@@ -41,6 +30,6 @@ try {
 	connection.close();
 }
 
-update.execute("DROP TABLE T");
+Update.execute("DROP TABLE T");
 
-assertTrue(value == 'DEF');
+Assert.assertTrue(value == 'DEF');

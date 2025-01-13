@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.security.service;
 
@@ -29,6 +28,9 @@ import java.util.List;
 import static org.eclipse.dirigible.components.security.repository.RoleRepositoryTest.createSecurityRole;
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * The Class RoleServiceTest.
+ */
 @SpringBootTest(classes = {RoleRepository.class, RoleService.class})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ComponentScan(basePackages = {"org.eclipse.dirigible.components"})
@@ -36,12 +38,17 @@ import static org.junit.jupiter.api.Assertions.*;
 @Transactional
 class RoleServiceTest {
 
+    /** The role repository. */
     @Autowired
     private RoleRepository roleRepository;
 
+    /** The role service. */
     @Autowired
     private RoleService roleService;
 
+    /**
+     * Setup.
+     */
     @BeforeEach
     public void setup() {
 
@@ -55,56 +62,75 @@ class RoleServiceTest {
         roleRepository.save(createSecurityRole("/a/b/c/test5.role", "test5", "description"));
     }
 
+    /**
+     * Cleanup.
+     */
     @AfterEach
     public void cleanup() {
         // Delete test security roles
         roleRepository.deleteAll();
     }
 
+    /**
+     * Test get all.
+     */
     @Test
     void testGetAll() {
         List<Role> securityRoleList = roleService.getAll();
         assertEquals(5, securityRoleList.size());
     }
 
+    /**
+     * Test find all.
+     */
     @Test
     void testFindAll() {
         Page<Role> securityRolePage = roleService.getPages(Pageable.ofSize(1));
         assertEquals(5, securityRolePage.getTotalElements());
     }
 
+    /**
+     * Test find by id.
+     */
     @Test
     void testFindById() {
-        Role securityRole = new Role("/a/b/c/test.role", "test", "description");
+        Role securityRole = new Role("/a/b/c/test.roles", "test", "description");
         roleService.save(securityRole);
         Role securityRoleServiceById = roleService.findById(securityRole.getId());
         assertEquals("test", securityRoleServiceById.getName());
     }
 
+    /**
+     * Test find by name.
+     */
     @Test
     void testFindByName() {
-        Role securityRole = new Role("/a/b/c/test.role", "test", "description");
+        Role securityRole = new Role("/a/b/c/test.roles", "test", "description");
         roleService.save(securityRole);
         Role securityRoleServiceByName = roleService.findByName("test");
         assertEquals(securityRole.getId(), securityRoleServiceByName.getId());
     }
 
+    /**
+     * Test save.
+     */
     @Test
     void testSave() {
-        Role securityRole = new Role("/a/b/c/test.role", "test", "description");
+        Role securityRole = new Role("/a/b/c/test.roles", "test", "description");
         roleService.save(securityRole);
         assertNotNull(roleService.findByName("test"));
     }
 
+    /**
+     * Test delete.
+     */
     @Test
     void testDelete() {
-        try {
-            Role securityRole = new Role("/a/b/c/test.role", "test", "description");
-            roleService.save(securityRole);
-            roleService.delete(securityRole);
+        Role securityRole = new Role("/a/b/c/test.roles", "test", "description");
+        roleService.save(securityRole);
+        roleService.delete(securityRole);
+        assertThrows(IllegalArgumentException.class, () -> {
             roleService.findByName("test");
-        } catch (Exception e) {
-            assertEquals("SecurityRole with name does not exist: test", e.getMessage());
-        }
+        });
     }
 }

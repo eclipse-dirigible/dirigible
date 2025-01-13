@@ -15,55 +15,57 @@
 
 const Configuration = Java.type("org.eclipse.dirigible.commons.config.Configuration");
 
-export function get(key, defaultValue?) {
-	if (defaultValue) {
-		return Configuration.get(key, defaultValue);
+export class Configurations {
+
+	public static get(key: string, defaultValue?: string): string | undefined {
+		const value = Configuration.get(key, defaultValue);
+		return value ?? undefined;
 	}
-	return Configuration.get(key);
-};
 
-export function set(key, value) {
-	Configuration.set(key, value);
-};
-
-export function remove(key) {
-	Configuration.remove(key);
-};
-
-export function getKeys() {
-	let keys = [];
-	let keysAsArray = Configuration.getKeys();
-	for (let i = 0; i < keysAsArray.length; i ++) {
-		keys.push(keysAsArray[i]);
+	public static set(key: string, value: string): void {
+		Configuration.set(key, value);
 	}
-	return keys;
-};
 
-export function load(path) {
-	Configuration.load(path);
-};
+	public static remove(key: string): void {
+		Configuration.remove(key);
+	}
 
-export function update() {
-	Configuration.update();
-};
+	public static getKeys(): string[] {
+		return Configuration.getKeys();
+	}
 
-export function getOS() {
-	return Configuration.getOS();
+	public static load(path: string): void {
+		Configuration.load(path);
+	}
+
+	public static update(): void {
+		Configuration.update();
+	}
+
+	public static getOS(): string {
+		return Configuration.getOS();
+	}
+
+	public static isOSWindows(): boolean {
+		return Configuration.isOSWindows();
+	}
+
+	public static isOSMac(): boolean {
+		return Configuration.isOSMac();
+	}
+
+	public static isOSUNIX(): boolean {
+		return Configuration.isOSUNIX();
+	}
+
+	public static isOSSolaris(): boolean {
+		return Configuration.isOSSolaris();
+	}
+
 }
 
-export function isOSWindows() {
-	return Configuration.isOSWindows();
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = Configurations;
 }
-
-export function isOSMac() {
-	return Configuration.isOSMac();
-}
-
-export function isOSUNIX() {
-	return Configuration.isOSUNIX();
-}
-
-export function isOSSolaris() {
-	return Configuration.isOSSolaris();
-}
-

@@ -1,0 +1,64 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="ide-bpm-process-context" ng-controller="IDEBpmProcessContextViewController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/perspective-processes/configs/bpm-process-context-view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="/services/web/perspective-processes/views/js/bpm-process-context.js"></script>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar compact="true">
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-button state="transparent" ng-disabled="selectedVariable === null || disableModificationButtons" glyph="sap-icon--edit" title="Edit" aria-label="Edit" ng-click="openEditDialog()"></bk-button>
+            <bk-button state="transparent" ng-disabled="currentProcessInstanceId === null || disableModificationButtons" glyph="sap-icon--add" title="Add" aria-label="Add" ng-click="openAddDialog()"></bk-button>
+            <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="reload()"></bk-button>
+        </bk-toolbar>
+        <bk-scrollbar class="bk-fill-parent">
+            <table bk-table outer-borders="bottom" display-mode="compact">
+                <thead bk-table-header sticky="true">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>Id</th>
+                        <th bk-table-header-cell>Process Instance Id</th>
+                        <th bk-table-header-cell>Name</th>
+                        <th bk-table-header-cell>Type</th>
+                        <th bk-table-header-cell>Value</th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat="next in variablesList track by next.id" hoverable="true" activable="true" selected="next.selected" ng-click="selectionChanged(next)">
+                        <td bk-table-cell>{{next.id}}</td>
+                        <td bk-table-cell>{{next.processInstanceId}}</td>
+                        <td bk-table-cell>{{next.name}}</td>
+                        <td bk-table-cell>{{next.typeName ? next.typeName : next.variableTypeName}}</td>
+                        <td bk-table-cell>{{next.value}}</td>
+                    </tr>
+                    <tr ng-if="variablesList.length === 0" bk-table-row>
+                        <td bk-table-cell no-data="true">No variables have been detected.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </bk-scrollbar>
+        <theme></theme>
+    </body>
+
+</html>

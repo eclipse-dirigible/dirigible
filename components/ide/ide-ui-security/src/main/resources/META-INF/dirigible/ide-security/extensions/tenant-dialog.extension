@@ -1,0 +1,5 @@
+{
+    "module": "ide-security/services/tenant-dialog.js",
+    "extensionPoint": "ide-dialog-window",
+    "description": "Dialog for creating new or editing an existing tenant"
+}

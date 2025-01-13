@@ -1,20 +1,20 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.management.service;
 
 
 import java.sql.SQLException;
-import java.util.Set;
+import java.util.List;
 import java.util.stream.Collectors;
 
+import org.eclipse.dirigible.components.data.management.config.DatabaseMetadataCache;
 import org.eclipse.dirigible.components.data.management.domain.DatabaseStructureTypes;
 import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
@@ -40,16 +40,21 @@ public class DatabaseMetadataService {
     /** The data sources service. */
     private final DataSourceService datasourceService;
 
+    /** The cache. */
+    private final DatabaseMetadataCache cache;
+
     /**
      * Instantiates a new data source endpoint.
      *
      * @param datasourceManager the datasource manager
      * @param datasourceService the datasource service
+     * @param cache the cache
      */
     @Autowired
-    public DatabaseMetadataService(DataSourcesManager datasourceManager, DataSourceService datasourceService) {
+    public DatabaseMetadataService(DataSourcesManager datasourceManager, DataSourceService datasourceService, DatabaseMetadataCache cache) {
         this.datasourceManager = datasourceManager;
         this.datasourceService = datasourceService;
+        this.cache = cache;
     }
 
     /**
@@ -57,11 +62,12 @@ public class DatabaseMetadataService {
      *
      * @return the data sources
      */
-    public Set<String> getDataSourcesNames() {
+    public List<String> getDataSourcesNames() {
         return datasourceService.getAll()
                                 .stream()
                                 .map(DataSource::getName)
-                                .collect(Collectors.toSet());
+                                .sorted(String.CASE_INSENSITIVE_ORDER)
+                                .collect(Collectors.toList());
     }
 
     /**
@@ -72,8 +78,13 @@ public class DatabaseMetadataService {
      * @throws SQLException the SQL exception
      */
     public String getDataSourceMetadata(String datasource) throws SQLException {
-        javax.sql.DataSource dataSource = datasourceManager.getDataSource(datasource);
-        String metadata = DatabaseMetadataHelper.getMetadataAsJson(dataSource);
+        String key = "DATASOURCE_" + datasource;
+        String metadata = cache.get(key);
+        if (metadata == null) {
+            javax.sql.DataSource dataSource = datasourceManager.getDataSource(datasource);
+            metadata = DatabaseMetadataHelper.getMetadataAsJson(dataSource);
+            cache.put(key, metadata);
+        }
         return metadata;
     }
 
@@ -98,9 +109,22 @@ public class DatabaseMetadataService {
      * @throws SQLException the SQL exception
      */
     public String getSchemaMetadata(String datasource, String schema) throws SQLException {
-        javax.sql.DataSource dataSource = datasourceManager.getDataSource(datasource);
-        String metadata = DatabaseMetadataHelper.getSchemaMetadataAsJson(dataSource, schema);
+        String key = "DATASOURCE_" + datasource + "_SCHEMA_" + schema;
+        String metadata = cache.get(key);
+        if (metadata == null) {
+            javax.sql.DataSource dataSource = datasourceManager.getDataSource(datasource);
+            metadata = DatabaseMetadataHelper.getSchemaMetadataAsJson(dataSource, schema);
+            cache.put(key, metadata);
+        }
         return metadata;
+    }
+
+    /**
+     * Invalidate cache.
+     */
+    public void invalidateCache() {
+        cache.getInternalCache()
+             .invalidateAll();
     }
 
     /**

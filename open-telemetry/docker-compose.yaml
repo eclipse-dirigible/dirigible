@@ -1,0 +1,167 @@
+services:
+
+  otelcol:
+    image: otel/opentelemetry-collector-contrib:0.113.0
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317" # OTLP gRPC receiver
+      - "4318:4318" # OTLP HTTP receiver
+      - "9091:9090"  # http://localhost:9091/metrics
+    depends_on:
+      jaeger:
+        condition: service_started
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.63.0
+    container_name: jaeger
+    ports:
+      - "6831:6831/udp" # UDP port for Jaeger agent
+      - "16686:16686" # Web UI
+      - "14268:14268" # HTTP port for spans
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.3.0-security-01
+    container_name: grafana
+    deploy:
+      resources:
+        limits:
+          memory: 100M
+    restart: unless-stopped
+    environment:
+      - "GF_INSTALL_PLUGINS=grafana-opensearch-datasource"
+    volumes:
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini
+      - ./grafana/provisioning/:/etc/grafana/provisioning/
+    ports:
+      - "3000:3000"
+
+  opensearch:
+    profiles:
+      - opensearch
+    image: opensearchproject/opensearch:2.18.0
+    container_name: opensearch
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    restart: unless-stopped
+    environment:
+      - cluster.name=demo-cluster
+      - node.name=demo-node
+      - bootstrap.memory_lock=true
+      - discovery.type=single-node
+      - OPENSEARCH_JAVA_OPTS=-Xms300m -Xmx300m
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - DISABLE_SECURITY_PLUGIN=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: curl -s http://localhost:9200/_cluster/health | grep -E '"status":"(green|yellow)"'
+      start_period: 10s
+      interval: 5s
+      timeout: 10s
+      retries: 10
+
+  opensearch-dashboards:
+    profiles:
+      - opensearch
+    image: opensearch-dashboards-no-security:latest
+    container_name: opensearch-dashboards
+    build:
+      context: ./opensearch-dashboards
+      dockerfile: ./Dockerfile
+      cache_from:
+        -  opensearch-dashboards-no-security:latest
+    ports:
+      - "5601:5601"
+    depends_on:
+      opensearch:
+        condition: service_started
+    environment:
+      - 'OPENSEARCH_HOSTS=["http://opensearch:9200"]'
+
+  loki:
+    image: grafana/loki:3.2.1
+    container_name: loki
+    ports:
+      - 3100:3100
+    command: -config.file=/etc/loki/local-config.yaml
+
+  ########################
+  #  Dirigible profiles
+  ########################
+  dirigible-latest-image-with-agent:
+    profiles:
+      - dirigible-latest-image-with-agent
+    image: dirigible-latest-image-with-agent:latest
+    container_name: dirigible-latest-image-with-agent
+    build:
+      context: ./
+      dockerfile: ./dirigible/dirigible-image-otel-agent/Dockerfile
+      cache_from:
+        -   dirigible-latest-image-with-agent:latest
+    environment:
+      - OTEL_SERVICE_NAME=eclipse-dirigible-agent
+      - OTEL_EXPORTER_OTLP_ENDPOINT
+      - OTEL_INSTRUMENTATIONS_ENABLED=true
+      - OTEL_EXPERIMENTAL_ENABLED=true
+      - OTEL_INSTRUMENTATION_MICROMETER_ENABLED=true
+    depends_on:
+      otelcol:
+        condition: service_started
+    ports:
+      - "8080:8080"
+
+  dirigible-local-with-otel-agent:
+    profiles:
+      - dirigible-local-agent
+    image: dirigible-local-with-otel-agent:latest
+    container_name: dirigible-local-with-otel-agent
+    build:
+      context: ../
+      dockerfile: open-telemetry/dirigible/local-dirigible-otel-agent/Dockerfile
+    environment:
+      - OTEL_SERVICE_NAME=eclipse-dirigible-agent
+      - OTEL_EXPORTER_OTLP_ENDPOINT
+      - OTEL_INSTRUMENTATIONS_ENABLED=true
+      - OTEL_EXPERIMENTAL_ENABLED=true
+      - OTEL_INSTRUMENTATION_MICROMETER_ENABLED=true
+    depends_on:
+      otelcol:
+        condition: service_started
+    ports:
+      - "8080:8080"
+
+  dirigible-local-with-otel-spring-starter:
+    profiles:
+      - dirigible-local-spring-starter
+    image: dirigible-local-with-otel-spring-starter:latest
+    container_name: dirigible-local-with-otel-spring-starter
+    build:
+      context: ../
+      dockerfile: open-telemetry/dirigible/local-dirigible-otel-spring-starter/Dockerfile
+    environment:
+      - SPRING_PROFILES_ACTIVE=open-telemetry
+    depends_on:
+      otelcol:
+        condition: service_started
+    ports:
+      - "8080:8080"

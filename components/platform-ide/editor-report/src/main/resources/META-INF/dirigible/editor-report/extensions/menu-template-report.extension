@@ -1,0 +1,5 @@
+{
+    "module": "editor-report/configs/menu-template-report.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "New Report Menu Extension"
+}

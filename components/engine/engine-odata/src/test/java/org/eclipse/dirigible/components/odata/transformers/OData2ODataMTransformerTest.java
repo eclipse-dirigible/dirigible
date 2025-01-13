@@ -1,19 +1,14 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.odata.transformers;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.mockito.Mockito.when;
-import java.io.IOException;
-import java.sql.SQLException;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.data.structures.domain.Table;
 import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
@@ -28,6 +23,12 @@ import org.mockito.Answers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.io.IOException;
+import java.sql.SQLException;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.mockito.Mockito.when;
 
 /**
  * The Class OData2ODataMTransformerTest.
@@ -69,14 +70,14 @@ public class OData2ODataMTransformerTest {
 
         String entityOrder =
                 "{\n" + "\t\"edmType\": \"OrderType\",\n" + "\t\"edmTypeFqn\": \"org.apache.olingo.odata2.ODataOrders.OrderType\",\n"
-                        + "\t\"sqlTable\": \"ORDERS\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"Id\": \"Id\",\n"
-                        + "\t\"Customer\": \"Customer\",\n" + "\t\"_ref_ItemType\": {\n" + "\t\t\"joinColumn\" : [\n" + "\t\t\t\"Id\"\n"
-                        + "\t\t]\n" + "\t},\n" + "\t\"_pk_\" : \"Id\"\n" + "}";
+                        + "\t\"sqlTable\": \"ORDERS\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"sqlSchema\": null,\n"
+                        + "\t\"Id\": \"Id\",\n" + "\t\"Customer\": \"Customer\",\n" + "\t\"_ref_ItemType\": {\n"
+                        + "\t\t\"joinColumn\" : [\n" + "\t\t\t\"Id\"\n" + "\t\t]\n" + "\t},\n" + "\t\"_pk_\" : \"Id\"\n" + "}";
         String entityItem =
                 "{\n" + "\t\"edmType\": \"ItemType\",\n" + "\t\"edmTypeFqn\": \"org.apache.olingo.odata2.ODataOrders.ItemType\",\n"
-                        + "\t\"sqlTable\": \"ITEMS\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"Id\": \"Id\",\n"
-                        + "\t\"Orderid\": \"OrderId\",\n" + "\t\"_ref_OrderType\": {\n" + "\t\t\"joinColumn\" : [\n" + "\t\t\t\"OrderId\"\n"
-                        + "\t\t]\n" + "\t},\n" + "\t\"_pk_\" : \"Id\"\n" + "}";
+                        + "\t\"sqlTable\": \"ITEMS\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"sqlSchema\": null,\n"
+                        + "\t\"Id\": \"Id\",\n" + "\t\"Orderid\": \"OrderId\",\n" + "\t\"_ref_OrderType\": {\n" + "\t\t\"joinColumn\" : [\n"
+                        + "\t\t\t\"OrderId\"\n" + "\t\t]\n" + "\t},\n" + "\t\"_pk_\" : \"Id\"\n" + "}";
         String[] transformed =
                 new OData2ODataMTransformer(defaultTableMetadataProvider, new DefaultPropertyNameEscaper()).transform(definition);
         assertArrayEquals(new String[] {entityOrder, entityItem}, transformed);
@@ -108,14 +109,14 @@ public class OData2ODataMTransformerTest {
 
         String entityOrder =
                 "{\n" + "\t\"edmType\": \"OrderType\",\n" + "\t\"edmTypeFqn\": \"org.apache.olingo.odata2.ODataOrders.OrderType\",\n"
-                        + "\t\"sqlTable\": \"ORDERS\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"Id\": \"ID\",\n"
-                        + "\t\"Customer\": \"CUSTOMER\",\n" + "\t\"_ref_ItemType\": {\n" + "\t\t\"joinColumn\" : [\n" + "\t\t\t\"ID\"\n"
-                        + "\t\t]\n" + "\t},\n" + "\t\"_pk_\" : \"ID\"\n" + "}";
+                        + "\t\"sqlTable\": \"ORDERS\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"sqlSchema\": null,\n"
+                        + "\t\"Id\": \"ID\",\n" + "\t\"Customer\": \"CUSTOMER\",\n" + "\t\"_ref_ItemType\": {\n"
+                        + "\t\t\"joinColumn\" : [\n" + "\t\t\t\"ID\"\n" + "\t\t]\n" + "\t},\n" + "\t\"_pk_\" : \"ID\"\n" + "}";
         String entityItem =
                 "{\n" + "\t\"edmType\": \"ItemType\",\n" + "\t\"edmTypeFqn\": \"org.apache.olingo.odata2.ODataOrders.ItemType\",\n"
-                        + "\t\"sqlTable\": \"ITEMS\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"ItemId\": \"ITEM_ID\",\n"
-                        + "\t\"OrderId\": \"ORDER_ID\",\n" + "\t\"_ref_OrderType\": {\n" + "\t\t\"joinColumn\" : [\n"
-                        + "\t\t\t\"ORDER_ID\"\n" + "\t\t]\n" + "\t},\n" + "\t\"_pk_\" : \"ITEM_ID\"\n" + "}";
+                        + "\t\"sqlTable\": \"ITEMS\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"sqlSchema\": null,\n"
+                        + "\t\"ItemId\": \"ITEM_ID\",\n" + "\t\"OrderId\": \"ORDER_ID\",\n" + "\t\"_ref_OrderType\": {\n"
+                        + "\t\t\"joinColumn\" : [\n" + "\t\t\t\"ORDER_ID\"\n" + "\t\t]\n" + "\t},\n" + "\t\"_pk_\" : \"ITEM_ID\"\n" + "}";
         String[] transformed =
                 new OData2ODataMTransformer(defaultTableMetadataProvider, new DefaultPropertyNameEscaper()).transform(definition);
         assertArrayEquals(new String[] {entityOrder, entityItem}, transformed);
@@ -132,18 +133,19 @@ public class OData2ODataMTransformerTest {
         OData definition = OData2ODataTransformerTestUtil.loadData_testTransformEntityProperty(odataDatabaseMetadataUtil);
 
         String entity1 = "{\n" + "\t\"edmType\": \"Entity1Type\",\n" + "\t\"edmTypeFqn\": \"mytest.Entity1Type\",\n"
-                + "\t\"sqlTable\": \"ENTITY1\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"entity1Id\": \"ENTITY1ID\",\n"
-                + "\t\"property2\": \"PROPERTY2\",\n" + "\t\"property3\": \"PROPERTY3\",\n" + "\t\"Country_Id\": \"Country.Id\",\n"
-                + "\t\"_ref_Entity2Type\": {\n" + "\t\t\"joinColumn\" : [\n" + "\t\t\t\"ENTITY1ID\"\n" + "\t\t]\n" + "\t},\n"
-                + "\t\"_pk_\" : \"ENTITY1ID\"\n" + "}";
+                + "\t\"sqlTable\": \"ENTITY1\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"sqlSchema\": null,\n"
+                + "\t\"entity1Id\": \"ENTITY1ID\",\n" + "\t\"property2\": \"PROPERTY2\",\n" + "\t\"property3\": \"PROPERTY3\",\n"
+                + "\t\"Country_Id\": \"Country.Id\",\n" + "\t\"_ref_Entity2Type\": {\n" + "\t\t\"joinColumn\" : [\n"
+                + "\t\t\t\"ENTITY1ID\"\n" + "\t\t]\n" + "\t},\n" + "\t\"_pk_\" : \"ENTITY1ID\"\n" + "}";
         String entity2 = "{\n" + "\t\"edmType\": \"Entity2Type\",\n" + "\t\"edmTypeFqn\": \"mytest.Entity2Type\",\n"
-                + "\t\"sqlTable\": \"ENTITY2\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"entity2Id\": \"ENTITY2ID\",\n"
-                + "\t\"property2\": \"PROPERTY2\",\n" + "\t\"property3\": \"PROPERTY3\",\n" + "\t\"property4_5\": \"PROPERTY4_5\",\n"
-                + "\t\"Entity1entity1Id\": \"ENTITY1ENTITY1ID\",\n" + "\t\"_ref_Entity1Type\": {\n" + "\t\t\"joinColumn\" : [\n"
-                + "\t\t\t\"ENTITY1ENTITY1ID\"\n" + "\t\t]\n" + "\t},\n" + "\t\"_pk_\" : \"ENTITY2ID\"\n" + "}";
+                + "\t\"sqlTable\": \"ENTITY2\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"sqlSchema\": null,\n"
+                + "\t\"entity2Id\": \"ENTITY2ID\",\n" + "\t\"property2\": \"PROPERTY2\",\n" + "\t\"property3\": \"PROPERTY3\",\n"
+                + "\t\"property4_5\": \"PROPERTY4_5\",\n" + "\t\"Entity1entity1Id\": \"ENTITY1ENTITY1ID\",\n"
+                + "\t\"_ref_Entity1Type\": {\n" + "\t\t\"joinColumn\" : [\n" + "\t\t\t\"ENTITY1ENTITY1ID\"\n" + "\t\t]\n" + "\t},\n"
+                + "\t\"_pk_\" : \"ENTITY2ID\"\n" + "}";
         String entity3 = "{\n" + "\t\"edmType\": \"Entity3Type\",\n" + "\t\"edmTypeFqn\": \"mytest.Entity3Type\",\n"
-                + "\t\"sqlTable\": \"ENTITY3\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"Entity3_id\": \"ENTITY3.ID\",\n"
-                + "\t\"Name_id\": \"NAME.ID\",\n" + "\t\"_pk_\" : \"ENTITY3.ID\"\n" + "}";
+                + "\t\"sqlTable\": \"ENTITY3\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"sqlSchema\": null,\n"
+                + "\t\"Entity3_id\": \"ENTITY3.ID\",\n" + "\t\"Name_id\": \"NAME.ID\",\n" + "\t\"_pk_\" : \"ENTITY3.ID\"\n" + "}";
 
         String[] transformed =
                 new OData2ODataMTransformer(defaultTableMetadataProvider, new DefaultPropertyNameEscaper()).transform(definition);
@@ -170,9 +172,10 @@ public class OData2ODataMTransformerTest {
         when(odataDatabaseMetadataUtil.getTableMetadata("EMPLOYEES", null)).thenReturn(model);
 
         String entityEmployee = "{\n" + "\t\"edmType\": \"employeeType\",\n" + "\t\"edmTypeFqn\": \"np.employeeType\",\n"
-                + "\t\"sqlTable\": \"EMPLOYEES\",\n" + "\t\"dataStructureType\": \"CALC VIEW\",\n" + "\t\"companyId\": \"COMPANY_ID\",\n"
-                + "\t\"employeeNumber\": \"EMPLOYEE_NUMBER\",\n" + "\t\"EmployeeId\": \"EmployeeId\",\n"
-                + "\t\"_parameters_\" : [\"EmployeeId\"],\n" + "\t\"_pk_\" : \"COMPANY_ID,EMPLOYEE_NUMBER\"\n" + "}";
+                + "\t\"sqlTable\": \"EMPLOYEES\",\n" + "\t\"dataStructureType\": \"CALC VIEW\",\n" + "\t\"sqlSchema\": null,\n"
+                + "\t\"companyId\": \"COMPANY_ID\",\n" + "\t\"employeeNumber\": \"EMPLOYEE_NUMBER\",\n"
+                + "\t\"EmployeeId\": \"EmployeeId\",\n" + "\t\"_parameters_\" : [\"EmployeeId\"],\n"
+                + "\t\"_pk_\" : \"COMPANY_ID,EMPLOYEE_NUMBER\"\n" + "}";
 
         String[] actualResult =
                 new OData2ODataMTransformer(defaultTableMetadataProvider, new DefaultPropertyNameEscaper()).transform(definition);
@@ -204,15 +207,15 @@ public class OData2ODataMTransformerTest {
         when(odataDatabaseMetadataUtil.getTableMetadata("PHONES", null)).thenReturn(model);
 
         String entityEmployee = "{\n" + "\t\"edmType\": \"employeeType\",\n" + "\t\"edmTypeFqn\": \"np.employeeType\",\n"
-                + "\t\"sqlTable\": \"EMPLOYEES\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"companyId\": \"COMPANY_ID\",\n"
-                + "\t\"employeeNumber\": \"EMPLOYEE_NUMBER\",\n" + "\t\"_ref_phoneType\": {\n" + "\t\t\"joinColumn\" : [\n"
-                + "\t\t\t\"COMPANY_ID\",\"EMPLOYEE_NUMBER\"\n" + "\t\t]\n" + "\t},\n" + "\t\"_pk_\" : \"COMPANY_ID,EMPLOYEE_NUMBER\"\n"
-                + "}";
+                + "\t\"sqlTable\": \"EMPLOYEES\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"sqlSchema\": null,\n"
+                + "\t\"companyId\": \"COMPANY_ID\",\n" + "\t\"employeeNumber\": \"EMPLOYEE_NUMBER\",\n" + "\t\"_ref_phoneType\": {\n"
+                + "\t\t\"joinColumn\" : [\n" + "\t\t\t\"COMPANY_ID\",\"EMPLOYEE_NUMBER\"\n" + "\t\t]\n" + "\t},\n"
+                + "\t\"_pk_\" : \"COMPANY_ID,EMPLOYEE_NUMBER\"\n" + "}";
         String phoneEntity = "{\n" + "\t\"edmType\": \"phoneType\",\n" + "\t\"edmTypeFqn\": \"np.phoneType\",\n"
-                + "\t\"sqlTable\": \"PHONES\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"number\": \"NUMBER\",\n"
-                + "\t\"fkCompanyId\": \"FK_COMPANY_ID\",\n" + "\t\"fkEmployeeNumber\": \"FK_EMPLOYEE_NUMBER\",\n"
-                + "\t\"_ref_employeeType\": {\n" + "\t\t\"joinColumn\" : [\n" + "\t\t\t\"FK_COMPANY_ID\",\"FK_EMPLOYEE_NUMBER\"\n"
-                + "\t\t]\n" + "\t},\n" + "\t\"_pk_\" : \"NUMBER\"\n" + "}";
+                + "\t\"sqlTable\": \"PHONES\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"sqlSchema\": null,\n"
+                + "\t\"number\": \"NUMBER\",\n" + "\t\"fkCompanyId\": \"FK_COMPANY_ID\",\n"
+                + "\t\"fkEmployeeNumber\": \"FK_EMPLOYEE_NUMBER\",\n" + "\t\"_ref_employeeType\": {\n" + "\t\t\"joinColumn\" : [\n"
+                + "\t\t\t\"FK_COMPANY_ID\",\"FK_EMPLOYEE_NUMBER\"\n" + "\t\t]\n" + "\t},\n" + "\t\"_pk_\" : \"NUMBER\"\n" + "}";
         String[] actualResult =
                 new OData2ODataMTransformer(defaultTableMetadataProvider, new DefaultPropertyNameEscaper()).transform(definition);
         assertArrayEquals(new String[] {entityEmployee, phoneEntity}, actualResult);
@@ -241,18 +244,18 @@ public class OData2ODataMTransformerTest {
 
         when(odataDatabaseMetadataUtil.getTableMetadata("CVGROUP", null)).thenReturn(model);
 
-        String entityUser =
-                "{\n" + "\t\"edmType\": \"UsersType\",\n" + "\t\"edmTypeFqn\": \"org.apache.olingo.odata2.ODataUsers.UsersType\",\n"
-                        + "\t\"sqlTable\": \"CVUSER\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"Id\": \"ID\",\n"
-                        + "\t\"Firstname\": \"FIRSTNAME\",\n" + "\t\"_ref_GroupsType\": {\n" + "\t\t\"joinColumn\" : [\n" + "\t\t\t\"ID\"\n"
-                        + "\t\t],\n" + "\t\t\"manyToManyMappingTable\" : {\n" + "\t\t\t\"mappingTableName\" : \"USERSTOGROUP\",\n"
-                        + "\t\t\t\"mappingTableJoinColumn\" : \"UserId\"\n" + "\t\t}\n" + "\t},\n" + "\t\"_pk_\" : \"ID\"\n" + "}";
-        String entityGroup =
-                "{\n" + "\t\"edmType\": \"GroupsType\",\n" + "\t\"edmTypeFqn\": \"org.apache.olingo.odata2.ODataUsers.GroupsType\",\n"
-                        + "\t\"sqlTable\": \"CVGROUP\",\n" + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"Id\": \"ID\",\n"
-                        + "\t\"Firstname\": \"FIRSTNAME\",\n" + "\t\"_ref_UsersType\": {\n" + "\t\t\"joinColumn\" : [\n" + "\t\t\t\"ID\"\n"
-                        + "\t\t],\n" + "\t\t\"manyToManyMappingTable\" : {\n" + "\t\t\t\"mappingTableName\" : \"USERSTOGROUP\",\n"
-                        + "\t\t\t\"mappingTableJoinColumn\" : \"GroupId\"\n" + "\t\t}\n" + "\t},\n" + "\t\"_pk_\" : \"ID\"\n" + "}";
+        String entityUser = "{\n" + "\t\"edmType\": \"UsersType\",\n"
+                + "\t\"edmTypeFqn\": \"org.apache.olingo.odata2.ODataUsers.UsersType\",\n" + "\t\"sqlTable\": \"CVUSER\",\n"
+                + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"sqlSchema\": null,\n" + "\t\"Id\": \"ID\",\n"
+                + "\t\"Firstname\": \"FIRSTNAME\",\n" + "\t\"_ref_GroupsType\": {\n" + "\t\t\"joinColumn\" : [\n" + "\t\t\t\"ID\"\n"
+                + "\t\t],\n" + "\t\t\"manyToManyMappingTable\" : {\n" + "\t\t\t\"mappingTableName\" : \"USERSTOGROUP\",\n"
+                + "\t\t\t\"mappingTableJoinColumn\" : \"UserId\"\n" + "\t\t}\n" + "\t},\n" + "\t\"_pk_\" : \"ID\"\n" + "}";
+        String entityGroup = "{\n" + "\t\"edmType\": \"GroupsType\",\n"
+                + "\t\"edmTypeFqn\": \"org.apache.olingo.odata2.ODataUsers.GroupsType\",\n" + "\t\"sqlTable\": \"CVGROUP\",\n"
+                + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"sqlSchema\": null,\n" + "\t\"Id\": \"ID\",\n"
+                + "\t\"Firstname\": \"FIRSTNAME\",\n" + "\t\"_ref_UsersType\": {\n" + "\t\t\"joinColumn\" : [\n" + "\t\t\t\"ID\"\n"
+                + "\t\t],\n" + "\t\t\"manyToManyMappingTable\" : {\n" + "\t\t\t\"mappingTableName\" : \"USERSTOGROUP\",\n"
+                + "\t\t\t\"mappingTableJoinColumn\" : \"GroupId\"\n" + "\t\t}\n" + "\t},\n" + "\t\"_pk_\" : \"ID\"\n" + "}";
         String[] transformed =
                 new OData2ODataMTransformer(defaultTableMetadataProvider, new DefaultPropertyNameEscaper()).transform(definition);
         assertArrayEquals(new String[] {entityUser, entityGroup}, transformed);
@@ -278,8 +281,8 @@ public class OData2ODataMTransformerTest {
 
         String entityView = "{\n" + "\t\"edmType\": \"UserRoleType\",\n"
                 + "\t\"edmTypeFqn\": \"org.apache.olingo.odata2.ODataUserRole.UserRoleType\",\n" + "\t\"sqlTable\": \"UserRole\",\n"
-                + "\t\"dataStructureType\": \"VIEW\",\n" + "\t\"ZUSR_ROLE\": \"ZUSR_ROLE\",\n" + "\t\"ZROLE_NAME\": \"ZROLE_NAME\",\n"
-                + "\t\"keyGenerated\": \"ID\",\n" + "\t\"_pk_\" : \"\"\n" + "}";
+                + "\t\"dataStructureType\": \"VIEW\",\n" + "\t\"sqlSchema\": null,\n" + "\t\"ZUSR_ROLE\": \"ZUSR_ROLE\",\n"
+                + "\t\"ZROLE_NAME\": \"ZROLE_NAME\",\n" + "\t\"keyGenerated\": \"ID\",\n" + "\t\"_pk_\" : \"\"\n" + "}";
 
         String[] transformed =
                 new OData2ODataMTransformer(defaultTableMetadataProvider, new DefaultPropertyNameEscaper()).transform(definition);
@@ -306,9 +309,10 @@ public class OData2ODataMTransformerTest {
 
         String aggregationEntity = "{\n" + "\t\"edmType\": \"CustomerType\",\n"
                 + "\t\"edmTypeFqn\": \"org.apache.olingo.odata2.ODataCustomer.CustomerType\",\n" + "\t\"sqlTable\": \"CUSTOMER\",\n"
-                + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"ID\": \"ID\",\n" + "\t\"NUMBER\": \"NUMBER\",\n"
-                + "\t\"PAYMENT\": \"PAYMENT\",\n" + "\t\"aggregationType\" : \"derived\",\n" + "\t\"aggregationProps\" : {\n"
-                + "\t\t\"NUMBER\": \"SUM\",\n" + "\t\t\"PAYMENT\": \"AVERAGE\"\n" + "\t},\n" + "\t\"_pk_\" : \"ID\"\n" + "}";
+                + "\t\"dataStructureType\": \"TABLE\",\n" + "\t\"sqlSchema\": null,\n" + "\t\"ID\": \"ID\",\n"
+                + "\t\"NUMBER\": \"NUMBER\",\n" + "\t\"PAYMENT\": \"PAYMENT\",\n" + "\t\"aggregationType\" : \"derived\",\n"
+                + "\t\"aggregationProps\" : {\n" + "\t\t\"NUMBER\": \"SUM\",\n" + "\t\t\"PAYMENT\": \"AVERAGE\"\n" + "\t},\n"
+                + "\t\"_pk_\" : \"ID\"\n" + "}";
 
         String[] transformed =
                 new OData2ODataMTransformer(defaultTableMetadataProvider, new DefaultPropertyNameEscaper()).transform(definition);

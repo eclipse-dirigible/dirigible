@@ -1,0 +1,68 @@
+/*
+ * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v2.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ */
+
+angular.module('{{fileName}}', ['ngResource', 'ideLayout', 'ideUI'])
+    .config(['messageHubProvider', function (messageHubProvider) {
+        messageHubProvider.eventIdPrefix = '{{fileName}}';
+    }])
+    .controller('PerspectiveController', ['$scope', 'messageHub', function ($scope, messageHub) {
+        $scope.layoutModel = {
+            views: ['welcome'],
+        };
+        $scope.layoutConfig = {
+            leftPaneMinSize: 300,
+        };
+        /*
+         * This function is called right before the context menu is shown.
+         * 'element' is the DOM element the user has right-clicked on.
+         * You can use this to show different items in the context menu.
+         */
+        $scope.contextMenuContent = function (element) {
+            return {
+                callbackTopic: '{{fileName}}.contextmenu',
+                items: [
+                    {
+                        id: 'alertInfo',
+                        label: 'Alert Info',
+                        data: `The user has right-clicked inside an HTML element with tag name '${element.tagName}'`
+                    },
+                    {
+                        id: 'alertError',
+                        label: 'Alert Error',
+                    },
+                    {
+                        id: 'statusInfo',
+                        label: 'Status info',
+                        divider: true,
+                    },
+                    {
+                        id: 'statusError',
+                        label: 'Status error',
+                    }
+                ]
+            }
+        };
+        messageHub.onDidReceiveMessage(
+            'contextmenu',
+            function (msg) {
+                if (msg.data.itemId === 'alertInfo') {
+                    messageHub.showAlertInfo('This is an alert', msg.data.data);
+                } else if (msg.data.itemId === 'alertError') {
+                    messageHub.showAlertError('This is an alert', 'Showing some error information.');
+                } else if (msg.data.itemId === 'statusInfo') {
+                    messageHub.setStatusMessage('Showing some useful information.');
+                } else if (msg.data.itemId === 'statusError') {
+                    messageHub.setStatusError('Showing some error information.');
+                }
+            }
+        );
+    }]);

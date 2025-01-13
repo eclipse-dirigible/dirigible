@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.api.db;
 
@@ -15,8 +14,6 @@ import java.util.List;
 import java.util.Map;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.store.DataStore;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -27,14 +24,11 @@ import org.springframework.stereotype.Component;
 @Component
 public class DataStoreFacade implements InitializingBean {
 
-    /** The Constant logger. */
-    private static final Logger logger = LoggerFactory.getLogger(DataStoreFacade.class);
-
     /** The data sore facade. */
     private static DataStoreFacade INSTANCE;
 
     /** The data store. */
-    private DataStore dataStore;
+    private final DataStore dataStore;
 
     /**
      * Instantiates a new data store facade.

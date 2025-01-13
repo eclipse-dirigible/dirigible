@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.engine.ftp.config;
 
@@ -46,6 +45,7 @@ public class FtpServerConfiguration {
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(FtpServerConfiguration.class);
 
+    /** The Constant REPOSITORY_ROOT. */
     private static final String REPOSITORY_ROOT = "./target/dirigible/cms/dirigible/repository/root";
 
     /**
@@ -64,7 +64,6 @@ public class FtpServerConfiguration {
     /**
      * Nio listener.
      *
-     * @param port the port
      * @return the listener
      */
     @Bean

@@ -1,21 +1,21 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-let rs = require('http/rs');
-let escape = require('utils/escape');
-let streams = require('io/streams');
-let repositoryManager = require('platform/repository');
-let configurations = require('core/configurations');
-let themesManager = require('theme/extensions/themes');
-let cacheUtils = require('theme/utils/cache');
+import { rs } from "sdk/http";
+import { escape } from "sdk/utils";
+import { streams } from "sdk/io";
+import { repository as repositoryManager } from "sdk/platform";
+import { configurations } from "sdk/core";
+import * as themesManager from "./extensions/themes";
+import * as cacheUtils from "./utils/cache";
 
 let THEME_CACHE = cacheUtils.getCache();
 

@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="512"
+   height="512"
+   viewBox="0 0 135.46666 135.46667"
+   version="1.1"
+   id="svg5"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs2">
+    <rect
+       x="655.71386"
+       y="274.77533"
+       width="156.12235"
+       height="87.428515"
+       id="rect1671" />
+    <rect
+       x="627.61184"
+       y="121.77543"
+       width="177.97948"
+       height="167.05091"
+       id="rect20658" />
+    <rect
+       x="-4.6836705"
+       y="17.173458"
+       width="266.96922"
+       height="282.58145"
+       id="rect18876" />
+    <rect
+       x="62.448939"
+       y="37.469364"
+       width="281.02023"
+       height="460.56093"
+       id="rect15709" />
+    <rect
+       x="117.09176"
+       y="143.63256"
+       width="159.2448"
+       height="204.52028"
+       id="rect13120" />
+    <rect
+       x="88.989739"
+       y="138.94889"
+       width="132.704"
+       height="138.94889"
+       id="rect11217" />
+  </defs>
+  <g
+     id="layer1">
+    <text
+       xml:space="preserve"
+       transform="scale(0.26458333)"
+       id="text11215"
+       style="fill:black;fill-opacity:1;line-height:1.25;stroke:none;font-family:sans-serif;font-style:normal;font-weight:normal;font-size:40px;white-space:pre;shape-inside:url(#rect11217)" />
+    <g
+       aria-label=""
+       transform="matrix(3.3866666,0,0,3.3866666,-396.55088,-503.36978)"
+       id="text13118"
+       style="font-size:40px;line-height:1.25;white-space:pre;shape-inside:url(#rect13120)">
+      <text
+         xml:space="preserve"
+         transform="matrix(0.078125,0,0,0.078125,117.0918,148.63281)"
+         id="text15707"
+         style="fill:black;fill-opacity:1;line-height:1.25;stroke:none;font-family:sans-serif;font-style:normal;font-weight:normal;font-size:40px;white-space:pre;shape-inside:url(#rect15709)" />
+      <text
+         xml:space="preserve"
+         transform="matrix(0.078125,0,0,0.078125,117.0918,148.63281)"
+         id="text18874"
+         style="fill:black;fill-opacity:1;line-height:1.25;stroke:none;font-family:sans-serif;font-style:normal;font-weight:normal;font-size:40px;white-space:pre;shape-inside:url(#rect18876)" />
+      <g
+         aria-label=""
+         id="text19058"
+         style="font-size:45.7143px;stroke-width:1.14286">
+        <path
+           d="m 154.23466,148.6328 q 1.16071,0 1.96428,0.80357 0.89286,0.80357 0.89286,2.05358 v 34.28572 q 0,1.25 -0.89286,2.05357 -0.80357,0.80357 -1.96428,0.80357 h -34.28573 q -1.25,0 -2.05357,-0.80357 -0.80357,-0.80357 -0.80357,-2.05357 v -34.28572 q 0,-1.25001 0.80357,-2.05358 0.80357,-0.80357 2.05357,-0.80357 z m 0,2.85715 h -34.28573 v 34.28572 h 34.28573 z"
+           id="path19788" />
+      </g>
+      <text
+         xml:space="preserve"
+         transform="matrix(0.078125,0,0,0.078125,117.0918,148.63281)"
+         id="text20656"
+         style="fill:black;fill-opacity:1;line-height:1.25;stroke:none;font-family:sans-serif;font-style:normal;font-weight:normal;font-size:40px;white-space:pre;shape-inside:url(#rect20658)" />
+      <text
+         xml:space="preserve"
+         transform="matrix(0.078125,0,0,0.078125,117.0918,148.63281)"
+         id="text1669"
+         style="fill:black;fill-opacity:1;line-height:1.25;stroke:none;font-family:sans-serif;font-style:normal;font-weight:normal;font-size:40px;white-space:pre;shape-inside:url(#rect1671)" />
+      <g
+         aria-label=""
+         id="text1787"
+         style="font-size:31.25px;stroke-width:0.78125">
+        <path
+           d="m 149.17676,158.74512 q 0.30517,0.30517 0.30517,0.67138 0,0.24414 -0.12207,0.48829 l -13.5498,19.89746 q -0.24414,0.48828 -0.54932,0.54931 -0.24414,0 -0.30517,0 -0.42725,0 -0.73243,-0.30517 l -9.2163,-10.19287 q -0.30518,-0.30518 -0.30518,-0.61036 0,0 0,-0.1831 0.061,-0.24414 0.36621,-0.54932 l 1.52588,-1.52588 q 0.36621,-0.36621 0.73242,-0.36621 0.36621,0 0.67139,0.36621 l 5.85937,5.85938 q 0.30518,0.30517 0.73243,0.30517 0,0 0.24414,0 0.30517,-0.061 0.54931,-0.54931 l 10.68115,-15.19776 q 0.24415,-0.42724 0.48829,-0.42724 0.30517,-0.061 0.36621,-0.061 0.36621,0 0.67138,0.24414 z"
+           id="path3687" />
+      </g>
+    </g>
+  </g>
+</svg>

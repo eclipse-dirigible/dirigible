@@ -1,0 +1,5 @@
+{
+    "module": "ide-result/services/crud-dialog.js",
+    "extensionPoint": "ide-dialog-window",
+    "description": "Dialog for editing row in database table"
+}

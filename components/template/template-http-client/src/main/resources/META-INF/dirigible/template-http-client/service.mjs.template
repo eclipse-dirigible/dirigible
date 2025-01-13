@@ -1,8 +1,6 @@
-import { client, response } from "@dirigible/http";
+import { client, response } from "sdk/http";
 
 let httpResponse = client.get("https://services.odata.org/V4/Northwind/Northwind.svc/");
 
 response.println(httpResponse.statusMessage);
 response.println(httpResponse.text);
-response.flush();
-response.close();

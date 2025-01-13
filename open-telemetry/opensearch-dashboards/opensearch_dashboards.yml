@@ -1,0 +1,5 @@
+# Example config: https://github.com/opensearch-project/OpenSearch-Dashboards/blob/main/config/opensearch_dashboards.yml
+---
+server.name: opensearch-dashboards
+server.host: "0.0.0.0"
+opensearch.hosts: http://opensearch:9200

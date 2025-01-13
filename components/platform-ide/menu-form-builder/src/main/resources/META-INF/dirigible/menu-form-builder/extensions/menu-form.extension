@@ -1,0 +1,5 @@
+{
+    "module": "menu-form-builder/templates/menu-form.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "Form Workbench New Menu Extension"
+}

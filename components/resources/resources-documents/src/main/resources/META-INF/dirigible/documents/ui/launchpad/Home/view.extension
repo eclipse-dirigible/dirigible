@@ -1,0 +1,5 @@
+{
+    "module": "documents/ui/launchpad/Home/view.js",
+    "extensionPoint": "documents-view",
+    "description": "documents - Application View"
+}

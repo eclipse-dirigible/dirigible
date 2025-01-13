@@ -1,21 +1,21 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.builders;
 
-import java.util.Set;
-import java.util.regex.Pattern;
-
-import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.database.sql.ISqlBuilder;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
+
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * The Abstract SQL Builder.
@@ -23,8 +23,7 @@ import org.eclipse.dirigible.database.sql.ISqlDialect;
 public abstract class AbstractSqlBuilder implements ISqlBuilder {
 
     /** The dialect. */
-    private ISqlDialect dialect;
-
+    private final ISqlDialect dialect;
 
     /**
      * Instantiates a new abstract sql builder.
@@ -65,15 +64,6 @@ public abstract class AbstractSqlBuilder implements ISqlBuilder {
     }
 
     /**
-     * Whether the names of tables, columns, indices are case sensitive.
-     *
-     * @return true if set
-     */
-    protected boolean isCaseSensitive() {
-        return Boolean.parseBoolean(Configuration.get("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", "false"));
-    }
-
-    /**
      * Encapsulate the name within quotes.
      *
      * @param name the name
@@ -93,7 +83,7 @@ public abstract class AbstractSqlBuilder implements ISqlBuilder {
     protected String encapsulate(String name, boolean isDataStructureName) {
         if (name == null)
             return null;
-        String escapeSymbol = getEscapeSymbol();
+        String escapeSymbol = String.valueOf(getEscapeSymbol());
         if ("*".equals(name.trim())) {
             return name;
         }
@@ -108,14 +98,14 @@ public abstract class AbstractSqlBuilder implements ISqlBuilder {
     }
 
     /** The column pattern. */
-    private Pattern columnPattern = Pattern.compile("^(?![0-9]*$)[a-zA-Z0-9_#$]+$");
+    private final Pattern columnPattern = Pattern.compile("^(?![0-9]*$)[a-zA-Z0-9_#$]+$");
 
     /**
      * Gets the escape symbol.
      *
      * @return the escape symbol
      */
-    public String getEscapeSymbol() {
+    public char getEscapeSymbol() {
         return getDialect().getEscapeSymbol();
     }
 
@@ -141,16 +131,38 @@ public abstract class AbstractSqlBuilder implements ISqlBuilder {
      * @return the transformed string
      */
     protected String encapsulateMany(String line) {
+        return encapsulateMany(line, getEscapeSymbol());
+    }
+
+    /**
+     * Encapsulate where.
+     *
+     * @param where the where
+     * @return the string
+     */
+    protected String encapsulateWhere(String where) {
+        return encapsulateMany(where, getEscapeSymbol());
+    }
+
+    /**
+     * Encapsulate many.
+     *
+     * @param line the line
+     * @param escapeChar the escape char
+     * @return the string
+     */
+    protected String encapsulateMany(String line, char escapeChar) {
         String lineWithoughContentBetweenSingleQuotes = String.join("", line.split(contentBetweenSingleQuotes.toString()));
         String regex = "([^a-zA-Z0-9_#$::']+)'*\\1*";
         String[] words = lineWithoughContentBetweenSingleQuotes.split(regex);
+        Set<String> wordsSet = new HashSet<>(Arrays.asList(words));
         Set<Set> functionsNames = getDialect().getFunctionsNames();
-        for (String word : words) {
+        for (String word : wordsSet) {
             if (isNumeric(word) || isValue(word)) {
                 continue;
             }
-            if (!"".equals(word.trim()) && !functionsNames.contains(word.toLowerCase())) {
-                line = line.replace(word, "\"" + word + "\"");
+            if (!"".equals(word.trim()) && !(functionsNames.contains(word.toLowerCase()) || functionsNames.contains(word.toUpperCase()))) {
+                line = line.replace(word, escapeChar + word + escapeChar);
             }
         }
         return line;
@@ -159,10 +171,10 @@ public abstract class AbstractSqlBuilder implements ISqlBuilder {
     /**
      * The Regex find the content between single quotes.
      */
-    private Pattern contentBetweenSingleQuotes = Pattern.compile("'([^']*?)'");
+    private final Pattern contentBetweenSingleQuotes = Pattern.compile("'([^']*?)'");
 
     /** The numeric pattern. */
-    private Pattern numericPattern = Pattern.compile("-?\\d+(\\.\\d+)?");
+    private final Pattern numericPattern = Pattern.compile("-?\\d+(\\.\\d+)?");
 
     /**
      * Check whether the string is a number.

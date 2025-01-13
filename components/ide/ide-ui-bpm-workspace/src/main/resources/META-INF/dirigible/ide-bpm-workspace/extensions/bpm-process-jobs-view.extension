@@ -1,0 +1,5 @@
+{
+    "module": "ide-bpm-workspace/services/bpm-process-jobs-view.js",
+    "extensionPoint": "ide-view",
+    "description": "Business Process Jobs Incidents"
+}

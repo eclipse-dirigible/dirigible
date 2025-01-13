@@ -1,0 +1,64 @@
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
+
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" href="data:;base64,iVBORw0KGgo=" dg-brand-icon />
+        <title dg-brand-title></title>
+        <theme></theme>
+        <script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=application-view-js">
+        </script>
+        <link type="text/css" rel="stylesheet"
+            href="/services/js/resources-core/services/loader.js?id=application-view-css" />
+        <script type="text/javascript" src="controller.js"></script>
+    </head>
+
+    <body>
+		<fd-toolbar has-title="true">
+			<fd-toolbar-title>${name} Report</fd-toolbar-title>
+		</fd-toolbar>
+        <fd-scrollbar ng-hide="data == null">
+            <table fd-table display-mode="compact" inner-borders="top" outer-borders="none">
+                <thead fd-table-header sticky="true">
+                    <tr fd-table-row>
+                #foreach ($column in $columns)
+						<th fd-table-header-cell>${column.alias}</th>
+                #end
+                    </tr>
+                </thead>
+                <tbody fd-table-body>
+                    <tr fd-table-row hoverable="true" ng-show="data.length == 0">
+                        <td fd-table-cell no-data="true">No data available.</td>
+                    </tr>
+                    <tr fd-table-row hoverable="true" ng-repeat="next in data">
+            #foreach ($column in $columns) 
+				#if($column.typeJava == 'time')
+						<td fd-table-cell hoverable="true" activable="true">
+							<fd-input type="time" ng-model="next['${column.alias}']" ng-readonly="true"></fd-input>
+						</td>
+				#elseif($column.typeJava == 'timestamp')
+						<td fd-table-cell hoverable="true" activable="true">
+							<fd-input type="datetime-local" ng-model="next['${column.alias}']" ng-readonly="true"></fd-input>
+						</td>
+				#elseif($column.typeJava == 'date')
+						<td fd-table-cell hoverable="true" activable="true">
+							<fd-input type="date" ng-model="next['${column.alias}']" ng-readonly="true"></fd-input>
+						</td>
+				#elseif($column.typeTypescript == 'boolean')
+						<td fd-table-cell hoverable="true" activable="true">
+							<fd-checkbox id="id${column.alias}" compact="false" ng-disabled="true" ng-model="next['${column.alias}']"></fd-checkbox>
+							<fd-checkbox-label for="id${column.alias}" empty="true"></fd-checkbox-label>
+						</td>
+				#else
+						<td fd-table-cell hoverable="true" activable="true">{{next['${column.alias}']}}</td>
+				#end
+            #end
+                    </tr>
+                </tbody>
+            </table>
+        </fd-scrollbar>
+    </body>
+
+</html>

@@ -1,17 +1,15 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.repository.local;
 
 import java.util.concurrent.atomic.AtomicLong;
-
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.fs.FileSystemRepository;
@@ -28,12 +26,6 @@ public class LocalRepository extends FileSystemRepository {
 
     /** The Constant TYPE. */
     public static final String TYPE = "local";
-
-    /** The Constant DIRIGIBLE_REPOSITORY_LOCAL_ROOT_FOLDER. */
-    public static final String DIRIGIBLE_REPOSITORY_LOCAL_ROOT_FOLDER = "DIRIGIBLE_REPOSITORY_LOCAL_ROOT_FOLDER"; //$NON-NLS-1$
-
-    /** The Constant DIRIGIBLE_REPOSITORY_LOCAL_ROOT_FOLDER_IS_ABSOLUTE. */
-    public static final String DIRIGIBLE_REPOSITORY_LOCAL_ROOT_FOLDER_IS_ABSOLUTE = "DIRIGIBLE_REPOSITORY_LOCAL_ROOT_FOLDER_IS_ABSOLUTE"; //$NON-NLS-1$
 
     /** The Constant lastModified. */
     private static final AtomicLong lastModified = new AtomicLong(0);
@@ -67,6 +59,19 @@ public class LocalRepository extends FileSystemRepository {
      */
     public LocalRepository(String rootFolder, boolean absolute) throws LocalRepositoryException {
         super(rootFolder, absolute);
+        lastModified.set(System.currentTimeMillis());
+    }
+
+    /**
+     * Instantiates a new local repository.
+     *
+     * @param rootFolder the root folder
+     * @param absolute the absolute
+     * @param versioned the versioned
+     * @throws LocalRepositoryException the local repository exception
+     */
+    public LocalRepository(String rootFolder, boolean absolute, boolean versioned) throws LocalRepositoryException {
+        super(rootFolder, absolute, versioned);
         lastModified.set(System.currentTimeMillis());
     }
 

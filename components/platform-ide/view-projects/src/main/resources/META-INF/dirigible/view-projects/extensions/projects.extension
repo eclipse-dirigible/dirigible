@@ -1,0 +1,5 @@
+{
+    "module": "view-projects/configs/projects-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Projects View"
+}

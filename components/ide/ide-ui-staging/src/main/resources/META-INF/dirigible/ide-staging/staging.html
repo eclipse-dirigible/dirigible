@@ -1,13 +1,17 @@
-<!DOCTYPE HTML>
 <!--
-  ~ Copyright (c) 2010-2023 SAP and others.
-  ~ All rights reserved. This program and the accompanying materials
-  ~ are made available under the terms of the Eclipse Public License v2.0
-  ~ which accompanies this distribution, and is available at
-  ~ http://www.eclipse.org/legal/epl-v20.html
-  ~ Contributors:
-  ~ SAP - initial API and implementation
-  -->
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="staging" ng-controller="StagingViewController">
 
   <head>
@@ -62,7 +66,7 @@
       </fd-toolbar>
       <div id="staged" fd-scrollbar class="jstree-fiori--fill dg-list-border jstree-list-mode fd-margin-bottom--tiny"
         style="flex: 4"></div>
-      <h6 fd-title header-size="6" aria-label="Commit Message" title="Commit Message"><b>Commit
+      <h6 fd-title header-size="6" aria-label="Commit Message" title="Commit Message" style="padding: 0.5rem"><b>Commit
           Message</b></h6>
       <fd-textarea compact="true" class="fd-margin-top--tiny" placeholder="Short description"
         ng-model="commitData.commitMessage" style="flex: 1">
@@ -100,7 +104,7 @@
           <div class="fd-row">
             <div class="fd-col fd-col-md--2 fd-col-lg--4 fd-col-xl--12">
               <fd-form-label for="password" dg-colon="true" dg-required="true" title="Password or Token"
-                autocomplete="git-pass">Password or Token</fd-form-label>
+                autocomplete="git-pass" style="white-space: break-spaces;">Password or Token</fd-form-label>
             </div>
             <div class="fd-col fd-col-md--10 fd-col-lg--8 fd-col-xl--12">
               <fd-input id="password" type="password" ng-required="true" ng-model="commitData.password"></fd-input>

@@ -1,13 +1,21 @@
 {
-	"edmType": "Order_Details_Extended",
-	"edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.OrderDetailsExtended",
-	"sqlTable": " PUBLIC.ORDER_DETAILS_EXTENDED",
-	"OrderID": "ORDER_ID",
-	"ProductID": "PRODUCT_ID",
-	"ProductName": "PRODUCT_NAME",
-	"UnitPrice": "UNIT_PRICE",
-	"Quantity": "QUANTITY",
-    "Discount": "DISCOUNT",
-    "ExtendedPrice": "EXTENDED_PRICE",
-	"_pk_": ["ORDER_ID", "PRODUCT_ID", "PRODUCT_NAME", "UNIT_PRICE", "QUANTITY", "QUANTITY"]
+  "edmType": "Order_Details_Extended",
+  "edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.OrderDetailsExtended",
+  "sqlTable": "ORDER_DETAILS_EXTENDED",
+  "sqlSchema": "PUBLIC",
+  "OrderID": "ORDER_ID",
+  "ProductID": "PRODUCT_ID",
+  "ProductName": "PRODUCT_NAME",
+  "UnitPrice": "UNIT_PRICE",
+  "Quantity": "QUANTITY",
+  "Discount": "DISCOUNT",
+  "ExtendedPrice": "EXTENDED_PRICE",
+  "_pk_": [
+    "ORDER_ID",
+    "PRODUCT_ID",
+    "PRODUCT_NAME",
+    "UNIT_PRICE",
+    "QUANTITY",
+    "QUANTITY"
+  ]
 }

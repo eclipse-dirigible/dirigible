@@ -1,35 +1,35 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
 angular.module('ideWorkspace', [])
     .provider('workspaceApi', function WorkspaceApiProvider() {
-        this.workspacesServiceUrl = '/services/ide/workspaces/';
+        this.workspacesServiceUrl = '/services/ide/workspaces';
         this.workspaceManagerServiceUrl = '/services/ide/workspace';
         this.workspaceSearchServiceUrl = '/services/ide/workspace-search';
         this.$get = ['$http', function workspaceApiFactory($http) {
-            let setWorkspace = function (workspaceName) {
+            const setWorkspace = function (workspaceName) {
                 if (workspaceName !== undefined && !(typeof workspaceName === 'string'))
                     throw Error("setWorkspace: workspaceName must be an string");
-                let workspace = { name: workspaceName };
+                const workspace = { name: workspaceName };
                 localStorage.setItem('DIRIGIBLE.workspace', JSON.stringify(workspace));
                 return workspace;
             };
 
-            let getCurrentWorkspace = function () {
+            const getCurrentWorkspace = function () {
                 let storedWorkspace = JSON.parse(localStorage.getItem('DIRIGIBLE.workspace') || '{}');
                 if (!('name' in storedWorkspace)) storedWorkspace = setWorkspace('workspace');
                 return storedWorkspace;
             };
 
-            let listWorkspaceNames = function () {
+            const listWorkspaceNames = function () {
                 return $http.get(this.workspacesServiceUrl)
                     .then(function successCallback(response) {
                         return { status: response.status, data: response.data };
@@ -39,8 +39,8 @@ angular.module('ideWorkspace', [])
                     });
             }.bind(this);
 
-            let load = function (resourcePath) {
-                let url = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(resourcePath.split('/')).build();
+            const load = function (resourcePath) {
+                const url = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(resourcePath.split('/')).build();
                 return $http.get(url, { headers: { 'describe': 'application/json' } })
                     .then(function successCallback(response) {
                         return { status: response.status, data: response.data };
@@ -50,8 +50,8 @@ angular.module('ideWorkspace', [])
                     });
             }.bind(this);
 
-            let resourceExists = function (resourcePath) {
-                let url = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(resourcePath.split('/')).build();
+            const resourceExists = function (resourcePath) {
+                const url = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(resourcePath.split('/')).build();
                 return $http.head(url)
                     .then(function successCallback(response) {
                         return { status: response.status };
@@ -62,8 +62,8 @@ angular.module('ideWorkspace', [])
                     });
             }.bind(this);
 
-            let loadContent = async function (workspace, filePath) {
-                let url = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(workspace).path(filePath.split('/')).build();
+            const loadContent = async function (workspace, filePath) {
+                const url = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(workspace).path(filePath.split('/')).build();
                 return $http.get(url)
                     .then(function successCallback(response) {
                         return { status: response.status, data: response.data };
@@ -73,7 +73,18 @@ angular.module('ideWorkspace', [])
                     });
             }.bind(this);
 
-            let getMetadata = function (resourceUrl) {
+            const saveContent = async function (workspace, filePath, content) {
+                const url = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(workspace).path(filePath.split('/')).build();
+                return $http.put(url, content, { headers: { 'Content-Type': 'text/plain;charset=UTF-8' } })
+                    .then(function successCallback(response) {
+                        return { status: response.status, data: response.data };
+                    }, function errorCallback(response) {
+                        console.error('Workspace service:', response);
+                        return { status: response.status };
+                    });
+            }.bind(this);
+
+            const getMetadata = function (resourceUrl) {
                 return $http.get(resourceUrl, { headers: { 'describe': 'application/json' } })
                     .then(function successCallback(response) {
                         return { status: response.status, data: response.data };
@@ -83,18 +94,18 @@ angular.module('ideWorkspace', [])
                     });
             }
 
-            let getMetadataByPath = function (workspace, path) {
-                let resourceUrl = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(workspace).path(path.split('/')).build();
+            const getMetadataByPath = function (workspace, path) {
+                const resourceUrl = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(workspace).path(path.split('/')).build();
                 return getMetadata(resourceUrl);
             }.bind(this);
 
-            let rename = function (oldName, newName, path, workspaceName) {
+            const rename = function (oldName, newName, path, workspaceName) {
                 let pathSegments = path.split('/');
                 pathSegments = pathSegments.slice(1);
                 if (pathSegments.length >= 1) {
-                    let url = new UriBuilder().path(this.workspaceManagerServiceUrl.split('/')).path(workspaceName).path('rename').build();
+                    const url = new UriBuilder().path(this.workspaceManagerServiceUrl.split('/')).path(workspaceName).path('rename').build();
                     return $http.post(url, {
-                        source: new UriBuilder().path(pathSegments).path(oldName).build(),
+                        sources: [new UriBuilder().path(pathSegments).path(oldName).build()],
                         target: new UriBuilder().path(pathSegments).path(newName).build(),
                         sourceWorkspace: workspaceName,
                         targetWorkspace: workspaceName
@@ -107,8 +118,8 @@ angular.module('ideWorkspace', [])
                 }
             }.bind(this);
 
-            let remove = function (filepath) {
-                let url = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(filepath.split('/')).build();
+            const remove = function (filepath) {
+                const url = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(filepath.split('/')).build();
                 return $http.delete(url, { headers: { 'Dirigible-Editor': 'Workspace' } })
                     .then(function successCallback(response) {
                         return { status: response.status, data: response.data };
@@ -118,11 +129,11 @@ angular.module('ideWorkspace', [])
                     });
             }.bind(this);
 
-            let copy = function (sourcePath, targetPath, sourceWorkspace, targetWorkspace) {
-                let url = new UriBuilder().path(this.workspaceManagerServiceUrl.split('/')).path(targetWorkspace).path('copy').build();
+            const copy = function (sourcePath, targetPath, sourceWorkspace, targetWorkspace) {
+                const url = new UriBuilder().path(this.workspaceManagerServiceUrl.split('/')).path(targetWorkspace).path('copy').build();
                 return $http.post(url, {
                     sourceWorkspace: sourceWorkspace,
-                    source: sourcePath,
+                    sources: Array.isArray(sourcePath) ? sourcePath : [sourcePath],
                     targetWorkspace: targetWorkspace,
                     target: (targetPath.endsWith('/') ? targetPath : targetPath + '/'),
                 }).then(function successCallback(response) {
@@ -133,11 +144,11 @@ angular.module('ideWorkspace', [])
                 });
             }.bind(this);
 
-            let move = function (sourcePath, targetPath, sourceWorkspace, targetWorkspace) {
+            const move = function (sourcePath, targetPath, sourceWorkspace, targetWorkspace) {
                 // TODO: Move to another workspace
-                let url = new UriBuilder().path(this.workspaceManagerServiceUrl.split('/')).path(sourceWorkspace).path('move').build();
+                const url = new UriBuilder().path(this.workspaceManagerServiceUrl.split('/')).path(sourceWorkspace).path('move').build();
                 return $http.post(url, {
-                    source: sourcePath,
+                    sources: Array.isArray(sourcePath) ? sourcePath : [sourcePath],
                     target: targetPath,
                     sourceWorkspace: sourceWorkspace,
                     targetWorkspace: targetWorkspace
@@ -149,7 +160,7 @@ angular.module('ideWorkspace', [])
                 });
             }.bind(this);
 
-            let createNode = function (name, targetPath, isDirectory, content = '') {
+            const createNode = function (name, targetPath, isDirectory, content = '') {
                 let url = new UriBuilder().path((this.workspacesServiceUrl + targetPath).split('/')).path(name).build();
                 if (isDirectory)
                     url += "/";
@@ -165,8 +176,8 @@ angular.module('ideWorkspace', [])
                     });
             }.bind(this);
 
-            let createWorkspace = function (workspace) {
-                let url = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(workspace).build();
+            const createWorkspace = function (workspace) {
+                const url = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(workspace).build();
                 return $http.post(url, {})
                     .then(function successCallback(response) {
                         return { status: response.status, data: response.data };
@@ -176,8 +187,8 @@ angular.module('ideWorkspace', [])
                     });
             }.bind(this);
 
-            let deleteWorkspace = function (workspace) {
-                let url = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(workspace).build();
+            const deleteWorkspace = function (workspace) {
+                const url = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(workspace).build();
                 return $http.delete(url, { headers: { 'Dirigible-Editor': 'Workspace' } })
                     .then(function successCallback(response) {
                         return { status: response.status, data: response.data };
@@ -187,8 +198,8 @@ angular.module('ideWorkspace', [])
                     });
             }.bind(this);
 
-            let createProject = function (workspace, projectName) {
-                let url = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(workspace).path(projectName).build();
+            const createProject = function (workspace, projectName) {
+                const url = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(workspace).path(projectName).build();
                 return $http.post(url, {})
                     .then(function successCallback(response) {
                         return { status: response.status, data: response.data };
@@ -198,10 +209,10 @@ angular.module('ideWorkspace', [])
                     });
             }.bind(this);
 
-            let linkProject = function (workspace, projectName, path) {
-                let url = new UriBuilder().path(this.workspaceManagerServiceUrl.split('/')).path(workspace).path('linkProject').build();
+            const linkProject = function (workspace, projectName, path) {
+                const url = new UriBuilder().path(this.workspaceManagerServiceUrl.split('/')).path(workspace).path('linkProject').build();
                 return $http.post(url, {
-                    source: projectName,
+                    sources: Array.isArray(sourcePath) ? projectName : [projectName],
                     target: path
                 }).then(function successCallback(response) {
                     return { status: response.status, data: response.data };
@@ -211,8 +222,8 @@ angular.module('ideWorkspace', [])
                 });
             }.bind(this);
 
-            let deleteProject = function (workspace, projectName) {
-                let url = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(workspace).path(projectName).build();
+            const deleteProject = function (workspace, projectName) {
+                const url = new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(workspace).path(projectName).build();
                 return $http.delete(url, { headers: { 'Dirigible-Editor': 'Workspace' } })
                     .then(function successCallback(response) {
                         return { status: response.status, data: response.data };
@@ -222,8 +233,8 @@ angular.module('ideWorkspace', [])
                     });
             }.bind(this);
 
-            let search = function (workspace, resourcePath, searchTerm) {
-                let url = new UriBuilder().path(this.workspaceSearchServiceUrl.split('/')).path(workspace).path(resourcePath.split('/')).build();
+            const search = function (workspace, resourcePath, searchTerm) {
+                const url = new UriBuilder().path(this.workspaceSearchServiceUrl.split('/')).path(workspace).path(resourcePath.split('/')).build();
                 return $http.post(url, searchTerm)
                     .then(function successCallback(response) {
                         return { status: response.status, data: response.data };
@@ -232,7 +243,11 @@ angular.module('ideWorkspace', [])
                         return { status: response.status };
                     });
             }.bind(this);
-            
+
+            const getFullURL = function (workspace, resourcePath) {
+                return new UriBuilder().path(this.workspacesServiceUrl.split('/')).path(workspace).path(resourcePath ? resourcePath.split('/') : '').build();
+            }.bind(this);
+
             return {
                 setWorkspace: setWorkspace,
                 getCurrentWorkspace: getCurrentWorkspace,
@@ -240,6 +255,7 @@ angular.module('ideWorkspace', [])
                 load: load,
                 resourceExists: resourceExists,
                 loadContent: loadContent,
+                saveContent: saveContent,
                 getMetadata: getMetadata,
                 getMetadataByPath: getMetadataByPath,
                 rename: rename,
@@ -253,6 +269,7 @@ angular.module('ideWorkspace', [])
                 linkProject: linkProject,
                 deleteProject: deleteProject,
                 search: search,
+                getFullURL: getFullURL,
             };
         }];
     });

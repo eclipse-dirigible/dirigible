@@ -1,15 +1,15 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.mongodb.jdbc;
 
+import java.net.URI;
 import java.sql.Array;
 import java.sql.Blob;
 import java.sql.CallableStatement;
@@ -29,14 +29,20 @@ import java.sql.Struct;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
+
 import org.bson.BsonDocument;
 import org.bson.BsonInt32;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.mongodb.MongoClient;
+
+import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientOptions;
+import com.mongodb.MongoClientSettings;
 import com.mongodb.MongoClientURI;
+import com.mongodb.MongoCredential;
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 
@@ -54,9 +60,6 @@ public class MongoDBConnection implements Connection {
     /** The info. */
     private Properties info;
 
-    /** The uri. */
-    private final MongoClientURI uri;
-
     /** The db name. */
     private String dbName;
 
@@ -68,6 +71,9 @@ public class MongoDBConnection implements Connection {
 
     /** The is readonly. */
     private boolean isReadonly = false;
+
+    /** The client URI. */
+    private MongoClientURI clientUri;
 
     /** The client. */
     private final MongoClient client;
@@ -92,28 +98,70 @@ public class MongoDBConnection implements Connection {
      */
     public MongoDBConnection(String url, Properties info) {
         String dbUrl = url.replace("jdbc:", "");
-        MongoClientURI uri = new MongoClientURI(dbUrl);
-        this.uri = uri;
-        this.dbName = this.uri.getDatabase() != null ? this.uri.getDatabase() : MONGODB_DEFAULT_DB;
-        this.collectionName = this.uri.getCollection();
+        String username = info.getProperty("user");
+        String password = info.getProperty("password");
+        this.client = createMongoClient(dbUrl, username, password);
+        this.clientUri = new MongoClientURI(dbUrl);
+        this.dbName = this.clientUri.getDatabase() != null ? this.clientUri.getDatabase() : MONGODB_DEFAULT_DB;
+        this.collectionName = this.clientUri.getCollection();
 
-        this.client = new MongoClient(this.uri);
         this.isClosed = false;
 
         this.info = info;
-        if (this.info == null)
+        if (this.info == null) {
             this.info = new Properties();
-        this.clientOptions = this.client.getMongoClientOptions();
+        }
+        this.clientOptions = this.clientUri.getOptions();
         this.info.putAll(this.mongoClientOptionsAsProperties(this.clientOptions, this.info));
 
         // retrieve these from connected client
-        this.dbName = this.uri.getDatabase();
-        if (this.dbName != null)
+        this.dbName = this.clientUri.getDatabase();
+        if (this.dbName != null) {
             this.mongoDatabase = this.client.getDatabase(this.dbName);
-        if (this.collectionName != null)
+        }
+        if (this.collectionName != null) {
             this.collection = this.mongoDatabase.getCollection(this.collectionName);
+        }
 
         logger.debug("Connected with client properties: " + this.info.toString());
+    }
+
+    /**
+     * Creates the mongo client.
+     *
+     * @param url the url
+     * @param user the user
+     * @param pass the pass
+     * @return the mongo client
+     */
+    public static MongoClient createMongoClient(String url, String user, String pass) {
+        URI dbUri = URI.create(url);
+        String username;
+        String password;
+        if (dbUri.getUserInfo() != null && !dbUri.getUserInfo()
+                                                 .isEmpty()) {
+            username = dbUri.getUserInfo()
+                            .substring(0, dbUri.getUserInfo()
+                                               .indexOf(':'));
+            password = dbUri.getUserInfo()
+                            .substring(dbUri.getUserInfo()
+                                            .indexOf(':')
+                                    + 1);
+        } else {
+            username = user;
+            password = pass;
+        }
+        MongoClient client;
+        if (username != null && password != null) {
+            MongoCredential credential = MongoCredential.createCredential(username, "admin", password.toCharArray());
+            client = MongoClients.create(MongoClientSettings.builder()
+                                                            .applyConnectionString(new ConnectionString(url))
+                                                            .credential(credential)
+                                                            .build());
+        } else {
+            client = MongoClients.create(new ConnectionString(url));
+        }
+        return client;
     }
 
     /**
@@ -449,9 +497,9 @@ public class MongoDBConnection implements Connection {
             metadata.setDatabaseProductName("MongoDB");
             metadata.setDatabaseProductVersion(response.getString("version"));
             metadata.setDriverName("MongoDB JDBC Driver");
-            metadata.setURL(this.uri.getURI());
+            metadata.setURL(this.clientUri.getURI());
         }
-        metadata.setIsReadOnly(client.isLocked());
+        // metadata.setIsReadOnly(client.isLocked());
         return metadata;
     }
 

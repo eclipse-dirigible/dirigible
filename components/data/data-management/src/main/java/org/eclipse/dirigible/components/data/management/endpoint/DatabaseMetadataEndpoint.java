@@ -1,17 +1,16 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.management.endpoint;
 
 import java.sql.SQLException;
-import java.util.Set;
+import java.util.List;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.data.management.service.DatabaseMetadataService;
@@ -51,7 +50,7 @@ public class DatabaseMetadataEndpoint extends BaseEndpoint {
      * @return the data sources
      */
     @GetMapping(value = "/", produces = "application/json")
-    public ResponseEntity<Set<String>> getDataSourcesNames() {
+    public ResponseEntity<List<String>> getDataSourcesNames() {
         return ResponseEntity.ok(databasesService.getDataSourcesNames());
     }
 
@@ -63,7 +62,7 @@ public class DatabaseMetadataEndpoint extends BaseEndpoint {
      * @throws SQLException the SQL exception
      */
     @GetMapping(value = "/{datasource}", produces = "application/json")
-    public ResponseEntity<String> getSchemaMetadata(@PathVariable("datasource") String datasource) throws SQLException {
+    public ResponseEntity<String> getDataSourceMetadata(@PathVariable("datasource") String datasource) throws SQLException {
         return ResponseEntity.ok(databasesService.getDataSourceMetadata(datasource));
     }
 
@@ -94,8 +93,19 @@ public class DatabaseMetadataEndpoint extends BaseEndpoint {
     @GetMapping(value = "/{datasource}/{schema}/{structure}", produces = "application/json")
     public ResponseEntity<String> getStructureMetadata(@PathVariable("datasource") String datasource, @PathVariable("schema") String schema,
             @PathVariable("structure") String structure, @Nullable @RequestParam("kind") String kind) throws SQLException {
-
         return ResponseEntity.ok(databasesService.getStructureMetadata(datasource, schema, structure, kind));
+    }
+
+    /**
+     * Invalidates the metadata cache.
+     *
+     * @return the response entity
+     */
+    @GetMapping(value = "/invalidate-cache")
+    public ResponseEntity<Void> invalidateCache() {
+        databasesService.invalidateCache();
+        return ResponseEntity.noContent()
+                             .<Void>build();
     }
 
 }

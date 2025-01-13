@@ -1,25 +1,16 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.engine.javascript.endpoint;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
+import io.opentelemetry.instrumentation.annotations.SpanAttribute;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.engine.javascript.service.JavascriptService;
 import org.eclipse.dirigible.graalium.core.JavascriptSourceProvider;
@@ -35,17 +26,16 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.lang.Nullable;
 import org.springframework.util.MultiValueMap;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.*;
 
 /**
  * The Class JavascriptEndpoint.
@@ -59,14 +49,17 @@ public class JavascriptEndpoint extends BaseEndpoint {
 
     /** The Constant HTTP_PATH_MATCHER. */
     private static final String HTTP_PATH_MATCHER = "/{projectName}/{*projectFilePath}";
-
-
+    /** The Constant CJS. */
+    private static final String CJS = ".cjs/";
+    /** The Constant MJS. */
+    private static final String MJS = ".mjs/";
+    /** The Constant JS. */
+    private static final String JS = ".js/";
     /** The javascript service. */
     private final JavascriptService javascriptService;
-
     /** The repository. */
     private final IRepository repository;
-
+    /** The source provider. */
     private final JavascriptSourceProvider sourceProvider = new DirigibleSourceProvider();
 
     /**
@@ -81,6 +74,49 @@ public class JavascriptEndpoint extends BaseEndpoint {
         this.repository = repository;
     }
 
+    /**
+     * The Dts.
+     */
+    record Dts(String content, String moduleName, String filePath) {
+
+        /**
+         * From dts path.
+         *
+         * @param dtsDirRoot the dts dir root
+         * @param dtsPath the dts path
+         * @return the dts
+         */
+        static Dts fromDtsPath(Path dtsDirRoot, Path dtsPath) {
+            String content = readAllText(dtsPath);
+            Path relativePath = dtsDirRoot.relativize(dtsPath);
+            String filePath = "file:///node_modules/sdk/" + relativePath;
+            String moduleName = ("sdk/" + relativePath).replace("index.d.ts", "")
+                                                       .replace(".d.ts", "");
+            return new Dts(content, moduleName, filePath);
+        }
+
+        /**
+         * Read all text.
+         *
+         * @param path the path
+         * @return the string
+         */
+        private static String readAllText(Path path) {
+            try {
+                byte[] bytes = Files.readAllBytes(path);
+                return new String(bytes, StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    /**
+     * Gets the dts.
+     *
+     * @return the dts
+     * @throws IOException Signals that an I/O exception has occurred.
+     */
     @GetMapping("/all-dts")
     public List<Dts> getDTS() throws IOException {
         Path dtsRoot = sourceProvider.getAbsoluteProjectPath("modules")
@@ -109,99 +145,10 @@ public class JavascriptEndpoint extends BaseEndpoint {
      * @param params the params
      * @return the response
      */
+    @WithSpan
     @GetMapping(HTTP_PATH_MATCHER)
-    public ResponseEntity<?> get(@PathVariable("projectName") String projectName, @PathVariable("projectFilePath") String projectFilePath,
-            @Nullable @RequestParam(required = false) MultiValueMap<String, String> params) {
-        return executeJavaScript(projectName, projectFilePath, params, null);
-    }
-
-    /**
-     * Post.
-     *
-     * @param projectName the project name
-     * @param projectFilePath the project file path
-     * @param params the params
-     * @return the response
-     */
-    @PostMapping(HTTP_PATH_MATCHER)
-    public ResponseEntity<?> post(@PathVariable("projectName") String projectName, @PathVariable("projectFilePath") String projectFilePath,
-            @Nullable @RequestParam(required = false) MultiValueMap<String, String> params) {
-        return executeJavaScript(projectName, projectFilePath, params, null);
-    }
-
-    /**
-     * Post.
-     *
-     * @param projectName the project name
-     * @param projectFilePath the project file path
-     * @param params the params
-     * @param file the file
-     * @return the response
-     */
-    @PostMapping(value = HTTP_PATH_MATCHER, consumes = "multipart/form-data")
-    public ResponseEntity<?> postFile(@PathVariable("projectName") String projectName,
-            @PathVariable("projectFilePath") String projectFilePath,
-            @Nullable @RequestParam(required = false) MultiValueMap<String, String> params,
-            @Validated @RequestParam("file") MultipartFile file) {
-        return executeJavaScript(projectName, projectFilePath, params, new MultipartFile[] {file});
-    }
-
-    /**
-     * Put.
-     *
-     * @param projectName the project name
-     * @param projectFilePath the project file path
-     * @param params the params
-     * @return the response
-     */
-    @PutMapping(HTTP_PATH_MATCHER)
-    public ResponseEntity<?> put(@PathVariable("projectName") String projectName, @PathVariable("projectFilePath") String projectFilePath,
-            @Nullable @RequestParam(required = false) MultiValueMap<String, String> params) {
-        return executeJavaScript(projectName, projectFilePath, params, null);
-    }
-
-    /**
-     * Put.
-     *
-     * @param projectName the project name
-     * @param projectFilePath the project file path
-     * @param params the params
-     * @param file the file
-     * @return the response
-     */
-    @PutMapping(value = HTTP_PATH_MATCHER, consumes = "multipart/form-data")
-    public ResponseEntity<?> putFile(@PathVariable("projectName") String projectName,
-            @PathVariable("projectFilePath") String projectFilePath,
-            @Nullable @RequestParam(required = false) MultiValueMap<String, String> params,
-            @Validated @RequestParam("file") MultipartFile file) {
-        return executeJavaScript(projectName, projectFilePath, params, new MultipartFile[] {file});
-    }
-
-    /**
-     * Patch.
-     *
-     * @param projectName the project name
-     * @param projectFilePath the project file path
-     * @param params the params
-     * @return the response
-     */
-    @PatchMapping(HTTP_PATH_MATCHER)
-    public ResponseEntity<?> patch(@PathVariable("projectName") String projectName, @PathVariable("projectFilePath") String projectFilePath,
-            @Nullable @RequestParam(required = false) MultiValueMap<String, String> params) {
-        return executeJavaScript(projectName, projectFilePath, params, null);
-    }
-
-    /**
-     * Delete.
-     *
-     * @param projectName the project name
-     * @param projectFilePath the project file path
-     * @param params the params
-     * @return the response
-     */
-    @DeleteMapping(HTTP_PATH_MATCHER)
-    public ResponseEntity<?> delete(@PathVariable("projectName") String projectName,
-            @PathVariable("projectFilePath") String projectFilePath,
+    public ResponseEntity<?> get(@SpanAttribute("project.name") @PathVariable("projectName") String projectName,
+            @SpanAttribute("project.file.path") @PathVariable("projectFilePath") String projectFilePath,
             @Nullable @RequestParam(required = false) MultiValueMap<String, String> params) {
         return executeJavaScript(projectName, projectFilePath, params, null);
     }
@@ -221,16 +168,6 @@ public class JavascriptEndpoint extends BaseEndpoint {
         projectFilePath = extractProjectFilePath(projectFilePath);
         return executeJavaScript(projectName, projectFilePath, projectFilePathParam, params, files);
     }
-
-
-    /** The Constant CJS. */
-    private static final String CJS = ".cjs/";
-
-    /** The Constant MJS. */
-    private static final String MJS = ".mjs/";
-
-    /** The Constant JS. */
-    private static final String JS = ".js/";
 
     /**
      * Extract project file path.
@@ -289,9 +226,7 @@ public class JavascriptEndpoint extends BaseEndpoint {
             }
             List<MultipartFile> filesList = new ArrayList<MultipartFile>();
             if (files != null) {
-                for (MultipartFile file : files) {
-                    filesList.add(file);
-                }
+                Collections.addAll(filesList, files);
                 context.put("files", filesList);
             }
 
@@ -315,16 +250,6 @@ public class JavascriptEndpoint extends BaseEndpoint {
     }
 
     /**
-     * Gets the dirigible working directory.
-     *
-     * @return the dirigible working directory
-     */
-    protected java.nio.file.Path getDirigibleWorkingDirectory() {
-        String publicRegistryPath = repository.getInternalResourcePath(IRepositoryStructure.PATH_REGISTRY_PUBLIC);
-        return java.nio.file.Path.of(publicRegistryPath);
-    }
-
-    /**
      * Checks if is valid.
      *
      * @param inputPath the input path
@@ -345,6 +270,16 @@ public class JavascriptEndpoint extends BaseEndpoint {
     }
 
     /**
+     * Gets the dirigible working directory.
+     *
+     * @return the dirigible working directory
+     */
+    protected java.nio.file.Path getDirigibleWorkingDirectory() {
+        String publicRegistryPath = repository.getInternalResourcePath(IRepositoryStructure.PATH_REGISTRY_PUBLIC);
+        return java.nio.file.Path.of(publicRegistryPath);
+    }
+
+    /**
      * Normalize path.
      *
      * @param path the path
@@ -359,23 +294,103 @@ public class JavascriptEndpoint extends BaseEndpoint {
         return path;
     }
 
-    record Dts(String content, String moduleName, String filePath) {
-        static Dts fromDtsPath(Path dtsDirRoot, Path dtsPath) {
-            String content = readAllText(dtsPath);
-            Path relativePath = dtsDirRoot.relativize(dtsPath);
-            String filePath = "file:///node_modules/@dirigible/" + relativePath;
-            String moduleName = ("@dirigible/" + relativePath).replace("index.d.ts", "")
-                                                              .replace(".d.ts", "");
-            return new Dts(content, moduleName, filePath);
-        }
+    /**
+     * Post.
+     *
+     * @param projectName the project name
+     * @param projectFilePath the project file path
+     * @param params the params
+     * @return the response
+     */
+    @WithSpan
+    @PostMapping(HTTP_PATH_MATCHER)
+    public ResponseEntity<?> post(@SpanAttribute("project.name") @PathVariable("projectName") String projectName,
+            @SpanAttribute("project.file.path") @PathVariable("projectFilePath") String projectFilePath,
+            @Nullable @RequestParam(required = false) MultiValueMap<String, String> params) {
+        return executeJavaScript(projectName, projectFilePath, params, null);
+    }
 
-        private static String readAllText(Path path) {
-            try {
-                byte[] bytes = Files.readAllBytes(path);
-                return new String(bytes, StandardCharsets.UTF_8);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }
+    /**
+     * Post.
+     *
+     * @param projectName the project name
+     * @param projectFilePath the project file path
+     * @param params the params
+     * @param file the file
+     * @return the response
+     */
+    @WithSpan
+    @PostMapping(value = HTTP_PATH_MATCHER, consumes = "multipart/form-data")
+    public ResponseEntity<?> postFile(@SpanAttribute("project.name") @PathVariable("projectName") String projectName,
+            @SpanAttribute("project.file.path") @PathVariable("projectFilePath") String projectFilePath,
+            @Nullable @RequestParam(required = false) MultiValueMap<String, String> params,
+            @Validated @RequestParam("file") MultipartFile[] file) {
+        return executeJavaScript(projectName, projectFilePath, params, file);
+    }
+
+    /**
+     * Put.
+     *
+     * @param projectName the project name
+     * @param projectFilePath the project file path
+     * @param params the params
+     * @return the response
+     */
+    @WithSpan
+    @PutMapping(HTTP_PATH_MATCHER)
+    public ResponseEntity<?> put(@SpanAttribute("project.name") @PathVariable("projectName") String projectName,
+            @SpanAttribute("project.file.path") @PathVariable("projectFilePath") String projectFilePath,
+            @Nullable @RequestParam(required = false) MultiValueMap<String, String> params) {
+        return executeJavaScript(projectName, projectFilePath, params, null);
+    }
+
+    /**
+     * Put.
+     *
+     * @param projectName the project name
+     * @param projectFilePath the project file path
+     * @param params the params
+     * @param file the file
+     * @return the response
+     */
+    @WithSpan
+    @PutMapping(value = HTTP_PATH_MATCHER, consumes = "multipart/form-data")
+    public ResponseEntity<?> putFile(@SpanAttribute("project.name") @PathVariable("projectName") String projectName,
+            @SpanAttribute("project.file.path") @PathVariable("projectFilePath") String projectFilePath,
+            @Nullable @RequestParam(required = false) MultiValueMap<String, String> params,
+            @Validated @RequestParam("file") MultipartFile file) {
+        return executeJavaScript(projectName, projectFilePath, params, new MultipartFile[] {file});
+    }
+
+    /**
+     * Patch.
+     *
+     * @param projectName the project name
+     * @param projectFilePath the project file path
+     * @param params the params
+     * @return the response
+     */
+    @PatchMapping(HTTP_PATH_MATCHER)
+    @WithSpan("java_script_endpoint_patch")
+    public ResponseEntity<?> patch(@SpanAttribute("project.name") @PathVariable("projectName") String projectName,
+            @SpanAttribute("project.file.path") @PathVariable("projectFilePath") String projectFilePath,
+            @Nullable @RequestParam(required = false) MultiValueMap<String, String> params) {
+        return executeJavaScript(projectName, projectFilePath, params, null);
+    }
+
+    /**
+     * Delete.
+     *
+     * @param projectName the project name
+     * @param projectFilePath the project file path
+     * @param params the params
+     * @return the response
+     */
+    @WithSpan
+    @DeleteMapping(HTTP_PATH_MATCHER)
+    public ResponseEntity<?> delete(@SpanAttribute("project.name") @PathVariable("projectName") String projectName,
+            @SpanAttribute("project.file.path") @PathVariable("projectFilePath") String projectFilePath,
+            @Nullable @RequestParam(required = false) MultiValueMap<String, String> params) {
+        return executeJavaScript(projectName, projectFilePath, params, null);
     }
 }

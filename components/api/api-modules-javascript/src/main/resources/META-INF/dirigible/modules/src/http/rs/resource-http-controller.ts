@@ -1,10 +1,11 @@
-import * as response from "../response";
-import * as request from "../request";
+import { Response as response } from "../response";
+import { Request as request } from "../request";
 import { ResourceMappings } from "./resource-mappings";
-import * as logging from "@dirigible/log/logging";
-const { match } = dirigibleRequire("http/path-to-regexp/6.2.1/index.js");
+import { Logging } from "sdk/log";
 
-const logger = logging.getLogger('http.rs.controller');
+const { match } = dirigibleRequire("modules/src/http/path-to-regexp/6.2.1/index.js");
+
+const logger = Logging.getLogger('http.rs.controller');
 
 function getRequest() {
     return request;
@@ -269,7 +270,7 @@ const catchErrorHandler = function (logctx, ctx, err, request, response) {
 const matchMediaType = function (request, producesMediaTypes, consumesMediaTypes) {
     let isProduceMatched = false;
     const acceptsMediaTypes = normalizeMediaTypeHeaderValue(request.getHeader('Accept'));
-    if (!acceptsMediaTypes || acceptsMediaTypes.indexOf('*/*') > -1) { //output media type is not restricted
+    if (!acceptsMediaTypes || acceptsMediaTypes.length === 0 || acceptsMediaTypes.indexOf('*/*') > -1) { //output media type is not restricted
         isProduceMatched = true;
     } else {
         let matchedProducesMIME;
@@ -285,7 +286,7 @@ const matchMediaType = function (request, producesMediaTypes, consumesMediaTypes
 
     let isConsumeMatched = false;
     const contentTypeMediaTypes = normalizeMediaTypeHeaderValue(request.getContentType());
-    if (!consumesMediaTypes || consumesMediaTypes.indexOf('*') > -1) { //input media type is not restricted
+    if (!consumesMediaTypes || consumesMediaTypes.length === 0 || consumesMediaTypes.indexOf('*/*') > -1) { //input media type is not restricted
         isConsumeMatched = true;
     } else {
         let matchedConsumesMIME;

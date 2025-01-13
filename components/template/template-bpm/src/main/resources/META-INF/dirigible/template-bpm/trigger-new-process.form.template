@@ -1,0 +1,54 @@
+#set($dollar = '$')
+{
+    "feeds": [],
+    "scripts": [],
+    "code": "${dollar}scope.model.param1 = \"\";\n${dollar}scope.model.param2 = 0;\n\n${dollar}scope.onTriggerClicked = function(){\n    ${dollar}http.post(\"/services/ts/${projectName}/api/ProcessService.ts/processes\", JSON.stringify(${dollar}scope.model)).then(function (response) {\n        if (response.status != 202) {\n            alert(`Unable to trigger a new process: '${dollar}{response.message}'`);\n            return;\n        }\n        alert(\"A new process instance has been triggered.\\nResponse: \" + JSON.stringify(response.data));\n    });\n}\n",
+    "form": [
+        {
+            "controlId": "header",
+            "groupId": "fb-display",
+            "title": "Trigger new process instance",
+            "size": 1
+        },
+        {
+            "controlId": "input-textfield",
+            "groupId": "fb-controls",
+            "id": "param1Id",
+            "label": "Parameter 1",
+            "horizontal": false,
+            "isCompact": false,
+            "placeholder": "string value here",
+            "type": "text",
+            "model": "param1",
+            "required": false,
+            "minLength": 0,
+            "maxLength": -1,
+            "validationRegex": "",
+            "errorState": "Incorrect input"
+        },
+        {
+            "controlId": "input-number",
+            "groupId": "fb-controls",
+            "id": "param2Id",
+            "label": "Parameter 2",
+            "horizontal": false,
+            "isCompact": false,
+            "placeholder": "",
+            "model": "param2",
+            "required": false,
+            "minNum": 0,
+            "maxNum": 100000,
+            "step": 1
+        },
+        {
+            "controlId": "button",
+            "groupId": "fb-controls",
+            "label": "Trigger",
+            "type": "emphasized",
+            "sizeToText": false,
+            "isSubmit": true,
+            "isCompact": false,
+            "callback": "onTriggerClicked()"
+        }
+    ]
+}

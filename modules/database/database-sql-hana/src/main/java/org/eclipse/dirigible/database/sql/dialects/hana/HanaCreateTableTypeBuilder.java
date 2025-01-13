@@ -1,21 +1,13 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.dialects.hana;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import org.eclipse.dirigible.database.sql.DataType;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
@@ -24,6 +16,13 @@ import org.eclipse.dirigible.database.sql.builders.table.CreateTablePrimaryKeyBu
 import org.eclipse.dirigible.database.sql.builders.tableType.CreateTableTypeBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * The Class HanaCreateTableTypeBuilder.
@@ -38,10 +37,10 @@ public class HanaCreateTableTypeBuilder extends CreateTableTypeBuilder {
             List.of(DataType.VARCHAR, DataType.CHAR, DataType.NVARCHAR, DataType.ALPHANUM, DataType.SHORTTEXT, DataType.DECIMAL));
 
     /** The table type. */
-    private String tableType;
+    private final String tableType;
 
     /** The columns. */
-    private List<String[]> columns = new ArrayList<>();
+    private final List<String[]> columns = new ArrayList<>();
 
     /** The primary key. */
     private CreateTablePrimaryKeyBuilder primaryKey;
@@ -125,7 +124,7 @@ public class HanaCreateTableTypeBuilder extends CreateTableTypeBuilder {
             boolean isColumnName = true;
             for (String arg : column) {
                 if (isColumnName) {
-                    String columnName = (isCaseSensitive()) ? encapsulate(arg) : arg;
+                    String columnName = encapsulate(arg);
                     snippet.append(columnName)
                            .append(SPACE);
                     isColumnName = false;
@@ -149,7 +148,7 @@ public class HanaCreateTableTypeBuilder extends CreateTableTypeBuilder {
      * @param sql the sql
      */
     private void generateTableType(StringBuilder sql) {
-        String tableTypeName = (isCaseSensitive()) ? encapsulate(this.getTableType(), true) : this.getTableType();
+        String tableTypeName = encapsulate(this.getTableType(), true);
         sql.append(SPACE)
            .append(KEYWORD_TABLE_TYPE)
            .append(SPACE)
@@ -221,7 +220,6 @@ public class HanaCreateTableTypeBuilder extends CreateTableTypeBuilder {
             definition = new String[] {name, getDialect().getDataTypeName(type)};
         }
 
-
         if (!isNullable) {
             definition = Stream.of(definition, new String[] {getDialect().getNotNullArgument()})
                                .flatMap(Stream::of)
@@ -255,7 +253,7 @@ public class HanaCreateTableTypeBuilder extends CreateTableTypeBuilder {
             sql.append(COMMA)
                .append(SPACE);
             if (this.primaryKey.getName() != null) {
-                String primaryKeyName = (isCaseSensitive()) ? encapsulate(this.primaryKey.getName()) : this.primaryKey.getName();
+                String primaryKeyName = encapsulate(this.primaryKey.getName());
                 sql.append(KEYWORD_CONSTRAINT)
                    .append(SPACE)
                    .append(primaryKeyName)
@@ -313,7 +311,7 @@ public class HanaCreateTableTypeBuilder extends CreateTableTypeBuilder {
         StringBuilder snippet = new StringBuilder();
         snippet.append(SPACE);
         for (String column : names) {
-            String columnName = (isCaseSensitive()) ? encapsulate(column) : column;
+            String columnName = encapsulate(column);
             snippet.append(columnName)
                    .append(SPACE)
                    .append(COMMA)

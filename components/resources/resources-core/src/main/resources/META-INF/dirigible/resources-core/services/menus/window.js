@@ -1,17 +1,29 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-let extensions = require('extensions/extensions');
+import { extensions } from "sdk/extensions";
 
-exports.getMenu = function () {
+let perspectiveExtensions = await extensions.loadExtensionModules('ide-perspective');
+let perspectiveExtensionDefinitions = [];
+
+for (let i = 0; i < perspectiveExtensions?.length; i++) {
+	perspectiveExtensionDefinitions.push(perspectiveExtensions[i].getPerspective());
+}
+
+let viewExtensions = await extensions.loadExtensionModules('ide-view');
+let viewExtensionDefinitions = [];
+for (let i = 0; i < viewExtensions.length; i++) {
+	viewExtensionDefinitions.push(viewExtensions[i].getView());
+}
+export const getMenu = () => {
 	let menu = {
 		label: "Window",
 		order: 800,
@@ -29,19 +41,6 @@ exports.getMenu = function () {
 		]
 	};
 
-	let perspectiveExtensions = extensions.getExtensions('ide-perspective');
-	let perspectiveExtensionDefinitions = [];
-
-	for (let i = 0; i < perspectiveExtensions.length; i++) {
-		let module = perspectiveExtensions[i];
-		try {
-			perspectiveExtensionDefinitions.push(require(module).getPerspective());
-		} catch (error) {
-			console.error('Error occured while loading metadata for the menu for perspective: ' + module);
-			console.error(error);
-		}
-	}
-
 	perspectiveExtensionDefinitions = perspectiveExtensionDefinitions.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 	for (let i = 0; i < perspectiveExtensionDefinitions.length; i++) {
 		let perspectiveInfo = perspectiveExtensionDefinitions[i];
@@ -54,17 +53,6 @@ exports.getMenu = function () {
 		});
 	}
 
-	let viewExtensions = extensions.getExtensions('ide-view');
-	let viewExtensionDefinitions = [];
-	for (let i = 0; i < viewExtensions.length; i++) {
-		let module = viewExtensions[i];
-		try {
-			viewExtensionDefinitions.push(require(module).getView());
-		} catch (error) {
-			console.error('Error occured while loading metadata for the menu for view: ' + module);
-			console.error(error);
-		}
-	}
 	viewExtensionDefinitions = viewExtensionDefinitions.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
 
 	for (let i = 0; i < viewExtensionDefinitions.length; i++) {

@@ -118,8 +118,6 @@ spec:
               value: {{ required "Missing database password" .Values.database.password }}
             - name: DIRIGIBLE_MESSAGING_USE_DEFAULT_DATABASE
               value: "false"
-            - name: DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE
-              value: "true"
             - name: DIRIGIBLE_SCHEDULER_MEMORY_STORE
               value: "true"
             {{- end }}
@@ -149,33 +147,25 @@ spec:
                   key: password
             - name: DIRIGIBLE_MESSAGING_USE_DEFAULT_DATABASE
               value: "false"
-            - name: DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE
-              value: "true"
             - name: DIRIGIBLE_SCHEDULER_MEMORY_STORE
               value: "true"
             {{- end }}
             {{- if .Values.keycloak.enabled }}
-            - name: DIRIGIBLE_KEYCLOAK_ENABLED
-              value: "true"
+            - name: spring_profiles_active
+              value: "keycloak"
             - name: DIRIGIBLE_BASIC_ENABLED
               value: "false"
-            - name: DIRIGIBLE_KEYCLOAK_CONFIDENTIAL_PORT
-              value: "443"
-            - name: DIRIGIBLE_KEYCLOAK_SSL_REQUIRED
-              value: "none"
-            - name: DIRIGIBLE_KEYCLOAK_REALM
-              value: {{ required "Missing Keycloak realm" .Values.keycloak.realm }}
             - name: DIRIGIBLE_KEYCLOAK_CLIENT_ID
               value: {{ required "Missing Keycloak client id" .Values.keycloak.clientId }}
             {{- if .Values.ingress.enabled }}
             - name: DIRIGIBLE_KEYCLOAK_AUTH_SERVER_URL
-              value: http{{ if $.Values.ingress.tls }}s{{ end }}://{{ required "Missing Keycloak name" .Values.keycloak.name }}.{{ required "Missing ingress host" .Values.ingress.host }}/auth/
+              value: http{{ if $.Values.ingress.tls }}s{{ end }}://{{ required "Missing Keycloak name" .Values.keycloak.name }}.{{ required "Missing ingress host" .Values.ingress.host }}/auth/realms/{{ required "Missing Keycloak realm" .Values.keycloak.realm }}
             {{- else if .Values.istio.enabled }}
             - name: DIRIGIBLE_KEYCLOAK_AUTH_SERVER_URL
-              value: http{{ if $.Values.ingress.tls }}s{{ end }}://{{ required "Missing Keycloak name" .Values.keycloak.name }}.{{ required "Missing ingress host" .Values.ingress.host }}/auth/
+              value: http{{ if $.Values.ingress.tls }}s{{ end }}://{{ required "Missing Keycloak name" .Values.keycloak.name }}.{{ required "Missing ingress host" .Values.ingress.host }}/auth/realms/{{ required "Missing Keycloak realm" .Values.keycloak.realm }}
             {{- else }}
             - name: DIRIGIBLE_KEYCLOAK_AUTH_SERVER_URL
-              value: https://{{ required "Missing Keycloak name" .Values.keycloak.name }}/auth/
+              value: https://{{ required "Missing Keycloak name" .Values.keycloak.name }}/auth/realms/{{ required "Missing Keycloak realm" .Values.keycloak.realm }}
             {{- end }}
             {{- end }}
           securityContext:

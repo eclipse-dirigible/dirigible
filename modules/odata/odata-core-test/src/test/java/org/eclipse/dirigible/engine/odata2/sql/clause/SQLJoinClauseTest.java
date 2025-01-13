@@ -1,25 +1,22 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.engine.odata2.sql.clause;
 
 import org.apache.olingo.odata2.annotation.processor.core.edm.AnnotationEdmProvider;
 import org.apache.olingo.odata2.api.edm.EdmEntityType;
-import org.apache.olingo.odata2.api.edm.EdmException;
 import org.apache.olingo.odata2.core.edm.provider.EdmImplProv;
-import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.engine.odata2.sql.binding.EdmTableBindingProvider;
 import org.eclipse.dirigible.engine.odata2.sql.builder.SQLContext;
-import org.eclipse.dirigible.engine.odata2.sql.builder.SQLSelectBuilder;
 import org.eclipse.dirigible.engine.odata2.sql.builder.SQLQueryBuilder;
 import org.eclipse.dirigible.engine.odata2.sql.builder.SQLQueryTestUtils;
+import org.eclipse.dirigible.engine.odata2.sql.builder.SQLSelectBuilder;
 import org.eclipse.dirigible.engine.odata2.sql.edm.Entity1;
 import org.eclipse.dirigible.engine.odata2.sql.edm.Entity2;
 import org.eclipse.dirigible.engine.odata2.sql.edm.Entity3;
@@ -79,17 +76,7 @@ public class SQLJoinClauseTest {
      */
     @Test
     public void testSimpleJoinWithCaseSensitiveNames() throws Exception {
-        testSimpleJoin(true, "LEFT JOIN \"MPLHEADER\" AS \"T0\" ON \"T0\".\"ID\" = \"T1\".\"HEADER_ID\"");
-    }
-
-    /**
-     * Test simple join with no case sensitive names.
-     *
-     * @throws Exception the exception
-     */
-    @Test
-    public void testSimpleJoinWithNoCaseSensitiveNames() throws Exception {
-        testSimpleJoin(false, "LEFT JOIN MPLHEADER AS T0 ON T0.ID = T1.HEADER_ID");
+        testSimpleJoin("LEFT JOIN \"MPLHEADER\" AS \"T0\" ON \"T0\".\"ID\" = \"T1\".\"HEADER_ID\"");
     }
 
     /**
@@ -99,8 +86,7 @@ public class SQLJoinClauseTest {
      * @param expectedJoinStatement the expected join statement
      * @throws Exception the exception
      */
-    public void testSimpleJoin(boolean caseSensitiveNames, String expectedJoinStatement) throws Exception {
-        Configuration.set("DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE", String.valueOf(caseSensitiveNames));
+    public void testSimpleJoin(String expectedJoinStatement) throws Exception {
         EdmEntityType mpl = edm.getEntityType(Entity1.class.getPackage()
                                                            .getName(),
                 Entity1.class.getSimpleName());

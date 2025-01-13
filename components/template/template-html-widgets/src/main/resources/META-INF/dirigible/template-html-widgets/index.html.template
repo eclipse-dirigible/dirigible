@@ -1850,28 +1850,28 @@
 			<fd-panel-content aria-label="Select Panel Content">
 				<h4>Compact Select With States</h4>
 				<div style="display:flex; justify-content: space-around">
-					<fd-select dg-placeholder="Select an option" dg-size="compact" state="success"
+					<fd-select dg-placeholder="Select an option" compact="true" state="success"
 						message="Success message">
 						<fd-option text="Option 1" value="1"></fd-option>
 						<fd-option text="Option 2" value="2"></fd-option>
 						<fd-option text="Option 3" value="3"></fd-option>
 						<fd-option text="Option 4" value="4"></fd-option>
 					</fd-select>
-					<fd-select dg-placeholder="Select an option" dg-size="compact" state="information"
+					<fd-select dg-placeholder="Select an option" compact="true" state="information"
 						message="Information message">
 						<fd-option text="Option 1" value="1"></fd-option>
 						<fd-option text="Option 2" value="2"></fd-option>
 						<fd-option text="Option 3" value="3"></fd-option>
 						<fd-option text="Option 4" value="4"></fd-option>
 					</fd-select>
-					<fd-select dg-placeholder="Select an option" dg-size="compact" state="warning"
+					<fd-select dg-placeholder="Select an option" compact="true" state="warning"
 						message="Warning message">
 						<fd-option text="Option 1" value="1"></fd-option>
 						<fd-option text="Option 2" value="2"></fd-option>
 						<fd-option text="Option 3" value="3"></fd-option>
 						<fd-option text="Option 4" value="4"></fd-option>
 					</fd-select>
-					<fd-select dg-placeholder="Select an option" dg-size="compact" state="error"
+					<fd-select dg-placeholder="Select an option" compact="true" state="error"
 						message="Error message">
 						<fd-option text="Option 1" value="1"></fd-option>
 						<fd-option text="Option 2" value="2"></fd-option>

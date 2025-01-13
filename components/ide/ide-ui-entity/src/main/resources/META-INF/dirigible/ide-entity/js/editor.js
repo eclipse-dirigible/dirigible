@@ -1,18 +1,17 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
 angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "ideGenerate", "ideTemplates"])
-	.controller('ModelerCtrl', function ($scope, messageHub, $window, workspaceApi, generateApi, templatesApi, ViewParameters) {
+	.controller('ModelerCtrl', function ($scope, messageHub, $window, workspaceApi, generateApi, templatesApi, ViewParameters, uuid) {
 		let contents;
-		let csrfToken;
 		let modelFile = '';
 		let genFile = '';
 		let fileWorkspace = '';
@@ -45,39 +44,27 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 			messageHub.setStatusCaret('');
 		});
 
-		function getResource() {
-			let xhr = new XMLHttpRequest();
-			xhr.open('GET', '/services/ide/workspaces' + $scope.dataParameters.file, false);
-			xhr.setRequestHeader('X-CSRF-Token', 'Fetch');
-			xhr.send();
-			if (xhr.status === 200) {
-				csrfToken = xhr.getResponseHeader("x-csrf-token");
-				return xhr.responseText;
-			} else {
-				$scope.state.error = true;
-				$scope.errorMessage = "Unable to load the file. See console, for more information.";
-				messageHub.setStatusError(`Error loading '${$scope.dataParameters.file}'`);
-				return '{}';
-			}
-		}
-
 		$scope.load = function () {
 			if (!$scope.state.error) {
-				contents = getResource();
-				initializeModelJson();
-			}
-		};
-
-		$scope.checkModel = function () {
-			let xhr = new XMLHttpRequest();
-			xhr.open('HEAD', `/services/ide/workspaces${modelFile}`, false);
-			xhr.setRequestHeader('X-CSRF-Token', 'Fetch');
-			xhr.send();
-			if (xhr.status === 200) {
-				csrfToken = xhr.getResponseHeader("x-csrf-token");
-				return true;
-			} else {
-				return false;
+				workspaceApi.loadContent('', $scope.dataParameters.file).then(function (response) {
+					if (response.status === 200) {
+						contents = response.data;
+						initializeModelJson();
+						main(document.getElementById('graphContainer'),
+							document.getElementById('outlineContainer'),
+							document.getElementById('toolbarContainer'),
+							document.getElementById('sidebarContainer'));
+						$scope.$apply(() => $scope.state.isBusy = false);
+					} else if (response.status === 404) {
+						messageHub.closeEditor($scope.dataParameters.file);
+					} else {
+						$scope.$apply(function () {
+							$scope.state.error = true;
+							$scope.errorMessage = 'There was a problem with loading the file';
+							$scope.state.isBusy = false;
+						});
+					}
+				});
 			}
 		};
 
@@ -85,75 +72,59 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 			workspaceApi.resourceExists(genFile).then(function (response) {
 				if (response.status === 200) $scope.canRegenerate = true;
 				else $scope.canRegenerate = false;
-			})
+			});
 		};
 
-		function saveContents(text, resourcePath) {
-			let xhr = new XMLHttpRequest();
-			xhr.open('PUT', '/services/ide/workspaces' + resourcePath);
-			xhr.setRequestHeader('X-Requested-With', 'Fetch');
-			xhr.setRequestHeader('X-CSRF-Token', csrfToken);
-			xhr.onreadystatechange = function () {
-				if (xhr.readyState === 4) {
+		function saveContents(text) {
+			workspaceApi.saveContent('', $scope.dataParameters.file, text).then(function (response) {
+				if (response.status === 200) {
 					messageHub.announceFileSaved({
-						name: resourcePath.substring(resourcePath.lastIndexOf('/') + 1),
-						path: resourcePath.substring(resourcePath.indexOf('/', 1)),
+						name: $scope.dataParameters.file.substring($scope.dataParameters.file.lastIndexOf('/') + 1),
+						path: $scope.dataParameters.file.substring($scope.dataParameters.file.indexOf('/', 1)),
 						contentType: $scope.dataParameters.contentType,
-						workspace: resourcePath.substring(1, resourcePath.indexOf('/', 1)),
+						workspace: $scope.dataParameters.file.substring(1, $scope.dataParameters.file.indexOf('/', 1)),
 					});
-					messageHub.setStatusMessage(`File '${resourcePath}' saved`);
+					messageHub.setStatusMessage(`File '${$scope.dataParameters.file}' saved`);
 					messageHub.setEditorDirty($scope.dataParameters.file, false);
 					$scope.$apply(function () {
 						$scope.state.isBusy = false;
 					});
-				}
-			};
-			xhr.onerror = function (error) {
-				console.error(`Error saving '${resourcePath}'`, error);
-				messageHub.setStatusError(`Error saving '${resourcePath}'`);
-				messageHub.showAlertError('Error while saving the file', 'Please look at the console for more information');
-				$scope.$apply(function () {
-					$scope.state.isBusy = false;
-				});
-			};
-			xhr.send(text);
-		}
-
-		function initializeModelJson() {
-			if (!$scope.checkModel()) {
-				let xhr = new XMLHttpRequest();
-				xhr.open('POST', '/services/ide/workspaces' + modelFile);
-				xhr.setRequestHeader('X-CSRF-Token', 'Fetch');
-				xhr.onreadystatechange = function () {
-					if (xhr.readyState === 4) {
-						messageHub.announceFileSaved({
-							name: resourcePath.substring(resourcePath.lastIndexOf('/') + 1),
-							path: resourcePath.substring(resourcePath.indexOf('/', 1)),
-							contentType: $scope.dataParameters.contentType,
-							workspace: resourcePath.substring(1, resourcePath.indexOf('/', 1)),
-						});
-						messageHub.setStatusMessage(`File '${resourcePath}' created`);
-						$scope.checkGenFile();
-					}
-				};
-				xhr.onerror = function (error) {
-					console.error(`Error creating '${resourcePath}'`, error);
-					messageHub.setStatusError(`Error creating '${resourcePath}'`);
-					messageHub.showAlertError('Error while creating the file', 'Please look at the console for more information');
+				} else {
+					messageHub.setStatusError(`Error saving '${$scope.dataParameters.file}'`);
+					messageHub.showAlertError('Error while saving the file', 'Please look at the console for more information');
 					$scope.$apply(function () {
 						$scope.state.isBusy = false;
 					});
-				};
-				xhr.send('');
-			} else $scope.checkGenFile();
+				}
+			});
 		}
 
-		$scope.saveModel = function () {
-			let schema = createModel($scope.graph);
-			saveContents(schema, $scope.dataParameters.file);
-			// let modelJson = createModelJson($scope.graph);
-			// saveContents(modelJson, modelFile);
-		};
+		function initializeModelJson() {
+			workspaceApi.resourceExists(modelFile).then(function (exists) {
+				if (exists.status === 200) {
+					$scope.checkGenFile();
+				} else {
+					workspaceApi.createNode('', modelFile, false, '').then(function (response) {
+						if (response.status === 201) {
+							const fileDescriptor = {
+								name: modelFile.substring(modelFile.lastIndexOf('/') + 1),
+								path: modelFile.substring(modelFile.indexOf('/', 1)),
+								contentType: $scope.dataParameters.contentType,
+								workspace: modelFile.substring(1, modelFile.indexOf('/', 1)),
+							};
+							messageHub.announceFileSaved(fileDescriptor);
+							messageHub.postMessage('projects.tree.refresh', { partial: true, project: fileDescriptor.path.substring(1, fileDescriptor.path.indexOf('/', 1)), workspace: fileDescriptor.workspace }, true);
+							messageHub.setStatusMessage(`File '${modelFile}' created`);
+							$scope.checkGenFile();
+						} else {
+							messageHub.setStatusError(`Error saving '${modelFile}'`);
+							messageHub.showAlertError('Error while saving the file', 'Please look at the console for more information');
+							$scope.state.isBusy = false;
+						}
+					});
+				}
+			});
+		}
 
 		$scope.chooseTemplate = function (project, filePath, params) {
 			const templateItems = [];
@@ -228,12 +199,13 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 				} else {
 					messageHub.setStatusMessage(`Generated from model '${filePath}'`);
 				}
-				messageHub.postMessage('projects.tree.refresh', { name: fileWorkspace }, true);
+				messageHub.postMessage('projects.tree.refresh', { partial: true, project: project, workspace: fileWorkspace }, true);
 			});
 		};
 
 		$scope.regenerate = function () {
 			messageHub.showLoadingDialog('edmRegenerateModel', 'Regenerating', 'Loading data');
+			$scope.save();
 			workspaceApi.loadContent('', genFile).then(function (response) {
 				if (response.status === 200) {
 					let { models, perspectives, templateId, filePath, workspaceName, projectName, ...params } = response.data;
@@ -255,11 +227,21 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 			if (msg.resourcePath === $scope.dataParameters.file) messageHub.setStatusCaret('');
 		});
 
+		messageHub.onEditorReloadParameters(
+			function (event) {
+				$scope.$apply(() => {
+					if (event.resourcePath === $scope.dataParameters.file) {
+						$scope.dataParameters = ViewParameters.get();
+					}
+				});
+			}
+		);
+
 		messageHub.onDidReceiveMessage(
 			"editor.file.save.all",
 			function () {
 				if (!$scope.state.error) {
-					$scope.saveModel();
+					saveContents(createModel($scope.graph));
 				}
 			},
 			true,
@@ -271,7 +253,7 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 				if (!$scope.state.error) {
 					let file = msg.data && typeof msg.data === 'object' && msg.data.file;
 					if (file && file === $scope.dataParameters.file) {
-						$scope.saveModel();
+						saveContents(createModel($scope.graph));
 					}
 				}
 			},
@@ -289,6 +271,7 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 				cell.value.dataQuery = msg.data.dataQuery;
 				cell.value.title = msg.data.title;
 				cell.value.caption = msg.data.caption;
+				cell.value.description = msg.data.description;
 				cell.value.tooltip = msg.data.tooltip;
 				cell.value.icon = msg.data.icon;
 				cell.value.menuKey = msg.data.menuKey;
@@ -296,6 +279,7 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 				cell.value.menuIndex = msg.data.menuIndex;
 				cell.value.layoutType = msg.data.layoutType;
 				cell.value.perspectiveName = msg.data.perspectiveName;
+				cell.value.perspectiveLabel = msg.data.perspectiveLabel;
 				cell.value.navigationPath = msg.data.navigationPath;
 				cell.value.feedUrl = msg.data.feedUrl;
 				cell.value.feedUsername = msg.data.feedUsername;
@@ -304,14 +288,23 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 				cell.value.feedPath = msg.data.feedPath;
 				cell.value.roleRead = msg.data.roleRead;
 				cell.value.roleWrite = msg.data.roleWrite;
-				// Maybe we should do this with "cell.value.clone()'
+				cell.value.importsCode = msg.data.importsCode;
+				cell.value.generateReport = msg.data.generateReport;
+
 				$scope.graph.model.setValue(cell, cell.value.clone());
-				if (cell.entityType === 'PROJECTION') {
+
+				if (cell.entityType === 'DEPENDENT') {
+					$scope.graph.getSelectionCell().style = 'dependent';
+					$scope.graph.refresh();
+				} else if (cell.entityType === 'COPIED') {
+					$scope.graph.getSelectionCell().style = 'copied';
+					$scope.graph.getSelectionCell().children.forEach(cell => cell.style = 'copiedproperty');
+					$scope.graph.refresh();
+				} else if (cell.entityType === 'PROJECTION') {
 					$scope.graph.getSelectionCell().style = 'projection';
 					$scope.graph.getSelectionCell().children.forEach(cell => cell.style = 'projectionproperty');
 					$scope.graph.refresh();
-				}
-				if (cell.entityType === 'EXTENSION') {
+				} else if (cell.entityType === 'EXTENSION') {
 					$scope.graph.getSelectionCell().style = 'extension';
 					$scope.graph.getSelectionCell().children.forEach(cell => cell.style = 'extensionproperty');
 					$scope.graph.refresh();
@@ -326,10 +319,15 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 			function (msg) {
 				let cell = $scope.graph.model.getCell(msg.data.cellId);
 				cell.value.name = msg.data.name;
+				cell.value.description = msg.data.description;
+				cell.value.tooltip = msg.data.tooltip;
+				cell.value.isRequiredProperty = msg.data.isRequiredProperty;
 				cell.value.isCalculatedProperty = msg.data.isCalculatedProperty;
-				cell.value.calculatedPropertyExpression = msg.data.calculatedPropertyExpression;
+				cell.value.calculatedPropertyExpressionCreate = msg.data.calculatedPropertyExpressionCreate;
+				cell.value.calculatedPropertyExpressionUpdate = msg.data.calculatedPropertyExpressionUpdate;
 				cell.value.dataName = msg.data.dataName;
 				cell.value.dataType = msg.data.dataType;
+				cell.value.dataOrderBy = msg.data.dataOrderBy;
 				cell.value.dataLength = msg.data.dataLength;
 				cell.value.dataPrimaryKey = msg.data.dataPrimaryKey;
 				cell.value.dataAutoIncrement = msg.data.dataAutoIncrement;
@@ -339,6 +337,7 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 				cell.value.dataScale = msg.data.dataScale;
 				cell.value.dataDefaultValue = msg.data.dataDefaultValue;
 				cell.value.widgetType = msg.data.widgetType;
+				cell.value.widgetSize = msg.data.widgetSize;
 				cell.value.widgetLength = msg.data.widgetLength;
 				cell.value.widgetLabel = msg.data.widgetLabel;
 				cell.value.widgetShortLabel = msg.data.widgetShortLabel;
@@ -349,6 +348,10 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 				cell.value.widgetIsMajor = msg.data.widgetIsMajor;
 				cell.value.widgetDropDownKey = msg.data.widgetDropDownKey;
 				cell.value.widgetDropDownValue = msg.data.widgetDropDownValue;
+				cell.value.widgetDependsOnProperty = msg.data.widgetDependsOnProperty;
+				cell.value.widgetDependsOnEntity = msg.data.widgetDependsOnEntity;
+				cell.value.widgetDependsOnValueFrom = msg.data.widgetDependsOnValueFrom;
+				cell.value.widgetDependsOnFilterBy = msg.data.widgetDependsOnFilterBy;
 				cell.value.feedPropertyName = msg.data.feedPropertyName;
 				cell.value.roleRead = msg.data.roleRead;
 				cell.value.roleWrite = msg.data.roleWrite;
@@ -401,23 +404,23 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 					cell.value.projectionReferencedModel = msg.data.model;
 					cell.value.projectionReferencedEntity = msg.data.entity;
 					cell.value.perspectiveName = msg.data.perspectiveName;
+					cell.value.perspectiveLabel = msg.data.perspectiveLabel;
 					cell.value.perspectiveIcon = msg.data.perspectiveIcon;
 					cell.value.perspectiveOrder = msg.data.perspectiveOrder;
+					cell.value.perspectiveRole = msg.data.perspectiveRole;
 					$scope.graph.model.setValue(cell, cell.value);
 
-					let propertyObject = new Property('propertyName');
-					let property = new mxCell(propertyObject, new mxGeometry(0, 0, 0, 26));
-					property.setVertex(true);
-					property.setConnectable(false);
-
 					for (let i = 0; i < msg.data.entityProperties.length; i++) {
-						let newProperty = property.clone();
-
+						let propertyObject = new Property('propertyName');
+						let property = new mxCell(propertyObject, new mxGeometry(0, 0, 0, 26));
+						property.setId(uuid.generate());
+						property.setVertex(true);
+						property.setConnectable(false);
 						for (let attributeName in msg.data.entityProperties[i]) {
-							newProperty.value[attributeName] = msg.data.entityProperties[i][attributeName];
+							property.value[attributeName] = msg.data.entityProperties[i][attributeName];
 						}
-						newProperty.style = 'projectionproperty';
-						cell.insert(newProperty);
+						property.style = 'projectionproperty';
+						cell.insert(property);
 					}
 					model.setCollapsed(cell, true);
 				} finally {
@@ -442,22 +445,22 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 					cell.value.projectionReferencedModel = msg.data.model;
 					cell.value.projectionReferencedEntity = msg.data.entity;
 					cell.value.perspectiveName = msg.data.perspectiveName;
+					cell.value.perspectiveLabel = msg.data.perspectiveLabel;
 					cell.value.perspectiveIcon = msg.data.perspectiveIcon;
 					cell.value.perspectiveOrder = msg.data.perspectiveOrder;
+					cell.value.perspectiveRole = msg.data.perspectiveRole;
 					$scope.graph.model.setValue(cell, cell.value);
 
-					let propertyObject = new Property('propertyName');
-					let property = new mxCell(propertyObject, new mxGeometry(0, 0, 0, 26));
-					property.setVertex(true);
-					property.setConnectable(false);
-
 					for (let i = 0; i < msg.data.entityProperties.length; i++) {
-						let newProperty = property.clone();
-
+						let propertyObject = new Property('propertyName');
+						let property = new mxCell(propertyObject, new mxGeometry(0, 0, 0, 26));
+						property.setId(uuid.generate());
+						property.setVertex(true);
+						property.setConnectable(false);
 						for (let attributeName in msg.data.entityProperties[i]) {
-							newProperty.value[attributeName] = msg.data.entityProperties[i][attributeName];
+							property.value[attributeName] = msg.data.entityProperties[i][attributeName];
 						}
-						cell.insert(newProperty);
+						cell.insert(property);
 					}
 					model.setCollapsed(cell, true);
 				} finally {
@@ -474,7 +477,11 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 
 		function main(container, outline, toolbar, sidebar) {
 			let ICON_ENTITY = 'sap-icon--header';
-			let ICON_PROPERTY = 'sap-icon--menu2';
+			let ICON_PROPERTY = 'sap-icon--bullet-text';
+			let ICON_DEPENDENT = 'sap-icon--accelerated';
+			let ICON_REPORT = 'sap-icon--area-chart';
+			let ICON_SETTING = 'sap-icon--wrench';
+			let ICON_FILTER = 'sap-icon--filter';
 			let ICON_COPIED = 'sap-icon--duplicate';
 			let ICON_PROJECTION = 'sap-icon--journey-arrive';
 			let ICON_EXTENSION = 'sap-icon--puzzle';
@@ -547,16 +554,24 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 					return this.isSwimlane(cell);
 				};
 
+				const selectionModel = $scope.graph.getSelectionModel();
+
 				// Only entities are movable
 				$scope.graph.isCellMovable = function (cell) {
+					if (selectionModel.cells.length <= 1 && cell.style === undefined && cell.parent.value && cell.parent.value.entityType) {
+						return true;
+					}
 					return this.isSwimlane(cell);
+				};
+
+				$scope.graph.model.createId = function (_cell) {
+					const id = uuid.generate();
+					return this.prefix + id + this.postfix;
 				};
 
 				// Sets the graph container and configures the editor
 				editor.setGraphContainer(container);
-				let config = mxUtils.load(
-					'editors/config/keyhandler-minimal.xml').
-					getDocumentElement();
+				let config = mxUtils.load('editors/config/keyhandler-minimal.xml').getDocumentElement();
 				editor.configure(config);
 
 				// Configures the automatic layout for the entity properties
@@ -659,8 +674,23 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 					}
 				});
 
+				const moveCells = $scope.graph.moveCells;
+
+				$scope.graph.moveCells = function (cells, dx, dy, clone, target, evt, mapping) {
+					if (target && cells && cells.length === 1 && cells[0].style === undefined && cells[0].parent.value.entityType) {
+						if (cells[0].parent.id !== target.id) {
+							return cells;
+						}
+					}
+					return moveCells.apply(this, arguments);
+				};
+
 				// Disables drag-and-drop into non-swimlanes.
-				$scope.graph.isValidDropTarget = function (cell, cells, evt) {
+				$scope.graph.isValidDropTarget = function (cell, cells, _evt) {
+					if (cells.length === 1 && cells[0].style === undefined && cells[0].parent.value.entityType) {
+						if (cells[0].parent.id === cell.id) return true;
+						else return false;
+					}
 					return this.isSwimlane(cell);
 				};
 
@@ -672,37 +702,35 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 				// Adds all required styles to the graph (see below)
 				configureStylesheet($scope.graph);
 
+				// Primary Entity ----------------------------------------------
+
 				// Adds sidebar icon for the entity object
 				let entityObject = new Entity('EntityName');
 				let entity = new mxCell(entityObject, new mxGeometry(0, 0, 200, 28), 'entity');
 				entity.setVertex(true);
-				addSidebarIcon($scope.graph, sidebar, entity, ICON_ENTITY, 'Drag this to the diagram to create a new Entity', $scope);
+				addSidebarIcon($scope.graph, sidebar, entity, ICON_ENTITY, 'Drag this to the diagram to create a new Entity', $scope, messageHub);
 
 				// Adds sidebar icon for the property object
-				let propertyObject = new Property('propertyName');
+				let propertyObject = new Property('PropertyName');
 				let property = new mxCell(propertyObject, new mxGeometry(0, 0, 0, 26));
 				property.setVertex(true);
 				property.setConnectable(false);
 
-				addSidebarIcon($scope.graph, sidebar, property, ICON_PROPERTY, 'Drag this to an Entity to create a new Property', $scope);
+				addSidebarIcon($scope.graph, sidebar, property, ICON_PROPERTY, 'Drag this to an Entity to create a new Property', $scope, messageHub);
 
 				// Adds primary key field into entity
-				let firstProperty = property.clone();
-
-				firstProperty.value.name = 'entityNameId';
+				let firstProperty = new mxCell(new Property('PropertyName'), new mxGeometry(0, 0, 0, 26));
+				firstProperty.setVertex(true);
+				firstProperty.setConnectable(false);
+				firstProperty.value.name = 'Id';
 				firstProperty.value.dataType = 'INTEGER';
 				firstProperty.value.dataLength = 0;
 				firstProperty.value.dataPrimaryKey = 'true';
 				firstProperty.value.dataAutoIncrement = 'true';
-
 				entity.insert(firstProperty);
 
 				// Adds child properties for new connections between entities
 				$scope.graph.addEdge = function (edge, parent, source, target, index) {
-
-					if (source.style && source.style.startsWith('projection')) {
-						return;
-					}
 
 					// Finds the primary key child of the target table
 					let primaryKey = null;
@@ -718,7 +746,7 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 					}
 
 					if (primaryKey === null) {
-						showAlert('Drop', 'Target Entity must have a Primary Key', $scope);
+						messageHub.showAlertError("Error", "Target Entity must have a Primary Key");
 						return;
 					}
 
@@ -726,9 +754,9 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 					try {
 						let prop1 = $scope.graph.model.cloneCell(property);
 						if (target.style && target.style.startsWith('projection')) {
-							prop1.value.name = primaryKey.parent.value.projectionReferencedEntity + primaryKey.value.name;
+							prop1.value.name = primaryKey.parent.value.projectionReferencedEntity;
 						} else {
-							prop1.value.name = primaryKey.parent.value.name + primaryKey.value.name;
+							prop1.value.name = primaryKey.parent.value.name;
 						}
 						prop1.value.dataType = primaryKey.value.dataType;
 						prop1.value.dataLength = primaryKey.value.dataLength;
@@ -743,11 +771,81 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 					}
 				};
 
+				// Dependent Entity ----------------------------------------------
+
+				// Adds sidebar icon for the dependent entity object
+				let dependentObject = new Entity('DependentEntityName');
+				let dependent = new mxCell(dependentObject, new mxGeometry(0, 0, 200, 28), 'dependent');
+				dependent.setVertex(true);
+				addSidebarIcon($scope.graph, sidebar, dependent, ICON_DEPENDENT, 'Drag this to the diagram to create a new Dependent Entity', $scope, messageHub);
+
+				// Adds primary key field into entity
+				firstProperty = property.clone();
+				firstProperty.value.name = 'Id';
+				firstProperty.value.dataType = 'INTEGER';
+				firstProperty.value.dataLength = 0;
+				firstProperty.value.dataPrimaryKey = 'true';
+				firstProperty.value.dataAutoIncrement = 'true';
+				dependent.insert(firstProperty);
+
+				// Report Entity ----------------------------------------------
+
+				// Adds sidebar icon for the report entity object
+				let reportObject = new Entity('ReportEntityName');
+				let report = new mxCell(reportObject, new mxGeometry(0, 0, 200, 28), 'report');
+				report.setVertex(true);
+				addSidebarIcon($scope.graph, sidebar, report, ICON_REPORT, 'Drag this to the diagram to create a new Report Entity', $scope, messageHub);
+
+				// Adds primary key field into entity
+				firstProperty = property.clone();
+				firstProperty.value.name = 'Id';
+				firstProperty.value.dataType = 'INTEGER';
+				firstProperty.value.dataLength = 0;
+				firstProperty.value.dataPrimaryKey = 'true';
+				firstProperty.value.dataAutoIncrement = 'true';
+				report.insert(firstProperty);
+
+				// Filter Entity ----------------------------------------------
+
+				// Adds sidebar icon for the filter entity object
+				let reportFilterObject = new Entity('ReportFilterEntityName');
+				let reportFilter = new mxCell(reportFilterObject, new mxGeometry(0, 0, 200, 28), 'filter');
+				reportFilter.setVertex(true);
+				addSidebarIcon($scope.graph, sidebar, reportFilter, ICON_FILTER, 'Drag this to the diagram to create a new Report Filter Entity', $scope, messageHub);
+
+				// Adds primary key field into entity
+				firstProperty = property.clone();
+				firstProperty.value.name = 'Id';
+				firstProperty.value.dataType = 'INTEGER';
+				firstProperty.value.dataLength = 0;
+				firstProperty.value.dataPrimaryKey = 'true';
+				firstProperty.value.dataAutoIncrement = 'true';
+				reportFilter.insert(firstProperty);
+
+				// Setting Entity ----------------------------------------------
+
+				// Adds sidebar icon for the setting entity object
+				let settingObject = new Entity('SettingEntityName');
+				let setting = new mxCell(settingObject, new mxGeometry(0, 0, 200, 28), 'setting');
+				setting.setVertex(true);
+				addSidebarIcon($scope.graph, sidebar, setting, ICON_SETTING, 'Drag this to the diagram to create a new Setting Entity', $scope, messageHub);
+
+				// Adds primary key field into entity
+				firstProperty = property.clone();
+				firstProperty.value.name = 'Id';
+				firstProperty.value.dataType = 'INTEGER';
+				firstProperty.value.dataLength = 0;
+				firstProperty.value.dataPrimaryKey = 'true';
+				firstProperty.value.dataAutoIncrement = 'true';
+				setting.insert(firstProperty);
+
+				// Copied Entity ----------------------------------------------
+
 				// Adds sidebar icon for the copied entity object
 				let copiedObject = new Entity('EntityName');
 				let copied = new mxCell(copiedObject, new mxGeometry(0, 0, 200, 28), 'copied');
 				copied.setVertex(true);
-				addSidebarIcon($scope.graph, sidebar, copied, ICON_COPIED, 'Drag this to the diagram to create a copy to an Entity from external model', $scope);
+				addSidebarIcon($scope.graph, sidebar, copied, ICON_COPIED, 'Drag this to the diagram to create a copy to an Entity from external model', $scope, messageHub);
 				$scope.showCopiedEntityDialog = function (cellId) {
 					messageHub.showDialogWindow(
 						"edmReference",
@@ -761,7 +859,7 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 				let projectionObject = new Entity('EntityName');
 				let projection = new mxCell(projectionObject, new mxGeometry(0, 0, 200, 28), 'projection');
 				projection.setVertex(true);
-				addSidebarIcon($scope.graph, sidebar, projection, ICON_PROJECTION, 'Drag this to the diagram to create a reference to an Entity from external model', $scope);
+				addSidebarIcon($scope.graph, sidebar, projection, ICON_PROJECTION, 'Drag this to the diagram to create a reference to an Entity from external model', $scope, messageHub);
 				$scope.showReferDialog = function (cellId) {
 					messageHub.showDialogWindow(
 						"edmReference",
@@ -771,22 +869,22 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 					);
 				};
 
+				// Extension Entity ----------------------------------------------
+
 				// Adds sidebar icon for the extension entity object
 				let extensionObject = new Entity('EntityName');
 				let extension = new mxCell(extensionObject, new mxGeometry(0, 0, 200, 28), 'extension');
 				extension.setVertex(true);
-				addSidebarIcon($scope.graph, sidebar, extension, ICON_EXTENSION, 'Drag this to the diagram to create a new Extension Entity', $scope);
+				addSidebarIcon($scope.graph, sidebar, extension, ICON_EXTENSION, 'Drag this to the diagram to create a new Extension Entity', $scope, messageHub);
 
-				// Adds primary key field into projection entity
+				// Adds primary key field into extension entity
 				keyProperty = property.clone();
-
 				keyProperty.value.name = 'Id';
 				keyProperty.value.dataType = 'INTEGER';
 				keyProperty.value.dataLength = 0;
 				keyProperty.value.dataPrimaryKey = 'true';
 				keyProperty.value.dataAutoIncrement = 'true';
 				keyProperty.style = 'extensionproperty';
-
 				extension.insert(keyProperty);
 
 				// Creates a new DIV that is used as a toolbar and adds
@@ -794,23 +892,14 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 				let spacer = document.createElement('div');
 				spacer.style.display = 'inline';
 				spacer.style.padding = '8px';
-				//		addToolbarButton(editor, toolbar, 'test', 'Test', 'wrench', true);
-				//		// Defines a new test action
-				//		editor.addAction('test', function(editor, cell) {
-				//			if (!cell) {
-				//				cell = $scope.graph.getSelectionCell();
-				//			}
-				//			$scope.$apply();
-				//			$('#entityPropertiesOpen').click();
-				//		});
 
 				// Defines a new save action
-				editor.addAction('save', function (editor, cell) {
-					$scope.saveModel($scope.graph);
+				editor.addAction('save', function (_editor, _cell) {
+					saveContents(createModel($scope.graph));
 				});
 
 				// Defines a new properties action
-				editor.addAction('properties', function (editor, cell) {
+				editor.addAction('properties', function (_editor, cell) {
 					if (!cell) {
 						cell = $scope.graph.getSelectionCell();
 						if (!cell) {
@@ -820,9 +909,6 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 							);
 							return;
 						}
-					}
-					if (cell.style && cell.style.startsWith('projection')) {
-						return;
 					}
 
 					if ($scope.graph.isHtmlLabel(cell)) {
@@ -835,10 +921,15 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 									dialogType: 'property',
 									cellId: cell.id,
 									name: cell.value.name,
+									description: cell.value.description,
+									tooltip: cell.value.tooltip,
+									isRequiredProperty: cell.value.isRequiredProperty,
 									isCalculatedProperty: cell.value.isCalculatedProperty,
-									calculatedPropertyExpression: cell.value.calculatedPropertyExpression,
+									calculatedPropertyExpressionCreate: cell.value.calculatedPropertyExpressionCreate,
+									calculatedPropertyExpressionUpdate: cell.value.calculatedPropertyExpressionUpdate,
 									dataName: cell.value.dataName,
 									dataType: cell.value.dataType,
+									dataOrderBy: cell.value.dataOrderBy,
 									dataLength: cell.value.dataLength,
 									dataPrimaryKey: cell.value.dataPrimaryKey,
 									dataAutoIncrement: cell.value.dataAutoIncrement,
@@ -848,6 +939,7 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 									dataScale: cell.value.dataScale,
 									dataDefaultValue: cell.value.dataDefaultValue,
 									widgetType: cell.value.widgetType,
+									widgetSize: cell.value.widgetSize,
 									widgetLength: cell.value.widgetLength,
 									widgetLabel: cell.value.widgetLabel,
 									widgetShortLabel: cell.value.widgetShortLabel,
@@ -858,6 +950,10 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 									widgetIsMajor: cell.value.widgetIsMajor,
 									widgetDropDownKey: cell.value.widgetDropDownKey,
 									widgetDropDownValue: cell.value.widgetDropDownValue,
+									widgetDependsOnProperty: cell.value.widgetDependsOnProperty,
+									widgetDependsOnEntity: cell.value.widgetDependsOnEntity,
+									widgetDependsOnValueFrom: cell.value.widgetDependsOnValueFrom,
+									widgetDependsOnFilterBy: cell.value.widgetDependsOnFilterBy,
 									feedPropertyName: cell.value.feedPropertyName,
 									roleRead: cell.value.roleRead,
 									roleWrite: cell.value.roleWrite,
@@ -888,6 +984,7 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 									dataQuery: cell.value.dataQuery,
 									title: cell.value.title,
 									caption: cell.value.caption,
+									description: cell.value.description,
 									tooltip: cell.value.tooltip,
 									icon: cell.value.icon,
 									menuKey: cell.value.menuKey,
@@ -895,6 +992,7 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 									menuIndex: cell.value.menuIndex,
 									layoutType: cell.value.layoutType,
 									perspectiveName: cell.value.perspectiveName,
+									perspectiveLabel: cell.value.perspectiveLabel,
 									navigationPath: cell.value.navigationPath,
 									feedUrl: cell.value.feedUrl,
 									feedUsername: cell.value.feedUsername,
@@ -905,6 +1003,8 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 									roleWrite: cell.value.roleWrite,
 									perspectives: $scope.graph.model.perspectives,
 									navigations: $scope.graph.model.navigations,
+									importsCode: cell.value.importsCode,
+									generateReport: cell.value.generateReport
 								},
 								null,
 								false,
@@ -1014,7 +1114,6 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 				// Defines a new save action
 				editor.addAction('paste', function (editor, cell) {
 					mxClipboard.paste($scope.graph);
-					//			document.execCommand("paste");
 				});
 
 				$scope.save = function () {
@@ -1099,9 +1198,10 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 			deserializeFilter($scope.graph);
 			loadPerspectives(doc, $scope.graph);
 			loadNavigations(doc, $scope.graph);
-			$scope.graph.model.addListener(mxEvent.START_EDIT, function (sender, evt) {
+			$scope.graph.model.addListener(mxEvent.START_EDIT, function (_sender, _evt) {
 				messageHub.setEditorDirty($scope.dataParameters.file, true);
 			});
+			$scope.graph.enterStopsCellEditing = true;
 		}
 
 		function deserializeFilter(graph) {
@@ -1123,6 +1223,9 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 					}
 					if (child.value.feedSchedule && child.value.feedSchedule !== "") {
 						child.value.feedSchedule = atob(child.value.feedSchedule);
+					}
+					if (child.value.importsCode && child.value.importsCode !== "") {
+						child.value.importsCode = atob(child.value.importsCode);
 					}
 				}
 			}
@@ -1151,6 +1254,8 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 										copy.icon = attribute.textContent;
 									} else if (attribute.localName === "order") {
 										copy.order = attribute.textContent;
+									} else if (attribute.localName === "role") {
+										copy.role = attribute.textContent;
 									}
 								}
 								graph.getModel().perspectives.push(copy);
@@ -1210,10 +1315,5 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 			genFile = $scope.dataParameters.file.substring(0, $scope.dataParameters.file.lastIndexOf('.')) + '.gen';
 			fileWorkspace = $scope.dataParameters.workspaceName || workspaceApi.getCurrentWorkspace();
 			$scope.load();
-			main(document.getElementById('graphContainer'),
-				document.getElementById('outlineContainer'),
-				document.getElementById('toolbarContainer'),
-				document.getElementById('sidebarContainer'));
-			$scope.state.isBusy = false;
 		}
 	});

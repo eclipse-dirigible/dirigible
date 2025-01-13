@@ -1,35 +1,27 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.structures.synchronizer.table;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.util.List;
-import java.util.Set;
-
-import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.components.data.structures.domain.Table;
-import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
-import org.eclipse.dirigible.components.data.structures.domain.TableConstraintCheck;
-import org.eclipse.dirigible.components.data.structures.domain.TableConstraintForeignKey;
-import org.eclipse.dirigible.components.data.structures.domain.TableConstraintUnique;
-import org.eclipse.dirigible.components.data.structures.domain.TableIndex;
-import org.eclipse.dirigible.components.database.DatabaseParameters;
+import org.eclipse.dirigible.components.data.structures.domain.*;
 import org.eclipse.dirigible.database.sql.DataType;
 import org.eclipse.dirigible.database.sql.ISqlKeywords;
 import org.eclipse.dirigible.database.sql.SqlFactory;
 import org.eclipse.dirigible.database.sql.builders.table.CreateTableBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Set;
 
 /**
  * The Table Create Processor.
@@ -59,12 +51,8 @@ public class TableCreateProcessor {
      * @throws SQLException the SQL exception
      */
     public static void execute(Connection connection, Table tableModel, boolean skipForeignKeys) throws SQLException {
-        boolean caseSensitive =
-                Boolean.parseBoolean(Configuration.get(DatabaseParameters.DIRIGIBLE_DATABASE_NAMES_CASE_SENSITIVE, "false"));
-        String tableName = tableModel.getName();
-        if (caseSensitive) {
-            tableName = "\"" + tableName + "\"";
-        }
+        String tableName = "\"" + tableModel.getName() + "\"";
+
         if (logger.isInfoEnabled()) {
             logger.info("Processing Create Table: " + tableName);
         }
@@ -74,10 +62,8 @@ public class TableCreateProcessor {
         List<TableColumn> columns = tableModel.getColumns();
         List<TableIndex> indexes = tableModel.getIndexes();
         for (TableColumn columnModel : columns) {
-            String name = columnModel.getName();
-            if (caseSensitive) {
-                name = "\"" + name + "\"";
-            }
+            String name = "\"" + columnModel.getName() + "\"";
+
             DataType type = DataType.valueOfByName(columnModel.getType());
             String length = columnModel.getLength();
             boolean isNullable = columnModel.isNullable();
@@ -119,11 +105,7 @@ public class TableCreateProcessor {
                 for (String column : tableModel.getConstraints()
                                                .getPrimaryKey()
                                                .getColumns()) {
-                    if (caseSensitive) {
-                        primaryKeyColumns[i++] = "\"" + column + "\"";
-                    } else {
-                        primaryKeyColumns[i++] = column;
-                    }
+                    primaryKeyColumns[i++] = "\"" + column + "\"";
                 }
 
                 createTableBuilder.primaryKey(primaryKeyColumns);
@@ -136,31 +118,19 @@ public class TableCreateProcessor {
                                       .isEmpty()) {
                     for (TableConstraintForeignKey foreignKey : tableModel.getConstraints()
                                                                           .getForeignKeys()) {
-                        String foreignKeyName = foreignKey.getName();
-                        if (caseSensitive) {
-                            foreignKeyName = "\"" + foreignKeyName + "\"";
-                        }
+                        String foreignKeyName = "\"" + foreignKey.getName() + "\"";
+
                         String[] foreignKeyColumns = new String[foreignKey.getColumns().length];
                         int i = 0;
                         for (String column : foreignKey.getColumns()) {
-                            if (caseSensitive) {
-                                foreignKeyColumns[i++] = "\"" + column + "\"";
-                            } else {
-                                foreignKeyColumns[i++] = column;
-                            }
+                            foreignKeyColumns[i++] = "\"" + column + "\"";
                         }
-                        String foreignKeyReferencedTable = foreignKey.getReferencedTable();
-                        if (caseSensitive) {
-                            foreignKeyReferencedTable = "\"" + foreignKeyReferencedTable + "\"";
-                        }
+                        String foreignKeyReferencedTable = "\"" + foreignKey.getReferencedTable() + "\"";
+
                         String[] foreignKeyReferencedColumns = new String[foreignKey.getReferencedColumns().length];
                         i = 0;
                         for (String column : foreignKey.getReferencedColumns()) {
-                            if (caseSensitive) {
-                                foreignKeyReferencedColumns[i++] = "\"" + column + "\"";
-                            } else {
-                                foreignKeyReferencedColumns[i++] = column;
-                            }
+                            foreignKeyReferencedColumns[i++] = "\"" + column + "\"";
                         }
 
                         createTableBuilder.foreignKey(foreignKeyName, foreignKeyColumns, foreignKeyReferencedTable,
@@ -172,18 +142,12 @@ public class TableCreateProcessor {
                           .getUniqueIndexes() != null) {
                 for (TableConstraintUnique uniqueIndex : tableModel.getConstraints()
                                                                    .getUniqueIndexes()) {
-                    String uniqueIndexName = uniqueIndex.getName();
-                    if (caseSensitive) {
-                        uniqueIndexName = "\"" + uniqueIndexName + "\"";
-                    }
+                    String uniqueIndexName = "\"" + uniqueIndex.getName() + "\"";
+
                     String[] uniqueIndexColumns = new String[uniqueIndex.getColumns().length];
                     int i = 0;
                     for (String column : uniqueIndex.getColumns()) {
-                        if (caseSensitive) {
-                            uniqueIndexColumns[i++] = "\"" + column + "\"";
-                        } else {
-                            uniqueIndexColumns[i++] = column;
-                        }
+                        uniqueIndexColumns[i++] = "\"" + column + "\"";
                     }
                     createTableBuilder.unique(uniqueIndexName, uniqueIndexColumns);
                 }
@@ -192,10 +156,8 @@ public class TableCreateProcessor {
                           .getChecks() != null) {
                 for (TableConstraintCheck check : tableModel.getConstraints()
                                                             .getChecks()) {
-                    String checkName = check.getName();
-                    if (caseSensitive) {
-                        checkName = "\"" + checkName + "\"";
-                    }
+                    String checkName = "\"" + check.getName() + "\"";
+
                     createTableBuilder.check(checkName, check.getExpression());
                 }
             }

@@ -1,0 +1,82 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/editor-data-structures/configs/view-editor.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=editor-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="/services/web/editor-data-structures/editors/view/editor.js"></script>
+    </head>
+
+    <body class="bk-padding-sm bk-vbox bk-center--vertical" bk-scrollbar shortcut="'ctrl+s'" shortcut-action="save">
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
+        <div class="bk-restrict-width bk-full-width" ng-show="!state.error && !state.isBusy">
+            <bk-fieldset class="fd-margin-bottom--sm" ng-form="forms.editor">
+                <bk-form-group label="View:" name="entityForm">
+                    <bk-form-item horizontal="false">
+                        <bk-form-label for="idName" required="true" colon="true">Name</bk-form-label>
+                        <bk-form-input-message state="{{ forms.editor['name'].$valid ? '' : 'error' }}" message="::inputErrorMessage">
+                            <bk-input id="idName" name="name" ng-required="true" ng-model="view.name" ng-maxlength="255" type="text" placeholder="Enter name" input-rules="nameRegex" state="{{ forms.editor['name'].$valid ? '' : 'error' }}">
+                            </bk-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
+                    <bk-form-item horizontal="false">
+                        <bk-form-label for="idQuery" colon="true">Query</bk-form-label>
+                        <bk-textarea id="idQuery" name="query" ng-model="view.query" placeholder="Enter query"></bk-textarea>
+                    </bk-form-item>
+                </bk-form-group>
+            </bk-fieldset>
+            <bk-toolbar no-bottom-border="true" has-title="true">
+                <bk-toolbar-title>Dependencies:</bk-toolbar-title>
+                <bk-toolbar-spacer></bk-toolbar-spacer>
+                <bk-button compact="true" state="emphasized" label="Save" ng-click="save()" ng-disabled="!(forms.editor.$valid && changed)"></bk-button>
+                <bk-button compact="true" label="Add" ng-click="addDependency()"></bk-button>
+            </bk-toolbar>
+            <table bk-table>
+                <thead bk-table-header>
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>Name</th>
+                        <th bk-table-header-cell>Type</th>
+                        <th bk-table-header-cell></th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr ng-if="!view.dependencies || view.dependencies.length === 0" bk-table-row>
+                        <td bk-table-cell no-data="true">View has no dependencies</td>
+                    </tr>
+                    <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in view.dependencies track by $index">
+                        <td bk-table-cell>{{item.name}}</td>
+                        <td bk-table-cell>{{item.type}}</td>
+                        <td bk-table-cell fit-content="true">
+                            <bk-button compact="true" glyph="sap-icon--edit" state="transparent" aria-label="Edit" ng-click="editDependency($index)"></bk-button>
+                            <bk-button compact="true" glyph="sap-icon--delete" state="transparent" aria-label="Delete" ng-click="deleteDependency($index)"></bk-button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+            <bk-message-page-title>Editor encounterd an error!</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+        </bk-message-page>
+        <theme></theme>
+    </body>
+
+</html>

@@ -3,19 +3,19 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-const restTemplateManager = dirigibleRequire("template-application-rest/template/template");
-const uiTemplate = dirigibleRequire("template-application-ui-angular/template/ui/template");
-const generateUtils = dirigibleRequire("ide-generate-service/template/generateUtils");
-const parameterUtils = dirigibleRequire("ide-generate-service/template/parameterUtils");
+import * as restTemplateManager from "template-application-rest/template/template";
+import * as uiTemplate from "template-application-ui-angular/template/ui/template";
+import * as generateUtils from "ide-generate-service/template/generateUtils";
+import * as parameterUtils from "ide-generate-service/template/parameterUtils";
 
-exports.generate = function (model, parameters) {
+export function generate(model, parameters) {
     model = JSON.parse(model).model;
-    let templateSources = exports.getTemplate(parameters).sources;
+    let templateSources = getTemplate(parameters).sources;
     parameterUtils.process(model, parameters)
     return generateUtils.generateFiles(model, parameters, templateSources);
 };
 
-exports.getTemplate = function (parameters) {
+export function getTemplate(parameters) {
     let restTemplate = restTemplateManager.getTemplate(parameters);
 
     let templateSources = [];

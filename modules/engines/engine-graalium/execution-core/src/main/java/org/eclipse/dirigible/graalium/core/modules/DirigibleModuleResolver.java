@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.graalium.core.modules;
 
@@ -27,13 +26,13 @@ import org.eclipse.dirigible.graalium.core.javascript.modules.ModuleResolver;
 public class DirigibleModuleResolver implements ModuleResolver {
 
     /** The Constant DIRIGIBLE_CORE_MODULE_SIGNATURE. */
-    private static final String DIRIGIBLE_CORE_MODULE_SIGNATURE = "@dirigible";
+    private static final String DIRIGIBLE_CORE_MODULE_SIGNATURE = "sdk";
 
     /** The Constant DIRIGIBLE_CORE_MODULE_SIGNATURE_PATTERN. */
-    private static final Pattern DIRIGIBLE_CORE_MODULE_SIGNATURE_PATTERN = Pattern.compile("(@dirigible)(\\/)(\\w+)"); // e.g.
-                                                                                                                       // @dirigible/core
-                                                                                                                       // => $1=dirigible
-                                                                                                                       // $2=/ $3=core
+    private static final Pattern DIRIGIBLE_CORE_MODULE_SIGNATURE_PATTERN = Pattern.compile("(sdk)(\\/)(\\w+)"); // e.g.
+                                                                                                                // sdk/core
+                                                                                                                // => $1=dirigible
+                                                                                                                // $2=/ $3=core
 
     /** The dirigible module ESM proxy generator. */
     private final DirigibleModuleESMProxyGenerator dirigibleModuleESMProxyGenerator;
@@ -75,7 +74,7 @@ public class DirigibleModuleResolver implements ModuleResolver {
     public Path resolve(String moduleToResolve) {
         Matcher modulePathMatcher = DIRIGIBLE_CORE_MODULE_SIGNATURE_PATTERN.matcher(moduleToResolve);
         if (!modulePathMatcher.matches()) {
-            throw new RuntimeException("Found invalid Dirigible core modules path!");
+            throw new RuntimeException("Found invalid Dirigible core modules path: " + moduleToResolve);
         }
 
         String coreModuleName = modulePathMatcher.group(3);

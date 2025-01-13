@@ -13,43 +13,45 @@
 const Properties = Java.type("java.util.Properties");
 const MailFacade = Java.type("org.eclipse.dirigible.components.api.mail.MailFacade");
 
-export function getClient(options) {
-    let native = null;
-    if (options) {
-        native = MailFacade.getInstance(toJavaProperties(options));
-    } else {
-        native = MailFacade.getInstance();
+export interface MailRecipients {
+    to?: string | string[];
+    cc?: string | string[];
+    bcc?: string | string[];
+}
+
+export interface MailMultipart {
+    type: "text" | "inline" | "attachment";
+    contentType: "text/plain" | "text/html";
+    text?: string;
+    contentId?: string;
+    fileName?: string;
+    data?: string;
+}
+
+type MailContentType = "html" | "plain";
+
+export class MailClient {
+    private readonly native: any;
+
+    public static sendMultipart(from: string, recipients: string | MailRecipients, subject: string, parts: MailMultipart[]): void {
+        const mailClient = new MailClient();
+        mailClient.sendMultipart(from, recipients, subject, parts);
     }
-    return new MailClient(native);
-};
 
-export function sendMultipart(from, recipients, subject, parts) {
-    const mailClient = this.getClient();
-    mailClient.sendMultipart(from, recipients, subject, parts);
-};
+    public static send(from: string, recipients: string | MailRecipients, subject: string, text: string, contentType: MailContentType): void {
+        const mailClient = new MailClient();
+        mailClient.send(from, recipients, subject, text, contentType);
+    }
 
-export function send(from, recipients, subject, text, subType) {
-    const mailClient = this.getClient();
-    mailClient.send(from, recipients, subject, text, subType);
-};
+    constructor(options?: object) {
+        this.native = options ? MailFacade.getInstance(toJavaProperties(options)) : MailFacade.getInstance();
+    }
 
-class MailClient {
-    constructor(private native) {}
-
-    send(from, _recipients, subject, text, contentType) {
-        switch (contentType) {
-            case "html":
-                contentType = "text/html";
-                break;
-            case "plain":
-                contentType = "text/plain";
-                break
-        }
-
+    public send(from: string, _recipients: string | MailRecipients, subject: string, text: string, contentType: MailContentType): void {
         const recipients = processRecipients(_recipients);
 
         const part = {
-            contentType: contentType,
+            contentType: contentType === "html" ? "text/html" : "text/plain",
             text: text,
             type: 'text'
         };
@@ -60,9 +62,9 @@ class MailClient {
             console.error(error.message);
             throw new Error(error);
         }
-    };
+    }
 
-    sendMultipart(from, _recipients, subject, parts) {
+    public sendMultipart(from: string, _recipients: string | MailRecipients, subject: string, parts: {}): void {
         let recipients = processRecipients(_recipients);
         try {
             return this.native.send(from, recipients.to, recipients.cc, recipients.bcc, subject, stringifyPartData(parts));
@@ -70,11 +72,11 @@ class MailClient {
             console.error(error.message);
             throw new Error(error);
         }
-    };
+    }
 }
 
-function stringifyPartData(parts) {
-    parts.forEach(function (part) {
+function stringifyPartData(parts: any): JSON {
+    parts.forEach(function (part: any) {
         if (part.data) {
             part.data = JSON.stringify(part.data);
         }
@@ -83,7 +85,7 @@ function stringifyPartData(parts) {
     return parts;
 }
 
-function processRecipients(recipients) {
+function processRecipients(recipients: string | MailRecipients) {
     let to = [];
     let cc = [];
     let bcc = [];
@@ -99,10 +101,10 @@ function processRecipients(recipients) {
         throw new Error(errorMessage);
     }
 
-    return {to: to, cc: cc, bcc: bcc};
+    return { to: to, cc: cc, bcc: bcc };
 }
 
-function toJavaProperties(properties) {
+function toJavaProperties(properties: any) {
     const javaProperties = new Properties();
     Object.keys(properties).forEach(function (e) {
         javaProperties.put(e, properties[e]);
@@ -110,7 +112,7 @@ function toJavaProperties(properties) {
     return javaProperties;
 }
 
-function parseRecipients(recipients, type) {
+function parseRecipients(recipients: string | MailRecipients, type: any): any {
     const objectType = typeof recipients[type];
     if (objectType === "string") {
         return [recipients[type]];
@@ -122,4 +124,10 @@ function parseRecipients(recipients, type) {
     const errorMessage = "Invalid 'recipients." + type + "' format: [" + recipients[type] + "|" + objectType + "]";
     console.error(errorMessage);
     throw new Error(errorMessage);
+}
+
+// @ts-ignore
+if (typeof module !== 'undefined') {
+	// @ts-ignore
+	module.exports = MailClient;
 }

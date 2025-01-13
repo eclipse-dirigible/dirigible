@@ -1,31 +1,22 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.websockets.synchronizer;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.text.ParseException;
-import java.util.List;
-
 import org.apache.commons.io.FilenameUtils;
 import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.ArtefactService;
-import org.eclipse.dirigible.components.base.artefact.topology.TopologicalDepleter;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
-import org.eclipse.dirigible.components.base.synchronizer.Synchronizer;
+import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.websockets.domain.Websocket;
@@ -36,14 +27,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+import java.text.ParseException;
+import java.util.List;
+
 /**
  * The Class WebsocketsSynchronizer.
- *
- * @param <A> the generic type
  */
 @Component
 @Order(SynchronizersOrder.WEBSOCKET)
-public class WebsocketsSynchronizer<A extends Artefact> implements Synchronizer<Websocket> {
+public class WebsocketsSynchronizer extends BaseSynchronizer<Websocket, Long> {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(WebsocketsSynchronizer.class);
@@ -57,19 +50,6 @@ public class WebsocketsSynchronizer<A extends Artefact> implements Synchronizer<
 
     /** The callback. */
     private SynchronizerCallback callback;
-
-    /**
-     * Checks if is accepted.
-     *
-     * @param file the file
-     * @param attrs the attrs
-     * @return true, if is accepted
-     */
-    @Override
-    public boolean isAccepted(Path file, BasicFileAttributes attrs) {
-        return file.toString()
-                   .endsWith(getFileExtension());
-    }
 
     /**
      * Checks if is accepted.
@@ -88,10 +68,10 @@ public class WebsocketsSynchronizer<A extends Artefact> implements Synchronizer<
      * @param location the location
      * @param content the content
      * @return the list
-     * @throws ParseException
+     * @throws ParseException the parse exception
      */
     @Override
-    public List<Websocket> parse(String location, byte[] content) throws ParseException {
+    protected List<Websocket> parseImpl(String location, byte[] content) throws ParseException {
         Websocket websocket = JsonHelper.fromJson(new String(content, StandardCharsets.UTF_8), Websocket.class);
         Configuration.configureObject(websocket);
         websocket.setLocation(location);
@@ -116,6 +96,16 @@ public class WebsocketsSynchronizer<A extends Artefact> implements Synchronizer<
     }
 
     /**
+     * Gets the service.
+     *
+     * @return the service
+     */
+    @Override
+    public ArtefactService<Websocket, Long> getService() {
+        return websocketService;
+    }
+
+    /**
      * Retrieve.
      *
      * @param location the location
@@ -134,10 +124,10 @@ public class WebsocketsSynchronizer<A extends Artefact> implements Synchronizer<
      * @param error the error
      */
     @Override
-    public void setStatus(Artefact artefact, ArtefactLifecycle lifecycle, String error) {
+    public void setStatus(Websocket artefact, ArtefactLifecycle lifecycle, String error) {
         artefact.setLifecycle(lifecycle);
         artefact.setError(error);
-        getService().save((Websocket) artefact);
+        getService().save(artefact);
     }
 
     /**
@@ -148,8 +138,8 @@ public class WebsocketsSynchronizer<A extends Artefact> implements Synchronizer<
      * @return true, if successful
      */
     @Override
-    public boolean complete(TopologyWrapper<Artefact> wrapper, ArtefactPhase flow) {
-        callback.registerState(this, wrapper, ArtefactLifecycle.CREATED, "");
+    protected boolean completeImpl(TopologyWrapper<Websocket> wrapper, ArtefactPhase flow) {
+        callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
         return true;
     }
 
@@ -159,26 +149,13 @@ public class WebsocketsSynchronizer<A extends Artefact> implements Synchronizer<
      * @param websocket the websocket
      */
     @Override
-    public void cleanup(Websocket websocket) {
+    public void cleanupImpl(Websocket websocket) {
         try {
             getService().delete(websocket);
         } catch (Exception e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
             callback.addError(e.getMessage());
-            callback.registerState(this, websocket, ArtefactLifecycle.DELETED, e.getMessage());
+            callback.registerState(this, websocket, ArtefactLifecycle.DELETED, e);
         }
-    }
-
-    /**
-     * Gets the service.
-     *
-     * @return the service
-     */
-    @Override
-    public ArtefactService<Websocket> getService() {
-        return websocketService;
     }
 
     /**

@@ -3,21 +3,20 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-exports.getTemplate = function() {
+export function getTemplate() {
 	return {
-		"name": "Scheduled Job",
-		"description": "Scheduled Job definition with a simple Javascript handler",
-		"sources": [
-		{
-			"location": "/template-job/job.template", 
-			"action": "generate",
-			"rename": "{{fileName}}.job"
-		},
-		{
-			"location": "/template-job/handler.js.template", 
-			"action": "generate",
-			"rename": "{{fileName}}-handler.js"
+		name: "Scheduled Job (Model)",
+		description: "Scheduled Job definition with a simple Javascript handler",
+		sources: [{
+			location: "/template-job/job.template",
+			action: "generate",
+			rename: "{{fileName}}.job"
+		}, {
+			location: "/template-job/handler.js.template",
+			action: "generate",
+			rename: "{{fileName}}-handler.js"
 		}],
-		"parameters": []
+		parameters: [],
+		order: 50
 	};
 };

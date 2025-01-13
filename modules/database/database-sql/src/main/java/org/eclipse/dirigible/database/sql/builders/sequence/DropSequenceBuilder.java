@@ -1,12 +1,11 @@
 /*
- * Copyright (c) 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible contributors
+ * Copyright (c) 2024 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Eclipse Dirigible
- * contributors SPDX-License-Identifier: EPL-2.0
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.database.sql.builders.sequence;
 
@@ -24,7 +23,9 @@ public class DropSequenceBuilder extends AbstractDropSqlBuilder {
     private static final Logger logger = LoggerFactory.getLogger(DropSequenceBuilder.class);
 
     /** The sequence. */
-    private String sequence = null;
+    private final String sequence;
+
+    private String dropOption;
 
     /**
      * Instantiates a new drop sequence builder.
@@ -37,15 +38,16 @@ public class DropSequenceBuilder extends AbstractDropSqlBuilder {
         this.sequence = sequence;
     }
 
+    public DropSequenceBuilder(ISqlDialect dialect, String sequence, String dropOption) {
+        super(dialect);
+        this.sequence = sequence;
+        this.dropOption = dropOption;
+    }
+
     /**
      * Generate.
      *
      * @return the string
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.database.sql.ISqlBuilder#generate()
      */
     @Override
     public String generate() {
@@ -58,13 +60,20 @@ public class DropSequenceBuilder extends AbstractDropSqlBuilder {
         // SEQUENCE
         generateSequence(sql);
 
+        generateDropOption(sql);
+
         String generated = sql.toString();
 
-        if (logger.isTraceEnabled()) {
-            logger.trace("generated: " + generated);
-        }
+        logger.trace("generated: " + generated);
 
         return generated;
+    }
+
+    protected void generateDropOption(StringBuilder sql) {
+        if (dropOption != null) {
+            sql.append(SPACE)
+               .append(dropOption);
+        }
     }
 
     /**
@@ -73,7 +82,7 @@ public class DropSequenceBuilder extends AbstractDropSqlBuilder {
      * @param sql the sql
      */
     protected void generateSequence(StringBuilder sql) {
-        String sequenceName = (isCaseSensitive()) ? encapsulate(this.getSequence(), true) : this.getSequence();
+        String sequenceName = encapsulate(this.getSequence(), true);
         sql.append(SPACE)
            .append(KEYWORD_SEQUENCE)
            .append(SPACE)
@@ -87,6 +96,15 @@ public class DropSequenceBuilder extends AbstractDropSqlBuilder {
      */
     public String getSequence() {
         return sequence;
+    }
+
+    public void setDropOption(String dropOption) {
+        this.dropOption = dropOption;
+    }
+
+    public DropSequenceBuilder unsetDropOption() {
+        this.dropOption = null;
+        return this;
     }
 
 }

@@ -1,6 +1,6 @@
 {
 	"expression":"0/5 * * * * ?",
-	"group":"dirigible-defined",
+	"group":"defined",
 	"handler":"{{projectName}}/{{fileName}}-handler.js",
 	"description":"{{fileName}} Job"
 }
