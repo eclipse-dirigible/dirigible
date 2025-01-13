@@ -167,9 +167,7 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
         }
 
         processing.set(true);
-        if (synchronizationWatcher.isModified()) {
-            synchronizationWatcher.reset();
-        }
+        synchronizationWatcher.reset();
 
         try {
 
