@@ -112,7 +112,7 @@
 		<maven-exec-plugin.version>3.3.0</maven-exec-plugin.version>
 		<maven-git-commit-id-plugin.version>4.9.10</maven-git-commit-id-plugin.version>
 		<maven-license-plugin.version>4.6</maven-license-plugin.version>
-    <git.build.hook.version>3.4.1</git.build.hook.version>
+		<git.build.hook.version>3.4.1</git.build.hook.version>
 
 		<!-- Spring -->
 		<spring.boot.version>3.4.0</spring.boot.version>
@@ -226,24 +226,24 @@
 
 	<build>
 		<plugins>
-      <plugin>
-          <groupId>com.rudikershaw.gitbuildhook</groupId>
-          <artifactId>git-build-hook-maven-plugin</artifactId>
-          <version>${git.build.hook.version}</version>
-          <configuration>
-              <gitConfig>
-                  <core.hooksPath>hooks/</core.hooksPath>
-                  <custom.configuration>true</custom.configuration>
-              </gitConfig>
-          </configuration>
-          <executions>
-              <execution>
-                  <goals>
-                      <goal>configure</goal>
-                  </goals>
-              </execution>
-          </executions>
-      </plugin>
+			<plugin>
+				<groupId>com.rudikershaw.gitbuildhook</groupId>
+				<artifactId>git-build-hook-maven-plugin</artifactId>
+				<version>${git.build.hook.version}</version>
+				<configuration>
+					<gitConfig>
+						<core.hooksPath>hooks/</core.hooksPath>
+						<custom.configuration>true</custom.configuration>
+					</gitConfig>
+				</configuration>
+				<executions>
+					<execution>
+						<goals>
+							<goal>configure</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
