@@ -635,24 +635,23 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                         result.tabsView.selectedTab = tab.id;
                     }
 
-                    showFileSaveDialog(tab.label, tab.params.filePath, { tabs })
-                        .then(args => {
-                            switch (args.id) {
-                                case 'save':
-                                    closingFileArgs = args;
-                                    break;
-                                case 'ignore':
-                                    closeCenterTab(args.filePath)
+                    showFileSaveDialog(tab.label, tab.params.filePath, { tabs }).then(args => {
+                        switch (args.id) {
+                            case 'save':
+                                closingFileArgs = args;
+                                break;
+                            case 'ignore':
+                                closeCenterTab(args.filePath)
 
-                                    let rest = args.params.tabs.filter(x => x.params.filePath !== args.filePath);
-                                    if (rest.length > 0)
-                                        if (tryCloseCenterTabs(rest)) {
-                                            $scope.$evalAsync();
-                                        }
+                                let rest = args.params.tabs.filter(x => x.params.filePath !== args.filePath);
+                                if (rest.length > 0)
+                                    if (tryCloseCenterTabs(rest)) {
+                                        $scope.$evalAsync();
+                                    }
 
-                                    break;
-                            }
-                        });
+                                break;
+                        }
+                    });
                 } else {
                     for (let i = 0; i < tabs.length; i++) {
                         removeCenterTab(tabs[i].id);
@@ -746,7 +745,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                     if (fileDescriptor.path === closingFileArgs.filePath) {
                         closeCenterTab(fileDescriptor.path);
 
-                        let rest = closingFileArgs.tabs.filter(x => x.params.filePath !== closingFileArgs.filePath);
+                        const rest = closingFileArgs.params.tabs.filter(x => x.params.filePath !== closingFileArgs.filePath);
                         if (rest.length > 0) {
                             if (tryCloseCenterTabs(rest)) {
                                 $scope.$evalAsync();

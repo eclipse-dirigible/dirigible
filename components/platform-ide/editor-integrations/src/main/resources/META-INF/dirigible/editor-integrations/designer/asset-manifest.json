@@ -1,0 +1,31 @@
+{
+  "files": {
+    "main.css": "/services/web/ide-integrations/designer/static/css/main.cad1c473.css",
+    "main.js": "/services/web/ide-integrations/designer/static/js/main.0447b661.js",
+    "static/media/fa-solid-900.woff2": "/services/web/ide-integrations/designer/static/media/fa-solid-900.c2b7c03209f0d3558e85.woff2",
+    "static/media/RedHatDisplayVF-Italic.woff2": "/services/web/ide-integrations/designer/static/media/RedHatDisplayVF-Italic.813182e673c38ef5ee4b.woff2",
+    "static/media/RedHatTextVF-Italic.woff2": "/services/web/ide-integrations/designer/static/media/RedHatTextVF-Italic.078865af129336cde269.woff2",
+    "static/media/RedHatDisplayVF.woff2": "/services/web/ide-integrations/designer/static/media/RedHatDisplayVF.18ca482120faaa701d8b.woff2",
+    "static/media/RedHatTextVF.woff2": "/services/web/ide-integrations/designer/static/media/RedHatTextVF.c33624692c8b41e36780.woff2",
+    "static/media/RedHatMono-Italic.woff2": "/services/web/ide-integrations/designer/static/media/RedHatMono-Italic.841cdd0ebb3d9038a7e7.woff2",
+    "static/media/RedHatMonoVF-Italic.woff2": "/services/web/ide-integrations/designer/static/media/RedHatMonoVF-Italic.6e3027616d8de472723c.woff2",
+    "static/media/RedHatMonoVF.woff2": "/services/web/ide-integrations/designer/static/media/RedHatMonoVF.e4faf134e53e0f37296b.woff2",
+    "static/media/RedHatText-MediumItalic.woff2": "/services/web/ide-integrations/designer/static/media/RedHatText-MediumItalic.e0f30d27bec7c8dbb6fc.woff2",
+    "static/media/RedHatDisplay-BoldItalic.woff2": "/services/web/ide-integrations/designer/static/media/RedHatDisplay-BoldItalic.b01a8365f7214919a9c3.woff2",
+    "static/media/RedHatDisplay-MediumItalic.woff2": "/services/web/ide-integrations/designer/static/media/RedHatDisplay-MediumItalic.ed292ec87cce0d76fd3c.woff2",
+    "static/media/RedHatText-Italic.woff2": "/services/web/ide-integrations/designer/static/media/RedHatText-Italic.aa07940756a803076b34.woff2",
+    "static/media/RedHatText-Medium.woff2": "/services/web/ide-integrations/designer/static/media/RedHatText-Medium.9c02e9a1e10fbc86466d.woff2",
+    "static/media/RedHatDisplay-Medium.woff2": "/services/web/ide-integrations/designer/static/media/RedHatDisplay-Medium.66ac08a9a7d29ae51581.woff2",
+    "static/media/RedHatDisplay-Bold.woff2": "/services/web/ide-integrations/designer/static/media/RedHatDisplay-Bold.d8d66dd2281610675aca.woff2",
+    "static/media/RedHatText-Regular.woff2": "/services/web/ide-integrations/designer/static/media/RedHatText-Regular.b36d694117bf12672d49.woff2",
+    "static/media/RedHatMono-Regular.woff2": "/services/web/ide-integrations/designer/static/media/RedHatMono-Regular.57234ce675330fa60781.woff2",
+    "static/media/pf-v5-pficon.woff2": "/services/web/ide-integrations/designer/static/media/pf-v5-pficon.c06f4d6490c387fd1d92.woff2",
+    "index.html": "/services/web/ide-integrations/designer/index.html",
+    "main.cad1c473.css.map": "/services/web/ide-integrations/designer/static/css/main.cad1c473.css.map",
+    "main.0447b661.js.map": "/services/web/ide-integrations/designer/static/js/main.0447b661.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.cad1c473.css",
+    "static/js/main.0447b661.js"
+  ]
+}

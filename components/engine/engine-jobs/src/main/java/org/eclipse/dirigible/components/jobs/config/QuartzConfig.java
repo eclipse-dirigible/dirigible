@@ -52,9 +52,6 @@ class QuartzConfig {
         Scheduler scheduler = factory.getScheduler();
         logger.debug("Starting Scheduler threads");
 
-        // give some time for spring auto configurations to pass before starting
-        scheduler.startDelayed(STARTUP_DELAY_SECONDS);
-
         scheduler.getListenerManager()
                  .addJobListener(jobExecutionsCountListener);
         scheduler.getListenerManager()
@@ -78,9 +75,7 @@ class QuartzConfig {
         SchedulerFactoryBean factory = new SchedulerFactoryBean();
         factory.setJobFactory(jobFactory);
         factory.setQuartzProperties(quartzProperties(systemDataSourceName));
-        // add startup delay - otherwise the scheduler triggers jobs execution
-        // before spring boot application full startup
-        factory.setStartupDelay(STARTUP_DELAY_SECONDS);
+
         return factory;
     }
 

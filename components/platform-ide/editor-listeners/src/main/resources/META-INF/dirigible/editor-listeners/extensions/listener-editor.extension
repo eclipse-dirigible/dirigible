@@ -1,0 +1,5 @@
+{
+    "module": "editor-listeners/configs/listener-editor.js",
+    "extensionPoint": "platform-editors",
+    "description": "Listener Editor"
+}

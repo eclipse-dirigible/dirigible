@@ -46,18 +46,35 @@ jobsView.controller('JobsController', ($scope, $http, Dialogs) => {
 		return classes;
 	};
 
-	$scope.toggle = (job) => {
-		if (job.enabled) $http.post('/services/jobs/enable/' + job.name).then((response) => {
-			console.info(response.data.name + " has been enabled.");
-			job.enabled = true;
+	$scope.toggle = (index) => {
+		if ($scope.list[index].enabled) {
+			$http.post('/services/jobs/enable/' + $scope.list[index].name).then((response) => {
+				console.info(`${response.data.name} has been enabled.`);
+			}, (response) => {
+				console.error(response.data);
+				$scope.$evalAsync(() => {
+					$scope.list[index].enabled = false;
+				});
+				Dialogs.showAlert({
+					title: 'Job state error',
+					message: 'There was an error while trying to enable the job.',
+					type: AlertTypes.Error,
+					preformatted: false,
+				});
+			});
+		} else $http.post('/services/jobs/disable/' + $scope.list[index].name).then((response) => {
+			console.info(`${response.data.name} has been disabled.`);
 		}, (response) => {
 			console.error(response.data);
-		});
-		else $http.post('/services/jobs/disable/' + job.name).then((response) => {
-			console.info(response.data.name + " has been disabled.");
-			job.enabled = false;
-		}, (response) => {
-			console.error(response.data);
+			$scope.$evalAsync(() => {
+				$scope.list[index].enabled = true;
+			});
+			Dialogs.showAlert({
+				title: 'Job state error',
+				message: 'There was an error while trying to disable the job.',
+				type: AlertTypes.Error,
+				preformatted: false,
+			});
 		});
 	};
 

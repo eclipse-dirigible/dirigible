@@ -101,22 +101,22 @@
 
 		<!-- Maven -->
 		<maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
-		<maven-javadoc-plugin.version>3.11.1</maven-javadoc-plugin.version>
+		<maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
 		<maven-surefire-plugin.version>3.5.1</maven-surefire-plugin.version>
 		<maven-failsafe-plugin.version>3.5.0</maven-failsafe-plugin.version>
 		<maven-source-plugin.version>3.3.1</maven-source-plugin.version>
-		<maven-gpg-plugin.version>3.1.0</maven-gpg-plugin.version>
+		<maven-gpg-plugin.version>3.2.7</maven-gpg-plugin.version>
 		<maven-jacoco-plugin.version>0.8.12</maven-jacoco-plugin.version>
 		<maven-spotbugs-plugin.version>4.8.6.6</maven-spotbugs-plugin.version>
 		<maven-formatter-plugin.version>2.23.0</maven-formatter-plugin.version>
-		<maven-exec-plugin.version>3.3.0</maven-exec-plugin.version>
+		<maven-exec-plugin.version>3.5.0</maven-exec-plugin.version>
 		<maven-git-commit-id-plugin.version>4.9.10</maven-git-commit-id-plugin.version>
 		<maven-license-plugin.version>4.6</maven-license-plugin.version>
 
 		<!-- Spring -->
-		<spring.boot.version>3.4.0</spring.boot.version>
+		<spring.boot.version>3.4.1</spring.boot.version>
 		<spring.admin.version>${spring.boot.version}</spring.admin.version>
-		<springdoc.version>2.7.0</springdoc.version>
+		<springdoc.version>2.8.3</springdoc.version>
 		
 		<!-- Webjars -->
 		<webjars.bootstrap.version>5.3.2</webjars.bootstrap.version>
@@ -130,7 +130,7 @@
 		<commons.io>2.18.0</commons.io>
 		<commons.lang3>3.17.0</commons.lang3>
 		<commons.exec>1.4.0</commons.exec>
-		<commons-csv.version>1.11.0</commons-csv.version>
+		<commons-csv.version>1.13.0</commons-csv.version>
 
 		<apache-httpcomponents-httpmime.version>4.5.14</apache-httpcomponents-httpmime.version>
 		<apache-httpcomponents-httpclient.version>4.5.14</apache-httpcomponents-httpclient.version>
@@ -149,7 +149,7 @@
 		<olingo.version>3.1.4</olingo.version>
 		
 		<!-- FTP -->
-		<mina-core.version>2.2.3</mina-core.version>
+		<mina-core.version>2.2.4</mina-core.version>
 		<sshd-core.version>2.14.0</sshd-core.version>
 		<ftpserver.version>1.2.0</ftpserver.version>
 		
@@ -157,7 +157,7 @@
 		<activemq.version>6.1.0</activemq.version>
 		
 		<!-- Camel -->
-		<camel.version>4.8.0</camel.version>
+		<camel.version>4.9.0</camel.version>
 		
 		<!-- Velocity -->
 		<velocity.version>2.4</velocity.version>
@@ -174,23 +174,23 @@
 
 		<!-- JDBC -->
 		<mongodb.version>3.12.14</mongodb.version>
-		<ngdbc.version>2.22.12</ngdbc.version>
-		<snowflake.version>3.20.0</snowflake.version>
+		<ngdbc.version>2.23.7</ngdbc.version>
+		<snowflake.version>3.21.0</snowflake.version>
 		<mysql.version>8.4.0</mysql.version>
 		
 		<!-- QLDB -->
 		<qldb.driver.version>2.3.1</qldb.driver.version>
-		<qldb.sdk.version>1.12.779</qldb.sdk.version>
+		<qldb.sdk.version>1.12.780</qldb.sdk.version>
 		
 		<!-- jETCD -->
 		<jetcd.core.version>0.8.3</jetcd.core.version>
 		
 		<!-- Various -->
 		<c3p0.version>0.10.1</c3p0.version>
-		<guava.version>33.3.1-jre</guava.version>
+		<guava.version>33.4.0-jre</guava.version>
 		<icu4j.version>76.1</icu4j.version>
 		<classgraph.version>4.8.179</classgraph.version>
-		<logcaptor.version>2.10.0</logcaptor.version>
+		<logcaptor.version>2.10.1</logcaptor.version>
 
 		<!-- UI -->
 		<jquery-ui.version>1.13.0</jquery-ui.version>
@@ -764,7 +764,7 @@
 			<dependency>
 				<groupId>io.opentelemetry.instrumentation</groupId>
 				<artifactId>opentelemetry-instrumentation-bom</artifactId>
-				<version>2.10.0</version>
+				<version>2.11.0</version>
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>
@@ -783,7 +783,7 @@
 			<dependency>
 				<groupId>org.junit.vintage</groupId>
 				<artifactId>junit-vintage-engine</artifactId>
-				<version>5.11.3</version>
+				<version>5.11.4</version>
 				<scope>test</scope>
 			</dependency>
 

@@ -108,8 +108,7 @@ function createExecuteAction() {
         // Method that will be executed when the action is triggered.
         // @param editor The editor instance is passed in as a convinience
         run: function (editor) {
-            const text = editor.getModel().getValueInRange(editor.getSelection());
-            const sqlCommand = getSQLCommand(text);
+            const sqlCommand = editor.getModel().getValueInRange(editor.getSelection());
             if (sqlCommand.length > 0) {
                 themingHub.postMessage({ topic: "database.sql.execute", data: sqlCommand });
             } else {

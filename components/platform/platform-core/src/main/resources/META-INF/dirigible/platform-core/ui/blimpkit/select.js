@@ -28,7 +28,7 @@ blimpkit.directive('bkSelect', (uuid, $window, $timeout, ScreenEdgeMargin, class
         placement: '@?',
         isReadonly: '<?',
     },
-    link: function (scope, _element, _attrs, ngModel) {
+    link: (scope, _element, _attrs, ngModel) => {
         let selectedValWatch;
         if (ngModel) {
             selectedValWatch = scope.$watch('selectedValue', (value) => {
@@ -49,12 +49,12 @@ blimpkit.directive('bkSelect', (uuid, $window, $timeout, ScreenEdgeMargin, class
         let control = $element[0].querySelector(`.fd-popover__control`);
         let rect;
         $scope.iconClass = 'sap-icon--slim-arrow-down';
-        $scope.setDefault = function () {
+        $scope.setDefault = () => {
             rect = control.getBoundingClientRect();
             $scope.defaultHeight = $window.innerHeight - ScreenEdgeMargin.FULL - rect.bottom;
         };
         function resizeEvent() {
-            $scope.$apply(function () { $scope.setDefault() });
+            $scope.$apply(() => { $scope.setDefault() });
         }
         $window.addEventListener('resize', resizeEvent);
         $scope.defaultHeight = 16;
@@ -79,8 +79,8 @@ blimpkit.directive('bkSelect', (uuid, $window, $timeout, ScreenEdgeMargin, class
             [`is-${$scope.state}`]: $scope.state,
         });
 
-        $scope.getPopoverBodyClasses = function () {
-            let classList = ['fd-popover__body', 'fd-popover__body--no-arrow', 'fd-popover__body--dropdown', 'fd-scrollbar'];
+        $scope.getPopoverBodyClasses = () => {
+            const classList = ['fd-popover__body', 'fd-popover__body--no-arrow', 'fd-popover__body--dropdown', 'fd-scrollbar'];
             if ($scope.dropdownFill) {
                 classList.push('fd-popover__body--dropdown-fill');
             }
@@ -152,17 +152,17 @@ blimpkit.directive('bkSelect', (uuid, $window, $timeout, ScreenEdgeMargin, class
             [`fd-form-message--${$scope.state}`]: $scope.state,
         });
 
-        $scope.onControlClick = function ($event) {
+        $scope.onControlClick = ($event) => {
             $scope.setDefault();
             $scope.bodyExpanded = !$scope.bodyExpanded;
             $event.currentTarget.focus();
         };
 
-        $scope.closeDropdown = function () {
+        $scope.closeDropdown = () => {
             $scope.bodyExpanded = false;
         };
 
-        $scope.getSelectedItem = function () {
+        $scope.getSelectedItem = () => {
             if ($scope.selectedValue === undefined || $scope.selectedValue === null)
                 return null;
 
@@ -170,12 +170,12 @@ blimpkit.directive('bkSelect', (uuid, $window, $timeout, ScreenEdgeMargin, class
             return index >= 0 ? $scope.items[index] : null;
         };
 
-        $scope.getSelectedItemText = function () {
+        $scope.getSelectedItemText = () => {
             const selectedItem = $scope.getSelectedItem();
             return selectedItem ? selectedItem.text : $scope.placeholder || '';
         };
 
-        $scope.getSelectedItemId = function () {
+        $scope.getSelectedItemId = () => {
             const selectedItem = $scope.getSelectedItem();
             return selectedItem ? selectedItem.optionId : '';
         };
@@ -203,7 +203,7 @@ blimpkit.directive('bkSelect', (uuid, $window, $timeout, ScreenEdgeMargin, class
             $scope.closeDropdown();
         }
 
-        $scope.getStyle = function () {
+        $scope.getStyle = () => {
             if ($scope.dropdownFixed === true && rect !== undefined) {
                 rect = control.getBoundingClientRect();
                 if ($scope.defaultHeight < ScreenEdgeMargin.QUADRUPLE) {
@@ -241,7 +241,7 @@ blimpkit.directive('bkSelect', (uuid, $window, $timeout, ScreenEdgeMargin, class
             $element.off('focusout', focusoutEvent);
         }
         $scope.$on('$destroy', cleanUp);
-        const contentLoaded = $scope.$watch('$viewContentLoaded', function () {
+        const contentLoaded = $scope.$watch('$viewContentLoaded', () => {
             $timeout(() => {
                 $scope.setDefault();
                 contentLoaded();
@@ -275,6 +275,7 @@ blimpkit.directive('bkSelect', (uuid, $window, $timeout, ScreenEdgeMargin, class
         secondaryText: '@?',
         value: '<',
         glyph: '@?',
+        icon: '@?',
         noWrap: '<?'
     },
     link: (scope, _element, _attrs, selectCtrl) => {
@@ -295,7 +296,8 @@ blimpkit.directive('bkSelect', (uuid, $window, $timeout, ScreenEdgeMargin, class
         });
 
         scope.getIconClasses = () => classNames('fd-list__icon', {
-            [scope.glyph]: scope.glyph,
+            [scope.glyph]: scope.glyph && !scope.icon,
+            'bk-icon--svg sap-icon': !scope.glyph && scope.icon,
         });
 
         selectCtrl.addItem(scope);
@@ -303,7 +305,7 @@ blimpkit.directive('bkSelect', (uuid, $window, $timeout, ScreenEdgeMargin, class
         scope.$on('$destroy', () => selectCtrl.removeItem(scope));
     },
     template: `<li id="{{ optionId }}" ng-class="getClasses()" role="option" aria-selected="{{ isSelected() }}" ng-click="selectItem()">
-        <i ng-if="glyph" role="presentation" ng-class="getIconClasses()"></i>
+        <i ng-if="glyph || icon" role="presentation" ng-class="getIconClasses()"><ng-include ng-if="icon" src="icon"></ng-include></i>
         <span ng-class="getTitleClasses()">{{ text }}</span>
         <span ng-if="secondaryText" class="fd-list__secondary">{{ secondaryText }}</span>
     </li>`

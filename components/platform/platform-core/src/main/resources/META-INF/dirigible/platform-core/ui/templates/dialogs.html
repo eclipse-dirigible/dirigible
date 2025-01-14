@@ -55,7 +55,7 @@
                 <bk-form-group transclude-classes="bk-vbox bk-box--gap">
                     <!-- Input -->
                     <bk-form-item ng-repeat-start="(id, item) in formDialogs[0].form track by id" ng-if="item.controlType === 'input' && item.type !== 'number' && formItemVisible(item.visibleOn, item.hiddenOn)">
-                        <bk-form-label for="{{id}}" colon="true">{{item.label}}</bk-form-label>
+                        <bk-form-label for="{{id}}" colon="true" ng-required="item.required">{{item.label}}</bk-form-label>
                         <bk-form-input-message state="{{formDialog.form['n' + id].$valid ? '' : 'error'}}" message="item.errorMsg || 'Invalid input'" message-fixed="true">
                             <bk-input id="{{id}}" type="{{item.type}}" ng-attr-placeholder="{{item.placeholder}}" name="{{ 'n' + id }}" ng-trim="false" ng-model="item.value" bk-focus="{{item.focus}}"
                                 state="{{ formDialog.form['n' + id].$valid ? '' : 'error' }}" ng-required="item.required" ng-minlength="item.minlength || 0" ng-disabled="formItemDisabled(item.enabledOn, item.disabledOn)"
@@ -66,7 +66,7 @@
                     </bk-form-item>
                     <!-- Number input -->
                     <bk-form-item ng-if="item.controlType === 'input' && item.type === 'number' && formItemVisible(item.visibleOn, item.hiddenOn)">
-                        <bk-form-label for="{{id}}" colon="true">{{item.label}}</bk-form-label>
+                        <bk-form-label for="{{id}}" colon="true" ng-required="item.required">{{item.label}}</bk-form-label>
                         <bk-form-input-message inactive="formDialog.form['n' + id].$valid" type="error" message="item.errorMsg || 'Invalid input'" message-fixed="true">
                             <bk-step-input input-id="{{id}}" type="{{item.type}}" placeholder="{{item.placeholder}}" name="{{ 'n' + id }}" ng-trim="false" ng-model="item.value" bk-focus="{{item.focus}}"
                                 state="{{ formDialog.form['n' + id].$valid ? '' : 'error' }}" ng-disabled="formItemDisabled(item.enabledOn, item.disabledOn)" ng-required="item.required" min="item.min" max="item.max" step="item.step">
@@ -75,7 +75,7 @@
                     </bk-form-item>
                     <!-- Textarea -->
                     <bk-form-item ng-if="item.controlType === 'textarea' && formItemVisible(item.visibleOn, item.hiddenOn)">
-                        <bk-form-label for="{{id}}" colon="true">{{item.label}}</bk-form-label>
+                        <bk-form-label for="{{id}}" colon="true" ng-required="item.required">{{item.label}}</bk-form-label>
                         <bk-form-input-message state="{{formDialog.form['n' + id].$valid ? '' : 'error'}}" message="item.errorMsg || 'Invalid input'" message-fixed="true">
                             <bk-textarea id="{{id}}" ng-attr-placeholder="{{item.placeholder}}" name="{{ 'n' + id }}" ng-trim="false" ng-model="item.value" bk-focus="{{item.focus}}"
                                 state="{{ formDialog.form['n' + id].$valid ? '' : 'error' }}" ng-disabled="formItemDisabled(item.enabledOn, item.disabledOn)" ng-required="item.required" ng-minlength="item.minlength || 0"
@@ -91,14 +91,14 @@
                     </bk-form-item>
                     <!-- Radio -->
                     <bk-form-item ng-if="item.controlType === 'radio' && formItemVisible(item.visibleOn, item.hiddenOn)">
-                        <bk-form-label colon="true">{{item.label}}</bk-form-label>
+                        <bk-form-label colon="true" ng-required="item.required">{{item.label}}</bk-form-label>
                         <bk-radio id="{{'ri' + $index}}" name="{{ 'n' + id }}" state="{{ formDialog.form['n' + id].$valid ? '' : 'error' }}" ng-model="item.value" ng-value="option.value" ng-required="item.required"
                             ng-disabled="formItemDisabled(item.enabledOn, item.disabledOn)" ng-repeat-start="option in item.options track by option.value"></bk-radio>
                         <bk-radio-label for="{{'ri' + $index}}" ng-repeat-end>{{option.label}}</bk-radio-label>
                     </bk-form-item>
                     <!-- Dropdown -->
                     <bk-form-item ng-if="item.controlType === 'dropdown' && formItemVisible(item.visibleOn, item.hiddenOn)" ng-repeat-end>
-                        <bk-form-label colon="true" required="{{item.required}}" id="{{id}}">
+                        <bk-form-label colon="true" ng-required="item.required" id="{{id}}">
                             {{ item.label }}
                         </bk-form-label>
                         <bk-select placeholder="{{item.placeholder}}" name="{{ 'n' + id }}" label-id="{{ item.id }}" state="{{ formDialog.form['n' + id].$valid ? '' : 'error' }}"

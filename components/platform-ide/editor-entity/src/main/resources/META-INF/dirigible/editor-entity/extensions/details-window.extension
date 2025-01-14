@@ -1,0 +1,5 @@
+{
+    "module": "editor-entity/configs/details-window.js",
+    "extensionPoint": "platform-windows",
+    "description": "EDM details dialog window"
+}

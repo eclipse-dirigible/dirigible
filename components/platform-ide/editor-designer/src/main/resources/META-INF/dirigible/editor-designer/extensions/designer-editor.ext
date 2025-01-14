@@ -1,0 +1,5 @@
+{
+    "module": "editor-designer/configs/designer-editor.js",
+    "extensionPoint": "platform-editors",
+    "description": "Designer Editor"
+}

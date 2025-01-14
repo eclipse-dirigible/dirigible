@@ -1,1 +1,0 @@
-{"module":"/ide-entity/template/transformer-on-save.js","extensionPoint":"ide-workspace-on-save","description":"Transform EDM to Model Extension"}

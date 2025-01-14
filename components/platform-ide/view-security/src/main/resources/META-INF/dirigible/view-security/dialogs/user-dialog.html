@@ -31,14 +31,14 @@
             <bk-fieldset ng-form="forms.userForm">
                 <bk-form-group>
                     <bk-form-item>
-                        <bk-form-label for="username" colon="true">Username</bk-form-label>
+                        <bk-form-label for="username" required colon="true">Username</bk-form-label>
                         <bk-input id="username" name="username" type="text" placeholder="Enter a name" ng-model="user.username" input-rules="inputRules" state="{{ forms.userForm['username'].$valid ? '' : 'error' }}" ng-required="true"
                             ng-trim="false"></bk-input>
                     </bk-form-item>
                 </bk-form-group>
                 <bk-form-group>
                     <bk-form-item>
-                        <bk-form-label for="password" colon="true">Password</bk-form-label>
+                        <bk-form-label for="password" required colon="true">Password</bk-form-label>
                         <bk-input id="password" name="password" type="password" placeholder="Enter password" ng-model="user.password" input-rules="inputRules" ng-trim="false" state="{{ forms.userForm['password'].$valid ? '' : 'error' }}"
                             ng-required="true">
                         </bk-input>

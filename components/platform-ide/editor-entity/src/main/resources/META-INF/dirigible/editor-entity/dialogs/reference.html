@@ -1,0 +1,71 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="edmReference" ng-controller="ReferenceController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/editor-entity/configs/reference-window.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=editor-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="/services/web/editor-entity/dialogs/js/reference.js"></script>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
+        <bk-scrollbar class="bk-padding bk-full-height" ng-show="!state.error && !state.isBusy">
+            <bk-fieldset ng-form="forms.newForm">
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="referencedModel" required="true" colon="true">Model Location
+                        </bk-form-label>
+                        <bk-select placeholder="Select a model" label-id="referencedModel" ng-required="true" ng-model="dropdowns.model" ng-change="modelSelected()" dropdown-fixed="true">
+                            <bk-option text="{{ model.name + ' - ' + model.path }}" value="model.path" ng-repeat="model in availableModels track by $index"></bk-option>
+                        </bk-select>
+                    </bk-form-item>
+                    <bk-form-item class="bk-margin-top--tiny">
+                        <bk-form-label for="referencedEntity" required="true" colon="true">Entity Name
+                        </bk-form-label>
+                        <bk-select placeholder="Select an entity" is-disabled="dropdowns.model ? false : true" label-id="referencedEntity" ng-required="true" ng-model="dropdowns.entity" dropdown-fixed="true">
+                            <bk-option text="{{ entity.name }}" value="entity.name" ng-repeat="entity in availableEntities track by $index"></bk-option>
+                        </bk-select>
+                    </bk-form-item>
+                </bk-form-group>
+            </bk-fieldset>
+        </bk-scrollbar>
+        <bk-bar bar-design="footer" in-page="true" padding="s" ng-show="!state.error && !state.isBusy">
+            <bk-bar-right>
+                <bk-bar-element>
+                    <bk-button label="Save" ng-disabled="!forms.newForm.$valid" state="emphasized" compact="true" ng-click="save()"></bk-button>
+                </bk-bar-element>
+                <bk-bar-element>
+                    <bk-button label="Cancel" state="transparent" ng-click="cancel()" compact="true">
+                    </bk-button>
+                </bk-bar-element>
+            </bk-bar-right>
+        </bk-bar>
+        <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+            <bk-message-page-title>Dialog encounterd an error!</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+            <bk-message-page-actions>
+                <bk-button compact="true" label="Close" ng-click="cancel()"></bk-button>
+            </bk-message-page-actions>
+        </bk-message-page>
+        <theme></theme>
+    </body>
+
+</html>

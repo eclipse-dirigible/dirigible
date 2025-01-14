@@ -166,11 +166,11 @@ blimpkit.directive('bkList', (classNames) => ({
     link: (scope) => {
         scope.getClasses = () => {
             if (!scope.glyph && !scope.svgPath) {
-                console.error('bk-list-icon error: You must provide a glpyh or an svg icon');
+                console.error('bk-list-icon error: You must provide a glyph or an svg icon');
             }
             return classNames('fd-list__icon', {
                 [scope.glyph]: scope.glyph && !scope.svgPath,
-                'bk-icon--svg sap-icon': scope.svgPath,
+                'bk-icon--svg sap-icon': !scope.glyph && scope.svgPath,
             })
         };
     },

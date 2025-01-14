@@ -29,8 +29,8 @@
         <table display-mode="compact" bk-table outer-borders="bottom">
             <thead bk-table-header sticky="true">
                 <tr bk-table-row>
-                    <th bk-table-header-cell>Status</th>
                     <th bk-table-header-cell>Enabled</th>
+                    <th bk-table-header-cell>Status</th>
                     <th bk-table-header-cell>Name</th>
                     <th bk-table-header-cell>Expression</th>
                     <th bk-table-header-cell>Handler</th>
@@ -44,12 +44,11 @@
             <tbody bk-table-body>
                 <tr bk-table-row hoverable="true" activable="false" ng-repeat="next in list track by $index">
                     <td bk-table-cell fit-content="true">
-                        <span ng-class="getIconClasses(next.status)" role="presentation"></span>
+                        <bk-checkbox id="cbjs{{$index}}" ng-model="next.enabled" ng-change="toggle($index)"></bk-checkbox>
+                        <bk-checkbox-label empty="true" for="cbjs{{$index}}"></bk-checkbox-label>
                     </td>
                     <td bk-table-cell fit-content="true">
-                        <bk-button state="transparent" glyph="{{ next.enabled ? 'sap-icon--connected' : 'sap-icon--disconnected' }}" title="{{ next.enabled ? 'Disable' : 'Enable' }}" aria-label="{{ next.enabled ? 'Disable' : 'Enable' }}"
-                            ng-click="toggle(next)">
-                        </bk-button>
+                        <span ng-class="getIconClasses(next.status)" role="presentation"></span>
                     </td>
                     <td bk-table-cell>{{next.name}}</td>
                     <td bk-table-cell>{{next.expression}}</td>

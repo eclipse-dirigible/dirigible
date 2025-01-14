@@ -1,0 +1,5 @@
+{
+    "module": "editor-entity/template/transformer-template.js",
+    "extensionPoint": "platform-templates",
+    "description": "The transform template from edm to model format"
+}

@@ -107,12 +107,12 @@ databasesView.controller('DatabaseController', ($scope, $http, Dialogs, ButtonSt
             message: 'Are you sure you want to delete the selected database?',
             buttons: [{
                 id: 'ok',
-                type: ButtonStates.Emphasized,
+                state: ButtonStates.Emphasized,
                 label: 'OK',
             },
             {
                 id: 'Cancel',
-                type: ButtonStates.Transparent,
+                state: ButtonStates.Transparent,
                 label: 'Cancel',
             }]
         }).then((buttonId) => {

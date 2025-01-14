@@ -1,0 +1,5 @@
+{
+    "module": "editor-jobs/configs/job-editor.js",
+    "extensionPoint": "platform-editors",
+    "description": "Job Editor"
+}

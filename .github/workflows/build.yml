@@ -4,6 +4,9 @@ on:
     branches: 
       - main
       - master
+
+permissions: 
+  security-events: write
 jobs:
   code-style:
     runs-on: ubuntu-latest

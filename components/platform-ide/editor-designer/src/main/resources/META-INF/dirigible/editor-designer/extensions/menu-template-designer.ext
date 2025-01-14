@@ -1,0 +1,5 @@
+{
+    "module": "editor-designer/configs/menu-template-designer.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "UI Designer Workspace New Menu Extension"
+}

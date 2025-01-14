@@ -152,21 +152,22 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
         logger.debug("Processing synchronizers...");
 
         if (!this.synchronizationWatcher.isModified() && initialized.get()) {
-            logger.debug("Skipped synchronization as no changes in the Registry.");
+            logger.debug("Skipped synchronization as NO changes in the Registry.");
             return;
         }
 
         if (!prepared.get()) {
-            logger.debug("Skipped synchronization as the runtime is not prepared yet.");
+            logger.debug("Skipped synchronization as the runtime is NOT prepared yet.");
             return;
         }
 
         if (processing.get()) {
-            logger.debug("Skipped synchronization as it is currently in progress.");
+            logger.debug("Skipped synchronization as it is CURRENTLY IN PROGRESS.");
             return;
         }
 
         processing.set(true);
+        synchronizationWatcher.reset();
 
         try {
 
@@ -205,7 +206,7 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                 }
             }
 
-            logger.debug("Loading of {} definitions done. {} artefacts found in total. {} new and {} modified.", definitions.size(),
+            logger.debug("Loading of [{}] definitions done. [{}] artefacts found in total. [{}] new and [{}] modified.", definitions.size(),
                     artefacts.size(), countNew, countModified);
 
             if (countNew > 0 || countModified > 0 || !initialized.get()) {
@@ -397,7 +398,6 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
             definitions.clear();
             artefacts.clear();
 
-            synchronizationWatcher.reset();
             initialized.set(true);
             processing.set(false);
         }

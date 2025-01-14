@@ -15,7 +15,7 @@ const editor = angular.module('editor', [
     'platformShortcuts', // Enable shortcut functionality, using the 'shortcut' directive
     'WorkspaceService', // Include the WorkspaceService for working with files
 ]);
-editor.controller('EditorController', function ($scope, $window, WorkspaceService, ViewParameters) {
+editor.controller('EditorController', ($scope, $window, WorkspaceService, ViewParameters) => {
     const statusBarHub = new StatusBarHub(); // This is an API based on MessageHub for communicating with the shell's status bar
     const workspaceHub = new WorkspaceHub(); // This is an API based on MessageHub for triggering and receiving file related events
     const layoutHub = new LayoutHub(); // This is an API based on MessageHub for communicating with the layout
@@ -35,21 +35,25 @@ editor.controller('EditorController', function ($scope, $window, WorkspaceServic
 
     // Whenever there is a change to the file model, mark the file as dirty
     $scope.modelChange = () => {
-        workspaceHub.setFileDirty({
+        layoutHub.setEditorDirty({
             path: $scope.dataParameters.filePath,
             dirty: true,
         });
     };
 
-    $scope.saveShortcut = (keySet, event) => {
-        event.preventDefault();
+    $scope.saveAction = (keySet = 'ctrl+s', event) => {
+        event?.preventDefault();
         if (keySet === 'ctrl+s') {
             $scope.state.isBusy = true;
             WorkspaceService.saveContent($scope.dataParameters.filePath, $scope.file.model).then(() => {
                 // Clean the dirty status, once the file has been saved.
-                workspaceHub.setFileDirty({
+                layoutHub.setEditorDirty({
                     path: $scope.dataParameters.filePath,
                     dirty: false,
+                });
+                workspaceHub.announceFileSaved({
+                    path: $scope.dataParameters.filePath,
+                    contentType: $scope.dataParameters.contentType,
                 });
                 $scope.$evalAsync(() => {
                     $scope.state.isBusy = false;
@@ -88,13 +92,27 @@ editor.controller('EditorController', function ($scope, $window, WorkspaceServic
     });
 
     // If the file changes (rename, move, etc) outside the editor, parameters will be changed and should be reloaded.
-    workspaceHub.onReloadEditorParams((data) => {
+    layoutHub.onReloadEditorParams((data) => {
         if (data.path === $scope.dataParameters.filePath) {
             $scope.$evalAsync(() => {
                 $scope.dataParameters = ViewParameters.get();
             });
         };
     });
+
+    // Triggered when the "Save All" action is called
+    workspaceHub.onSaveAll(() => {
+		if (!$scope.state.error) {
+			$scope.saveAction();
+		}
+	});
+
+    // Save action triggered from outside the editor. Usually from a confirmation dialog when closing a modified file.
+	workspaceHub.onSaveFile((data) => {
+        if (!$scope.state.error && data.path && data.path === $scope.dataParameters.filePath) {
+            $scope.saveAction();
+        }
+	});
 
     // Use ViewParameters to get the editor parameters like 'filePath'
     $scope.dataParameters = ViewParameters.get();

@@ -204,6 +204,7 @@
 		<module>platform-ide/perspective-operations</module>
 		<module>platform-ide/perspective-jobs</module>
 		<module>platform-ide/perspective-security</module>
+		<module>platform-ide/perspective-processes</module>
 		<module>platform-ide/view-welcome</module>
 		<module>platform-ide/view-search</module>
 		<module>platform-ide/view-projects</module>
@@ -249,6 +250,17 @@
 		<module>platform-ide/editor-monaco-extensions</module>
 		<module>platform-ide/editor-bpm</module>
 		<module>platform-ide/editor-image</module>
+		<module>platform-ide/editor-data-structures</module>
+		<module>platform-ide/editor-extensions</module>
+		<module>platform-ide/editor-jobs</module>
+		<module>platform-ide/editor-listeners</module>
+		<module>platform-ide/editor-schema</module>
+		<module>platform-ide/editor-security</module>
+		<module>platform-ide/editor-websockets</module>
+		<module>platform-ide/editor-integrations</module>
+		<module>platform-ide/editor-report</module>
+		<module>platform-ide/editor-designer</module>
+		<module>platform-ide/editor-entity</module>
 		<module>platform-ide/menu-bpm</module>
 		<module>platform-ide/menu-database</module>
 		<module>platform-ide/menu-entity</module>
@@ -1179,6 +1191,11 @@
 				<artifactId>dirigible-components-perspective-security</artifactId>
 				<version>${project.version}</version>
 			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-perspective-processes</artifactId>
+				<version>${project.version}</version>
+			</dependency>
 
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
@@ -1405,6 +1422,61 @@
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
 				<artifactId>dirigible-components-editor-image</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-editor-data-structures</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-editor-extensions</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-editor-jobs</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-editor-listeners</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-editor-schema</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-editor-security</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-editor-websockets</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-editor-integrations</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-editor-report</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-editor-designer</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-editor-entity</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 

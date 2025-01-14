@@ -1,0 +1,73 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/editor-listeners/configs/listener-editor.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=editor-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="/services/web/editor-listeners/js/editor.js"></script>
+    </head>
+
+    <body class="bk-padding bk-vbox bk-center--vertical" bk-scrollbar shortcut="'ctrl+s'" shortcut-action="save">
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
+        <div class="bk-restrict-width bk-full-width" ng-show="!state.error && !state.isBusy">
+            <bk-fieldset ng-form="forms.editor">
+                <bk-form-group label="Listener:" name="entityForm">
+                    <bk-form-item horizontal="false">
+                        <bk-form-label for="idName" required="true" colon="true">Name</bk-form-label>
+                        <bk-form-input-message state="{{ forms.editor['name'].$valid ? '' : 'error' }}" message="::nameErrorMessage">
+                            <bk-input id="idName" name="name" ng-required="true" ng-model="listener.name" ng-maxlength="255" type="text" placeholder="Name of the Queue or the Topic" input-rules="{ patterns: ['^[a-zA-Z0-9_.-]*$'] }"
+                                state="{{ forms.editor['name'].$valid ? '' : 'error' }}"></bk-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
+                    <bk-form-item horizontal="false">
+                        <bk-form-label for="idType" required="true" colon="true">Type</bk-form-label>
+                        <bk-combobox-input id="idType" name="type" ng-required="true" ng-model="listener.kind" dropdown-items="types" placeholder="Search listener types..." state="{{ forms.editor['type'].$valid ? '' : 'error' }}"
+                            btn-aria-label="show/hide listener type options" list-aria-label="listener type options" max-body-height="240">
+                        </bk-combobox-input>
+                    </bk-form-item>
+                    <bk-form-item horizontal="false">
+                        <bk-form-label for="idHandler" required="true" colon="true">Handler</bk-form-label>
+                        <bk-form-input-message state="{{ forms.editor['name'].$valid ? '' : 'error' }}" message="::handlerErrorMessage">
+                            <bk-input id="idHandler" name="handler" ng-required="true" ng-model="listener.handler" ng-maxlength="255" type="text" placeholder="Enter handler" input-rules="{ patterns: ['^[a-zA-Z0-9_.-/$-]*$'] }"
+                                state="{{ forms.editor['handler'].$valid ? '' : 'error' }}">
+                            </bk-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
+                    <bk-form-item horizontal="false">
+                        <bk-form-label for="idDescription" required="false" colon="true">Description</bk-form-label>
+                        <bk-form-input-message state="{{ forms.editor['description'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+                            <bk-textarea id="idDescription" name="description" ng-required="false" ng-model="listener.description" placeholder="Enter Description"></bk-textarea>
+                        </bk-form-input-message>
+                    </bk-form-item>
+                    <bk-form-item horizontal="false" class="bk-box--items-end">
+                        <bk-button compact="true" state="emphasized" label="Save" ng-click="save()" ng-disabled="!forms.editor.$valid || !changed"></bk-button>
+                    </bk-form-item>
+                </bk-form-group>
+            </bk-fieldset>
+        </div>
+        <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+            <bk-message-page-title>Editor encounterd an error!</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+        </bk-message-page>
+        <theme></theme>
+    </body>
+
+</html>

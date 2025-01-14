@@ -1,0 +1,5 @@
+{
+    "module": "editor-security/configs/roles-editor.js",
+    "extensionPoint": "platform-editors",
+    "description": "Roles Editor"
+}

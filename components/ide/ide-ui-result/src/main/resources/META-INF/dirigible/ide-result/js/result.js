@@ -78,16 +78,9 @@ resultView.controller('DatabaseResultController', ['$scope', '$http', 'messageHu
         'create-row',
         function (msg) {
             if (msg.data) {
-                let row = msg.data;
-                const requestBody = {
-                    schemaName: $scope.schemaName,
-                    tableName: $scope.tableName,
-                    data: row
-                };
-
-                $http.post("/services/js/ide-result/js/crud.js/create", requestBody)
+                const url = `/services/js/ide-result/js/databaseTable.js/${$scope.datasource}/${$scope.schemaName}/${$scope.tableName}`;
+                $http.post(url, msg.data)
                     .then((response) => {
-
                         messageHub.postMessage('database.sql.showContent', {
                             schemaName: $scope.schemaName,
                             tableName: $scope.tableName
@@ -106,25 +99,18 @@ resultView.controller('DatabaseResultController', ['$scope', '$http', 'messageHu
         'edit-row',
         function (msg) {
             if (msg.data) {
-                let row = msg.data;
-                const requestBody = {
-                    schemaName: $scope.schemaName,
-                    tableName: $scope.tableName,
-                    data: row,
+                const url = `/services/js/ide-result/js/databaseTable.js/${$scope.datasource}/${$scope.schemaName}/${$scope.tableName}`;
+                $http.put(url, {
+                    data: msg.data,
                     primaryKey: $scope.primaryKeyColumns
-                };
-
-                $http.put("/services/js/ide-result/js/crud.js/update", requestBody)
-                    .then((response) => {
-
-                        messageHub.postMessage('database.sql.showContent', {
-                            schemaName: $scope.schemaName,
-                            tableName: $scope.tableName
-                        });
-                    })
-                    .catch((error) => {
-                        console.error("Failed to edit row:", error);
+                }).then((response) => {
+                    messageHub.postMessage('database.sql.showContent', {
+                        schemaName: $scope.schemaName,
+                        tableName: $scope.tableName
                     });
+                }).catch((error) => {
+                    console.error("Failed to edit row:", error);
+                });
             }
             messageHub.closeDialogWindow('result-view-crud');
         },
@@ -135,25 +121,23 @@ resultView.controller('DatabaseResultController', ['$scope', '$http', 'messageHu
         'delete-row',
         function (msg) {
             if (msg.data) {
-                let row = msg.data;
-                const requestBody = {
-                    schemaName: $scope.schemaName,
-                    tableName: $scope.tableName,
-                    data: row,
-                    primaryKey: $scope.primaryKeyColumns
-                };
-
-                $http.post("/services/js/ide-result/js/crud.js/delete", requestBody)
-                    .then((response) => {
-
-                        messageHub.postMessage('database.sql.showContent', {
-                            schemaName: $scope.schemaName,
-                            tableName: $scope.tableName
-                        });
-                    })
-                    .catch((error) => {
-                        console.error("Failed to delete row:", error);
+                const url = `/services/js/ide-result/js/databaseTable.js/${$scope.datasource}/${$scope.schemaName}/${$scope.tableName}`;
+                $http({
+                    method: 'DELETE',
+                    url: url,
+                    data: {
+                        data: msg.data,
+                        primaryKey: $scope.primaryKeyColumns
+                    },
+                    headers: { 'Content-Type': 'application/json' },
+                }).then((response) => {
+                    messageHub.postMessage('database.sql.showContent', {
+                        schemaName: $scope.schemaName,
+                        tableName: $scope.tableName
                     });
+                }).catch((error) => {
+                    console.error("Failed to delete row:", error);
+                });
             }
             messageHub.closeDialogWindow('result-view-crud');
         },
@@ -210,8 +194,30 @@ resultView.controller('DatabaseResultController', ['$scope', '$http', 'messageHu
         $scope.$apply();
     };
 
-    function executeQuery(command) {
+    function populateResultView(result) {
+        cleanScope();
+        if (result.data != null && result.data.length > 0) {
+            $scope.rows = result.data;
+            $scope.columns = [];
+            for (let i = 0; i < result.data.length; i++) {
+                for (let column in result.data[i]) {
+                    $scope.columns.push(column);
+                }
+                break;
+            }
+            $scope.hasResult = true;
+        } else if (result.data !== null && result.data.errorMessage !== null && result.data.errorMessage !== undefined) {
+            $scope.state.error = true;
+            $scope.errorMessage = result.data.errorMessage;
+            $scope.hasResult = false;
+        } else {
+            $scope.result = 'Empty result';
+            $scope.hasResult = false;
+        }
+        $scope.hideProgress();
+    }
 
+    function executeQuery(command) {
         $scope.state.error = false;
         $scope.showProgress();
         let url = "/services/data/" + $scope.datasource;
@@ -227,28 +233,8 @@ resultView.controller('DatabaseResultController', ['$scope', '$http', 'messageHu
                     'X-CSRF-Token': csrfToken
                 }
             }).then(
-                function (result) {
-                    cleanScope();
-                    if (result.data != null && result.data.length > 0) {
-                        $scope.rows = result.data;
-                        $scope.columns = [];
-                        for (let i = 0; i < result.data.length; i++) {
-                            for (let column in result.data[i]) {
-                                $scope.columns.push(column);
-                            }
-                            break;
-                        }
-                        $scope.hasResult = true;
-                    } else if (result.data !== null && result.data.errorMessage !== null && result.data.errorMessage !== undefined) {
-                        $scope.state.error = true;
-                        $scope.errorMessage = result.data.errorMessage;
-                        $scope.hasResult = false;
-                    } else {
-                        $scope.result = 'Empty result';
-                        $scope.hasResult = false;
-                    }
-                    $scope.hideProgress();
-                }, function (reject) {
+                populateResultView,
+                function (reject) {
                     cleanScope();
                     $scope.state.error = true;
                     $scope.errorMessage = reject.data.message;
@@ -418,8 +404,7 @@ resultView.controller('DatabaseResultController', ['$scope', '$http', 'messageHu
         let data = event.data;
         $scope.schemaName = data.schemaName;
         $scope.tableName = data.tableName;
-        let sqlCommand = "SELECT * FROM \"" + data.schemaName + "\"" + "." + "\"" + data.tableName + "\";\n";
-        executeQuery({ data: sqlCommand });
+
         $http.get("/services/data/definition/" + $scope.datasource + '/' + $scope.schemaName
             + '/' + $scope.tableName)
             .then(function (response) {
@@ -427,6 +412,13 @@ resultView.controller('DatabaseResultController', ['$scope', '$http', 'messageHu
                 const extractedKeys = extractSpecialAndPrimaryKeys($scope.metadata);
                 $scope.primaryKeyColumns = extractedKeys.primaryKeyColumns;
                 $scope.specialColumns = extractedKeys.specialColumns;
+
+                const url = `/services/js/ide-result/js/databaseTable.js/${$scope.datasource}/${$scope.schemaName}/${$scope.tableName}`;
+                $http.get(url)
+                    .then(populateResultView)
+                    .catch((error) => {
+                        console.error("Failed to get all rows:", error);
+                    });
             })
             .catch(function (error) {
                 console.error("Error fetching metadata:", error);

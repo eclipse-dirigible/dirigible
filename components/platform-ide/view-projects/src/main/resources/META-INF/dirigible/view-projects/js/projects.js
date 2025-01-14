@@ -2013,9 +2013,11 @@ projectsView.controller('ProjectsViewController', function (
             if (msg.workspace === $scope.selectedWorkspace) {
                 if (msg.partial) {
                     const instance = jstreeWidget.jstree(true);
-                    for (let item in instance._model.data) {
-                        if (item !== '#' && instance._model.data[item].data.path === `/${msg.project}`) {
-                            instance.refresh_node(item);
+                    if (typeof instance._model !== 'undefined') {
+                        for (let item in instance._model.data) {
+                            if (item !== '#' && instance._model.data[item].data.path === `/${msg.workspace}/${msg.project}`) {
+                                instance.refresh_node(item);
+                            }
                         }
                     }
                 } else $scope.$evalAsync(() => {

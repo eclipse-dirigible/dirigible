@@ -1,0 +1,5 @@
+{
+    "module": "editor-entity/configs/nav-details-window.js",
+    "extensionPoint": "platform-windows",
+    "description": "EDM navigation details dialog window"
+}

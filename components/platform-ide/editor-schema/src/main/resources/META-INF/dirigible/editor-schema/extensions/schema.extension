@@ -1,0 +1,5 @@
+{
+    "module": "editor-schema/configs/schema-editor.js",
+    "extensionPoint": "platform-editors",
+    "description": "Database Schema Modeler"
+}

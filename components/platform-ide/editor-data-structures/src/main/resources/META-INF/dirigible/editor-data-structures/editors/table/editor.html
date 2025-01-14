@@ -1,0 +1,102 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/editor-data-structures/configs/table-editor.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=editor-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="/services/web/editor-data-structures/editors/table/editor.js"></script>
+    </head>
+
+    <body class="bk-vbox" shortcut="'ctrl+s'" shortcut-action="save">
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
+        <bk-toolbar has-title="true" ng-show="!state.error && !state.isBusy">
+            <bk-toolbar-title>Table:</bk-toolbar-title>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-button compact="true" state="emphasized" label="Save" ng-click="save()" ng-disabled="!(forms.editor.$valid && changed)"></bk-button>
+        </bk-toolbar>
+        <bk-scrollbar class="bk-full-width" ng-show="!state.error && !state.isBusy">
+            <bk-fieldset class="fd-margin--sm" ng-form="forms.editor">
+                <bk-form-group name="entityForm">
+                    <bk-form-item horizontal="false">
+                        <bk-form-label for="Name" required="true" colon="true">Name</bk-form-label>
+                        <bk-form-input-message state="{{ forms.editor['name'].$valid ? '' : 'error' }}" message="::inputErrorMessage">
+                            <bk-input id="idName" name="name" state="{{ forms.editor['name'].$valid ? '' : 'error' }}" ng-required="true" ng-model="table.name" ng-maxlength="255" input-rules="nameRegex" type="text" placeholder="Enter name">
+                            </bk-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
+                </bk-form-group>
+            </bk-fieldset>
+            <bk-toolbar has-title="true">
+                <bk-toolbar-title>Columns:</bk-toolbar-title>
+                <bk-toolbar-spacer></bk-toolbar-spacer>
+                <bk-button compact="true" label="Add" ng-click="addColumn()"></bk-button>
+            </bk-toolbar>
+            <table bk-table outer-borders="bottom">
+                <thead bk-table-header>
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>Name</th>
+                        <th bk-table-header-cell>Type</th>
+                        <th bk-table-header-cell>Length</th>
+                        <th bk-table-header-cell>Primary Key</th>
+                        <th bk-table-header-cell>Unique</th>
+                        <th bk-table-header-cell>Nullable</th>
+                        <th bk-table-header-cell>Default</th>
+                        <th bk-table-header-cell>Precision</th>
+                        <th bk-table-header-cell>Scale</th>
+                        <th bk-table-header-cell></th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr ng-if="table.columns.length === 0" bk-table-row>
+                        <td bk-table-cell no-data="true">Table has no columns</td>
+                    </tr>
+                    <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in table.columns track by $index">
+                        <td bk-table-cell>{{item.name}}</td>
+                        <td bk-table-cell>{{item.type}}</td>
+                        <td bk-table-cell>{{item.length}}</td>
+                        <td bk-table-cell>
+                            <span bk-object-status status="{{ item.primaryKey ? 'positive' : 'negative' }}" text="{{ item.primaryKey ? 'True' : 'False' }}"></span>
+                        </td>
+                        <td bk-table-cell>
+                            <span bk-object-status status="{{ item.unique ? 'positive' : 'negative' }}" text="{{ item.unique ? 'True' : 'False' }}"></span>
+                        </td>
+                        <td bk-table-cell>
+                            <span bk-object-status status="{{ item.nullable ? 'positive' : 'negative' }}" text="{{ item.nullable ? 'True' : 'False' }}"></span>
+                        </td>
+                        <td bk-table-cell>{{item.defaultValue}}</td>
+                        <td bk-table-cell>{{item.precision}}</td>
+                        <td bk-table-cell>{{item.scale}}</td>
+                        <td bk-table-cell fit-content="true">
+                            <bk-button compact="true" glyph="sap-icon--edit" state="transparent" aria-label="Edit" ng-click="editColumn($index)"></bk-button>
+                            <bk-button compact="true" glyph="sap-icon--delete" state="transparent" aria-label="Delete" ng-click="deleteColumn($index)"></bk-button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </bk-scrollbar>
+        <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+            <bk-message-page-title>Editor encounterd an error!</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+        </bk-message-page>
+        <theme></theme>
+    </body>
+
+</html>

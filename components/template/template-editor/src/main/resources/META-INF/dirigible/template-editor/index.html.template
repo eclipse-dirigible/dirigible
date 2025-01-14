@@ -30,7 +30,7 @@
 		<script type="text/javascript" src="js/editor.js"></script>
 	</head>
 
-	<body class="bk-vbox bk-padding" shortcut="'ctrl+s'" shortcut-action="saveShortcut">
+	<body class="bk-vbox bk-padding" shortcut="'ctrl+s'" shortcut-action="saveAction">
 		<!-- Loading indicator -->
 		<bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{::state.busyText}}</bk-busy-indicator-extended>
 		<!-- Editor text area -->

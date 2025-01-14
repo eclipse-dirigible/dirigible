@@ -35,15 +35,15 @@
 				<bk-card card-type="list" aria-roledescription="code editor setting section">
 					<bk-card-content aria-roledescription="Card content">
 						<bk-list>
-							<bk-list-item interactive="true">
+							<bk-list-item interactive="false">
 								<bk-list-title id="afl">Format On Save</bk-list-title>
 								<bk-switch class="bk-margin-inline--none" switch-id="afsw" switch-labelledby="afl" ng-model="switches.autoFormat" ng-change="autoFormatChange()"></bk-switch>
 							</bk-list-item>
-							<bk-list-item interactive="true">
+							<bk-list-item interactive="false">
 								<bk-list-title id="acb">Auto Closing Brackets</bk-list-title>
 								<bk-switch class="bk-margin-inline--none" switch-id="acbsw" switch-labelledby="acb" ng-model="switches.autoBrackets" ng-change="autoBracketsChange()"></bk-switch>
 							</bk-list-item>
-							<bk-list-item interactive="true">
+							<bk-list-item interactive="false">
 								<bk-list-title id="amm">Autohide Minimap</bk-list-title>
 								<bk-switch class="bk-margin-inline--none" switch-id="ammsw" switch-labelledby="amm" ng-model="switches.minimapAutohide" ng-change="minimapAutohideChange()"></bk-switch>
 							</bk-list-item>
@@ -79,7 +79,7 @@
 						<bk-card-content aria-roledescription="Card content">
 							<div class="bk-padding" style="text-align: center;" ng-if="!autoFormatExcluded.length">No excluded files</div>
 							<bk-list byline="true" ng-if="autoFormatExcluded.length">
-								<bk-list-item interactive="true" ng-repeat="file in autoFormatExcluded track by $index" class="{{$last ? 'bk-no-border--bottom' : ''}}">
+								<bk-list-item interactive="false" ng-repeat="file in autoFormatExcluded track by $index" class="{{$last ? 'bk-no-border--bottom' : ''}}">
 									<bk-list-content item-title="{{file.substring(file.lastIndexOf('/') + 1, file.length)}}">{{file}}</bk-list-content>
 									<bk-button bk-list-button state="transparent" glyph="sap-icon--delete" aria-label="remove" ng-click="clearExcluded(file)"></bk-button>
 								</bk-list-item>

@@ -658,6 +658,12 @@ ng-transclude:empty {
   padding-left: 0 !important;
 }
 
+.bk-padding--none {
+  padding-block: 0 !important;
+  padding-inline: 0 !important;
+  padding: 0 !important;
+}
+
 .bk-checkered-bg {
   background-image:
     linear-gradient(45deg, #949494 25%, transparent 25%, transparent 75%, #949494 75%),

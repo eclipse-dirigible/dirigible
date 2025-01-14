@@ -14,6 +14,9 @@ on:
 
 run-name: 'version set to ${{ github.event.inputs.releaseVersion }} for release'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest

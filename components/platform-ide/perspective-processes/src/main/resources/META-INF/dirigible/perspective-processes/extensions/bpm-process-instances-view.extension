@@ -1,0 +1,5 @@
+{
+    "module": "perspective-processes/configs/bpm-process-instances-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Business Process Instances"
+}
