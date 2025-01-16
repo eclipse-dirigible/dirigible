@@ -210,7 +210,7 @@
 		<angular-file-upload.version>2.6.1</angular-file-upload.version>
 		<angularjs.version>1.8.2</angularjs.version>
 		<fontawesome.version>4.7.0</fontawesome.version>
-		<ag-grid.version>27.1.0</ag-grid.version>
+		<ag-grid.version>27.3.0</ag-grid.version>
 		<papaparse.version>5.3.2</papaparse.version>
 
 		<!-- Tests -->
