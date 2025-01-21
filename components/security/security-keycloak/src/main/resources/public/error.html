@@ -15,57 +15,42 @@
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="errorPage" ng-controller="ErrorPageController">
 
     <head>
-        <meta charset="utf-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link rel="icon" href="/services/web/resources/images/favicon.ico" />
-        <title>Unexpected Error Occurred</title>
-        <theme></theme>
-        <script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=application-view-js">
-        </script>
-        <link type="text/css" rel="stylesheet"
-            href="/services/js/resources-core/services/loader.js?id=application-view-css" />
+        <link rel="icon" href="data:;base64,iVBORw0KGgo=" brand-icon />
+        <title config-title></title>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
     </head>
 
-    <body class="fd-scrollbar" dg-contextmenu="contextMenuContent">
-
-        <div style="height: 600px; width: 100%;">
-            <fd-message-page glyph="sap-icon--error">
-                <fd-message-page-title>Unexpected Error Occurred</fd-message-page-title>
-                <fd-message-page-subtitle>
-                    <b>There was a problem serving the requested page</b>.
-                    <br>
-                    Usually this means that an enexpected error
-                    happened while processing your request. Here's what you can try next:
-                    <br>
-                    <br>
-                    <i><b>Reload the page</b>, the problem may be temporary. If the problem persists, <b>contact us</b>
-                        and we'll
-                        help get you on your way.</i>
-                </fd-message-page-subtitle>
-                <fd-message-page-actions>
-                    <fd-button compact="true" dg-label="Reload Page" dg-type="emphasized" style="margin: 0 0.25rem;"
-                        ng-click="reloadPage()">
-                    </fd-button>
-                    <fd-button compact="true" dg-label="Contact Support" ng-click="contactSupport()"></fd-button>
-                </fd-message-page-actions>
-            </fd-message-page>
-        </div>
+    <body class="bk-center" bk-scrollbar>
+        <bk-message-page glyph="sap-icon--error">
+            <bk-message-page-title>Unexpected Error Occurred</bk-message-page-title>
+            <bk-message-page-subtitle class="bk-vbox bk-box--gap-m">
+                <b>There was a problem serving the requested page.</b>
+                Usually this means that an enexpected error
+                happened while processing your request. Here's what you can try next:
+                <i><b>Reload the page</b>, the problem may be temporary.
+                    If the problem persists, <b>contact us</b> and we'll help get you on your way.</i>
+            </bk-message-page-subtitle>
+            <bk-message-page-actions class="bk-box--gap">
+                <bk-button compact="true" label="Reload Page" state="emphasized" ng-click="reloadPage()"></bk-button>
+                <bk-button compact="true" label="Contact Support" ng-click="contactSupport()"></bk-button>
+            </bk-message-page-actions>
+        </bk-message-page>
 
         <script>
-            let errorPage = angular.module('errorPage', ['ideUI', 'ideView']);
-
-			errorPage.controller('ErrorPageController', ['$scope', 'theming', function ($scope, theming) {
-
-				$scope.reloadPage = function() {
-					location.reload();
-				};
-
-				$scope.contactSupport = function() {
-					window.open("https://bugs.dirigible.io", "_blank");
-				};
-			}]);
+            const viewData = {
+            label: 'Unexpected Error Occurred',
+            autoFocusTab: false
+        };
+        const errorPage = angular.module('errorPage', ['blimpKit', 'platformView']);
+        errorPage.controller('ErrorPageController', ($scope) => {
+            $scope.reloadPage = () => location.reload();
+            $scope.contactSupport = () => window.open("https://bugs.dirigible.io", "_blank");
+        });
         </script>
+        <theme></theme>
     </body>
 
 </html>

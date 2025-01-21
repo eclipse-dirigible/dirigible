@@ -95,6 +95,11 @@ body {
     box-sizing: border-box;
 }
 
+.statusbar-busy {
+    padding-inline: 0.5rem;
+    gap: 0.5rem;
+}
+
 .statusbar-busy,
 .statusbar-message,
 .statusbar-error {

@@ -427,7 +427,7 @@ angular.module('platformShell', ['ngCookies', 'platformUser', 'platformExtension
         },
         template: `<div class="statusbar">
             <div class="statusbar-busy" ng-if="busy">
-                <bk-busy-indicator size="m"></bk-busy-indicator>
+                <bk-loader contrast="true"></bk-loader>
                 <span class="statusbar--text">{{ busy }}</span>
             </div>
             <div class="statusbar-message" ng-style="{'visibility': message ? 'visible':'hidden'}">

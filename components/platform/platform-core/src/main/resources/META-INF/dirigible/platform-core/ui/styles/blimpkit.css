@@ -196,6 +196,60 @@ ng-transclude:empty {
   color: var(--sapSelectedColor, #fecc04);
 }
 
+/* Loader */
+
+.bk-loader {
+  --bkLoader_Size: 1rem;
+  --bkLoader_BorderWidth: 0.125rem;
+  --bkLoader_Color: var(--fdBusy_Indicator_Dot_Color);
+  display: block;
+  border: var(--bkLoader_BorderWidth) solid transparent;
+  border-radius: 50%;
+  border-top: var(--bkLoader_BorderWidth) solid var(--bkLoader_Color);
+  border-bottom: var(--bkLoader_BorderWidth) solid var(--bkLoader_Color);
+  box-sizing: border-box;
+  width: var(--bkLoader_Size);
+  height: var(--bkLoader_Size);
+  -webkit-animation: loader 1.6s linear infinite;
+  animation: loader 1.6s linear infinite;
+}
+
+.bk-loader--l {
+  --bkLoader_Size: 2rem;
+  --bkLoader_BorderWidth: 0.25rem;
+}
+
+.bk-loader--contrast {
+  --bkLoader_Color: var(--fdBusy_Indicator_Dot_Contrast_Color);
+}
+
+.fd-list__item>.bk-loader:first-child {
+  -webkit-margin-start: -0.125rem;
+  margin-inline-start: -0.125rem;
+  -webkit-margin-end: 0.875rem;
+  margin-inline-end: 0.875rem;
+}
+
+@-webkit-keyframes loader {
+  0% {
+    -webkit-transform: rotate(0deg);
+  }
+
+  100% {
+    -webkit-transform: rotate(360deg);
+  }
+}
+
+@keyframes loader {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
 /* General helper classes */
 .bk-padding--tiny {
   padding: 0.5rem;

@@ -10,7 +10,7 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const blimpkit = angular.module('blimpKit', ['ngAria'])
-    .info({ version: '1.0.9' })
+    .info({ version: '1.1.0' })
     .constant('ScreenEdgeMargin', {
         FULL: 16,
         DOUBLE: 32,
