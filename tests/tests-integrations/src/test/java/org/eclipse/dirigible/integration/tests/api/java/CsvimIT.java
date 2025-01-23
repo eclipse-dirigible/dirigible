@@ -79,8 +79,8 @@ public class CsvimIT extends UserInterfaceIntegrationTest {
     }
 
     /**
-     * Initially the table READERS2 is not defined. However, the other two tables must be imported. Once
-     * the table is created, csvim retry should be able to import data in it as well
+     * Initially the table READERS2 is not defined. However, the other two tables must be imported. Once the table is created, csvim retry
+     * should be able to import data in it as well
      */
     @Test
     void testImportData() throws SQLException {
