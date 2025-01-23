@@ -78,19 +78,22 @@ public class CustomDataSourcesService {
     }
 
     private String getRequiredParameter(String dataSourceName, String suffix) {
-        String configName = dataSourceName + "_" + suffix;
+        String configName = createConfigName(dataSourceName, suffix);
         String value = Configuration.get(configName);
         if (null == value || value.trim()
                                   .isEmpty()) {
-            throw new IllegalArgumentException(
-                    "Missing required configuration parameter [" + configName + "] for data source [" + dataSourceName + "]. The value is: "
-                            + value);
+            throw new IllegalArgumentException("Missing required configuration parameter [" + configName + "] for data source ["
+                    + dataSourceName + "]. The value is: " + value);
         }
         return value;
     }
 
+    private String createConfigName(String dataSourceName, String suffix) {
+        return dataSourceName + "_" + suffix;
+    }
+
     private String getOptionalParameter(String dataSourceName, String suffix) {
-        String configName = dataSourceName + "_" + suffix;
+        String configName = createConfigName(dataSourceName, suffix);
         String value = Configuration.get(configName);
         if (null == value || value.trim()
                                   .isEmpty()) {
