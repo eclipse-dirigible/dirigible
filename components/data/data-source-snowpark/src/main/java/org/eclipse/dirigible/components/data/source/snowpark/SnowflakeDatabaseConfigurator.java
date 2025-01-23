@@ -21,6 +21,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 @Component
@@ -46,31 +47,55 @@ public class SnowflakeDatabaseConfigurator implements DatabaseConfigurator {
         config.addDataSourceProperty("CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY", 900);
 
         addDataSourcePropertyIfConfigAvailable("SNOWFLAKE_WAREHOUSE", "warehouse", config);
+
+        // automatically populated by Snowflake unless explicitly set
+        // https://docs.snowflake.com/en/developer-guide/snowpark-container-services/additional-considerations-services-jobs
         addDataSourcePropertyIfConfigAvailable("SNOWFLAKE_ACCOUNT", "account", config);
         addDataSourcePropertyIfConfigAvailable("SNOWFLAKE_DATABASE", "db", config);
         addDataSourcePropertyIfConfigAvailable("SNOWFLAKE_SCHEMA", "schema", config);
 
         String url;
-        if (hasTokenFile()) {
-            logger.info("There IS token file. OAuth will be added to [{}]", config);
+
+        boolean registeredUsernameAndPass = StringUtils.isNotBlank(config.getUsername()) && StringUtils.isNotBlank(config.getPassword());
+        if (registeredUsernameAndPass && userAndPassAreNotDummyValues(config)) {
+            logger.info("There ARE registered username and pass for config [{}]. User and password will be used.", config);
+            config.addDataSourceProperty("user", config.getUsername());
+            config.addDataSourceProperty("password", config.getPassword());
+
+            url = config.getJdbcUrl();
+        } else {
+            if (!hasTokenFile()) {
+                throw new IllegalStateException("There in no username and/or password (or both are dummy values) for provided config ["
+                        + config + "]. Assuming it should use oauth token but there is no token file at " + TOKEN_FILE_PATH);
+            }
+
+            logger.info("Missing username and/or password for config [{}]. OAuth token will be used.", config);
 
             config.setUsername(null);
             config.setPassword(null);
             config.addDataSourceProperty("authenticator", "OAUTH");
             config.addDataSourceProperty("token", loadTokenFile());
+
             url = "jdbc:snowflake://" + Configuration.get("SNOWFLAKE_HOST") + ":" + Configuration.get("SNOWFLAKE_PORT");
-        } else {
-            logger.info("There is NO token file. User/password will be added to [{}]", config);
-
-            addDataSourcePropertyIfConfigAvailable("SNOWFLAKE_ROLE", "role", config);
-            addDataSourcePropertyIfConfigAvailable("SNOWFLAKE_USERNAME", "user", config);
-            addDataSourcePropertyIfConfigAvailable("SNOWFLAKE_PASSWORD", "password", config);
-
-            url = Configuration.get("SNOWFLAKE_URL", config.getJdbcUrl());
         }
-        logger.info("Built url [{}]", url);
+
+        logger.info("Will be used url [{}] for config [{}]", url, config);
         config.addDataSourceProperty("url", url);
         config.setJdbcUrl(url);
+    }
+
+    private boolean userAndPassAreNotDummyValues(HikariConfig config) {
+        return isNotDummyValue(config.getUsername()) && isNotDummyValue(config.getPassword());
+    }
+
+    /**
+     * Note: needed for backward compatibility with Snowflake native applications until they are updated
+     *
+     * @param value
+     * @return
+     */
+    private boolean isNotDummyValue(String value) {
+        return !Objects.equals(value, "not-used-in-snowpark-scenario");
     }
 
     private static String loadTokenFile() {

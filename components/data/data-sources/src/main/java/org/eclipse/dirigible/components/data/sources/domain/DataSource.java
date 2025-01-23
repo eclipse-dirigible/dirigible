@@ -9,22 +9,15 @@
  */
 package org.eclipse.dirigible.components.data.sources.domain;
 
-import java.util.ArrayList;
-import java.util.List;
+import com.google.gson.annotations.Expose;
+import jakarta.persistence.*;
 import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.eclipse.dirigible.components.base.encryption.Encrypted;
 import org.hibernate.annotations.LazyCollection;
 import org.hibernate.annotations.LazyCollectionOption;
-import com.google.gson.annotations.Expose;
-import jakarta.persistence.CascadeType;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.Table;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The Class DataSource.
@@ -53,12 +46,12 @@ public class DataSource extends Artefact {
     private String url;
 
     /** The username. */
-    @Column(name = "DS_USERNAME", columnDefinition = "VARCHAR", nullable = false, length = 255)
+    @Column(name = "DS_USERNAME", columnDefinition = "VARCHAR", nullable = true, length = 255)
     @Expose
     private String username;
 
     /** The password. */
-    @Column(name = "DS_PASSWORD", columnDefinition = "VARCHAR", nullable = false, length = 255)
+    @Column(name = "DS_PASSWORD", columnDefinition = "VARCHAR", nullable = true, length = 255)
     @Expose
     @Encrypted
     private String password;

@@ -59,10 +59,9 @@
                 </fd-form-group>
                 <fd-form-group>
                     <fd-form-item>
-                        <fd-form-label for="username" dg-colon="true" dg-required="true">Username</fd-form-label>
+                        <fd-form-label for="username" dg-colon="true">Username</fd-form-label>
                         <fd-input id="username" name="username" type="text" placeholder="Enter username"
-                            ng-model="database.username" dg-input-rules="inputRules" ng-trim="false"
-                            state="{{ forms.dbForm['username'].$valid ? '' : 'error' }}" ng-required="true"></fd-input>
+                            ng-model="database.username"></fd-input>
                     </fd-form-item>
                 </fd-form-group>
                 <fd-form-group>
