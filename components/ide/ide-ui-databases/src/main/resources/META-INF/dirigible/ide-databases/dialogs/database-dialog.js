@@ -29,13 +29,23 @@ dbdialog.controller('DBDialogController', ['$scope', 'messageHub', 'ViewParamete
     $scope.editMode = false;
 
     $scope.urls = {
-        "org.h2.Driver": "jdbc:h2:path/name",
-        "org.postgresql.Driver": "jdbc:postgresql://host:port/database",
-        "com.mysql.cj.jdbc.Driver": "jdbc:mysql://host:port/database",
-        "org.mariadb.jdbc.Driver": "jdbc:mariadb://host:port/database",
-        "com.sap.db.jdbc.Driver": "jdbc:sap://host:port/?encrypt=true&validateCertificate=false",
-        "net.snowflake.client.jdbc.SnowflakeDriver": "jdbc:snowflake://account_identifier.snowflakecomputing.com/?db=SNOWFLAKE_SAMPLE_DATA&schema=TPCH_SF1000",
-        "org.eclipse.dirigible.mongodb.jdbc.Driver": "jdbc:mongodb://host:port/database",
+        "org.h2.Driver": "jdbc:h2:<path>/<name>",
+        "org.postgresql.Driver": "jdbc:postgresql://<host>:<port>/<database>",
+        "com.mysql.cj.jdbc.Driver": "jdbc:mysql://<host>:<port>/<database>",
+        "org.mariadb.jdbc.Driver": "jdbc:mariadb://<host>:<port>/<database>",
+        "com.sap.db.jdbc.Driver": "jdbc:sap://<host>:<port>/?encrypt=true&validateCertificate=false",
+        "net.snowflake.client.jdbc.SnowflakeDriver": "jdbc:snowflake://<account_identifier>.snowflakecomputing.com",
+        "org.eclipse.dirigible.mongodb.jdbc.Driver": "jdbc:mongodb://<host>:<port>/<database>",
+    };
+
+    $scope.parameters = {
+        'org.h2.Driver': '',
+        'org.postgresql.Driver': '',
+        'com.mysql.cj.jdbc.Driver': '',
+        'org.mariadb.jdbc.Driver': '',
+        'com.sap.db.jdbc.Driver': '',
+        'net.snowflake.client.jdbc.SnowflakeDriver': 'db=<database>,schema=<schema>',
+        'org.eclipse.dirigible.mongodb.jdbc.Driver': '',
     };
 
     $scope.drivers = [
@@ -61,6 +71,7 @@ dbdialog.controller('DBDialogController', ['$scope', 'messageHub', 'ViewParamete
         $scope.database.url = $scope.urls[$scope.database.driver];
         $scope.database.username = "";
         $scope.database.password = "";
+        $scope.database.parameters = $scope.parameters[$scope.database.driver];
     };
 
     function getTopic() {
