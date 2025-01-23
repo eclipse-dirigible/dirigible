@@ -38,6 +38,21 @@ public class SnowflakeDatabaseConfigurator implements DatabaseConfigurator {
 
     @Override
     public void apply(HikariConfig config) {
+        setCommonConfigurations(config);
+
+        boolean registeredUsernameAndPass = StringUtils.isNotBlank(config.getUsername()) && StringUtils.isNotBlank(config.getPassword());
+
+        if (registeredUsernameAndPass && userAndPassAreNotDummyValues(config)) {
+            logger.info("There ARE registered username and pass for config [{}] and they  will be used.", config);
+            config.addDataSourceProperty("user", config.getUsername());
+            config.addDataSourceProperty("password", config.getPassword());
+
+        } else {
+            configureOAuth(config);
+        }
+    }
+
+    private void setCommonConfigurations(HikariConfig config) {
         config.setConnectionTestQuery("SELECT 1"); // connection validation query
         config.setKeepaliveTime(TimeUnit.MINUTES.toMillis(5)); // validation execution interval, must be bigger than idle timeout
         config.setMaxLifetime(TimeUnit.MINUTES.toMillis(9)); // recreate connections after specified time
@@ -45,6 +60,20 @@ public class SnowflakeDatabaseConfigurator implements DatabaseConfigurator {
 
         config.addDataSourceProperty("CLIENT_SESSION_KEEP_ALIVE", true);
         config.addDataSourceProperty("CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY", 900);
+    }
+
+    private void configureOAuth(HikariConfig config) {
+        if (!hasTokenFile()) {
+            throw new IllegalStateException("There in no username and/or password (or both are dummy values) for provided config [" + config
+                    + "]. Assuming it should use oauth token but there is no token file at " + TOKEN_FILE_PATH);
+        }
+
+        logger.info("Missing username and/or password for config [{}]. OAuth token will be used.", config);
+
+        config.setUsername(null);
+        config.setPassword(null);
+        config.addDataSourceProperty("authenticator", "OAUTH");
+        config.addDataSourceProperty("token", loadTokenFile());
 
         addDataSourcePropertyIfConfigAvailable("SNOWFLAKE_WAREHOUSE", "warehouse", config);
 
@@ -54,34 +83,33 @@ public class SnowflakeDatabaseConfigurator implements DatabaseConfigurator {
         addDataSourcePropertyIfConfigAvailable("SNOWFLAKE_DATABASE", "db", config);
         addDataSourcePropertyIfConfigAvailable("SNOWFLAKE_SCHEMA", "schema", config);
 
-        String url;
-
-        boolean registeredUsernameAndPass = StringUtils.isNotBlank(config.getUsername()) && StringUtils.isNotBlank(config.getPassword());
-        if (registeredUsernameAndPass && userAndPassAreNotDummyValues(config)) {
-            logger.info("There ARE registered username and pass for config [{}]. User and password will be used.", config);
-            config.addDataSourceProperty("user", config.getUsername());
-            config.addDataSourceProperty("password", config.getPassword());
-
-            url = config.getJdbcUrl();
-        } else {
-            if (!hasTokenFile()) {
-                throw new IllegalStateException("There in no username and/or password (or both are dummy values) for provided config ["
-                        + config + "]. Assuming it should use oauth token but there is no token file at " + TOKEN_FILE_PATH);
-            }
-
-            logger.info("Missing username and/or password for config [{}]. OAuth token will be used.", config);
-
-            config.setUsername(null);
-            config.setPassword(null);
-            config.addDataSourceProperty("authenticator", "OAUTH");
-            config.addDataSourceProperty("token", loadTokenFile());
-
-            url = "jdbc:snowflake://" + Configuration.get("SNOWFLAKE_HOST") + ":" + Configuration.get("SNOWFLAKE_PORT");
-        }
+        String url = "jdbc:snowflake://" + Configuration.get("SNOWFLAKE_HOST") + ":" + Configuration.get("SNOWFLAKE_PORT");
 
         logger.info("Will be used url [{}] for config [{}]", url, config);
         config.addDataSourceProperty("url", url);
         config.setJdbcUrl(url);
+    }
+
+    private String loadTokenFile() {
+        try {
+            return new String(Files.readAllBytes(Paths.get(TOKEN_FILE_PATH)));
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to load token file from path " + TOKEN_FILE_PATH, ex);
+        }
+    }
+
+    private boolean hasTokenFile() {
+        return Files.exists(Paths.get(TOKEN_FILE_PATH));
+    }
+
+    private void addDataSourcePropertyIfConfigAvailable(String configName, String propertyName, HikariConfig config) {
+        String value = Configuration.get(configName);
+        if (StringUtils.isNotBlank(value)) {
+            logger.debug("Setting property [{}] from config [{}]", propertyName, configName);
+            config.addDataSourceProperty(propertyName, value);
+        } else {
+            logger.debug("Will NOT set property [{}] since config [{}] value is [{}]", propertyName, configName, value);
+        }
     }
 
     private boolean userAndPassAreNotDummyValues(HikariConfig config) {
@@ -96,28 +124,6 @@ public class SnowflakeDatabaseConfigurator implements DatabaseConfigurator {
      */
     private boolean isNotDummyValue(String value) {
         return !Objects.equals(value, "not-used-in-snowpark-scenario");
-    }
-
-    private static String loadTokenFile() {
-        try {
-            return new String(Files.readAllBytes(Paths.get(TOKEN_FILE_PATH)));
-        } catch (IOException ex) {
-            throw new IllegalStateException("Failed to load token file from path " + TOKEN_FILE_PATH, ex);
-        }
-    }
-
-    private static boolean hasTokenFile() {
-        return Files.exists(Paths.get(TOKEN_FILE_PATH));
-    }
-
-    private void addDataSourcePropertyIfConfigAvailable(String configName, String propertyName, HikariConfig config) {
-        String value = Configuration.get(configName);
-        if (StringUtils.isNotBlank(value)) {
-            logger.debug("Setting property [{}] from config [{}]", propertyName, configName);
-            config.addDataSourceProperty(propertyName, value);
-        } else {
-            logger.debug("Will NOT set property [{}] since config [{}] value is [{}]", propertyName, configName, value);
-        }
     }
 
 }
