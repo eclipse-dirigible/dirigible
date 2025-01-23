@@ -38,57 +38,65 @@ public class CustomDataSourcesService {
     public void initialize() {
         String customDataSourcesList = Configuration.get("DIRIGIBLE_DATABASE_CUSTOM_DATASOURCES");
         if ((customDataSourcesList != null) && !"".equals(customDataSourcesList)) {
-            if (logger.isTraceEnabled()) {
-                logger.trace("Custom datasources list: " + customDataSourcesList);
-            }
+            logger.trace("Custom datasources list: [{}]", customDataSourcesList);
             StringTokenizer tokens = new StringTokenizer(customDataSourcesList, ",");
             while (tokens.hasMoreTokens()) {
                 String name = tokens.nextToken();
-                if (logger.isInfoEnabled()) {
-                    logger.info("Initializing a custom datasource with name: " + name);
-                }
+                logger.info("Initializing a custom datasource with name [{}]", name);
                 saveDataSource(name);
             }
         } else {
-            if (logger.isTraceEnabled()) {
-                logger.trace("No custom datasources configured");
-            }
+            logger.trace("No custom datasources configured");
         }
-        if (logger.isDebugEnabled()) {
-            logger.debug(this.getClass()
-                             .getCanonicalName()
-                    + " module initialized.");
-        }
+        logger.debug("[{}] module initialized.", this.getClass()
+                                                     .getCanonicalName());
     }
 
     /**
      * Save data source model.
      *
      * @param name the name
-     * @return the data source
      */
     private void saveDataSource(String name) {
-        String databaseDriver = Configuration.get(name + "_DRIVER");
-        String databaseUrl = Configuration.get(name + "_URL");
-        String databaseUsername = Configuration.get(name + "_USERNAME");
-        String databasePassword = Configuration.get(name + "_PASSWORD");
-        String databaseSchema = Configuration.get(name + "_SCHEMA");
+        String databaseDriver = getRequiredParameter(name, "DRIVER");
+        String databaseUrl = getRequiredParameter(name, "URL");
+        String databaseUsername = getOptionalParameter(name, "USERNAME");
+        String databasePassword = getOptionalParameter(name, "PASSWORD");
+        String databaseSchema = getOptionalParameter(name, "SCHEMA");
 
-        if ((databaseDriver != null) && (databaseUrl != null) && (databaseUsername != null) && (databasePassword != null)) {
-            org.eclipse.dirigible.components.data.sources.domain.DataSource ds =
-                    new org.eclipse.dirigible.components.data.sources.domain.DataSource("ENV_" + name, name, null, databaseDriver,
-                            databaseUrl, databaseUsername, databasePassword);
-            ds.setSchema(databaseSchema);
-            ds.updateKey();
-            ds.setLifecycle(ArtefactLifecycle.NEW);
-            DataSource maybe = dataSourceService.findByKey(ds.getKey());
-            if (maybe != null) {
-                dataSourceService.delete(maybe);
-            }
-            dataSourceService.save(ds);
-        } else {
-            throw new IllegalArgumentException("Invalid configuration for the custom datasource: " + name);
+        org.eclipse.dirigible.components.data.sources.domain.DataSource ds =
+                new org.eclipse.dirigible.components.data.sources.domain.DataSource("ENV_" + name, name, null, databaseDriver, databaseUrl,
+                        databaseUsername, databasePassword);
+        ds.setSchema(databaseSchema);
+        ds.updateKey();
+        ds.setLifecycle(ArtefactLifecycle.NEW);
+        DataSource maybe = dataSourceService.findByKey(ds.getKey());
+        if (maybe != null) {
+            dataSourceService.delete(maybe);
         }
+        dataSourceService.save(ds);
+    }
+
+    private String getRequiredParameter(String dataSourceName, String suffix) {
+        String configName = dataSourceName + "_" + suffix;
+        String value = Configuration.get(configName);
+        if (null == value || value.trim()
+                                  .isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Missing required configuration parameter [" + configName + "] for data source [" + dataSourceName + "]. The value is: "
+                            + value);
+        }
+        return value;
+    }
+
+    private String getOptionalParameter(String dataSourceName, String suffix) {
+        String configName = dataSourceName + "_" + suffix;
+        String value = Configuration.get(configName);
+        if (null == value || value.trim()
+                                  .isEmpty()) {
+            logger.info("Optional parameter [{}] for data source [{}] is missing. The value is: [{}]", configName, dataSourceName, value);
+        }
+        return value;
     }
 
 }
