@@ -115,7 +115,7 @@
 
 		<!-- Spring -->
 		<spring.boot.version>3.4.2</spring.boot.version>
-		<spring.admin.version>${spring.boot.version}</spring.admin.version>
+		<spring.admin.version>3.4.1</spring.admin.version>
 		<springdoc.version>2.8.3</springdoc.version>
 		
 		<!-- Webjars -->
