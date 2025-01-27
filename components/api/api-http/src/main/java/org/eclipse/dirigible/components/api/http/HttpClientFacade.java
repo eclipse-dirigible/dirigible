@@ -183,10 +183,10 @@ public class HttpClientFacade {
 
     /** The Constant recognizedTextMimeTypes. */
     private static final HashSet<String> recognizedTextMimeTypes = new HashSet<>(Arrays.asList("application/json; charset=utf-8",
-            "text/json; charset=utf-8", "text/json", "application/CSV", "application/csv", "text/csv", "json", ContentType.TEXT_PLAIN.getMimeType(),
-            ContentType.TEXT_HTML.getMimeType(), ContentType.TEXT_XML.getMimeType(), ContentType.APPLICATION_JSON.getMimeType(),
-            ContentType.APPLICATION_ATOM_XML.getMimeType(), ContentType.APPLICATION_XML.getMimeType(),
-            ContentType.APPLICATION_XHTML_XML.getMimeType()));
+            "text/json; charset=utf-8", "text/json", "application/CSV", "application/csv", "text/csv", "json",
+            ContentType.TEXT_PLAIN.getMimeType(), ContentType.TEXT_HTML.getMimeType(), ContentType.TEXT_XML.getMimeType(),
+            ContentType.APPLICATION_JSON.getMimeType(), ContentType.APPLICATION_ATOM_XML.getMimeType(),
+            ContentType.APPLICATION_XML.getMimeType(), ContentType.APPLICATION_XHTML_XML.getMimeType()));
 
     /**
      * Process http client response.
@@ -214,7 +214,9 @@ public class HttpClientFacade {
                                                          .getMimeType();
                 boolean isSupportedTextType = recognizedTextMimeTypes.contains(processedContentType);
                 if (!isSupportedTextType) {
-                    Optional<String> recognizedTextMimeType = recognizedTextMimeTypes.stream().filter(e -> processedContentType.contains(e)).findFirst();
+                    Optional<String> recognizedTextMimeType = recognizedTextMimeTypes.stream()
+                                                                                     .filter(e -> processedContentType.contains(e))
+                                                                                     .findFirst();
                     isSupportedTextType = recognizedTextMimeType.isPresent();
                 }
 
@@ -383,8 +385,8 @@ public class HttpClientFacade {
         ContentType contentType = shouldParseContentType ? ContentType.parse(contentTypeString) : ContentType.create(contentTypeString);
 
         EntityBuilder entityBuilder = EntityBuilder.create()
-                                                   // .setText(httpClientRequestOptions.getText())
-                                                   .setBinary(httpClientRequestOptions.getText().getBytes(StandardCharsets.UTF_8))
+                                                   .setBinary(httpClientRequestOptions.getText()
+                                                                                      .getBytes(StandardCharsets.UTF_8))
                                                    .setContentType(contentType);
         if (httpClientRequestOptions.isCharacterEncodingEnabled()) {
             entityBuilder.setContentEncoding(httpClientRequestOptions.getCharacterEncoding());
@@ -504,7 +506,6 @@ public class HttpClientFacade {
         httpPut.setConfig(config);
         prepareHeaders(httpClientRequestOptions, httpPut);
         EntityBuilder entityBuilder = EntityBuilder.create()
-                                                   // .setText(httpClientRequestOptions.getText())
                                                    .setBinary(httpClientRequestOptions.getText()
                                                                                       .getBytes(StandardCharsets.UTF_8))
                                                    .setContentType(ContentType.create(httpClientRequestOptions.getContentType()));
@@ -628,7 +629,6 @@ public class HttpClientFacade {
         httpPatch.setConfig(config);
         prepareHeaders(httpClientRequestOptions, httpPatch);
         EntityBuilder entityBuilder = EntityBuilder.create()
-                                                   // .setText(httpClientRequestOptions.getText())
                                                    .setBinary(httpClientRequestOptions.getText()
                                                                                       .getBytes(StandardCharsets.UTF_8))
                                                    .setContentType(ContentType.create(httpClientRequestOptions.getContentType()));
