@@ -15,8 +15,6 @@ export function generate(model, parameters) {
 };
 
 export function getTemplate(parameters) {
-    console.log(JSON.stringify(parameters));
-
     const daoTemplate = daoTemplateManager.getTemplate(parameters);
 
     let templateSources = [{
