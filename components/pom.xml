@@ -1189,11 +1189,6 @@
 			</dependency>
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-perspective-settings</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
 				<artifactId>dirigible-components-ui-perspective-operations</artifactId>
 				<version>${project.version}</version>
 			</dependency>
