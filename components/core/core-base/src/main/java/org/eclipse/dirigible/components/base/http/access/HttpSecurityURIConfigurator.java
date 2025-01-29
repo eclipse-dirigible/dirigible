@@ -19,7 +19,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 public class HttpSecurityURIConfigurator {
 
     /** The Constant PUBLIC_PATTERNS. */
-    private static final String[] PUBLIC_PATTERNS = {//
+    private static final String[] PUBLIC_PATTERNS = { //
             "/", //
             "/home", //
             "/index.html", //
@@ -37,6 +37,7 @@ public class HttpSecurityURIConfigurator {
             "/services/web/resources/**", //
             "/services/web/resources-core/**", //
             "/services/web/platform-core/**", //
+            "/services/web/theme-blimpkit/**", //
             "/services/js/platform-core/**", //
             "/services/js/resources-core/**", //
             "/services/integrations/**", //
@@ -45,7 +46,7 @@ public class HttpSecurityURIConfigurator {
             "/actuator/health"};
 
     /** The Constant AUTHENTICATED_PATTERNS. */
-    private static final String[] AUTHENTICATED_PATTERNS = {//
+    private static final String[] AUTHENTICATED_PATTERNS = { //
             "/services/**", //
             "/websockets/**", //
             "/api-docs/swagger-config", //
@@ -54,12 +55,12 @@ public class HttpSecurityURIConfigurator {
             "/swagger-ui/**"};
 
     /** The Constant DEVELOPER_PATTERNS. */
-    private static final String[] DEVELOPER_PATTERNS = {//
+    private static final String[] DEVELOPER_PATTERNS = { //
             "/services/bpm/**", //
             "/services/ide/**", //
             "/websockets/ide/**"};
 
-    private static final String[] OPERATOR_PATTERNS = {//
+    private static final String[] OPERATOR_PATTERNS = { //
             "/spring-admin/**", //
             "/actuator/**"};
 
@@ -74,7 +75,8 @@ public class HttpSecurityURIConfigurator {
         authz.requestMatchers(PUBLIC_PATTERNS)
              .permitAll()
 
-             // NOTE!: the order is important - role checks should be before just authenticated paths
+             // NOTE!: the order is important - role checks should be before just
+             // authenticated paths
 
              // Fine grained configurations
              .requestMatchers(HttpMethod.GET, "/services/bpm/bpm-processes/tasks")

@@ -48,13 +48,13 @@ public class SecurityFilter implements Filter {
      */
     private static final Logger logger = LoggerFactory.getLogger(SecurityFilter.class);
     /**
-     * The Constant PATH_WEB_RESOURCES.
-     */
-    private static final String PATH_WEB_RESOURCES = "/web/resources";
-    /**
      * The Constant SECURED_PREFIXES.
      */
     private static final Set<String> SECURED_PREFIXES = new HashSet<>();
+    /**
+     * The Constant ALLOWED_PREFIXES.
+     */
+    private static final Set<String> ALLOWED_PREFIXES = new HashSet<>();
 
     /** The security access verifier. */
     private final AccessVerifier securityAccessVerifier;
@@ -76,11 +76,16 @@ public class SecurityFilter implements Filter {
      */
     @Override
     public void init(FilterConfig filterConfig) {
-        SECURED_PREFIXES.add("/js");
-        SECURED_PREFIXES.add("/public");
-        SECURED_PREFIXES.add("/web");
-        SECURED_PREFIXES.add("/wiki");
-        SECURED_PREFIXES.add("/command");
+        SECURED_PREFIXES.add("/services/js");
+        SECURED_PREFIXES.add("/services/ts");
+        SECURED_PREFIXES.add("/services/public");
+        SECURED_PREFIXES.add("/services/web");
+        SECURED_PREFIXES.add("/services/wiki");
+        SECURED_PREFIXES.add("/services/command");
+
+        ALLOWED_PREFIXES.add("/services/web/resources");
+        ALLOWED_PREFIXES.add("/services/js/platform");
+        ALLOWED_PREFIXES.add("/services/web/theme-blimpkit");
     }
 
     /**
@@ -100,7 +105,7 @@ public class SecurityFilter implements Filter {
 
         String path =
                 !"".equals(httpServletRequest.getServletPath()) ? httpServletRequest.getServletPath() : IRepositoryStructure.SEPARATOR;
-        if (!path.startsWith(PATH_WEB_RESOURCES)) {
+        if (!isAllowed(path)) {
             for (String prefix : SECURED_PREFIXES) {
                 if (path.startsWith(prefix)) {
                     path = path.substring(prefix.length());
@@ -151,6 +156,21 @@ public class SecurityFilter implements Filter {
         }
 
         chain.doFilter(request, response);
+    }
+
+    /**
+     * Checks if is allowed.
+     *
+     * @param path the path
+     * @return true, if is allowed
+     */
+    private boolean isAllowed(String path) {
+        for (String prefix : ALLOWED_PREFIXES) {
+            if (path.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

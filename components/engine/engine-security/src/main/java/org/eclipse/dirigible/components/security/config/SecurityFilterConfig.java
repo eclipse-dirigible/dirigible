@@ -31,12 +31,21 @@ public class SecurityFilterConfig {
         FilterRegistrationBean<SecurityFilter> filterRegistrationBean = new FilterRegistrationBean<>(securityFilter);
 
         filterRegistrationBean.setFilter(securityFilter);
-        filterRegistrationBean.addUrlPatterns("/services/js/*", "/services/public/*", "/services/web/*", "/services/wiki/*",
-                "/services/command/*",
-
-                "/public/js/*", "/public/ts/*", "/public/public/*", "/public/web/*", "/public/wiki/*", "/public/command/*",
-
-                "/odata/v2/*");
+        filterRegistrationBean.addUrlPatterns(//
+                "/services/js/*", //
+                "/services/ts/*", //
+                "/services/public/*", //
+                "/services/web/*", //
+                "/services/wiki/*", //
+                "/services/command/*", //
+                "/public/js/*", //
+                "/public/ts/*", //
+                "/public/public/*", //
+                "/public/web/*", //
+                "/public/wiki/*", //
+                "/public/command/*", //
+                "/odata/v2/*" //
+        );
 
         return filterRegistrationBean;
     }
