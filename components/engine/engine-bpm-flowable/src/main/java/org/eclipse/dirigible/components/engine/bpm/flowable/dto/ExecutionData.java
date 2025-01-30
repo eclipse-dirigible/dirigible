@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.engine.bpm.flowable.dto;
 
 import java.util.Date;
+import java.util.Map;
 
 /**
  * The Class ExecutionData.
@@ -156,6 +157,9 @@ public class ExecutionData {
 
     /** The callback type. */
     protected String callbackType;
+
+    /** The variables. */
+    protected Map<String, Object> variables;
 
     /**
      * Gets the id.
@@ -1001,6 +1005,24 @@ public class ExecutionData {
      */
     public void setCallbackType(String callbackType) {
         this.callbackType = callbackType;
+    }
+
+    /**
+     * Gets the variables.
+     *
+     * @return the variables
+     */
+    public Map<String, Object> getVariables() {
+        return variables;
+    }
+
+    /**
+     * Sets the variables.
+     *
+     * @param callbackType the new callback type
+     */
+    public void setVariables(Map<String, Object> variables) {
+        this.variables = variables;
     }
 
 }

@@ -242,6 +242,14 @@ class ExecutionContext {
 		return this.data.callbackType ?? undefined;
 	}
 
+	public getVariable(variableName: string): any | undefined {
+		return this.getVariables()[variableName];
+	}
+
+	public getVariables(): Record<string, any> {
+		return this.data.variables ?? {};
+	}
+
 }
 
 // @ts-ignore
