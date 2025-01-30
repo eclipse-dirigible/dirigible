@@ -10,13 +10,17 @@ const viewData = {
     region: "center",
     link: "/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${name}/index.html",
     perspectiveName: "${perspectiveName}",
-#if($perspectiveRole || $roleRead)
+#if($perspectiveRole || $roleRead || $generateDefaultRoles)
     roles: [
 #if($perspectiveRole)
         "${perspectiveRole}",
 #end
 #if($roleRead)
         "${roleRead}",
+#end
+#if($generateDefaultRoles)
+        "${model.name}ReadOnly",
+        "${model.name}FullAccess",
 #end
     ]
 #end

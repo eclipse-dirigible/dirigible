@@ -1,1 +1,8 @@
-{"module":"{{projectName}}/gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/view.js","extensionPoint":"{{projectName}}-dialog-window","description":"{{projectName}} - Application Dialog Window"}
+{
+    "module": "{{projectName}}/gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/view.js",
+    "extensionPoint": "{{projectName}}-dialog-window",
+    "description": "{{projectName}} - Application Dialog Window",
+#if($generateDefaultRoles)
+    "role": "${model.name}ReadOnly"
+#end
+}

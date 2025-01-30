@@ -15,15 +15,18 @@ exports.getTile = function () {
         location: "/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/index.html",
         order: "${menuIndex}",
         groupOrder: "${perspectiveOrder}",
-#if($perspectiveRole || $roleRead)
-        roles: [
+#if($perspectiveRole || $roleRead || $generateDefaultRoles)
+    roles: [
 #if($perspectiveRole)
-            "${perspectiveRole}",
+        "${perspectiveRole}",
 #end
 #if($roleRead)
-            "${roleRead}",
+        "${roleRead}",
 #end
-        ]
+#if($generateDefaultRoles)
+        "${model.name}ReadOnly",
+        "${model.name}FullAccess",
 #end
-    };
+    ]
+#end
 };
