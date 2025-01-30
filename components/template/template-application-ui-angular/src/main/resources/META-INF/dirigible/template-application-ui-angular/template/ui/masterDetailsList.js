@@ -56,12 +56,14 @@ function getMaster(parameters) {
         {
             location: "/template-application-ui-angular/ui/perspective/master-list/tile.extension",
             action: "generate",
+            engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.extension",
             collection: "uiListMasterModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/master-list/tile-portal.extension",
             action: "generate",
+            engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile-portal.extension",
             collection: "uiListMasterModels"
         },
@@ -75,6 +77,7 @@ function getMaster(parameters) {
         {
             location: "/template-application-ui-angular/ui/perspective/master-list/view.extension",
             action: "generate",
+            engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/view.extension",
             collection: "uiListMasterModels"
         },
@@ -102,6 +105,7 @@ function getMaster(parameters) {
         {
             location: "/template-application-ui-angular/ui/perspective/master-list/main-details/view.extension",
             action: "generate",
+            engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/main-details/view.extension",
             collection: "uiListMasterModels"
         },
@@ -129,6 +133,7 @@ function getMaster(parameters) {
         {
             location: "/template-application-ui-angular/ui/perspective/master-list/dialog-filter/view.extension",
             action: "generate",
+            engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-filter/view.extension",
             collection: "uiListMasterModels"
         },
@@ -217,6 +222,7 @@ function getDetails(parameters) {
         {
             location: "/template-application-ui-angular/ui/perspective/master-list/detail/dialog-filter/view.extension",
             action: "generate",
+            engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{masterEntity}}/{{name}}/dialog-filter/view.extension",
             collection: "uiListDetailsModels"
         },

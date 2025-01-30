@@ -16,17 +16,18 @@ exports.getTile = function () {
         order: "${menuIndex}",
         groupOrder: "${perspectiveOrder}",
 #if($perspectiveRole || $roleRead || $generateDefaultRoles)
-    roles: [
+        roles: [
 #if($perspectiveRole)
-        "${perspectiveRole}",
+            "${perspectiveRole}",
 #end
 #if($roleRead)
-        "${roleRead}",
+            "${roleRead}",
 #end
 #if($generateDefaultRoles)
-        "${model.name}ReadOnly",
-        "${model.name}FullAccess",
+            "${name}ReadOnly",
+            "${name}FullAccess",
 #end
-    ]
+        ]
 #end
-};
+    };
+}

@@ -50,6 +50,7 @@ export function getSources(parameters) {
 		{
 			location: "/template-application-ui-angular/ui/perspective/list/dialog-window/view.extension",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/view.extension",
 			collection: "uiListModels"
 		},
@@ -77,6 +78,7 @@ export function getSources(parameters) {
 		{
 			location: "/template-application-ui-angular/ui/perspective/list/dialog-filter/view.extension",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-filter/view.extension",
 			collection: "uiListModels"
 		},
@@ -104,12 +106,14 @@ export function getSources(parameters) {
 		{
 			location: "/template-application-ui-angular/ui/perspective/list/tile.extension",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.extension",
 			collection: "uiListModels"
 		},
 		{
 			location: "/template-application-ui-angular/ui/perspective/list/tile-portal.extension",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile-portal.extension",
 			collection: "uiListModels"
 		},
@@ -123,6 +127,7 @@ export function getSources(parameters) {
 		{
 			location: "/template-application-ui-angular/ui/perspective/list/view.extension",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/view.extension",
 			collection: "uiListModels"
 		},

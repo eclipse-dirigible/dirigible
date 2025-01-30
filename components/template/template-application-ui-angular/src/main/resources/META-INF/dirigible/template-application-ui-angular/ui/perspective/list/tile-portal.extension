@@ -1,8 +1,6 @@
 {
-    "module": "{{projectName}}/gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.js",
+    "module": "${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${name}/tile.js",
     "extensionPoint": "portal-tile",
-    "description": "{{projectName}} - Application Tile",
-#if($generateDefaultRoles)
-    "role": "${model.name}ReadOnly"
-#end
+    "description": "${projectName} - Application Tile"#if($generateDefaultRoles),
+    "role": "${name}ReadOnly"#end
 }

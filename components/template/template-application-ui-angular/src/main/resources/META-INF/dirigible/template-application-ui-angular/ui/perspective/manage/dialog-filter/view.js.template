@@ -8,13 +8,17 @@ const viewData = {
     label: "${name} Filter",
     link: "/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${name}/dialog-filter/index.html",
     perspectiveName: "${perspectiveName}",
-#if($perspectiveRole || $roleRead)
+#if($perspectiveRole || $roleRead || $generateDefaultRoles)
     roles: [
 #if($perspectiveRole)
         "${perspectiveRole}",
 #end
 #if($roleRead)
         "${roleRead}",
+#end
+#if($generateDefaultRoles)
+        "${name}ReadOnly",
+        "${name}FullAccess",
 #end
     ]
 #end
