@@ -26,20 +26,22 @@ import java.util.List;
 
 class MultitenancyIT extends UserInterfaceIntegrationTest {
 
-    @BeforeAll
-    public static void setUp() {
-        Configuration.set(DirigibleConfig.MULTI_TENANT_MODE_ENABLED.getKey(), "true");
+    static {
+        Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
     }
 
     @Autowired
     private TestProject testProject;
-
     @Autowired
     @DefaultTenant
     private Tenant defTenant;
-
     @Autowired
     private BrowserFactory browserFactory;
+
+    @BeforeAll
+    public static void setUp() {
+        Configuration.set(DirigibleConfig.MULTI_TENANT_MODE_ENABLED.getKey(), "true");
+    }
 
     @Test
     void testOpenNotRegisteredTenant() {
