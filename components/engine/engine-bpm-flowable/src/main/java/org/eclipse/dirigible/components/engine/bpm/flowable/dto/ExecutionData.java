@@ -1019,7 +1019,7 @@ public class ExecutionData {
     /**
      * Sets the variables.
      *
-     * @param callbackType the new callback type
+     * @param variables the new callback type
      */
     public void setVariables(Map<String, Object> variables) {
         this.variables = variables;
