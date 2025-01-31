@@ -9,12 +9,17 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.junit.jupiter.api.Test;
 
 class DirigibleHomepageIT extends UserInterfaceIntegrationTest {
 
     private static final String ECLIPSE_DIRIGIBLE_HEADER = "Eclipse Dirigible";
+
+    static {
+        Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
+    }
 
     @Test
     void testOpenHomepage() {
