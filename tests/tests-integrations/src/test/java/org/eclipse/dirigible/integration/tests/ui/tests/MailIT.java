@@ -35,12 +35,16 @@ class MailIT extends UserInterfaceIntegrationTest {
     private static final int PORT = PortUtil.getFreeRandomPort();
 
     static {
-        DirigibleConfig.MAIL_USERNAME.setStringValue(USER);
-        DirigibleConfig.MAIL_PASSWORD.setStringValue(PASSWORD);
-        DirigibleConfig.MAIL_TRANSPORT_PROTOCOL.setStringValue("smtp");
-        DirigibleConfig.MAIL_SMTP_HOST.setStringValue("localhost");
-        DirigibleConfig.MAIL_SMTP_PORT.setIntValue(PORT);
-        DirigibleConfig.MAIL_SMTP_AUTH.setBooleanValue(true);
+        Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
+    }
+
+    static {
+        Configuration.set("DIRIGIBLE_MAIL_USERNAME", USER);
+        Configuration.set("DIRIGIBLE_MAIL_PASSWORD", PASSWORD);
+        Configuration.set("DIRIGIBLE_MAIL_TRANSPORT_PROTOCOL", "smtp");
+        Configuration.set("DIRIGIBLE_MAIL_SMTP_HOST", "localhost");
+        Configuration.set("DIRIGIBLE_MAIL_SMTP_PORT", Integer.toString(PORT));
+        Configuration.set("DIRIGIBLE_MAIL_SMTP_AUTH", "true");
     }
 
     @Autowired

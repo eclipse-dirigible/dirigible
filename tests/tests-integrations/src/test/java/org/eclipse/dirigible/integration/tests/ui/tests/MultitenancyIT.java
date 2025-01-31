@@ -26,19 +26,25 @@ import java.util.List;
 
 class MultitenancyIT extends UserInterfaceIntegrationTest {
 
+    static {
+        Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
+    }
+
     @Autowired
     private TestProject testProject;
-
     @Autowired
     @DefaultTenant
     private Tenant defTenant;
-
     @Autowired
     private BrowserFactory browserFactory;
 
     @BeforeAll
     public static void setUp() {
+<<<<<<< HEAD
         DirigibleConfig.MULTI_TENANT_MODE_ENABLED.setBooleanValue(true);
+=======
+        Configuration.set(DirigibleConfig.MULTI_TENANT_MODE_ENABLED.getKey(), "true");
+>>>>>>> 2fcce022eb (fix tests execution - run them with the old UI until adapted)
     }
 
     @Test
