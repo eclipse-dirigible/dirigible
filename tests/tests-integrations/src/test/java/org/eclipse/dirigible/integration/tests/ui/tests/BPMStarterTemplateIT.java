@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import ch.qos.logback.classic.Level;
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.api.bpm.BpmFacade;
 import org.eclipse.dirigible.tests.FormView;
 import org.eclipse.dirigible.tests.WelcomeView;
@@ -33,7 +34,6 @@ class BPMStarterTemplateIT extends UserInterfaceIntegrationTest {
     private static final String TRIGGER_PROCESS_FORM_FILENAME = "trigger-new-process.form";
     private static final String TRIGGER_PROCESS_FORM_PATH =
             "/services/web/" + TEST_PROJECT + "/gen/trigger-new-process/forms/trigger-new-process/index.html";
-
     private static final String PARAM_1_ID = "param1Id";
     private static final String PARAM_2_ID = "param2Id";
     private static final String PARAM_1_VALUE = "string-param-value";
@@ -41,6 +41,10 @@ class BPMStarterTemplateIT extends UserInterfaceIntegrationTest {
     public static final String EXPECTED_TASK_LOGGED_MESSAGE =
             "Hello World! Process variables: {param1=" + PARAM_1_VALUE + ", param2=" + PARAM_2_VALUE + ".0}";
     private static final String TRIGGER_BUTTON_TEXT = "Trigger";
+
+    static {
+        Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
+    }
 
     private LogsAsserter consoleLogAsserter;
 
