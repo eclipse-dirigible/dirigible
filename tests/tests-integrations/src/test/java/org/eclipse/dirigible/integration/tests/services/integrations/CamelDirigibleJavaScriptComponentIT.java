@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.integration.tests.services.integrations;
 
 import ch.qos.logback.classic.Level;
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.integration.tests.ui.tests.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.logging.LogsAsserter;
 import org.eclipse.dirigible.tests.restassured.RestAssuredExecutor;
@@ -24,6 +25,10 @@ import static org.awaitility.Awaitility.await;
 import static org.hamcrest.Matchers.containsString;
 
 class CamelDirigibleJavaScriptComponentIT extends UserInterfaceIntegrationTest {
+
+    static {
+        Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
+    }
 
     @Autowired
     private RestAssuredExecutor restAssuredExecutor;
