@@ -15,8 +15,6 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
-import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
-import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ExecutionData;
 import org.eclipse.dirigible.components.open.telemetry.OpenTelemetryProvider;
 import org.eclipse.dirigible.graalium.core.DirigibleJavascriptCodeRunner;
 import org.eclipse.dirigible.repository.api.RepositoryPath;
@@ -26,7 +24,6 @@ import org.flowable.engine.delegate.JavaDelegate;
 import org.flowable.engine.impl.el.FixedValue;
 import org.graalvm.polyglot.Source;
 import org.graalvm.polyglot.Value;
-import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Component;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
@@ -248,9 +245,7 @@ public class DirigibleCallDelegate implements JavaDelegate {
         }
 
         Map<Object, Object> context = new HashMap<>();
-        ExecutionData executionData = new ExecutionData();
-        BeanUtils.copyProperties(execution, executionData);
-        context.put("execution", GsonHelper.toJson(executionData));
+        context.put("execution", execution);
         if (type == null) {
             type = new FixedValue("javascript");
         }
