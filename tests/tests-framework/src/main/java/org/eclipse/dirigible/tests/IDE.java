@@ -123,7 +123,7 @@ public class IDE {
 
     public Workbench openWorkbench() {
         openHomePage();
-        browser.clickOnElementByAttributeValue(HtmlElementType.ANCHOR, HtmlAttribute.TITLE, "Workbench");
+        browser.clickOnElementByAttributeValue(HtmlElementType.LI, HtmlAttribute.TITLE, "Workbench'][ng-class='getClasses()");
         return new Workbench(browser);
     }
 

@@ -16,7 +16,9 @@ import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.openqa.selenium.By;
+import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeOptions;
+import org.openqa.selenium.interactions.Actions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +26,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -228,9 +231,56 @@ class BrowserImpl implements Browser {
     }
 
     @Override
+    public void rightClickInsideNestedIframe() {
+        System.out.println("🔍 Waiting for first iframe: perspective-workbench");
+
+        // Wait for the first iframe (Workbench) and switch into it
+        SelenideElement firstIframe = Selenide.$(By.cssSelector("iframe[src*='perspective-workbench/index.html']"))
+                .shouldBe(Condition.visible, Duration.ofSeconds(30));
+        Selenide.switchTo().frame(firstIframe);
+
+        SelenideElement secondIframe = Selenide.$(By.cssSelector("iframe[src*='view-projects/projects.html']"))
+                .shouldBe(Condition.visible, Duration.ofSeconds(30));
+        Selenide.switchTo().frame(secondIframe);
+
+        // Find the target element (#pvtree) inside the second iframe
+        SelenideElement treeElement = Selenide.$(By.id("pvtree"))
+                .shouldBe(Condition.exist, Duration.ofSeconds(30))
+                .shouldBe(Condition.visible, Duration.ofSeconds(30));
+
+
+        WebElement webElement = treeElement.toWebElement();
+        Actions actions = new Actions(WebDriverRunner.getWebDriver());
+        actions.contextClick(webElement).perform();
+
+        // Switch back to the main content after interacting
+        Selenide.switchTo().defaultContent();
+    }
+
+
+    @Override
     public void rightClickOnElementById(String id) {
         SelenideElement element = getElementById(id);
-        handleElementInAllFrames(element, this::rightClickElement);
+        handleElementInAllFrames(element, el -> {
+            System.out.println("Trying to right-click element: " + id);
+
+            // Ensure the element is forcefully displayed before right-clicking
+            Selenide.executeJavaScript("arguments[0].style.display = 'block'; arguments[0].style.visibility = 'visible';", el);
+
+            // Force element to be interactive (fixes cases where it remains hidden)
+            Selenide.executeJavaScript("arguments[0].setAttribute('aria-hidden', 'false');", el);
+
+            // Scroll into view before right-clicking
+            el.scrollIntoView(false);
+
+            // Wait a little if needed to allow visibility changes to take effect
+            SleepUtil.sleepMillis(500);
+
+            // Perform right-click
+            el.contextClick();
+            System.out.println("Right-clicked on element: " + id);
+        });
+
     }
 
     private SelenideElement getElementById(String id) {

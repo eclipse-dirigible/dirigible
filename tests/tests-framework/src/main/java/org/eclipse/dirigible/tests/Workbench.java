@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class Workbench {
 
-    public static final String PROJECTS_VIEW_ID = "dgProjects";
+    public static final String PROJECTS_VIEW_ID = "pvtree";
     public static final String PROJECT_NAME_INPUT_ID = "pgfi1";
     private static final String PROJECTS_CONTEXT_MENU_NEW_PROJECT = "New Project";
     private static final String CREATE_PROJECT_BUTTON_TEXT = "Create";
@@ -61,7 +61,8 @@ public class Workbench {
     }
 
     public void createNewProject(String projectName) {
-        browser.rightClickOnElementById(PROJECTS_VIEW_ID);
+//        browser.rightClickOnElementById(PROJECTS_VIEW_ID);
+        browser.rightClickInsideNestedIframe();
 
         browser.clickOnElementContainingText(HtmlElementType.SPAN, PROJECTS_CONTEXT_MENU_NEW_PROJECT);
 

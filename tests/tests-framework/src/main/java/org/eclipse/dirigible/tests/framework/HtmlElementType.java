@@ -19,8 +19,7 @@ public enum HtmlElementType {
     SPAN("span"), //
     HEADER3("h3"), //
     DIV("div"), //
-    FD_MESSAGE_PAGE_TITLE("bk-message-page-title"), //
-    HEADER1("h1");
+    FD_MESSAGE_PAGE_TITLE("bk-message-page-title"), LI("li"), HEADER1("h1");
 
     private final String type;
 
