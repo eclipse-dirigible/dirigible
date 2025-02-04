@@ -19,8 +19,8 @@ const viewData = {
         "${roleRead}",
 #end
 #if($generateDefaultRoles)
-        "${name}ReadOnly",
-        "${name}FullAccess",
+        "${projectName}.${perspectiveName}.${name}ReadOnly",
+        "${projectName}.${perspectiveName}.${name}FullAccess",
 #end
     ]
 #end

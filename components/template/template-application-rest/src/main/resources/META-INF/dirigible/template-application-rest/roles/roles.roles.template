@@ -1,12 +1,14 @@
 [
 #foreach($model in $models)
+    #if($model.type != "PROJECTION")
     {
-        "name": "${model.name}ReadOnly",
+        "name": "${projectName}.${model.perspectiveName}.${model.name}ReadOnly",
         "description": "A role that grants read only permission for ${model.name}."
     },
     {
-        "name": "${model.name}FullAccess",
+        "name": "${projectName}.${model.perspectiveName}.${model.name}FullAccess",
         "description": "A role that grants full access for ${model.name}."
     }#if($foreach.hasNext),#end
+    #end
 #end
 ]
