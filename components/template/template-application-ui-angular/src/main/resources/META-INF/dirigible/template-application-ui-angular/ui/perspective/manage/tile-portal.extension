@@ -1,5 +1,5 @@
 {
-    "module": "${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${name}/tile.js",
+    "module": "{{projectName}}/gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.js",
     "extensionPoint": "portal-tile",
-    "description": "${projectName} - Application Tile"
+    "description": "{{projectName}} - Application Tile"
 }

@@ -56,28 +56,24 @@ function getMaster(parameters) {
 		{
 			location: "/template-application-ui-angular/ui/perspective/master-manage/tile.extension",
 			action: "generate",
-			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.extension",
 			collection: "uiManageMasterModels"
 		},
 		{
 			location: "/template-application-ui-angular/ui/perspective/master-manage/tile-portal.extension",
 			action: "generate",
-			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile-portal.extension",
 			collection: "uiManageMasterModels"
 		},
 		{
 			location: "/template-application-ui-angular/ui/perspective/master-manage/tile.js.template",
 			action: "generate",
-			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.js",
 			collection: "uiManageMasterModels"
 		},
 		{
 			location: "/template-application-ui-angular/ui/perspective/master-manage/view.extension",
 			action: "generate",
-			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/view.extension",
 			collection: "uiManageMasterModels"
 		},
@@ -105,7 +101,6 @@ function getMaster(parameters) {
 		{
 			location: "/template-application-ui-angular/ui/perspective/master-manage/main-details/view.extension",
 			action: "generate",
-			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/main-details/view.extension",
 			collection: "uiManageMasterModels"
 		},
@@ -133,7 +128,6 @@ function getMaster(parameters) {
 		{
 			location: "/template-application-ui-angular/ui/perspective/master-manage/dialog-filter/view.extension",
 			action: "generate",
-			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-filter/view.extension",
 			collection: "uiManageMasterModels"
 		},
@@ -222,7 +216,6 @@ function getDetails(parameters) {
 		{
 			location: "/template-application-ui-angular/ui/perspective/master-manage/detail/dialog-filter/view.extension",
 			action: "generate",
-			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{masterEntity}}/{{name}}/dialog-filter/view.extension",
 			collection: "uiManageDetailsModels"
 		},
