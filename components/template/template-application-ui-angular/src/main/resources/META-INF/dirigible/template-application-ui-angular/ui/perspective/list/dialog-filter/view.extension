@@ -1,6 +1,5 @@
 {
     "module": "${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${name}/dialog-filter/view.js",
     "extensionPoint": "${projectName}-dialog-window",
-    "description": "${projectName} - Application Dialog Window"#if($generateDefaultRoles),
-    "role": "${name}ReadOnly"#end
+    "description": "${projectName} - Application Dialog Window"
 }

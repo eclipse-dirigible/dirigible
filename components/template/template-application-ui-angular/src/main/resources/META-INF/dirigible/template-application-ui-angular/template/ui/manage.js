@@ -50,7 +50,6 @@ export function getSources(parameters) {
         {
             location: "/template-application-ui-angular/ui/perspective/manage/dialog-window/view.extension",
             action: "generate",
-            engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/view.extension",
             collection: "uiManageModels"
         },
@@ -78,7 +77,6 @@ export function getSources(parameters) {
         {
             location: "/template-application-ui-angular/ui/perspective/manage/dialog-filter/view.extension",
             action: "generate",
-            engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-filter/view.extension",
             collection: "uiManageModels"
         },
@@ -106,14 +104,12 @@ export function getSources(parameters) {
         {
             location: "/template-application-ui-angular/ui/perspective/manage/tile.extension",
             action: "generate",
-            engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.extension",
             collection: "uiManageModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/manage/tile-portal.extension",
             action: "generate",
-            engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile-portal.extension",
             collection: "uiManageModels"
         },
@@ -127,7 +123,6 @@ export function getSources(parameters) {
         {
             location: "/template-application-ui-angular/ui/perspective/manage/view.extension",
             action: "generate",
-            engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/view.extension",
             collection: "uiManageModels"
         },

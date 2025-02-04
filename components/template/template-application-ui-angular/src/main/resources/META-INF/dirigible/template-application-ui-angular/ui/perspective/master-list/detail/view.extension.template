@@ -1,6 +1,5 @@
 {
-    "module": "${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${masterEntity}/${name}/view.js",
-    "extensionPoint": "${projectName}-view",
-    "description": "${projectName} - Application View - Details"#if($generateDefaultRoles),
-    "role": "${name}ReadOnly"#end
+    "module": "{{projectName}}/gen/{{genFolderName}}/ui/{{perspectiveName}}/{{masterEntity}}/{{name}}/view.js",
+    "extensionPoint": "{{projectName}}-view",
+    "description": "{{projectName}} - Application View - Details"
 }

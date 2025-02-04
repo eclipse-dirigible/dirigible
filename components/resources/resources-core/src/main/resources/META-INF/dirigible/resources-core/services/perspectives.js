@@ -28,10 +28,10 @@ function setETag() {
 for (let i = 0; i < perspectiveExtensions?.length; i++) {
 	const perspective = perspectiveExtensions[i].getPerspective();
 	if (perspective.roles && Array.isArray(perspective.roles)) {
-		let hasRoles = true;
+		let hasRoles = false;
 		for (const next of perspective.roles) {
-			if (!user.isInRole(next)) {
-				hasRoles = false;
+			if (user.isInRole(next)) {
+				hasRoles = true;
 				break;
 			}
 		}

@@ -28,10 +28,10 @@ function setETag() {
 for (let i = 0; i < viewExtensions?.length; i++) {
 	const view = viewExtensions[i].getView();
 	if (view.roles && Array.isArray(view.roles)) {
-		let hasRoles = true;
+		let hasRoles = false;
 		for (const next of view.roles) {
-			if (!user.isInRole(next)) {
-				hasRoles = false;
+			if (user.isInRole(next)) {
+				hasRoles = true;
 				break;
 			}
 		}

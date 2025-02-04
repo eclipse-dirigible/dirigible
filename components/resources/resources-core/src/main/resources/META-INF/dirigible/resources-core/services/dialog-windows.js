@@ -28,10 +28,10 @@ function setETag() {
 for (let i = 0; i < dialogWindowExtensions?.length; i++) {
     const dialogWindow = dialogWindowExtensions[i].getDialogWindow();
     if (dialogWindow.roles && Array.isArray(dialogWindow.roles)) {
-        let hasRoles = true;
+        let hasRoles = false;
         for (const next of dialogWindow.roles) {
-            if (!user.isInRole(next)) {
-                hasRoles = false;
+            if (user.isInRole(next)) {
+                hasRoles = true;
                 break;
             }
         }
