@@ -210,30 +210,36 @@ class ${name}Service {
     private checkPermissions(operationType: string) {
 #if($perspectiveRole || $generateDefaultRoles)
         if (!user.isInRole("${perspectiveRole}") && !user.isInRole("${projectName}.${perspectiveName}.${name}ReadOnly") && !user.isInRole("${projectName}.${perspectiveName}.${name}FullAccess")) {
-            throw new ForbiddenError();
+            const perspectiveRoles = [
+                "${perspectiveRole}",
+                "${projectName}.${perspectiveName}.${name}ReadOnly",
+                "${projectName}.${perspectiveName}.${name}FullAccess"
+            ];
+
+            throw new ForbiddenError(perspectiveRoles);
         }
 #end
-#if($roleRead)
-        if (operationType === "read" && !(user.isInRole("${roleRead}") || user.isInRole("${projectName}.${perspectiveName}.${name}ReadOnly") || user.isInRole("${projectName}.${perspectiveName}.${name}FullAccess"))) {
-            throw new ForbiddenError();
+#if($roleRead || $generateDefaultRoles)
+        if (operationType === "read" && !(#if($roleRead)user.isInRole("${roleRead}")#end #if($roleRead && $generateDefaultRoles)||#end #if($generateDefaultRoles)user.isInRole("${projectName}.${perspectiveName}.${name}ReadOnly") || user.isInRole("${projectName}.${perspectiveName}.${name}FullAccess")#end)) {
+            const readRoles = [
+                #if($roleRead)"${roleRead}",#end
+                "${projectName}.${perspectiveName}.${name}ReadOnly",
+                "${projectName}.${perspectiveName}.${name}FullAccess"
+            ];
+            
+            throw new ForbiddenError(readRoles, "read");
         }
 #end
-#if($roleWrite)
-        if (operationType === "write" && !(user.isInRole("${roleWrite}") || user.isInRole("${projectName}.${perspectiveName}.${name}FullAccess"))) {
-            throw new ForbiddenError();
+#if($roleWrite || $generateDefaultRoles)
+        if (operationType === "write" && !(#if($roleWrite)user.isInRole("${roleWrite}")#end #if($roleRead && $generateDefaultRoles)||#end #if($generateDefaultRoles)user.isInRole("${projectName}.${perspectiveName}.${name}FullAccess")#end)) {
+            const writeRoles = [
+                #if($roleWrite)"${roleWrite}",#end
+                "${projectName}.${perspectiveName}.${name}FullAccess"
+            ];
+            
+            throw new ForbiddenError(writeRoles, "write");
         }
 #end
-// #end
-// #if($generateDefaultRoles)
-//         if (operationType === "read" && !(user.isInRole("${projectName}.${perspectiveName}.${name}ReadOnly") || user.isInRole("${projectName}.${perspectiveName}.${name}FullAccess"))) {
-//             throw new ForbiddenError();
-//         }
-// #end
-// #if($generateDefaultRoles)
-//         if (operationType === "write" && !user.isInRole("${projectName}.${perspectiveName}.${name}FullAccess")) {
-//             throw new ForbiddenError();
-//         }
-// #end
     }
 #end
 
