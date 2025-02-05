@@ -17,6 +17,7 @@ import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.SqlFactory;
 import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.eclipse.dirigible.integration.tests.ui.tests.UserInterfaceIntegrationTest;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +43,10 @@ public class CsvimIT extends UserInterfaceIntegrationTest {
     private static final String TEST_PROJECT_FOLDER_PATH = "CsvimIT/csvim-test-project";
     private static final List<Reader> CSV_READERS = List.of(new Reader(1, "Ivan", "Ivanov"), new Reader(2, "Maria", "Petrova"));
 
+    private static final String initialDirigibleHomeUrl;
+
     static {
+        initialDirigibleHomeUrl = Configuration.get("DIRIGIBLE_HOME_URL");
         Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
     }
 
@@ -80,6 +84,12 @@ public class CsvimIT extends UserInterfaceIntegrationTest {
         public String toString() {
             return "Reader{" + "id=" + id + ", firstName='" + firstName + '\'' + ", lastName='" + lastName + '\'' + '}';
         }
+    }
+
+    // TODO - method to be removed once the test is adapted to the new UI
+    @AfterAll
+    public static void tearDown() {
+        Configuration.set("DIRIGIBLE_HOME_URL", initialDirigibleHomeUrl);
     }
 
     /**
