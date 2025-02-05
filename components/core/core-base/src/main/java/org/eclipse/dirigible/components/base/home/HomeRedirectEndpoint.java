@@ -9,12 +9,13 @@
  */
 package org.eclipse.dirigible.components.base.home;
 
-import java.io.IOException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+
+import java.io.IOException;
 
 /**
  * The Home Redirect.
@@ -34,7 +35,7 @@ class HomeRedirectEndpoint {
      */
     @RequestMapping(path = {"/home", "/", ""})
     void goHome(HttpServletRequest request, HttpServletResponse response) throws IOException {
-        String homeUrl = Configuration.get(DIRIGIBLE_HOME_URL);
+        String homeUrl = Configuration.get(DIRIGIBLE_HOME_URL, "services/web/shell-ide/");
         response.sendRedirect(homeUrl);
     }
 
