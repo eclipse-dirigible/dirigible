@@ -294,8 +294,8 @@ class BrowserImpl implements Browser {
 
     private SelenideElement getElementByAttributeAndTextPattern(HtmlElementType htmlElementType, String textPattern) {
         if (htmlElementType == HtmlElementType.SPAN) {
-            String escapedTextPattern = textPattern.replace("'", "\\'");
-            return Selenide.$x("//span[contains(text(), '" + escapedTextPattern + "')]");
+            String escapedTextPattern = textPattern.replace("\"", "\\\"");
+            return Selenide.$x("//span[contains(text(), \"" + escapedTextPattern + "\")]");
         }
         ElementsCollection elements = getElements(htmlElementType);
         return elements.findBy(Condition.matchText(textPattern));
@@ -309,8 +309,8 @@ class BrowserImpl implements Browser {
 
     private SelenideElement getElementByAttributeAndText(HtmlElementType elementType, String text) {
         if (elementType == HtmlElementType.SPAN) {
-            String escapedText = text.replace("'", "\\'");
-            return Selenide.$x("//span[text()='" + escapedText + "']");
+            String escapedText = text.replace("\"", "\\\"");
+            return Selenide.$x("//span[text()=\"" + escapedText + "\"]");
         }
 
         By selector = constructCssSelectorByType(elementType);
