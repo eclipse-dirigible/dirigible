@@ -17,6 +17,7 @@ import org.eclipse.dirigible.tests.WelcomeView;
 import org.eclipse.dirigible.tests.Workbench;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.logging.LogsAsserter;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -42,11 +43,20 @@ class BPMStarterTemplateIT extends UserInterfaceIntegrationTest {
             "Hello World! Process variables: {param1=" + PARAM_1_VALUE + ", param2=" + PARAM_2_VALUE + ".0}";
     private static final String TRIGGER_BUTTON_TEXT = "Trigger";
 
+    private static final String initialDirigibleHomeUrl;
+
     static {
+        initialDirigibleHomeUrl = Configuration.get("DIRIGIBLE_HOME_URL");
         Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
     }
 
     private LogsAsserter consoleLogAsserter;
+
+    // TODO - method to be removed once the test is adapted to the new UI
+    @AfterAll
+    public static void tearDown() {
+        Configuration.set("DIRIGIBLE_HOME_URL", initialDirigibleHomeUrl);
+    }
 
     @BeforeEach
     void setUp() {
