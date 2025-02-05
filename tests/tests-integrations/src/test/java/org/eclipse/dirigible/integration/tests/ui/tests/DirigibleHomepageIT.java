@@ -22,4 +22,5 @@ class DirigibleHomepageIT extends UserInterfaceIntegrationTest {
 
         browser.assertElementExistsByTypeAndText(HtmlElementType.SPAN, ECLIPSE_DIRIGIBLE_HEADER);
     }
+
 }
