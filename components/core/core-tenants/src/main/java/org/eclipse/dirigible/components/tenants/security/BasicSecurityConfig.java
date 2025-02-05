@@ -39,7 +39,8 @@ public class BasicSecurityConfig {
      * @throws Exception the exception
      */
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http, TenantContextInitFilter tenantContextInitFilter) throws Exception {
+    SecurityFilterChain filterChain(HttpSecurity http, TenantContextInitFilter tenantContextInitFilter,
+            HttpSecurityURIConfigurator httpSecurityURIConfigurator) throws Exception {
         http.cors(Customizer.withDefaults())
             .httpBasic(Customizer.withDefaults())
             .csrf(csrf -> csrf.disable())// if enabled, some functionalities will not work - like creating a project
@@ -48,7 +49,7 @@ public class BasicSecurityConfig {
             .logout(logout -> logout.deleteCookies("JSESSIONID"))
             .headers(headers -> headers.frameOptions(frameOpts -> frameOpts.disable()));
 
-        HttpSecurityURIConfigurator.configure(http);
+        httpSecurityURIConfigurator.configure(http);
 
         return http.build();
     }
