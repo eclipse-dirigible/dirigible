@@ -10,22 +10,12 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import org.eclipse.dirigible.commons.config.Configuration;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 class CreateNewProjectIT extends UserInterfaceIntegrationTest {
 
-    private static final String initialDirigibleHomeUrl;
-
     static {
-        initialDirigibleHomeUrl = Configuration.get("DIRIGIBLE_HOME_URL");
         Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
-    }
-
-    // TODO - method to be removed once the test is adapted to the new UI
-    @AfterAll
-    public static void tearDown() {
-        Configuration.set("DIRIGIBLE_HOME_URL", initialDirigibleHomeUrl);
     }
 
     @Test
