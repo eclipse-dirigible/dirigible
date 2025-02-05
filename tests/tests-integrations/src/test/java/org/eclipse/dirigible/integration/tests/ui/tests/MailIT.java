@@ -19,6 +19,7 @@ import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.integration.tests.ui.TestProject;
 import org.eclipse.dirigible.tests.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.util.PortUtil;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,7 +35,10 @@ class MailIT extends UserInterfaceIntegrationTest {
     private static final String PASSWORD = "password";
     private static final int PORT = PortUtil.getFreeRandomPort();
 
+    private static final String initialDirigibleHomeUrl;
+
     static {
+        initialDirigibleHomeUrl = Configuration.get("DIRIGIBLE_HOME_URL");
         Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
     }
 
@@ -49,11 +53,15 @@ class MailIT extends UserInterfaceIntegrationTest {
 
     @Autowired
     private TestProject testProject;
-
     @Autowired
     private RestAssuredExecutor restAssuredExecutor;
-
     private GreenMail greenMail;
+
+    // TODO - method to be removed once the test is adapted to the new UI
+    @AfterAll
+    public static void cleanup() {
+        Configuration.set("DIRIGIBLE_HOME_URL", initialDirigibleHomeUrl);
+    }
 
     @BeforeEach
     void setUp() {

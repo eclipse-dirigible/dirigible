@@ -14,6 +14,7 @@ import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.integration.tests.ui.tests.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.logging.LogsAsserter;
 import org.eclipse.dirigible.tests.restassured.RestAssuredExecutor;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,14 +27,22 @@ import static org.hamcrest.Matchers.containsString;
 
 class CamelDirigibleJavaScriptComponentIT extends UserInterfaceIntegrationTest {
 
+    private static final String initialDirigibleHomeUrl;
+
     static {
+        initialDirigibleHomeUrl = Configuration.get("DIRIGIBLE_HOME_URL");
         Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
     }
 
     @Autowired
     private RestAssuredExecutor restAssuredExecutor;
-
     private LogsAsserter logsAsserter;
+
+    // TODO - method to be removed once the test is adapted to the new UI
+    @AfterAll
+    public static void tearDown() {
+        Configuration.set("DIRIGIBLE_HOME_URL", initialDirigibleHomeUrl);
+    }
 
     @BeforeEach
     void setUp() {
