@@ -1,5 +1,0 @@
-{
-    "module": "{{projectName}}/gen/{{genFolderName}}/ui/{{perspectiveName}}/{{masterEntity}}/{{name}}/dialog-filter/view.js",
-    "extensionPoint": "{{projectName}}-dialog-window",
-    "description": "{{projectName}} - Application Dialog Window"
-}

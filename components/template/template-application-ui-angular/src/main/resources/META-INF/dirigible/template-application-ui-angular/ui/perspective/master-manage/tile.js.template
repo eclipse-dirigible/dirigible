@@ -14,20 +14,6 @@ exports.getTile = function () {
         icon: "${icon}",
         location: "/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/index.html",
         order: "${menuIndex}",
-        groupOrder: "${perspectiveOrder}",
-#if($perspectiveRole || $roleRead || $generateDefaultRoles)
-        roles: [
-#if($perspectiveRole)
-            "${perspectiveRole}",
-#end
-#if($roleRead)
-            "${roleRead}",
-#end
-#if($generateDefaultRoles)
-            "${projectName}.${perspectiveName}.${name}ReadOnly",
-            "${projectName}.${perspectiveName}.${name}FullAccess",
-#end
-        ]
-#end
+        groupOrder: "${perspectiveOrder}"
     };
 }
