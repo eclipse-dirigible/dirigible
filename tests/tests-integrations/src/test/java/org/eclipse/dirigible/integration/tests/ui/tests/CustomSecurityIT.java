@@ -16,7 +16,6 @@ import org.eclipse.dirigible.tests.IDEFactory;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.util.SecurityUtil;
 import org.eclipse.dirigible.tests.util.SleepUtil;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,10 +29,7 @@ class CustomSecurityIT extends UserInterfaceIntegrationTest {
     private static final String PROTECTED_PAGE_PATH = "/services/web/dirigible-test-project/security/protected_page.html";
     private static final String PROTECTED_PAGE_HEADER = "This is a protected page";
 
-    private static final String initialDirigibleHomeUrl;
-
     static {
-        initialDirigibleHomeUrl = Configuration.get("DIRIGIBLE_HOME_URL");
         Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
     }
 
@@ -43,12 +39,6 @@ class CustomSecurityIT extends UserInterfaceIntegrationTest {
     private IDEFactory ideFactory;
     @Autowired
     private SecurityUtil securityUtil;
-
-    // TODO - method to be removed once the test is adapted to the new UI
-    @AfterAll
-    public static void tearDown() {
-        Configuration.set("DIRIGIBLE_HOME_URL", initialDirigibleHomeUrl);
-    }
 
     @BeforeEach
     void setUp() {

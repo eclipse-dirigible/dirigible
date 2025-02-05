@@ -17,7 +17,8 @@ public class DisabledMultitenantModeIT extends TenantDeterminationIT {
 
     @BeforeAll
     public static void setUp() {
-        DirigibleConfig.MULTI_TENANT_MODE_ENABLED.setBooleanValue(false);
+        initialConfigValue = Configuration.get(DirigibleConfig.MULTI_TENANT_MODE_ENABLED.getKey());
+        Configuration.set(DirigibleConfig.MULTI_TENANT_MODE_ENABLED.getKey(), "false");
     }
 
     @Test

@@ -21,7 +21,7 @@ class EnabledMultitenantModeIT extends TenantDeterminationIT {
 
     @BeforeAll
     public static void setUp() {
-        DirigibleConfig.MULTI_TENANT_MODE_ENABLED.setBooleanValue(true);
+        Configuration.set(DirigibleConfig.MULTI_TENANT_MODE_ENABLED.getKey(), "true");
     }
 
     @Test
