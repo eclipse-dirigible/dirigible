@@ -27,7 +27,6 @@ import org.springframework.stereotype.Component;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.fail;
 
@@ -271,15 +270,13 @@ class BrowserImpl implements Browser {
 
     @Override
     public void doubleClickOnElementContainingText(HtmlElementType elementType, String text) {
-        String textPattern = Pattern.quote(text);
-        SelenideElement element = getElementByAttributeAndTextPattern(elementType, textPattern);
+        SelenideElement element = getElementByAttributeAndTextPattern(elementType, text);
         handleElementInAllFrames(element, SelenideElement::doubleClick);
     }
 
     @Override
     public void clickOnElementContainingText(HtmlElementType elementType, String text) {
-        String textPattern = Pattern.quote(text);
-        SelenideElement element = getElementByAttributeAndTextPattern(elementType, textPattern);
+        SelenideElement element = getElementByAttributeAndTextPattern(elementType, text);
         handleElementInAllFrames(element, SelenideElement::click);
     }
 
@@ -297,7 +294,8 @@ class BrowserImpl implements Browser {
 
     private SelenideElement getElementByAttributeAndTextPattern(HtmlElementType htmlElementType, String textPattern) {
         if (htmlElementType == HtmlElementType.SPAN) {
-            return Selenide.$x("//span[contains(text(), '" + textPattern + "')]");
+            String escapedTextPattern = textPattern.replace("'", "\\'");
+            return Selenide.$x("//span[contains(text(), '" + escapedTextPattern + "')]");
         }
         ElementsCollection elements = getElements(htmlElementType);
         return elements.findBy(Condition.matchText(textPattern));
@@ -311,7 +309,8 @@ class BrowserImpl implements Browser {
 
     private SelenideElement getElementByAttributeAndText(HtmlElementType elementType, String text) {
         if (elementType == HtmlElementType.SPAN) {
-            return Selenide.$x("//span[text()='" + text + "']");
+            String escapedText = text.replace("'", "\\'");
+            return Selenide.$x("//span[text()='" + escapedText + "']");
         }
 
         By selector = constructCssSelectorByType(elementType);
