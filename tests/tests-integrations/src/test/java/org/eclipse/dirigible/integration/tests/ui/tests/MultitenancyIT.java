@@ -17,7 +17,7 @@ import org.eclipse.dirigible.tests.DirigibleTestTenant;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.BrowserFactory;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
-import org.eclipse.dirigible.tests.util.SleepUtil;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,7 +26,10 @@ import java.util.List;
 
 class MultitenancyIT extends UserInterfaceIntegrationTest {
 
+    private static final String initialDirigibleHomeUrl;
+
     static {
+        initialDirigibleHomeUrl = Configuration.get("DIRIGIBLE_HOME_URL");
         Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
     }
 
@@ -37,6 +40,12 @@ class MultitenancyIT extends UserInterfaceIntegrationTest {
     private Tenant defTenant;
     @Autowired
     private BrowserFactory browserFactory;
+
+    // TODO - method to be removed once the test is adapted to the new UI
+    @AfterAll
+    public static void tearDown() {
+        Configuration.set("DIRIGIBLE_HOME_URL", initialDirigibleHomeUrl);
+    }
 
     @BeforeAll
     public static void setUp() {
