@@ -1127,12 +1127,12 @@ export class CallableStatement {
 	}
 
 	public getBlob(parameterIndex: number): any /*: sql.Blob*/ {
-		const data = readBlobValue(this.native.getBlob(parameterIndex));
+		const data = DatabaseFacade.readBlobValue(this.native, parameterIndex);
 		return Bytes.toJavaScriptBytes(data);
 	}
 
 	public getBlobNative(parameterIndex: number): any /*: sql.Blob*/ {
-		return readBlobValue(this.native.getBlob(parameterIndex));
+		return DatabaseFacade.readBlobValue(this.native, parameterIndex);
 	}
 
 	public getClob(parameterIndex: number): any /*: sql.Clob*/ {
@@ -1425,12 +1425,12 @@ export class ResultSet {
 	};
 
 	public getBlob(identifier: number | string): any /*: sql.Blob*/ {
-		const data = readBlobValue(this.native.getBlob(identifier));
+		const data = DatabaseFacade.readBlobValue(this.native, identifier);
 		return Bytes.toJavaScriptBytes(data);
 	}
 
 	public getBlobNative(identifier: number | string): any /*: sql.Blob*/ {
-		return readBlobValue(this.native.getBlob(identifier));
+		return DatabaseFacade.readBlobValue(this.native, identifier);
 	}
 
 	public getClob(identifier: number | string): any /*: sql.Clob*/ {
@@ -1520,10 +1520,6 @@ function isHanaDatabase(connection) {
 		isHanaDatabase = metadata.getDatabaseProductName() === "HDB";
 	}
 	return isHanaDatabase;
-}
-
-function readBlobValue(value) {
-	return value ? value.getBytes(1, value.length()) : value;
 }
 
 function createBlobValue(native, value) {
