@@ -17,7 +17,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.stereotype.Component;
 
-import java.util.Optional;
+import java.util.Collection;
 
 /**
  * The Class HttpSecurityURIConfigurator.
@@ -122,9 +122,8 @@ public class HttpSecurityURIConfigurator {
     }
 
     private void applyCustomConfigurations(HttpSecurity http) throws Exception {
-        Optional<CustomSecurityConfigurator> optionalConfigurator = BeanProvider.getOptionalBean(CustomSecurityConfigurator.class);
-        if (optionalConfigurator.isPresent()) {
-            CustomSecurityConfigurator configurator = optionalConfigurator.get();
+        Collection<CustomSecurityConfigurator> customConfigurators = BeanProvider.getBeans(CustomSecurityConfigurator.class);
+        for (CustomSecurityConfigurator configurator : customConfigurators) {
             LOGGER.info("Applying custom security configurations using [{}]", configurator);
             configurator.configure(http);
         }
