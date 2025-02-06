@@ -66,11 +66,11 @@ public class IDE {
     }
 
     public void assertStatusBarMessage(String expectedMessage) {
-        browser.assertElementExistsByTypeAndTextPattern(HtmlElementType.SPAN, expectedMessage);
+        browser.assertElementExistsByTypeAndTextPattern(HtmlElementType.STATUS_MESSAGE, expectedMessage);
     }
 
     public void assertPublishedProjectMessage(String projectName) {
-        String publishedMessage = "Published '/" + projectName + "'";
+        String publishedMessage = "Published '/workspace/" + projectName + "'";
         assertStatusBarMessage(publishedMessage);
     }
 
@@ -141,6 +141,7 @@ public class IDE {
         workbench.createNewProject(projectName);
 
         assertCreatedProject(projectName);
+        assertPublishedProjectMessage(projectName);
     }
 
     public void assertCreatedProject(String projectName) {
