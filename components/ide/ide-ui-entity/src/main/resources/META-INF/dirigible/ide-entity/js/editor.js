@@ -286,6 +286,15 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 				cell.value.feedPassword = msg.data.feedPassword;
 				cell.value.feedSchedule = msg.data.feedSchedule;
 				cell.value.feedPath = msg.data.feedPath;
+				// if (generateDefaultRoles) {
+				// 	cell.value.roleRead = "{{projectName}}.{{model.perspectiveName}}.{{model.name}}ReadOnly";
+				// 	cell.value.roleWrite = "{{projectName}}.{{model.perspectiveName}}.{{model.name}}FullAccess";
+				// 	console.log("Hello from model.js. Default roles active!");
+				// } else {
+				// 	cell.value.roleRead = msg.data.roleRead;
+				// 	cell.value.roleWrite = msg.data.roleWrite;
+				// 	console.log("Hello from model.js");
+				// }
 				cell.value.roleRead = msg.data.roleRead;
 				cell.value.roleWrite = msg.data.roleWrite;
 				cell.value.importsCode = msg.data.importsCode;
@@ -353,6 +362,15 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 				cell.value.widgetDependsOnValueFrom = msg.data.widgetDependsOnValueFrom;
 				cell.value.widgetDependsOnFilterBy = msg.data.widgetDependsOnFilterBy;
 				cell.value.feedPropertyName = msg.data.feedPropertyName;
+				// if (generateDefaultRoles) {
+				// 	cell.value.roleRead = "{{projectName}}.{{model.perspectiveName}}.{{model.name}}ReadOnly";
+				// 	cell.value.roleWrite = "{{projectName}}.{{model.perspectiveName}}.{{model.name}}FullAccess";
+				// 	console.log("Hello from model.js. Default roles active!");
+				// } else {
+				// 	cell.value.roleRead = msg.data.roleRead;
+				// 	cell.value.roleWrite = msg.data.roleWrite;
+				// 	console.log("Hello from model.js");
+
 				cell.value.roleRead = msg.data.roleRead;
 				cell.value.roleWrite = msg.data.roleWrite;
 				// Maybe we should do this with "cell.value.clone()'
