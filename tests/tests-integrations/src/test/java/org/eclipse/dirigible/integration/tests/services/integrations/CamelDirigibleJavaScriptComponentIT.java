@@ -32,7 +32,6 @@ class CamelDirigibleJavaScriptComponentIT extends UserInterfaceIntegrationTest {
 
     @Autowired
     private RestAssuredExecutor restAssuredExecutor;
-
     private LogsAsserter logsAsserter;
 
     @BeforeEach
