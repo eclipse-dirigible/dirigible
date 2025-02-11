@@ -100,15 +100,6 @@ Property.prototype.widgetDependsOnEntity = null; // the entity in depends on cas
 Property.prototype.widgetDependsOnValueFrom = null; // the value from in depends on case
 Property.prototype.widgetDependsOnFilterBy = null; // the filter by in drop down case
 Property.prototype.feedPropertyName = null; // the matching property name from the feed
-// if (generateDefaultRoles) {
-// 	Entity.prototype.roleRead = "{{projectName}}.{{model.perspectiveName}}.{{model.name}}ReadOnly"; // default read role
-// 	Entity.prototype.roleWrite = "{{projectName}}.{{model.perspectiveName}}.{{model.name}}FullAccess"; // default write role
-// 	console.log("Hello from model.js");
-// } else {
-// 	Entity.prototype.roleRead = null; // the matching property name from the read role
-// 	Entity.prototype.roleWrite = null; // the matching property name from the write role
-// 	console.log("Hello from model.js");
-// }
 Property.prototype.roleRead = null; // the matching property name from the read role
 Property.prototype.roleWrite = null; // the matching property name from the write role
 

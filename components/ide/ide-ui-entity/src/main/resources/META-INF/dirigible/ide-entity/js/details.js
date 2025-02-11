@@ -161,6 +161,7 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
                         feedPath: $scope.dataParameters.feedPath,
                         roleRead: $scope.dataParameters.roleRead,
                         roleWrite: $scope.dataParameters.roleWrite,
+                        generateDefaultRoles: $scope.dataParameters.generateDefaultRoles,
                         importsCode: $scope.dataParameters.importsCode,
                         generateReport: $scope.dataParameters.generateReport,
                     }, true);
@@ -204,6 +205,7 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
                         feedPropertyName: $scope.dataParameters.feedPropertyName,
                         roleRead: $scope.dataParameters.roleRead,
                         roleWrite: $scope.dataParameters.roleWrite,
+                        generateDefaultRoles: $scope.dataParameters.generateDefaultRoles,
                     }, true);
                 }
             }

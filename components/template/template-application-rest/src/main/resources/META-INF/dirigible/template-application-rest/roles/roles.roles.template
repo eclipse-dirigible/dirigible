@@ -1,6 +1,6 @@
 [
 #foreach($model in $models)
-    #if($model.type != "PROJECTION")
+    #if($model.type != "PROJECTION" && $model.roleRead)
     {
         "name": "${projectName}.${model.perspectiveName}.${model.name}ReadOnly",
         "description": "A role that grants read only permission for ${model.name}."
