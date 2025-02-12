@@ -25,6 +25,7 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
         }
     }))
     .controller('DetailsController', ($scope, $http, Dialogs, ViewParameters) => {
+        console.log("View Parameters:", ViewParameters.get());
         $scope.state = {
             isBusy: true,
             error: false,

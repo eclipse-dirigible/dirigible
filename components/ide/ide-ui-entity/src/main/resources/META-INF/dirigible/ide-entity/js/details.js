@@ -24,6 +24,7 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
         };
     })
     .controller('DetailsController', ['$scope', '$http', 'messageHub', 'ViewParameters', function ($scope, $http, messageHub, ViewParameters) {
+        console.log("View Parameters: ", ViewParameters.get());
         $scope.state = {
             isBusy: true,
             error: false,
@@ -135,6 +136,8 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
                 $scope.state.busyText = "Saving";
                 $scope.state.isBusy = true;
                 if ($scope.dialogType === 'entity') {
+                    console.log("View prameter:", ViewParameters.get());
+                    console.log("Data parameters: ", $scope.dataParameters);
                     messageHub.postMessage('edm.editor.entity', {
                         cellId: $scope.dataParameters.cellId,
                         name: $scope.dataParameters.name,
@@ -164,6 +167,7 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
                         generateDefaultRoles: $scope.dataParameters.generateDefaultRoles,
                         importsCode: $scope.dataParameters.importsCode,
                         generateReport: $scope.dataParameters.generateReport,
+
                     }, true);
                 } else {
                     messageHub.postMessage('edm.editor.property', {
@@ -205,7 +209,6 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
                         feedPropertyName: $scope.dataParameters.feedPropertyName,
                         roleRead: $scope.dataParameters.roleRead,
                         roleWrite: $scope.dataParameters.roleWrite,
-                        generateDefaultRoles: $scope.dataParameters.generateDefaultRoles,
                     }, true);
                 }
             }

@@ -37,17 +37,9 @@ Entity.prototype.feedUsername = null;
 Entity.prototype.feedPassword = null;
 Entity.prototype.feedSchedule = null;
 Entity.prototype.feedPath = null;
-// if (generateDefaultRoles) {
-// 	Entity.prototype.roleRead = "{{projectName}}.{{model.perspectiveName}}.{{model.name}}ReadOnly";
-// 	Entity.prototype.roleWrite = "{{projectName}}.{{model.perspectiveName}}.{{model.name}}FullAccess";
-// 	console.log("Hello from model.js");
-// } else {
-// 	Entity.prototype.roleRead = null;
-// 	Entity.prototype.roleWrite = null;
-// 	console.log("Hello from model.js");
-// }
 Entity.prototype.roleRead = null;
 Entity.prototype.roleWrite = null;
+Entity.prototype.generateDefaultRoles = false;
 Entity.prototype.projectionReferencedModel = null;
 Entity.prototype.projectionReferencedEntity = null;
 Entity.prototype.referenceProjections = [];

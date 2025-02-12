@@ -8,10 +8,10 @@
 import { Controller, Get, Post, Put, Delete, response } from "sdk/http"
 import { Extensions } from "sdk/extensions"
 import { ${name}Repository, ${name}EntityOptions } from "../../dao/${perspectiveName}/${name}Repository";
-#if($perspectiveRole || $roleRead || $roleWrite || $isEntityPropertySecurityEnabled || $generateDefaultRoles)
+#if($perspectiveRole || $roleRead || $roleWrite || $isEntityPropertySecurityEnabled)
 import { user } from "sdk/security"
 #end
-#if($perspectiveRole || $roleRead || $roleWrite || $generateDefaultRoles)
+#if($perspectiveRole || $roleRead || $roleWrite)
 import { ForbiddenError } from "../utils/ForbiddenError";
 #end
 import { ValidationError } from "../utils/ValidationError";
@@ -31,7 +31,7 @@ class ${name}Service {
     @Get("/")
     public getAll(_: any, ctx: any) {
         try {
-#if($perspectiveRole || $roleRead || $roleWrite || $generateDefaultRoles)
+#if($perspectiveRole || $roleRead || $roleWrite)
             this.checkPermissions("read");
 #end
             const options: ${name}EntityOptions = {
@@ -65,7 +65,7 @@ class ${name}Service {
     @Post("/")
     public create(entity: any) {
         try {
-#if($perspectiveRole || $roleRead || $roleWrite || $generateDefaultRoles)
+#if($perspectiveRole || $roleRead || $roleWrite)
             this.checkPermissions("write");
 #end
             this.validateEntity(entity);
@@ -86,7 +86,7 @@ class ${name}Service {
     @Get("/count")
     public count() {
         try {
-#if($perspectiveRole || $roleRead || $roleWrite || $generateDefaultRoles)
+#if($perspectiveRole || $roleRead || $roleWrite)
             this.checkPermissions("read");
 #end
             return this.repository.count();
@@ -98,7 +98,7 @@ class ${name}Service {
     @Post("/count")
     public countWithFilter(filter: any) {
         try {
-#if($perspectiveRole || $roleRead || $roleWrite || $generateDefaultRoles)
+#if($perspectiveRole || $roleRead || $roleWrite)
             this.checkPermissions("read");
 #end
             return this.repository.count(filter);
@@ -110,7 +110,7 @@ class ${name}Service {
     @Post("/search")
     public search(filter: any) {
         try {
-#if($perspectiveRole || $roleRead || $roleWrite || $generateDefaultRoles)
+#if($perspectiveRole || $roleRead || $roleWrite)
             this.checkPermissions("read");
 #end
 #if($isEntityPropertySecurityEnabled)
@@ -126,7 +126,7 @@ class ${name}Service {
     @Get("/:id")
     public getById(_: any, ctx: any) {
         try {
-#if($perspectiveRole || $roleRead || $roleWrite || $generateDefaultRoles)
+#if($perspectiveRole || $roleRead || $roleWrite)
             this.checkPermissions("read");
 #end
 #foreach ($property in $properties)
@@ -160,7 +160,7 @@ class ${name}Service {
     @Put("/:id")
     public update(entity: any, ctx: any) {
         try {
-#if($perspectiveRole || $roleRead || $roleWrite || $generateDefaultRoles)
+#if($perspectiveRole || $roleRead || $roleWrite)
             this.checkPermissions("write");
 #end
             entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = ctx.pathParameters.id;
@@ -180,7 +180,7 @@ class ${name}Service {
     @Delete("/:id")
     public deleteById(_: any, ctx: any) {
         try {
-#if($perspectiveRole || $roleRead || $roleWrite || $generateDefaultRoles)
+#if($perspectiveRole || $roleRead || $roleWrite)
             this.checkPermissions("write");
 #end
             const id = ctx.pathParameters.id;
@@ -205,51 +205,34 @@ class ${name}Service {
             HttpUtils.sendInternalServerError(error.message);
         }
     }
-#if($perspectiveRole || $roleRead || $roleWrite || $generateDefaultRoles)
+#if($perspectiveRole || $roleRead || $roleWrite)
 
     private checkPermissions(operationType: string) {
-#if($perspectiveRole || $generateDefaultRoles)
-        if (#if($perspectiveRole)!user.isInRole("${perspectiveRole}")#end #if($perspectiveRole && $generateDefaultRoles)&&#end #if($generateDefaultRoles)!user.isInRole("${projectName}.${perspectiveName}.${name}ReadOnly") && !user.isInRole("${projectName}.${perspectiveName}.${name}FullAccess")#end) {
+#if($perspectiveRole)
+        if (!user.isInRole("${perspectiveRole}")) {
             const perspectiveRoles = [
-                #if($perspectiveRole)
                 "${perspectiveRole}",
-                #end
-                #if($generateDefaultRoles)
-                "${projectName}.${perspectiveName}.${name}ReadOnly",
-                "${projectName}.${perspectiveName}.${name}FullAccess"
-                #end
             ];
 
             throw new ForbiddenError(perspectiveRoles);
         }
 #end
-#if($roleRead || $generateDefaultRoles)
-        if (operationType === "read" && !(#if($roleRead)user.isInRole("${roleRead}")#end #if($roleRead && $generateDefaultRoles)||#end #if($generateDefaultRoles)user.isInRole("${projectName}.${perspectiveName}.${name}ReadOnly") || user.isInRole("${projectName}.${perspectiveName}.${name}FullAccess")#end)) {
+#if($roleRead)
+        if (operationType === "read" && !user.isInRole("${roleRead}")) {
             const readRoles = [
-                #if($roleRead)
                 "${roleRead}",
-                #end
                 #if($roleWrite)
                 "${roleWrite}",
-                #end
-                #if($generateDefaultRoles)
-                "${projectName}.${perspectiveName}.${name}ReadOnly",
-                "${projectName}.${perspectiveName}.${name}FullAccess"
                 #end
             ];
             
             throw new ForbiddenError(readRoles, "read");
         }
 #end
-#if($roleWrite || $generateDefaultRoles)
-        if (operationType === "write" && !(#if($roleWrite)user.isInRole("${roleWrite}")#end #if($roleRead && $generateDefaultRoles)||#end #if($generateDefaultRoles)user.isInRole("${projectName}.${perspectiveName}.${name}FullAccess")#end)) {
+#if($roleWrite)
+        if (operationType === "write" && !user.isInRole("${roleWrite}")) {
             const writeRoles = [
-                #if($roleWrite)
                 "${roleWrite}",
-                #end
-                #if($generateDefaultRoles)
-                "${projectName}.${perspectiveName}.${name}FullAccess"
-                #end
             ];
             
             throw new ForbiddenError(writeRoles, "write");

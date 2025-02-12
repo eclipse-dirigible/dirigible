@@ -288,8 +288,8 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 				cell.value.feedPath = msg.data.feedPath;
 				cell.value.roleRead = msg.data.roleRead;
 				cell.value.roleWrite = msg.data.roleWrite;
-				cell.generateDefaultRoles = cell.value.generateDefaultRoles,
-					cell.value.importsCode = msg.data.importsCode;
+				cell.value.generateDefaultRoles = msg.data.generateDefaultRoles;
+				cell.value.importsCode = msg.data.importsCode;
 				cell.value.generateReport = msg.data.generateReport;
 
 				$scope.graph.model.setValue(cell, cell.value.clone());
@@ -356,9 +356,8 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 				cell.value.feedPropertyName = msg.data.feedPropertyName;
 				cell.value.roleRead = msg.data.roleRead;
 				cell.value.roleWrite = msg.data.roleWrite;
-				cell.generateDefaultRoles = msg.data.generateDefaultRoles,
-					// Maybe we should do this with "cell.value.clone()'
-					$scope.graph.model.setValue(cell, cell.value);
+				// Maybe we should do this with "cell.value.clone()'
+				$scope.graph.model.setValue(cell, cell.value);
 				messageHub.closeDialogWindow("edmDetails");
 			},
 			true,
@@ -959,7 +958,6 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 									feedPropertyName: cell.value.feedPropertyName,
 									roleRead: cell.value.roleRead,
 									roleWrite: cell.value.roleWrite,
-									generateDefaultRoles: cell.value.generateDefaultRoles,
 								},
 								null,
 								false,
