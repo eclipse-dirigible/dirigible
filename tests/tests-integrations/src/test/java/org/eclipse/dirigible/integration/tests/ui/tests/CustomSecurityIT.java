@@ -36,10 +36,8 @@ class CustomSecurityIT extends UserInterfaceIntegrationTest {
 
     @Autowired
     private TestProject testProject;
-
     @Autowired
     private IDEFactory ideFactory;
-
     @Autowired
     private SecurityUtil securityUtil;
 

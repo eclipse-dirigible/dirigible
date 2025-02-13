@@ -75,6 +75,7 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
             { value: 'DOUBLE', label: 'DOUBLE' },
             { value: 'BOOLEAN', label: 'BOOLEAN' },
             { value: 'BLOB', label: 'BLOB' },
+            { value: 'CLOB', label: 'CLOB' },
             { value: 'DECIMAL', label: 'DECIMAL' },
             { value: 'BIT', label: 'BIT' }
         ];

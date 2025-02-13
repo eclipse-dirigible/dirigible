@@ -140,6 +140,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 					});
 #end
 				});
+			}
 		});
 #end
 #end

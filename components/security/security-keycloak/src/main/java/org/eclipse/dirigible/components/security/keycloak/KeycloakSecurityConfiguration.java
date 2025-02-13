@@ -40,7 +40,8 @@ public class KeycloakSecurityConfiguration {
      * @throws Exception the exception
      */
     @Bean
-    SecurityFilterChain configure(HttpSecurity http, TenantContextInitFilter tenantContextInitFilter) throws Exception {
+    SecurityFilterChain configure(HttpSecurity http, TenantContextInitFilter tenantContextInitFilter,
+            HttpSecurityURIConfigurator httpSecurityURIConfigurator) throws Exception {
         http//
             .authorizeHttpRequests(authz -> authz.requestMatchers("/oauth2/**", "/login/**")
                                                  .permitAll())
@@ -52,7 +53,7 @@ public class KeycloakSecurityConfiguration {
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
             .sessionManagement(sessionManagement -> sessionManagement.sessionCreationPolicy(SessionCreationPolicy.ALWAYS));
 
-        HttpSecurityURIConfigurator.configure(http);
+        httpSecurityURIConfigurator.configure(http);
 
         return http.build();
     }
