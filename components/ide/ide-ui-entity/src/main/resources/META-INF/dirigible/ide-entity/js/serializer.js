@@ -50,7 +50,6 @@ function createModel(graph) {
 				'" perspectiveRole="' + getPerspectiveRole(graph, child) +
 				'" generateReport="' + _.escape(child.value.generateReport) +
 				'" generateDefaultRoles="' + _.escape(child.value.generateDefaultRoles) + '"';
-			debugger
 
 			if (child.value.feedUrl && child.value.feedUrl !== "") {
 				child.value.feedUrl = btoa(child.value.feedUrl);
@@ -70,6 +69,7 @@ function createModel(graph) {
 			if (child.value.feedPath && child.value.feedPath !== "") {
 				entityContent += ' feedPath="' + child.value.feedPath + '"';
 			}
+			debugger
 			if (child.value.roleRead && child.value.roleRead !== "") {
 				entityContent += ' roleRead="' + child.value.roleRead + '"';
 			}

@@ -976,8 +976,6 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 							let roleReadValue;
 							let roleWriteValue;
 
-							console.log("Entity: ", entity);
-
 							if (cell.value.generateDefaultRoles === 'true') {
 								roleReadValue = "." + cell.value.perspectiveName + "." + cell.value.name + "ReadOnly";
 								roleWriteValue = "." + cell.value.perspectiveName + "." + cell.value.name + "FullAccess";

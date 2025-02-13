@@ -166,7 +166,8 @@ export function process(model, parameters) {
     parameters.roles = [];
 
     model.entities.forEach(e => {
-        if (e.generateDefaultRoles) {
+        debugger
+        if (e.generateDefaultRoles == "true") {
             if (e.type != "PROJECTION") {
                 let rolePair = {};
 
