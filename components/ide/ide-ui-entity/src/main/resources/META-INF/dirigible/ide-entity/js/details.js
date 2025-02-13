@@ -213,6 +213,16 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
         $scope.cancel = function () {
             messageHub.closeDialogWindow("edmDetails");
         };
+        $scope.toggleDefaultRoles = function () {
+            if ($scope.dataParameters.generateDefaultRoles === 'true') {
+                $scope.dataParameters.roleRead = $scope.dataParameters.perspectiveName + '.' + $scope.dataParameters.name + "ReadOnly";
+                $scope.dataParameters.roleWrite = $scope.dataParameters.perspectiveName + '.' + $scope.dataParameters.name + "FullAccess";
+            } else {
+                $scope.dataParameters.roleRead = null;
+                $scope.dataParameters.roleWrite = null;
+            }
+        };
+
         $scope.dataParameters = ViewParameters.get();
         if ($scope.dataParameters.dialogType === "entity") {
             $scope.dialogType = 'entity';

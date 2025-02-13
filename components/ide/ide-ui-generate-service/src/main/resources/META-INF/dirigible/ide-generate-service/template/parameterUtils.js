@@ -168,25 +168,27 @@ export function process(model, parameters) {
     model.entities.forEach(e => {
         if (e.generateDefaultRoles === "true") {
             if (e.type != "PROJECTION") {
-                console.log("Generate: ", e.generateDefaultRoles);
-                console.log("Read: ", e.roleRead);
-                console.log("Write: ", e.roleWrite);
                 console.log(JSON.stringify(e));
+                console.log("test fro parametersUtils");
 
                 let rolePair = {};
                 rolePair["entityName"] = e.name;
 
-                if (e.roleRead) {
+                if (e.roleRead && e.roleRead != "") {
                     rolePair["roleRead"] = e.roleRead;
                 }
 
-                if (e.roleWrite) {
+                if (e.roleWrite && e.roleWrite != "") {
                     rolePair["roleWrite"] = e.roleWrite;
                 }
 
                 parameters.roles.push(rolePair);
             }
         }
+    })
+
+    parameters.roles.forEach(e => {
+        console.log(JSON.stringify(e));
     })
 }
 

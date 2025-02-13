@@ -69,7 +69,6 @@ function createModel(graph) {
 			if (child.value.feedPath && child.value.feedPath !== "") {
 				entityContent += ' feedPath="' + child.value.feedPath + '"';
 			}
-			debugger
 			if (child.value.roleRead && child.value.roleRead !== "") {
 				entityContent += ' roleRead="' + child.value.roleRead + '"';
 			}

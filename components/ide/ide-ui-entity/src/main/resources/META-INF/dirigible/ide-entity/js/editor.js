@@ -285,10 +285,10 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 				cell.value.feedUsername = msg.data.feedUsername;
 				cell.value.feedPassword = msg.data.feedPassword;
 				cell.value.feedSchedule = msg.data.feedSchedule;
+				cell.value.generateDefaultRoles = msg.data.generateDefaultRoles;
 				cell.value.feedPath = msg.data.feedPath;
 				cell.value.roleRead = msg.data.roleRead;
 				cell.value.roleWrite = msg.data.roleWrite;
-				cell.value.generateDefaultRoles = msg.data.generateDefaultRoles;
 				cell.value.importsCode = msg.data.importsCode;
 				cell.value.generateReport = msg.data.generateReport;
 
@@ -916,6 +916,7 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 						if (cell) {
 							// assume Entity's property
 							//showProperties($scope.graph, cell);
+
 							messageHub.showDialogWindow(
 								"edmDetails",
 								{
@@ -973,17 +974,6 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 						if (cell.value && Entity.prototype.isPrototypeOf(cell.value)) {
 							// assume Entity
 							//showEntityProperties($scope.graph, cell);
-							let roleReadValue;
-							let roleWriteValue;
-
-							if (cell.value.generateDefaultRoles === 'true') {
-								roleReadValue = "." + cell.value.perspectiveName + "." + cell.value.name + "ReadOnly";
-								roleWriteValue = "." + cell.value.perspectiveName + "." + cell.value.name + "FullAccess";
-							}
-							else {
-								roleReadValue = "";
-								roleWriteValue = "";
-							}
 
 							messageHub.showDialogWindow(
 								"edmDetails",
@@ -1013,8 +1003,8 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 									feedSchedule: cell.value.feedSchedule,
 									generateDefaultRoles: cell.value.generateDefaultRoles,
 									feedPath: cell.value.feedPath,
-									roleRead: roleReadValue,
-									roleWrite: roleWriteValue,
+									roleRead: cell.value.roleRead,
+									roleWrite: cell.value.roleWrite,
 									perspectives: $scope.graph.model.perspectives,
 									navigations: $scope.graph.model.navigations,
 									importsCode: cell.value.importsCode,
