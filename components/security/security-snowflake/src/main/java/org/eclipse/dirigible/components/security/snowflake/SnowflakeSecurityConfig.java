@@ -41,7 +41,8 @@ class SnowflakeSecurityConfig {
     }
 
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http, TenantContextInitFilter tenantContextInitFilter) throws Exception {
+    SecurityFilterChain filterChain(HttpSecurity http, TenantContextInitFilter tenantContextInitFilter,
+            HttpSecurityURIConfigurator httpSecurityURIConfigurator) throws Exception {
         LOGGER.info("Configure snowflake security configurations");
         http.cors(Customizer.withDefaults())
             .csrf(csrf -> csrf.disable()) // if enabled, some functionalities will not work - like creating a project
@@ -55,7 +56,7 @@ class SnowflakeSecurityConfig {
             .addFilterBefore(tenantContextInitFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterAt(snowflakeAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
-        HttpSecurityURIConfigurator.configure(http);
+        httpSecurityURIConfigurator.configure(http);
 
         return http.build();
     }

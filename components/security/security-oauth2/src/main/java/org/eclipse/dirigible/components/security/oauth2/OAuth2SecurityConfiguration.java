@@ -33,7 +33,7 @@ public class OAuth2SecurityConfiguration {
      * @throws Exception the exception
      */
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain filterChain(HttpSecurity http, HttpSecurityURIConfigurator httpSecurityURIConfigurator) throws Exception {
         http//
             .authorizeHttpRequests(authz -> authz.requestMatchers("/oauth2/**", "/login/**")
                                                  .permitAll())
@@ -44,7 +44,7 @@ public class OAuth2SecurityConfiguration {
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
             .sessionManagement(sessionManagement -> sessionManagement.sessionCreationPolicy(SessionCreationPolicy.ALWAYS));
 
-        HttpSecurityURIConfigurator.configure(http);
+        httpSecurityURIConfigurator.configure(http);
 
         return http.build();
     }

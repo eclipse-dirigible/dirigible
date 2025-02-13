@@ -10,13 +10,23 @@
 package org.eclipse.dirigible.components.base.http.access;
 
 import org.eclipse.dirigible.components.base.http.roles.Roles;
+import org.eclipse.dirigible.components.base.spring.BeanProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.stereotype.Component;
+
+import java.util.Collection;
 
 /**
  * The Class HttpSecurityURIConfigurator.
  */
+
+@Component
 public class HttpSecurityURIConfigurator {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(HttpSecurityURIConfigurator.class);
 
     /** The Constant PUBLIC_PATTERNS. */
     private static final String[] PUBLIC_PATTERNS = { //
@@ -64,14 +74,23 @@ public class HttpSecurityURIConfigurator {
             "/spring-admin/**", //
             "/actuator/**"};
 
+    private final BeanProvider beanProvider;
+
+    HttpSecurityURIConfigurator(BeanProvider beanProvider) {
+        this.beanProvider = beanProvider;
+    }
+
     /**
      * Configure.
      *
      * @param http the http
      * @throws Exception the exception
      */
-    public static void configure(HttpSecurity http) throws Exception {
+    public void configure(HttpSecurity http) throws Exception {
+        applyCustomConfigurations(http);
+
         http.authorizeHttpRequests((authz) -> //
+
         authz.requestMatchers(PUBLIC_PATTERNS)
              .permitAll()
 
@@ -100,6 +119,14 @@ public class HttpSecurityURIConfigurator {
              // Deny all other requests
              .anyRequest()
              .denyAll());
+    }
+
+    private void applyCustomConfigurations(HttpSecurity http) throws Exception {
+        Collection<CustomSecurityConfigurator> customConfigurators = BeanProvider.getBeans(CustomSecurityConfigurator.class);
+        for (CustomSecurityConfigurator configurator : customConfigurators) {
+            LOGGER.info("Applying custom security configurations using [{}]", configurator);
+            configurator.configure(http);
+        }
     }
 
 }
