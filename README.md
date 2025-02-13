@@ -113,19 +113,20 @@ git config --system core.longpaths true
  - If you want to **run all integration tests only**:
 	```shell
 	DIRIGIBLE_GIT_REPO='<path-to-git-repo>'
-        cd $DIRIGIBLE_GIT_REPO
-        mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true -U
-        mvn -f tests/pom.xml verify -P integration-tests -D selenide.headless=true
+	cd $DIRIGIBLE_GIT_REPO
+	mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true -U
+ 
+	mvn -f tests/pom.xml verify -P integration-tests -D selenide.headless=true
  	```
 
  - If you want to **run specific integration test(s)**:
 	```shell
 	DIRIGIBLE_GIT_REPO='<path-to-git-repo>'
-        cd $DIRIGIBLE_GIT_REPO
-        mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true -U
-
-   	export TEST='CsvimIT,CreateNewProjectIT'
-        mvn -f tests/pom.xml verify -P integration-tests -Dit.test="$TEST"
+	cd $DIRIGIBLE_GIT_REPO
+	mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true -U
+	
+	export TEST='CsvimIT,CreateNewProjectIT'
+	mvn -f tests/pom.xml verify -P integration-tests -Dit.test="$TEST"
  	```
 
 > The build should pass successfully.
