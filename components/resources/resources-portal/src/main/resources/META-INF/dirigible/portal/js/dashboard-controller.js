@@ -23,7 +23,7 @@ dashboard.controller('DashboardController', ['$scope', '$http', 'messageHub', fu
     };
 
     $scope.isWidgetContainerUsed = [false, false, false];
-
+    
     $http.get("/services/js/portal/api/WidgetsExtension/WidgetService.js")
         .then(function (response) {
             $scope.widgetList = response.data;
@@ -45,9 +45,23 @@ dashboard.controller('DashboardController', ['$scope', '$http', 'messageHub', fu
         }
 
         const iframe = document.createElement('iframe');
+        const widgetContainer = document.createElement('div');
 
-        if (widgetData.redirectViewId)
+        widgetContainer.dataset.redirectViewId = widgetData.redirectViewId;
+
+        if (widgetData.redirectViewId) {
+            widgetContainer.onclick = () => {
+                messageHub.postMessage(
+                    "launchpad.switch.perspective",
+                    {
+                        viewId: widgetContainer.dataset.redirectViewId,
+                    },
+                    true
+                );
+            }
+
             iframe.style.pointerEvents = "none";
+        }
 
         iframe.src = widgetData.link;
         iframe.title = widgetData.label;
@@ -59,7 +73,6 @@ dashboard.controller('DashboardController', ['$scope', '$http', 'messageHub', fu
         // @ts-ignore
         iframe.loading = "lazy";
 
-        const widgetContainer = document.createElement('div');
         if (widgetData.size == "small") {
             $scope.isWidgetContainerUsed[0] = true;
             widgetContainer.className = 'fd-col fd-col--6 fd-col-md--3 fd-col-lg--3 fd-col-xl--3';
