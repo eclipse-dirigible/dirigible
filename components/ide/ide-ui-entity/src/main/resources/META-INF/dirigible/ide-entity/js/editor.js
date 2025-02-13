@@ -973,6 +973,20 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 						if (cell.value && Entity.prototype.isPrototypeOf(cell.value)) {
 							// assume Entity
 							//showEntityProperties($scope.graph, cell);
+							let roleReadValue;
+							let roleWriteValue;
+
+							console.log("Entity: ", entity);
+
+							if (cell.value.generateDefaultRoles === 'true') {
+								roleReadValue = "." + cell.value.perspectiveName + "." + cell.value.name + "ReadOnly";
+								roleWriteValue = "." + cell.value.perspectiveName + "." + cell.value.name + "FullAccess";
+							}
+							else {
+								roleReadValue = "";
+								roleWriteValue = "";
+							}
+
 							messageHub.showDialogWindow(
 								"edmDetails",
 								{
@@ -999,10 +1013,10 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 									feedUsername: cell.value.feedUsername,
 									feedPassword: cell.value.feedPassword,
 									feedSchedule: cell.value.feedSchedule,
-									feedPath: cell.value.feedPath,
-									roleRead: cell.value.roleRead,
-									roleWrite: cell.value.roleWrite,
 									generateDefaultRoles: cell.value.generateDefaultRoles,
+									feedPath: cell.value.feedPath,
+									roleRead: roleReadValue,
+									roleWrite: roleWriteValue,
 									perspectives: $scope.graph.model.perspectives,
 									navigations: $scope.graph.model.navigations,
 									importsCode: cell.value.importsCode,

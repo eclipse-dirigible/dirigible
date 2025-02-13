@@ -24,7 +24,6 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
         };
     })
     .controller('DetailsController', ['$scope', '$http', 'messageHub', 'ViewParameters', function ($scope, $http, messageHub, ViewParameters) {
-        console.log("View Parameters: ", ViewParameters.get());
         $scope.state = {
             isBusy: true,
             error: false,
@@ -136,8 +135,6 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
                 $scope.state.busyText = "Saving";
                 $scope.state.isBusy = true;
                 if ($scope.dialogType === 'entity') {
-                    console.log("View prameter:", ViewParameters.get());
-                    console.log("Data parameters: ", $scope.dataParameters);
                     messageHub.postMessage('edm.editor.entity', {
                         cellId: $scope.dataParameters.cellId,
                         name: $scope.dataParameters.name,

@@ -58,7 +58,7 @@ export function getTemplate(parameters) {
         engine: "velocity"
     }];
 
-    if (parameters && parameters.generateDefaultRoles) {
+    if (parameters && parameters.roles.length > 0) {
         templateSources.push({
             location: "/template-application-rest/roles/roles.roles.template",
             action: "generate",

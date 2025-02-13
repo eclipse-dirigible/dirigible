@@ -162,6 +162,26 @@ export function process(model, parameters) {
             parameters.perspectives[e.perspectiveName].views.push(e.name);
         }
     });
+
+    parameters.roles = [];
+
+    model.entities.forEach(e => {
+        if (e.generateDefaultRoles) {
+            if (e.type != "PROJECTION") {
+                let rolePair = {};
+
+                if (e.roleRead) {
+                    rolePair["roleRead"] = e.roleRead;
+                }
+
+                if (e.roleWrite) {
+                    rolePair["roleWrite"] = e.roleWrite;
+                }
+
+                parameters.roles.push(rolePair);
+            }
+        }
+    })
 }
 
 export function getUniqueParameters(...parameters) {

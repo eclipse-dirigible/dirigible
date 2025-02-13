@@ -123,16 +123,6 @@
                         <fd-checkbox-label for="generalGenerateReport" dg-required="false">Generate Report
                         </fd-checkbox-label>
                     </fd-form-item>
-                    <fd-form-item class="fd-row fd-margin-top--tiny">
-                        <div class="fd-col fd-col-md--2">
-                        </div>
-                        <fd-checkbox id="generalGenerateDefaultRoles" compact="false" ng-required="true"
-                            ng-model="dataParameters.generateDefaultRoles" data-ng-true-value="'true'"
-                            data-ng-false-value="'false'">
-                        </fd-checkbox>
-                        <fd-checkbox-label for="generalGenerateDefaultRoles" dg-required="false">Generate Default Roles
-                        </fd-checkbox-label>
-                    </fd-form-item>
                 </fd-form-group>
                 <fd-form-group class="fd-container fd-form-layout-grid-container" style="max-width:1024px;"
                     ng-if="dialogType === 'property'">
@@ -697,30 +687,31 @@
                         </div>
                         <div class="fd-col fd-col-md--4 fd-col-lg--3">
                             <fd-input id="srr" type="text" ng-required="false" ng-model="dataParameters.roleRead"
-                                placeholder="role name">
+                                placeholder="role name" ng-disabled="dataParameters.generateDefaultRoles === 'true'">
                             </fd-input>
                         </div>
                     </fd-form-item>
+
                     <fd-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2">
                             <fd-form-label for="swr" dg-required="false" dg-colon="true">Write role</fd-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4 fd-col-lg--3">
                             <fd-input id="swr" type="text" ng-required="false" ng-model="dataParameters.roleWrite"
-                                placeholder="role name">
+                                placeholder="role name" ng-disabled="dataParameters.generateDefaultRoles === 'true'">
                             </fd-input>
                         </div>
                     </fd-form-item>
-                    <!-- <fd-form-item class="fd-row fd-margin-top--tiny">
-                        <div class="fd-col fd-col-md--2">
-                        </div>
+
+                    <fd-form-item class="fd-row fd-margin-top--tiny">
+                        <div class="fd-col fd-col-md--2"></div>
                         <fd-checkbox id="generalGenerateDefaultRoles" compact="false" ng-required="true"
                             ng-model="dataParameters.generateDefaultRoles" data-ng-true-value="'true'"
-                            data-ng-false-value="'false'">
+                            data-ng-false-value="'false'" ng-change="toggleDefaultRoles()">
                         </fd-checkbox>
                         <fd-checkbox-label for="generalGenerateDefaultRoles" dg-required="false">Generate Default Roles
                         </fd-checkbox-label>
-                    </fd-form-item> -->
+                    </fd-form-item>
                 </fd-form-group>
             </section>
             <section role="tabpanel" class="fd-icon-tab-bar__panel" id="section6" aria-labelledby="tab6"

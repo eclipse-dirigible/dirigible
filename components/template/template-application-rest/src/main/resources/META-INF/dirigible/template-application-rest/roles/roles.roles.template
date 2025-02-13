@@ -1,14 +1,15 @@
 [
-#foreach($model in $models)
-    #if($model.type != "PROJECTION" && $model.roleRead)
+#foreach($role in $roles)
+    #if($role.roleRead)
     {
-        "name": "${projectName}.${model.perspectiveName}.${model.name}ReadOnly",
-        "description": "A role that grants read only permission for ${model.name}."
-    },
+        "name": "${role.roleRead}",
+        "description": "A role that grants read only permission for ${role.entityName}."
+    }#end#if($role.roleRead && $role.roleRead),#end
+    #if($role.roleWrite)
     {
-        "name": "${projectName}.${model.perspectiveName}.${model.name}FullAccess",
-        "description": "A role that grants full access for ${model.name}."
-    }#if($foreach.hasNext),#end
+        "name": "${role.roleWrite}",
+        "description": "A role that grants full access for ${role.entityName}."
+    }
     #end
 #end
 ]
