@@ -61,6 +61,7 @@ dashboard.controller('DashboardController', ['$scope', '$http', 'messageHub', fu
             }
 
             iframe.style.pointerEvents = "none";
+            widgetContainer.style.cursor = "pointer"
         }
 
         iframe.src = widgetData.link;
