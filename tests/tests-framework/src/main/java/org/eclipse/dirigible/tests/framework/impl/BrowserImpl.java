@@ -235,25 +235,29 @@ class BrowserImpl implements Browser {
 
         // Wait for the first iframe (Workbench) and switch into it
         SelenideElement firstIframe = Selenide.$(By.cssSelector("iframe[src*='perspective-workbench/index.html']"))
-                .shouldBe(Condition.visible, Duration.ofSeconds(30));
-        Selenide.switchTo().frame(firstIframe);
+                                              .shouldBe(Condition.visible, Duration.ofSeconds(30));
+        Selenide.switchTo()
+                .frame(firstIframe);
 
         SelenideElement secondIframe = Selenide.$(By.cssSelector("iframe[src*='view-projects/projects.html']"))
-                .shouldBe(Condition.visible, Duration.ofSeconds(30));
-        Selenide.switchTo().frame(secondIframe);
+                                               .shouldBe(Condition.visible, Duration.ofSeconds(30));
+        Selenide.switchTo()
+                .frame(secondIframe);
 
         // Find the target element (#pvtree) inside the second iframe
         SelenideElement treeElement = Selenide.$(By.id("pvtree"))
-                .shouldBe(Condition.exist, Duration.ofSeconds(30))
-                .shouldBe(Condition.visible, Duration.ofSeconds(30));
+                                              .shouldBe(Condition.exist, Duration.ofSeconds(30))
+                                              .shouldBe(Condition.visible, Duration.ofSeconds(30));
 
 
         WebElement webElement = treeElement.toWebElement();
         Actions actions = new Actions(WebDriverRunner.getWebDriver());
-        actions.contextClick(webElement).perform();
+        actions.contextClick(webElement)
+               .perform();
 
         // Switch back to the main content after interacting
-        Selenide.switchTo().defaultContent();
+        Selenide.switchTo()
+                .defaultContent();
     }
 
 
