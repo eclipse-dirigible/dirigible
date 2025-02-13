@@ -61,7 +61,6 @@ public class Workbench {
     }
 
     public void createNewProject(String projectName) {
-//        browser.rightClickOnElementById(PROJECTS_VIEW_ID);
         browser.rightClickInsideNestedIframe();
 
         browser.clickOnElementContainingText(HtmlElementType.SPAN, PROJECTS_CONTEXT_MENU_NEW_PROJECT);

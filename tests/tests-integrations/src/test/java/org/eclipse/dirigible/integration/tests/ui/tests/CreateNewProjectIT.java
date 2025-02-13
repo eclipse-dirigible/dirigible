@@ -17,6 +17,7 @@ class CreateNewProjectIT extends UserInterfaceIntegrationTest {
     // static {
     // Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
     // }
+    // if you want to use the old UI - uncomment the upper 3 lines
 
     @Test
     void testCreateNewBlankProject() {
