@@ -13,6 +13,8 @@ public interface Browser {
 
     void openPath(String path);
 
+    void rightClickInsideNestedIframe();
+
     void enterTextInElementByAttributePattern(HtmlElementType elementType, HtmlAttribute attribute, String pattern, String text);
 
     void enterTextInElementById(String elementId, String text);

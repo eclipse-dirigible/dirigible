@@ -66,11 +66,11 @@ public class IDE {
     }
 
     public void assertStatusBarMessage(String expectedMessage) {
-        browser.assertElementExistsByTypeAndTextPattern(HtmlElementType.SPAN, expectedMessage);
+        browser.assertElementExistsByTypeAndTextPattern(HtmlElementType.STATUS_MESSAGE, expectedMessage);
     }
 
     public void assertPublishedProjectMessage(String projectName) {
-        String publishedMessage = "Published '/" + projectName + "'";
+        String publishedMessage = "Published '/workspace/" + projectName + "'";
         assertStatusBarMessage(publishedMessage);
     }
 
@@ -123,7 +123,7 @@ public class IDE {
 
     public Workbench openWorkbench() {
         openHomePage();
-        browser.clickOnElementByAttributeValue(HtmlElementType.ANCHOR, HtmlAttribute.TITLE, "Workbench");
+        browser.clickOnElementByAttributeValue(HtmlElementType.LI, HtmlAttribute.TITLE, "Workbench'][ng-class='getClasses()");
         return new Workbench(browser);
     }
 
@@ -141,6 +141,7 @@ public class IDE {
         workbench.createNewProject(projectName);
 
         assertCreatedProject(projectName);
+        assertPublishedProjectMessage(projectName);
     }
 
     public void assertCreatedProject(String projectName) {
