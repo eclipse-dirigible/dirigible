@@ -118,7 +118,7 @@
 
 		<!-- Spring -->
 		<spring.boot.version>3.4.2</spring.boot.version>
-		<spring.admin.version>3.4.1</spring.admin.version>
+		<spring.admin.version>3.4.2</spring.admin.version>
 		<springdoc.version>2.8.4</springdoc.version>
 		
 		<!-- Webjars -->
@@ -154,7 +154,7 @@
 		<!-- FTP -->
 		<mina-core.version>2.2.4</mina-core.version>
 		<sshd-core.version>2.14.0</sshd-core.version>
-		<ftpserver.version>1.2.0</ftpserver.version>
+		<ftpserver.version>1.2.1</ftpserver.version>
 		
 		<!-- ActiveMQ -->
 		<activemq.version>6.1.0</activemq.version>
@@ -177,8 +177,8 @@
 
 		<!-- JDBC -->
 		<mongodb.version>3.12.14</mongodb.version>
-		<ngdbc.version>2.23.8</ngdbc.version>
-		<snowflake.version>3.21.0</snowflake.version>
+		<ngdbc.version>2.23.9</ngdbc.version>
+		<snowflake.version>3.22.0</snowflake.version>
 		<mysql.version>8.4.0</mysql.version>
 		
 		<!-- QLDB -->
@@ -189,7 +189,7 @@
 		<jetcd.core.version>0.8.3</jetcd.core.version>
 		
 		<!-- Various -->
-		<c3p0.version>0.10.1</c3p0.version>
+		<c3p0.version>0.10.2</c3p0.version>
 		<guava.version>33.4.0-jre</guava.version>
 		<icu4j.version>76.1</icu4j.version>
 		<classgraph.version>4.8.179</classgraph.version>

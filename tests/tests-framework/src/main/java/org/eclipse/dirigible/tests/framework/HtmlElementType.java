@@ -13,14 +13,17 @@ public enum HtmlElementType {
     BUTTON("button"), //
     INPUT("input"), //
     ANCHOR("a"), //
+    HEADER1("h1"), //
+    HEADER2("h2"), //
+    HEADER3("h3"), //
+    HEADER4("h4"), //
     HEADER5("h5"), //
+    HEADER6("h6"), //
     TITLE("title"), //
     IFRAME("iframe"), //
     SPAN("span"), //
-    HEADER3("h3"), //
     DIV("div"), //
-    FD_MESSAGE_PAGE_TITLE("bk-message-page-title"), //
-    HEADER1("h1");
+    FD_MESSAGE_PAGE_TITLE("bk-message-page-title");
 
     private final String type;
 

@@ -27,7 +27,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
+
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
@@ -774,6 +777,59 @@ public class DatabaseFacade implements InitializingBean {
      */
     public static SqlFactory getNative(Connection connection) throws SQLException {
         return SqlFactory.getNative(connection);
+    }
+
+    /**
+     * Read blob value.
+     *
+     * @param resultSet the result set
+     * @param index the index
+     * @return the byte[]
+     */
+    public static byte[] readBlobValue(ResultSet resultSet, Integer index) {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        InputStream input;
+        try {
+            input = resultSet.getBinaryStream(index);
+            readByteStream(baos, input);
+        } catch (Exception e) {
+            logger.error("Failed to retreive a BLOB value of [{}].", index, e);
+        }
+        return baos.toByteArray();
+    }
+
+    /**
+     * Read blob value.
+     *
+     * @param resultSet the result set
+     * @param column the column
+     * @return the byte[]
+     */
+    public static byte[] readBlobValue(ResultSet resultSet, String column) {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        InputStream input;
+        try {
+            input = resultSet.getBinaryStream(column);
+            readByteStream(baos, input);
+        } catch (Exception e) {
+            logger.error("Failed to retreive a BLOB value of [{}].", column, e);
+        }
+        return baos.toByteArray();
+    }
+
+    /**
+     * Read byte stream.
+     *
+     * @param baos the baos
+     * @param input the input
+     * @throws IOException Signals that an I/O exception has occurred.
+     */
+    public static void readByteStream(ByteArrayOutputStream baos, InputStream input) throws IOException {
+        byte[] buffer = new byte[1024];
+        int bytesRead;
+        while ((bytesRead = input.read(buffer)) > 0) {
+            baos.write(buffer, 0, bytesRead);
+        }
     }
 
 }
