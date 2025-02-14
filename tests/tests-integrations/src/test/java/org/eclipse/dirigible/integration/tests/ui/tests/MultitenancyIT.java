@@ -17,6 +17,7 @@ import org.eclipse.dirigible.tests.DirigibleTestTenant;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.BrowserFactory;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
+import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -81,7 +82,7 @@ class MultitenancyIT extends UserInterfaceIntegrationTest {
     }
 
     private void verifyTenants(List<DirigibleTestTenant> tenants) {
-        SleepUtil.sleepSeconds(12);
+        SleepUtil.sleepSeconds(10);
         tenants.forEach(testProject::verify);
     }
 
