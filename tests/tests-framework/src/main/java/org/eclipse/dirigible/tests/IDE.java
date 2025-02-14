@@ -66,7 +66,7 @@ public class IDE {
     }
 
     public void assertStatusBarMessage(String expectedMessage) {
-        browser.assertElementExistsByTypeAndTextPattern(HtmlElementType.SPAN, expectedMessage);
+        browser.assertElementExistsByTypeAndText(HtmlElementType.SPAN, expectedMessage);
     }
 
     public void assertPublishedProjectMessage(String projectName) {

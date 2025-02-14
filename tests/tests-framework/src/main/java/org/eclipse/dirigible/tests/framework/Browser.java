@@ -29,6 +29,8 @@ public interface Browser {
 
     void clickOnElementContainingText(HtmlElementType htmlElementType, String text);
 
+    void clickOnElementWithText(HtmlElementType htmlElementType, String text);
+
     void clickOnElementByAttributePattern(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String pattern);
 
     void assertElementExistsByTypeAndTextPattern(HtmlElementType htmlElementType, String textPattern);

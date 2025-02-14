@@ -63,11 +63,12 @@ public class Workbench {
     public void createNewProject(String projectName) {
         browser.rightClickOnElementById(PROJECTS_VIEW_ID);
 
-        browser.clickOnElementContainingText(HtmlElementType.SPAN, PROJECTS_CONTEXT_MENU_NEW_PROJECT);
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.ROLE, "menuitem",
+                PROJECTS_CONTEXT_MENU_NEW_PROJECT);
 
         browser.enterTextInElementById(PROJECT_NAME_INPUT_ID, projectName);
 
-        browser.clickOnElementContainingText(HtmlElementType.BUTTON, CREATE_PROJECT_BUTTON_TEXT);
+        browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_PROJECT_BUTTON_TEXT);
     }
 
 }
