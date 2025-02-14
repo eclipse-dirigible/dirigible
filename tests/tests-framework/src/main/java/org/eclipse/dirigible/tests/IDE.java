@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.tests;
 
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
@@ -67,6 +68,7 @@ public class IDE {
 
     public void assertStatusBarMessage(String expectedMessage) {
         browser.assertElementExistsByTypeAndTextPattern(HtmlElementType.STATUS_MESSAGE, expectedMessage);
+        browser.assertElementExistsByTypeAndText(HtmlElementType.SPAN, expectedMessage);
     }
 
     public void assertPublishedProjectMessage(String projectName) {
@@ -124,6 +126,15 @@ public class IDE {
     public Workbench openWorkbench() {
         openHomePage();
         browser.clickOnElementByAttributeValue(HtmlElementType.LI, HtmlAttribute.TITLE, "Workbench'][ng-class='getClasses()");
+
+        // TODO: remove the if once switched to the new UI
+        String homeValue = Configuration.get("DIRIGIBLE_HOME_URL");
+        if (null != homeValue && homeValue.contains("services/web/ide")) {
+            browser.clickOnElementByAttributeValue(HtmlElementType.ANCHOR, HtmlAttribute.TITLE, "Workbench");
+        }
+
+        browser.clickOnElementById("perspective-workbench");
+
         return new Workbench(browser);
     }
 

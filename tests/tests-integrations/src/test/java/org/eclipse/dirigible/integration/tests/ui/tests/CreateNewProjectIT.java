@@ -14,10 +14,9 @@ import org.junit.jupiter.api.Test;
 
 class CreateNewProjectIT extends UserInterfaceIntegrationTest {
 
-    // static {
-    // Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
-    // }
-    // if you want to enable the old ui uncomment the above 3 lines ^
+    static {
+        Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
+    }
 
     @Test
     void testCreateNewBlankProject() {
