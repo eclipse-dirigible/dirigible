@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.tests.framework.impl;
 
 import com.codeborne.selenide.*;
+import com.codeborne.selenide.ex.ListSizeMismatch;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
@@ -24,9 +25,8 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-import java.util.Arrays;
-import java.util.Optional;
-import java.util.UUID;
+import java.time.Duration;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
@@ -110,6 +110,11 @@ class BrowserImpl implements Browser {
 
     @Override
     public void enterTextInElementByAttributePattern(HtmlElementType elementType, HtmlAttribute attribute, String pattern, String text) {
+        enterTextInElementByAttributePattern(elementType.getType(), attribute.getAttribute(), pattern, text);
+    }
+
+    @Override
+    public void enterTextInElementByAttributePattern(String elementType, String attribute, String pattern, String text) {
         By by = constructCssSelectorByTypeAndAttribute(elementType, attribute, pattern);
         handleElementInAllFrames(by, e -> {
             e.click();
@@ -118,12 +123,13 @@ class BrowserImpl implements Browser {
         });
     }
 
-    private By constructCssSelectorByTypeAndAttribute(HtmlElementType elementType, HtmlAttribute attribute, String attributePattern) {
-        String cssSelector = elementType.getType() + "[" + attribute.getAttribute() + "*='" + attributePattern + "']";
+    private By constructCssSelectorByTypeAndAttribute(String elementType, String attribute, String attributePattern) {
+        String cssSelector = elementType + "[" + attribute + "*='" + attributePattern + "']";
         return Selectors.byCssSelector(cssSelector);
     }
 
-    private void handleElementInAllFrames(By by, Consumer<SelenideElement> elementHandler) {
+    @Override
+    public void handleElementInAllFrames(By by, Consumer<SelenideElement> elementHandler) {
         Optional<SelenideElement> element = findElementInAllFrames(by);
         if (element.isPresent()) {
             elementHandler.accept(element.get());
@@ -139,7 +145,8 @@ class BrowserImpl implements Browser {
                                        .toString());
     }
 
-    private Optional<SelenideElement> findElementInAllFrames(By by, WebElementCondition... conditions) {
+    @Override
+    public Optional<SelenideElement> findElementInAllFrames(By by, WebElementCondition... conditions) {
         long maxWaitTime = System.currentTimeMillis() + TOTAL_ELEMENT_SEARCH_TIMEOUT;
 
         do {
@@ -175,14 +182,17 @@ class BrowserImpl implements Browser {
     private Optional<SelenideElement> findSingleElementInAllFrames(By by, WebElementCondition... conditions) {
         Selenide.switchTo()
                 .defaultContent();
-        LOGGER.info("Checking element by [{}] and conditions [{}] in the default frame...", by, conditions);
+        LOGGER.info("Checking element by [{}] and conditions [{}] in the DEFAULT frame...", by, conditions);
 
         Optional<SelenideElement> element = findSingleElement(by, conditions);
         if (element.isPresent()) {
-            LOGGER.debug("Element by selector [{}] and conditions [{}] was FOUND in the default frame.", by, conditions);
+            LOGGER.debug("Element by selector [{}] and conditions [{}] was FOUND in the DEFAULT frame.", by, conditions);
             return element;
         }
 
+        LOGGER.debug(
+                "Element by selector [{}] and conditions [{}] was NOT FOUND in the DEFAULT frame. Will search for it recursively in all iframes...",
+                by, conditions);
         return findElementInFramesRecursively(by, conditions);
     }
 
@@ -194,11 +204,11 @@ class BrowserImpl implements Browser {
         for (SelenideElement iframe : iframes) {
             Selenide.switchTo()
                     .frame(iframe);
-            LOGGER.info("Switched to iframe [{}]. Searching for element by [{}] and conditions[{}]...", iframe, by, conditions);
+            LOGGER.info("Switched to iframe [{}]. Searching for element by [{}] and conditions [{}]...", iframe, by, conditions);
 
             Optional<SelenideElement> element = findSingleElement(by, conditions);
             if (element.isPresent()) {
-                LOGGER.debug("Element with selector [{}] was FOUND in iframe [{}].", by, iframe);
+                LOGGER.debug("Element with selector [{}] and conditions [{}] was FOUND in iframe [{}].", by, conditions, iframe);
                 return element;
             }
 
@@ -211,41 +221,40 @@ class BrowserImpl implements Browser {
                     .parentFrame();
         }
 
+        LOGGER.debug("Element with selector [{}] and conditions [{}] was NOT FOUND in [{}] iframes.", by, conditions, iframes.size());
         return Optional.empty();
     }
 
     private By constructCssSelectorByType(HtmlElementType elementType) {
-        String cssSelector = elementType.getType();
-        return Selectors.byCssSelector(cssSelector);
+        return constructCssSelectorByType(elementType.getType());
+    }
+
+    private By constructCssSelectorByType(String elementType) {
+        return Selectors.byTagName(elementType);
     }
 
     private Optional<SelenideElement> findSingleElement(By by, WebElementCondition... conditions) {
-        long until = System.currentTimeMillis() + ELEMENT_SEARCH_IN_FRAME_MILLIS;
         LOGGER.info("Searching for element by [{}] and conditions [{}] in the current frame for [{}] millis", by, conditions,
                 ELEMENT_SEARCH_IN_FRAME_MILLIS);
-        do {
-            ElementsCollection foundElements = Selenide.$$(by);
-            for (WebElementCondition condition : conditions) {
-                foundElements = foundElements.filterBy(condition);
-            }
 
-            int foundElementsCount = foundElements.size();
-            if (foundElements.size() == 1) {
-                return Optional.of(foundElements.first());
-            }
+        ElementsCollection foundElements = Selenide.$$(by);
 
-            if (foundElementsCount > 1) {
-                String screenshot = createScreenshot();
-                fail("Expected only one element with selector [" + by + "] and conditions [{" + Arrays.toString(conditions)
-                        + "}] but found [" + foundElementsCount + "]. Consider using more precises selector. Elements: "
-                        + foundElements.describe() + "\nScreenshot path: " + screenshot);
-                throw new IllegalStateException("Will not be actually thrown");
-            }
+        List<WebElementCondition> allConditions = new ArrayList<>();
+        allConditions.add(Condition.exist);
+        allConditions.addAll(Arrays.asList(conditions));
 
-            LOGGER.info("Element with selector [{}] and conditions [{}] does NOT exist in the current frame.", by, conditions);
-            SleepUtil.sleepMillis(200);
-        } while (System.currentTimeMillis() < until);
-        return Optional.empty();
+        for (WebElementCondition condition : allConditions) {
+            foundElements = foundElements.filterBy(condition);
+        }
+
+        try {
+            foundElements.shouldHave(CollectionCondition.size(1), Duration.ofMillis(ELEMENT_SEARCH_IN_FRAME_MILLIS));
+            return Optional.of(foundElements.first());
+        } catch (ListSizeMismatch ex) {
+            LOGGER.debug("Element with selector [{}] and conditions [{}] does NOT exist in the current frame. Error: [{}]", by,
+                    allConditions, ex.getMessage());
+            return Optional.empty();
+        }
     }
 
     @Override
@@ -255,7 +264,7 @@ class BrowserImpl implements Browser {
 
     @Override
     public void rightClickOnElementById(String id) {
-        By by = By.cssSelector("#" + id);
+        By by = Selectors.byId(id);
         handleElementInAllFrames(by, this::rightClickElement);
     }
 
@@ -267,10 +276,19 @@ class BrowserImpl implements Browser {
 
     @Override
     public void clickOnElementByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern, String text) {
+        clickOnElementByAttributePatternAndText(elementType.getType(), attribute.getAttribute(), pattern, text);
+    }
+
+    @Override
+    public void clickOnElementByAttributePatternAndText(String elementType, String attribute, String pattern, String text) {
         By by = constructCssSelectorByTypeAndAttribute(elementType, attribute, pattern);
-        SelenideElement element = findElementInAllFrames(by, Condition.text(text)).orElseThrow(
+        SelenideElement element = findElementInAllFrames(by, Condition.exactText(text)).orElseThrow(
                 () -> new IllegalStateException("Element by [" + by + "] cannot be found in any iframe."));
         clickElement(element);
+    }
+
+    private static WebElementCondition containsText(String text) {
+        return Condition.text(text);
     }
 
     private void clickElement(SelenideElement element) {
@@ -281,25 +299,35 @@ class BrowserImpl implements Browser {
 
     @Override
     public void clickOnElementByAttributeValue(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String attributeValue) {
+        clickOnElementByAttributeValue(htmlElementType.getType(), htmlAttribute.getAttribute(), attributeValue);
+    }
+
+    @Override
+    public void clickOnElementByAttributeValue(String htmlElementType, String htmlAttribute, String attributeValue) {
         By by = constructCssSelectorByTypeAndAttribute(htmlElementType, htmlAttribute, attributeValue);
         handleElementInAllFrames(by, this::clickElement);
     }
 
     @Override
     public void doubleClickOnElementContainingText(HtmlElementType elementType, String text) {
+        doubleClickOnElementContainingText(elementType.getType(), text);
+    }
+
+    @Override
+    public void doubleClickOnElementContainingText(String elementType, String text) {
         String textPattern = Pattern.quote(text);
-        SelenideElement element = getElementByAttributeAndTextPattern(elementType, textPattern);
+        SelenideElement element = getElementByAttributeAndTextRegex(elementType, textPattern);
 
         element.doubleClick();
     }
 
-    private SelenideElement getElementByAttributeAndTextPattern(HtmlElementType elementType, String textPattern) {
+    private SelenideElement getElementByAttributeAndTextRegex(String elementType, String textPatternRegex) {
         By selector = constructCssSelectorByType(elementType);
-        return findElementInAllFrames(selector, Condition.exist, Condition.matchText(textPattern)).orElseThrow(
+        return findElementInAllFrames(selector, Condition.exist, Condition.matchText(textPatternRegex)).orElseThrow(
                 () -> new IllegalStateException("Element by [" + selector + "] cannot be found in any iframe."));
     }
 
-    private SelenideElement getElementByAttributeAndText(HtmlElementType elementType, String text) {
+    private SelenideElement getElementByAttributeAndText(String elementType, String text) {
         By selector = constructCssSelectorByType(elementType);
         return findElementInAllFrames(selector, Condition.exist, Condition.exactText(text), Condition.visible,
                 Condition.clickable).orElseThrow(
@@ -308,14 +336,26 @@ class BrowserImpl implements Browser {
 
     @Override
     public void clickOnElementContainingText(HtmlElementType elementType, String text) {
+        clickOnElementContainingText(elementType.getType(), text);
+    }
+
+    @Override
+    public void clickOnElementContainingText(String elementType, String text) {
         String textPattern = Pattern.quote(text);
-        SelenideElement element = getElementByAttributeAndTextPattern(elementType, textPattern);
+        SelenideElement element = getElementByAttributeAndTextRegex(elementType, textPattern);
+
+        element.shouldBe(Condition.visible);
 
         element.click();
     }
 
     @Override
     public void clickOnElementWithText(HtmlElementType elementType, String text) {
+        clickOnElementWithText(elementType.getType(), text);
+    }
+
+    @Override
+    public void clickOnElementWithText(String elementType, String text) {
         SelenideElement element = getElementByAttributeAndText(elementType, text);
 
         element.click();
@@ -323,18 +363,33 @@ class BrowserImpl implements Browser {
 
     @Override
     public void clickOnElementByAttributePattern(HtmlElementType elementType, HtmlAttribute attribute, String pattern) {
+        clickOnElementByAttributePattern(elementType.getType(), attribute.getAttribute(), pattern);
+    }
+
+    @Override
+    public void clickOnElementByAttributePattern(String elementType, String attribute, String pattern) {
         By by = constructCssSelectorByTypeAndAttribute(elementType, attribute, pattern);
 
         handleElementInAllFrames(by, SelenideElement::click);
     }
 
     @Override
-    public void assertElementExistsByTypeAndTextPattern(HtmlElementType htmlElementType, String textPattern) {
-        getElementByAttributeAndTextPattern(htmlElementType, textPattern);
+    public void assertElementExistsByTypeAndTextPattern(HtmlElementType htmlElementType, String textRegex) {
+        assertElementExistsByTypeAndTextPattern(htmlElementType.getType(), textRegex);
+    }
+
+    @Override
+    public void assertElementExistsByTypeAndTextPattern(String elementType, String textRegex) {
+        getElementByAttributeAndTextRegex(elementType, textRegex);
     }
 
     @Override
     public void assertElementExistsByTypeAndText(HtmlElementType elementType, String text) {
+        assertElementExistsByTypeAndText(elementType.getType(), text);
+    }
+
+    @Override
+    public void assertElementExistsByTypeAndText(String elementType, String text) {
         By selector = constructCssSelectorByType(elementType);
 
         findElementInAllFrames(selector, Condition.exist, Condition.exactText(text)).orElseThrow(
