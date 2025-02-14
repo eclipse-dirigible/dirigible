@@ -23,6 +23,7 @@ public enum HtmlElementType {
     IFRAME("iframe"), //
     SPAN("span"), //
     DIV("div"), //
+    LI("li"), //
     FD_MESSAGE_PAGE_TITLE("bk-message-page-title");
 
     private final String type;
