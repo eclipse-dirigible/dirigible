@@ -295,7 +295,7 @@ class BrowserImpl implements Browser {
 
     private SelenideElement getElementByAttributeAndTextPattern(HtmlElementType elementType, String textPattern) {
         By selector = constructCssSelectorByType(elementType);
-        return findElementInAllFrames(selector, Condition.matchText(textPattern), Condition.exist).orElseThrow(
+        return findElementInAllFrames(selector, Condition.exist, Condition.matchText(textPattern)).orElseThrow(
                 () -> new IllegalStateException("Element by [" + selector + "] cannot be found in any iframe."));
     }
 
