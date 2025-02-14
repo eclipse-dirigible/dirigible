@@ -332,7 +332,7 @@ class BrowserImpl implements Browser {
         By selector = constructCssSelectorByType(elementType);
         return findElementInAllFrames(selector, Condition.exist, Condition.exactText(text), Condition.visible,
                 Condition.clickable).orElseThrow(
-                () -> new IllegalStateException("Element by [" + selector + "] cannot be found in any iframe."));
+                        () -> new IllegalStateException("Element by [" + selector + "] cannot be found in any iframe."));
     }
 
     @Override
