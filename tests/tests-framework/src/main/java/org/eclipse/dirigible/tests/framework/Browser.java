@@ -35,6 +35,8 @@ public interface Browser {
 
     void assertElementExistsByTypeAndContainsText(String htmlElementType, String text);
 
+    void assertElementExistsByTypeAndTextPattern(String htmlElementType, String textPattern);
+
     void clickOnElementById(String id);
 
     void clickOnElementByAttributeValue(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String attributeValue);
@@ -73,5 +75,6 @@ public interface Browser {
 
     void handleElementInAllFrames(By by, Consumer<SelenideElement> elementHandler, WebElementCondition... conditions);
 
-    String getFirstTdTextInRowContaining(String searchText);
+    void handleElementInAllFrames(By by, Consumer<SelenideElement> elementHandler);
+
 }
