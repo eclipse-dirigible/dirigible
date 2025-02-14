@@ -19,6 +19,7 @@ class CreateNewProjectIT extends UserInterfaceIntegrationTest {
     // }
     // if you want to use the old UI - uncomment the upper 3 lines
 
+
     @Test
     void testCreateNewBlankProject() {
         ide.createNewBlankProject("create-project-ui-test");

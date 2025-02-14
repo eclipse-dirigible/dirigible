@@ -65,6 +65,7 @@ public abstract class IntegrationTest {
 
     protected void waitForTenantProvisioning(DirigibleTestTenant tenant) {
         Awaitility.await()
+                  .pollInterval(3, TimeUnit.SECONDS)
                   .atMost(35, TimeUnit.SECONDS)
                   .until(() -> tenantCreator.isTenantProvisioned(tenant));
     }

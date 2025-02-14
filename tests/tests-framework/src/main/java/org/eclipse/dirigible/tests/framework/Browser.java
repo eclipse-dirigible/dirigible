@@ -9,31 +9,59 @@
  */
 package org.eclipse.dirigible.tests.framework;
 
+import com.codeborne.selenide.SelenideElement;
+import com.codeborne.selenide.WebElementCondition;
+import org.openqa.selenium.By;
+
+import java.util.function.Consumer;
+
 public interface Browser {
 
     void openPath(String path);
 
-    void rightClickInsideNestedIframe();
+    String getPageTitle();
 
     void enterTextInElementByAttributePattern(HtmlElementType elementType, HtmlAttribute attribute, String pattern, String text);
 
-    void enterTextInElementById(String elementId, String text);
+    void enterTextInElementByAttributePattern(String elementType, String attribute, String pattern, String text);
 
-    void clickOnElementByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern, String text);
+    void enterTextInElementById(String elementId, String text);
 
     void assertElementExistsByTypeAndText(HtmlElementType elementType, String text);
 
-    String getPageTitle();
+    void assertElementExistsByTypeAndText(String elementType, String text);
+
+    void assertElementExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text);
+
+    void assertElementExistsByTypeAndContainsText(String htmlElementType, String text);
+
+    void clickOnElementById(String id);
 
     void clickOnElementByAttributeValue(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String attributeValue);
 
-    void doubleClickOnElementContainingText(HtmlElementType htmlElementType, String text);
+    void clickOnElementByAttributeValue(String htmlElementType, String htmlAttribute, String attributeValue);
+
+    void clickOnElementByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern, String text);
+
+    void clickOnElementByAttributePatternAndText(String elementType, String attribute, String pattern, String text);
 
     void clickOnElementContainingText(HtmlElementType htmlElementType, String text);
 
+    void clickOnElementContainingText(String htmlElementType, String text);
+
+    void clickOnElementWithText(HtmlElementType htmlElementType, String text);
+
+    void clickOnElementWithText(String htmlElementType, String text);
+
     void clickOnElementByAttributePattern(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String pattern);
 
-    void assertElementExistsByTypeAndTextPattern(HtmlElementType htmlElementType, String textPattern);
+    void clickOnElementByAttributePattern(String htmlElementType, String htmlAttribute, String pattern);
+
+    void doubleClickOnElementContainingText(HtmlElementType htmlElementType, String text);
+
+    void doubleClickOnElementContainingText(String htmlElementType, String text);
+
+    void rightClickOnElementById(String id);
 
     void reload();
 
@@ -41,5 +69,8 @@ public interface Browser {
 
     void clearCookies();
 
-    void rightClickOnElementById(String id);
+    SelenideElement findElementInAllFrames(By by, WebElementCondition... conditions);
+
+    void handleElementInAllFrames(By by, Consumer<SelenideElement> elementHandler, WebElementCondition... conditions);
+
 }
