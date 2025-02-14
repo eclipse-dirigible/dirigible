@@ -348,8 +348,7 @@ class BrowserImpl implements Browser {
 =======
         return findElementInAllFrames(selector, Condition.exist, Condition.exactText(text), Condition.visible,
                 Condition.clickable).orElseThrow(
-                () -> new IllegalStateException("Element by [" + selector + "] cannot be found in any iframe."));
->>>>>>> 377e5968c2 (make openWorkbench to work with the new and the old UI)
+                        () -> new IllegalStateException("Element by [" + selector + "] cannot be found in any iframe."));
     }
 
     @Override
