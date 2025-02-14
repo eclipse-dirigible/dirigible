@@ -251,8 +251,9 @@ class BrowserImpl implements Browser {
             foundElements.shouldHave(CollectionCondition.size(1), Duration.ofMillis(ELEMENT_SEARCH_IN_FRAME_MILLIS));
             return Optional.of(foundElements.first());
         } catch (ListSizeMismatch ex) {
-            LOGGER.debug("Element with selector [{}] and conditions [{}] does NOT exist in the current frame. Error: [{}]", by,
-                    allConditions, ex.getMessage());
+            LOGGER.warn(
+                    "Element with selector [{}] and conditions [{}] does NOT exist in the current frame or there are MORE than one matched elements. Consider using more precise selector and conditions. Error: [{}]",
+                    by, allConditions, ex.getMessage());
             return Optional.empty();
         }
     }
@@ -331,7 +332,7 @@ class BrowserImpl implements Browser {
         By selector = constructCssSelectorByType(elementType);
         return findElementInAllFrames(selector, Condition.exist, Condition.exactText(text), Condition.visible,
                 Condition.clickable).orElseThrow(
-                        () -> new IllegalStateException("Element by [" + selector + "] cannot be found in any iframe."));
+                () -> new IllegalStateException("Element by [" + selector + "] cannot be found in any iframe."));
     }
 
     @Override
@@ -381,6 +382,12 @@ class BrowserImpl implements Browser {
     @Override
     public void assertElementExistsByTypeAndTextPattern(String elementType, String textRegex) {
         getElementByAttributeAndTextRegex(elementType, textRegex);
+    }
+
+    @Override
+    public void clickOnElementById(String id) {
+        By by = Selectors.byId(id);
+        handleElementInAllFrames(by, this::clickElement);
     }
 
     @Override
