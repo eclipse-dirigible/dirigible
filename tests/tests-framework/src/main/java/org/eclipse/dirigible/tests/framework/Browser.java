@@ -37,6 +37,8 @@ public interface Browser {
 
     void clickOnElementById(String id);
 
+    void clickOnElementById(String id);
+
     void clickOnElementByAttributeValue(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String attributeValue);
 
     void clickOnElementByAttributeValue(String htmlElementType, String htmlAttribute, String attributeValue);
@@ -72,5 +74,7 @@ public interface Browser {
     SelenideElement findElementInAllFrames(By by, WebElementCondition... conditions);
 
     void handleElementInAllFrames(By by, Consumer<SelenideElement> elementHandler, WebElementCondition... conditions);
+
+    void handleElementInAllFrames(By by, Consumer<SelenideElement> elementHandler);
 
 }

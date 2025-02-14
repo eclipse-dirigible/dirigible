@@ -252,9 +252,9 @@ class BrowserImpl implements Browser {
 
             return Optional.of(foundElements.first());
         } catch (ListSizeMismatch ex) {
-            LOGGER.debug(
-                    "Element with selector [{}] and conditions [{}] does NOT exist in the current frame or MULTIPLE found. Consider using more precise selector and conditions.\nFound elements: {}.\nCause error message: {}",
-                    by, allConditions, describeCollection(by, foundElements, conditions), ex.getMessage());
+            LOGGER.warn(
+                    "Element with selector [{}] and conditions [{}] does NOT exist in the current frame or there are MORE than one matched elements. Consider using more precise selector and conditions. Error: [{}]",
+                    by, allConditions, ex.getMessage());
             return Optional.empty();
         }
     }
@@ -343,7 +343,13 @@ class BrowserImpl implements Browser {
 
     private SelenideElement getElementByAttributeAndText(String elementType, String text) {
         By selector = constructCssSelectorByType(elementType);
+<<<<<<< HEAD
         return findElementInAllFrames(selector, Condition.exist, Condition.exactText(text), Condition.visible, Condition.clickable);
+=======
+        return findElementInAllFrames(selector, Condition.exist, Condition.exactText(text), Condition.visible,
+                Condition.clickable).orElseThrow(
+                () -> new IllegalStateException("Element by [" + selector + "] cannot be found in any iframe."));
+>>>>>>> 377e5968c2 (make openWorkbench to work with the new and the old UI)
     }
 
     @Override
@@ -398,6 +404,12 @@ class BrowserImpl implements Browser {
     public void clickOnElementById(String id) {
         By by = Selectors.byId(id);
         handleElementInAllFrames(by, this::clickElement, Condition.visible, Condition.enabled);
+    }
+
+    @Override
+    public void clickOnElementById(String id) {
+        By by = Selectors.byId(id);
+        handleElementInAllFrames(by, this::clickElement);
     }
 
     @Override
