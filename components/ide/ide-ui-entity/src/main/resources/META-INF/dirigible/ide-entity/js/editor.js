@@ -975,9 +975,11 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 							// assume Entity
 							//showEntityProperties($scope.graph, cell);
 
+							debugger;
 							messageHub.showDialogWindow(
 								"edmDetails",
 								{
+									projectName: modelFile.split("/")[2],
 									dialogType: 'entity',
 									cellId: cell.id,
 									name: cell.value.name,

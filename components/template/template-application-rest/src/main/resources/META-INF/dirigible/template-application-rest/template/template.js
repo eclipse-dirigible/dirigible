@@ -58,18 +58,13 @@ export function getTemplate(parameters) {
         engine: "velocity"
     }];
 
-    if (parameters && parameters.roles.length > 0) {
-        console.log("Parameters: ", JSON.stringify(parameters));
-        console.log("Roles List: ", JSON.stringify(parameters.roles));
-        console.log("Roles List Length: ", parameters.roles.length);
+    templateSources.push({
+        location: "/template-application-rest/roles/roles.roles.template",
+        action: "generate",
+        engine: "velocity",
+        rename: "gen/{{genFolderName}}/roles/default-roles.roles"
+    });
 
-        templateSources.push({
-            location: "/template-application-rest/roles/roles.roles.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/roles/default-roles.roles"
-        });
-    }
 
     templateSources = templateSources.concat(daoTemplate.sources);
 
