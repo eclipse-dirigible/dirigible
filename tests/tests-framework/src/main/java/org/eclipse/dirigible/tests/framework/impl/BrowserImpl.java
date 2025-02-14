@@ -42,6 +42,8 @@ class BrowserImpl implements Browser {
     private static final String BROWSER = "chrome";
     private static final long SELENIDE_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(15);
     private static final String PATH_SEPARATOR = "/";
+    private static final int TOTAL_ELEMENT_SEARCH_TIMEOUT = 30 * 1000;
+    private static final long ELEMENT_SEARCH_IN_FRAME_MILLIS = 800;
 
     static {
         Configuration.timeout = SELENIDE_TIMEOUT_MILLIS;
@@ -138,11 +140,7 @@ class BrowserImpl implements Browser {
     }
 
     private Optional<SelenideElement> findElementInAllFrames(By by, WebElementCondition... conditions) {
-        return findElementInAllFrames(30 * 1000, by, conditions);
-    }
-
-    private Optional<SelenideElement> findElementInAllFrames(long waitMillis, By by, WebElementCondition... conditions) {
-        long maxWaitTime = System.currentTimeMillis() + waitMillis;
+        long maxWaitTime = System.currentTimeMillis() + TOTAL_ELEMENT_SEARCH_TIMEOUT;
 
         do {
             Optional<SelenideElement> element = findSingleElementInAllFrames(by, conditions);
@@ -154,7 +152,8 @@ class BrowserImpl implements Browser {
             }
         } while (System.currentTimeMillis() < maxWaitTime);
 
-        LOGGER.info("Element by [{}] was NOT found. Will try last time to reload the page and find it.", by);
+        LOGGER.info("Element by [{}] and conditions [{}] was NOT found. Will try last time to reload the page and find it.", by,
+                conditions);
 
         reload();
         SleepUtil.sleepSeconds(3);
@@ -180,7 +179,7 @@ class BrowserImpl implements Browser {
 
         Optional<SelenideElement> element = findSingleElement(by, conditions);
         if (element.isPresent()) {
-            LOGGER.info("Element by selector [{}] and conditions [{}] was FOUND in the default frame.", by, conditions);
+            LOGGER.debug("Element by selector [{}] and conditions [{}] was FOUND in the default frame.", by, conditions);
             return element;
         }
 
@@ -190,7 +189,7 @@ class BrowserImpl implements Browser {
     private Optional<SelenideElement> findElementInFramesRecursively(By by, WebElementCondition... conditions) {
         By iframeSelector = constructCssSelectorByType(HtmlElementType.IFRAME);
         ElementsCollection iframes = Selenide.$$(iframeSelector);
-        LOGGER.info("Found [{}] iframes", iframes.size());
+        LOGGER.debug("Found [{}] iframes", iframes.size());
 
         for (SelenideElement iframe : iframes) {
             Selenide.switchTo()
@@ -199,7 +198,7 @@ class BrowserImpl implements Browser {
 
             Optional<SelenideElement> element = findSingleElement(by, conditions);
             if (element.isPresent()) {
-                LOGGER.info("Element with selector [{}] was FOUND in iframe [{}].", by, iframe);
+                LOGGER.debug("Element with selector [{}] was FOUND in iframe [{}].", by, iframe);
                 return element;
             }
 
@@ -221,9 +220,9 @@ class BrowserImpl implements Browser {
     }
 
     private Optional<SelenideElement> findSingleElement(By by, WebElementCondition... conditions) {
-        long searchMillis = 1000;
-        LOGGER.info("Searching for element by [{}] and conditions [{}] in the current frame for [{}] millis", by, conditions, searchMillis);
-        long until = System.currentTimeMillis() + searchMillis;
+        long until = System.currentTimeMillis() + ELEMENT_SEARCH_IN_FRAME_MILLIS;
+        LOGGER.info("Searching for element by [{}] and conditions [{}] in the current frame for [{}] millis", by, conditions,
+                ELEMENT_SEARCH_IN_FRAME_MILLIS);
         do {
             ElementsCollection foundElements = Selenide.$$(by);
             for (WebElementCondition condition : conditions) {
@@ -296,19 +295,15 @@ class BrowserImpl implements Browser {
 
     private SelenideElement getElementByAttributeAndTextPattern(HtmlElementType elementType, String textPattern) {
         By selector = constructCssSelectorByType(elementType);
-        SelenideElement element = findElementInAllFrames(selector, Condition.matchText(textPattern), Condition.exist).orElseThrow(
+        return findElementInAllFrames(selector, Condition.matchText(textPattern), Condition.exist).orElseThrow(
                 () -> new IllegalStateException("Element by [" + selector + "] cannot be found in any iframe."));
-
-        return element;
     }
 
     private SelenideElement getElementByAttributeAndText(HtmlElementType elementType, String text) {
         By selector = constructCssSelectorByType(elementType);
-        SelenideElement element = findElementInAllFrames(selector, Condition.exist, Condition.exactText(text), Condition.visible,
+        return findElementInAllFrames(selector, Condition.exist, Condition.exactText(text), Condition.visible,
                 Condition.clickable).orElseThrow(
                         () -> new IllegalStateException("Element by [" + selector + "] cannot be found in any iframe."));
-
-        return element;
     }
 
     @Override
