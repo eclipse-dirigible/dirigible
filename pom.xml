@@ -281,6 +281,10 @@
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-surefire-plugin</artifactId>
+					<configuration>
+						<useSystemClassLoader>false</useSystemClassLoader>
+						<useManifestOnlyJar>true</useManifestOnlyJar>
+					</configuration>
 					<version>${maven-surefire-plugin.version}</version>
 				</plugin>
 				<plugin>

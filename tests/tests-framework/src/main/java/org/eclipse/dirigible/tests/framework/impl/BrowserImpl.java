@@ -31,6 +31,7 @@ import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.fail;
 
@@ -260,34 +261,6 @@ class BrowserImpl implements Browser {
     }
 
     @Override
-    public void rightClickInsideNestedIframe() {
-        System.out.println("🔍 Waiting for first iframe: perspective-workbench");
-
-        // Wait for the first iframe (Workbench) and switch into it
-        SelenideElement firstIframe = Selenide.$(By.cssSelector("iframe[src*='perspective-workbench/index.html']"))
-                .shouldBe(Condition.visible, Duration.ofSeconds(30));
-        Selenide.switchTo().frame(firstIframe);
-
-        SelenideElement secondIframe = Selenide.$(By.cssSelector("iframe[src*='view-projects/projects.html']"))
-                .shouldBe(Condition.visible, Duration.ofSeconds(30));
-        Selenide.switchTo().frame(secondIframe);
-
-        // Find the target element (#pvtree) inside the second iframe
-        SelenideElement treeElement = Selenide.$(By.id("pvtree"))
-                .shouldBe(Condition.exist, Duration.ofSeconds(30))
-                .shouldBe(Condition.visible, Duration.ofSeconds(30));
-
-
-        WebElement webElement = treeElement.toWebElement();
-        Actions actions = new Actions(WebDriverRunner.getWebDriver());
-        actions.contextClick(webElement).perform();
-
-        // Switch back to the main content after interacting
-        Selenide.switchTo().defaultContent();
-    }
-
-
-    @Override
     public void rightClickOnElementById(String id) {
         By by = Selectors.byId(id);
         handleElementInAllFrames(by, this::rightClickElement, Condition.visible, Condition.enabled);
@@ -353,7 +326,12 @@ class BrowserImpl implements Browser {
     }
 
     private By constructCssSelectorByType(String elementType) {
-        return Selectors.byTagName(elementType);
+        String homeValue = org.eclipse.dirigible.commons.config.Configuration.get("DIRIGIBLE_HOME_URL");
+        if (null != homeValue && homeValue.contains("services/web/ide")) {
+            return Selectors.byTagName(elementType);
+        } else {
+            return By.cssSelector(elementType);
+        }
     }
 
     private SelenideElement getElementByAttributeAndText(String elementType, String text) {

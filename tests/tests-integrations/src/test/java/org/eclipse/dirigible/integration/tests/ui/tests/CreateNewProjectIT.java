@@ -14,9 +14,9 @@ import org.junit.jupiter.api.Test;
 
 class CreateNewProjectIT extends UserInterfaceIntegrationTest {
 
-    static {
-        Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
-    }
+    // static {
+    // Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
+    // }
 
     @Test
     void testCreateNewBlankProject() {

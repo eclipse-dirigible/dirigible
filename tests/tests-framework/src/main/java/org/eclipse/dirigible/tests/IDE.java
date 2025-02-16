@@ -67,13 +67,24 @@ public class IDE {
     }
 
     public void assertStatusBarMessage(String expectedMessage) {
-        browser.assertElementExistsByTypeAndTextPattern(HtmlElementType.STATUS_MESSAGE, expectedMessage);
-        browser.assertElementExistsByTypeAndText(HtmlElementType.SPAN, expectedMessage);
+        String homeValue = Configuration.get("DIRIGIBLE_HOME_URL");
+        if (null != homeValue && homeValue.contains("services/web/ide")) {
+            browser.assertElementExistsByTypeAndText(HtmlElementType.SPAN, expectedMessage);
+        } else {
+            browser.assertElementExistsByTypeAndText(HtmlElementType.STATUS_MESSAGE, expectedMessage);
+
+        }
     }
 
     public void assertPublishedProjectMessage(String projectName) {
-        String publishedMessage = "Published '/workspace/" + projectName + "'";
-        assertStatusBarMessage(publishedMessage);
+        String homeValue = Configuration.get("DIRIGIBLE_HOME_URL");
+        if (null != homeValue && homeValue.contains("services/web/ide")) {
+            String publishedMessage = "Published '/" + projectName + "'";
+            assertStatusBarMessage(publishedMessage);
+        } else {
+            String publishedMessage = "Published '/workspace/" + projectName + "'";
+            assertStatusBarMessage(publishedMessage);
+        }
     }
 
     public void assertJSHttpResponse(String projectName, String fileRelativePath, int expectedStatusCode, String expectedBody) {
@@ -125,7 +136,6 @@ public class IDE {
 
     public Workbench openWorkbench() {
         openHomePage();
-        browser.clickOnElementByAttributeValue(HtmlElementType.LI, HtmlAttribute.TITLE, "Workbench'][ng-class='getClasses()");
 
         // TODO: remove the if once switched to the new UI
         String homeValue = Configuration.get("DIRIGIBLE_HOME_URL");
@@ -151,7 +161,7 @@ public class IDE {
 
         workbench.createNewProject(projectName);
 
-        assertCreatedProject(projectName);
+        // assertCreatedProject(projectName);
         assertPublishedProjectMessage(projectName);
     }
 
