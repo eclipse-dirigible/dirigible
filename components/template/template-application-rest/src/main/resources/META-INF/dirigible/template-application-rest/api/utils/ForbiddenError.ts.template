@@ -1,12 +1,8 @@
 export class ForbiddenError extends Error {
     readonly name = "ForbiddenError";
-    readonly stack = new Error().stack;
+    readonly stack = (new Error()).stack;
 
-    constructor(requiredRoles: string[], operationType?: string) {
-        const roleList = requiredRoles.map(role => `'${role}'`).join(", ");
-        const message = operationType
-            ? `You don't have permission to '${operationType}' this resource. Required roles: ${roleList}.`
-            : `You don't have permission to access this resource. Required roles: ${roleList}.`;
+    constructor(message: string = "You don't have permission to access this resource") {
         super(message);
     }
 }

@@ -4,7 +4,7 @@
     {
         "name": "${role.roleRead}",
         "description": "A role that grants read only permission for ${role.entityName}."
-    }#end#if($role.roleRead && $role.roleRead),#end
+    }#end#if($role.roleRead && $role.roleWrite),#end
     #if($role.roleWrite)
     {
         "name": "${role.roleWrite}",

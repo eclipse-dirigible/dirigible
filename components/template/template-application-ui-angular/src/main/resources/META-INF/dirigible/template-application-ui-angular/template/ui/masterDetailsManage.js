@@ -145,32 +145,33 @@ function getMaster(parameters) {
 			collection: "uiManageMasterModels"
 		},
 		{
-            location: "/template-application-ui-angular/ui/perspective/master-manage/dialog-window/controller.js.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/controller.js",
-            collection: "uiManageMasterModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/master-manage/dialog-window/index.html.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/index.html",
-            collection: "uiManageMasterModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/master-manage/dialog-window/view.extension",
-            action: "generate",
-            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/view.extension",
-            collection: "uiManageMasterModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/master-manage/dialog-window/view.js.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/view.js",
-            collection: "uiManageMasterModels"
-        }
+			location: "/template-application-ui-angular/ui/perspective/master-manage/dialog-window/controller.js.template",
+			action: "generate",
+			engine: "velocity",
+			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/controller.js",
+			collection: "uiManageMasterModels"
+		},
+		{
+			location: "/template-application-ui-angular/ui/perspective/master-manage/dialog-window/index.html.template",
+			action: "generate",
+			engine: "velocity",
+			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/index.html",
+			collection: "uiManageMasterModels"
+		},
+		{
+			location: "/template-application-ui-angular/ui/perspective/master-manage/dialog-window/view.extension.template",
+			action: "generate",
+			engine: "velocity",
+			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/view.extension",
+			collection: "uiManageMasterModels"
+		},
+		{
+			location: "/template-application-ui-angular/ui/perspective/master-manage/dialog-window/view.js.template",
+			action: "generate",
+			engine: "velocity",
+			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/view.js",
+			collection: "uiManageMasterModels"
+		}
 	];
 }
 

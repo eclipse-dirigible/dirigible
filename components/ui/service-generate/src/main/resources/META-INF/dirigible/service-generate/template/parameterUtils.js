@@ -169,7 +169,7 @@ export function process(model, parameters) {
         if (e.generateDefaultRoles === "true") {
             if (e.type != "PROJECTION") {
 
-                let rolePair = {};
+                const rolePair = {};
                 rolePair["entityName"] = e.name;
 
                 if (e.roleRead && e.roleRead != "") {

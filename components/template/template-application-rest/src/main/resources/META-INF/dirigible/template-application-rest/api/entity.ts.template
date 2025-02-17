@@ -210,32 +210,17 @@ class ${name}Service {
     private checkPermissions(operationType: string) {
 #if($perspectiveRole)
         if (!user.isInRole("${perspectiveRole}")) {
-            const perspectiveRoles = [
-                "${perspectiveRole}",
-            ];
-
-            throw new ForbiddenError(perspectiveRoles);
+            throw new ForbiddenError();
         }
 #end
 #if($roleRead)
         if (operationType === "read" && !(user.isInRole("${roleRead}")#if($roleWrite) || user.isInRole("${roleWrite}")#end)) {
-            const readRoles = [
-                "${roleRead}",
-                #if($roleWrite)
-                "${roleWrite}",
-                #end
-            ];
-            
-            throw new ForbiddenError(readRoles, "read");
+            throw new ForbiddenError();
         }
 #end
 #if($roleWrite)
         if (operationType === "write" && !user.isInRole("${roleWrite}")) {
-            const writeRoles = [
-                "${roleWrite}",
-            ];
-            
-            throw new ForbiddenError(writeRoles, "write");
+            throw new ForbiddenError();
         }
 #end
     }

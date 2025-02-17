@@ -59,7 +59,7 @@ export function getTemplate(parameters) {
     }];
 
     templateSources.push({
-        location: "/template-application-rest/roles/roles.roles.template",
+        location: "/template-application-rest/roles/default-roles.roles.template",
         action: "generate",
         engine: "velocity",
         rename: "gen/{{genFolderName}}/roles/default-roles.roles"
