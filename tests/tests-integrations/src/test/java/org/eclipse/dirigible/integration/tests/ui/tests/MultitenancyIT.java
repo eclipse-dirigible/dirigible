@@ -26,10 +26,6 @@ import java.util.List;
 
 class MultitenancyIT extends UserInterfaceIntegrationTest {
 
-    static {
-        Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
-    }
-
     @Autowired
     private TestProject testProject;
     @Autowired

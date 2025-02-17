@@ -263,8 +263,8 @@ class BrowserImpl implements Browser {
             return Optional.of(foundElements.first());
         } catch (ListSizeMismatch ex) {
             LOGGER.debug(
-                    "Element with selector [{}] and conditions [{}] does NOT exist in the current frame or MULTIPLE found. Consider using more precise selector and conditions. Found elements: {}",
-                    by, allConditions, foundElements.describe(), ex);
+                    "Element with selector [{}] and conditions [{}] does NOT exist in the current frame or MULTIPLE found. Consider using more precise selector and conditions.\nFound elements: {}.\nCause error message: {}",
+                    by, allConditions, describeCollection(by, foundElements, conditions), ex.getMessage());
             return Optional.empty();
         }
     }
