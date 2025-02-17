@@ -39,6 +39,7 @@ Entity.prototype.feedSchedule = null;
 Entity.prototype.feedPath = null;
 Entity.prototype.roleRead = null;
 Entity.prototype.roleWrite = null;
+Entity.prototype.generateDefaultRoles = false;
 Entity.prototype.projectionReferencedModel = null;
 Entity.prototype.projectionReferencedEntity = null;
 Entity.prototype.referenceProjections = [];

@@ -215,7 +215,6 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
         };
         $scope.toggleDefaultRoles = function () {
             if ($scope.dataParameters.generateDefaultRoles === 'true') {
-                debugger;
                 $scope.dataParameters.roleRead = $scope.dataParameters.projectName + '.' + $scope.dataParameters.perspectiveName + '.' + $scope.dataParameters.name + "ReadOnly";
                 $scope.dataParameters.roleWrite = $scope.dataParameters.projectName + '.' + $scope.dataParameters.perspectiveName + '.' + $scope.dataParameters.name + "FullAccess";
             } else {
@@ -225,7 +224,6 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
         };
 
         $scope.dataParameters = ViewParameters.get();
-        debugger;
         if ($scope.dataParameters.dialogType === "entity") {
             $scope.dialogType = 'entity';
             $scope.loadIcons();

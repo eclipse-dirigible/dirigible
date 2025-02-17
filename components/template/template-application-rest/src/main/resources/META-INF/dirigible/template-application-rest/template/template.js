@@ -71,11 +71,6 @@ export function getTemplate(parameters) {
     let templateParameters = [];
     templateParameters = templateParameters.concat(daoTemplate.parameters);
     templateParameters.push({
-        name: "generateDefaultRoles",
-        label: "Do you want to generate default roles",
-        type: "checkbox",
-    });
-    templateParameters.push({
         name: "addOpenApiInfo",
         label: "OpenAPI Info (Optional)",
         type: "checkbox",
