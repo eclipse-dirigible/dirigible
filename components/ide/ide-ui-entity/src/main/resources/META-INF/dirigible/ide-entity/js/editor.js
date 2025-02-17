@@ -974,8 +974,6 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 						if (cell.value && Entity.prototype.isPrototypeOf(cell.value)) {
 							// assume Entity
 							//showEntityProperties($scope.graph, cell);
-
-							debugger;
 							messageHub.showDialogWindow(
 								"edmDetails",
 								{
