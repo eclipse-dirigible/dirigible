@@ -30,10 +30,6 @@ class CustomSecurityIT extends UserInterfaceIntegrationTest {
     private static final String PROTECTED_PAGE_PATH = "/services/web/dirigible-test-project/security/protected_page.html";
     private static final String PROTECTED_PAGE_HEADER = "This is a protected page";
 
-    static {
-        Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
-    }
-
     @Autowired
     private TestProject testProject;
     @Autowired

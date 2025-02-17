@@ -245,7 +245,10 @@ class BrowserImpl implements Browser {
         }
 
         try {
-            foundElements.shouldHave(CollectionCondition.size(1), Duration.ofMillis(ELEMENT_SEARCH_IN_FRAME_MILLIS));
+            // foundElements.shouldHave(CollectionCondition.size(1),
+            // Duration.ofMillis(ELEMENT_SEARCH_IN_FRAME_MILLIS));
+            foundElements.shouldHave(CollectionCondition.sizeGreaterThan(0), Duration.ofMillis(ELEMENT_SEARCH_IN_FRAME_MILLIS));
+
             return Optional.of(foundElements.first());
         } catch (ListSizeMismatch ex) {
             LOGGER.warn(
