@@ -44,7 +44,7 @@ class BrowserImpl implements Browser {
     private static final long SELENIDE_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(15);
     private static final String PATH_SEPARATOR = "/";
     private static final int TOTAL_ELEMENT_SEARCH_TIMEOUT = 60 * 1000;
-    private static final long ELEMENT_SEARCH_IN_FRAME_MILLIS = 200;
+    private static final long ELEMENT_SEARCH_IN_FRAME_MILLIS = 100;
 
     static {
         Configuration.timeout = SELENIDE_TIMEOUT_MILLIS;
