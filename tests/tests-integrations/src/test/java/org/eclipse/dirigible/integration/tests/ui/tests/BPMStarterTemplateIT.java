@@ -10,7 +10,6 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import ch.qos.logback.classic.Level;
-import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.api.bpm.BpmFacade;
 import org.eclipse.dirigible.tests.FormView;
 import org.eclipse.dirigible.tests.WelcomeView;
@@ -41,10 +40,6 @@ class BPMStarterTemplateIT extends UserInterfaceIntegrationTest {
     public static final String EXPECTED_TASK_LOGGED_MESSAGE =
             "Hello World! Process variables: {param1=" + PARAM_1_VALUE + ", param2=" + PARAM_2_VALUE + ".0}";
     private static final String TRIGGER_BUTTON_TEXT = "Trigger";
-
-    static {
-        Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
-    }
 
     private LogsAsserter consoleLogAsserter;
 
