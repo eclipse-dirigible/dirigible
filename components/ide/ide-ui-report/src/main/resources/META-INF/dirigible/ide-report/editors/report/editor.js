@@ -1528,5 +1528,19 @@ angular.module('page', ['ideUI', 'ideView', 'ideWorkspace'])
 
 		// End Add from Tables Section ---------------------------------------------------------------------------------
 
+		// Begin Security Section --------------------------------------------------------------------------------------
+
+		$scope.toggleDefaultRoles = function () {
+			if ($scope.dataParameters.generateDefaultRoles === 'true') {
+				$scope.dataParameters.roleRead = $scope.dataParameters.projectName + '.' + $scope.dataParameters.perspectiveName + '.' + $scope.dataParameters.name + "ReadOnly";
+				$scope.dataParameters.roleWrite = $scope.dataParameters.projectName + '.' + $scope.dataParameters.perspectiveName + '.' + $scope.dataParameters.name + "FullAccess";
+			} else {
+				$scope.dataParameters.roleRead = null;
+				$scope.dataParameters.roleWrite = null;
+			}
+		};
+
+		// End Security Section ----------------------------------------------------------------------------------------
+
 
 	});
