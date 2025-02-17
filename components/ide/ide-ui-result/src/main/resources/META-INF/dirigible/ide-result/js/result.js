@@ -436,7 +436,21 @@ resultView.controller('DatabaseResultController', ['$scope', '$http', 'messageHu
                 importType: 'data',
                 uploadPath: url,
                 workspace: "",
-                table: $scope.datasource + " -> " + artifact[0] + " -> " + artifact[1],
+                table: $scope.datasource + "." + artifact[0] + "." + artifact[1],
+            }
+        );
+    }, true);
+    
+    messageHub.onDidReceiveMessage("database.data.import.sql", function (command) {
+        let artifact = command.data.split('.');
+        let url = "/services/data/sql/" + $scope.datasource + "/" + artifact[0];
+        messageHub.showDialogWindow(
+            "import",
+            {
+                importType: 'sql',
+                uploadPath: url,
+                workspace: "",
+                schema: $scope.datasource + "." + artifact[0],
             }
         );
     }, true);

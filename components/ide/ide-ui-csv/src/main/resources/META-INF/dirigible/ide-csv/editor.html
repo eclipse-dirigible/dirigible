@@ -24,25 +24,22 @@
         <theme></theme>
         <script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=ide-editor-js">
         </script>
-        <link type="text/css" rel="stylesheet"
-            href="/services/js/resources-core/services/loader.js?id=ide-editor-css" />
-        <script type="text/javascript" src="js/papaparse.min.js"></script>
-        <script type="text/javascript" src="js/ag-grid-community.min.noStyle.js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/resources-core/services/loader.js?id=ide-editor-css" />
+        <script type="text/javascript" src="/webjars/papaparse/5.3.2/papaparse.min.js"></script>
+        <script type="text/javascript" src="/webjars/ag-grid-community__all-modules/27.1.0/dist/ag-grid-community.min.noStyle.js"></script>
         <script type="text/javascript" src="js/editor.js"></script>
         <link type="text/css" rel="stylesheet" href="css/csv.css" />
-        <link type="text/css" rel="stylesheet" href="css/ag-grid.min.css" />
-        <link type="text/css" rel="stylesheet" href="css/ag-theme-alpine.min.css" />
+        <link type="text/css" rel="stylesheet" href="/webjars/ag-grid-community__all-modules/27.1.0/dist/styles/ag-grid.min.css" />
+        <link type="text/css" rel="stylesheet" href="/webjars/ag-grid-community__all-modules/27.1.0/dist/styles/ag-theme-alpine.min.css" />
     </head>
 
-    <body class="dg-vbox" ng-mousedown="handleClick($event)" dg-contextmenu="contextMenuContent" dg-shortcut="'ctrl+s'"
-        dg-shortcut-action="save">
+    <body class="dg-vbox" ng-mousedown="handleClick($event)" dg-contextmenu="contextMenuContent" dg-shortcut="'ctrl+s'" dg-shortcut-action="save">
         <fd-busy-indicator-extended class="dg-fill-parent" ng-hide="state.error || !state.isBusy" dg-size="l">
             {{state.busyText}}
         </fd-busy-indicator-extended>
         <fd-toolbar ng-show="!state.error && !state.isBusy">
             <fd-toolbar-spacer></fd-toolbar-spacer>
-            <fd-input type="search" placeholder="Search..." ng-model="search.text" ng-change="searchCsv()"
-                style="max-width:30%;"></fd-input>
+            <fd-input type="search" placeholder="Search..." ng-model="search.text" ng-change="searchCsv()" style="max-width:30%;"></fd-input>
             <fd-toolbar-separator></fd-toolbar-separator>
             <fd-button glyph="sap-icon--save" dg-label="Save" dg-type="transparent" ng-click="save()">
             </fd-button>
@@ -50,16 +47,14 @@
             </fd-button>
             <fd-toolbar-separator></fd-toolbar-separator>
             <fd-toolbar-overflow>
-                <fd-button glyph="sap-icon--add" is-overflow="true" dg-type="transparent" ng-click="addRow()"
-                    dg-label="Add row"></fd-button>
+                <fd-button glyph="sap-icon--add" is-overflow="true" dg-type="transparent" ng-click="addRow()" dg-label="Add row"></fd-button>
                 <fd-toolbar-separator></fd-toolbar-separator>
                 <fd-checkbox id="csvHeader" ng-model="papaConfig.header" ng-change="hasHeader()">
                 </fd-checkbox>
                 <fd-checkbox-label for="csvHeader">Has header</fd-checkbox-label>
             </fd-toolbar-overflow>
         </fd-toolbar>
-        <div class="dg-fill-parent ag-grid-editor ag-theme-alpine" ag-grid="gridOptions"
-            ng-show="!state.error && !state.isBusy"></div>
+        <div class="dg-fill-parent ag-grid-editor ag-theme-alpine" ag-grid="gridOptions" ng-show="!state.error && !state.isBusy"></div>
         <div class="dg-full-width dg-border-top" ng-show="!state.error && !state.isBusy">
             <p class="fd-text fd-margin--tiny">Data rows: {{rowsCount}}</p>
         </div>

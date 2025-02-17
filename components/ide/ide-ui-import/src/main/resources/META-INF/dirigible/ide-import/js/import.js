@@ -63,12 +63,18 @@ importView.controller('ImportViewController', [
                         $scope.dropAreaTitle = 'Import files';
                         $scope.dropAreaSubtitle = 'Drop file(s) here, or use the "+" button.';
                         $scope.dropAreaMore = `Files will be imported in "${params.uploadPath}"`;
-                    } if (params.importType === 'data') {
+                    } else if (params.importType === 'data') {
                         $scope.inputAccept = 'csv';
                         $scope.importType = params.importType;
                         $scope.dropAreaTitle = 'Import data files';
                         $scope.dropAreaSubtitle = 'Drop file(s) here, or use the "+" button.';
                         $scope.dropAreaMore = `Files will be imported in "${params.table}"`;
+                    } else if (params.importType === 'sql') {
+                        $scope.inputAccept = 'sql';
+                        $scope.importType = params.importType;
+                        $scope.dropAreaTitle = 'Import SQL files';
+                        $scope.dropAreaSubtitle = 'Drop file(s) here, or use the "+" button.';
+                        $scope.dropAreaMore = `Files will be imported in "${params.schema}"`;
                     } else {
                         $scope.dropAreaTitle = 'Import files from zip';
                         $scope.dropAreaMore = `Files will be extracted in "${params.uploadPath}"`;
@@ -85,7 +91,7 @@ importView.controller('ImportViewController', [
             name: 'customFilter',
             fn: function (item /*{File|FileLikeObject}*/, options) {
                 let type = item.type.slice(item.type.lastIndexOf('/') + 1);
-                if ($scope.importType !== 'file' && $scope.importType !== 'data')
+                if ($scope.importType !== 'file' && $scope.importType !== 'data' && $scope.importType !== 'sql')
                     if (type != 'zip' && type != 'x-zip' && type != 'x-zip-compressed') {
                         return false;
                     }
@@ -102,7 +108,7 @@ importView.controller('ImportViewController', [
                         'Dirigible-Editor': 'Editor'
                     };
                     item.url = new UriBuilder().path(transportApi.getFileImportUrl().split('/')).path($scope.selectedWorkspace.name).path($scope.uploadPath.split('/')).path(item.name).build();
-                } else if ($scope.inDialog && $scope.importType === 'data') {
+                } else if ($scope.inDialog && ($scope.importType === 'data' || $scope.importType === 'sql')) {
                     item.headers = {
                         'Dirigible-Editor': 'Editor'
                     };

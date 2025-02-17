@@ -1,0 +1,102 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/editor-jobs/configs/job-editor.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=editor-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="/services/web/editor-jobs/js/editor.js"></script>
+    </head>
+
+    <body class="bk-vbox bk-center--vertical" shortcut="'ctrl+s'" shortcut-action="save">
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
+        <bk-scrollbar class="bk-full-width" ng-show="!state.error && !state.isBusy">
+            <bk-fieldset class="fd-margin--md" ng-form="forms.editor">
+                <bk-form-group name="entityForm">
+                    <bk-form-item horizontal="false">
+                        <bk-form-label for="idGroup" required="true" colon="true">Group</bk-form-label>
+                        <bk-form-input-message state="{{ forms.editor['group'].$valid ? '' : 'error' }}" message="::groupErrorMessage">
+                            <bk-input id="idGroup" name="group" state="{{ forms.editor['group'].$valid ? '' : 'error' }}" ng-required="true" ng-model="job.group" ng-maxlength="255" input-rules="{ patterns: ['^[a-zA-Z0-9_.-]*$'] }"
+                                type="text" placeholder="Enter group"></bk-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
+                    <bk-form-item horizontal="false">
+                        <bk-form-label for="idExpression" required="true" colon="true">Expression</bk-form-label>
+                        <bk-form-input-message state="{{ forms.editor['expression'].$valid ? '' : 'error' }}" message="'Must be a valid cron expression'">
+                            <bk-input id="idExpression" name="expression" state="{{ forms.editor['expression'].$valid ? '' : 'error' }}" ng-required="true" ng-model="job.expression" ng-maxlength="255" type="text"
+                                placeholder="0 0/5 * * * ?"></bk-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
+                    <bk-form-item horizontal="false">
+                        <bk-form-label for="idHandler" required="true" colon="true">Handler</bk-form-label>
+                        <bk-form-input-message state="{{ forms.editor['handler'].$valid ? '' : 'error' }}" message="::handlerErrorMessage">
+                            <bk-input id="idHandler" name="handler" ng-required="true" ng-model="job.handler" ng-maxlength="255" type="text" placeholder="Enter handler" input-rules="{ patterns: ['^[a-zA-Z0-9_.-/$-]*$'] }"
+                                state="{{ forms.editor['handler'].$valid ? '' : 'error' }}"></bk-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
+                    <bk-form-item horizontal="false">
+                        <bk-form-label for="idDescription" colon="true">Description</bk-form-label>
+                        <bk-textarea id="idDescription" name="description" ng-model="job.description" placeholder="Enter description" ng-maxlength="255"></bk-textarea>
+                    </bk-form-item>
+                </bk-form-group>
+            </bk-fieldset>
+            <bk-toolbar has-title="true">
+                <bk-toolbar-title>Parameters:</bk-toolbar-title>
+                <bk-toolbar-spacer></bk-toolbar-spacer>
+                <bk-button compact="true" label="Add" ng-click="addParameter()"></bk-button>
+                <bk-button compact="true" state="emphasized" label="Save" ng-click="save()" ng-disabled="!(forms.editor.$valid && changed)"></bk-button>
+            </bk-toolbar>
+            <table bk-table outer-borders="bottom">
+                <thead bk-table-header>
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>Name</th>
+                        <th bk-table-header-cell>Type</th>
+                        <th bk-table-header-cell>Default value</th>
+                        <th bk-table-header-cell>Choices</th>
+                        <th bk-table-header-cell>Description</th>
+                        <th bk-table-header-cell></th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr ng-if="job.parameters.length === 0" bk-table-row>
+                        <td bk-table-cell no-data="true">Job has no parameters.</td>
+                    </tr>
+                    <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in job.parameters track by $index">
+                        <td bk-table-cell>{{ item.name }}</td>
+                        <td bk-table-cell>{{ item.type }}</td>
+                        <td bk-table-cell>{{ item.defaultValue }}</td>
+                        <td bk-table-cell>{{ item.choices }}</td>
+                        <td bk-table-cell>{{ item.description }}</td>
+                        <td bk-table-cell fit-content="true">
+                            <bk-button compact="true" glyph="sap-icon--edit" state="transparent" aria-label="Edit" ng-click="editParameter($index)"></bk-button>
+                            <bk-button compact="true" glyph="sap-icon--delete" state="transparent" aria-label="Delete" ng-click="deleteParameter($index)"></bk-button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </bk-scrollbar>
+        <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+            <bk-message-page-title>Editor encounterd an error!</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+        </bk-message-page>
+        <theme></theme>
+    </body>
+
+</html>

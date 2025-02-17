@@ -59,10 +59,9 @@
                 </fd-form-group>
                 <fd-form-group>
                     <fd-form-item>
-                        <fd-form-label for="username" dg-colon="true" dg-required="true">Username</fd-form-label>
+                        <fd-form-label for="username" dg-colon="true">Username</fd-form-label>
                         <fd-input id="username" name="username" type="text" placeholder="Enter username"
-                            ng-model="database.username" dg-input-rules="inputRules" ng-trim="false"
-                            state="{{ forms.dbForm['username'].$valid ? '' : 'error' }}" ng-required="true"></fd-input>
+                            ng-model="database.username"></fd-input>
                     </fd-form-item>
                 </fd-form-group>
                 <fd-form-group>
@@ -77,7 +76,7 @@
                         <fd-form-label for="parameters" dg-colon="true">Parameters</fd-form-label>
                         <fd-input id="parameters" name="parameters" type="text"
                             state="{{ forms.dbForm['parameters'].$valid ? '' : 'error' }}"
-                            dg-input-rules="{patterns: ['^([A-Za-z0-9=,]+)=([A-Za-z0-9]+?)(?=,[^,]+=|$)$']}"
+                            dg-input-rules="{patterns: ['^([A-Za-z0-9._-]+=[A-Za-z0-9._-]+)(,[A-Za-z0-9._-]+=[A-Za-z0-9._-]+)*$']}"
                             placeholder="Enter parameters, e.g. name1=value1,name2=value2 ..."
                             ng-model="database.parameters" ng-minlength="3"></fd-input>
                     </fd-form-item>

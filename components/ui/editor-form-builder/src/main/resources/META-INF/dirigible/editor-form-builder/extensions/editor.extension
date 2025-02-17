@@ -1,0 +1,5 @@
+{
+    "module": "editor-form-builder/configs/editor.js",
+    "extensionPoint": "platform-editors",
+    "description": "Form Builder"
+}

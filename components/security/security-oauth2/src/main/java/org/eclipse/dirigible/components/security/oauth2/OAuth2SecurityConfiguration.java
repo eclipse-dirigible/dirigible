@@ -15,12 +15,13 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
  * The Class OAuth2SecurityConfiguration.
  */
-@Profile("oauth")
+@Profile(value = {"github", "cognito"})
 @Configuration
 public class OAuth2SecurityConfiguration {
 
@@ -32,18 +33,19 @@ public class OAuth2SecurityConfiguration {
      * @throws Exception the exception
      */
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-
-        http.cors(Customizer.withDefaults())
+    SecurityFilterChain filterChain(HttpSecurity http, HttpSecurityURIConfigurator httpSecurityURIConfigurator) throws Exception {
+        http//
+            .authorizeHttpRequests(authz -> authz.requestMatchers("/oauth2/**", "/login/**")
+                                                 .permitAll())
             .csrf(csrf -> csrf.disable())
             .headers(headers -> headers.frameOptions(frameOpts -> frameOpts.disable()))
-            .oauth2Login(Customizer.withDefaults());
+            .oauth2Client(Customizer.withDefaults())
+            .oauth2Login(Customizer.withDefaults())
+            .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
+            .sessionManagement(sessionManagement -> sessionManagement.sessionCreationPolicy(SessionCreationPolicy.ALWAYS));
 
-
-        HttpSecurityURIConfigurator.configure(http);
+        httpSecurityURIConfigurator.configure(http);
 
         return http.build();
     }
-
-
 }

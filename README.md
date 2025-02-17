@@ -86,29 +86,48 @@ git config --system core.longpaths true
 
    > If you are using Windows, make sure that you open the terminal as Administrator otherwise the tests will fail
 
- - Quick build with tests:
+ - Quick build **with tests**:
 
         mvn -T 1C clean install -D maven.javadoc.skip=true -D license.skip=true
 
- - If you don't want to trigger license updates:
+ - If you **don't want to trigger license updates**:
 
         mvn clean install -D license.skip=true
 
- - If you have a multi-core system, enable threads:
+ - If you have a **multi-core system, enable threads**:
 
         mvn -T 1C clean install
 
- - If you don't need to run tests, you can add the following argument:
+ - If you **don't need to run tests**, you can add the following argument:
 
         mvn clean install -D skipTests
 
- - If you don't need to compile and run tests:
+ - If you **don't need to compile and run tests**:
 
         mvn clean install -D skipTests
 
- - If you want to do a fast build, with no tests, javadocs and license updates:
+ - If you want to do a fast build, with **no tests, javadocs and license updates**:
 
         mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true
+
+ - If you want to **run all integration tests only**:
+	```shell
+	DIRIGIBLE_GIT_REPO='<path-to-git-repo>'
+	cd $DIRIGIBLE_GIT_REPO
+	mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true -U
+ 
+	mvn -f tests/pom.xml verify -P integration-tests -D selenide.headless=true
+ 	```
+
+ - If you want to **run specific integration test(s)**:
+	```shell
+	DIRIGIBLE_GIT_REPO='<path-to-git-repo>'
+	cd $DIRIGIBLE_GIT_REPO
+	mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true -U
+	
+	export TEST='CsvimIT,CreateNewProjectIT'
+	mvn -f tests/pom.xml verify -P integration-tests -Dit.test="$TEST"
+ 	```
 
 > The build should pass successfully.
 
@@ -323,4 +342,3 @@ Unicons by IconScout: [https://github.com/Iconscout/unicons](https://github.com/
 - Mailing List: [https://dev.eclipse.org/mailman/listinfo/dirigible-dev](https://dev.eclipse.org/mailman/listinfo/dirigible-dev)
 - Issues: [https://github.com/eclipse/dirigible/issues](https://github.com/eclipse/dirigible/issues)
 - Eclipse Foundation Help Desk: https://gitlab.eclipse.org/eclipsefdn/helpdesk
-

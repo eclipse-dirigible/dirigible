@@ -9,28 +9,38 @@
  */
 package org.eclipse.dirigible.components.data.sources.manager;
 
-import com.zaxxer.hikari.HikariConfig;
+import static java.text.MessageFormat.format;
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Properties;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.TimeUnit;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.data.sources.config.DefaultDataSourceName;
 import org.eclipse.dirigible.components.data.sources.config.SystemDataSourceName;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
 import org.eclipse.dirigible.components.data.sources.domain.DataSourceProperty;
-import org.eclipse.dirigible.components.database.*;
+import org.eclipse.dirigible.components.database.DatabaseConfigurator;
+import org.eclipse.dirigible.components.database.DatabaseParameters;
+import org.eclipse.dirigible.components.database.DatabaseSystem;
+import org.eclipse.dirigible.components.database.DatabaseSystemDeterminer;
+import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.stereotype.Component;
-
-import java.io.File;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.util.*;
-import java.util.concurrent.TimeUnit;
-
-import static java.text.MessageFormat.format;
+import com.zaxxer.hikari.HikariConfig;
 
 /**
  * The Class DataSourceInitializer.
@@ -141,10 +151,16 @@ public class DataSourceInitializer {
         config.setMaximumPoolSize(20);
 
         config.setMinimumIdle(10);
-        config.setIdleTimeout(TimeUnit.MINUTES.toMillis(3)); // free connections when idle, potentially remove leaked connections
-        config.setMaxLifetime(TimeUnit.MINUTES.toMillis(15)); // recreate connections after specified time
+
+        // free connections when idle, potentially remove leaked connections
+        config.setIdleTimeout(TimeUnit.MINUTES.toMillis(3));
+
+        // recreate connections after specified time
+        config.setMaxLifetime(TimeUnit.MINUTES.toMillis(Configuration.getAsInt(name + "_MAX_LIFETIME_MINUTES", 15)));
         config.setConnectionTimeout(TimeUnit.SECONDS.toMillis(15));
-        config.setLeakDetectionThreshold(TimeUnit.MINUTES.toMillis(1)); // log message for possible leaked connection
+
+        // log message for possible leaked connection
+        config.setLeakDetectionThreshold(TimeUnit.MINUTES.toMillis(Configuration.getAsInt(name + "_LEAK_DETECTION_THRESHOLD_MINUTES", 1)));
 
         applyDbSpecificConfigurations(dbType, config);
 

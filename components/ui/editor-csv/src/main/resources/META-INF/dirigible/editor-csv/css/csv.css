@@ -1,0 +1,39 @@
+/**
+ * Copyright (c) 2010-2024 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v2.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ */
+:root {
+  --ag-background-color: var(--sapList_Background, #fff);
+  --ag-border-color: var(--sapGroup_TitleBorderColor, #d9d9d9);
+  --ag-input-focus-border-color: var(--sapField_Focus_BorderColor, #303030);
+  --ag-row-hover-color: var(--sapList_Hover_Background, #f2f2f2);
+  --ag-selected-row-background-color: var(--sapList_SelectionBackgroundColor, #fff7d9);
+  --ag-header-background-color: var(--sapList_HeaderBackground, #f7f7f7);
+  --ag-odd-row-background-color: var(--sapList_HeaderBackground, #f7f7f7);
+  --ag-control-panel-background-color: var(--sapList_HeaderBackground, #f7f7f7);
+  --ag-alpine-active-color: var(--sapList_Active_TextColor, #303030);
+  --ag-foreground-color: var(--sapTextColor, #303030);
+  --ag-checkbox-background-color: var(--sapField_Background, #fff);
+  --ag-checkbox-checked-color: var(--sapActiveColor, #bebebe);
+  --ag-row-border-color: var(--sapList_BorderColor, #dedede);
+}
+
+.ag-grid-editor>.ag-root-wrapper {
+  border: none !important;
+}
+
+.header-input {
+  display: none;
+  width: 100%;
+}
+
+.ag-cell-value:empty {
+  height: 100%;
+}

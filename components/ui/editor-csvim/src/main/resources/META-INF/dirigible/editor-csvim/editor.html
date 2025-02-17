@@ -1,0 +1,195 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="csvim-editor" ng-controller="CsvimController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/editor-csvim/configs/csvim-editor.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=editor-js,split-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?ids=view-css,split-css" />
+        <script type="text/javascript" src="/services/web/editor-csvim/js/editor.js"></script>
+    </head>
+
+    <body class="bk-vbox" shortcut="'ctrl+s'" shortcut-action="save">
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
+        <split direction="horizontal" ng-show="!state.error && !state.isBusy">
+            <split-pane size="20" min-size="240">
+                <div class="bk-vbox bk-fill-parent">
+                    <bk-toolbar compact="true">
+                        <bk-toolbar-spacer></bk-toolbar-spacer>
+                        <bk-button state="transparent" toggled="searchVisible" glyph="sap-icon--search" title="Toggle search" aria-label="Toggle search" ng-click="toggleSearch()"></bk-button>
+                        <bk-toolbar-separator></bk-toolbar-separator>
+                        <bk-button glyph="sap-icon--add" label="Add File" state="transparent" ng-click="addNew()"></bk-button>
+                        <bk-button glyph="sap-icon--save" label="Save" state="transparent" ng-click="save()" state="{{ forms.editor.$valid && isFileChanged ? '' : 'disabled'  }}"></bk-button>
+                    </bk-toolbar>
+                    <bk-toolbar ng-if="searchVisible">
+                        <bk-input type="search" placeholder="Search" ng-keyup="filterFiles($event)" ng-model="searchField.text" bk-focus="true"></bk-input>
+                    </bk-toolbar>
+                    <bk-list compact="true" bk-scrollbar>
+                        <bk-list-item interactive="true" selected="activeItemId === $index" ng-repeat="csv in csvimData.files track by $index" ng-click="fileSelected($index)" ng-show="csv.visible">
+                            <bk-list-title>{{csv.name}}</bk-list-title>
+                            <bk-button bk-list-button state="transparent" glyph="sap-icon--delete" aria-label="delete" ng-click="deleteFile($index)"></bk-button>
+                        </bk-list-item>
+                    </bk-list>
+                </div>
+            </split-pane>
+            <split-pane size="80">
+                <div class="bk-vbox bk-fill-parent" ng-if="!dataEmpty">
+                    <bk-toolbar compact="true">
+                        <bk-button glyph="sap-icon--action" label="Open" state="transparent" ng-click="openFile()"></bk-button>
+                        <bk-button glyph="sap-icon--edit" label="Edit" state="transparent" toggled="editEnabled" ng-click="setEditEnabled()"></bk-button>
+                        <bk-toolbar-spacer></bk-toolbar-spacer>
+                    </bk-toolbar>
+                    <bk-scrollbar class="bk-fill-parent">
+                        <div class="bk-restrict-width--sm bk-full-width" ng-show="!state.error && !state.isBusy">
+                            <bk-fieldset class="fd-margin--sm" ng-form="forms.editor">
+                                <bk-form-group name="csvimForm">
+                                    <bk-form-item horizontal="false" style="max-width: 400px">
+                                        <bk-form-label for="idTable" required="true" colon="true">Table</bk-form-label>
+                                        <bk-form-input-message state="{{ forms.editor['table'].$valid ? '' : 'error' }}" message="::tableError">
+                                            <bk-input id="idTable" name="table" ng-trim="false" ng-attr-readonly="{{ !editEnabled || undefined }}" state="{{ forms.editor['table'].$valid ? '' : 'error' }}" ng-required="true"
+                                                ng-model="csvimData.files[activeItemId].table" ng-change="fileChanged()" input-rules="{ patterns: ['^([A-Za-z0-9_$.-](::)?)+$'] }" type="text"></bk-input>
+                                        </bk-form-input-message>
+                                    </bk-form-item>
+                                    <bk-form-item horizontal="false">
+                                        <bk-form-label for="idSchema" required="true" colon="true">Schema</bk-form-label>
+                                        <bk-form-input-message state="{{ forms.editor['schema'].$valid ? '' : 'error' }}" message="::schemaError">
+                                            <bk-input id="idSchema" name="schema" ng-trim="false" ng-attr-readonly="{{ !editEnabled || undefined }}" state="{{ forms.editor['schema'].$valid ? '' : 'error' }}" ng-required="true"
+                                                ng-model="csvimData.files[activeItemId].schema" ng-change="fileChanged()" input-rules="{ patterns: ['^[A-Za-z0-9_$.-]+$'] }" type="text"></bk-input>
+                                        </bk-form-input-message>
+                                    </bk-form-item>
+                                    <bk-form-item horizontal="false">
+                                        <bk-form-label for="idSequence" colon="true">Sequence</bk-form-label>
+                                        <bk-form-input-message state="{{ forms.editor['sequence'].$valid ? '' : 'error' }}" message="::sequenceError">
+                                            <bk-input id="idSequence" name="sequence" ng-trim="false" ng-attr-readonly="{{ !editEnabled || undefined }}" state="{{ forms.editor['sequence'].$valid ? '' : 'error' }}"
+                                                ng-model="csvimData.files[activeItemId].sequence" ng-change="fileChanged()" input-rules="{ patterns: ['^[A-Za-z0-9_$.-]+$'] }" type="text"></bk-input>
+                                        </bk-form-input-message>
+                                    </bk-form-item>
+                                    <bk-form-item horizontal="false">
+                                        <bk-form-label for="idFilepath" required="true" colon="true">File Path</bk-form-label>
+                                        <bk-form-input-message state="{{ forms.editor['filepath'].$valid ? '' : 'error' }}" message="fileExists ? filepathError[0] : filepathError[1]">
+                                            <bk-input id="idFilepath" name="filepath" ng-trim="false" ng-attr-readonly="{{ !editEnabled || undefined }}" ng-required="true"
+                                                state="{{ forms.editor['filepath'].$valid ? fileExists ? '': 'warning' : 'error' }}" ng-model="csvimData.files[activeItemId].file" ng-change="fileChanged()"
+                                                input-rules="{ patterns: ['^[a-zA-Z0-9_. /$-]+$'] }" type="text"></bk-input>
+                                        </bk-form-input-message>
+                                    </bk-form-item>
+                                    <bk-form-item horizontal="false">
+                                        <bk-form-label for="idVersion" colon="true">Version</bk-form-label>
+                                        <bk-form-input-message state="{{ forms.editor['version'].$valid ? '' : 'error' }}" message="::versionError">
+                                            <bk-input id="idVersion" name="version" ng-trim="false" ng-attr-readonly="{{ !editEnabled || undefined }}" state="{{ forms.editor['version'].$valid ? '' : 'error' }}"
+                                                ng-model="csvimData.files[activeItemId].version" ng-change="fileChanged()" input-rules="{ patterns: ['^[A-Za-z0-9_$.-]+$'] }" type="text"></bk-input>
+                                        </bk-form-input-message>
+                                    </bk-form-item>
+                                    <bk-form-item>
+                                        <bk-checkbox id="idHeader" compact="false" ng-change="fileChanged()" ng-model="csvimData.files[activeItemId].header" ng-disabled="!editEnabled"></bk-checkbox>
+                                        <bk-checkbox-label for="idHeader">Header</bk-checkbox-label>
+                                    </bk-form-item>
+                                    <bk-form-item>
+                                        <bk-checkbox id="idUseHeaderNames" compact="false" ng-change="fileChanged()" ng-model="csvimData.files[activeItemId].useHeaderNames" ng-disabled="!editEnabled"></bk-checkbox>
+                                        <bk-checkbox-label for="idUseHeaderNames">Use header names</bk-checkbox-label>
+                                    </bk-form-item>
+                                    <bk-form-item>
+                                        <bk-checkbox id="idDistinguishEmptyFromNull" compact="false" ng-change="fileChanged()" ng-model="csvimData.files[activeItemId].distinguishEmptyFromNull" ng-disabled="!editEnabled"></bk-checkbox>
+                                        <bk-checkbox-label for="idDistinguishEmptyFromNull">Distinguish empty from null</bk-checkbox-label>
+                                    </bk-form-item>
+                                    <div class="bk-hbox">
+                                        <div class="bk-vbox bk-full-width fd-margin-end--tiny">
+                                            <bk-form-label required="true" colon="true">Delimiter</bk-form-label>
+                                            <bk-select placeholder="{{csvimData.files[activeItemId].delimField}}" ng-required="true" is-disabled="!editEnabled" is-readonly="!editEnabled"
+                                                state="{{ isDelimiterSupported(csvimData.files[activeItemId].delimField) ? '' : 'warning' }}" ng-change="fileChanged()" ng-model="csvimData.files[activeItemId].delimField">
+                                                <bk-option text="{{::option}}" value="option" ng-repeat="option in delimiterList track by $index"></bk-option>
+                                            </bk-select>
+                                            <span class="fd-margin-top--tiny" ng-hide="isDelimiterSupported(csvimData.files[activeItemId].delimField)" bk-object-status status="critical" glyph="sap-icon--message-warning"
+                                                text="This delimiter is not supported!"></span>
+                                        </div>
+                                        <div class="bk-vbox bk-full-width fd-margin-begin--tiny">
+                                            <bk-form-label required="true" colon="true">Quote character</bk-form-label>
+                                            <bk-select placeholder="{{ csvimData.files[activeItemId].delimEnclosing }}" ng-required="true" is-disabled="!editEnabled"
+                                                state="{{ isQuoteCharSupported(csvimData.files[activeItemId].delimEnclosing) ? '' : 'warning' }}" ng-change="fileChanged()" is-readonly="!editEnabled"
+                                                ng-model="csvimData.files[activeItemId].delimEnclosing">
+                                                <bk-option text="{{::option}}" value="option" ng-repeat="option in quoteCharList track by $index"></bk-option>
+                                            </bk-select>
+                                            <span class="fd-margin-top--tiny" ng-hide="isQuoteCharSupported(csvimData.files[activeItemId].delimEnclosing)" bk-object-status status="critical" glyph="sap-icon--message-warning"
+                                                text="This quote character is not supported!"></span>
+                                        </div>
+                                    </div>
+                                    <!-- 
+                                    <bk-form-item>
+                                        <bk-toolbar class="bk-padding--none fd-margin-top-bottom--tiny" no-bottom-border="true" type="transparent">
+                                            <bk-toolbar-title>Keys:</bk-toolbar-title>
+                                            <bk-toolbar-spacer></bk-toolbar-spacer>
+                                            <bk-button compact="true" label="Add Column Key" ng-click="addKeyColumn()" state="{{ editEnabled ? '' : 'disabled' }}"></bk-button>
+                                        </bk-toolbar>
+                                        <table bk-table display-mode="compact">
+                                            <thead bk-table-header>
+                                                <tr bk-table-row>
+                                                    <th bk-table-header-cell>Column</th>
+                                                    <th bk-table-header-cell>Values</th>
+                                                    <th ng-if="editEnabled" bk-table-header-cell></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody bk-table-body>
+                                                <tr ng-if="csvimData[activeItemId].keys.length === 0" bk-table-row>
+                                                    <td bk-table-cell no-data="true">There are no keys</td>
+                                                </tr>
+                                                <tr bk-table-row hoverable="false" ng-repeat="key in csvimData[activeItemId].keys track by $index">
+                                                    <td bk-table-cell>
+                                                        <bk-form-input-message-group dg-inactive="{{ forms.editor['c'+$index].$valid ? 'true' : 'false' }}">
+                                                            <bk-input index="{{$index}}" name="c{{$index}}" compact="true" type="text" in-group="true" compact="true" state="{{ forms.editor['c'+$index].$valid ? '' : 'error' }}"
+                                                                ng-model="csvimData[activeItemId].keys[$index].column" ng-change="fileChanged()" unique-field="{ regex: '^[A-Za-z0-9_$.-]+$', checkUniqueColumn: checkUniqueColumn }"
+                                                                ng-attr-readonly="{{ !editEnabled || undefined }}">
+                                                            </bk-input>
+                                                            <bk-form-message dg-type="error">{{columnError}}</bk-form-message>
+                                                        </bk-form-input-message-group>
+                                                    </td>
+                                                    <td bk-table-cell>
+                                                        <bk-input-group is-readonly="!editEnabled" compact="true" ng-init="pindex = $parent.$index" state="{{ forms.editor['v'+pindex+$index].$valid ? '' : 'error' }}"
+                                                            ng-repeat="val in csvimData[activeItemId].keys[$index].values track by $index">
+                                                            <bk-input name="v{{pindex}}{{$index}}" kindex="{{pindex}}" vindex="{{$index}}" type="text" in-group="true" ng-trim="false"
+                                                                unique-field="{ regex: '^[A-Za-z0-9_$.-]+$', checkUniqueValue: checkUniqueValue }" ng-model="csvimData[activeItemId].keys[pindex].values[$index]" ng-changed="fileChanged()"
+                                                                ng-attr-readonly="{{ !editEnabled || undefined }}">
+                                                            </bk-input>
+                                                            <bk-input-group-addon ng-if="editEnabled" has-button="true">
+                                                                <bk-button in-group="true" glyph="sap-icon--delete" ng-click="removeValueFromKey(pindex, $index)" title="Delete Value" aria-label="delete value"></bk-button>
+                                                            </bk-input-group-addon>
+                                                        </bk-input-group>
+                                                        <bk-button class="bk-full-width fd-margin-top-bottom--tiny" ng-if="editEnabled" compact="true" glyph="sap-icon--add" label="Add Value" ng-click="addValueToKey(key.column)"></bk-button>
+                                                    </td>
+                                                    <td ng-if="editEnabled" bk-table-cell fit-content="true">
+                                                        <bk-button compact="true" glyph="sap-icon--delete" state="transparent" aria-label="Delete column key" ng-click="removeKeyColumn($index)" title="Delete Column Key"></bk-button>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </bk-form-item> -->
+
+                                </bk-form-group>
+                            </bk-fieldset>
+                        </div>
+                    </bk-scrollbar>
+                </div>
+            </split-pane>
+        </split>
+        <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+            <bk-message-page-title>Editor encounterd an error!</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+        </bk-message-page>
+        <theme></theme>
+    </body>
+
+</html>

@@ -16,5 +16,6 @@
         {
             "guid": "template-application-odata"
         }
-    ]
+    ],
+    "actions": []
 }

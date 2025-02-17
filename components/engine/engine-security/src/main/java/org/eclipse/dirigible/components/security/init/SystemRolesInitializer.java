@@ -74,9 +74,8 @@ class SystemRolesInitializer implements ApplicationListener<ApplicationReadyEven
         role.setType(Role.ARTEFACT_TYPE);
         role.setName(roleName);
         role.setDescription("System role");
-        role.setKey("n/a");
         role.setPhase(ArtefactPhase.CREATE);
-        role.setLocation("SYSTEM_n/a");
+        role.setLocation("SYSTEM_DEFAULT");
 
         role.updateKey();
 

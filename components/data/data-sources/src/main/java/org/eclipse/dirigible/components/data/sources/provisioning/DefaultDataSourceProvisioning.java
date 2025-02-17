@@ -161,7 +161,7 @@ class DefaultDataSourceProvisioning implements TenantProvisioningStep {
         DataSource defaultDS = dataSourcesManager.getDataSourceDefinition(defaultDataSourceName);
 
         DataSource datasource = new DataSource();
-        datasource.setLocation("TENANT_n/a");
+        datasource.setLocation("TENANT_DEFAULT");
         datasource.setType(DataSource.ARTEFACT_TYPE);
         datasource.setCreatedBy("TENANT_PROVISIONING_JOB");
         datasource.setLifecycle(ArtefactLifecycle.CREATED);

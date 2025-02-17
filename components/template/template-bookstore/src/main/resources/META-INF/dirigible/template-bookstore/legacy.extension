@@ -1,0 +1,5 @@
+{
+    "extensionPoint": "ide-template",
+    "module": "template-bookstore/template.js",
+    "description": "Bookstore Template"
+}

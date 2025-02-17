@@ -110,6 +110,16 @@
 			<artifactId>sortablejs</artifactId>
 			<version>${sortablejs.version}</version>
 		</dependency>
+		<dependency>
+			<groupId>org.webjars.npm</groupId>
+			<artifactId>ag-grid-community__all-modules</artifactId>
+			<version>${ag-grid.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.webjars.npm</groupId>
+			<artifactId>papaparse</artifactId>
+			<version>${papaparse.version}</version>
+		</dependency>
     </dependencies>
     
     <build>

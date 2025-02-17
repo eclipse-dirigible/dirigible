@@ -9,12 +9,12 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.delegate;
 
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.Tracer;
-import io.opentelemetry.context.Scope;
-import jakarta.annotation.Nullable;
-import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
-import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ExecutionData;
+import static org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActionData.Action.SKIP;
+import static org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService.DIRIGIBLE_BPM_INTERNAL_SKIP_STEP;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Pattern;
 import org.eclipse.dirigible.components.open.telemetry.OpenTelemetryProvider;
 import org.eclipse.dirigible.graalium.core.DirigibleJavascriptCodeRunner;
 import org.eclipse.dirigible.repository.api.RepositoryPath;
@@ -24,16 +24,11 @@ import org.flowable.engine.delegate.JavaDelegate;
 import org.flowable.engine.impl.el.FixedValue;
 import org.graalvm.polyglot.Source;
 import org.graalvm.polyglot.Value;
-import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Component;
-
-import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.regex.Pattern;
-
-import static org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActionData.Action.SKIP;
-import static org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService.DIRIGIBLE_BPM_INTERNAL_SKIP_STEP;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Scope;
+import jakarta.annotation.Nullable;
 
 /**
  * The Class DirigibleCallDelegate.
@@ -250,9 +245,7 @@ public class DirigibleCallDelegate implements JavaDelegate {
         }
 
         Map<Object, Object> context = new HashMap<>();
-        ExecutionData executionData = new ExecutionData();
-        BeanUtils.copyProperties(execution, executionData);
-        context.put("execution", GsonHelper.toJson(executionData));
+        context.put("execution", execution);
         if (type == null) {
             type = new FixedValue("javascript");
         }

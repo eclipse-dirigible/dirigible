@@ -1,0 +1,60 @@
+<!--
+
+    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="csv-editor" ng-controller="CsvController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/editor-csv/configs/csv-editor.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=editor-js"></script>
+        <script type="text/javascript" src="/webjars/papaparse/5.3.2/papaparse.min.js"></script>
+        <script type="text/javascript" src="/webjars/ag-grid-community__all-modules/27.1.0/dist/ag-grid-community.min.noStyle.js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <link type="text/css" rel="stylesheet" href="/webjars/ag-grid-community__all-modules/27.1.0/dist/styles/ag-grid.min.css" />
+        <link type="text/css" rel="stylesheet" href="/webjars/ag-grid-community__all-modules/27.1.0/dist/styles/ag-theme-alpine.min.css" />
+        <link type="text/css" rel="stylesheet" href="css/csv.css" />
+        <script type="text/javascript" src="/services/web/editor-csv/js/editor.js"></script>
+    </head>
+
+    <body class="bk-vbox" ng-mousedown="handleClick($event)" ng-on-contextmenu="showContextMenu($event)" shortcut="'ctrl+s'" shortcut-action="save">
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
+        <bk-toolbar ng-show="!state.error && !state.isBusy">
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-input type="search" compact="true" placeholder="Search..." ng-model="search.text" ng-change="searchCsv()" style="max-width:30%;"></bk-input>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button glyph="sap-icon--save" label="Save" state="transparent" ng-click="save()"></bk-button>
+            <bk-button glyph="sap-icon--download" label="Export" state="transparent" ng-click="downloadCsv()"></bk-button>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-toolbar-overflow>
+                <bk-button glyph="sap-icon--add" is-overflow="true" state="transparent" ng-click="addRow()" label="Add row"></bk-button>
+                <bk-toolbar-separator></bk-toolbar-separator>
+                <bk-checkbox id="csvHeader" ng-model="papaConfig.header" ng-change="hasHeader()"></bk-checkbox>
+                <bk-checkbox-label for="csvHeader">Has header</bk-checkbox-label>
+            </bk-toolbar-overflow>
+        </bk-toolbar>
+        <div class="bk-fill-parent ag-grid-editor ag-theme-alpine" ag-grid="gridOptions" ng-show="!state.error && !state.isBusy"></div>
+        <div class="bk-full-width bk-border--top" ng-show="!state.error && !state.isBusy">
+            <p class="fd-text fd-margin--tiny">Data rows: {{rowsCount}}</p>
+        </div>
+        <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+            <bk-message-page-title>Editor encounterd an error!</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+        </bk-message-page>
+        <theme></theme>
+    </body>
+
+</html>

@@ -85,4 +85,19 @@ public class DataImportService {
         importData(datasource, schema, table, true, true, ",", "\"", null, false, is);
     }
 
+    /**
+     * Process SQL.
+     *
+     * @param datasource the datasource
+     * @param schema the schema
+     * @param is the is
+     */
+    public void processSQL(String datasource, String schema, InputStream is) throws Exception {
+        DirigibleDataSource dataSource = datasourceManager.getDataSource(datasource);
+        try (Connection connection = dataSource.getConnection()) {
+            ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
+            dialect.processSQL(connection, schema, is);
+        }
+    }
+
 }

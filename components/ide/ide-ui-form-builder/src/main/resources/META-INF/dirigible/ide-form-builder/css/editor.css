@@ -14,6 +14,7 @@ div.fb-main-container {
     border-radius: .188rem;
     outline: .063rem dashed var(--sapTextColor, #e5e5e5);
     padding-bottom: 2rem;
+    margin: 0.5rem;
 }
 
 div.fb-main-container[disabled] {
@@ -105,4 +106,9 @@ div.dg-vbox[data-type="container"]:empty {
 
 div[data-type="container"]>div.fb-control-wrapper {
     padding: .25rem;
+}
+
+.fb-margin-block--none {
+    margin-block-end: 0 !important;
+    margin-block-start: 0 !important;
 }

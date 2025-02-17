@@ -82,7 +82,7 @@ public class DataImportEndpoint {
             if (logger.isErrorEnabled()) {
                 logger.error(e.getMessage(), e);
             }
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Project upload failed: " + e.getMessage());
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Data upload failed: " + e.getMessage());
         }
     }
 

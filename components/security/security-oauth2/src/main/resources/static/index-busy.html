@@ -12,88 +12,89 @@
 
 -->
 <!DOCTYPE HTML>
-<!--
-  ~ Copyright (c) 2010-2021 SAP and others.
-  ~ All rights reserved. This program and the accompanying materials
-  ~ are made available under the terms of the Eclipse Public License v2.0
-  ~ which accompanies this distribution, and is available at
-  ~ http://www.eclipse.org/legal/epl-v20.html
-  ~ Contributors:
-  ~ SAP - initial API and implementation
-  -->
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="busyPage" ng-controller="BusyController">
 
     <head>
-        <meta charset="utf-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link rel="icon" href="/services/web/resources/images/favicon.ico" />
-        <title>Loading ...</title>
-        <theme></theme>
-        <script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=application-view-js">
-        </script>
-        <link type="text/css" rel="stylesheet"
-            href="/services/js/resources-core/services/loader.js?id=application-view-css" />
+        <link rel="icon" href="data:;base64,iVBORw0KGgo=" brand-icon />
+        <title config-title></title>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <style>
+            [data-status='positive'] {
+                color: var(--sapPositiveTextColor) !important;
+            }
+
+            [data-status='negative'] {
+                color: var(--sapNegativeTextColor) !important;
+            }
+
+        </style>
     </head>
 
-    <body class="fd-scrollbar" dg-contextmenu="contextMenuContent">
-
-        <div style="padding-left: 10rem; padding-right: 10rem; margin-top: 3rem;">
-            <div class="fd-panel fd-panel--fixed">
-                <div class="fd-panel__header">
-                    <h4 class="fd-panel__title">Preparing the Instance</h4>
-                </div>
-            </div>
-            <fd-list>
-                <fd-list-item ng-repeat="job in jobs">
-                    <span fd-object-status status="{{job.status}}" glyph="{{job.statusIcon}}"
-                        text="{{job.name}}"></span>
-                </fd-list-item>
-            </fd-list>
-            <fd-busy-indicator style="margin-top: 3rem;" dg-size="l"></fd-busy-indicator>
+    <body class="bk-vbox bk-center--vertical" bk-scrollbar>
+        <div class="bk-vbox bk-box--gap-xl bk-restrict-width--sm bk-full-width bk-padding-top-bottom--md" ng-hide="state.error">
+            <h4 bk-title wrap="true" header-size="4" aria-label="page title" style="text-align: center;">Preparing the Instance</h4>
+            <bk-list ng-if="jobs.length" class="bk-list-border">
+                <bk-list-item ng-repeat="job in jobs track by $index">
+                    <bk-loader ng-if="job.status === 'loading'"></bk-loader>
+                    <bk-list-icon ng-if="job.status !== 'loading'" data-status="{{job.status}}" glyph="{{job.icon}}"></bk-list-icon>
+                    <bk-list-title>{{::job.name}}</bk-list-title>
+                </bk-list-item>
+            </bk-list>
+            <bk-busy-indicator-extended ng-if="!jobs.length" class="bk-fill-parent" size="l">Loading job list...</bk-busy-indicator-extended>
         </div>
-
+        <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+            <bk-message-page-title>Encounterd an error!</bk-message-page-title>
+            <bk-message-page-subtitle>Error retreiving the health status</bk-message-page-subtitle>
+        </bk-message-page>
         <script>
-            let busyPage = angular.module('busyPage', ['ideUI', 'ideView']);
-
-			busyPage.controller('BusyController', ['$scope', '$http', 'theming', function ($scope, $http, theming) {
-
-                setInterval(function() {
-
+            const viewData = {
+                label: 'Loading...',
+                autoFocusTab: false
+            };
+            const busyPage = angular.module('busyPage', ['blimpKit', 'platformView']);
+            busyPage.controller('BusyController', ($scope, $http) => {
+                $scope.state = {
+                    error: false,
+                };
+                const interval = setInterval(() => {
                     $http({
                         method: 'GET',
                         url: '/services/core/healthcheck'
-                    }).then(function(healthStatus){
+                    }).then((healthStatus) => {
                         if (healthStatus.data.status === "Ready") {
-                            window.location='/home';
+                            clearInterval(interval);
+                            window.location = '/home';
                         }
                         let jobs = [];
                         for (const [key, value] of Object.entries(healthStatus.data.jobs.statuses)) {
                             let job = new Object();
                             job.name = key;
-                            switch(value) {
+                            switch (value) {
                                 case "Succeeded":
                                     job.status = "positive";
-                                    job.statusIcon = "sap-icon--message-success"
+                                    job.icon = "sap-icon--message-success"
                                     break;
                                 case "Failed":
                                     job.status = "negative";
-                                    job.statusIcon = "sap-icon--message-error";
+                                    job.icon = "sap-icon--message-error";
                                 default:
-                                    job.status = "informative";
-                                    job.statusIcon = "sap-icon--message-information"
+                                    job.status = "loading";
                                     break;
                             }
                             jobs.push(job);
                         }
                         $scope.jobs = jobs.sort((x, y) => x.name > y.name ? 1 : -1);
-                    }), (function(e){
+                    }, (e) => {
                         console.error("Error retreiving the health status", e);
+                        $scope.$evalAsync(() => { $scope.state.error = true });
                     });
-
                 }, 1000);
-			}]);
+            });
         </script>
+        <theme></theme>
     </body>
 
 </html>

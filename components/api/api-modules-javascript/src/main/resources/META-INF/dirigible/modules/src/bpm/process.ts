@@ -38,8 +38,7 @@ export class Process {
 	}
 
 	public static getExecutionContext() {
-		const data = JSON.parse(__context.get('execution'));
-		return new ExecutionContext(data);
+		return new ExecutionContext();
 	}
 }
 
@@ -48,200 +47,555 @@ export class Process {
  */
 class ExecutionContext {
 
-	private data: any;
+	private execution: any;
 
-	constructor(data: any) {
-		this.data = data;
+	constructor() {
+		this.execution = __context.get('execution');
 	}
 
+	/**
+	 * Unique id of this path of execution that can be used as a handle to provide external signals back into the engine after wait states.
+	 */
 	public getId(): string {
-		return this.data.id;
+		return this.execution.getId();
 	}
 
-	public getRevision(): number {
-		return this.data.revision;
+	/** Reference to the overall process instance */
+	public getProcessInstanceId(): string {
+		return this.execution.getProcessInstanceId();
 	}
 
-	public isInserted(): boolean {
-		return this.data.isInserted;
+	/**
+	 * The 'root' process instance. When using call activity for example, the processInstance set will not always be the root. This method returns the topmost process instance.
+	 */
+	public getRootProcessInstanceId(): string {
+		return this.execution.getRootProcessInstanceId();
 	}
 
-	public isUpdated(): boolean {
-		return this.data.isUpdated;
+	/**
+	 * Will contain the event name in case this execution is passed in for an {@link ExecutionListener}.
+	 */
+	public getEventName(): string {
+		return this.execution.getEventName();
 	}
 
-	public isDeleted(): boolean {
-		return this.data.isDeleted;
+	/**
+	 * Sets the current event (typically when execution an {@link ExecutionListener}).
+	 */
+	public setEventName(eventName: string): void {
+		this.execution.setEventName(eventName);
 	}
 
-	public getTenantId(): string | undefined {
-		return this.data.tenantId ?? undefined;
+	/**
+	 * The business key for the process instance this execution is associated with.
+	 */
+	public getProcessInstanceBusinessKey(): string {
+		return this.execution.getProcessInstanceBusinessKey();
 	}
 
-	public getName(): string | undefined {
-		return this.data.name ?? undefined;
+	/**
+	 * The business status for the process instance this execution is associated with.
+	 */
+	public getProcessInstanceBusinessStatus(): string {
+		return this.execution.getProcessInstanceBusinessStatus();
 	}
 
-	public getDescription(): string | undefined {
-		return this.data.description ?? undefined;
+	/**
+	 * The process definition key for the process instance this execution is associated with.
+	 */
+	public getProcessDefinitionId(): string {
+		return this.execution.getProcessDefinitionId();
 	}
 
-	public getLocalizedName(): string | undefined {
-		return this.data.localizedName ?? undefined;
+	/**
+	 * If this execution runs in the context of a case and stage, this method returns it's closest parent stage instance id (the stage plan item instance id to be
+	 * precise).
+	 *
+	 * @return the stage instance id this execution belongs to or null, if this execution is not part of a case at all or is not a child element of a stage
+	 */
+	public getPropagatedStageInstanceId(): string {
+		return this.execution.getPropagatedStageInstanceId();
 	}
 
-	public getLocalizedDescription(): string | undefined {
-		return this.data.localizedDescription ?? undefined;
+	/**
+	 * Gets the id of the parent of this execution. If null, the execution represents a process-instance.
+	 */
+	public getParentId(): string {
+		return this.execution.getParentId();
 	}
 
-	public getLockTime(): Date | undefined {
-		return this.data.lockTime ?? undefined;
+	/**
+	 * Gets the id of the calling execution. If not null, the execution is part of a subprocess.
+	 */
+	public getSuperExecutionId(): string {
+		return this.execution.getSuperExecutionId();
 	}
 
+	/**
+	 * Gets the id of the current activity.
+	 */
+	public getCurrentActivityId(): string {
+		return this.execution.getCurrentActivityId();
+	}
+
+	/**
+	 * Returns the tenant id, if any is set before on the process definition or process instance.
+	 */
+	public getTenantId(): string {
+		return this.execution.getTenantId();
+	}
+
+	/**
+	 * The BPMN element where the execution currently is at.
+	 */
+	public getCurrentFlowElement(): any {
+		return this.execution.getCurrentFlowElement();
+	}
+
+	/**
+	 * Change the current BPMN element the execution is at.
+	 */
+	public setCurrentFlowElement(flowElement: any): void {
+		this.execution.setCurrentFlowElement(flowElement);
+	}
+
+	/**
+	 * Returns the {@link FlowableListener} instance matching an {@link ExecutionListener} if currently an execution listener is being execution. Returns null otherwise.
+	 */
+	public getCurrentFlowableListener(): any {
+		return this.execution.getCurrentFlowableListener();
+	}
+
+	/**
+	 * Called when an {@link ExecutionListener} is being executed.
+	 */
+	public setCurrentFlowableListener(currentListener: any): void {
+		this.execution.setCurrentFlowableListener(currentListener);
+	}
+
+	/**
+	 * Create a snapshot read only delegate execution of this delegate execution.
+	 *
+	 * @return a {@link ReadOnlyDelegateExecution}
+	 */
+	public snapshotReadOnly(): any {
+		return this.execution.snapshotReadOnly();
+	}
+
+	/**
+	 * returns the parent of this execution, or null if there no parent.
+	 */
+	public getParent(): any {
+		return this.execution.getParent();
+	}
+
+	/**
+	 * returns the list of execution of which this execution the parent of.
+	 */
+	public getExecutions(): any[] {
+		return this.execution.getExecutions();
+	}
+
+	/**
+	 * makes this execution active or inactive.
+	 */
+	public setActive(isActive: boolean): void {
+		this.execution.setActive(isActive);
+	}
+
+	/**
+	 * returns whether this execution is currently active.
+	 */
 	public isActive(): boolean {
-		return this.data.isActive;
+		return this.execution.isActive();
 	}
 
-	public isScope(): boolean {
-		return this.data.isScope;
-	}
-
-	public isConcurrent(): boolean {
-		return this.data.isConcurrent;
-	}
-
+	/**
+	 * returns whether this execution has ended or not.
+	 */
 	public isEnded(): boolean {
-		return this.data.isEnded;
+		return this.execution.isEnded();
 	}
 
-	public isEventScope(): boolean {
-		return this.data.isEventScope;
+	/**
+	 * changes the concurrent indicator on this execution.
+	 */
+	public setConcurrent(isConcurrent: boolean): void {
+		this.execution.setConcurrent(isConcurrent);
 	}
 
+	/**
+	 * returns whether this execution is concurrent or not.
+	 */
+	public isConcurrent(): boolean {
+		return this.execution.isConcurrent();
+	}
+
+	/**
+	 * returns whether this execution is a process instance or not.
+	 */
+	public isProcessInstanceType(): boolean {
+		return this.execution.isProcessInstanceType();
+	}
+
+	/**
+	 * Inactivates this execution. This is useful for example in a join: the execution still exists, but it is not longer active.
+	 */
+	public inactivate(): void {
+		this.execution.inactivate();
+	}
+
+	/**
+	 * Returns whether this execution is a scope.
+	 */
+	public isScope(): boolean {
+		return this.execution.isScope();
+	}
+
+	/**
+	 * Changes whether this execution is a scope or not.
+	 */
+	public setScope(isScope: boolean): void {
+		this.execution.setScope(isScope);
+	}
+
+	/**
+	 * Returns whether this execution is the root of a multi instance execution.
+	 */
 	public isMultiInstanceRoot(): boolean {
-		return this.data.isMultiInstanceRoot;
+		return this.execution.isMultiInstanceRoot();
 	}
 
-	public isCountEnabled(): boolean {
-		return this.data.isCountEnabled;
+	/**
+	 * Changes whether this execution is a multi instance root or not.
+	 * 
+	 * @param isMultiInstanceRoot
+	 */
+	public setMultiInstanceRoot(isMultiInstanceRoot: boolean): void {
+		this.execution.setMultiInstanceRoot(isMultiInstanceRoot);
 	}
 
-	public getEventName(): string | undefined {
-		return this.data.eventName ?? undefined;
+	/**
+	 * Returns all variables. This will include all variables of parent scopes too.
+	 */
+	public getVariables(): Map<string, any> {
+		const variables = this.execution.getVariables();
+		for (const [key, value] of variables) {
+			variables.set(key, this.parseValue(value));
+		}
+		return variables;
 	}
 
-	public getDeleteReason(): string | undefined {
-		return this.data.deleteReason ?? undefined;
+	/**
+	 * Returns all variables, as instances of the {@link VariableInstance} interface, which gives more information than only the value (type, execution id, etc.)
+	 */
+	public getVariableInstances(): Map<string, any> {
+		return this.execution.getVariableInstances();
 	}
 
-	public getSuspensionState(): number {
-		return this.data.suspensionState;
+	/**
+	 * Returns the variable local to this scope only. So, in contrary to {@link #getVariables()}, the variables from the parent scope won't be returned.
+	 */
+	public getVariablesLocal(): Map<string, any> {
+		const variablesLocal = this.execution.getVariablesLocal();
+		for (const [key, value] of variablesLocal) {
+			variablesLocal.set(key, this.parseValue(value));
+		}
+		return variablesLocal;
 	}
 
-	public getStartActivityId(): string | undefined {
-		return this.data.startActivityId ?? undefined;
+	/**
+	 * Returns the variables local to this scope as instances of the {@link VariableInstance} interface, which provided additional information about the variable.
+	 */
+	public getVariableInstancesLocal(): Map<string, any> {
+		return this.execution.getVariableInstancesLocal();
 	}
 
-	public getStartUserId(): string | undefined {
-		return this.data.startUserId ?? undefined;
+	/**
+	 * Returns the variable value for one specific variable. Will look in parent scopes when the variable does not exist on this particular scope.
+	 */
+	public getVariable(variableName: string): any {
+		return this.parseValue(this.execution.getVariable(variableName));
 	}
 
-	public getStartTime(): Date | undefined {
-		return this.data.startTime ?? undefined;
+	/**
+	 * Similar to {@link #getVariable(String)}, but returns a {@link VariableInstance} instance, which contains more information than just the value.
+	 */
+	public getVariableInstance(variableName: string): any {
+		return this.execution.getVariableInstance(variableName);
 	}
 
-	public getEventSubscriptionCount(): number {
-		return this.data.eventSubscriptionCount;
+	/**
+	 * Returns the value for the specific variable and only checks this scope and not any parent scope.
+	 */
+	public getVariableLocal(variableName: string): any {
+		return this.parseValue(this.execution.getVariableLocal(variableName));
 	}
 
-	public getTaskCount(): number {
-		return this.data.taskCount;
+	/**
+	 * Similar to {@link #getVariableLocal(String)}, but returns an instance of {@link VariableInstance}, which has some additional information beyond the value.
+	 */
+	public getVariableInstanceLocal(variableName: string): any {
+		return this.execution.getVariableInstanceLocal(variableName);
 	}
 
-	public getJobCount(): number {
-		return this.data.jobCount;
+	/**
+	 * Returns all the names of the variables for this scope and all parent scopes.
+	 */
+	public getVariableNames(): Set<string> {
+		const variableNames = new Set<string>();
+		for (const next of this.execution.getVariableNames().toArray()) {
+			variableNames.add(next);
+		}
+		return variableNames;
 	}
 
-	public getTimerJobCount(): number {
-		return this.data.timerJobCount;
+	/**
+	 * Returns all the names of the variables for this scope (no parent scopes).
+	 */
+	public getVariableNamesLocal(): Set<string> {
+		const variableNamesLocal = new Set<string>();
+		for (const next of this.execution.getVariableNamesLocal().toArray()) {
+			variableNamesLocal.add(next);
+		}
+		return variableNamesLocal;
 	}
 
-	public getSuspendedJobCount(): number {
-		return this.data.suspendedJobCount;
+	/**
+	 * Sets the variable with the provided name to the provided value. In the case when variable name is an expression
+	 * which is resolved by expression manager, the value is set in the object resolved from the expression.
+	 * 
+	 * <p>
+	 * A variable is set according to the following algorithm:
+	 *
+	 * <ul>
+	 * <li>If variable name is an expression, resolve expression and set the value on the resolved object.</li>
+	 * <li>If this scope already contains a variable by the provided name as a <strong>local</strong> variable, its value is overwritten to the provided value.</li>
+	 * <li>If this scope does <strong>not</strong> contain a variable by the provided name as a local variable, the variable is set to this scope's parent scope, if there is one. If there is no parent
+	 * scope (meaning this scope is the root scope of the hierarchy it belongs to), this scope is used. This applies recursively up the parent scope chain until, if no scope contains a local variable
+	 * by the provided name, ultimately the root scope is reached and the variable value is set on that scope.</li>
+	 * </ul>
+	 * In practice for most cases, this algorithm will set variables to the scope of the execution at the process instance’s root level, if there is no execution-local variable by the provided name.
+	 * 
+	 * @param variableName
+	 *            the name of the variable to be set
+	 * @param value
+	 *            the value of the variable to be set
+	 */
+	public setVariable(variableName: string, value: any): void {
+		this.execution.setVariable(variableName, this.stringifyValue(value));
 	}
 
-	public getDeadLetterJobCount(): number {
-		return this.data.deadLetterJobCount;
+	/**
+	 * Similar to {@link #setVariable(String, Object)}, but the variable is set to this scope specifically. Variable name
+	 is handled as a variable name string without resolving an expression.
+	 */
+	public setVariableLocal(variableName: string, value: any): any {
+		return this.execution.setVariableLocal(variableName, this.stringifyValue(value));
 	}
 
-	public getVariableCount(): number {
-		return this.data.variableCount;
+	/**
+	 * Sets the provided variables to the variable scope.
+	 * 
+	 * <p>
+	 * Variables are set according algorithm for {@link #setVariable(String, Object)}, applied separately to each variable.
+	 * 
+	 * @param variables
+	 *            a map of keys and values for the variables to be set
+	 */
+	public setVariables(variables: Map<string, any>): void {
+		for (const [key, value] of variables) {
+			variables.set(key, this.stringifyValue(value));
+		}
+		this.execution.setVariables(variables);
 	}
 
-	public getIdentityLinkCount(): number {
-		return this.data.identityLinkCount;
+	/**
+	 * Similar to {@link #setVariables(Map)}, but the variable are set on this scope specifically.
+	 */
+	public setVariablesLocal(variables: Map<string, any>): void {
+		for (const [key, value] of variables) {
+			variables.set(key, this.stringifyValue(value));
+		}
+		this.execution.setVariablesLocal(variables);
 	}
 
-	public getProcessDefinitionId(): string | undefined {
-		return this.data.processDefinitionId ?? undefined;
+	/**
+	 * Returns whether this scope or any parent scope has variables.
+	 */
+	public hasVariables(): boolean {
+		return this.execution.hasVariables();
 	}
 
-	public getProcessDefinitionKey(): string | undefined {
-		return this.data.processDefinitionKey ?? undefined;
+	/**
+	 * Returns whether this scope has variables.
+	 */
+	public hasVariablesLocal(): boolean {
+		return this.execution.hasVariablesLocal();
 	}
 
-	public getProcessDefinitionName(): string | undefined {
-		return this.data.processDefinitionName ?? undefined;
+	/**
+	 * Returns whether this scope or any parent scope has a specific variable.
+	 */
+	public hasVariable(variableName: string): boolean {
+		return this.execution.hasVariable(variableName);
 	}
 
-	public getProcessDefinitionVersion(): number | undefined {
-		return this.data.processDefinitionVersion ?? undefined;
+	/**
+	 * Returns whether this scope has a specific variable.
+	 */
+	public hasVariableLocal(variableName: string): boolean {
+		return this.execution.hasVariableLocal(variableName);
 	}
 
-	public getDeploymentId(): string | undefined {
-		return this.data.deploymentId ?? undefined;
+	/**
+	 * Removes the variable and creates a new HistoricVariableUpdate.
+	 */
+	public removeVariable(variableName: string): void {
+		this.execution.removeVariable(variableName);
 	}
 
-	public getActivityId(): string | undefined {
-		return this.data.activityId ?? undefined;
+	/**
+	 * Removes the local variable and creates a new HistoricVariableUpdate.
+	 */
+	public removeVariableLocal(variableName: string): void {
+		this.execution.removeVariableLocal(variableName);
 	}
 
-	public getActivityName(): string | undefined {
-		return this.data.activityName ?? undefined;
+	/**
+	 * Removes the variables and creates a new HistoricVariableUpdate for each of them.
+	 */
+	public removeVariables(variableNames: string[]): void {
+		this.execution.removeVariables(variableNames);
 	}
 
-	public getProcessInstanceId(): string | undefined {
-		return this.data.processInstanceId ?? undefined;
+	/**
+	 * Removes the local variables and creates a new HistoricVariableUpdate for each of them.
+	 */
+	public removeVariablesLocal(variableNames: string[]): void {
+		this.execution.removeVariablesLocal(variableNames);
 	}
 
-	public getBusinessKey(): string | undefined {
-		return this.data.businessKey ?? undefined;
+	/**
+	 * Similar to {@link #setVariable(String, Object)}, but the variable is transient:
+	 * 
+	 * - no history is kept for the variable - the variable is only available until a waitstate is reached in the process - transient variables 'shadow' persistent variable (when getVariable('abc')
+	 * where 'abc' is both persistent and transient, the transient value is returned.
+	 */
+	public setTransientVariable(variableName: string, variableValue: any): void {
+		this.execution.setTransientVariable(variableName, this.stringifyValue(variableValue));
 	}
 
-	public getParentId(): string | undefined {
-		return this.data.parentId ?? undefined;
+	/**
+	 * Similar to {@link #setVariableLocal(String, Object)}, but for a transient variable. See {@link #setTransientVariable(String, Object)} for the rules on 'transient' variables.
+	 */
+	public setTransientVariableLocal(variableName: string, variableValue: any): void {
+		this.execution.setTransientVariableLocal(variableName, this.stringifyValue(variableValue));
 	}
 
-	public getSuperExecutionId(): string | undefined {
-		return this.data.superExecutionId ?? undefined;
+	/**
+	 * Similar to {@link #setVariables(Map)}, but for transient variables. See {@link #setTransientVariable(String, Object)} for the rules on 'transient' variables.
+	 */
+	public setTransientVariables(transientVariables: Map<string, any>): void {
+		for (const [key, value] of transientVariables) {
+			transientVariables.set(key, this.stringifyValue(value));
+		}
+		this.execution.setTransientVariables(transientVariables);
 	}
 
-	public getRootProcessInstanceId(): string | undefined {
-		return this.data.rootProcessInstanceId ?? undefined;
+	/**
+	 * Similar to {@link #getVariable(String)}, including the searching via the parent scopes, but for transient variables only. See {@link #setTransientVariable(String, Object)} for the rules on
+	 * 'transient' variables.
+	 */
+	public getTransientVariable(variableName: string): any {
+		return this.parseValue(this.execution.getTransientVariable(variableName));
 	}
 
-	public isForcedUpdate(): boolean {
-		return this.data.forcedUpdate;
+	/**
+	 * Similar to {@link #getVariables()}, but for transient variables only. See {@link #setTransientVariable(String, Object)} for the rules on 'transient' variables.
+	 */
+	public getTransientVariables(): Map<string, any> {
+		const transientVariables = this.execution.getTransientVariables();
+		for (const [key, value] of transientVariables) {
+			transientVariables.set(key, this.parseValue(value));
+		}
+		return transientVariables;
 	}
 
-	public getCallbackId(): string | undefined {
-		return this.data.callbackId ?? undefined;
+	/**
+	 * Similar to {@link #setVariablesLocal(Map)}, but for transient variables. See {@link #setTransientVariable(String, Object)} for the rules on 'transient' variables.
+	 */
+	public setTransientVariablesLocal(transientVariables: Map<string, any>): void {
+		for (const [key, value] of transientVariables) {
+			transientVariables.set(key, this.stringifyValue(value));
+		}
+		this.execution.setTransientVariablesLocal(transientVariables);
 	}
 
-	public getCallbackType(): string | undefined {
-		return this.data.callbackType ?? undefined;
+	/**
+	 * Similar to {@link #getVariableLocal(String)}, but for a transient variable. See {@link #setTransientVariable(String, Object)} for the rules on 'transient' variables.
+	 */
+	public getTransientVariableLocal(variableName: string): any {
+		return this.parseValue(this.execution.getTransientVariableLocal(variableName));
 	}
 
+	/**
+	 * Similar to {@link #getVariableLocal(String)}, but for transient variables only. See {@link #setTransientVariable(String, Object)} for the rules on 'transient' variables.
+	 */
+	public getTransientVariablesLocal(): Map<string, any> {
+		const transientVariablesLocal = this.execution.getTransientVariablesLocal();
+		for (const [key, value] of transientVariablesLocal) {
+			transientVariablesLocal.set(key, this.parseValue(value));
+		}
+		return transientVariablesLocal;
+	}
+
+	/**
+	 * Removes a specific transient variable (also searching parent scopes). See {@link #setTransientVariable(String, Object)} for the rules on 'transient' variables.
+	 */
+	public removeTransientVariableLocal(variableName: string): void {
+		this.execution.removeTransientVariableLocal(variableName);
+	}
+
+	/**
+	 * Removes a specific transient variable. See {@link #setTransientVariable(String, Object)} for the rules on 'transient' variables.
+	 */
+	public removeTransientVariable(variableName: string): void {
+		this.execution.removeTransientVariable(variableName);
+	}
+
+	/**
+	 * Remove all transient variable of this scope and its parent scopes. See {@link #setTransientVariable(String, Object)} for the rules on 'transient' variables.
+	 */
+	public removeTransientVariables(): void {
+		this.execution.removeTransientVariables();
+	}
+
+	/**
+	 * Removes all local transient variables. See {@link #setTransientVariable(String, Object)} for the rules on 'transient' variables.
+	 */
+	public removeTransientVariablesLocal(): void {
+		this.execution.removeTransientVariablesLocal();
+	}
+
+	private parseValue(value: any) {
+		try {
+			return JSON.parse(value);
+		} catch (e) {
+			// Do nothing
+		}
+		return value;
+	}
+
+	private stringifyValue(value: any): any {
+		if (Array.isArray(value)) {
+			// @ts-ignore
+			return java.util.Arrays.asList(value.map(e => JSON.stringify(e)));
+		} else if (typeof value === 'object') {
+			return JSON.stringify(value);
+		}
+		return value;
+	}
 }
 
 // @ts-ignore

@@ -9,24 +9,6 @@
  */
 package org.eclipse.dirigible.components.api.http;
 
-import org.apache.commons.io.IOUtils;
-import org.apache.http.Header;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpHost;
-import org.apache.http.NameValuePair;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.entity.EntityBuilder;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
-import org.apache.http.client.methods.*;
-import org.apache.http.entity.ContentType;
-import org.apache.http.entity.mime.MultipartEntityBuilder;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.message.BasicNameValuePair;
-import org.apache.http.util.EntityUtils;
-import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
-import org.eclipse.dirigible.components.api.http.client.*;
-import org.springframework.stereotype.Component;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
@@ -35,6 +17,36 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import org.apache.commons.io.IOUtils;
+import org.apache.http.Header;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpHost;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.entity.EntityBuilder;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpDelete;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpHead;
+import org.apache.http.client.methods.HttpPatch;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpPut;
+import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.client.methods.HttpTrace;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.message.BasicNameValuePair;
+import org.apache.http.util.EntityUtils;
+import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
+import org.eclipse.dirigible.components.api.http.client.HttpClientHeader;
+import org.eclipse.dirigible.components.api.http.client.HttpClientParam;
+import org.eclipse.dirigible.components.api.http.client.HttpClientProxyUtils;
+import org.eclipse.dirigible.components.api.http.client.HttpClientRequestOptions;
+import org.eclipse.dirigible.components.api.http.client.HttpClientResponse;
+import org.springframework.stereotype.Component;
 
 /**
  * Java face for HTTP operations.
@@ -171,10 +183,10 @@ public class HttpClientFacade {
 
     /** The Constant recognizedTextMimeTypes. */
     private static final HashSet<String> recognizedTextMimeTypes = new HashSet<>(Arrays.asList("application/json; charset=utf-8",
-            "text/json; charset=utf-8", "text/json", "application/CSV", "application/csv", "text/csv", ContentType.TEXT_PLAIN.getMimeType(),
-            ContentType.TEXT_HTML.getMimeType(), ContentType.TEXT_XML.getMimeType(), ContentType.APPLICATION_JSON.getMimeType(),
-            ContentType.APPLICATION_ATOM_XML.getMimeType(), ContentType.APPLICATION_XML.getMimeType(),
-            ContentType.APPLICATION_XHTML_XML.getMimeType()));
+            "text/json; charset=utf-8", "text/json", "application/CSV", "application/csv", "text/csv", "json",
+            ContentType.TEXT_PLAIN.getMimeType(), ContentType.TEXT_HTML.getMimeType(), ContentType.TEXT_XML.getMimeType(),
+            ContentType.APPLICATION_JSON.getMimeType(), ContentType.APPLICATION_ATOM_XML.getMimeType(),
+            ContentType.APPLICATION_XML.getMimeType(), ContentType.APPLICATION_XHTML_XML.getMimeType()));
 
     /**
      * Process http client response.
@@ -201,6 +213,12 @@ public class HttpClientFacade {
                 String processedContentType = ContentType.getOrDefault(entity)
                                                          .getMimeType();
                 boolean isSupportedTextType = recognizedTextMimeTypes.contains(processedContentType);
+                if (!isSupportedTextType) {
+                    Optional<String> recognizedTextMimeType = recognizedTextMimeTypes.stream()
+                                                                                     .filter(e -> processedContentType.contains(e))
+                                                                                     .findFirst();
+                    isSupportedTextType = recognizedTextMimeType.isPresent();
+                }
 
                 if (!binary && isSupportedTextType) {
                     Charset charset = ContentType.getOrDefault(entity)
@@ -367,9 +385,12 @@ public class HttpClientFacade {
         ContentType contentType = shouldParseContentType ? ContentType.parse(contentTypeString) : ContentType.create(contentTypeString);
 
         EntityBuilder entityBuilder = EntityBuilder.create()
-                                                   .setText(httpClientRequestOptions.getText())
+                                                   .setBinary(httpClientRequestOptions.getText()
+                                                                                      .getBytes(StandardCharsets.UTF_8))
                                                    .setContentType(contentType);
-
+        if (httpClientRequestOptions.isCharacterEncodingEnabled()) {
+            entityBuilder.setContentEncoding(httpClientRequestOptions.getCharacterEncoding());
+        }
         httpPost.setEntity(entityBuilder.build());
         return httpPost;
     }
@@ -485,7 +506,8 @@ public class HttpClientFacade {
         httpPut.setConfig(config);
         prepareHeaders(httpClientRequestOptions, httpPut);
         EntityBuilder entityBuilder = EntityBuilder.create()
-                                                   .setText(httpClientRequestOptions.getText())
+                                                   .setBinary(httpClientRequestOptions.getText()
+                                                                                      .getBytes(StandardCharsets.UTF_8))
                                                    .setContentType(ContentType.create(httpClientRequestOptions.getContentType()));
         if (httpClientRequestOptions.isCharacterEncodingEnabled()) {
             entityBuilder.setContentEncoding(httpClientRequestOptions.getCharacterEncoding());
@@ -607,7 +629,8 @@ public class HttpClientFacade {
         httpPatch.setConfig(config);
         prepareHeaders(httpClientRequestOptions, httpPatch);
         EntityBuilder entityBuilder = EntityBuilder.create()
-                                                   .setText(httpClientRequestOptions.getText())
+                                                   .setBinary(httpClientRequestOptions.getText()
+                                                                                      .getBytes(StandardCharsets.UTF_8))
                                                    .setContentType(ContentType.create(httpClientRequestOptions.getContentType()));
         if (httpClientRequestOptions.isCharacterEncodingEnabled()) {
             entityBuilder.setContentEncoding(httpClientRequestOptions.getCharacterEncoding());

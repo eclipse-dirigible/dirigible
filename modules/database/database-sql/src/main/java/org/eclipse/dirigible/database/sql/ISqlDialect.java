@@ -275,4 +275,13 @@ public interface ISqlDialect<SELECT extends SelectBuilder, INSERT extends Insert
      */
     void importData(Connection connection, String table, InputStream input) throws Exception;
 
+    /**
+     * Process SQL.
+     *
+     * @param connection the connection
+     * @param schema the schema
+     * @param is the input stream
+     */
+    public void processSQL(Connection connection, String schema, InputStream is) throws Exception;
+
 }

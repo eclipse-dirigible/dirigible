@@ -230,7 +230,7 @@ csvView.controller('CsvViewController', function ($scope, $window, messageHub, w
                 messageHub.setEditorDirty($scope.dataParameters.file, false);
                 $scope.$apply(function () {
                     $scope.state.isBusy = false;
-                    $scope.isFileChanged = false;
+                    isFileChanged = false;
                 });
             } else {
                 messageHub.setStatusError(`Error saving '${$scope.dataParameters.file}'`);
