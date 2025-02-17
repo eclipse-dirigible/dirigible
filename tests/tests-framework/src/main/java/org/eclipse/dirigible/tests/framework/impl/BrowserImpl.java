@@ -44,7 +44,7 @@ class BrowserImpl implements Browser {
     private static final long SELENIDE_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(15);
     private static final String PATH_SEPARATOR = "/";
     private static final int TOTAL_ELEMENT_SEARCH_TIMEOUT = 60 * 1000;
-    private static final long ELEMENT_SEARCH_IN_FRAME_MILLIS = 100;
+    private static final long ELEMENT_SEARCH_IN_FRAME_MILLIS = 200;
 
     static {
         Configuration.timeout = SELENIDE_TIMEOUT_MILLIS;
@@ -153,12 +153,14 @@ class BrowserImpl implements Browser {
             Optional<SelenideElement> element = findSingleElementInAllFrames(by, conditions);
             if (element.isEmpty()) {
                 LOGGER.debug("Element by [{}] and conditions [{}] was NOT found. Will try again.", by, conditions);
+                LOGGER.debug("Element by [{}] and conditions [{}] was NOT found. Will try again.", by, conditions);
             } else {
-                LOGGER.info("Element by [{}] and conditions [{}] was FOUND.", by, conditions);
+                LOGGER.debug("Element by [{}] and conditions [{}] was FOUND.", by, conditions);
                 return element.get();
             }
         } while (System.currentTimeMillis() < maxWaitTime);
 
+        LOGGER.debug("Element by [{}] and conditions [{}] was NOT found. Will try last time to reload the page and find it.", by,
         LOGGER.debug("Element by [{}] and conditions [{}] was NOT found. Will try last time to reload the page and find it.", by,
                 conditions);
 
@@ -167,7 +169,7 @@ class BrowserImpl implements Browser {
 
         Optional<SelenideElement> element = findSingleElementInAllFrames(by);
         if (element.isPresent()) {
-            LOGGER.info("Element [{}] was FOUND after page reload.", element);
+            LOGGER.debug("Element [{}] was FOUND after page reload.", element);
             return element.get();
         } else {
             String screenshot = createScreenshot();
@@ -192,6 +194,7 @@ class BrowserImpl implements Browser {
         Selenide.switchTo()
                 .defaultContent();
         LOGGER.debug("Checking element by [{}] and conditions [{}] in the DEFAULT frame...", by, conditions);
+        LOGGER.debug("Checking element by [{}] and conditions [{}] in the DEFAULT frame...", by, conditions);
 
         Optional<SelenideElement> element = findSingleElement(by, conditions);
         if (element.isPresent()) {
@@ -213,6 +216,7 @@ class BrowserImpl implements Browser {
         for (SelenideElement iframe : iframes) {
             Selenide.switchTo()
                     .frame(iframe);
+            LOGGER.debug("Switched to iframe [{}]. Searching for element by [{}] and conditions [{}]...", iframe, by, conditions);
             LOGGER.debug("Switched to iframe [{}]. Searching for element by [{}] and conditions [{}]...", iframe, by, conditions);
 
             Optional<SelenideElement> element = findSingleElement(by, conditions);
@@ -240,6 +244,7 @@ class BrowserImpl implements Browser {
 
     private Optional<SelenideElement> findSingleElement(By by, WebElementCondition... conditions) {
         LOGGER.debug("Searching for element by [{}] and conditions [{}] in the current frame for [{}] millis", by, conditions,
+        LOGGER.debug("Searching for element by [{}] and conditions [{}] in the current frame for [{}] millis", by, conditions,
                 ELEMENT_SEARCH_IN_FRAME_MILLIS);
 
         ElementsCollection foundElements = Selenide.$$(by);
@@ -257,9 +262,9 @@ class BrowserImpl implements Browser {
 
             return Optional.of(foundElements.first());
         } catch (ListSizeMismatch ex) {
-            LOGGER.warn(
-                    "Element with selector [{}] and conditions [{}] does NOT exist in the current frame or there are MORE THAN ONE matched elements. Consider using more precise selector and conditions. Error: [{}]",
-                    by, allConditions, ex.getMessage());
+            LOGGER.debug(
+                    "Element with selector [{}] and conditions [{}] does NOT exist in the current frame or MULTIPLE found. Consider using more precise selector and conditions. Found elements: {}",
+                    by, allConditions, foundElements.describe(), ex);
             return Optional.empty();
         }
     }
