@@ -285,6 +285,7 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 				cell.value.feedUsername = msg.data.feedUsername;
 				cell.value.feedPassword = msg.data.feedPassword;
 				cell.value.feedSchedule = msg.data.feedSchedule;
+				cell.value.generateDefaultRoles = msg.data.generateDefaultRoles;
 				cell.value.feedPath = msg.data.feedPath;
 				cell.value.roleRead = msg.data.roleRead;
 				cell.value.roleWrite = msg.data.roleWrite;
@@ -915,6 +916,7 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 						if (cell) {
 							// assume Entity's property
 							//showProperties($scope.graph, cell);
+
 							messageHub.showDialogWindow(
 								"edmDetails",
 								{
@@ -972,9 +974,12 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 						if (cell.value && Entity.prototype.isPrototypeOf(cell.value)) {
 							// assume Entity
 							//showEntityProperties($scope.graph, cell);
+
+							debugger;
 							messageHub.showDialogWindow(
 								"edmDetails",
 								{
+									projectName: modelFile.split("/")[2],
 									dialogType: 'entity',
 									cellId: cell.id,
 									name: cell.value.name,
@@ -998,6 +1003,7 @@ angular.module('ui.entity-data.modeler', ["ideUI", "ideView", "ideWorkspace", "i
 									feedUsername: cell.value.feedUsername,
 									feedPassword: cell.value.feedPassword,
 									feedSchedule: cell.value.feedSchedule,
+									generateDefaultRoles: cell.value.generateDefaultRoles,
 									feedPath: cell.value.feedPath,
 									roleRead: cell.value.roleRead,
 									roleWrite: cell.value.roleWrite,
