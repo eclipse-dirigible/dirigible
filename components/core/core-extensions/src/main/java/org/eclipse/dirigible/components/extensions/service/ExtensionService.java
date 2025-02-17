@@ -57,12 +57,14 @@ public class ExtensionService extends BaseArtefactService<Extension, Long> {
         return result;
     }
 
-    private boolean validateRoles(boolean validRequest, Extension e) {
-        if(e.getRole() != null && !e.getRole().trim().equals("") && validRequest){
-            String rolesArrayString = e.getRole();
+    private boolean validateRoles(boolean validRequest, Extension extension) {
+        if (validRequest && extension.getRole() != null && !extension.getRole()
+                                                                     .trim()
+                                                                     .equals("")) {
+            String rolesArrayString = extension.getRole();
             String[] rolesArray = rolesArrayString.split(",");
-            for(String role : rolesArray){
-                if(UserRequestVerifier.isUserInRole(role)){
+            for (String role : rolesArray) {
+                if (UserRequestVerifier.isUserInRole(role)) {
                     return true;
                 }
             }
