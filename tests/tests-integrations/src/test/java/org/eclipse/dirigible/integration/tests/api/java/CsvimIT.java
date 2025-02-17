@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.integration.tests.api.java;
 
-import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.database.sql.DataType;
@@ -41,10 +40,6 @@ public class CsvimIT extends UserInterfaceIntegrationTest {
     private static final String UNDEFINIED_TABLE_NAME = "TEST_TABLE_READERS2";
     private static final String TEST_PROJECT_FOLDER_PATH = "CsvimIT/csvim-test-project";
     private static final List<Reader> CSV_READERS = List.of(new Reader(1, "Ivan", "Ivanov"), new Reader(2, "Maria", "Petrova"));
-
-    static {
-        Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
-    }
 
     @Autowired
     private DataSourcesManager dataSourcesManager;
