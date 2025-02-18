@@ -1,0 +1,26 @@
+#set($dollar = '$')
+angular.module('page', ["ideUI", "ideView"])
+	.controller('PageController', ['$scope', 'ViewParameters', function ($scope, ViewParameters) {
+
+		$scope.entity = {};
+
+		let params = ViewParameters.get();
+		if (Object.keys(params).length) {
+			$scope.action = "select";;
+
+#foreach ($property in $properties)
+#if($property.isDateType)
+			if (params.entity.${property.name}) {
+				params.entity.${property.name} = new Date(params.entity.${property.name});
+			}
+#end
+#end
+			$scope.entity = params.entity;
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+			$scope.options${property.name} = params.options${property.name};
+#end
+#end
+		}
+
+	}]);

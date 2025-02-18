@@ -138,7 +138,34 @@ function getMaster(parameters) {
             engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-filter/view.js",
             collection: "uiListMasterModels"
-        }
+        },
+        {
+			location: "/template-application-ui-angular/ui/perspective/master-list/dialog-window/controller.js.template",
+			action: "generate",
+			engine: "velocity",
+			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/controller.js",
+			collection: "uiListMasterModels"
+		},
+		{
+			location: "/template-application-ui-angular/ui/perspective/master-list/dialog-window/index.html.template",
+			action: "generate",
+			engine: "velocity",
+			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/index.html",
+			collection: "uiListMasterModels"
+		},
+		{
+			location: "/template-application-ui-angular/ui/perspective/master-list/dialog-window/view.extension",
+			action: "generate",
+			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/view.extension",
+			collection: "uiListMasterModels"
+		},
+		{
+			location: "/template-application-ui-angular/ui/perspective/master-list/dialog-window/view.js.template",
+			action: "generate",
+			engine: "velocity",
+			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/view.js",
+			collection: "uiListMasterModels"
+		},
     ];
 }
 

@@ -1,5 +1,5 @@
 {
     "module": "${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${masterEntity}/${name}/dialog-window/view.js",
-    "extensionPoint": "#if($hasReferencedProjection)${referencedProjectionProjectName}#else${projectName}#end-dialog-window",
+    "extensionPoint": "dialog-window",
     "description": "${projectName} - Application Dialog Window"
 }

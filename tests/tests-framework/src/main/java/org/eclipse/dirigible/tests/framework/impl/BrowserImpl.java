@@ -18,6 +18,7 @@ import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.interactions.Actions;
 import org.slf4j.Logger;
@@ -46,6 +47,7 @@ class BrowserImpl implements Browser {
     private static final String PATH_SEPARATOR = "/";
     private static final int TOTAL_ELEMENT_SEARCH_TIMEOUT = 60 * 1000;
     private static final long ELEMENT_SEARCH_IN_FRAME_MILLIS = 200;
+
 
     static {
         Configuration.timeout = SELENIDE_TIMEOUT_MILLIS;
@@ -252,9 +254,20 @@ class BrowserImpl implements Browser {
             return Optional.of(foundElements.first());
         } catch (ListSizeMismatch ex) {
             LOGGER.debug(
-                    "Element with selector [{}] and conditions [{}] does NOT exist in the current frame or MULTIPLE found. Consider using more precise selector and conditions. Found elements: {}",
-                    by, allConditions, foundElements.describe(), ex);
+                    "Element with selector [{}] and conditions [{}] does NOT exist in the current frame or MULTIPLE found. Consider using more precise selector and conditions.\nFound elements: {}.\nCause error message: {}",
+                    by, allConditions, describeCollection(by, foundElements, conditions), ex.getMessage());
             return Optional.empty();
+        }
+    }
+
+    private String describeCollection(By by, ElementsCollection foundElements, WebElementCondition... conditions) {
+        try {
+            return foundElements.describe();
+        } catch (StaleElementReferenceException ex) {
+            LOGGER.debug("Element with selector [{}] and conditions [{}] cannot be described", by, conditions, ex);
+
+            return "Failed to describe elements by [" + by + "] and conditions [" + Arrays.toString(conditions) + "] due to error: "
+                    + ex.getMessage();
         }
     }
 

@@ -31,6 +31,7 @@ class MultitenancyIT extends UserInterfaceIntegrationTest {
         Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
     }
 
+
     @Autowired
     private TestProject testProject;
     @Autowired
@@ -84,6 +85,7 @@ class MultitenancyIT extends UserInterfaceIntegrationTest {
 
     private void verifyTenants(List<DirigibleTestTenant> tenants) {
         SleepUtil.sleepSeconds(10);
+
         tenants.forEach(testProject::verify);
     }
 

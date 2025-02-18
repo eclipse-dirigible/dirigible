@@ -10,7 +10,8 @@
                     </div>
                 </div>
             </header>
-            <div class="fd-message-box__body">{{ alert.message }}</div>
+            <div ng-if="!alert.preformatted" class="fd-message-box__body">{{ alert.message }}</div>
+            <pre ng-if="alert.preformatted" class="fd-message-box__body" bk-scrollbar>{{ alert.message }}</pre>
             <footer class="fd-bar fd-bar--compact fd-bar--footer fd-message-box__footer">
                 <div class="fd-bar__right">
                     <div class="fd-bar__element">
