@@ -67,12 +67,24 @@ public class IDE {
     }
 
     public void assertStatusBarMessage(String expectedMessage) {
-        browser.assertElementExistsByTypeAndText(HtmlElementType.SPAN, expectedMessage);
+        String homeValue = Configuration.get("DIRIGIBLE_HOME_URL");
+        if (null != homeValue && homeValue.contains("services/web/ide")) {
+            browser.assertElementExistsByTypeAndText(HtmlElementType.SPAN, expectedMessage);
+        } else {
+            browser.assertElementExistsByTypeAndText(HtmlElementType.STATUS_MESSAGE, expectedMessage);
+
+        }
     }
 
     public void assertPublishedProjectMessage(String projectName) {
-        String publishedMessage = "Published '/" + projectName + "'";
-        assertStatusBarMessage(publishedMessage);
+        String homeValue = Configuration.get("DIRIGIBLE_HOME_URL");
+        if (null != homeValue && homeValue.contains("services/web/ide")) {
+            String publishedMessage = "Published '/" + projectName + "'";
+            assertStatusBarMessage(publishedMessage);
+        } else {
+            String publishedMessage = "Published '/workspace/" + projectName + "'";
+            assertStatusBarMessage(publishedMessage);
+        }
     }
 
     public void assertJSHttpResponse(String projectName, String fileRelativePath, int expectedStatusCode, String expectedBody) {
@@ -149,7 +161,8 @@ public class IDE {
 
         workbench.createNewProject(projectName);
 
-        assertCreatedProject(projectName);
+        // assertCreatedProject(projectName);
+        assertPublishedProjectMessage(projectName);
     }
 
     public void assertCreatedProject(String projectName) {

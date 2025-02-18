@@ -24,7 +24,7 @@ public enum HtmlElementType {
     SPAN("span"), //
     DIV("div"), //
     LI("li"), //
-    FD_MESSAGE_PAGE_TITLE("bk-message-page-title");
+    FD_MESSAGE_PAGE_TITLE("bk-message-page-title"), STATUS_MESSAGE(".statusbar-message"),;;
 
     private final String type;
 
