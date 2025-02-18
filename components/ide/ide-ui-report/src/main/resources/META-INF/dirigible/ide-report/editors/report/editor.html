@@ -421,21 +421,8 @@
                                     </div>
                                     <div class="fd-col fd-col-md--4 fd-col-lg--3">
                                         <fd-input id="srr" type="text" ng-required="false"
-                                            ng-model="dataParameters.roleRead" placeholder="role name"
-                                            ng-disabled="dataParameters.generateDefaultRoles === 'true'">
-                                        </fd-input>
-                                    </div>
-                                </fd-form-item>
-
-                                <fd-form-item class="fd-row fd-margin-top--tiny">
-                                    <div class="fd-col fd-col-md--2">
-                                        <fd-form-label for="swr" dg-required="false" dg-colon="true">Write role
-                                        </fd-form-label>
-                                    </div>
-                                    <div class="fd-col fd-col-md--4 fd-col-lg--3">
-                                        <fd-input id="swr" type="text" ng-required="false"
-                                            ng-model="dataParameters.roleWrite" placeholder="role name"
-                                            ng-disabled="dataParameters.generateDefaultRoles === 'true'">
+                                            ng-model="report.security.roleRead" placeholder="role name"
+                                            ng-disabled="report.security.generateDefaultRoles === 'true'">
                                         </fd-input>
                                     </div>
                                 </fd-form-item>
@@ -443,7 +430,7 @@
                                 <fd-form-item class="fd-row fd-margin-top--tiny">
                                     <div class="fd-col fd-col-md--2"></div>
                                     <fd-checkbox id="generalGenerateDefaultRoles" compact="false" ng-required="false"
-                                        ng-model="dataParameters.generateDefaultRoles" data-ng-true-value="'true'"
+                                        ng-model="report.security.generateDefaultRoles" data-ng-true-value="'true'"
                                         data-ng-false-value="'false'" ng-change="toggleDefaultRoles()">
                                     </fd-checkbox>
                                     <fd-checkbox-label for="generalGenerateDefaultRoles" dg-required="false">Generate

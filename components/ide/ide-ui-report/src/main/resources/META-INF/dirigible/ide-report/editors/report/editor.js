@@ -1531,12 +1531,10 @@ angular.module('page', ['ideUI', 'ideView', 'ideWorkspace'])
 		// Begin Security Section --------------------------------------------------------------------------------------
 
 		$scope.toggleDefaultRoles = function () {
-			if ($scope.dataParameters.generateDefaultRoles === 'true') {
-				$scope.dataParameters.roleRead = $scope.dataParameters.projectName + '.' + $scope.dataParameters.perspectiveName + '.' + $scope.dataParameters.name + "ReadOnly";
-				$scope.dataParameters.roleWrite = $scope.dataParameters.projectName + '.' + $scope.dataParameters.perspectiveName + '.' + $scope.dataParameters.name + "FullAccess";
+			if ($scope.report.security.generateDefaultRoles === 'true') {
+				$scope.report.security.roleRead = $scope.dataParameters.file.split('/')[2] + '.' + "Report" + '.' + $scope.report.name + "ReadOnly";
 			} else {
-				$scope.dataParameters.roleRead = null;
-				$scope.dataParameters.roleWrite = null;
+				$scope.report.security.roleRead = null;
 			}
 		};
 
