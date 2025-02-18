@@ -348,6 +348,7 @@ class BrowserImpl implements Browser {
         } else {
             return By.cssSelector(elementType);
         }
+
     }
 
     private SelenideElement getElementByAttributeAndText(String elementType, String text) {

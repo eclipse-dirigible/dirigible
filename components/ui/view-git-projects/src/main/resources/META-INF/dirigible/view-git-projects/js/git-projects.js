@@ -591,6 +591,10 @@ gitProjectsView.controller('GitProjectsController', ($scope, StatusBar, Dialogs,
             if (setConfig) jstreeWidget.jstree(jstreeConfig);
             else jstreeWidget.jstree(true).refresh();
         }, (response) => {
+            if (response.status === 404 && $scope.selectedWorkspace !== WorkspaceService.getDefaultWorkspace()) {
+                $scope.switchWorkspace(WorkspaceService.getDefaultWorkspace(), setConfig);
+                return;
+            }
             console.error(response);
             $scope.$evalAsync(() => {
                 $scope.state.isBusy = false;
@@ -605,11 +609,11 @@ gitProjectsView.controller('GitProjectsController', ($scope, StatusBar, Dialogs,
         });
     };
 
-    $scope.switchWorkspace = (workspace) => {
+    $scope.switchWorkspace = (workspace, setConfig = false) => {
         if ($scope.selectedWorkspace !== workspace) {
             $scope.selectedWorkspace = workspace;
             WorkspaceService.setWorkspace(workspace);
-            $scope.reloadProjects();
+            $scope.reloadProjects(setConfig);
         }
     };
 

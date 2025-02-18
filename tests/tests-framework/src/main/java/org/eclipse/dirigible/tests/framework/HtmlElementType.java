@@ -27,6 +27,7 @@ public enum HtmlElementType {
     FD_MESSAGE_PAGE_TITLE("bk-message-page-title"), STATUS_MESSAGE(".statusbar-message"),;
 
 
+
     private final String type;
 
     HtmlElementType(String type) {

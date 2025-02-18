@@ -1117,6 +1117,10 @@ projectsView.controller('ProjectsViewController', (
                 else jstreeWidget.jstree(true).refresh();
             });
         }, (response) => {
+            if (response.status === 404 && $scope.selectedWorkspace !== WorkspaceService.getDefaultWorkspace()) {
+                $scope.switchWorkspace(WorkspaceService.getDefaultWorkspace(), setConfig);
+                return;
+            }
             console.error(response);
             $scope.state.isBusy = false;
             $scope.state.error = true;
@@ -1212,11 +1216,11 @@ projectsView.controller('ProjectsViewController', (
         });
     };
 
-    $scope.switchWorkspace = (workspace) => {
+    $scope.switchWorkspace = (workspace, setConfig = false) => {
         if ($scope.selectedWorkspace !== workspace) {
             $scope.selectedWorkspace = workspace;
             WorkspaceService.setWorkspace(workspace);
-            $scope.reloadWorkspace();
+            $scope.reloadWorkspace(setConfig);
         }
     };
 
