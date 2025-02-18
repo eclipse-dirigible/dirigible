@@ -162,8 +162,10 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
                         feedPath: $scope.dataParameters.feedPath,
                         roleRead: $scope.dataParameters.roleRead,
                         roleWrite: $scope.dataParameters.roleWrite,
+                        generateDefaultRoles: $scope.dataParameters.generateDefaultRoles,
                         importsCode: $scope.dataParameters.importsCode,
                         generateReport: $scope.dataParameters.generateReport,
+
                     }, true);
                 } else {
                     messageHub.postMessage('edm.editor.property', {
@@ -212,6 +214,16 @@ angular.module('edmDetails', ['ideUI', 'ideView'])
         $scope.cancel = function () {
             messageHub.closeDialogWindow("edmDetails");
         };
+        $scope.toggleDefaultRoles = function () {
+            if ($scope.dataParameters.generateDefaultRoles === 'true') {
+                $scope.dataParameters.roleRead = $scope.dataParameters.projectName + '.' + $scope.dataParameters.perspectiveName + '.' + $scope.dataParameters.name + "ReadOnly";
+                $scope.dataParameters.roleWrite = $scope.dataParameters.projectName + '.' + $scope.dataParameters.perspectiveName + '.' + $scope.dataParameters.name + "FullAccess";
+            } else {
+                $scope.dataParameters.roleRead = null;
+                $scope.dataParameters.roleWrite = null;
+            }
+        };
+
         $scope.dataParameters = ViewParameters.get();
         if ($scope.dataParameters.dialogType === "entity") {
             $scope.dialogType = 'entity';

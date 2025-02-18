@@ -169,6 +169,7 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
                             feedPath: $scope.dataParameters.feedPath,
                             roleRead: $scope.dataParameters.roleRead,
                             roleWrite: $scope.dataParameters.roleWrite,
+                            generateDefaultRoles: $scope.dataParameters.generateDefaultRoles,
                             importsCode: $scope.dataParameters.importsCode,
                             generateReport: $scope.dataParameters.generateReport,
                         }
@@ -222,6 +223,15 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
         };
         $scope.cancel = () => {
             Dialogs.closeWindow();
+        };
+        $scope.toggleDefaultRoles = function () {
+            if ($scope.dataParameters.generateDefaultRoles === 'true') {
+                $scope.dataParameters.roleRead = $scope.dataParameters.projectName + '.' + $scope.dataParameters.perspectiveName + '.' + $scope.dataParameters.name + "ReadOnly";
+                $scope.dataParameters.roleWrite = $scope.dataParameters.projectName + '.' + $scope.dataParameters.perspectiveName + '.' + $scope.dataParameters.name + "FullAccess";
+            } else {
+                $scope.dataParameters.roleRead = null;
+                $scope.dataParameters.roleWrite = null;
+            }
         };
         $scope.dataParameters = ViewParameters.get();
         if ($scope.dataParameters.dialogType === 'entity') {

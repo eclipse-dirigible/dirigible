@@ -280,6 +280,7 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 				cell.value.feedPassword = data.feedPassword;
 				cell.value.feedSchedule = data.feedSchedule;
 				cell.value.feedPath = data.feedPath;
+				cell.value.generateDefaultRoles = data.generateDefaultRoles;
 				cell.value.roleRead = data.roleRead;
 				cell.value.roleWrite = data.roleWrite;
 				cell.value.importsCode = data.importsCode;
@@ -967,6 +968,7 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 								id: 'edmDetails',
 								hasHeader: false,
 								params: {
+									projectName: modelFile.split("/")[2],
 									dialogType: 'entity',
 									cellId: cell.id,
 									name: cell.value.name,
@@ -991,6 +993,7 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 									feedPassword: cell.value.feedPassword,
 									feedSchedule: cell.value.feedSchedule,
 									feedPath: cell.value.feedPath,
+									generateDefaultRoles: cell.value.generateDefaultRoles,
 									roleRead: cell.value.roleRead,
 									roleWrite: cell.value.roleWrite,
 									perspectives: $scope.graph.model.perspectives,

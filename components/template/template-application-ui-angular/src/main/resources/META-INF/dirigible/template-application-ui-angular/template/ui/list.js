@@ -48,8 +48,9 @@ export function getSources(parameters) {
 			collection: "uiListModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/list/dialog-window/view.extension",
+			location: "/template-application-ui-angular/ui/perspective/list/dialog-window/view.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/view.extension",
 			collection: "uiListModels"
 		},
@@ -75,8 +76,9 @@ export function getSources(parameters) {
 			collection: "uiListModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/list/dialog-filter/view.extension",
+			location: "/template-application-ui-angular/ui/perspective/list/dialog-filter/view.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-filter/view.extension",
 			collection: "uiListModels"
 		},
@@ -102,14 +104,16 @@ export function getSources(parameters) {
 			collection: "uiListModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/list/tile.extension",
+			location: "/template-application-ui-angular/ui/perspective/list/tile.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.extension",
 			collection: "uiListModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/list/tile-portal.extension",
+			location: "/template-application-ui-angular/ui/perspective/list/tile-portal.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile-portal.extension",
 			collection: "uiListModels"
 		},
@@ -121,8 +125,9 @@ export function getSources(parameters) {
 			collection: "uiListModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/list/view.extension",
+			location: "/template-application-ui-angular/ui/perspective/list/view.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/view.extension",
 			collection: "uiListModels"
 		},
