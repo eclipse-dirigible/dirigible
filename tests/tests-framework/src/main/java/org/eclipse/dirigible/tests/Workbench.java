@@ -39,7 +39,7 @@ public class Workbench {
 
     public void publishAll() {
         clickPublishAll();
-        browser.assertElementExistsByTypeAndTextPattern(HtmlElementType.SPAN, "Published all projects in");
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Published all projects in");
     }
 
     public void clickPublishAll() {

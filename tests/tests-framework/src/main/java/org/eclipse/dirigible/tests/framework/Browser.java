@@ -13,7 +13,6 @@ import com.codeborne.selenide.SelenideElement;
 import com.codeborne.selenide.WebElementCondition;
 import org.openqa.selenium.By;
 
-import java.util.Optional;
 import java.util.function.Consumer;
 
 public interface Browser {
@@ -32,9 +31,11 @@ public interface Browser {
 
     void assertElementExistsByTypeAndText(String elementType, String text);
 
-    void assertElementExistsByTypeAndTextPattern(HtmlElementType htmlElementType, String textPattern);
+    void assertElementExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text);
 
-    void assertElementExistsByTypeAndTextPattern(String htmlElementType, String textPattern);
+    void assertElementExistsByTypeAndContainsText(String htmlElementType, String text);
+
+    void clickOnElementById(String id);
 
     void clickOnElementByAttributeValue(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String attributeValue);
 
@@ -68,7 +69,8 @@ public interface Browser {
 
     void clearCookies();
 
-    Optional<SelenideElement> findElementInAllFrames(By by, WebElementCondition... conditions);
+    SelenideElement findElementInAllFrames(By by, WebElementCondition... conditions);
 
-    void handleElementInAllFrames(By by, Consumer<SelenideElement> elementHandler);
+    void handleElementInAllFrames(By by, Consumer<SelenideElement> elementHandler, WebElementCondition... conditions);
+
 }

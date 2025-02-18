@@ -37,7 +37,6 @@ import static org.awaitility.Awaitility.await;
 public class CsvimIT extends UserInterfaceIntegrationTest {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(CsvimIT.class);
-
     private static final String UNDEFINIED_TABLE_NAME = "TEST_TABLE_READERS2";
     private static final String TEST_PROJECT_FOLDER_PATH = "CsvimIT/csvim-test-project";
     private static final List<Reader> CSV_READERS = List.of(new Reader(1, "Ivan", "Ivanov"), new Reader(2, "Maria", "Petrova"));

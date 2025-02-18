@@ -54,7 +54,7 @@ public class WelcomeView {
     }
 
     public void confirmTemplate() {
-        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Ok");
+        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Create");
     }
 
 }
