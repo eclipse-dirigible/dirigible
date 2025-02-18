@@ -74,7 +74,7 @@ angular.module('ideMessageHub', [])
                     text: label,
                 }, 'ide.status.caret');
             };
-            const showAlert = function (title, message, type) {
+            const showAlert = function (title, message, type, preformatted = false) {
                 if (isNullOrUndefinedOrEmpty(message))
                     throw Error("Alert: you must provide a message");
                 if (isNullOrUndefinedOrEmpty(title))
@@ -82,20 +82,21 @@ angular.module('ideMessageHub', [])
                 messageHub.post({
                     title: title,
                     message: message,
-                    type: type
+                    type: type,
+                    preformatted: preformatted,
                 }, 'ide.alert');
             };
-            const showAlertSuccess = function (title, message) {
-                showAlert(title, message, "success");
+            const showAlertSuccess = function (title, message, preformatted) {
+                showAlert(title, message, "success", preformatted);
             };
-            const showAlertInfo = function (title, message) {
-                showAlert(title, message, "info");
+            const showAlertInfo = function (title, message, preformatted) {
+                showAlert(title, message, "info", preformatted);
             };
-            const showAlertWarning = function (title, message) {
-                showAlert(title, message, "warning");
+            const showAlertWarning = function (title, message, preformatted) {
+                showAlert(title, message, "warning", preformatted);
             };
-            const showAlertError = function (title, message) {
-                showAlert(title, message, "error");
+            const showAlertError = function (title, message, preformatted) {
+                showAlert(title, message, "error", preformatted);
             };
             const showDialog = function (
                 title = "",

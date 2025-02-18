@@ -929,7 +929,6 @@ class DirigibleEditor {
             const model = editor.getModel();
             model.setValue(model.getValue());
             DirigibleEditor.lastSavedVersionId = model.getAlternativeVersionId();
-            DirigibleEditor.sourceBeingChangedProgramatically = false;
 
             TypeScriptUtils.loadImportedFiles(monaco, fileObject.importedFilesNames, true);
         }, "ide.ts.reload");
@@ -997,13 +996,15 @@ class TypeScriptUtils {
                 }
                 if (importedFileMetadata.importedFilesNames?.length > 0) {
                     const relativeImportedPaths = importedFileMetadata.importedFilesNames.map(e => fileIO.resolveRelativePath(importedFile, e));
-                    TypeScriptUtils.loadImportedFiles(monaco, relativeImportedPaths, isReload);
+                    if (JSON.stringify(importedFiles) !== JSON.stringify(relativeImportedPaths))
+                        await TypeScriptUtils.loadImportedFiles(monaco, relativeImportedPaths, isReload);
                 }
                 TypeScriptUtils.#IMPORTED_FILES.add(importedFilePath);
             } catch (e) {
                 Utils.logErrorMessage(e);
             }
         }
+        DirigibleEditor.sourceBeingChangedProgramatically = false;
     }
 
     static async loadDTS(monaco) {

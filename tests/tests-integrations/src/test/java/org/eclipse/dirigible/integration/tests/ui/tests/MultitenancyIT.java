@@ -27,10 +27,6 @@ import java.util.List;
 
 class MultitenancyIT extends UserInterfaceIntegrationTest {
 
-    static {
-        Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
-    }
-
     @Autowired
     private TestProject testProject;
     @Autowired
@@ -83,7 +79,7 @@ class MultitenancyIT extends UserInterfaceIntegrationTest {
     }
 
     private void verifyTenants(List<DirigibleTestTenant> tenants) {
-        SleepUtil.sleepSeconds(10);
+        SleepUtil.sleepSeconds(12);
         tenants.forEach(testProject::verify);
     }
 

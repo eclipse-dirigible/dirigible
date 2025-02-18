@@ -530,6 +530,7 @@ angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideExtensions', 'i
                     title: "",
                     message: "",
                     type: "information", // information, error, success, warning
+                    preformatted: false
                 };
                 scope.dialog = {
                     id: null,
@@ -864,6 +865,7 @@ angular.module('idePerspective', ['ngResource', 'ngCookies', 'ideExtensions', 'i
                                 title: data.title,
                                 message: data.message,
                                 type: type,
+                                preformatted: data.preformatted,
                             });
                             if (!scope.activeDialog && alerts.length < 2) {
                                 scope.showAlert();

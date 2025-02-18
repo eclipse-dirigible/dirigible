@@ -36,7 +36,7 @@ ideBpmProcessJobsView.controller('IDEBpmProcessJobsViewController', ['$scope', '
     }
 
     $scope.openDialog = function(job) {
-        messageHub.showAlertError(job.exceptionMessage, job.exceptionStacktrace);
+        messageHub.showAlertError(job.exceptionMessage, job.exceptionStacktrace, true);
     }
 
     messageHub.onDidReceiveMessage('instance.selected', function (msg) {

@@ -153,6 +153,13 @@ class FileIO {
         return '';
     }
 
+    getWorkspacePath(filePath) {
+        if (this.#getResourceType() === 'workspace') {
+            return `/${editorParameters.resourcePath.split('/')[1]}/${filePath}`
+        }
+        return filePath;
+    }
+
     resolveRelativePath(basePath, relativePath) {
         if (relativePath.startsWith('../')) {
             const fileNameTokens = basePath.split('/');
@@ -955,7 +962,6 @@ class DirigibleEditor {
                 const model = editor.getModel();
                 model.setValue(model.getValue());
                 DirigibleEditor.lastSavedVersionId = model.getAlternativeVersionId();
-                DirigibleEditor.sourceBeingChangedProgramatically = false;
 
                 TypeScriptUtils.loadImportedFiles(monaco, fileObject.importedFilesNames, true);
             },
@@ -1005,7 +1011,7 @@ class TypeScriptUtils {
                 if (TypeScriptUtils.#IMPORTED_FILES.has(importedFilePath)) {
                     continue;
                 }
-                const importedFileMetadata = await fileIO.loadText(importedFile);
+                const importedFileMetadata = await fileIO.loadText(fileIO.getWorkspacePath(importedFilePath));
                 let uriPath = importedFileMetadata.filePath;
                 if (TypeScriptUtils.isGlobalImport(importedFile)) {
                     monaco.languages.typescript.typescriptDefaults.addExtraLib(
@@ -1024,13 +1030,15 @@ class TypeScriptUtils {
                 }
                 if (importedFileMetadata.importedFilesNames?.length > 0) {
                     const relativeImportedPaths = importedFileMetadata.importedFilesNames.map(e => fileIO.resolveRelativePath(importedFile, e));
-                    TypeScriptUtils.loadImportedFiles(monaco, relativeImportedPaths, isReload);
+                    if (JSON.stringify(importedFiles) !== JSON.stringify(relativeImportedPaths))
+                        await TypeScriptUtils.loadImportedFiles(monaco, relativeImportedPaths, isReload);
                 }
                 TypeScriptUtils.#IMPORTED_FILES.add(importedFilePath);
             } catch (e) {
                 Utils.logErrorMessage(e);
             }
         }
+        DirigibleEditor.sourceBeingChangedProgramatically = false;
     }
 
     static async loadDTS(monaco) {
