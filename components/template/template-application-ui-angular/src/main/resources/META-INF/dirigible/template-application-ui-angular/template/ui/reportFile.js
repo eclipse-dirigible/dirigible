@@ -87,6 +87,12 @@ function getTableReportBackendSources() {
             engine: "velocity",
             collection: "reportModels"
         }, {
+            location: "/template-application-rest/roles/default-roles.roles.template",
+            action: "generate",
+            rename: "gen/{{genFolderName}}/roles/default-roles.roles",
+            engine: "velocity",
+            collection: "reportModels"
+        }, {
             location: "/template-application-rest/project.json.mjs",
             action: "generate",
             rename: "project.json",

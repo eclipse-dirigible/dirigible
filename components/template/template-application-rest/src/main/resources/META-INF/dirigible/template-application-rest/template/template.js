@@ -65,7 +65,6 @@ export function getTemplate(parameters) {
         rename: "gen/{{genFolderName}}/roles/default-roles.roles"
     });
 
-
     templateSources = templateSources.concat(daoTemplate.sources);
 
     let templateParameters = [];
