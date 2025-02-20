@@ -13,7 +13,6 @@ import com.codeborne.selenide.*;
 import com.codeborne.selenide.ex.ListSizeMismatch;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.dirigible.tests.framework.Browser;
-import org.eclipse.dirigible.tests.framework.CssClass;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.util.SleepUtil;
