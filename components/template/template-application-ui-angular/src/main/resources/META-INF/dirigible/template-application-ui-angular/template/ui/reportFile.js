@@ -124,8 +124,9 @@ function getTableReportUISource() {
             collection: "generateReportModels"
         },
         {
-            location: "/template-application-ui-angular/ui/perspective/report-file/dialog-window/view.extension",
+            location: "/template-application-ui-angular/ui/perspective/report-file/dialog-window/view.extension.template",
             action: "generate",
+            engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window/view.extension",
             collection: "generateReportModels"
         },
@@ -151,8 +152,9 @@ function getTableReportUISource() {
             collection: "generateReportModels"
         },
         {
-            location: "/template-application-ui-angular/ui/perspective/report-file/dialog-filter/view.extension",
+            location: "/template-application-ui-angular/ui/perspective/report-file/dialog-filter/view.extension.template",
             action: "generate",
+            engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-filter/view.extension",
             collection: "generateReportModels"
         },
@@ -178,14 +180,16 @@ function getTableReportUISource() {
             collection: "generateReportModels"
         },
         {
-            location: "/template-application-ui-angular/ui/perspective/report-file/tile.extension",
+            location: "/template-application-ui-angular/ui/perspective/report-file/tile.extension.template",
             action: "generate",
+            engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/tile.extension",
             collection: "generateReportModels"
         },
         {
-            location: "/template-application-ui-angular/ui/perspective/report-file/tile-portal.extension",
+            location: "/template-application-ui-angular/ui/perspective/report-file/tile-portal.extension.template",
             action: "generate",
+            engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/tile-portal.extension",
             collection: "generateReportModels"
         },
@@ -197,8 +201,9 @@ function getTableReportUISource() {
             collection: "generateReportModels"
         },
         {
-            location: "/template-application-ui-angular/ui/perspective/report-file/view.extension",
+            location: "/template-application-ui-angular/ui/perspective/report-file/view.extension.template",
             action: "generate",
+            engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/view.extension",
             collection: "generateReportModels"
         },
@@ -226,6 +231,7 @@ function getTableReportUISource() {
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/dialog-print/print.extension.template",
             action: "generate",
+            engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-print/print.extension",
             collection: "generateReportModels"
         },
