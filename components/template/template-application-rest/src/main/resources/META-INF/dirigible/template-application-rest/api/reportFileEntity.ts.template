@@ -1,12 +1,9 @@
-#foreach ($column in $columns)
-#if($column.roleRead)
+#if($perspectiveRole || $security.roleRead)
 #set($isEntityPropertySecurityEnabled = "true")
-#break
-#end
 #end
 import { Controller, Get, Post } from "sdk/http"
 import { ${name}Repository, ${name}Filter, ${name}PaginatedFilter } from "../../dao/${perspectiveName}/${name}Repository";
-#if($perspectiveRole)
+#if($perspectiveRole || $security.roleRead)
 import { user } from "sdk/security"
 import { ForbiddenError } from "../utils/ForbiddenError";
 #end
@@ -20,8 +17,9 @@ class ${name}Service {
     @Get("/")
     public filter(_: any, ctx: any) {
         try {
-#if($perspectiveRole)
-            this.checkPermissions();
+#if($perspectiveRole || $security.roleRead)
+            this.checkPermissions("read");
+
 #end
             const filter: ${name}PaginatedFilter = {
 #foreach ($parameter in $parameters)
@@ -54,8 +52,9 @@ class ${name}Service {
     @Get("/count")
     public count(_: any, ctx: any) {
         try {
-#if($perspectiveRole)
-            this.checkPermissions();
+#if($perspectiveRole || $security.roleRead)
+            this.checkPermissions("read");
+
 #end
             const filter: ${name}Filter = {
 #foreach ($parameter in $parameters)
@@ -81,8 +80,9 @@ class ${name}Service {
     @Post("/count")
     public countWithFilter(filter: any) {
         try {
-#if($perspectiveRole || $roleRead || $roleWrite)
+#if($perspectiveRole || $security.roleRead)
             this.checkPermissions("read");
+
 #end
             return this.repository.count(filter);
         } catch (error: any) {
@@ -93,8 +93,9 @@ class ${name}Service {
     @Post("/search")
     public search(filter: any) {
         try {
-#if($perspectiveRole || $roleRead || $roleWrite)
+#if($perspectiveRole || $security.roleRead)
             this.checkPermissions("read");
+
 #end
 #if($isEntityPropertySecurityEnabled)
             return this.repository.findAll(filter).map(e => this.transformEntity("read", e));
@@ -116,11 +117,18 @@ class ${name}Service {
         }
     }
 
+#if($perspectiveRole || $security.roleRead)
+    private checkPermissions(operationType: string) {
 #if($perspectiveRole)
-    private checkPermissions() {
         if (!user.isInRole("${perspectiveRole}")) {
             throw new ForbiddenError();
         }
+#end
+#if($security.roleRead)
+        if (operationType === "read" && !(user.isInRole("${security.roleRead}")) {
+            throw new ForbiddenError();
+        }
+#end
     }
 
 #end
