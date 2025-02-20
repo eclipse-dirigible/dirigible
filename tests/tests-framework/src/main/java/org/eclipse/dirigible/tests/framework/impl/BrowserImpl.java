@@ -13,6 +13,7 @@ import com.codeborne.selenide.*;
 import com.codeborne.selenide.ex.ListSizeMismatch;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.dirigible.tests.framework.Browser;
+import org.eclipse.dirigible.tests.framework.CssClass;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.util.SleepUtil;
@@ -246,7 +247,7 @@ class BrowserImpl implements Browser {
         }
 
         try {
-            foundElements.shouldHave(CollectionCondition.sizeGreaterThan(0), Duration.ofMillis(ELEMENT_SEARCH_IN_FRAME_MILLIS));
+            foundElements.shouldHave(CollectionCondition.size(1), Duration.ofMillis(ELEMENT_SEARCH_IN_FRAME_MILLIS));
 
             return Optional.of(foundElements.first());
         } catch (ListSizeMismatch ex) {
@@ -338,8 +339,12 @@ class BrowserImpl implements Browser {
         return findElementInAllFrames(selector, conditions);
     }
 
-    private By constructCssSelectorByType(String elementType) {
+    private By constructCssLocatorByType(String elementType) {
         return By.cssSelector(elementType);
+    }
+
+    private By constructCssSelectorByType(String elementType) {
+        return Selectors.byTagName(elementType);
     }
 
     private SelenideElement getElementByAttributeAndText(String elementType, String text) {
@@ -408,7 +413,7 @@ class BrowserImpl implements Browser {
 
     @Override
     public void assertElementExistsByTypeAndText(String elementType, String text) {
-        By selector = constructCssSelectorByType(elementType);
+        By selector = constructCssLocatorByType(elementType);
 
         findElementInAllFrames(selector, Condition.exist, Condition.exactText(text));
     }

@@ -67,7 +67,8 @@ public class IDE {
     }
 
     public void assertStatusBarMessage(String expectedMessage) {
-        browser.assertElementExistsByTypeAndText(HtmlElementType.STATUS_MESSAGE, expectedMessage);
+        String cssClass = ".statusbar-message";
+        browser.assertElementExistsByTypeAndText(cssClass, expectedMessage);
     }
 
     public void assertPublishedProjectMessage(String projectName) {
