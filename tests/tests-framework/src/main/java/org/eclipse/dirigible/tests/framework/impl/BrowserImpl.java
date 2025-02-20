@@ -246,8 +246,6 @@ class BrowserImpl implements Browser {
         }
 
         try {
-            // foundElements.shouldHave(CollectionCondition.size(1),
-            // Duration.ofMillis(ELEMENT_SEARCH_IN_FRAME_MILLIS));
             foundElements.shouldHave(CollectionCondition.sizeGreaterThan(0), Duration.ofMillis(ELEMENT_SEARCH_IN_FRAME_MILLIS));
 
             return Optional.of(foundElements.first());
@@ -341,12 +339,7 @@ class BrowserImpl implements Browser {
     }
 
     private By constructCssSelectorByType(String elementType) {
-        String homeValue = org.eclipse.dirigible.commons.config.Configuration.get("DIRIGIBLE_HOME_URL");
-        if (null != homeValue && homeValue.contains("services/web/ide")) {
-            return Selectors.byTagName(elementType);
-        } else {
-            return By.cssSelector(elementType);
-        }
+        return By.cssSelector(elementType);
     }
 
     private SelenideElement getElementByAttributeAndText(String elementType, String text) {
