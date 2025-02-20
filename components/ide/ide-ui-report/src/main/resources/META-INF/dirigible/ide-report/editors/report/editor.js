@@ -1528,5 +1528,17 @@ angular.module('page', ['ideUI', 'ideView', 'ideWorkspace'])
 
 		// End Add from Tables Section ---------------------------------------------------------------------------------
 
+		// Begin Security Section --------------------------------------------------------------------------------------
+
+		$scope.toggleDefaultRoles = function () {
+			if ($scope.report.security.generateDefaultRoles === 'true') {
+				$scope.report.security.roleRead = $scope.dataParameters.file.split('/')[2] + '.' + "Report" + '.' + $scope.report.name + "ReadOnly";
+			} else {
+				$scope.report.security.roleRead = null;
+			}
+
+		};
+
+		// End Security Section ----------------------------------------------------------------------------------------
 
 	});
