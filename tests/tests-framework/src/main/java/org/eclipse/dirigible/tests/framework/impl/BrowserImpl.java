@@ -338,10 +338,6 @@ class BrowserImpl implements Browser {
         return findElementInAllFrames(selector, conditions);
     }
 
-    private By constructCssLocatorByType(String elementType) {
-        return By.cssSelector(elementType);
-    }
-
     private By constructCssSelectorByType(String elementType) {
         return Selectors.byTagName(elementType);
     }
@@ -412,7 +408,7 @@ class BrowserImpl implements Browser {
 
     @Override
     public void assertElementExistsByTypeAndText(String elementType, String text) {
-        By selector = constructCssLocatorByType(elementType);
+        By selector = constructCssSelectorByType(elementType);
 
         findElementInAllFrames(selector, Condition.exist, Condition.exactText(text));
     }

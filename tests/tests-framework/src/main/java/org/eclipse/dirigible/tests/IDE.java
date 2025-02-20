@@ -67,8 +67,7 @@ public class IDE {
     }
 
     public void assertStatusBarMessage(String expectedMessage) {
-        String cssClass = ".statusbar-message";
-        browser.assertElementExistsByTypeAndText(cssClass, expectedMessage);
+        browser.assertElementExistsByTypeAndText(HtmlElementType.SPAN, expectedMessage);
     }
 
     public void assertPublishedProjectMessage(String projectName) {
@@ -145,10 +144,6 @@ public class IDE {
         workbench.createNewProject(projectName);
 
         assertPublishedProjectMessage(projectName);
-    }
-
-    public void assertCreatedProject(String projectName) {
-        assertStatusBarMessage("Created project '" + projectName + "'");
     }
 
     public void openSpringBootAdmin() {
