@@ -48,8 +48,9 @@ export function getSources(parameters) {
 			collection: "generateReportModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report/dialog-window/view.extension",
+			location: "/template-application-ui-angular/ui/perspective/report/dialog-window/view.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window/view.extension",
 			collection: "generateReportModels"
 		},
@@ -75,8 +76,9 @@ export function getSources(parameters) {
 			collection: "generateReportModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report/dialog-filter/view.extension",
+			location: "/template-application-ui-angular/ui/perspective/report/dialog-filter/view.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-filter/view.extension",
 			collection: "generateReportModels"
 		},
@@ -102,14 +104,16 @@ export function getSources(parameters) {
 			collection: "generateReportModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report/tile.extension",
+			location: "/template-application-ui-angular/ui/perspective/report/tile.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/tile.extension",
 			collection: "generateReportModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report/tile-portal.extension",
+			location: "/template-application-ui-angular/ui/perspective/report/tile-portal.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/tile-portal.extension",
 			collection: "generateReportModels"
 		},
@@ -121,8 +125,9 @@ export function getSources(parameters) {
 			collection: "generateReportModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report/view.extension",
+			location: "/template-application-ui-angular/ui/perspective/report/view.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/view.extension",
 			collection: "generateReportModels"
 		},
@@ -150,6 +155,7 @@ export function getSources(parameters) {
 		{
 			location: "/template-application-ui-angular/ui/perspective/report/dialog-print/print.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-print/print.extension",
 			collection: "generateReportModels"
 		},

@@ -8,10 +8,7 @@ const navigationData = {
 	label: '${title}',
 	group: 'reports',
 	link: '/services/web/${projectName}/gen/${genFolderName}/ui/Reports/${name}/index.html',
-	order: $navigationOrder,
-#if($perspectiveRole)
-	role: '${perspectiveRole}',
-#end
+	order: $navigationOrder
 };
 
 function getNavigation() {

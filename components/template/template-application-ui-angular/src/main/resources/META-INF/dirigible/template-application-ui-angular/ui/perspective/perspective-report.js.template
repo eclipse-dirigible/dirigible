@@ -8,10 +8,7 @@ const perspectiveData = {
 	name: 'Reports',
 	link: '/services/web/${projectName}/gen/${genFolderName}/ui/Reports/index.html',
 	order: 999,
-	icon: '/services/web/resources/unicons/dashboard.svg',
-#if($perspectiveRole)
-	role: '${perspectiveRole}',
-#end
+	icon: '/services/web/resources/unicons/dashboard.svg'
 };
 
 if (typeof exports !== 'undefined') {

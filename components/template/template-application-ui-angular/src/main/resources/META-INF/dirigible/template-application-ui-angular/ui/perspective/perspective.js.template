@@ -7,11 +7,8 @@ const perspectiveData = {
 	id: '${perspectiveName}',
 	name: '${perspectiveLabel}',
 	link: '/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/index.html',
-	order: ${perspectiveOrder},
-	icon: '${perspectiveIcon}',
-#if($perspectiveRole)
-	role: '${perspectiveRole}',
-#end
+	order: '${perspectiveOrder}',
+	icon: '${perspectiveIcon}'
 };
 
 if (typeof exports !== 'undefined') {
