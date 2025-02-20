@@ -1540,5 +1540,4 @@ angular.module('page', ['ideUI', 'ideView', 'ideWorkspace'])
 		};
 
 		// End Security Section ----------------------------------------------------------------------------------------
-
 	});
