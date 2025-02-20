@@ -67,24 +67,12 @@ public class IDE {
     }
 
     public void assertStatusBarMessage(String expectedMessage) {
-        String homeValue = Configuration.get("DIRIGIBLE_HOME_URL");
-        if (null != homeValue && homeValue.contains("services/web/ide")) {
-            browser.assertElementExistsByTypeAndText(HtmlElementType.SPAN, expectedMessage);
-        } else {
-            browser.assertElementExistsByTypeAndText(HtmlElementType.STATUS_MESSAGE, expectedMessage);
-
-        }
+        browser.assertElementExistsByTypeAndText(HtmlElementType.STATUS_MESSAGE, expectedMessage);
     }
 
     public void assertPublishedProjectMessage(String projectName) {
-        String homeValue = Configuration.get("DIRIGIBLE_HOME_URL");
-        if (null != homeValue && homeValue.contains("services/web/ide")) {
-            String publishedMessage = "Published '/" + projectName + "'";
-            assertStatusBarMessage(publishedMessage);
-        } else {
-            String publishedMessage = "Published '/workspace/" + projectName + "'";
-            assertStatusBarMessage(publishedMessage);
-        }
+        String publishedMessage = "Published '/workspace/" + projectName + "'";
+        assertStatusBarMessage(publishedMessage);
     }
 
     public void assertJSHttpResponse(String projectName, String fileRelativePath, int expectedStatusCode, String expectedBody) {
@@ -137,12 +125,6 @@ public class IDE {
     public Workbench openWorkbench() {
         openHomePage();
 
-        // TODO: remove the if once switched to the new UI
-        String homeValue = Configuration.get("DIRIGIBLE_HOME_URL");
-        if (null != homeValue && homeValue.contains("services/web/ide")) {
-            browser.clickOnElementByAttributeValue(HtmlElementType.ANCHOR, HtmlAttribute.TITLE, "Workbench");
-        }
-
         browser.clickOnElementById("perspective-workbench");
 
         return new Workbench(browser);
@@ -161,7 +143,6 @@ public class IDE {
 
         workbench.createNewProject(projectName);
 
-        // assertCreatedProject(projectName);
         assertPublishedProjectMessage(projectName);
     }
 
