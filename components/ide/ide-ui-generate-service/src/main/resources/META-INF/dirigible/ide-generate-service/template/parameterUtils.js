@@ -176,7 +176,7 @@ export function process(model, parameters) {
                     rolePair["roleRead"] = e.roleRead;
                 }
 
-                if (e.type != "REPORT" || e.type != "FILTER") {
+                if (e.type != "REPORT" && e.type != "FILTER") {
                     if (e.roleWrite && e.roleWrite != "") {
                         rolePair["roleWrite"] = e.roleWrite;
                     }
