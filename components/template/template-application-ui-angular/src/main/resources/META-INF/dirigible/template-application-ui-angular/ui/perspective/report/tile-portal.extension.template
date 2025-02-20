@@ -2,5 +2,5 @@
     "module": "${projectName}/gen/${genFolderName}/ui/Reports/${name}/tile.js",
     "extensionPoint": "portal-tile",
     "description": "${projectName} - Application Tile"#if($perspectiveRole || $roleRead),
-    "role": "#if($perspectiveRole)${perspectiveRole},#end#if($roleRead)${roleRead},#end"#end
+    "role": "#if($perspectiveRole)${perspectiveRole},#end#if($roleRead)${roleRead}#end"#end
 }
