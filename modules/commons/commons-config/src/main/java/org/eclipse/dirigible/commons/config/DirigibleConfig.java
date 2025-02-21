@@ -123,19 +123,6 @@ public enum DirigibleConfig {
         return Configuration.get(key, defaultValue);
     }
 
-    public void setStringValue(String value) {
-        Configuration.set(getKey(), value);
-    }
-
-    /**
-     * Gets the key.
-     *
-     * @return the key
-     */
-    public String getKey() {
-        return key;
-    }
-
     /**
      * From base 64.
      *
@@ -170,7 +157,20 @@ public enum DirigibleConfig {
     }
 
     public void setBooleanValue(boolean value) {
-        Configuration.set(getKey(), Boolean.toString(value));
+        setStringValue(Boolean.toString(value));
+    }
+
+    public void setStringValue(String value) {
+        Configuration.set(getKey(), value);
+    }
+
+    /**
+     * Gets the key.
+     *
+     * @return the key
+     */
+    public String getKey() {
+        return key;
     }
 
     /**
@@ -190,6 +190,6 @@ public enum DirigibleConfig {
     }
 
     public void setIntValue(int value) {
-        Configuration.set(getKey(), Integer.toString(value));
+        setStringValue(Integer.toString(value));
     }
 }
