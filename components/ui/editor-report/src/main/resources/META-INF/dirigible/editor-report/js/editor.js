@@ -1394,7 +1394,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 
 	$scope.toggleDefaultRoles = function () {
 		if ($scope.report.security.generateDefaultRoles === 'true') {
-			$scope.report.security.roleRead = $scope.dataParameters.file.split('/')[2] + '.' + "Report" + '.' + $scope.report.name + "ReadOnly";
+			$scope.report.security.roleRead = $scope.dataParameters.filePath.split('/')[2] + '.' + "Report" + '.' + $scope.report.name + "ReadOnly";
 		} else {
 			$scope.report.security.roleRead = null;
 		}

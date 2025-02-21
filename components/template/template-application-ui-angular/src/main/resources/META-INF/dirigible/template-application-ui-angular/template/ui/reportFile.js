@@ -37,8 +37,9 @@ function getReportPerspectiveSources() {
             collection: "generateReportModels"
         },
         {
-            location: "/template-application-ui-angular/ui/perspective/perspective-navigation-report.extension",
+            location: "/template-application-ui-angular/ui/perspective/perspective-navigation-report.extension.template",
             action: "generate",
+            engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/Reports/perspective-navigation.extension",
             collection: "generateReportModels"
         },
