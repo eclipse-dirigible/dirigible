@@ -17,10 +17,8 @@ import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.openqa.selenium.By;
-import org.openqa.selenium.WebElement;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.chrome.ChromeOptions;
-import org.openqa.selenium.interactions.Actions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -293,9 +291,7 @@ class BrowserImpl implements Browser {
     public void clickOnElementByAttributePatternAndText(String elementType, String attribute, String pattern, String text) {
         By by = constructCssSelectorByTypeAndAttribute(elementType, attribute, pattern);
 
-        WebElementCondition[] conditions = {Condition.visible, Condition.enabled, Condition.exactText(text)};
-
-        SelenideElement element = findElementInAllFrames(by, conditions);
+        SelenideElement element = findElementInAllFrames(by, Condition.visible, Condition.enabled, Condition.exactText(text));
         clickElement(element);
     }
 
@@ -334,8 +330,7 @@ class BrowserImpl implements Browser {
     private SelenideElement getElementByAttributeAndContainsText(String elementType, String text) {
         By selector = constructCssSelectorByType(elementType);
 
-        WebElementCondition[] conditions = {Condition.exist, Condition.matchText(Pattern.quote(text))};
-        return findElementInAllFrames(selector, conditions);
+        return findElementInAllFrames(selector, Condition.exist, Condition.matchText(Pattern.quote(text)));
     }
 
     private By constructCssSelectorByType(String elementType) {
