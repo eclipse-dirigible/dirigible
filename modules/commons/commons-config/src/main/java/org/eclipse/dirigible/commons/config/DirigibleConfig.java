@@ -30,6 +30,16 @@ public enum DirigibleConfig {
 
     MAIL_SMTP_PORT("DIRIGIBLE_MAIL_SMTP_PORT", null), MAIL_SMTP_AUTH("DIRIGIBLE_MAIL_SMTP_AUTH", null), //
 
+    MAIL_USERNAME("DIRIGIBLE_MAIL_USERNAME", null), //
+
+    MAIL_PASSWORD("DIRIGIBLE_MAIL_PASSWORD", null), //
+
+    MAIL_TRANSPORT_PROTOCOL("DIRIGIBLE_MAIL_TRANSPORT_PROTOCOL", "smtps"), //
+
+    MAIL_SMTP_HOST("DIRIGIBLE_MAIL_SMTP_HOST", null), //
+
+    MAIL_SMTP_PORT("DIRIGIBLE_MAIL_SMTP_PORT", null), MAIL_SMTP_AUTH("DIRIGIBLE_MAIL_SMTP_AUTH", null), //
+
     SNOWFLAKE_DATA_SOURCE_LIFESPAN_SECONDS("DIRIGIBLE_SNOWFLAKE_DATA_SOURCE_LIFESPAN_SECONDS", "540"), // 9 minutes
 
     LEAKED_CONNECTIONS_MAX_IN_USE_SECONDS("DIRIGIBLE_LEAKED_CONNECTIONS_MAX_IN_USE_SECONDS", "180"), // 3 min by default
@@ -113,6 +123,19 @@ public enum DirigibleConfig {
         return Configuration.get(key, defaultValue);
     }
 
+    public void setStringValue(String value) {
+        Configuration.set(getKey(), value);
+    }
+
+    /**
+     * Gets the key.
+     *
+     * @return the key
+     */
+    public String getKey() {
+        return key;
+    }
+
     /**
      * From base 64.
      *
@@ -151,15 +174,6 @@ public enum DirigibleConfig {
     }
 
     /**
-     * Gets the key.
-     *
-     * @return the key
-     */
-    public String getKey() {
-        return key;
-    }
-
-    /**
      * Gets the int value.
      *
      * @return the int value
@@ -176,6 +190,6 @@ public enum DirigibleConfig {
     }
 
     public void setIntValue(int value) {
-        setStringValue(Integer.toString(value));
+        Configuration.set(getKey(), Integer.toString(value));
     }
 }
