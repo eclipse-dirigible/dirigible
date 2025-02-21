@@ -45,10 +45,8 @@ class MailIT extends UserInterfaceIntegrationTest {
 
     @Autowired
     private TestProject testProject;
-
     @Autowired
     private RestAssuredExecutor restAssuredExecutor;
-
     private GreenMail greenMail;
 
     @BeforeEach

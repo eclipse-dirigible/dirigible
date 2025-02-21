@@ -23,19 +23,15 @@ class CustomSecurityIT extends UserInterfaceIntegrationTest {
 
     private static final String EMPLOYEE_ROLE = "employee";
     private static final String EMPLOYEE_USERNAME = "test-employee";
-
     private static final String EMPLOYEE_MANAGER_ROLE = "employee-manager";
     private static final String EMPLOYEE_MANAGER_USERNAME = "test-employee-manager";
-
     private static final String PROTECTED_PAGE_PATH = "/services/web/dirigible-test-project/security/protected_page.html";
     private static final String PROTECTED_PAGE_HEADER = "This is a protected page";
 
     @Autowired
     private TestProject testProject;
-
     @Autowired
     private IDEFactory ideFactory;
-
     @Autowired
     private SecurityUtil securityUtil;
 

@@ -9,9 +9,14 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.junit.jupiter.api.Test;
 
 class CreateNewProjectIT extends UserInterfaceIntegrationTest {
+
+    static {
+        Configuration.set("DIRIGIBLE_HOME_URL", "services/web/ide/");
+    }
 
     @Test
     void testCreateNewBlankProject() {
