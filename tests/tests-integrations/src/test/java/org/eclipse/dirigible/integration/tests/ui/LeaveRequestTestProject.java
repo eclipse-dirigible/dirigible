@@ -50,8 +50,8 @@ public class LeaveRequestTestProject {
     private final ProjectUtil projectUtil;
     private final LogsAsserter testLogsAsserter;
 
-    public LeaveRequestTestProject(BrowserFactory browserFactory, IDE ide, RestAssuredExecutor restAssuredExecutor, IDEFactory ideFactory,
-            ProjectUtil projectUtil) {
+    public LeaveRequestTestProject(BrowserFactory browserFactory, IDE ide, RestAssuredExecutor restAssuredExecutor,
+                            IDEFactory ideFactory, ProjectUtil projectUtil) {
         this.browserFactory = browserFactory;
         this.ide = ide;
         this.restAssuredExecutor = restAssuredExecutor;
@@ -89,16 +89,16 @@ public class LeaveRequestTestProject {
     private void verifyProcessService(DirigibleTestTenant tenant) {
         String jsonPayload = "{\"requester\": \"John Doe\", \"daysRequested\": 5}";
         given().contentType(ContentType.JSON)
-               .body(jsonPayload)
-               .when()
-               .post(API_PATH)
-               .then()
-               .statusCode(201);
+                .body(jsonPayload)
+                .when()
+                .post(API_PATH)
+                .then()
+                .statusCode(201);
         given().when()
-               .get(API_PATH)
-               .then()
-               .statusCode(200)
-               .body("$.requester", equalTo("John Doe"))
-               .body("$.daysRequested", equalTo(5));
+                .get(API_PATH)
+                .then()
+                .statusCode(200)
+                .body("$.requester", equalTo("John Doe"))
+                .body("$.daysRequested", equalTo(5));
     }
 }
