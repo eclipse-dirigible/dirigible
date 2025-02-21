@@ -71,7 +71,7 @@ public class IDE {
     }
 
     public void assertPublishedProjectMessage(String projectName) {
-        String publishedMessage = "Published '/" + projectName + "'";
+        String publishedMessage = "Published '/workspace/" + projectName + "'";
         assertStatusBarMessage(publishedMessage);
     }
 
@@ -125,12 +125,6 @@ public class IDE {
     public Workbench openWorkbench() {
         openHomePage();
 
-        // TODO: remove the if once switched to the new UI
-        String homeValue = Configuration.get("DIRIGIBLE_HOME_URL");
-        if (null != homeValue && homeValue.contains("services/web/ide")) {
-            browser.clickOnElementByAttributeValue(HtmlElementType.ANCHOR, HtmlAttribute.TITLE, "Workbench");
-        }
-
         browser.clickOnElementById("perspective-workbench");
 
         return new Workbench(browser);
@@ -149,11 +143,7 @@ public class IDE {
 
         workbench.createNewProject(projectName);
 
-        assertCreatedProject(projectName);
-    }
-
-    public void assertCreatedProject(String projectName) {
-        assertStatusBarMessage("Created project '" + projectName + "'");
+        assertPublishedProjectMessage(projectName);
     }
 
     public void openSpringBootAdmin() {
