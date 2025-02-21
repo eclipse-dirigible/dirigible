@@ -51,28 +51,30 @@ class MessagingFacadeTest {
 
             String message = MessagingFacade.receiveFromQueue(QUEUE, TIMEOUT);
 
-            assertThat(message).isEqualTo(MESSAGE ).withFailMessage("Unexpected message");
+            assertThat(message).isEqualTo(MESSAGE)
+                               .withFailMessage("Unexpected message");
         }
 
         @Test
         void onJMSException() throws TimeoutException, JMSException {
             when(messageConsumer.receiveMessageFromQueue(QUEUE, TIMEOUT)).thenThrow(JMSException.class);
 
-            assertThrows(MessagingAPIException.class, ()->MessagingFacade.receiveFromQueue(QUEUE, TIMEOUT));
+            assertThrows(MessagingAPIException.class, () -> MessagingFacade.receiveFromQueue(QUEUE, TIMEOUT));
         }
 
         @Test
         void onRuntimeException() throws TimeoutException, JMSException {
             when(messageConsumer.receiveMessageFromQueue(QUEUE, TIMEOUT)).thenThrow(RuntimeException.class);
 
-            assertThrows( MessagingAPIException.class, ()->MessagingFacade.receiveFromQueue(QUEUE, TIMEOUT));
+            assertThrows(MessagingAPIException.class, () -> MessagingFacade.receiveFromQueue(QUEUE, TIMEOUT));
         }
 
         @Test
         void onTimeoutException() throws TimeoutException, JMSException {
             when(messageConsumer.receiveMessageFromQueue(QUEUE, TIMEOUT)).thenThrow(TimeoutException.class);
 
-            assertThrows(org.eclipse.dirigible.components.api.messaging.TimeoutException.class, ()->MessagingFacade.receiveFromQueue(QUEUE, TIMEOUT));
+            assertThrows(org.eclipse.dirigible.components.api.messaging.TimeoutException.class,
+                    () -> MessagingFacade.receiveFromQueue(QUEUE, TIMEOUT));
         }
     }
 
@@ -85,28 +87,30 @@ class MessagingFacadeTest {
 
             String message = MessagingFacade.receiveFromTopic(TOPIC, TIMEOUT);
 
-            assertThat(message).isEqualTo(MESSAGE ).withFailMessage("Unexpected message");
+            assertThat(message).isEqualTo(MESSAGE)
+                               .withFailMessage("Unexpected message");
         }
 
         @Test
         void onJMSException() throws TimeoutException, JMSException {
             when(messageConsumer.receiveMessageFromTopic(TOPIC, TIMEOUT)).thenThrow(JMSException.class);
 
-            assertThrows( MessagingAPIException.class, ()->MessagingFacade.receiveFromTopic(TOPIC, TIMEOUT));
+            assertThrows(MessagingAPIException.class, () -> MessagingFacade.receiveFromTopic(TOPIC, TIMEOUT));
         }
 
         @Test
         void onRuntimeException() throws TimeoutException, JMSException {
             when(messageConsumer.receiveMessageFromTopic(TOPIC, TIMEOUT)).thenThrow(RuntimeException.class);
 
-            assertThrows( MessagingAPIException.class, ()->   MessagingFacade.receiveFromTopic(TOPIC, TIMEOUT));
+            assertThrows(MessagingAPIException.class, () -> MessagingFacade.receiveFromTopic(TOPIC, TIMEOUT));
         }
 
         @Test
         void onTimeoutException() throws TimeoutException, JMSException {
             when(messageConsumer.receiveMessageFromTopic(TOPIC, TIMEOUT)).thenThrow(TimeoutException.class);
 
-            assertThrows(org.eclipse.dirigible.components.api.messaging.TimeoutException.class, ()->MessagingFacade.receiveFromTopic(TOPIC, TIMEOUT));
+            assertThrows(org.eclipse.dirigible.components.api.messaging.TimeoutException.class,
+                    () -> MessagingFacade.receiveFromTopic(TOPIC, TIMEOUT));
         }
     }
 
