@@ -1,0 +1,10 @@
+[
+    {
+        "name": "employee-manager",
+        "description": "Employee Manager Role"
+    },
+    {
+        "name": "employee",
+        "description": "Employee Role"
+    }
+]
