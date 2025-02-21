@@ -6,7 +6,7 @@
 #end
 import { Controller, Get } from "sdk/http"
 import { ${name}Repository, ${name}Filter, ${name}PaginatedFilter } from "../../dao/${perspectiveName}/${name}Repository";
-#if($perspectiveRole)
+#if($perspectiveRole || $roleRead)
 import { user } from "sdk/security"
 import { ForbiddenError } from "../utils/ForbiddenError";
 #end
@@ -20,8 +20,8 @@ class ${name}Service {
     @Get("/")
     public filter(_: any, ctx: any) {
         try {
-#if($perspectiveRole)
-            this.checkPermissions();
+#if($perspectiveRole || $roleRead)
+            this.checkPermissions("read");
 #end
             const filter: ${name}PaginatedFilter = {
 #foreach ($property in $filter.properties)
@@ -56,8 +56,8 @@ class ${name}Service {
     @Get("/count")
     public count(_: any, ctx: any) {
         try {
-#if($perspectiveRole)
-            this.checkPermissions();
+#if($perspectiveRole || $roleRead)
+            this.checkPermissions("read");
 #end
             const filter: ${name}Filter = {
 #foreach ($property in $filter.properties)
@@ -94,11 +94,18 @@ class ${name}Service {
         }
     }
 
+#if($perspectiveRole || $roleRead)
+    private checkPermissions(operationType: string) {
 #if($perspectiveRole)
-    private checkPermissions() {
         if (!user.isInRole("${perspectiveRole}")) {
             throw new ForbiddenError();
         }
+#end
+#if($roleRead)
+        if (operationType === "read" && !(user.isInRole("${roleRead}"))) {
+            throw new ForbiddenError();
+        }
+#end
     }
 
 #end

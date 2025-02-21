@@ -9,17 +9,7 @@ const viewData = {
     factory: "frame",
     region: "center",
     link: "/services/web/${projectName}/gen/${genFolderName}/ui/Reports/${name}/index.html",
-    perspectiveName: "Reports",
-#if($perspectiveRole || $roleRead)
-    roles: [
-#if($perspectiveRole)
-        "${perspectiveRole}",
-#end
-#if($roleRead)
-        "${roleRead}",
-#end
-    ]
-#end
+    perspectiveName: "Reports"
 };
 
 if (typeof exports !== 'undefined') {

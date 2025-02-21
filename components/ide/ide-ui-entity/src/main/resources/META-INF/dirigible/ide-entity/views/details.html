@@ -56,7 +56,8 @@
                         <span class="fd-icon-tab-bar__tag">Feed</span>
                     </a>
                 </li>
-                <li role="presentation" class="fd-icon-tab-bar__item">
+                <li role="presentation" class="fd-icon-tab-bar__item"
+                    ng-hide="dataParameters.entityType === 'PROJECTION'">
                     <a role="tab" class="fd-icon-tab-bar__tab" href="#section5" ng-click="tabNumber = 4"
                         ng-attr-aria-selected="{{ tabNumber === 4 ? true : undefined }}" id="tab5">
                         <span class="fd-icon-tab-bar__tag">Security</span>
@@ -692,7 +693,8 @@
                         </div>
                     </fd-form-item>
 
-                    <fd-form-item class="fd-row fd-margin-top--tiny">
+                    <fd-form-item class="fd-row fd-margin-top--tiny"
+                        ng-hide="dataParameters.entityType === 'REPORT' || dataParameters.entityType === 'FILTER'">
                         <div class="fd-col fd-col-md--2">
                             <fd-form-label for="swr" dg-required="false" dg-colon="true">Write role</fd-form-label>
                         </div>
