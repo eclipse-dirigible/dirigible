@@ -28,15 +28,17 @@ class MultitenancyIT extends UserInterfaceIntegrationTest {
 
     @Autowired
     private TestProject testProject;
+
     @Autowired
     @DefaultTenant
     private Tenant defTenant;
+
     @Autowired
     private BrowserFactory browserFactory;
 
     @BeforeAll
     public static void setUp() {
-        Configuration.set(DirigibleConfig.MULTI_TENANT_MODE_ENABLED.getKey(), "true");
+        DirigibleConfig.MULTI_TENANT_MODE_ENABLED.setBooleanValue(true);
     }
 
     @Test

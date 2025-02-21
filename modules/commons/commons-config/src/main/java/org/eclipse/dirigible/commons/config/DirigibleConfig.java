@@ -147,11 +147,7 @@ public enum DirigibleConfig {
     }
 
     public void setBooleanValue(boolean value) {
-        setStringValue(Boolean.toString(value));
-    }
-
-    public void setStringValue(String value) {
-        Configuration.set(getKey(), value);
+        Configuration.set(getKey(), Boolean.toString(value));
     }
 
     /**
