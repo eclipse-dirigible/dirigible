@@ -20,8 +20,6 @@ import java.util.Base64;
  */
 public enum DirigibleConfig {
 
-    HOME_URL("DIRIGIBLE_HOME_URL", "services/web/shell-ide/"), //
-
     MAIL_USERNAME("DIRIGIBLE_MAIL_USERNAME", null), //
 
     MAIL_PASSWORD("DIRIGIBLE_MAIL_PASSWORD", null), //
@@ -115,6 +113,19 @@ public enum DirigibleConfig {
         return Configuration.get(key, defaultValue);
     }
 
+    public void setStringValue(String value) {
+        Configuration.set(getKey(), value);
+    }
+
+    /**
+     * Gets the key.
+     *
+     * @return the key
+     */
+    public String getKey() {
+        return key;
+    }
+
     /**
      * From base 64.
      *
@@ -153,15 +164,6 @@ public enum DirigibleConfig {
     }
 
     /**
-     * Gets the key.
-     *
-     * @return the key
-     */
-    public String getKey() {
-        return key;
-    }
-
-    /**
      * Gets the int value.
      *
      * @return the int value
@@ -178,6 +180,6 @@ public enum DirigibleConfig {
     }
 
     public void setIntValue(int value) {
-        setStringValue(Integer.toString(value));
+        Configuration.set(getKey(), Integer.toString(value));
     }
 }
