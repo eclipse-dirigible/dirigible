@@ -27,7 +27,8 @@
 
     <body class="bk-vbox" shortcut="'ctrl+s'" shortcut-action="save">
         <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">
-            {{state.busyText}}</bk-busy-indicator-extended>
+            {{state.busyText}}
+        </bk-busy-indicator-extended>
         <bk-toolbar class="bk-full-width" has-title="true" ng-show="!state.error && !state.isBusy">
             <bk-toolbar-title>Report:</bk-toolbar-title>
             <bk-toolbar-spacer></bk-toolbar-spacer>
@@ -366,7 +367,7 @@
                     <!-- Begin Security -->
                     <bk-panel expanded="false">
                         <bk-panel-header>
-                            <bk-panel-expand hint="expand query section"></bk-panel-expand>
+                            <bk-panel-expand hint="expand security section"></bk-panel-expand>
                             <h4 bk-panel-title>Security</h4>
                         </bk-panel-header>
                         <bk-panel-content aria-label="Security">
@@ -386,8 +387,8 @@
                                     <div class="fd-col fd-col-md--2">
                                     </div>
                                     <bk-checkbox id="generalGenerateDefaultRoles" compact="false" ng-required="false"
-                                        ng-model="report.security.generateReport" data-ng-true-value="'true'"
-                                        data-ng-false-value="'false'"></bk-checkbox>
+                                        ng-model="report.security.generateDefaultRoles" data-ng-true-value="'true'"
+                                        data-ng-false-value="'false'" ng-change="toggleDefaultRoles()"></bk-checkbox>
                                     <bk-checkbox-label for="generalGenerateDefaultRoles">Generate Default Roles
                                     </bk-checkbox-label>
                                 </bk-form-item>
