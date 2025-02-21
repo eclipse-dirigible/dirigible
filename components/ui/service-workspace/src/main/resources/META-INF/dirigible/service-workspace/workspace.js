@@ -31,6 +31,11 @@ angular.module('WorkspaceService', []).constant('workspaceStorageKey', `${brandi
         };
 
         /**
+         * Returns the default workspace name.
+         */
+        const getDefaultWorkspace = () => 'workspace';
+
+        /**
          * Lists all available workspaces.
          */
         const listWorkspaceNames = function () {
@@ -310,6 +315,7 @@ angular.module('WorkspaceService', []).constant('workspaceStorageKey', `${brandi
         return {
             setWorkspace: setWorkspace,
             getCurrentWorkspace: getCurrentWorkspace,
+            getDefaultWorkspace: getDefaultWorkspace,
             listWorkspaceNames: listWorkspaceNames,
             list: list,
             resourceExists: resourceExists,

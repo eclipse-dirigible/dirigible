@@ -26,7 +26,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
+                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--7 #end">
 	                        <fd-combobox-input id="id${property.name}"
 	                            name="${property.name}"
 	                            state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
@@ -40,8 +40,16 @@
 	                            dropdown-items="options${property.name}"
 	                            dg-placeholder="Search ${property.widgetLabel} ...">
 	                        </fd-combobox-input>
-	                        <i class="sap-icon--information" role="presentation" onclick="javascript:alert('${property.description}')"></i>
 	                    </div>
+	                    <div class="fd-col fd-col-md--1">
+							<button class="fd-button" ng-click="create${property.name}()" ng-hide="action === 'select'">
+								<i class="sap-icon--add" role="presentation"></i>
+							</button>
+							<button class="fd-button" ng-click="refresh${property.name}()" ng-hide="action === 'select'">
+								<i class="sap-icon--refresh" role="presentation"></i>
+							</button>
+							<i class="sap-icon--information" role="presentation" onclick="javascript:alert('${property.description}')"></i>
+						</div>
                     </fd-form-item>
 #elseif($property.widgetType == "CHECKBOX")
                     <fd-form-item class="fd-row">

@@ -6,7 +6,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 	.config(["entityApiProvider", function (entityApiProvider) {
 		entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
 	}])
-	.controller('PageController', ['$scope', 'Extensions', 'messageHub', 'entityApi', function ($scope, Extensions, messageHub, entityApi) {
+	.controller('PageController', ['$scope', #if($hasDropdowns) '${dollar}http',#end 'Extensions', 'messageHub', 'entityApi', function ($scope, #if($hasDropdowns) ${dollar}http,#end Extensions, messageHub, entityApi) {
 
 		$scope.entity = {};
 		$scope.forms = {
@@ -173,5 +173,47 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		$scope.cancel = function () {
 			messageHub.postMessage("clearDetails");
 		};
+		
+		//-----------------Dialogs-------------------//
+		
+#if($hasDropdowns)
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+		$scope.create${property.name} = function () {
+			messageHub.showDialogWindow("${property.relationshipEntityName}-details", {
+				action: "create",
+				entity: {},
+			}, null, false);
+		};
+#end
+#end
+#end
+
+		//-----------------Dialogs-------------------//
+
+
+
+		//----------------Dropdowns-----------------//
+
+#if($hasDropdowns)
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+		$scope.refresh${property.name} = function () {
+			$scope.options${property.name} = [];
+			${dollar}http.get("${property.widgetDropdownUrl}").then(function (response) {
+				${dollar}scope.options${property.name} = response.data.map(e => {
+					return {
+						value: e.${property.widgetDropDownKey},
+						text: e.${property.widgetDropDownValue}
+					}
+				});
+			});
+		};
+#end
+#end
+#end
+
+		//----------------Dropdowns-----------------//	
+		
 
 	}]);

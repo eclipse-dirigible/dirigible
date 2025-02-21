@@ -13,6 +13,7 @@ import org.apache.camel.CamelContext;
 import org.apache.camel.component.platform.http.PlatformHttpComponent;
 import org.apache.camel.component.platform.http.spi.PlatformHttpEngine;
 import org.apache.camel.component.platform.http.springboot.CamelRequestHandlerMapping;
+import org.apache.camel.spring.boot.CamelSpringBootApplicationController;
 import org.apache.camel.spring.boot.SpringBootCamelContext;
 import org.eclipse.dirigible.components.engine.camel.processor.CamelDirigibleRequestHandlerMapping;
 import org.springframework.context.ApplicationContext;
@@ -51,7 +52,7 @@ class CamelDirigibleConfiguration {
      */
     @Bean
     SpringBootCamelContext createSpringBootCamelContext(ApplicationContext applicationContext) {
-        return new SpringBootCamelContext(applicationContext, true);
+        return new SpringBootCamelContext(applicationContext, true, new CamelSpringBootApplicationController(applicationContext));
     }
 
 }
