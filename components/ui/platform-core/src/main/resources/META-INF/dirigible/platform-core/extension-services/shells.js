@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Eclipse Dirigible contributors
+ * Copyright (c) 2025 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -12,7 +12,6 @@
 import { extensions } from "sdk/extensions";
 import { request, response } from "sdk/http";
 import { uuid } from "sdk/utils";
-import { user } from "sdk/security";
 
 const shells = [];
 const extensionPoints = (request.getParameter('extensionPoints') || 'platform-shells').split(',');
@@ -47,22 +46,7 @@ shellLoop: for (let i = 0; i < shellExtensions?.length; i++) {
 				continue shellLoop;
 			}
 		}
-		if (shell.roles && Array.isArray(shell.roles)) {
-			let hasRoles = true;
-			for (const next of shell.roles) {
-				if (!user.isInRole(next)) {
-					hasRoles = false;
-					break;
-				}
-			}
-			if (hasRoles) {
-				shells.push(shell);
-			}
-		} else if (shell.role && user.isInRole(shell.role)) {
-			shells.push(shell);
-		} else if (shell.role === undefined) {
-			shells.push(shell);
-		}
+		shells.push(shell);
 	}
 }
 

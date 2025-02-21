@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Eclipse Dirigible contributors
+ * Copyright (c) 2025 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -51,11 +51,26 @@ public class ExtensionService extends BaseArtefactService<Extension, Long> {
         boolean validRequest = UserRequestVerifier.isValid();
         List<Extension> result = extensions.stream()
                                            .filter(e -> {
-                                               return e.getRole() != null && validRequest ? UserRequestVerifier.isUserInRole(e.getRole())
-                                                       : true;
+                                               return validateRoles(validRequest, e);
                                            })
                                            .collect(Collectors.toList());
         return result;
+    }
+
+    private boolean validateRoles(boolean validRequest, Extension extension) {
+        if (validRequest && extension.getRole() != null && !extension.getRole()
+                                                                     .trim()
+                                                                     .equals("")) {
+            String rolesArrayString = extension.getRole();
+            String[] rolesArray = rolesArrayString.split(",");
+            for (String role : rolesArray) {
+                if (UserRequestVerifier.isUserInRole(role)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return true;
     }
 
 }

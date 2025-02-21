@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Eclipse Dirigible contributors
+ * Copyright (c) 2025 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -12,7 +12,6 @@
 import { request, response } from "sdk/http";
 import { extensions } from "sdk/extensions";
 import { uuid } from "sdk/utils";
-import { user } from "sdk/security";
 
 let mainmenu = [];
 const extensionPoints = (request.getParameter('extensionPoints') || 'platform-menus').split(',');
@@ -34,11 +33,7 @@ function setETag() {
 
 for (let i = 0; i < menuExtensions?.length; i++) {
 	const menu = menuExtensions[i].getMenu();
-	if (menu.role && user.isInRole(menu.role)) {
-		mainmenu.push(menu);
-	} else if (menu.role === undefined) {
-		mainmenu.push(menu);
-	}
+	mainmenu.push(menu);
 }
 
 response.setContentType("application/json");

@@ -57,12 +57,19 @@ export function getTemplate(parameters) {
         rename: "tsconfig.json",
         engine: "velocity"
     }];
+
+    templateSources.push({
+        location: "/template-application-rest/roles/default-roles.roles.template",
+        action: "generate",
+        engine: "velocity",
+        rename: "gen/{{genFolderName}}/roles/default-roles.roles"
+    });
+
+
     templateSources = templateSources.concat(daoTemplate.sources);
 
     let templateParameters = [];
     templateParameters = templateParameters.concat(daoTemplate.parameters);
-    templateParameters.push
-
     templateParameters.push({
         name: "addOpenApiInfo",
         label: "OpenAPI Info (Optional)",

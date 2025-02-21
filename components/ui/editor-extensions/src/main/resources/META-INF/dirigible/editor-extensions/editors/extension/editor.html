@@ -1,6 +1,6 @@
 <!--
 
-    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+    Copyright (c) 2010-2025 Eclipse Dirigible contributors
 
     All rights reserved. This program and the accompanying materials
     are made available under the terms of the Eclipse Public License v2.0
@@ -26,7 +26,9 @@
     </head>
 
     <body class="bk-vbox bk-center--vertical" bk-scrollbar shortcut="'ctrl+s'" shortcut-action="save">
-        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">
+            {{state.busyText}}
+        </bk-busy-indicator-extended>
         <div class="bk-restrict-width bk-full-width" ng-show="!state.error && !state.isBusy">
             <bk-fieldset class="bk-margin--md" ng-form="forms.editor">
                 <bk-form-group label="Extension:" name="entityForm">
@@ -47,7 +49,7 @@
                         <bk-form-label for="idRole" colon="true">Role</bk-form-label>
                         <bk-form-input-message state="{{ forms.editor['role'].$valid ? '' : 'error' }}" message="::inputErrorMessage">
                             <bk-input id="idRole" name="role" type="text" placeholder="Enter role name" state="{{ forms.editor['role'].$valid ? '' : 'error' }}" ng-required="false" ng-model="extension.role" ng-maxlength="255"
-                                input-rules="{ patterns: ['^[a-zA-Z0-9_.-/$-]*$'] }"></bk-input>
+                                input-rules="{ patterns: ['^[a-zA-Z0-9_,.-/$-]*$'] }"></bk-input>
                         </bk-form-input-message>
                     </bk-form-item>
                     <bk-form-item horizontal="false">

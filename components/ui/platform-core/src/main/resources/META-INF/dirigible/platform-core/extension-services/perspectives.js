@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Eclipse Dirigible contributors
+ * Copyright (c) 2025 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -13,7 +13,6 @@
 import { extensions } from 'sdk/extensions';
 import { request, response } from 'sdk/http';
 import { uuid } from 'sdk/utils';
-import { user } from 'sdk/security';
 
 
 const perspectives = [];
@@ -68,34 +67,11 @@ perspectiveLoop: for (let i = 0; i < perspectiveExtensions?.length; i++) {
 		continue perspectiveLoop;
 	}
 	pIds.add(perspective.id);
-	if (perspective.roles && Array.isArray(perspective.roles)) {
-		let hasRoles = true;
-		for (const next of perspective.roles) {
-			if (!user.isInRole(next)) {
-				hasRoles = false;
-				break;
-			}
-		}
-		if (hasRoles) {
-			if (perspective.isUtility) {
-				sidebarConfig.utilities.push(perspective);
-			} else if (perspective.items) {
-				sidebarConfig.perspectives.push(perspective);
-			} else perspectives.push(perspective);
-		}
-	} else if (perspective.role && user.isInRole(perspective.role)) {
-		if (perspective.isUtility) {
-			sidebarConfig.utilities.push(perspective);
-		} else if (perspective.items) {
-			sidebarConfig.perspectives.push(perspective);
-		} else perspectives.push(perspective);
-	} else if (perspective.role === undefined) {
-		if (perspective.isUtility) {
-			sidebarConfig.utilities.push(perspective);
-		} else if (perspective.items) {
-			sidebarConfig.perspectives.push(perspective);
-		} else perspectives.push(perspective);
-	}
+	if (perspective.isUtility) {
+		sidebarConfig.utilities.push(perspective);
+	} else if (perspective.items) {
+		sidebarConfig.perspectives.push(perspective);
+	} else perspectives.push(perspective);
 }
 
 response.setContentType('application/json');

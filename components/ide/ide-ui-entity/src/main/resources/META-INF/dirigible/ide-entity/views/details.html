@@ -1,6 +1,6 @@
 <!--
 
-    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+    Copyright (c) 2010-2025 Eclipse Dirigible contributors
 
     All rights reserved. This program and the accompanying materials
     are made available under the terms of the Eclipse Public License v2.0
@@ -101,8 +101,8 @@
                             <fd-form-label for="generalCaption" dg-colon="true">Caption</fd-form-label>
                         </div>
                         <div class="fd-col fd-col-md--6">
-                        	<fd-input id="generalCaption" type="text" ng-required="false" ng-model="dataParameters.caption"
-                                placeholder="Entity caption"></fd-input>
+                            <fd-input id="generalCaption" type="text" ng-required="false"
+                                ng-model="dataParameters.caption" placeholder="Entity caption"></fd-input>
                         </div>
                     </fd-form-item>
                     <fd-form-item class="fd-row">
@@ -468,16 +468,16 @@
                             </fd-input>
                         </div>
                     </fd-form-item>
-                    
-                    
+
+
                     <fd-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2">
                             <fd-form-label for="dependsonproperty" dg-colon="true">Depends on Property
                             </fd-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <fd-input id="dependsonproperty" type="text" ng-model="dataParameters.widgetDependsOnProperty"
-                            	placeholder="Property depending on">
+                            <fd-input id="dependsonproperty" type="text"
+                                ng-model="dataParameters.widgetDependsOnProperty" placeholder="Property depending on">
                             </fd-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
@@ -486,7 +486,7 @@
                         </div>
                         <div class="fd-col fd-col-md--4">
                             <fd-input id="dependsonentity" type="text" ng-model="dataParameters.widgetDependsOnEntity"
-                            	placeholder="Entity depending on">
+                                placeholder="Entity depending on">
                             </fd-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
@@ -494,8 +494,9 @@
                             </fd-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <fd-input id="dependsonvaluefrom" type="text" ng-model="dataParameters.widgetDependsOnValueFrom"
-                            	placeholder="Property used to get value from">
+                            <fd-input id="dependsonvaluefrom" type="text"
+                                ng-model="dataParameters.widgetDependsOnValueFrom"
+                                placeholder="Property used to get value from">
                             </fd-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
@@ -503,14 +504,15 @@
                             </fd-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <fd-input id="dependsonfilterby" type="text" ng-model="dataParameters.widgetDependsOnFilterBy"
-                            	placeholder="Property to set value to or filter by">
+                            <fd-input id="dependsonfilterby" type="text"
+                                ng-model="dataParameters.widgetDependsOnFilterBy"
+                                placeholder="Property to set value to or filter by">
                             </fd-input>
                         </div>
                     </fd-form-item>
-                    
-                    
-                    
+
+
+
                     <fd-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2">
                             <fd-form-label for="uiws" dg-required="false" dg-colon="true">Widget size</fd-form-label>
@@ -537,15 +539,15 @@
                         </div>
                         <div class="fd-col fd-col-md--6">
                             <fd-input id="uilab" type="text" ng-required="false" ng-model="dataParameters.widgetLabel"
-                            	placeholder="Label text">
+                                placeholder="Label text">
                             </fd-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <fd-form-label for="uislab" dg-required="false" dg-colon="true">Short label</fd-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <fd-input id="uislab" type="text" ng-required="false" ng-model="dataParameters.widgetShortLabel"
-                            	placeholder="Short label text">
+                            <fd-input id="uislab" type="text" ng-required="false"
+                                ng-model="dataParameters.widgetShortLabel" placeholder="Short label text">
                             </fd-input>
                         </div>
                     </fd-form-item>
@@ -555,7 +557,7 @@
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <fd-input id="uipat" type="text" ng-required="false" ng-model="dataParameters.widgetPattern"
-                            	placeholder="Input pattern">
+                                placeholder="Input pattern">
                             </fd-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
@@ -563,7 +565,7 @@
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <fd-input id="uif" type="text" ng-required="false" ng-model="dataParameters.widgetFormat"
-                            	placeholder="Rendering format">
+                                placeholder="Rendering format">
                             </fd-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
@@ -593,7 +595,7 @@
                         </div>
                         <div class="fd-col fd-col-md--6">
                             <fd-input id="uisec" type="text" ng-required="false" ng-model="dataParameters.widgetSection"
-                            	placeholder="Section to be placed in">
+                                placeholder="Section to be placed in">
                             </fd-input>
                         </div>
                     </fd-form-item>
@@ -685,19 +687,30 @@
                         </div>
                         <div class="fd-col fd-col-md--4 fd-col-lg--3">
                             <fd-input id="srr" type="text" ng-required="false" ng-model="dataParameters.roleRead"
-                                placeholder="role name">
+                                placeholder="role name" ng-disabled="dataParameters.generateDefaultRoles === 'true'">
                             </fd-input>
                         </div>
                     </fd-form-item>
+
                     <fd-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2">
                             <fd-form-label for="swr" dg-required="false" dg-colon="true">Write role</fd-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4 fd-col-lg--3">
                             <fd-input id="swr" type="text" ng-required="false" ng-model="dataParameters.roleWrite"
-                                placeholder="role name">
+                                placeholder="role name" ng-disabled="dataParameters.generateDefaultRoles === 'true'">
                             </fd-input>
                         </div>
+                    </fd-form-item>
+
+                    <fd-form-item class="fd-row fd-margin-top--tiny">
+                        <div class="fd-col fd-col-md--2"></div>
+                        <fd-checkbox id="generalGenerateDefaultRoles" compact="false" ng-required="false"
+                            ng-model="dataParameters.generateDefaultRoles" data-ng-true-value="'true'"
+                            data-ng-false-value="'false'" ng-change="toggleDefaultRoles()">
+                        </fd-checkbox>
+                        <fd-checkbox-label for="generalGenerateDefaultRoles" dg-required="false">Generate Default Roles
+                        </fd-checkbox-label>
                     </fd-form-item>
                 </fd-form-group>
             </section>

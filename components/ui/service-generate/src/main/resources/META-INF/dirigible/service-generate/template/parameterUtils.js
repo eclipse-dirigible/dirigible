@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Eclipse Dirigible contributors
+ * Copyright (c) 2025 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -162,6 +162,28 @@ export function process(model, parameters) {
             parameters.perspectives[e.perspectiveName].views.push(e.name);
         }
     });
+
+    parameters.roles = [];
+
+    model.entities.forEach(e => {
+        if (e.generateDefaultRoles === "true") {
+            if (e.type != "PROJECTION") {
+
+                const rolePair = {};
+                rolePair["entityName"] = e.name;
+
+                if (e.roleRead && e.roleRead != "") {
+                    rolePair["roleRead"] = e.roleRead;
+                }
+
+                if (e.roleWrite && e.roleWrite != "") {
+                    rolePair["roleWrite"] = e.roleWrite;
+                }
+
+                parameters.roles.push(rolePair);
+            }
+        }
+    })
 }
 
 export function getUniqueParameters(...parameters) {

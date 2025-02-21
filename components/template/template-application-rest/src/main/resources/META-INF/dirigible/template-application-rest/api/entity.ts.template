@@ -214,7 +214,7 @@ class ${name}Service {
         }
 #end
 #if($roleRead)
-        if (operationType === "read" && !user.isInRole("${roleRead}")) {
+        if (operationType === "read" && !(user.isInRole("${roleRead}")#if($roleWrite) || user.isInRole("${roleWrite}")#end)) {
             throw new ForbiddenError();
         }
 #end

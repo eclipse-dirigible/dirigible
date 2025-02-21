@@ -1,5 +1,6 @@
 {
     "module": "${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${masterEntity}/${name}/dialog-window/view.js",
     "extensionPoint": "dialog-window",
-    "description": "${projectName} - Application Dialog Window"
+    "description": "${projectName} - Application Dialog Window"#if($perspectiveRole || $roleRead || $roleWrite),
+    "role": "#if($perspectiveRole)${perspectiveRole},#end#if($roleRead)${roleRead},#end#if($roleWrite)${roleWrite}#end"#end
 }

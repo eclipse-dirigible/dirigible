@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Eclipse Dirigible contributors
+ * Copyright (c) 2025 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -12,7 +12,6 @@
 import { extensions } from "sdk/extensions";
 import { request, response } from "sdk/http";
 import { uuid } from "sdk/utils";
-import { user } from "sdk/security";
 
 const editors = [];
 const extensionPoints = (request.getParameter('extensionPoints') || 'platform-editors').split(',');
@@ -40,22 +39,7 @@ editorLoop: for (let i = 0; i < editorExtensions?.length; i++) {
 			continue editorLoop;
 		}
 	}
-	if (editor.roles && Array.isArray(editor.roles)) {
-		let hasRoles = true;
-		for (const next of editor.roles) {
-			if (!user.isInRole(next)) {
-				hasRoles = false;
-				break;
-			}
-		}
-		if (hasRoles) {
-			editors.push(editor);
-		}
-	} else if (editor.role && user.isInRole(editor.role)) {
-		editors.push(editor);
-	} else if (editor.role === undefined) {
-		editors.push(editor);
-	}
+	editors.push(editor);
 }
 
 response.setContentType("application/json");

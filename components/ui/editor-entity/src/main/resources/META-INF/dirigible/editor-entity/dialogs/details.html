@@ -1,6 +1,6 @@
 <!--
 
-    Copyright (c) 2010-2024 Eclipse Dirigible contributors
+    Copyright (c) 2010-2025 Eclipse Dirigible contributors
 
     All rights reserved. This program and the accompanying materials
     are made available under the terms of the Eclipse Public License v2.0
@@ -26,7 +26,9 @@
     </head>
 
     <body class="bk-vbox">
-        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">
+            {{state.busyText}}
+        </bk-busy-indicator-extended>
         <bk-icon-tab-bar side-padding="sm" selected-tab-id="selectedTab" ng-show="!state.error && !state.isBusy">
             <bk-icon-tab-bar-tablist>
                 <bk-icon-tab-bar-tab label="General" tab-id="general" ng-click="switchTab('general')"></bk-icon-tab-bar-tab>
@@ -73,8 +75,7 @@
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
-                        <div class="fd-col fd-col-md--2">
-                        </div>
+                        <div class="fd-col fd-col-md--2"></div>
                         <bk-checkbox id="generalGenerateReport" compact="false" ng-required="true" ng-model="dataParameters.generateReport" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
                         <bk-checkbox-label for="generalGenerateReport">Generate Report</bk-checkbox-label>
                     </bk-form-item>
@@ -108,7 +109,9 @@
                     </bk-form-item>
                     <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'" class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
-                        <bk-form-label for="generalCpeC" colon="true">Calculated property expression for <strong>Create</strong></bk-form-label>
+                        <bk-form-label for="generalCpeC" colon="true">Calculated property expression for
+                            <strong>Create</strong>
+                        </bk-form-label>
                     </bk-form-item>
                     <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'" class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
@@ -118,7 +121,9 @@
                     </bk-form-item>
                     <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'" class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
-                        <bk-form-label for="generalCpeU" colon="true">Calculated property expression for <strong>Update</strong></bk-form-label>
+                        <bk-form-label for="generalCpeU" colon="true">Calculated property expression for
+                            <strong>Update</strong>
+                        </bk-form-label>
                     </bk-form-item>
                     <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'" class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
@@ -205,8 +210,7 @@
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
-                        <div class="fd-col fd-col-md--2">
-                        </div>
+                        <div class="fd-col fd-col-md--2"></div>
                         <div class="fd-col fd-col-md--2">
                             <bk-checkbox id="dbpk" compact="false" ng-model="dataParameters.dataPrimaryKey" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
                             <bk-checkbox-label for="dbpk">Primary key</bk-checkbox-label>
@@ -342,7 +346,8 @@
                             <bk-form-label for="dependsonproperty" colon="true">Depends on Property</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="dependsonproperty" type="text" ng-model="dataParameters.widgetDependsOnProperty" placeholder="Property depending on"></bk-input>
+                            <bk-input id="dependsonproperty" type="text" ng-model="dataParameters.widgetDependsOnProperty" placeholder="Property depending on">
+                            </bk-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="dependsonentity" colon="true">Depends on Entity</bk-form-label>
@@ -506,7 +511,7 @@
                             <bk-form-label for="srr" colon="true">Read role</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4 fd-col-lg--3">
-                            <bk-input id="srr" type="text" ng-model="dataParameters.roleRead" placeholder="role name"></bk-input>
+                            <bk-input id="srr" type="text" ng-model="dataParameters.roleRead" placeholder="role name" ng-disabled="dataParameters.generateDefaultRoles === 'true'"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -514,8 +519,13 @@
                             <bk-form-label for="swr" colon="true">Write role</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4 fd-col-lg--3">
-                            <bk-input id="swr" type="text" ng-model="dataParameters.roleWrite" placeholder="role name"></bk-input>
+                            <bk-input id="swr" type="text" ng-model="dataParameters.roleWrite" placeholder="role name" ng-disabled="dataParameters.generateDefaultRoles === 'true'"></bk-input>
                         </div>
+                    </bk-form-item>
+                    <bk-form-item class="fd-row fd-margin-top--tiny">
+                        <div class="fd-col fd-col-md--2"></div>
+                        <bk-checkbox id="generalGenerateDefaultRoles" compact="false" ng-required="false" ng-model="dataParameters.generateReport" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
+                        <bk-checkbox-label for="generalGenerateDefaultRoles">Generate Default Roles</bk-checkbox-label>
                     </bk-form-item>
                 </bk-form-group>
             </bk-icon-tab-bar-panel>

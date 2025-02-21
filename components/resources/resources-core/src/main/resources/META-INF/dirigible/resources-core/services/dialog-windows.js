@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Eclipse Dirigible contributors
+ * Copyright (c) 2025 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -12,7 +12,6 @@
 import { extensions } from "sdk/extensions";
 import { request, response } from "sdk/http";
 import { uuid } from "sdk/utils";
-import { user } from "sdk/security";
 
 let dialogWindows = [];
 const extensionPoint = request.getParameter('extensionPoint') || 'ide-dialog-window';
@@ -27,29 +26,14 @@ function setETag() {
 
 for (let i = 0; i < dialogWindowExtensions?.length; i++) {
     const dialogWindow = dialogWindowExtensions[i].getDialogWindow();
-    if (dialogWindow.roles && Array.isArray(dialogWindow.roles)) {
-        let hasRoles = true;
-        for (const next of dialogWindow.roles) {
-            if (!user.isInRole(next)) {
-                hasRoles = false;
-                break;
-            }
-        }
-        if (hasRoles) {
-            dialogWindows.push(dialogWindow);
-        }
-    } else if (dialogWindow.role && user.isInRole(dialogWindow.role)) {
-        dialogWindows.push(dialogWindow);
-    } else if (dialogWindow.role === undefined) {
-        dialogWindows.push(dialogWindow);
-    }
+    dialogWindows.push(dialogWindow);
 }
 
 dialogWindows.sort(function (a, b) {
     if (a.order !== undefined && b.order !== undefined) {
         return (parseInt(a.order) - parseInt(b.order));
     } else if (a.order === undefined && b.order === undefined) {
-        return a.label < b.label ? -1 : 1
+        return a.label < b.label ? -1 : 1;
     } else if (a.order === undefined) {
         return 1;
     } else if (b.order === undefined) {
