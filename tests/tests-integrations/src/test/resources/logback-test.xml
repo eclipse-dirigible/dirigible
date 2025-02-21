@@ -71,7 +71,7 @@
     </root>
 
     <logger name="org.eclipse.dirigible.components.tenants.tenant" level="INFO"/>
-    <logger name="org.eclipse.dirigible.tests.framework.impl.BrowserImpl" level="INFO"/>
+    <logger name="org.eclipse.dirigible.tests.framework.impl.BrowserImpl" level="DEBUG"/>
     <logger name="org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer" level="INFO"/>
     <logger name="org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor" level="TRACE"/>
     <logger name="org.eclipse.dirigible.components.base.logging.TenantConverter" level="INFO"/>

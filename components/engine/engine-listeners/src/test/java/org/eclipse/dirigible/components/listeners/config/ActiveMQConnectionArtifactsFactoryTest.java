@@ -52,20 +52,20 @@ class ActiveMQConnectionArtifactsFactoryTest {
     private Session session;
 
     /**
-	 * Test create connection.
-	 *
-	 * @throws JMSException the JMS exception
-	 */
-	@Test
-	void testCreateConnection() throws JMSException {
-		when(connectionFactory.createConnection()).thenReturn(connection);
+     * Test create connection.
+     *
+     * @throws JMSException the JMS exception
+     */
+    @Test
+    void testCreateConnection() throws JMSException {
+        when(connectionFactory.createConnection()).thenReturn(connection);
 
-		Connection actualConnection = connectionArtifactsFactory.createConnection(exceptionListener);
+        Connection actualConnection = connectionArtifactsFactory.createConnection(exceptionListener);
 
-		assertThat(actualConnection).isEqualTo(connection);
-		verify(connection).setExceptionListener(exceptionListener);
-		verify(connection).start();
-	}
+        assertThat(actualConnection).isEqualTo(connection);
+        verify(connection).setExceptionListener(exceptionListener);
+        verify(connection).start();
+    }
 
     /**
      * Test create connection on JMS exception.
@@ -74,23 +74,23 @@ class ActiveMQConnectionArtifactsFactoryTest {
      */
     @Test
     void testCreateConnectionOnJMSException() throws JMSException {
-    	when(connectionFactory.createConnection()).thenThrow(JMSException.class);
+        when(connectionFactory.createConnection()).thenThrow(JMSException.class);
 
-        assertThrows(IllegalStateException.class, ()->connectionArtifactsFactory.createConnection(exceptionListener));
+        assertThrows(IllegalStateException.class, () -> connectionArtifactsFactory.createConnection(exceptionListener));
     }
 
     /**
-	 * Test create session.
-	 *
-	 * @throws JMSException the JMS exception
-	 */
-	@Test
-	void testCreateSession() throws JMSException {
-		when(connection.createSession(false, Session.AUTO_ACKNOWLEDGE)).thenReturn(session);
+     * Test create session.
+     *
+     * @throws JMSException the JMS exception
+     */
+    @Test
+    void testCreateSession() throws JMSException {
+        when(connection.createSession(false, Session.AUTO_ACKNOWLEDGE)).thenReturn(session);
 
-		Session actualSession = connectionArtifactsFactory.createSession(connection);
+        Session actualSession = connectionArtifactsFactory.createSession(connection);
 
-		assertThat(actualSession).isEqualTo(session);
-	}
+        assertThat(actualSession).isEqualTo(session);
+    }
 
 }

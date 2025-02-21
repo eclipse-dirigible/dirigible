@@ -15,7 +15,7 @@ import com.icegreen.greenmail.util.ServerSetup;
 import jakarta.mail.Message;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
-import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.integration.tests.ui.TestProject;
 import org.eclipse.dirigible.tests.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.util.PortUtil;
@@ -35,20 +35,18 @@ class MailIT extends UserInterfaceIntegrationTest {
     private static final int PORT = PortUtil.getFreeRandomPort();
 
     static {
-        Configuration.set("DIRIGIBLE_MAIL_USERNAME", USER);
-        Configuration.set("DIRIGIBLE_MAIL_PASSWORD", PASSWORD);
-        Configuration.set("DIRIGIBLE_MAIL_TRANSPORT_PROTOCOL", "smtp");
-        Configuration.set("DIRIGIBLE_MAIL_SMTP_HOST", "localhost");
-        Configuration.set("DIRIGIBLE_MAIL_SMTP_PORT", Integer.toString(PORT));
-        Configuration.set("DIRIGIBLE_MAIL_SMTP_AUTH", "true");
+        DirigibleConfig.MAIL_USERNAME.setStringValue(USER);
+        DirigibleConfig.MAIL_PASSWORD.setStringValue(PASSWORD);
+        DirigibleConfig.MAIL_TRANSPORT_PROTOCOL.setStringValue("smtp");
+        DirigibleConfig.MAIL_SMTP_HOST.setStringValue("localhost");
+        DirigibleConfig.MAIL_SMTP_PORT.setIntValue(PORT);
+        DirigibleConfig.MAIL_SMTP_AUTH.setBooleanValue(true);
     }
 
     @Autowired
     private TestProject testProject;
-
     @Autowired
     private RestAssuredExecutor restAssuredExecutor;
-
     private GreenMail greenMail;
 
     @BeforeEach

@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.tests;
 
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
@@ -70,7 +71,7 @@ public class IDE {
     }
 
     public void assertPublishedProjectMessage(String projectName) {
-        String publishedMessage = "Published '/" + projectName + "'";
+        String publishedMessage = "Published '/workspace/" + projectName + "'";
         assertStatusBarMessage(publishedMessage);
     }
 
@@ -123,7 +124,9 @@ public class IDE {
 
     public Workbench openWorkbench() {
         openHomePage();
-        browser.clickOnElementByAttributeValue(HtmlElementType.ANCHOR, HtmlAttribute.TITLE, "Workbench");
+
+        browser.clickOnElementById("perspective-workbench");
+
         return new Workbench(browser);
     }
 
@@ -140,11 +143,7 @@ public class IDE {
 
         workbench.createNewProject(projectName);
 
-        assertCreatedProject(projectName);
-    }
-
-    public void assertCreatedProject(String projectName) {
-        assertStatusBarMessage("Created project '" + projectName + "'");
+        assertPublishedProjectMessage(projectName);
     }
 
     public void openSpringBootAdmin() {

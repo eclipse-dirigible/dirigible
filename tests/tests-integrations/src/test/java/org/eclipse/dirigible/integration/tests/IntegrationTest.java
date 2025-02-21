@@ -11,8 +11,10 @@ package org.eclipse.dirigible.integration.tests;
 
 import org.awaitility.Awaitility;
 import org.eclipse.dirigible.DirigibleApplication;
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.tests.DirigibleCleaner;
 import org.eclipse.dirigible.tests.DirigibleTestTenant;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,6 +46,11 @@ public abstract class IntegrationTest {
         dirigibleCleaner.clean();
     }
 
+    @AfterAll
+    public static final void reloadConfigurations() {
+        Configuration.reloadConfigurations();
+    }
+
     protected void createTenants(DirigibleTestTenant... tenants) {
         createTenants(Arrays.asList(tenants));
     }
@@ -58,6 +65,7 @@ public abstract class IntegrationTest {
 
     protected void waitForTenantProvisioning(DirigibleTestTenant tenant) {
         Awaitility.await()
+                  .pollInterval(3, TimeUnit.SECONDS)
                   .atMost(35, TimeUnit.SECONDS)
                   .until(() -> tenantCreator.isTenantProvisioned(tenant));
     }

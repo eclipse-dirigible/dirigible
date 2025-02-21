@@ -33,7 +33,6 @@ class BPMStarterTemplateIT extends UserInterfaceIntegrationTest {
     private static final String TRIGGER_PROCESS_FORM_FILENAME = "trigger-new-process.form";
     private static final String TRIGGER_PROCESS_FORM_PATH =
             "/services/web/" + TEST_PROJECT + "/gen/trigger-new-process/forms/trigger-new-process/index.html";
-
     private static final String PARAM_1_ID = "param1Id";
     private static final String PARAM_2_ID = "param2Id";
     private static final String PARAM_1_VALUE = "string-param-value";
