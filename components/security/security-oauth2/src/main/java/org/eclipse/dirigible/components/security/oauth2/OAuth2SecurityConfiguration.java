@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.eclipse.dirigible.components.base.http.access.HttpSecurityURIConfigurator;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -31,6 +32,19 @@ import org.springframework.security.web.SecurityFilterChain;
 @Configuration
 public class OAuth2SecurityConfiguration {
 
+    /** The authentication success handler. */
+    private final OAuth2AuthenticationSuccessHandler authenticationSuccessHandler;
+
+    /**
+     * Instantiates a new tenants endpoint.
+     *
+     * @param tenantService the tenant service
+     */
+    @Autowired
+    public OAuth2SecurityConfiguration(OAuth2AuthenticationSuccessHandler authenticationSuccessHandler) {
+        this.authenticationSuccessHandler = authenticationSuccessHandler;
+    }
+
     /**
      * Filter chain.
      *
@@ -48,6 +62,7 @@ public class OAuth2SecurityConfiguration {
             .oauth2Client(Customizer.withDefaults())
             .oauth2Login(oauth2 -> {
                 oauth2.userInfoEndpoint(userInfoEndpointConfig -> userInfoEndpointConfig.userAuthoritiesMapper(userAuthoritiesMapper()));
+                oauth2.successHandler(authenticationSuccessHandler);
             })
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
             .sessionManagement(sessionManagement -> sessionManagement.sessionCreationPolicy(SessionCreationPolicy.ALWAYS));
