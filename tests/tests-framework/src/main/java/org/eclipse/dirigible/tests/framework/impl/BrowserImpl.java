@@ -117,11 +117,15 @@ class BrowserImpl implements Browser {
     @Override
     public void enterTextInElementByAttributePattern(String elementType, String attribute, String pattern, String text) {
         By by = constructCssSelectorByTypeAndAttribute(elementType, attribute, pattern);
-        handleElementInAllFrames(by, e -> {
-            e.click();
-            LOGGER.info("Entering [{}] in [{}]", text, e);
-            e.setValue(text);
-        }, Condition.visible);
+        handleElementInAllFrames(by, enterTextInElement(text), Condition.visible);
+    }
+
+    private Consumer<SelenideElement> enterTextInElement(String text) {
+        return element -> {
+            element.click();
+            LOGGER.info("Entering [{}] in [{}]", text, element);
+            element.setValue(text);
+        };
     }
 
     private By constructCssSelectorByTypeAndAttribute(String elementType, String attribute, String attributePattern) {

@@ -127,15 +127,6 @@ public enum DirigibleConfig {
     }
 
     /**
-     * Gets the key.
-     *
-     * @return the key
-     */
-    public String getKey() {
-        return key;
-    }
-
-    /**
      * Gets the boolean value.
      *
      * @return the boolean value
@@ -143,6 +134,19 @@ public enum DirigibleConfig {
     public boolean getBooleanValue() {
         String configValue = getStringValue();
         return Boolean.valueOf(configValue);
+    }
+
+    public void setBooleanValue(boolean value) {
+        Configuration.set(getKey(), Boolean.toString(value));
+    }
+
+    /**
+     * Gets the key.
+     *
+     * @return the key
+     */
+    public String getKey() {
+        return key;
     }
 
     /**

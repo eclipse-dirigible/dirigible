@@ -9,19 +9,15 @@
  */
 package org.eclipse.dirigible.integration.tests.api.rest;
 
-import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 public class DisabledMultitenantModeIT extends TenantDeterminationIT {
 
-    private static String initialConfigValue;
-
     @BeforeAll
     public static void setUp() {
-        initialConfigValue = Configuration.get(DirigibleConfig.MULTI_TENANT_MODE_ENABLED.getKey());
-        Configuration.set(DirigibleConfig.MULTI_TENANT_MODE_ENABLED.getKey(), "false");
+        DirigibleConfig.MULTI_TENANT_MODE_ENABLED.setBooleanValue(false);
     }
 
     @Test
