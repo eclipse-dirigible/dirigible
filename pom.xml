@@ -70,7 +70,7 @@
 	<description>Dirigible Parent</description>
 	<groupId>org.eclipse.dirigible</groupId>
 	<artifactId>dirigible-parent</artifactId>
-	<version>11.0.0-SNAPSHOT</version>
+	<version>12.0.0-SNAPSHOT</version>
 	<packaging>pom</packaging>
 
 	<inceptionYear>2010</inceptionYear>
@@ -795,7 +795,7 @@
 			<dependency>
 				<groupId>org.seleniumhq.selenium</groupId>
 				<artifactId>selenium-java</artifactId>
-				<version>4.28.1</version>
+				<version>4.29.0</version>
 				<scope>test</scope>
 			</dependency>
 			<dependency>
