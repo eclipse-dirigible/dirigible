@@ -54,13 +54,11 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
         DirigibleConfig.MAIL_SMTP_AUTH.setBooleanValue(true);
     }
 
-
     @Autowired
     private LeaveRequestTestProject leaveRequestTestProject;
 
     @Autowired
     private SecurityUtil securityUtil;
-
 
     @Autowired
     private RestAssuredExecutor restAssuredExecutor;
@@ -69,7 +67,6 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
     private IDEFactory ideFactory;
 
     private GreenMail greenMail;
-
 
     @BeforeEach
     void setUp() {
@@ -87,6 +84,7 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
         // wait some time synchronizers to complete their execution
         SleepUtil.sleepSeconds(10);
     }
+
     @Test
     void testCreateBPMProcessAndApproveIt() throws MessagingException {
         // Step 1: Create users
@@ -177,12 +175,12 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
         testDeclineEmail(); //check why tf the emails doesnt work as they should
     }
 
-
     @AfterEach
     public void tearDown() {
         greenMail.stop();
         browser.clearCookies();
     }
+
 
     void testDeclineEmail(){
         MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
