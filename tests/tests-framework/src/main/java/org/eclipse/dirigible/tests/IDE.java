@@ -131,14 +131,6 @@ public class IDE {
         return new Workbench(browser);
     }
 
-    public Workbench openSecurityPage() {
-        openHomePage();
-
-        browser.clickOnElementById("perspective-security");
-
-        return new Workbench(browser);
-    }
-
     public void openHomePage() {
         browser.openPath(ROOT_PATH);
         login(false);

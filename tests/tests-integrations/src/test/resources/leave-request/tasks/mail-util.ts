@@ -5,13 +5,13 @@ import { client as mailClient } from "sdk/mail";
 const logger = logging.getLogger("mail-util.ts");
 
 function isMailConfigured() {
-    return configurations.get("DIRIGIBLE_MAIL_USERNAME") &&
-        configurations.get("DIRIGIBLE_MAIL_PASSWORD") &&
-        configurations.get("DIRIGIBLE_MAIL_TRANSPORT_PROTOCOL") &&
+    return configurations.get("MAIL_USERNAME", "user") &&
+        configurations.get("MAIL_PASSWORD", "password") &&
+        configurations.get("MAIL_TRANSPORT_PROTOCOL", "smtp") &&
         (
-            (configurations.get("DIRIGIBLE_MAIL_SMTPS_HOST") && configurations.get("DIRIGIBLE_MAIL_SMTPS_PORT") && configurations.get("DIRIGIBLE_MAIL_SMTPS_AUTH"))
-            ||
-            (configurations.get("DIRIGIBLE_MAIL_SMTP_HOST") && configurations.get("DIRIGIBLE_MAIL_SMTP_PORT") && configurations.get("DIRIGIBLE_MAIL_SMTP_AUTH"))
+//             (configurations.get("MAIL_SMTPS_HOST", "localhost") && configurations.get("MAIL_SMTPS_PORT", PortUtil.getFreeRandomPort()) && configurations.get("MAIL_SMTPS_AUTH", "true"))
+//             ||
+            (configurations.get("MAIL_SMTP_HOST", "localhost") && configurations.get("MAIL_SMTP_PORT", "565") && configurations.get("DIRIGIBLE_MAIL_SMTP_AUTH", "true"))
         );
 }
 
