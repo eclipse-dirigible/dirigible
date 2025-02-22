@@ -71,4 +71,13 @@ public class Workbench {
         browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_PROJECT_BUTTON_TEXT);
     }
 
+    public void createFileInProject(String projectName, String fileName, String newFileType) {
+        expandProject(projectName);
+        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
+//        browser.clickOnElementWithText(HtmlElementType.LI, newFileType);
+        browser.clickOnElementFromListByAttributePattern(HtmlElementType.LI, HtmlAttribute.CLASS, "fd-menu__item", 2);
+        browser.enterTextInElementById("pgfi1", fileName);
+        browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
+    }
+
 }

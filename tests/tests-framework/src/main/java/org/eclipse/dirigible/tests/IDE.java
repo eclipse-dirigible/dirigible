@@ -144,6 +144,15 @@ public class IDE {
         workbench.createNewProject(projectName);
 
         assertPublishedProjectMessage(projectName);
+//        assertCreatedProject(projectName);
+    }
+
+    public void createNewFileInProject(String projectName, String fileName) {
+        browser.clickOnElementWithText(HtmlElementType.ANCHOR, projectName);
+    }
+
+    public void assertCreatedProject(String projectName) {
+        assertStatusBarMessage("Created project '" + projectName + "'");
     }
 
     public void openSpringBootAdmin() {

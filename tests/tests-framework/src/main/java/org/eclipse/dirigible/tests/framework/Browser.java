@@ -53,6 +53,10 @@ public interface Browser {
 
     void clickOnElementWithText(String htmlElementType, String text);
 
+    void clickOnElementFromListByAttributePattern(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String pattern, int index);
+
+    void clickOnElementFromListByAttributePattern(String htmlElementType, String htmlAttribute, String pattern, int index);
+
     void clickOnElementByAttributePattern(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String pattern);
 
     void clickOnElementByAttributePattern(String htmlElementType, String htmlAttribute, String pattern);
@@ -62,6 +66,14 @@ public interface Browser {
     void doubleClickOnElementContainingText(String htmlElementType, String text);
 
     void rightClickOnElementById(String id);
+
+    void rightClickOnElementContainingText(HtmlElementType htmlElementType, String text);
+
+    void rightClickOnElementContainingText(String htmlElementType, String text);
+
+    void rightClickOnElementByAttributeValue(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String attributeValue);
+
+    void rightClickOnElementByAttributeValue(String htmlElementType, String htmlAttribute, String attributeValue) ;
 
     void reload();
 

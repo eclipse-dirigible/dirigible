@@ -86,6 +86,15 @@ public class TestProject {
         workbench.publishAll();
     }
 
+    public void publishEmptyEdm(){
+        ide.createNewBlankProject(UI_PROJECT_TITLE);
+        Workbench workbench = ide.openWorkbench();
+        workbench.createFileInProject(UI_PROJECT_TITLE, EDM_FILE_NAME, "Entity Data Model");
+        workbench.openFile(EDM_FILE_NAME);
+
+        edmView.createEntity("City");
+    }
+
     public void verify(DirigibleTestTenant tenant) {
         LOGGER.info("Verifying test project for tenant [{}]...", tenant);
         try {
