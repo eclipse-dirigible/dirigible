@@ -84,6 +84,7 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
         // wait some time synchronizers to complete their execution
         SleepUtil.sleepSeconds(10);
     }
+
     @Test
     void testCreateBPMProcessAndApproveIt() throws MessagingException {
         // Step 1: Create users
@@ -174,12 +175,12 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
         testDeclineEmail(); //check why tf the emails doesnt work as they should
     }
 
-
     @AfterEach
     public void tearDown() {
         greenMail.stop();
         browser.clearCookies();
     }
+
 
     void testDeclineEmail(){
         MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
