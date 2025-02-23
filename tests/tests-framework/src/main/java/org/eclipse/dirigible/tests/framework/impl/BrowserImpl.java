@@ -354,6 +354,7 @@ class BrowserImpl implements Browser {
         By by = constructCssSelectorByTypeAndAttribute(htmlElementType, htmlAttribute, pattern);
         ElementsCollection elements = Selenide.$$(by);
         SelenideElement element = elements.get(index);
+
         clickElement(element);
     }
 

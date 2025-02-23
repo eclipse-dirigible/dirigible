@@ -9,6 +9,10 @@
  */
 package org.eclipse.dirigible.tests;
 
+import com.codeborne.selenide.Condition;
+import com.codeborne.selenide.Selectors;
+import com.codeborne.selenide.Selenide;
+import com.codeborne.selenide.SelenideElement;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
@@ -71,13 +75,23 @@ public class Workbench {
         browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_PROJECT_BUTTON_TEXT);
     }
 
+    public void clickOnButtonWithJs(String buttonText) {
+        SelenideElement button = browser.findElementInAllFrames(
+                Selectors.byText(buttonText), Condition.visible
+        );
+        Selenide.executeJavaScript("arguments[0].click();", button);
+    }
+
     public void createFileInProject(String projectName, String fileName, String newFileType) {
         expandProject(projectName);
         browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
-//        browser.clickOnElementWithText(HtmlElementType.LI, newFileType);
-        browser.clickOnElementFromListByAttributePattern(HtmlElementType.LI, HtmlAttribute.CLASS, "fd-menu__item", 2);
-        browser.enterTextInElementById("pgfi1", fileName);
-        browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
+
+        clickOnButtonWithJs(newFileType);
+        clickOnButtonWithJs("Create");
+        browser.reload();
+
+//       browser.enterTextInElementById("pgfi1", fileName);
+//        browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
     }
 
 }
