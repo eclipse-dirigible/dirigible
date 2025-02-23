@@ -40,6 +40,7 @@ public class JdbcTestProject {
     public void createProject() {
         Workbench workbench = ide.openWorkbench();
         workbench.createNewProject(PROJECT_NAME);
+        workbench.createFileInProject(PROJECT_NAME, "orders.table", "File");
         workbench.publishAll();
 
         LOGGER.info("Project '{}' created and published successfully.", PROJECT_NAME);
