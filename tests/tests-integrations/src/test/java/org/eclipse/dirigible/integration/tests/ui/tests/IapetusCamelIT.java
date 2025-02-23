@@ -25,16 +25,16 @@ class IapetusCamelIT extends UserInterfaceIntegrationTest {
     //
     @Autowired
     private JdbcTestProject jdbcTestProject;
-    //    private TestProject testProject;
+    // private TestProject testProject;
 
     @BeforeEach
     public void setup() {
         jdbcTestProject.createProject();
-        //        jdbcTestProject.defineTables();
-        //        jdbcTestProject.createDatasource();
-        //        jdbcTestProject.verifyDataSource();
-        //        jdbcTestProject.implementETL();
-        //        testProject.publish();
+        // jdbcTestProject.defineTables();
+        // jdbcTestProject.createDatasource();
+        // jdbcTestProject.verifyDataSource();
+        // jdbcTestProject.implementETL();
+        // testProject.publish();
         browser.clearCookies();
 
         // wait some time synchronizers to complete their execution

@@ -368,7 +368,7 @@ class BrowserImpl implements Browser {
         SelenideElement element = getElementByAttributeAndContainsText(elementType, text);
 
         element.shouldBe(Condition.visible);
-        
+
         element.doubleClick();
     }
 
