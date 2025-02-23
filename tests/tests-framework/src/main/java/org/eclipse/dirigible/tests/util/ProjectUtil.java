@@ -64,6 +64,19 @@ public class ProjectUtil {
         copyResourceFolder(resourcesFolder, destinationDirPath, placeholders);
     }
 
+    public void createFile(String relativePath, String content) {
+        String fullPath = repository.getRepositoryPath() + File.separator + relativePath;
+        File file = new File(fullPath);
+
+        try {
+            FileUtils.writeStringToFile(file, content, StandardCharsets.UTF_8);
+            LOGGER.info("File created successfully at: {}", fullPath);
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to create file: " + fullPath, ex);
+        }
+    }
+
+
     private void copyResourceFolder(String resourcesFolder, String destinationDirPath, Map<String, String> placeholders) {
         String sourceDirPath = getResourcePath(resourcesFolder);
         File sourceDir = new File(sourceDirPath);
@@ -91,6 +104,8 @@ public class ProjectUtil {
         }
         return resourceURL.getPath();
     }
+
+
 
     private void replacePlaceholderInFile(File file, Map<String, String> placeholders) {
         try {

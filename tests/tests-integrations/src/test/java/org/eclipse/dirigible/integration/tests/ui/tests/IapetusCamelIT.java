@@ -15,11 +15,13 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 // import org.eclipse.dirigible.tests.framework.HtmlElementType;
 // import org.eclipse.dirigible.tests.util.SecurityUtil;
 // import org.eclipse.dirigible.tests.util.SleepUtil;
+import org.eclipse.dirigible.integration.tests.ui.JdbcTestProject;
 import org.eclipse.dirigible.integration.tests.ui.TestProject;
 import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class IapetusCamelIT extends UserInterfaceIntegrationTest {
@@ -27,13 +29,18 @@ class IapetusCamelIT extends UserInterfaceIntegrationTest {
     // @Autowired
     // private DataSource dataSource;
     //
-    // private JdbcTemplate jdbcTemplate;
     @Autowired
-    private TestProject testProject;
+    private JdbcTestProject jdbcTestProject;
+    //    private TestProject testProject;
 
     @BeforeEach
     public void setup() {
-        testProject.publish();
+        jdbcTestProject.createProject();
+        jdbcTestProject.defineTables();
+        jdbcTestProject.createDatasource();
+        //        jdbcTestProject.verifyDataSource();
+        jdbcTestProject.implementETL();
+        //        testProject.publish();
         browser.clearCookies();
 
         // wait some time synchronizers to complete their execution
