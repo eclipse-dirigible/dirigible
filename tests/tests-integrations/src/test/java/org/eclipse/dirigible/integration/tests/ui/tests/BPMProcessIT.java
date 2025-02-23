@@ -88,91 +88,72 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
     @Test
     void testCreateBPMProcessAndApproveIt() throws MessagingException {
         // Step 1: Create users
-        securityUtil.createUser(EMPLOYEE_USERNAME, EMPLOYEE_USERNAME, EMPLOYEE_ROLE);
-        securityUtil.createUser(EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_ROLE);
+        createSecurityUsers();
 
         // Step 2: Log in as employee
-        IDE ide = ideFactory.create(EMPLOYEE_USERNAME, EMPLOYEE_USERNAME);
+        ide = createIdeFromUser(EMPLOYEE_USERNAME);
+
+        //Open the submit form
         ide.openPath(SUBMIT_FORM_URL);
 
-        browser.clickOnElementContainingText(HtmlElementType.BUTTON, SUBMIT_BUTTON_TEXT);
+        //Fill the form and send it
+        fillForm();
 
         // Waits for the email to be sent
         SleepUtil.sleepSeconds(5);
 
+        //Test if the email has been sent
         testSendEmail();
 
         //Clears cookies but should check why it only works with this
         browser.clearCookies();
 
-        //Step 3: Logs in as a manager and approve
-        ide = ideFactory.create(EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_USERNAME);
-        ide.openPath(INBOX_URL);
+        //Clears cookies but should check why it only works with this
+        browser.clearCookies();
 
-        browser.clickOnElementContainingText(HtmlElementType.TR, "Process request");
+        //Step 3: Logs in as a manager and decline
+        ide = createIdeFromUser(EMPLOYEE_MANAGER_USERNAME);
 
-        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Claim");
-        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Close");
+        processRequest();
 
-        //TO DO: this link should be get not hardcoded but it should match the taskId
-        browser.openPath("/services/web/leave-request/gen/process-leave-request/forms/process-leave-request/index.html?taskId=17");
-//        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Open Form");
-
-//        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Approve");  //check why this doesnt work
-
-        SelenideElement approveButton = browser.findElementInAllFrames(
-                Selectors.byText("Approve"), Condition.visible
-        );
-        Selenide.executeJavaScript("arguments[0].click();", approveButton);
+        declineOrApproveRequest("Approve");
 
         SleepUtil.sleepSeconds(5);
 
-        testAproveEmail(); //check why tf the emails doesnt work as they should
+        testApprovalEmail();
     }
 
     @Test
-    void testCreateBPMProcessAndDeclineIt() throws MessagingException {
+    void testCreateBPMProcessAndDeclineIt() throws MessagingException { //to do: check it why it fails after running the first one
         // Step 1: Create users
-        securityUtil.createUser(EMPLOYEE_USERNAME, EMPLOYEE_USERNAME, EMPLOYEE_ROLE);
-        securityUtil.createUser(EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_ROLE);
+        createSecurityUsers();
 
         // Step 2: Log in as employee
-        IDE ide = ideFactory.create(EMPLOYEE_USERNAME, EMPLOYEE_USERNAME);
+        ide = createIdeFromUser(EMPLOYEE_USERNAME);
+
+        //Open the submit form
         ide.openPath(SUBMIT_FORM_URL);
 
-        browser.clickOnElementContainingText(HtmlElementType.BUTTON, SUBMIT_BUTTON_TEXT);
+        //Fill the form and send it
+        fillForm();
 
         // Waits for the email to be sent
         SleepUtil.sleepSeconds(5);
 
+        //Test if the email has been sent
         testSendEmail();
 
         //Clears cookies but should check why it only works with this
         browser.clearCookies();
 
-        //Step 3: Logs in as a manager and approve
-        ide = ideFactory.create(EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_USERNAME);
-        ide.openPath(INBOX_URL);
+        //Step 3: Logs in as a manager and decline
+        ide = createIdeFromUser(EMPLOYEE_MANAGER_USERNAME);
 
-        browser.clickOnElementContainingText(HtmlElementType.TR, "Process request");
+        processRequest();
 
-        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Claim");
-        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Close");
+        declineOrApproveRequest("Decline");
 
-        //TO DO: this link should be get not hardcoded but it should match the taskId
-        browser.openPath("/services/web/leave-request/gen/process-leave-request/forms/process-leave-request/index.html?taskId=17");
-//        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Open Form");
-
-//        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Decline");  //check why this doesnt work
-
-        SelenideElement approveButton = browser.findElementInAllFrames(
-                Selectors.byText("Decline"), Condition.visible
-        );
-        Selenide.executeJavaScript("arguments[0].click();", approveButton);
-
-        SleepUtil.sleepSeconds(5);
-
-        testDeclineEmail(); //check why tf the emails doesnt work as they should
+        testDeclineEmail();
     }
 
     @AfterEach
@@ -181,29 +162,87 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
         browser.clearCookies();
     }
 
+    public void createSecurityUsers(){
+        securityUtil.createUser(EMPLOYEE_USERNAME, EMPLOYEE_USERNAME, EMPLOYEE_ROLE);
+        securityUtil.createUser(EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_ROLE);
+    }
 
-    void testDeclineEmail(){
+    public IDE createIdeFromUser(String UsernameAndPassword){
+        return ideFactory.create(UsernameAndPassword, UsernameAndPassword);
+    }
+
+    public void fillForm(){
+        browser.enterTextInElementById("fromId", "02/02/2002");
+        browser.enterTextInElementById("toId", "03/03/2002");
+        browser.clickOnElementContainingText(HtmlElementType.BUTTON, SUBMIT_BUTTON_TEXT);
+    }
+
+
+    public void processRequest(){
+        ide.openPath(INBOX_URL);
+
+        browser.clickOnElementContainingText(HtmlElementType.TR, "Process request");
+
+        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Claim");
+        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Close");
+
+        //TO DO: this link should be get not hardcoded but it should match the taskId
+        browser.openPath("/services/web/leave-request/gen/process-leave-request/forms/process-leave-request/index.html?taskId=17");
+//        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Open Form");
+    }
+
+    public void declineOrApproveRequest(String option){
+        //        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Decline");  //check why this doesnt work
+        SelenideElement approveButton = browser.findElementInAllFrames(
+                Selectors.byText(option), Condition.visible
+        );
+        Selenide.executeJavaScript("arguments[0].click();", approveButton);
+
+        SleepUtil.sleepSeconds(5);
+
+    }
+    void testDeclineEmail() throws MessagingException {
         MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
         assertThat(receivedMessages).hasSize(2);
 
-        MimeMessage sentEmail = receivedMessages[0];
+        MimeMessage sentEmail = receivedMessages[1];
+        assertThat(sentEmail.getSubject()).isEqualTo("Your leave request has been declined");
+        assertThat(sentEmail.getFrom()[0].toString()).isEqualTo("leave-request-app@example.com");
+        assertThat(sentEmail.getRecipients(Message.RecipientType.TO)[0].toString()).isEqualTo("john.doe.employee@example.com");
+        String emailBody = GreenMailUtil.getBody(sentEmail).trim();
+
+        String extractedFromDate = emailBody.split("from \\[")[1].split("T")[0];
+        String extractedToDate = emailBody.split("to \\[")[1].split("T")[0];
+
+        assertThat(extractedFromDate).isEqualTo("2002-02-02");
+        assertThat(extractedToDate).isEqualTo("2002-03-03");
+
         assertThat(GreenMailUtil.getBody(sentEmail)
-                .trim()).contains("<h4>A new leave request for [john.doe.employee@example.com] has been created</h4>Open the inbox <a href=\"http://localhost:80/services/web/inbox/\" target=\"_blank\">here</a> to process the request.");
+                .trim()).contains("has been declined by [emily.stone.mngr@example.com]</h4>");
     }
 
-    void testAproveEmail(){
+    void testApprovalEmail() throws MessagingException {
         MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
         assertThat(receivedMessages).hasSize(2);
 
-        MimeMessage sentEmail = receivedMessages[0];
+        MimeMessage sentEmail = receivedMessages[1];
 
-//        assertThat(sentEmail.getSubject()).isEqualTo("Your leave request has been approved");
-//        assertThat(sentEmail.getFrom()[0].toString()).isEqualTo("leave-request-app@example.com");
-//        assertThat(sentEmail.getRecipients(Message.RecipientType.TO)[0].toString()).isEqualTo("john.doe.employee@example.com");
+        assertThat(sentEmail.getSubject()).isEqualTo("Your leave request has been approved");
+        assertThat(sentEmail.getFrom()[0].toString()).isEqualTo("leave-request-app@example.com");
+        assertThat(sentEmail.getRecipients(Message.RecipientType.TO)[0].toString()).isEqualTo("john.doe.employee@example.com");
+        String emailBody = GreenMailUtil.getBody(sentEmail).trim();
+
+        String extractedFromDate = emailBody.split("from \\[")[1].split("T")[0];
+        String extractedToDate = emailBody.split("to \\[")[1].split("T")[0];
+
+        assertThat(extractedFromDate).isEqualTo("2002-02-02");
+        assertThat(extractedToDate).isEqualTo("2002-03-03");
+
         assertThat(GreenMailUtil.getBody(sentEmail)
-                .trim()).contains("<h4>A new leave request for [john.doe.employee@example.com] has been created</h4>Open the inbox <a href=\"http://localhost:80/services/web/inbox/\" target=\"_blank\">here</a> to process the request.");
+                .trim()).contains("has been approved by [emily.stone.mngr@example.com]</h4>");
     }
 
+    //To do: rename this function
     void testSendEmail() throws MessagingException {
         MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
         assertThat(receivedMessages).hasSize(1);
@@ -217,3 +256,6 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
                 .trim()).contains("<h4>A new leave request for [john.doe.employee@example.com] has been created</h4>Open the inbox <a href=\"http://localhost:80/services/web/inbox/\" target=\"_blank\">here</a> to process the request.");
     }
 }
+
+
+//To do: clean the code for example in the function for checking for approval - check the date in another function
