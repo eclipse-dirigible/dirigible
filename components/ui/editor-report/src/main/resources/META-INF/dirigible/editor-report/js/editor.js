@@ -1392,7 +1392,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 
 	// Begin Security Section --------------------------------------------------------------------------------------
 
-	$scope.toggleDefaultRoles = function () {
+	$scope.toggleDefaultRoles = () => {
 		if ($scope.report.security.generateDefaultRoles === 'true') {
 			$scope.report.security.roleRead = $scope.dataParameters.filePath.split('/')[2] + '.' + "Report" + '.' + $scope.report.name + "ReadOnly";
 		} else {

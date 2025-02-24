@@ -37,8 +37,7 @@
                 <bk-icon-tab-bar-tab label="User interface" tab-id="ui" ng-click="switchTab('ui')">
                 </bk-icon-tab-bar-tab>
                 <bk-icon-tab-bar-tab label="Feed" tab-id="feed" ng-click="switchTab('feed')"></bk-icon-tab-bar-tab>
-                <bk-icon-tab-bar-tab label="Security" tab-id="security" ng-click="switchTab('security')"
-                    ng-hide="dataParameters.entityType === 'PROJECTION'"></bk-icon-tab-bar-tab>
+                <bk-icon-tab-bar-tab label="Security" tab-id="security" ng-click="switchTab('security')" ng-hide="dataParameters.entityType === 'PROJECTION'"></bk-icon-tab-bar-tab>
                 <bk-icon-tab-bar-tab label="Imports" tab-id="imports" ng-click="switchTab('imports')">
                 </bk-icon-tab-bar-tab>
             </bk-icon-tab-bar-tablist>
@@ -49,8 +48,7 @@
                             <bk-form-label for="generalName" required="true" colon="true">Name</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="generalName" type="text" ng-required="true" ng-model="dataParameters.name"
-                                placeholder="Entity name"></bk-input>
+                            <bk-input id="generalName" type="text" ng-required="true" ng-model="dataParameters.name" placeholder="Entity name"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -58,10 +56,8 @@
                             <bk-form-label for="generalType" required="true" colon="true">Type</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-select placeholder="Select a type" label-id="generalType" ng-required="true"
-                                ng-model="dataParameters.entityType" dropdown-fixed="true">
-                                <bk-option text="{{ type.label }}" value="type.value"
-                                    ng-repeat="type in entityTypes track by $index"></bk-option>
+                            <bk-select placeholder="Select a type" label-id="generalType" ng-required="true" ng-model="dataParameters.entityType" dropdown-fixed="true">
+                                <bk-option text="{{ type.label }}" value="type.value" ng-repeat="type in entityTypes track by $index"></bk-option>
                             </bk-select>
                         </div>
                     </bk-form-item>
@@ -70,8 +66,7 @@
                             <bk-form-label for="generalCaption" colon="true">Caption</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--6">
-                            <bk-input id="generalCaption" type="text" ng-model="dataParameters.caption"
-                                placeholder="Entity caption"></bk-input>
+                            <bk-input id="generalCaption" type="text" ng-model="dataParameters.caption" placeholder="Entity caption"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row">
@@ -84,9 +79,7 @@
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
-                        <bk-checkbox id="generalGenerateReport" compact="false" ng-required="true"
-                            ng-model="dataParameters.generateReport" data-ng-true-value="'true'"
-                            data-ng-false-value="'false'"></bk-checkbox>
+                        <bk-checkbox id="generalGenerateReport" compact="false" ng-required="true" ng-model="dataParameters.generateReport" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
                         <bk-checkbox-label for="generalGenerateReport">Generate Report</bk-checkbox-label>
                     </bk-form-item>
                 </bk-form-group>
@@ -96,8 +89,7 @@
                             <bk-form-label for="generalName" required="true" colon="true">Name</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="generalName" type="text" ng-required="true" ng-model="dataParameters.name"
-                                placeholder="Property name"></bk-input>
+                            <bk-input id="generalName" type="text" ng-required="true" ng-model="dataParameters.name" placeholder="Property name"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row">
@@ -110,45 +102,36 @@
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
-                        <bk-checkbox id="generalRequired" compact="false" ng-required="true"
-                            ng-model="dataParameters.isRequiredProperty" data-ng-true-value="'true'"
-                            data-ng-false-value="'false'"></bk-checkbox>
+                        <bk-checkbox id="generalRequired" compact="false" ng-required="true" ng-model="dataParameters.isRequiredProperty" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
                         <bk-checkbox-label for="generalRequired" required="true">Required</bk-checkbox-label>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
-                        <bk-checkbox id="generalCalc" compact="false" ng-model="dataParameters.isCalculatedProperty"
-                            data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
+                        <bk-checkbox id="generalCalc" compact="false" ng-model="dataParameters.isCalculatedProperty" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
                         <bk-checkbox-label for="generalCalc">Calculated</bk-checkbox-label>
                     </bk-form-item>
-                    <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'"
-                        class="fd-row fd-margin-top--tiny">
+                    <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'" class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
                         <bk-form-label for="generalCpeC" colon="true">Calculated property expression for
                             <strong>Create</strong>
                         </bk-form-label>
                     </bk-form-item>
-                    <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'"
-                        class="fd-row fd-margin-top--tiny">
+                    <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'" class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
                         <div class="fd-col fd-col-md--8">
-                            <bk-textarea id="generalCpeC" placeholder="create calculated property expression"
-                                ng-model="dataParameters.calculatedPropertyExpressionCreate" rows="5"></bk-textarea>
+                            <bk-textarea id="generalCpeC" placeholder="create calculated property expression" ng-model="dataParameters.calculatedPropertyExpressionCreate" rows="5"></bk-textarea>
                         </div>
                     </bk-form-item>
-                    <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'"
-                        class="fd-row fd-margin-top--tiny">
+                    <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'" class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
                         <bk-form-label for="generalCpeU" colon="true">Calculated property expression for
                             <strong>Update</strong>
                         </bk-form-label>
                     </bk-form-item>
-                    <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'"
-                        class="fd-row fd-margin-top--tiny">
+                    <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'" class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
                         <div class="fd-col fd-col-md--8">
-                            <bk-textarea id="generalCpeU" placeholder="update calculated property expression"
-                                ng-model="dataParameters.calculatedPropertyExpressionUpdate" rows="5"></bk-textarea>
+                            <bk-textarea id="generalCpeU" placeholder="update calculated property expression" ng-model="dataParameters.calculatedPropertyExpressionUpdate" rows="5"></bk-textarea>
                         </div>
                     </bk-form-item>
                 </bk-form-group>
@@ -160,8 +143,7 @@
                             <bk-form-label for="ddn" required="true" colon="true">Database name</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="ddn" type="text" ng-required="true" ng-model="dataParameters.dataName"
-                                placeholder="Data name"></bk-input>
+                            <bk-input id="ddn" type="text" ng-required="true" ng-model="dataParameters.dataName" placeholder="Data name"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -187,8 +169,7 @@
                             <bk-form-label for="ddn" required="true" colon="true">Database name</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="ddn" type="text" ng-required="true" ng-model="dataParameters.dataName"
-                                placeholder="Data name"></bk-input>
+                            <bk-input id="ddn" type="text" ng-required="true" ng-model="dataParameters.dataName" placeholder="Data name"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row">
@@ -196,10 +177,8 @@
                             <bk-form-label for="dbtype" required="true" colon="true">Data type</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-select placeholder="Select an data type" label-id="dbtype" ng-required="true"
-                                ng-model="dataParameters.dataType" dropdown-fixed="true">
-                                <bk-option text="{{ type.label }}" value="type.value"
-                                    ng-repeat="type in dataTypes track by $index"></bk-option>
+                            <bk-select placeholder="Select an data type" label-id="dbtype" ng-required="true" ng-model="dataParameters.dataType" dropdown-fixed="true">
+                                <bk-option text="{{ type.label }}" value="type.value" ng-repeat="type in dataTypes track by $index"></bk-option>
                             </bk-select>
                         </div>
                     </bk-form-item>
@@ -208,61 +187,50 @@
                             <bk-form-label for="dbtype" colon="true">Order by</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-select placeholder="Select an order by option" label-id="dborder"
-                                ng-model="dataParameters.dataOrderBy" dropdown-fixed="true">
-                                <bk-option text="{{ order.label }}" value="order.value"
-                                    ng-repeat="order in dataOrderByOptions track by $index"></bk-option>
+                            <bk-select placeholder="Select an order by option" label-id="dborder" ng-model="dataParameters.dataOrderBy" dropdown-fixed="true">
+                                <bk-option text="{{ order.label }}" value="order.value" ng-repeat="order in dataOrderByOptions track by $index"></bk-option>
                             </bk-select>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
-                        <div class="fd-col fd-col-md--2"
-                            ng-show="dataParameters.dataType === 'VARCHAR' || dataParameters.dataType === 'CHAR'">
+                        <div class="fd-col fd-col-md--2" ng-show="dataParameters.dataType === 'VARCHAR' || dataParameters.dataType === 'CHAR'">
                             <bk-form-label for="dblen" required="true" colon="true">Length</bk-form-label>
                         </div>
-                        <div class="fd-col fd-col-md--2"
-                            ng-show="dataParameters.dataType === 'VARCHAR' || dataParameters.dataType === 'CHAR'">
-                            <bk-step-input input-id="dblen" name="dblen" string-to-number ng-required="true"
-                                ng-model="dataParameters.dataLength" placeholder="20" style="max-width: 320px">
+                        <div class="fd-col fd-col-md--2" ng-show="dataParameters.dataType === 'VARCHAR' || dataParameters.dataType === 'CHAR'">
+                            <bk-step-input input-id="dblen" name="dblen" string-to-number ng-required="true" ng-model="dataParameters.dataLength" placeholder="20" style="max-width: 320px">
                             </bk-step-input>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.dataType === 'DECIMAL'">
                             <bk-form-label for="dbprecision" colon="true">Precision</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.dataType === 'DECIMAL'">
-                            <bk-step-input input-id="dbprecision" name="dbprecision" string-to-number ng-required="true"
-                                ng-model="dataParameters.dataPrecision" placeholder="0" style="max-width: 320px">
+                            <bk-step-input input-id="dbprecision" name="dbprecision" string-to-number ng-required="true" ng-model="dataParameters.dataPrecision" placeholder="0" style="max-width: 320px">
                             </bk-step-input>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.dataType === 'DECIMAL'">
                             <bk-form-label for="dbscale" colon="true">Scale</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.dataType === 'DECIMAL'">
-                            <bk-step-input input-id="dbscale" name="dbscale" string-to-number ng-required="true"
-                                ng-model="dataParameters.dataScale" placeholder="0" style="max-width: 320px">
+                            <bk-step-input input-id="dbscale" name="dbscale" string-to-number ng-required="true" ng-model="dataParameters.dataScale" placeholder="0" style="max-width: 320px">
                             </bk-step-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-checkbox id="dbpk" compact="false" ng-model="dataParameters.dataPrimaryKey"
-                                data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
+                            <bk-checkbox id="dbpk" compact="false" ng-model="dataParameters.dataPrimaryKey" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
                             <bk-checkbox-label for="dbpk">Primary key</bk-checkbox-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-checkbox id="dbkk" compact="false" ng-model="dataParameters.dataAutoIncrement"
-                                data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
+                            <bk-checkbox id="dbkk" compact="false" ng-model="dataParameters.dataAutoIncrement" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
                             <bk-checkbox-label for="dbkk">Auto increment</bk-checkbox-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-checkbox id="dbnn" compact="false" ng-model="dataParameters.dataNotNull"
-                                data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
+                            <bk-checkbox id="dbnn" compact="false" ng-model="dataParameters.dataNotNull" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
                             <bk-checkbox-label for="dbnn">Not null</bk-checkbox-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-checkbox id="dbu" compact="false" ng-model="dataParameters.dataUnique"
-                                data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
+                            <bk-checkbox id="dbu" compact="false" ng-model="dataParameters.dataUnique" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
                             <bk-checkbox-label for="dbu">Unique</bk-checkbox-label>
                         </div>
                     </bk-form-item>
@@ -277,8 +245,7 @@
                 </bk-form-group>
             </bk-icon-tab-bar-panel>
             <bk-icon-tab-bar-panel tab-id="ui" ng-show="selectedTab === 'ui'">
-                <bk-form-group class="fd-container fd-form-layout-grid-container fd-form-group"
-                    ng-if="dialogType === 'entity'">
+                <bk-form-group class="fd-container fd-form-layout-grid-container fd-form-group" ng-if="dialogType === 'entity'">
                     <bk-form-item class="fd-row">
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="uit" colon="true">Title</bk-form-label>
@@ -292,8 +259,7 @@
                             <bk-form-label for="uith" colon="true">Tooltip</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--6">
-                            <bk-input id="uith" type="text" ng-model="dataParameters.tooltip"
-                                placeholder="Tooltip hint"></bk-input>
+                            <bk-input id="uith" type="text" ng-model="dataParameters.tooltip" placeholder="Tooltip hint"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -301,10 +267,8 @@
                             <bk-form-label for="uii" colon="true">Icon</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--3">
-                            <bk-select placeholder="Select an icon" label-id="uui" ng-model="dataParameters.icon"
-                                dropdown-fixed="true">
-                                <bk-option text="{{ ::icon.name }}" value="::icon.url" icon="{{::icon.url}}"
-                                    ng-repeat="icon in icons track by $index"></bk-option>
+                            <bk-select placeholder="Select an icon" label-id="uui" ng-model="dataParameters.icon" dropdown-fixed="true">
+                                <bk-option text="{{ ::icon.name }}" value="::icon.url" icon="{{::icon.url}}" ng-repeat="icon in icons track by $index"></bk-option>
                             </bk-select>
                         </div>
                     </bk-form-item>
@@ -325,8 +289,7 @@
                             <bk-form-label for="uimi" colon="true">Menu index</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-step-input input-id="uimi" name="manuIndex" ng-model="dataParameters.menuIndex"
-                                style="max-width: 320px"></bk-step-input>
+                            <bk-step-input input-id="uimi" name="manuIndex" ng-model="dataParameters.menuIndex" style="max-width: 320px"></bk-step-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -334,10 +297,8 @@
                             <bk-form-label for="uilt" required="true" colon="true">Layout type</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-select placeholder="Select a layout" label-id="uilt" ng-required="true"
-                                ng-model="dataParameters.layoutType" dropdown-fixed="true">
-                                <bk-option text="{{ type.label }}" value="type.value"
-                                    ng-repeat="type in layoutTypes track by $index"></bk-option>
+                            <bk-select placeholder="Select a layout" label-id="uilt" ng-required="true" ng-model="dataParameters.layoutType" dropdown-fixed="true">
+                                <bk-option text="{{ type.label }}" value="type.value" ng-repeat="type in layoutTypes track by $index"></bk-option>
                             </bk-select>
                         </div>
                     </bk-form-item>
@@ -346,10 +307,8 @@
                             <bk-form-label for="uip" colon="true">Perspective</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-select placeholder="Select a perspective" label-id="uip"
-                                ng-model="dataParameters.perspectiveName" dropdown-fixed="true">
-                                <bk-option text="{{ perspective.label }}" value="perspective.id"
-                                    ng-repeat="perspective in dataParameters.perspectives track by $index"></bk-option>
+                            <bk-select placeholder="Select a perspective" label-id="uip" ng-model="dataParameters.perspectiveName" dropdown-fixed="true">
+                                <bk-option text="{{ perspective.label }}" value="perspective.id" ng-repeat="perspective in dataParameters.perspectives track by $index"></bk-option>
                             </bk-select>
                         </div>
                     </bk-form-item>
@@ -358,10 +317,8 @@
                             <bk-form-label for="uip" colon="true">Navigation</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--6">
-                            <bk-select placeholder="Select a navigation" label-id="uip"
-                                ng-model="dataParameters.navigationPath" dropdown-fixed="true">
-                                <bk-option text="{{ navigation.label }}" value="navigation.path"
-                                    ng-repeat="navigation in dataParameters.navigations track by $index"></bk-option>
+                            <bk-select placeholder="Select a navigation" label-id="uip" ng-model="dataParameters.navigationPath" dropdown-fixed="true">
+                                <bk-option text="{{ navigation.label }}" value="navigation.path" ng-repeat="navigation in dataParameters.navigations track by $index"></bk-option>
                             </bk-select>
                         </div>
                     </bk-form-item>
@@ -372,25 +329,21 @@
                             <bk-form-label for="uiwt" required="true" colon="true">Widget type</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--10">
-                            <bk-select placeholder="Select a type" label-id="uiwt" ng-required="true"
-                                ng-model="dataParameters.widgetType" dropdown-fixed="true">
-                                <bk-option text="{{ type.label }}" value="type.value"
-                                    ng-repeat="type in widgetTypes track by $index"></bk-option>
+                            <bk-select placeholder="Select a type" label-id="uiwt" ng-required="true" ng-model="dataParameters.widgetType" dropdown-fixed="true">
+                                <bk-option text="{{ type.label }}" value="type.value" ng-repeat="type in widgetTypes track by $index"></bk-option>
                             </bk-select>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.widgetType === 'DROPDOWN'">
                             <bk-form-label for="uidk" required="true" colon="true">Dropdown key</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.widgetType === 'DROPDOWN'">
-                            <bk-input id="uidk" type="text" ng-required="true"
-                                ng-model="dataParameters.widgetDropDownKey"></bk-input>
+                            <bk-input id="uidk" type="text" ng-required="true" ng-model="dataParameters.widgetDropDownKey"></bk-input>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.widgetType === 'DROPDOWN'">
                             <bk-form-label for="uidv" required="true" colon="true">Dropdown value</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.widgetType === 'DROPDOWN'">
-                            <bk-input id="uidv" type="text" ng-required="true"
-                                ng-model="dataParameters.widgetDropDownValue"></bk-input>
+                            <bk-input id="uidv" type="text" ng-required="true" ng-model="dataParameters.widgetDropDownValue"></bk-input>
                         </div>
                     </bk-form-item>
 
@@ -399,33 +352,27 @@
                             <bk-form-label for="dependsonproperty" colon="true">Depends on Property</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="dependsonproperty" type="text"
-                                ng-model="dataParameters.widgetDependsOnProperty" placeholder="Property depending on">
+                            <bk-input id="dependsonproperty" type="text" ng-model="dataParameters.widgetDependsOnProperty" placeholder="Property depending on">
                             </bk-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="dependsonentity" colon="true">Depends on Entity</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="dependsonentity" type="text" ng-model="dataParameters.widgetDependsOnEntity"
-                                placeholder="Entity depending on">
+                            <bk-input id="dependsonentity" type="text" ng-model="dataParameters.widgetDependsOnEntity" placeholder="Entity depending on">
                             </bk-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="dependsonvaluefrom" colon="true">Value From</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="dependsonvaluefrom" type="text"
-                                ng-model="dataParameters.widgetDependsOnValueFrom"
-                                placeholder="Property used to get value from"></bk-input>
+                            <bk-input id="dependsonvaluefrom" type="text" ng-model="dataParameters.widgetDependsOnValueFrom" placeholder="Property used to get value from"></bk-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="dependsonfilterby" colon="true">Filter By</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="dependsonfilterby" type="text"
-                                ng-model="dataParameters.widgetDependsOnFilterBy"
-                                placeholder="Property to set value to or filter by"></bk-input>
+                            <bk-input id="dependsonfilterby" type="text" ng-model="dataParameters.widgetDependsOnFilterBy" placeholder="Property to set value to or filter by"></bk-input>
                         </div>
                     </bk-form-item>
 
@@ -434,18 +381,15 @@
                             <bk-form-label for="uiws" colon="true">Widget size</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-select placeholder="Select a size" label-id="uiws" ng-model="dataParameters.widgetSize"
-                                dropdown-fixed="true">
-                                <bk-option text="{{ size.label }}" value="size.value"
-                                    ng-repeat="size in widgetSizes track by $index"></bk-option>
+                            <bk-select placeholder="Select a size" label-id="uiws" ng-model="dataParameters.widgetSize" dropdown-fixed="true">
+                                <bk-option text="{{ size.label }}" value="size.value" ng-repeat="size in widgetSizes track by $index"></bk-option>
                             </bk-select>
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="uilen" colon="true">Length</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-step-input index-id="uilen" name="uilen" string-to-number ng-required="true"
-                                ng-model="dataParameters.widgetLength" placeholder="20" style="max-width: 320px">
+                            <bk-step-input index-id="uilen" name="uilen" string-to-number ng-required="true" ng-model="dataParameters.widgetLength" placeholder="20" style="max-width: 320px">
                             </bk-step-input>
                         </div>
                     </bk-form-item>
@@ -454,15 +398,13 @@
                             <bk-form-label for="uilab" colon="true">Label</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--6">
-                            <bk-input id="uilab" type="text" ng-model="dataParameters.widgetLabel"
-                                placeholder="Label text"></bk-input>
+                            <bk-input id="uilab" type="text" ng-model="dataParameters.widgetLabel" placeholder="Label text"></bk-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="uislab" colon="true">Short label</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-input id="uislab" type="text" ng-model="dataParameters.widgetShortLabel"
-                                placeholder="Short label text"></bk-input>
+                            <bk-input id="uislab" type="text" ng-model="dataParameters.widgetShortLabel" placeholder="Short label text"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -470,22 +412,19 @@
                             <bk-form-label for="uipat" colon="true">Pattern</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-input id="uipat" type="text" ng-model="dataParameters.widgetPattern"
-                                placeholder="Input pattern"></bk-input>
+                            <bk-input id="uipat" type="text" ng-model="dataParameters.widgetPattern" placeholder="Input pattern"></bk-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="uif" colon="true">Format</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-input id="uif" type="text" ng-model="dataParameters.widgetFormat"
-                                placeholder="Rendering format"></bk-input>
+                            <bk-input id="uif" type="text" ng-model="dataParameters.widgetFormat" placeholder="Rendering format"></bk-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="uith" colon="true">Tooltip</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-input id="uith" type="text" ng-model="dataParameters.tooltip"
-                                placeholder="Tooltip hint"></bk-input>
+                            <bk-input id="uith" type="text" ng-model="dataParameters.tooltip" placeholder="Tooltip hint"></bk-input>
                         </div>
                     </bk-form-item>
                     <!-- 
@@ -503,8 +442,7 @@
                             <bk-form-label for="uisec" colon="true">Section</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--6">
-                            <bk-input id="uisec" type="text" ng-model="dataParameters.widgetSection"
-                                placeholder="Section to be placed in"></bk-input>
+                            <bk-input id="uisec" type="text" ng-model="dataParameters.widgetSection" placeholder="Section to be placed in"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -512,18 +450,15 @@
                             <bk-form-label for="uimt" colon="true">Major type</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--3">
-                            <bk-select placeholder="Select a type" label-id="uimt"
-                                ng-model="dataParameters.widgetIsMajor" dropdown-fixed="true">
-                                <bk-option text="{{ type.label }}" value="type.value"
-                                    ng-repeat="type in majorTypes track by $index"></bk-option>
+                            <bk-select placeholder="Select a type" label-id="uimt" ng-model="dataParameters.widgetIsMajor" dropdown-fixed="true">
+                                <bk-option text="{{ type.label }}" value="type.value" ng-repeat="type in majorTypes track by $index"></bk-option>
                             </bk-select>
                         </div>
                     </bk-form-item>
                 </bk-form-group>
             </bk-icon-tab-bar-panel>
             <bk-icon-tab-bar-panel tab-id="feed" ng-show="selectedTab === 'feed'">
-                <bk-form-group class="fd-container fd-form-layout-grid-container fd-form-group"
-                    ng-if="dialogType === 'entity'">
+                <bk-form-group class="fd-container fd-form-layout-grid-container fd-form-group" ng-if="dialogType === 'entity'">
                     <bk-form-item class="fd-row">
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="furl" required="true" colon="true">Feed URL</bk-form-label>
@@ -567,8 +502,7 @@
                         </div>
                     </bk-form-item>
                 </bk-form-group>
-                <bk-form-group class="fd-container fd-form-layout-grid-container fd-form-group"
-                    ng-if="dialogType === 'property'">
+                <bk-form-group class="fd-container fd-form-layout-grid-container fd-form-group" ng-if="dialogType === 'property'">
                     <bk-form-item class="fd-row">
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="furl" colon="true">Property name</bk-form-label>
@@ -586,25 +520,21 @@
                             <bk-form-label for="srr" colon="true">Read role</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4 fd-col-lg--3">
-                            <bk-input id="srr" type="text" ng-model="dataParameters.roleRead" placeholder="role name"
-                                ng-disabled="dataParameters.generateDefaultRoles === 'true'"></bk-input>
+                            <bk-input id="srr" type="text" ng-model="dataParameters.roleRead" placeholder="role name" ng-disabled="dataParameters.generateDefaultRoles === 'true'"></bk-input>
                         </div>
                     </bk-form-item>
-                    <bk-form-item class="fd-row fd-margin-top--tiny"
-                        ng-hide="dataParameters.entityType === 'REPORT' || dataParameters.entityType === 'FILTER'">
+                    <bk-form-item class="fd-row fd-margin-top--tiny" ng-hide="dataParameters.entityType === 'REPORT' || dataParameters.entityType === 'FILTER'">
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="swr" colon="true">Write role</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4 fd-col-lg--3">
-                            <bk-input id="swr" type="text" ng-model="dataParameters.roleWrite" placeholder="role name"
-                                ng-disabled="dataParameters.generateDefaultRoles === 'true'"></bk-input>
+                            <bk-input id="swr" type="text" ng-model="dataParameters.roleWrite" placeholder="role name" ng-disabled="dataParameters.generateDefaultRoles === 'true'"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
-                        <bk-checkbox id="generalGenerateDefaultRoles" compact="false" ng-required="false"
-                            ng-model="dataParameters.generateDefaultRoles" data-ng-true-value="'true'"
-                            data-ng-false-value="'false'" ng-change="toggleDefaultRoles()"></bk-checkbox>
+                        <bk-checkbox id="generalGenerateDefaultRoles" compact="false" ng-required="false" ng-model="dataParameters.generateDefaultRoles" data-ng-true-value="'true'" data-ng-false-value="'false'"
+                            ng-change="toggleDefaultRoles()"></bk-checkbox>
                         <bk-checkbox-label for="generalGenerateDefaultRoles">Generate Default Roles</bk-checkbox-label>
                     </bk-form-item>
                 </bk-form-group>
@@ -616,8 +546,7 @@
                             <bk-form-label for="importscode" colon="true">Imports</bk-form-label>
                         </div>
                         <div class="fd-col">
-                            <bk-textarea id="importscode" placeholder="imports code"
-                                ng-model="dataParameters.importsCode" rows="10"></bk-textarea>
+                            <bk-textarea id="importscode" placeholder="imports code" ng-model="dataParameters.importsCode" rows="10"></bk-textarea>
                         </div>
                     </bk-form-item>
                 </bk-form-group>
