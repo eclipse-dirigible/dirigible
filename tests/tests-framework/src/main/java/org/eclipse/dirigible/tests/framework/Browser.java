@@ -52,9 +52,7 @@ public interface Browser {
     void clickOnElementWithText(HtmlElementType htmlElementType, String text);
 
     void clickOnElementWithText(String htmlElementType, String text);
-
-    void clickOnElementFromListByAttributePattern(String htmlElementType, String htmlAttribute, String pattern, int index);
-
+    
     void clickOnElementByAttributePattern(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String pattern);
 
     void clickOnElementByAttributePattern(String htmlElementType, String htmlAttribute, String pattern);

@@ -294,9 +294,7 @@ class BrowserImpl implements Browser {
     @Override
     public void rightClickOnElementContainingText(String elementType, String text) {
         SelenideElement element = getElementByAttributeAndContainsText(elementType, text);
-
         element.shouldBe(Condition.visible);
-
         rightClickElement(element);
     }
 
@@ -345,7 +343,7 @@ class BrowserImpl implements Browser {
     }
 
     @Override
-    public void clickOnElementFromListByAttributePattern(String htmlElementType, String htmlAttribute, String pattern, int index){
+    public void clickOnElementFromListByAttributePattern(String htmlElementType, String htmlAttribute, String pattern, int index) {
         By by = constructCssSelectorByTypeAndAttribute(htmlElementType, htmlAttribute, pattern);
         ElementsCollection elements = Selenide.$$(by);
         SelenideElement element = elements.get(index);
