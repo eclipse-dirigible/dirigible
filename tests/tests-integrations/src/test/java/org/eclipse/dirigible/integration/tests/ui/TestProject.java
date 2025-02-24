@@ -45,10 +45,12 @@ public class TestProject {
     private static final String EDM_FILE_NAME = "edm.edm";
     private static final String READERS_ODATA_ENTITY_PATH = "/odata/v2/Readers";
     private static final String READERS_VIEW_SERVICE_PATH = "/services/ts/dirigible-test-project/views/ReaderViewService.ts";
-    private static final String PROJECT_ROOT_FOLDER = "dirigible-test-project";
+    private static final String PROJECT_ROOT_FOLDER_DEFAULT = "dirigible-test-project";
+    private static final String PROJECT_ROOT_FOLDER_DEPENDS_ON = "dirigible-depends-on-test-project";
     private static final String DOCUMENTS_SERVICE_PATH = "/services/ts/dirigible-test-project/cmis/DocumentService.ts/documents";
 
-    private static final String PROJECT_RESOURCES_PATH = "dirigible-test-project";
+    private static final String PROJECT_RESOURCES_PATH_DEFAULT = "dirigible-test-project";
+    private static final String PROJECT_RESOURCES_PATH_DEPENDS_ON = "dirigible-depends-on-test-project";
     private static final String UI_PROJECT_TITLE = "Dirigible Test Project";
 
     private final BrowserFactory browserFactory;
@@ -74,12 +76,20 @@ public class TestProject {
         this.eventListenerLogsAsserter = new LogsAsserter("app.book-entity-events-handler.ts", Level.DEBUG);
     }
 
-    public void publish() {
-        projectUtil.copyResourceProjectToDefaultUserWorkspace(PROJECT_RESOURCES_PATH);
+    public void publishDefault() {
+        publish(PROJECT_RESOURCES_PATH_DEFAULT, PROJECT_ROOT_FOLDER_DEFAULT, EDM_FILE_NAME);
+    }
+
+    public void publishDependsOn() {
+        publish(PROJECT_RESOURCES_PATH_DEPENDS_ON, PROJECT_ROOT_FOLDER_DEPENDS_ON, EDM_FILE_NAME);
+    }
+
+    public void publish(String projectResourcesPath, String projectRootFolder, String edmFileName) {
+        projectUtil.copyResourceProjectToDefaultUserWorkspace(projectResourcesPath);
 
         Workbench workbench = ide.openWorkbench();
-        workbench.expandProject(PROJECT_ROOT_FOLDER);
-        workbench.openFile(EDM_FILE_NAME);
+        workbench.expandProject(projectRootFolder);
+        workbench.openFile(edmFileName);
 
         edmView.regenerate();
 
@@ -91,8 +101,6 @@ public class TestProject {
         Workbench workbench = ide.openWorkbench();
         workbench.createFileInProject(UI_PROJECT_TITLE, EDM_FILE_NAME, "Entity Data Model");
         workbench.openFile(EDM_FILE_NAME);
-
-        edmView.createEntity("City");
     }
 
     public void verify(DirigibleTestTenant tenant) {

@@ -53,7 +53,7 @@ class MultitenancyIT extends UserInterfaceIntegrationTest {
         List<DirigibleTestTenant> tenants = createTenants();
         waitForTenantsProvisioning(tenants);
 
-        testProject.publish();
+        testProject.publishDefault();
 
         verifyTenants(tenants);
     }

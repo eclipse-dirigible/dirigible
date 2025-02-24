@@ -37,7 +37,7 @@ class CustomSecurityIT extends UserInterfaceIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        testProject.publish();
+        testProject.publishDefault();
         browser.clearCookies();
 
         // wait some time synchronizers to complete their execution

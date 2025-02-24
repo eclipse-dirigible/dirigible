@@ -88,10 +88,8 @@ public class Workbench {
 
         clickOnButtonWithJs(newFileType);
         clickOnButtonWithJs("Create");
-        browser.reload();
 
-//       browser.enterTextInElementById("pgfi1", fileName);
-//        browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
+        browser.reload();
     }
 
 }

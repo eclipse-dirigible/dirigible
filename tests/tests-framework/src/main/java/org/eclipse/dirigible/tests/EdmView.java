@@ -29,14 +29,5 @@ public class EdmView {
         browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.TITLE, "Regenerate");
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Generated from model");
     }
-
-    public void createEntity(String entityName) {
-        //drag and drop
-        browser.rightClickOnElementByAttributeValue(HtmlElementType.I, HtmlAttribute.CLASS, "mx-sidebar-icon sap-icon--header");
-        browser.clickOnElementById("graphContainer");
-
-//        browser.clickOnElementByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.TITLE, "Create Entity", entityName);
-//        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Entity created");
-    }
 }
 

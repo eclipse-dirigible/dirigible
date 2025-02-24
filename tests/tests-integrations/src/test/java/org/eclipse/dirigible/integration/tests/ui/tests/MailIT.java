@@ -58,7 +58,7 @@ class MailIT extends UserInterfaceIntegrationTest {
 
         greenMail.setUser(USER, PASSWORD);
 
-        testProject.publish();
+        testProject.publishDefault();
     }
 
     @AfterEach
