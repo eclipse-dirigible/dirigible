@@ -343,15 +343,6 @@ class BrowserImpl implements Browser {
     }
 
     @Override
-    public void clickOnElementFromListByAttributePattern(String htmlElementType, String htmlAttribute, String pattern, int index) {
-        By by = constructCssSelectorByTypeAndAttribute(htmlElementType, htmlAttribute, pattern);
-        ElementsCollection elements = Selenide.$$(by);
-        SelenideElement element = elements.get(index);
-
-        clickElement(element);
-    }
-
-    @Override
     public void doubleClickOnElementContainingText(HtmlElementType elementType, String text) {
         doubleClickOnElementContainingText(elementType.getType(), text);
     }
