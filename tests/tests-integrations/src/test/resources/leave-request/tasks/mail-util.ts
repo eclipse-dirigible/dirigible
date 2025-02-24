@@ -11,7 +11,7 @@ function isMailConfigured() {
         (
 //             (configurations.get("MAIL_SMTPS_HOST", "localhost") && configurations.get("MAIL_SMTPS_PORT", PortUtil.getFreeRandomPort()) && configurations.get("MAIL_SMTPS_AUTH", "true"))
 //             ||
-            (configurations.get("MAIL_SMTP_HOST", "localhost") && configurations.get("MAIL_SMTP_PORT", "565") && configurations.get("DIRIGIBLE_MAIL_SMTP_AUTH", "true"))
+            (configurations.get("MAIL_SMTP_HOST", "localhost") && configurations.get("MAIL_SMTP_PORT", "56565") && configurations.get("DIRIGIBLE_MAIL_SMTP_AUTH", "true"))
         );
 }
 
