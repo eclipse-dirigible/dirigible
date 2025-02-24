@@ -1,5 +1,5 @@
 {
-    "module": "menu-projects/templates/menu-csvim.js",
+    "module": "menu-csv/templates/menu-csvim.js",
     "extensionPoint": "platform-templates-menu",
     "description": "CSVIM Workbench New Menu Extension"
 }

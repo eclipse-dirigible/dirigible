@@ -1,0 +1,5 @@
+{
+    "module": "menu-csv/templates/menu-csv.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "CSV Workbench New Menu Extension"
+}
