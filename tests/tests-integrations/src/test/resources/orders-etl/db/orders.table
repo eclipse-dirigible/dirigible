@@ -1,0 +1,32 @@
+{
+    "name": "ORDERS",
+    "type": "TABLE",
+    "columns": [
+        {
+            "type": "INTEGER",
+            "length": 0,
+            "primaryKey": true,
+            "identity": true,
+            "precision": "NaN",
+            "scale": "NaN",
+            "nullable": true,
+            "name": "ID"
+        },
+        {
+            "type": "DECIMAL",
+            "length": 19,
+            "precision": "15",
+            "scale": "4",
+            "nullable": true,
+            "name": "TOTAL"
+        },
+        {
+            "type": "TIMESTAMP",
+            "length": 20,
+            "precision": "NaN",
+            "scale": "NaN",
+            "nullable": true,
+            "name": "DATEADDED"
+        }
+    ]
+}

@@ -1,0 +1,8 @@
+{
+    "location": "/orders-etl/datasources/OpenCartDB.datasource",
+    "name": "OpenCartDB",
+    "driver": "org.mariadb.jdbc.Driver",
+    "url": "jdbc:mariadb://mariadb:3306/oc_order",
+    "username": "admin",
+    "password": "admin" 
+}

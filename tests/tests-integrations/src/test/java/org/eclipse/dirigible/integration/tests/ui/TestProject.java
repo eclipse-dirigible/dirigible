@@ -46,9 +46,11 @@ public class TestProject {
     private static final String READERS_ODATA_ENTITY_PATH = "/odata/v2/Readers";
     private static final String READERS_VIEW_SERVICE_PATH = "/services/ts/dirigible-test-project/views/ReaderViewService.ts";
     private static final String PROJECT_ROOT_FOLDER = "dirigible-test-project";
+    private static final String PROJECT_CAMEL_ROOT_FOLDER = "orders-etl";
     private static final String DOCUMENTS_SERVICE_PATH = "/services/ts/dirigible-test-project/cmis/DocumentService.ts/documents";
 
     private static final String PROJECT_RESOURCES_PATH = "dirigible-test-project";
+    private static final String PROJECT_CAMEL_RESOURCES_PATH = "orders-etl";
     private static final String UI_PROJECT_TITLE = "Dirigible Test Project";
 
     private final BrowserFactory browserFactory;
@@ -82,6 +84,14 @@ public class TestProject {
         workbench.openFile(EDM_FILE_NAME);
 
         edmView.regenerate();
+
+        workbench.publishAll();
+    }
+
+    public void publishCamel() {
+        projectUtil.copyResourceProjectToDefaultUserWorkspace(PROJECT_CAMEL_RESOURCES_PATH);
+
+        Workbench workbench = ide.openWorkbench();
 
         workbench.publishAll();
     }
