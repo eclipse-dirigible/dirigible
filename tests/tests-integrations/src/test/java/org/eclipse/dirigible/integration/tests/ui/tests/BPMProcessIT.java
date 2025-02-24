@@ -105,10 +105,8 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
         //Test if the email has been sent
         testSendEmailForm();
 
-        //Clears cookies but should check why it only works with this
-        browser.clearCookies();
-
-        //Clears cookies but should check why it only works with this
+        //Clears cookies but should check why it only works with this:
+        // It works bc it isnt logged in otherwise as emily
         browser.clearCookies();
 
         //Step 3: Logs in as a manager and decline
@@ -124,7 +122,7 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
     }
 
     @Test
-    void testCreateBPMProcessAndDeclineIt() throws MessagingException { //to do: check it why it fails after running the first one
+    void testCreateBPMProcessAndDeclineIt() throws MessagingException {
         // Step 1: Create users
         createSecurityUsers();
 
@@ -186,8 +184,8 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
         browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Claim");
         browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Close");
 
-        //TO DO: this link should be get not hardcoded but it should match the taskId
-        browser.openPath("/services/web/leave-request/gen/process-leave-request/forms/process-leave-request/index.html?taskId=17");
+        String firstTdText = browser.getFirstTdTextInRowContaining("Process request"); //this gets the id bc it is not always 17
+        browser.openPath("/services/web/leave-request/gen/process-leave-request/forms/process-leave-request/index.html?taskId="+firstTdText);
 //        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Open Form");
     }
 
@@ -255,6 +253,3 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
                 .trim()).contains("<h4>A new leave request for [john.doe.employee@example.com] has been created</h4>Open the inbox <a href=\"http://localhost:80/services/web/inbox/\" target=\"_blank\">here</a> to process the request.");
     }
 }
-
-
-//To do: clean the code for example in the function for checking for approval - check the date in another function
