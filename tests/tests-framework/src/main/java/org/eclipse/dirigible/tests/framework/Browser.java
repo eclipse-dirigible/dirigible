@@ -52,7 +52,7 @@ public interface Browser {
     void clickOnElementWithText(HtmlElementType htmlElementType, String text);
 
     void clickOnElementWithText(String htmlElementType, String text);
-    
+
     void clickOnElementByAttributePattern(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String pattern);
 
     void clickOnElementByAttributePattern(String htmlElementType, String htmlAttribute, String pattern);
@@ -80,5 +80,4 @@ public interface Browser {
     SelenideElement findElementInAllFrames(By by, WebElementCondition... conditions);
 
     void handleElementInAllFrames(By by, Consumer<SelenideElement> elementHandler, WebElementCondition... conditions);
-
 }
