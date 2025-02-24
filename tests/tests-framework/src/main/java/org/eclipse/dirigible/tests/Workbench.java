@@ -76,9 +76,7 @@ public class Workbench {
     }
 
     public void clickOnButtonWithJs(String buttonText) {
-        SelenideElement button = browser.findElementInAllFrames(
-                Selectors.byText(buttonText), Condition.visible
-        );
+        SelenideElement button = browser.findElementInAllFrames(Selectors.byText(buttonText), Condition.visible);
         Selenide.executeJavaScript("arguments[0].click();", button);
     }
 
@@ -91,5 +89,4 @@ public class Workbench {
 
         browser.reload();
     }
-
 }
