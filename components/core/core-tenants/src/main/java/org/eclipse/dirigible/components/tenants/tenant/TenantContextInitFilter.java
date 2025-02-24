@@ -9,6 +9,28 @@
  */
 package org.eclipse.dirigible.components.tenants.tenant;
 
+import java.io.IOException;
+import java.security.Principal;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.base.tenant.Tenant;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
+import org.eclipse.dirigible.components.tenants.service.TenantService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.gson.Gson;
@@ -17,23 +39,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.eclipse.dirigible.commons.config.DirigibleConfig;
-import org.eclipse.dirigible.components.base.tenant.Tenant;
-import org.eclipse.dirigible.components.base.tenant.TenantContext;
-import org.eclipse.dirigible.components.tenants.service.TenantService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
-import org.springframework.web.filter.OncePerRequestFilter;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * The Class TenantContextInitFilter.
@@ -50,7 +55,7 @@ public class TenantContextInitFilter extends OncePerRequestFilter {
     private static final Pattern TENANT_SUBDOMAIN_PATTERN = Pattern.compile(DirigibleConfig.TENANT_SUBDOMAIN_REGEX.getStringValue());
 
     /** The Constant tenantCache. */
-    private static final Cache<String, Optional<Tenant>> tenantCache = Caffeine.newBuilder()
+    public static final Cache<String, Optional<Tenant>> TENANT_CACHE = Caffeine.newBuilder()
                                                                                .expireAfterWrite(10, TimeUnit.MINUTES)
                                                                                .maximumSize(100)
                                                                                .build();
@@ -96,6 +101,32 @@ public class TenantContextInitFilter extends OncePerRequestFilter {
                 LOGGER.warn("Tried to reach unregistered tenant. Headers: [{}]", getHeaders(request));
             }
             return;
+        }
+
+        if (multitenantModeEnabled) {
+            Principal principal = request.getUserPrincipal();
+            if (principal instanceof OAuth2AuthenticationToken oauthToken) {
+                String tenantAttribute = oauthToken.getPrincipal()
+                                                   .getAttribute("custom:tenant");
+                if (tenantAttribute == null || tenantAttribute.equals("")) {
+                    forbidden("User is not assigned to any tenant", response);
+                    return;
+                }
+                Set<String> tenants = new HashSet<>(Arrays.asList(tenantAttribute.split(","))
+                                                          .stream()
+                                                          .map(e -> e.trim())
+                                                          .collect(Collectors.toList()));
+                Optional<Tenant> tenant = determineTenantSubdomain(request);
+                if (tenant.isEmpty() || !tenants.contains(tenant.get()
+                                                                .getSubdomain())) {
+                    forbidden("User is not member of the [" + tenant.get()
+                                                                    .getName()
+                            + " | " + tenant.get()
+                                            .getSubdomain()
+                            + "] tenant", response);
+                    return;
+                }
+            }
         }
 
         try {
@@ -182,7 +213,7 @@ public class TenantContextInitFilter extends OncePerRequestFilter {
             return Optional.empty();
         }
         String subdomain = subdomainOpt.get();
-        return tenantCache.get(subdomain, k -> {
+        return TENANT_CACHE.get(subdomain, k -> {
             LOGGER.debug("Searching for tenant with subdomain [{}] from database", subdomain);
             return tenantService.findBySubdomain(subdomain)
                                 .map(TenantImpl::createFromEntity);
@@ -204,7 +235,26 @@ public class TenantContextInitFilter extends OncePerRequestFilter {
                 || request.getRequestURI()
                           .startsWith("/js/")
                 || request.getRequestURI()
-                          .endsWith(".ico");
+                          .endsWith(".ico")
+                || request.getRequestURI()
+                          .startsWith("/index-busy.html")
+                || request.getRequestURI()
+                          .startsWith("/services/js/platform-core/extension-services/themes.js")
+                || request.getRequestURI()
+                          .startsWith("/services/js/platform-core/services/loader.js");
     }
 
+    /**
+     * Forbidden.
+     *
+     * @param message the message
+     * @param response the response
+     * @throws IOException Signals that an I/O exception has occurred.
+     */
+    private void forbidden(String message, HttpServletResponse response) throws IOException {
+        if (logger.isWarnEnabled()) {
+            logger.warn(message);
+        }
+        response.sendError(HttpServletResponse.SC_FORBIDDEN, message);
+    }
 }
