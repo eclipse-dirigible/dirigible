@@ -263,6 +263,7 @@
 		<module>ui/editor-csv</module>
 		<module>ui/editor-csvim</module>
 		<module>ui/editor-form-builder</module>
+		
 		<module>ui/menu-bpm</module>
 		<module>ui/menu-database</module>
 		<module>ui/menu-entity</module>
@@ -274,6 +275,7 @@
 		<module>ui/menu-schema</module>
 		<module>ui/menu-security</module>
 		<module>ui/menu-websockets</module>
+		<module>ui/menu-csv</module>
 
 		<!-- Resources -->
 		<module>resources/resources-core</module>
@@ -1554,6 +1556,11 @@
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
 				<artifactId>dirigible-components-ui-menu-websockets</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-ui-menu-csv</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			

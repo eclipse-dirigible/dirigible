@@ -347,6 +347,10 @@
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-ui-menu-websockets</artifactId>
 		</dependency>
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-ui-menu-csv</artifactId>
+		</dependency>
 
     </dependencies>
 

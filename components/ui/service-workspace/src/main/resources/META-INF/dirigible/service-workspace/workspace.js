@@ -64,7 +64,7 @@ angular.module('WorkspaceService', []).constant('workspaceStorageKey', `${brandi
          * Loads file content.
          * @param {string} resourcePath - Full resource path, including workspace name.
          */
-        const loadContent = async function (resourcePath) {
+        const loadContent = function (resourcePath) {
             const url = UriBuilder().path(this.workspacesServiceUrl.split('/')).path(resourcePath.split('/')).build();
             return $http.get(url);
         }.bind(this);
@@ -74,7 +74,7 @@ angular.module('WorkspaceService', []).constant('workspaceStorageKey', `${brandi
          * @param {string} resourcePath - Full resource path, including workspace name.
          * @param {string} content - File content.
          */
-        const saveContent = async function (resourcePath, content) {
+        const saveContent = function (resourcePath, content) {
             const url = UriBuilder().path(this.workspacesServiceUrl.split('/')).path(resourcePath.split('/')).build();
             return $http.put(url, content, { headers: { 'Content-Type': 'text/plain;charset=UTF-8' } });
         }.bind(this);

@@ -457,6 +457,17 @@ angular.module('GitService', [])
                 });
             }.bind(this);
 
+            /*
+            * Returns the original file content in git and the modified file content from a full workspace path.
+            */
+            const loadContent = function (workspacePath) {
+                const pathChunks = workspacePath.split('/');
+                pathChunks.shift();
+                const workspace = pathChunks.shift();
+                const project = pathChunks.shift();
+                return getOriginalModified(workspace, project, `${project}/${pathChunks.join('/')}`);
+            }.bind(this);
+
             const history = function (workspace, project, file) {
                 let url = UriBuilder().path(this.gitServiceUrl.split('/')).path(workspace).path(project).path('history').build();
                 if (file) {
@@ -497,6 +508,7 @@ angular.module('GitService', [])
                 revertFiles: revertFiles,
                 removeFiles: removeFiles,
                 getOriginalModified: getOriginalModified,
+                loadContent: loadContent,
                 history: history,
             };
         }];

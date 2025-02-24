@@ -130,6 +130,7 @@ class FileIO {
     static EDITOR_URL = new URL(window.location.href);
 
     isReadOnly() {
+        if (editorParameters.resourceType !== 'workspace') return true;
         return editorParameters.readOnly || false;
     }
 
@@ -286,7 +287,7 @@ class FileIO {
                 fileMetadata.modified = fileContent;
                 fileMetadata.sourceCode = fileContent;
             }
-            if (TypeScriptUtils.isTypeScriptFile(path)) {
+            if (!this.isReadOnly() && TypeScriptUtils.isTypeScriptFile(path)) {
                 const importedFilesNames = TypeScriptUtils.getImportedModuleFiles(fileMetadata.sourceCode);
                 // @ts-ignore
                 fileMetadata.importedFilesNames.push(...importedFilesNames);
@@ -409,10 +410,18 @@ class FileIO {
 class EditorActionsProvider {
     static #autoFormatExcludedKey = `${brandingInfo.keyPrefix}.code-editor.autoFormat.excluded`;
     static _toggleAutoFormattingActionRegistration = undefined;
+    static #autoFormatEnabled = undefined;
 
     static isAutoFormattingEnabled() {
-        const autoFormat = window.localStorage.getItem(`${brandingInfo.keyPrefix}.code-editor.autoFormat`);
-        return autoFormat === null || autoFormat === 'true';
+        if (EditorActionsProvider.#autoFormatEnabled === undefined) {
+            const autoFormat = window.localStorage.getItem(`${brandingInfo.keyPrefix}.code-editor.autoFormat`);
+            return autoFormat === null || autoFormat === 'true';
+        }
+        return EditorActionsProvider.#autoFormatEnabled;
+    }
+
+    static setAutoFormattingEnabled(enabled) {
+        EditorActionsProvider.#autoFormatEnabled = enabled;
     }
 
     static createSaveAction(formatEnabled = true) {
@@ -465,7 +474,7 @@ class EditorActionsProvider {
     static createToggleAutoFormattingAction() {
         return {
             id: 'code-editor-toggle-auto-formatting',
-            label: EditorActionsProvider.#isAutoFormattingEnabledForCurrentFile() ? "Disable Auto-Formatting" : "Enable Auto-Formatting",
+            label: "Toggle Auto-Formatting",
             keybindings: [
                 monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyD
             ],
@@ -518,7 +527,7 @@ class EditorActionsProvider {
 }
 
 class DirigibleEditor {
-
+    static fileIO = new FileIO();
     static dirty = false;
     static lastSavedVersionId = undefined;
     static loadingOverview = document.getElementById('loadingOverview');
@@ -552,8 +561,7 @@ class DirigibleEditor {
     }
 
     static saveFileContent(editor) {
-        const fileIO = new FileIO();
-        fileIO.saveText(editor.getModel().getValue()).then(() => {
+        DirigibleEditor.fileIO.saveText(editor.getModel().getValue()).then(() => {
             DirigibleEditor.lastSavedVersionId = editor.getModel().getAlternativeVersionId();
             DirigibleEditor.dirty = false;
         });
@@ -706,7 +714,7 @@ class DirigibleEditor {
             editor.addAction(EditorActionsProvider.createSaveAction(!this.isTemplate));
         }
         editor.addAction(EditorActionsProvider.createSearchAction());
-        if (!this.isTemplate) {
+        if (!this.isTemplate && EditorActionsProvider.isAutoFormattingEnabled()) {
             EditorActionsProvider._toggleAutoFormattingActionRegistration = editor.addAction(EditorActionsProvider.createToggleAutoFormattingAction());
         }
 
@@ -785,8 +793,6 @@ class DirigibleEditor {
             resolveJsonModule: true,
             jsx: (this.fileName?.endsWith(".tsx") === true) ? "react" : undefined
         });
-
-        this.monaco.languages.typescript.javascriptDefaults.addExtraLib('/** Loads external module: \n\n> ```\nlet res = require("http/v8/response");\nres.println("Hello World!");``` */ var require = function(moduleName: string) {return new Module();};', 'js:require.js');
 
         this.monaco.languages.typescript.javascriptDefaults.addExtraLib('/** $. XSJS API */ var $: any;', 'ts:$.js');
 
@@ -870,8 +876,9 @@ class DirigibleEditor {
                 const filePath = getTypeScriptFileImport(model, position, fileObject);
                 if (filePath) {
                     layoutHub.openEditor({
-                        path: filePath,
-                        contentType: "typescript",
+                        path: DirigibleEditor.fileIO.getWorkspacePath(filePath),
+                        params: { resourceType: 'workspace' },
+                        contentType: "plain/text",
                     });
                 }
             }
@@ -897,25 +904,35 @@ class DirigibleEditor {
         const monaco = this.monaco;
         const fileObject = this.fileObject;
 
-        themingHub.addMessageListener({
-            topic: 'code-editor.settings.update', handler: (data) => {
-                if (data.setting === 'autoFormat' && !this.isTemplate) {
-                    if (data.fileName && data.fileName === fileName && EditorActionsProvider._toggleAutoFormattingActionRegistration) {
-                        // @ts-ignore
-                        EditorActionsProvider._toggleAutoFormattingActionRegistration.dispose();
-                        EditorActionsProvider._toggleAutoFormattingActionRegistration = editor.addAction(EditorActionsProvider.createToggleAutoFormattingAction());
+        if (!this.isTemplate) {
+            themingHub.addMessageListener({
+                topic: 'code-editor.settings.update', handler: (data) => {
+                    if (data.setting === 'autoFormatAll') {
+                        EditorActionsProvider.setAutoFormattingEnabled(data.value);
+                        if (data.value && !EditorActionsProvider._toggleAutoFormattingActionRegistration) {
+                            EditorActionsProvider._toggleAutoFormattingActionRegistration = editor.addAction(EditorActionsProvider.createToggleAutoFormattingAction());
+                        } else if (EditorActionsProvider._toggleAutoFormattingActionRegistration) {
+                            EditorActionsProvider._toggleAutoFormattingActionRegistration.dispose();
+                            EditorActionsProvider._toggleAutoFormattingActionRegistration = undefined;
+                        }
+                    } else if (data.setting === 'autoFormat') {
+                        if (data.fileName && data.fileName === fileName && EditorActionsProvider._toggleAutoFormattingActionRegistration) {
+                            // @ts-ignore
+                            EditorActionsProvider._toggleAutoFormattingActionRegistration.dispose();
+                            EditorActionsProvider._toggleAutoFormattingActionRegistration = editor.addAction(EditorActionsProvider.createToggleAutoFormattingAction());
+                        }
+                    } else if (data.setting === 'autoBrackets') {
+                        editor.updateOptions({ autoClosingBrackets: data.value });
+                    } else if (data.setting === 'minimapAutohide') {
+                        editor.updateOptions({ minimap: { autohide: data.value } });
+                    } else if (data.setting === 'whitespace') {
+                        editor.updateOptions({ renderWhitespace: data.value });
+                    } else if (data.setting === 'wordWrap') {
+                        editor.updateOptions({ wordWrap: data.value });
                     }
-                } else if (data.setting === 'autoBrackets') {
-                    editor.updateOptions({ autoClosingBrackets: data.value });
-                } else if (data.setting === 'minimapAutohide') {
-                    editor.updateOptions({ minimap: { autohide: data.value } });
-                } else if (data.setting === 'whitespace') {
-                    editor.updateOptions({ renderWhitespace: data.value });
-                } else if (data.setting === 'wordWrap') {
-                    editor.updateOptions({ wordWrap: data.value });
                 }
-            }
-        });
+            });
+        }
 
         themingHub.onThemeChange((theme) => {
             setTheme(theme, this.monaco);

@@ -37,15 +37,24 @@
 						<bk-list>
 							<bk-list-item interactive="false">
 								<bk-list-title id="afl">Format On Save</bk-list-title>
-								<bk-switch class="bk-margin-inline--none" switch-id="afsw" switch-labelledby="afl" ng-model="switches.autoFormat" ng-change="autoFormatChange()"></bk-switch>
+								<bk-switch class="bk-margin-inline--none">
+									<input bk-switch-input id="afsw" type="checkbox" aria-labelledby="afl" ng-model="switches.autoFormat" ng-change="autoFormatChange()" />
+									<bk-switch-slider></bk-switch-slider>
+								</bk-switch>
 							</bk-list-item>
 							<bk-list-item interactive="false">
 								<bk-list-title id="acb">Auto Closing Brackets</bk-list-title>
-								<bk-switch class="bk-margin-inline--none" switch-id="acbsw" switch-labelledby="acb" ng-model="switches.autoBrackets" ng-change="autoBracketsChange()"></bk-switch>
+								<bk-switch class="bk-margin-inline--none">
+									<input bk-switch-input id="acbsw" type="checkbox" aria-labelledby="acb" ng-model="switches.autoBrackets" ng-change="autoBracketsChange()" />
+									<bk-switch-slider></bk-switch-slider>
+								</bk-switch>
 							</bk-list-item>
 							<bk-list-item interactive="false">
 								<bk-list-title id="amm">Autohide Minimap</bk-list-title>
-								<bk-switch class="bk-margin-inline--none" switch-id="ammsw" switch-labelledby="amm" ng-model="switches.minimapAutohide" ng-change="minimapAutohideChange()"></bk-switch>
+								<bk-switch class="bk-margin-inline--none">
+									<input bk-switch-input id="ammsw" type="checkbox" aria-labelledby="amm" ng-model="switches.minimapAutohide" ng-change="minimapAutohideChange()" />
+									<bk-switch-slider></bk-switch-slider>
+								</bk-switch>
 							</bk-list-item>
 							<bk-list-item interactive="false">
 								<bk-list-title>Render Whitespace</bk-list-title>
@@ -160,6 +169,10 @@
 
 				$scope.autoFormatChange = () => {
 					$window.localStorage.setItem(autoFormatKey, `${$scope.switches.autoFormat}`);
+					messageHub.postMessage({
+						topic: 'code-editor.settings.update',
+						data: { fromSettings: true, setting: 'autoFormatAll', value: $scope.switches.autoFormat }
+					});
 				};
 				$scope.autoBracketsChange = () => {
 					$window.localStorage.setItem(autoBracketsKey, `${$scope.switches.autoBrackets}`);
