@@ -103,7 +103,7 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
         SleepUtil.sleepSeconds(5);
 
         //Test if the email has been sent
-        testSendEmail();
+        testSendEmailForm();
 
         //Clears cookies but should check why it only works with this
         browser.clearCookies();
@@ -141,7 +141,7 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
         SleepUtil.sleepSeconds(5);
 
         //Test if the email has been sent
-        testSendEmail();
+        testSendEmailForm();
 
         //Clears cookies but should check why it only works with this
         browser.clearCookies();
@@ -242,8 +242,7 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
                 .trim()).contains("has been approved by [emily.stone.mngr@example.com]</h4>");
     }
 
-    //To do: rename this function
-    void testSendEmail() throws MessagingException {
+    void testSendEmailForm() throws MessagingException {
         MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
         assertThat(receivedMessages).hasSize(1);
 
