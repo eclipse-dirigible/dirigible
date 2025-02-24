@@ -8,8 +8,8 @@ class CreateEmptyEdmFileIT extends UserInterfaceIntegrationTest {
     @Autowired
     private TestProject testProject;
 
-     @Test
-     void dependsOnTest() {
-         testProject.publishEmptyEdm();
-     }
+    @Test
+    void dependsOnTest() {
+        testProject.publishEmptyEdm();
+    }
 }

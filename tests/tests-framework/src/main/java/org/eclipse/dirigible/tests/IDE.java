@@ -82,7 +82,8 @@ public class IDE {
                              .get(path)
                              .then()
                              .statusCode(expectedStatusCode)
-                             .body(containsString(expectedBody)), username, password);
+                             .body(containsString(expectedBody)),
+                username, password);
     }
 
     public void assertPublishedAllProjectsMessage() {

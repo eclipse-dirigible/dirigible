@@ -96,7 +96,7 @@ public class TestProject {
         workbench.publishAll();
     }
 
-    public void publishEmptyEdm(){
+    public void publishEmptyEdm() {
         ide.createNewBlankProject(UI_PROJECT_TITLE);
         Workbench workbench = ide.openWorkbench();
         workbench.createFileInProject(UI_PROJECT_TITLE, EDM_FILE_NAME, "Entity Data Model");

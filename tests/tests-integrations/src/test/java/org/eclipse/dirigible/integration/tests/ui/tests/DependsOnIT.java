@@ -11,8 +11,8 @@ class DependsOnIT extends UserInterfaceIntegrationTest {
     @Autowired
     private TestProject testProject;
 
-     @Test
-     void dependsOnTest() {
-         testProject.publishDependsOn();
-     }
+    @Test
+    void dependsOnTest() {
+        testProject.publishDependsOn();
+    }
 }
