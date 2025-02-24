@@ -1,0 +1,9 @@
+NC='\033[0m' # No Color
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+
+echo "${GREEN} Checking code formatting..."
+mvn formatter:validate > /dev/null
+
+status=$?
+([ $status -eq 0 ] && echo "${GREEN} Formatting is OK ${NC}") || (echo "${RED} Formatting error, you can format the sources with the following command:\n\n\tmvn formatter:format\n${NC}" && exit 1)
