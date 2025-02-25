@@ -1,0 +1,5 @@
+{
+    "module": "view-databases/configs/result-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Results view"
+}
