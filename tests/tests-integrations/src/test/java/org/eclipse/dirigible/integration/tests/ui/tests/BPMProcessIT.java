@@ -92,8 +92,6 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
 
         declineOrApproveRequest("Approve");
 
-        SleepUtil.sleepSeconds(5);
-
         testApprovalEmail();
     }
 
