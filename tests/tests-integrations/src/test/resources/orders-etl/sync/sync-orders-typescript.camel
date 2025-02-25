@@ -6,8 +6,8 @@
       description: Trigger Orders Replication
       uri: cron
       parameters:
-        schedule: 30 * * ? * *
-        name: TriggerOrdersReplication
+        schedule: 0/10 * * ? * *
+        name: TriggerOrdersReplicationTypeScript
       steps:
         - log:
             id: log-ac34

@@ -4,6 +4,7 @@ import { client } from "sdk/http";
 export function onMessage(message: any) {
     const repository = new oc_orderRepository();
     const openCartOrders = repository.findAll();
+
     message.setBody(openCartOrders);
 
     const exchangeRate = getUsdToEuroExchangeRate();
