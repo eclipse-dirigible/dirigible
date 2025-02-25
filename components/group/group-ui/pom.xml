@@ -102,19 +102,7 @@
 		</dependency>
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-ui-view-git-branches</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-ui-view-git-staging</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-ui-view-git-history</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-ui-view-git-projects</artifactId>
+			<artifactId>dirigible-components-ui-view-git</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>
@@ -127,14 +115,6 @@
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-ui-view-databases</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-ui-view-db-explorer</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-ui-view-result</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>

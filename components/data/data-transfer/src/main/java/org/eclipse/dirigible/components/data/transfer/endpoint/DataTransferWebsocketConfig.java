@@ -46,7 +46,7 @@ public class DataTransferWebsocketConfig implements WebSocketConfigurer {
      */
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        registry.addHandler(getDataTransferWebsocketHandler(), BaseEndpoint.PREFIX_ENDPOINT_WEBSOCKETS + "/data/transfer");
+        registry.addHandler(getDataTransferWebsocketHandler(), BaseEndpoint.PREFIX_ENDPOINT_WEBSOCKETS + "data/transfer");
     }
 
     /**
