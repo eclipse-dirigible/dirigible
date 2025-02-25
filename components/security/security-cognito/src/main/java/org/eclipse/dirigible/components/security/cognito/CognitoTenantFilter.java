@@ -128,9 +128,7 @@ public class CognitoTenantFilter extends OncePerRequestFilter {
      * @throws IOException Signals that an I/O exception has occurred.
      */
     private void forbidden(String message, HttpServletResponse response) throws IOException {
-        if (logger.isWarnEnabled()) {
-            logger.warn(message);
-        }
+        logger.warn(message);
         response.sendError(HttpServletResponse.SC_FORBIDDEN, message);
     }
 }
