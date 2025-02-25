@@ -417,4 +417,17 @@ class BrowserImpl implements Browser {
         return Selenide.title();
     }
 
+    public String getFirstTdTextInRowContaining(String searchText) {
+        clickOnElementContainingText(HtmlElementType.TR, searchText);
+
+        SelenideElement trElement =
+                findElementInAllFrames(constructCssSelectorByType(HtmlElementType.TR), Condition.matchText(Pattern.quote(searchText)));
+
+        if (trElement != null) {
+            SelenideElement firstTd = trElement.$("td");
+            return firstTd.getText();
+        }
+        return null;
+    }
+
 }
