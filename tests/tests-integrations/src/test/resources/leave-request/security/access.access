@@ -1,0 +1,44 @@
+{
+    "constraints": [
+        {
+            "path": "/services/web/leave-request/gen/submit-leave-request/forms/submit-leave-request/index.html",
+            "method": "*",
+            "scope": "HTTP",
+            "roles": [
+                "employee"
+            ]
+        },
+        {
+            "path": "/services/ts/leave-request/api/ProcessService.ts/requests",
+            "method": "POST",
+            "scope": "HTTP",
+            "roles": [
+                "employee"
+            ]
+        },
+        {
+            "path": "/services/web/leave-request/gen/process-leave-request/forms/process-leave-request/index.html",
+            "method": "*",
+            "scope": "HTTP",
+            "roles": [
+                "employee-manager"
+            ]
+        },
+        {
+            "path": "/services/ts/leave-request/api/ProcessService.ts/requests/*/decline",
+            "method": "PUT",
+            "scope": "HTTP",
+            "roles": [
+                "employee-manager"
+            ]
+        },
+        {
+            "path": "/services/ts/leave-request/api/ProcessService.ts/requests/*/approve",
+            "method": "PUT",
+            "scope": "HTTP",
+            "roles": [
+                "employee-manager"
+            ]
+        }
+    ]
+}
