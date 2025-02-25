@@ -19,6 +19,8 @@ import org.slf4j.LoggerFactory;
  */
 public enum DirigibleConfig {
 
+    HOME_URL("DIRIGIBLE_HOME_URL", "services/web/shell-ide/"), //
+
     MAIL_USERNAME("DIRIGIBLE_MAIL_USERNAME", null), //
 
     MAIL_PASSWORD("DIRIGIBLE_MAIL_PASSWORD", null), //

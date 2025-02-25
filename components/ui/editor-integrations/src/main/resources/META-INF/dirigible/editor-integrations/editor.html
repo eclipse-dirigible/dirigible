@@ -12,7 +12,7 @@
 
 -->
 <!DOCTYPE HTML>
-<html id="appBase" lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="integrations" ng-controller="EditorViewController">
+<html id="appBase" ng-class="themeMode" lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="integrations" ng-controller="EditorViewController">
 
     <head>
         <meta charset="utf-8" />
@@ -23,13 +23,16 @@
         <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=editor-js"></script>
         <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
         <link type="text/css" rel="stylesheet" href="designer/static/css/main.cad1c473.css">
+        <link type="text/css" rel="stylesheet" href="/services/web/editor-integrations/css/theme.css">
         <script type="text/javascript" src="/services/web/editor-integrations/js/editor.js"></script>
     </head>
 
     <body class="bk-center" bk-scrollbar shortcut="'ctrl+s'" shortcut-action="save">
         <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
 
-        <div id="root" class="bk-fill-parent" ng-show="!state.error && !state.isBusy"></div>
+        <div class="bk-fill-parent" ng-show="!state.error && !state.isBusy">
+            <div id="root" ng-non-bindable></div>
+        </div>
 
         <bk-message-page glyph="sap-icon--error" ng-if="state.error">
             <bk-message-page-title>Editor encounterd an error!</bk-message-page-title>

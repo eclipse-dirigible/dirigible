@@ -1,0 +1,38 @@
+:where(.pf-v5-theme-dark) .pf-v5-c-page {
+    background-color: var(--sapBackgroundColor, --pf-v5-global--BackgroundColor--light-300);
+}
+
+:where(.pf-v5-theme-dark) .karavan .page .main-tabs-wrapper .main-tabs .top-menu-item {
+    color: var(--sapTextColor) !important;
+    fill: var(--sapTextColor) !important;
+}
+
+:where(.pf-v5-theme-dark) .karavan .page .main-tabs-wrapper .main-tabs .top-menu-item svg path {
+    fill: var(--sapTextColor) !important;
+}
+
+:where(.pf-v5-theme-dark) .pf-v5-c-badge.pf-m-read {
+    --pf-v5-c-badge--Color: var(--sapTextColor, --pf-v5-c-badge--m-read--Color);
+    opacity: 0.7;
+}
+
+:where(.pf-v5-theme-dark) .karavan .step-element .header .text-bottom {
+    background-color: transparent;
+}
+
+:where(.pf-v5-theme-dark) .pf-v5-c-page__main-section {
+    background-color: var(--sapBackgroundColor, --pf-v5-global--BackgroundColor--light-300);
+}
+
+:where(.pf-v5-theme-dark) .pf-v5-c-drawer.pf-m-inline,
+:where(.pf-v5-theme-dark) .pf-v5-c-drawer.pf-m-static {
+    --pf-v5-c-drawer__panel--BackgroundColor: var(--sapBackgroundColor, --pf-v5-global--BackgroundColor--100);
+}
+
+:where(.pf-v5-theme-dark) .pf-v5-c-drawer__content {
+    background-color: var(--sapBackgroundColor, --pf-v5-c-drawer__content--BackgroundColor);
+}
+
+:where(.pf-v5-theme-dark) .pf-v5-c-modal-box {
+    --pf-v5-c-modal-box--BackgroundColor: var(--sapBackgroundColor, --pf-v5-global--BackgroundColor--300);
+}

@@ -1593,7 +1593,7 @@ projectsView.controller('ProjectsViewController', (
 
     function openFile(node, editor = undefined) {
         let parent = node;
-        let extraArgs = { gitName: undefined };
+        let extraArgs = { resourceType: 'workspace', gitName: undefined };
         for (let i = 0; i < node.parents.length - 1; i++) {
             parent = jstreeWidget.jstree(true).get_node(parent.parent);
         }

@@ -11,7 +11,7 @@
     "supportLevel": "Stable",
     "groupId": "org.eclipse.dirigible",
     "artifactId": "dirigible-components-engine-camel",
-    "version": "11.0.0-SNAPSHOT",
+    "version": "12.0.0-SNAPSHOT",
     "scheme": "dirigible-java-script",
     "extendsScheme": "",
     "syntax": "dirigible-java-script:javaScriptPath",

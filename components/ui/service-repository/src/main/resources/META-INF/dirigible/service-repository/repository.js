@@ -14,8 +14,21 @@ angular.module('RepositoryService', []).provider('RepositoryService', function R
     this.$get = ['$http', function repositoryApiFactory($http) {
         const getMetadata = function (resourceUrl) {
             return $http.get(resourceUrl, { headers: { 'describe': 'application/json' } });
-        }
+        };
 
+        /**
+         * Loads file content.
+         * @param {string} resourcePath - Full resource path.
+         */
+        const loadContent = function (resourcePath) {
+            const url = UriBuilder().path(this.repositoryServiceUrl.split('/')).path(resourcePath.split('/')).build();
+            return $http.get(url);
+        }.bind(this);
+
+        /**
+         * List the contents of a repository path.
+         * @param {string} resourcePath - Full resource path. Default is '/'
+         */
         const loadRepository = function (resourcePath = '/') {
             const url = UriBuilder().path(this.repositoryServiceUrl.split('/')).path(resourcePath.split('/')).build();
             return $http.get(url, { headers: { 'describe': 'application/json' } });
@@ -40,6 +53,7 @@ angular.module('RepositoryService', []).provider('RepositoryService', function R
 
         return {
             getMetadata: getMetadata,
+            loadContent: loadContent,
             load: loadRepository,
             createCollection: createCollection,
             createResource: createResource,

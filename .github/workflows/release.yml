@@ -6,11 +6,11 @@ on:
       releaseVersion:
         description: Release Version
         required: true
-        default: 10.0.0
+        default: 11.0.0
       snapshotVersion:
         description: Snapshot Version
         required: true
-        default: 11.0.0-SNAPSHOT
+        default: 12.0.0-SNAPSHOT
 
 run-name: 'version set to ${{ github.event.inputs.releaseVersion }} for release'
 

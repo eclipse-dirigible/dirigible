@@ -176,8 +176,10 @@ export function process(model, parameters) {
                     rolePair["roleRead"] = e.roleRead;
                 }
 
-                if (e.roleWrite && e.roleWrite != "") {
-                    rolePair["roleWrite"] = e.roleWrite;
+                if (e.type != "REPORT" && e.type != "FILTER") {
+                    if (e.roleWrite && e.roleWrite != "") {
+                        rolePair["roleWrite"] = e.roleWrite;
+                    }
                 }
 
                 parameters.roles.push(rolePair);

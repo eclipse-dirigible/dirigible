@@ -7,17 +7,7 @@ const viewData = {
     id: "${name}-Report-details",
     label: "${name} Report",
     link: "/services/web/${projectName}/gen/${genFolderName}/ui/Reports/${name}/dialog-window/index.html",
-    perspectiveName: "Reports",
-#if($perspectiveRole || $roleRead)
-    roles: [
-#if($perspectiveRole)
-        "${perspectiveRole}",
-#end
-#if($roleRead)
-        "${roleRead}",
-#end
-    ]
-#end
+    perspectiveName: "Reports"
 };
 
 if (typeof exports !== 'undefined') {

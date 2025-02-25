@@ -1,5 +1,0 @@
-{
-    "module": "view-git-branches/configs/local-view.js",
-    "extensionPoint": "platform-views",
-    "description": "Git Local Branches View"
-}

@@ -38,6 +38,24 @@ export function generate(model, parameters) {
     if (parameters.perspectiveName === undefined) {
         parameters.perspectiveName = model.name;
     }
+
+    parameters.roles = [];
+
+    if (model.security.generateDefaultRoles === "true") {
+        const roleData = {}
+        roleData["entityName"] = model.name;
+
+        if (model.security.roleRead && model.security.roleRead != "") {
+            roleData["roleRead"] = model.security.roleRead;
+        }
+
+        if (model.security.roleWrite && model.security.roleWrite != "") {
+            roleData["roleWrite"] = model.security.roleWrite;
+        }
+
+        parameters.roles.push(roleData);
+    }
+
     return generateUtils.generateGeneric(model, parameters, templateSources);
 };
 

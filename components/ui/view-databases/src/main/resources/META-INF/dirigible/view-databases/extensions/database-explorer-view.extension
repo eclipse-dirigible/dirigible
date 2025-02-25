@@ -1,0 +1,5 @@
+{
+    "module": "view-databases/configs/explorer-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Database Explorer View"
+}

@@ -127,7 +127,9 @@ jobs:
       - name: Generate a random artifact name
         if: always()
         id: generate_name
-        run: echo "ARTIFACT_NAME=selenide-screenshots-$(date +%s).zip" >> $GITHUB_ENV
+        run: |
+          TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+          echo "ARTIFACT_NAME=selenide-screenshots-${TIMESTAMP}.zip" >> $GITHUB_ENV
       - name: Upload selenide screenshots
         uses: actions/upload-artifact@v4
         if: always()
@@ -192,7 +194,9 @@ jobs:
       - name: Generate a random artifact name
         if: always()
         id: generate_name
-        run: echo "ARTIFACT_NAME=selenide-screenshots-$(date +%s).zip" >> $GITHUB_ENV
+        run: |
+          TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+          echo "ARTIFACT_NAME=selenide-screenshots-${TIMESTAMP}.zip" >> $GITHUB_ENV
       - name: Upload selenide screenshots
         uses: actions/upload-artifact@v4
         if: always()

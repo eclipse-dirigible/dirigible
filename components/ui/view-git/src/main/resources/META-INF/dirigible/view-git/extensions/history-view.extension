@@ -1,0 +1,5 @@
+{
+    "module": "view-git/configs/history-view.js",
+    "extensionPoint": "platform-views",
+    "description": "History View"
+}
