@@ -1,0 +1,36 @@
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="forms" ng-controller="FormController">
+
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+		<title dg-view-title></title>
+		<script type="text/javascript" src="view.js"></script>
+		<script type="text/javascript" src="/services/js/resources-core/services/loader.js?id=ide-view-js"></script>
+		<link type="text/css" rel="stylesheet" href="/services/js/resources-core/services/loader.js?id=ide-view-css" />
+		<theme></theme>
+		<script type="text/javascript" src="controller.js"></script>
+	</head>
+
+	<body class="dg-vbox">
+		<fd-fieldset class="fd-margin--tiny" ng-form="forms.form">
+
+			<h5 fd-title header-size="1.0">Submit new leave request</h5>
+			<fd-form-item horizontal="false">
+				<fd-form-label dg-colon="true" dg-required="true" for="fromId">From</fd-form-label>
+				<fd-input id="fromId" name="fromId" compact="false" ng-model="model.fromDate" ng-required="true" type="date"></fd-input>
+			</fd-form-item>
+			<fd-form-item horizontal="false">
+				<fd-form-label dg-colon="true" dg-required="true" for="toId">To</fd-form-label>
+				<fd-input id="toId" name="toId" compact="false" ng-model="model.toDate" ng-required="true" type="date"></fd-input>
+			</fd-form-item>
+			<div>
+				<fd-button class="dg-full-width" type="submit" dg-label="Submit" compact="false" dg-type="emphasized" ng-click="onSubmitClicked()"></fd-button>
+			</div>
+
+		</fd-fieldset>
+
+	</body>
+
+</html>
