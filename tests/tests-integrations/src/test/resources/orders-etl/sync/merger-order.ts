@@ -13,18 +13,33 @@ export function onMessage(message: any) {
     return message;
 }
 
-const MERGE_SQL = `
+// Define SQL statements for H2 and PostgreSQL
+const H2_MERGE_SQL = `
     MERGE INTO ORDERS
         (ID, TOTAL, DATEADDED) 
     KEY(ID)
     VALUES (?, ?, ?)
 `;
 
+const POSTGRES_UPSERT_SQL = `
+    INSERT INTO ORDERS
+        (ID, TOTAL, DATEADDED) 
+    VALUES (?, ?, ?)
+    ON CONFLICT (ID) DO UPDATE SET
+        TOTAL = EXCLUDED.TOTAL,
+        DATEADDED = EXCLUDED.DATEADDED
+`;
+
 function upsertOrder(openCartOrder: oc_orderEntity, exchangeRate: number) {
     const totalEuro = openCartOrder.TOTAL * exchangeRate;
 
     const connection = database.getConnection();
-    const statement = connection.prepareStatement(MERGE_SQL);
+    const databaseType = connection.getMetaData().getDatabaseProductName().toLowerCase();
+
+    // Choose the appropriate SQL statement based on the database type
+    const sql = databaseType.includes("postgresql") ? POSTGRES_UPSERT_SQL : H2_MERGE_SQL;
+
+    const statement = connection.prepareStatement(sql);
     try {
         statement.setLong(1, openCartOrder.ORDER_ID);
         statement.setDouble(2, totalEuro);
@@ -34,5 +49,4 @@ function upsertOrder(openCartOrder: oc_orderEntity, exchangeRate: number) {
         statement.close();
         connection.close();
     }
-
 }
