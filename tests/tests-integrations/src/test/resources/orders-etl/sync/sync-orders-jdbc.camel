@@ -44,64 +44,28 @@
                 id: simple-ffe9
                 expression: ${body}
             steps:
-              - choice:
-                  id: choose-database-syntax
-                  description: Choose SQL syntax based on database
-                  when:
-                    - simple:
-                        id: simple-8a2b
-                        expression: ${header.CamelSpringJdbcDataSourceName} == 'DefaultDB'
-                        steps:
-                          - setBody:
-                              id: create-order-merge-statement-h2
-                              description: Create MERGE statement for H2
-                              expression:
-                                simple:
-                                  id: simple-7d10
-                                  expression: |
-                                    MERGE INTO ORDERS
-                                        (ID, TOTAL, DATEADDED)
-                                    KEY(ID)
-                                    VALUES
-                                        (
-                                            ${body['ORDER_ID']},
-                                            ${body['TOTAL']} * ${exchangeProperty.currencyExchangeRate},
-                                            '${body['DATE_ADDED']}'
-                                        );
-                          - to:
-                              id: merge-order-h2
-                              description: Merge order for H2
-                              uri: spring-jdbc
-                              parameters:
-                                dataSourceName: DefaultDB
-                    - simple:
-                        id: simple-9c3d
-                        expression: ${header.CamelSpringJdbcDataSourceName} == 'PostgreSQLDB'
-                        steps:
-                          - setBody:
-                              id: create-order-merge-statement-postgres
-                              description: Create INSERT ... ON CONFLICT statement for PostgreSQL
-                              expression:
-                                simple:
-                                  id: simple-8e4f
-                                  expression: |
-                                    INSERT INTO ORDERS
-                                        (ID, TOTAL, DATEADDED)
-                                    VALUES
-                                        (
-                                            ${body['ORDER_ID']},
-                                            ${body['TOTAL']} * ${exchangeProperty.currencyExchangeRate},
-                                            '${body['DATE_ADDED']}'
-                                        )
-                                    ON CONFLICT (ID) DO UPDATE SET
-                                        TOTAL = EXCLUDED.TOTAL,
-                                        DATEADDED = EXCLUDED.DATEADDED;
-                          - to:
-                              id: merge-order-postgres
-                              description: Merge order for PostgreSQL
-                              uri: spring-jdbc
-                              parameters:
-                                dataSourceName: PostgreSQLDB
+              - setBody:
+                  id: create-order-merge-statement
+                  description: Create MERGE statement
+                  expression:
+                    simple:
+                      id: simple-7d10
+                      expression: |
+                        MERGE INTO ORDERS
+                            (ID, TOTAL, DATEADDED)
+                        KEY(ID)
+                        VALUES
+                            (
+                                ${body['ORDER_ID']},
+                                ${body['TOTAL']} * ${exchangeProperty.currencyExchangeRate},
+                                '${body['DATE_ADDED']}'
+                            );
+              - to:
+                  id: merge-order
+                  description: Merge order
+                  uri: spring-jdbc
+                  parameters:
+                    dataSourceName: DefaultDB
         - log:
             id: log-orders-replication-completed
             description: Log completed

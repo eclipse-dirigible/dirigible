@@ -12,7 +12,6 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 import ch.qos.logback.classic.Level;
 import org.eclipse.dirigible.integration.tests.ui.TestProject;
 import org.eclipse.dirigible.tests.logging.LogsAsserter;
-import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,7 +19,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.concurrent.TimeUnit;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 class ApacheCamelIT extends UserInterfaceIntegrationTest {
