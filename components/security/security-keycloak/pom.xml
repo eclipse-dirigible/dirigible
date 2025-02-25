@@ -8,7 +8,7 @@
 	<parent>
 		<artifactId>dirigible-components-parent</artifactId>
 		<groupId>org.eclipse.dirigible</groupId>
-		<version>11.2.0</version>
+		<version>12.0.0-SNAPSHOT</version>
 		<relativePath>../../pom.xml</relativePath>
 	</parent>
 
