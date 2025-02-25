@@ -26,7 +26,9 @@
     </head>
 
     <body class="bk-vbox" shortcut="'ctrl+s'" shortcut-action="save">
-        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">
+            {{state.busyText}}
+        </bk-busy-indicator-extended>
         <bk-toolbar class="bk-full-width" has-title="true" ng-show="!state.error && !state.isBusy">
             <bk-toolbar-title>Report:</bk-toolbar-title>
             <bk-toolbar-spacer></bk-toolbar-spacer>
@@ -136,7 +138,8 @@
                         <bk-panel-content aria-label="Joins Content">
                             <div class="bk-hbox bk-full-width bk-padding-bottom--tiny bk-flex-end bk-box--gap">
                                 <bk-button compact="true" label="Add" ng-click="addJoin()"></bk-button>
-                                <bk-button compact="true" label="Add from Tables" ng-click="addFromTables()"></bk-button>
+                                <bk-button compact="true" label="Add from Tables" ng-click="addFromTables()">
+                                </bk-button>
                             </div>
                             <table bk-table outer-borders="all">
                                 <thead bk-table-header>
@@ -323,11 +326,41 @@
                             <bk-form-item horizontal="false">
                                 <bk-form-label for="idQuery" colon="true">Generated Query
                                 </bk-form-label>
-                                <bk-textarea id="idQuery" name="query" ng-model="query" rows="10" ng-readonly="true"></bk-textarea>
+                                <bk-textarea id="idQuery" name="query" ng-model="query" rows="10" ng-readonly="true">
+                                </bk-textarea>
                             </bk-form-item>
                         </bk-panel-content>
                     </bk-panel>
                     <!-- End Query -->
+                    <!-- Begin Security -->
+                    <bk-panel expanded="false">
+                        <bk-panel-header>
+                            <bk-panel-expand hint="expand security section"></bk-panel-expand>
+                            <h4 bk-panel-title>Security</h4>
+                        </bk-panel-header>
+                        <bk-panel-content aria-label="Security">
+                            <bk-form-group class="fd-container fd-form-layout-grid-container">
+                                <bk-form-item class="fd-row">
+                                    <div class="fd-col fd-col-md--2">
+                                        <bk-form-label for="srr" colon="true">Read role</bk-form-label>
+                                    </div>
+                                    <div class="fd-col fd-col-md--4 fd-col-lg--3">
+                                        <bk-input id="srr" type="text" ng-model="report.security.roleRead" placeholder="role name" ng-disabled="report.security.generateDefaultRoles === 'true'">
+                                        </bk-input>
+                                    </div>
+                                </bk-form-item>
+                                <bk-form-item class="fd-row fd-margin-top--tiny">
+                                    <div class="fd-col fd-col-md--2">
+                                    </div>
+                                    <bk-checkbox id="generalGenerateDefaultRoles" compact="false" ng-required="false" ng-model="report.security.generateDefaultRoles" data-ng-true-value="'true'" data-ng-false-value="'false'"
+                                        ng-change="toggleDefaultRoles()"></bk-checkbox>
+                                    <bk-checkbox-label for="generalGenerateDefaultRoles">Generate Default Roles
+                                    </bk-checkbox-label>
+                                </bk-form-item>
+                            </bk-form-group>
+                        </bk-panel-content>
+                    </bk-panel>
+                    <!-- End Security -->
                 </bk-form-group>
             </bk-fieldset>
         </bk-scrollbar>

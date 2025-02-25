@@ -1389,4 +1389,16 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 	};
 
 	// End Add from Tables Section ---------------------------------------------------------------------------------
+
+	// Begin Security Section --------------------------------------------------------------------------------------
+
+	$scope.toggleDefaultRoles = () => {
+		if ($scope.report.security.generateDefaultRoles === 'true') {
+			$scope.report.security.roleRead = $scope.dataParameters.filePath.split('/')[2] + '.' + "Report" + '.' + $scope.report.name + "ReadOnly";
+		} else {
+			$scope.report.security.roleRead = null;
+		}
+	};
+
+	// End Security Section ----------------------------------------------------------------------------------------
 });

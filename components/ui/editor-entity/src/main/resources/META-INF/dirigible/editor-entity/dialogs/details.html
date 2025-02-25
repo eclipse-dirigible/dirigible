@@ -31,12 +31,15 @@
         </bk-busy-indicator-extended>
         <bk-icon-tab-bar side-padding="sm" selected-tab-id="selectedTab" ng-show="!state.error && !state.isBusy">
             <bk-icon-tab-bar-tablist>
-                <bk-icon-tab-bar-tab label="General" tab-id="general" ng-click="switchTab('general')"></bk-icon-tab-bar-tab>
+                <bk-icon-tab-bar-tab label="General" tab-id="general" ng-click="switchTab('general')">
+                </bk-icon-tab-bar-tab>
                 <bk-icon-tab-bar-tab label="Data" tab-id="data" ng-click="switchTab('data')"></bk-icon-tab-bar-tab>
-                <bk-icon-tab-bar-tab label="User interface" tab-id="ui" ng-click="switchTab('ui')"></bk-icon-tab-bar-tab>
+                <bk-icon-tab-bar-tab label="User interface" tab-id="ui" ng-click="switchTab('ui')">
+                </bk-icon-tab-bar-tab>
                 <bk-icon-tab-bar-tab label="Feed" tab-id="feed" ng-click="switchTab('feed')"></bk-icon-tab-bar-tab>
-                <bk-icon-tab-bar-tab label="Security" tab-id="security" ng-click="switchTab('security')"></bk-icon-tab-bar-tab>
-                <bk-icon-tab-bar-tab label="Imports" tab-id="imports" ng-click="switchTab('imports')"></bk-icon-tab-bar-tab>
+                <bk-icon-tab-bar-tab label="Security" tab-id="security" ng-click="switchTab('security')" ng-hide="dataParameters.entityType === 'PROJECTION'"></bk-icon-tab-bar-tab>
+                <bk-icon-tab-bar-tab label="Imports" tab-id="imports" ng-click="switchTab('imports')">
+                </bk-icon-tab-bar-tab>
             </bk-icon-tab-bar-tablist>
             <bk-icon-tab-bar-panel tab-id="general" ng-show="selectedTab === 'general'">
                 <bk-form-group class="fd-container fd-form-layout-grid-container" ng-if="dialogType === 'entity'">
@@ -194,19 +197,22 @@
                             <bk-form-label for="dblen" required="true" colon="true">Length</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.dataType === 'VARCHAR' || dataParameters.dataType === 'CHAR'">
-                            <bk-step-input input-id="dblen" name="dblen" string-to-number ng-required="true" ng-model="dataParameters.dataLength" placeholder="20" style="max-width: 320px"></bk-step-input>
+                            <bk-step-input input-id="dblen" name="dblen" string-to-number ng-required="true" ng-model="dataParameters.dataLength" placeholder="20" style="max-width: 320px">
+                            </bk-step-input>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.dataType === 'DECIMAL'">
                             <bk-form-label for="dbprecision" colon="true">Precision</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.dataType === 'DECIMAL'">
-                            <bk-step-input input-id="dbprecision" name="dbprecision" string-to-number ng-required="true" ng-model="dataParameters.dataPrecision" placeholder="0" style="max-width: 320px"></bk-step-input>
+                            <bk-step-input input-id="dbprecision" name="dbprecision" string-to-number ng-required="true" ng-model="dataParameters.dataPrecision" placeholder="0" style="max-width: 320px">
+                            </bk-step-input>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.dataType === 'DECIMAL'">
                             <bk-form-label for="dbscale" colon="true">Scale</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.dataType === 'DECIMAL'">
-                            <bk-step-input input-id="dbscale" name="dbscale" string-to-number ng-required="true" ng-model="dataParameters.dataScale" placeholder="0" style="max-width: 320px"></bk-step-input>
+                            <bk-step-input input-id="dbscale" name="dbscale" string-to-number ng-required="true" ng-model="dataParameters.dataScale" placeholder="0" style="max-width: 320px">
+                            </bk-step-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -383,7 +389,8 @@
                             <bk-form-label for="uilen" colon="true">Length</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-step-input index-id="uilen" name="uilen" string-to-number ng-required="true" ng-model="dataParameters.widgetLength" placeholder="20" style="max-width: 320px"></bk-step-input>
+                            <bk-step-input index-id="uilen" name="uilen" string-to-number ng-required="true" ng-model="dataParameters.widgetLength" placeholder="20" style="max-width: 320px">
+                            </bk-step-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -457,7 +464,8 @@
                             <bk-form-label for="furl" required="true" colon="true">Feed URL</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="furl" type="text" ng-required="true" ng-model="dataParameters.feedUrl"></bk-input>
+                            <bk-input id="furl" type="text" ng-required="true" ng-model="dataParameters.feedUrl">
+                            </bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -481,7 +489,8 @@
                             <bk-form-label for="fs" required="true" colon="true">Schedule</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="fs" type="text" ng-required="true" ng-model="dataParameters.feedSchedule"></bk-input>
+                            <bk-input id="fs" type="text" ng-required="true" ng-model="dataParameters.feedSchedule">
+                            </bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -514,7 +523,7 @@
                             <bk-input id="srr" type="text" ng-model="dataParameters.roleRead" placeholder="role name" ng-disabled="dataParameters.generateDefaultRoles === 'true'"></bk-input>
                         </div>
                     </bk-form-item>
-                    <bk-form-item class="fd-row fd-margin-top--tiny">
+                    <bk-form-item class="fd-row fd-margin-top--tiny" ng-hide="dataParameters.entityType === 'REPORT' || dataParameters.entityType === 'FILTER'">
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="swr" colon="true">Write role</bk-form-label>
                         </div>
@@ -524,7 +533,8 @@
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
-                        <bk-checkbox id="generalGenerateDefaultRoles" compact="false" ng-required="false" ng-model="dataParameters.generateReport" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
+                        <bk-checkbox id="generalGenerateDefaultRoles" compact="false" ng-required="false" ng-model="dataParameters.generateDefaultRoles" data-ng-true-value="'true'" data-ng-false-value="'false'"
+                            ng-change="toggleDefaultRoles()"></bk-checkbox>
                         <bk-checkbox-label for="generalGenerateDefaultRoles">Generate Default Roles</bk-checkbox-label>
                     </bk-form-item>
                 </bk-form-group>
@@ -543,7 +553,8 @@
                 <bk-form-group class="fd-container fd-form-layout-grid-container" ng-if="dialogType === 'property'">
                     <bk-form-item class="fd-row">
                         <div class="fd-col fd-col-md--4">
-                            <div for="importscode" colon="true">Imports can be set at the <strong>Entity</strong> level</div>
+                            <div for="importscode" colon="true">Imports can be set at the <strong>Entity</strong> level
+                            </div>
                         </div>
                     </bk-form-item>
                 </bk-form-group>

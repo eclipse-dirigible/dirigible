@@ -15,8 +15,11 @@ let editorScope;
 const statusBarHub = new StatusBarHub();
 const workspaceHub = new WorkspaceHub();
 const layoutHub = new LayoutHub();
+const themingHub = new ThemingHub();
 
 editorView.controller('EditorViewController', ($scope, $window, WorkspaceService, ViewParameters) => {
+    let theme = themingHub.getSavedTheme();
+    $scope.themeMode = '';
     $scope.state = {
         isBusy: true,
         error: false,
@@ -27,6 +30,24 @@ editorView.controller('EditorViewController', ($scope, $window, WorkspaceService
     $scope.workspaceApiBaseUrl = WorkspaceService.getFullURL();
 
     angular.element($window).bind('focus', () => { statusBarHub.showLabel('') });
+
+    $scope.setThemeMode = (themeData) => {
+        if (themeData.type === 'light') {
+            $scope.themeMode = '';
+        } else if (themeData.type === 'dark') {
+            $scope.themeMode = 'pf-v5-theme-dark';
+        } else {
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                $scope.themeMode = 'pf-v5-theme-dark';
+            } else $scope.themeMode = '';
+        }
+    };
+
+    $scope.setThemeMode(theme);
+
+    themingHub.onThemeChange((theme) => {
+        $scope.setThemeMode(theme);
+    });
 
     layoutHub.onFocusEditor((data) => {
         if (data.path && data.path === $scope.dataParameters.filePath) statusBarHub.showLabel('');
