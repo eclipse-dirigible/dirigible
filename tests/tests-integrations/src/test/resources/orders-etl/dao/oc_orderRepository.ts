@@ -603,373 +603,373 @@ interface oc_orderUpdateEntityEvent extends oc_orderEntityEvent {
 export class oc_orderRepository {
 
     private static readonly DEFINITION = {
-        table: "oc_order",
+        table: "OC_ORDER",
         properties: [
             {
-                name: "order_id",
-                column: "order_id",
+                name: "ORDER_ID",
+                column: "ORDER_ID",
                 type: "INT",
                 id: true,
                 autoIncrement: true,
                 required: true
             },
             {
-                name: "invoice_no",
-                column: "invoice_no",
+                name: "INVOICE_NO",
+                column: "INVOICE_NO",
                 type: "INT",
                 required: true
             },
             {
-                name: "invoice_prefix",
-                column: "invoice_prefix",
+                name: "INVOICE_PREFIX",
+                column: "INVOICE_PREFIX",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "store_id",
-                column: "store_id",
+                name: "STORE_ID",
+                column: "STORE_ID",
                 type: "INT",
                 required: true
             },
             {
-                name: "store_name",
-                column: "store_name",
+                name: "STORE_NAME",
+                column: "STORE_NAME",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "store_url",
-                column: "store_url",
+                name: "STORE_URL",
+                column: "STORE_URL",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "customer_id",
-                column: "customer_id",
+                name: "CUSTOMER_ID",
+                column: "CUSTOMER_ID",
                 type: "INT",
                 required: true
             },
             {
-                name: "customer_group_id",
-                column: "customer_group_id",
+                name: "CUSTOMER_GROUP_ID",
+                column: "CUSTOMER_GROUP_ID",
                 type: "INT",
                 required: true
             },
             {
-                name: "firstname",
-                column: "firstname",
+                name: "FIRSTNAME",
+                column: "FIRSTNAME",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "lastname",
-                column: "lastname",
+                name: "LASTNAME",
+                column: "LASTNAME",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "email",
-                column: "email",
+                name: "EMAIL",
+                column: "EMAIL",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "telephone",
-                column: "telephone",
+                name: "TELEPHONE",
+                column: "TELEPHONE",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "fax",
-                column: "fax",
+                name: "FAX",
+                column: "FAX",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "custom_field",
-                column: "custom_field",
+                name: "CUSTOM_FIELD",
+                column: "CUSTOM_FIELD",
                 type: "TEXT",
                 required: true
             },
             {
-                name: "payment_firstname",
-                column: "payment_firstname",
+                name: "PAYMENT_FIRSTNAME",
+                column: "PAYMENT_FIRSTNAME",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "payment_lastname",
-                column: "payment_lastname",
+                name: "PAYMENT_LASTNAME",
+                column: "PAYMENT_LASTNAME",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "payment_company",
-                column: "payment_company",
+                name: "PAYMENT_COMPANY",
+                column: "PAYMENT_COMPANY",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "payment_address_1",
-                column: "payment_address_1",
+                name: "PAYMENT_ADDRESS_1",
+                column: "PAYMENT_ADDRESS_1",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "payment_address_2",
-                column: "payment_address_2",
+                name: "PAYMENT_ADDRESS_2",
+                column: "PAYMENT_ADDRESS_2",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "payment_city",
-                column: "payment_city",
+                name: "PAYMENT_CITY",
+                column: "PAYMENT_CITY",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "payment_postcode",
-                column: "payment_postcode",
+                name: "PAYMENT_POSTCODE",
+                column: "PAYMENT_POSTCODE",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "payment_country",
-                column: "payment_country",
+                name: "PAYMENT_COUNTRY",
+                column: "PAYMENT_COUNTRY",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "payment_country_id",
-                column: "payment_country_id",
+                name: "PAYMENT_COUNTRY_ID",
+                column: "PAYMENT_COUNTRY_ID",
                 type: "INT",
                 required: true
             },
             {
-                name: "payment_zone",
-                column: "payment_zone",
+                name: "PAYMENT_ZONE",
+                column: "PAYMENT_ZONE",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "payment_zone_id",
-                column: "payment_zone_id",
+                name: "PAYMENT_ZONE_ID",
+                column: "PAYMENT_ZONE_ID",
                 type: "INT",
                 required: true
             },
             {
-                name: "payment_address_format",
-                column: "payment_address_format",
+                name: "PAYMENT_ADDRESS_FORMAT",
+                column: "PAYMENT_ADDRESS_FORMAT",
                 type: "TEXT",
                 required: true
             },
             {
-                name: "payment_custom_field",
-                column: "payment_custom_field",
+                name: "PAYMENT_CUSTOM_FIELD",
+                column: "PAYMENT_CUSTOM_FIELD",
                 type: "TEXT",
                 required: true
             },
             {
-                name: "payment_method",
-                column: "payment_method",
+                name: "PAYMENT_METHOD",
+                column: "PAYMENT_METHOD",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "payment_code",
-                column: "payment_code",
+                name: "PAYMENT_CODE",
+                column: "PAYMENT_CODE",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "shipping_firstname",
-                column: "shipping_firstname",
+                name: "SHIPPING_FIRSTNAME",
+                column: "SHIPPING_FIRSTNAME",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "shipping_lastname",
-                column: "shipping_lastname",
+                name: "SHIPPING_LASTNAME",
+                column: "SHIPPING_LASTNAME",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "shipping_company",
-                column: "shipping_company",
+                name: "SHIPPING_COMPANY",
+                column: "SHIPPING_COMPANY",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "shipping_address_1",
-                column: "shipping_address_1",
+                name: "SHIPPING_ADDRESS_1",
+                column: "SHIPPING_ADDRESS_1",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "shipping_address_2",
-                column: "shipping_address_2",
+                name: "SHIPPING_ADDRESS_2",
+                column: "SHIPPING_ADDRESS_2",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "shipping_city",
-                column: "shipping_city",
+                name: "SHIPPING_CITY",
+                column: "SHIPPING_CITY",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "shipping_postcode",
-                column: "shipping_postcode",
+                name: "SHIPPING_POSTCODE",
+                column: "SHIPPING_POSTCODE",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "shipping_country",
-                column: "shipping_country",
+                name: "SHIPPING_COUNTRY",
+                column: "SHIPPING_COUNTRY",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "shipping_country_id",
-                column: "shipping_country_id",
+                name: "SHIPPING_COUNTRY_ID",
+                column: "SHIPPING_COUNTRY_ID",
                 type: "INT",
                 required: true
             },
             {
-                name: "shipping_zone",
-                column: "shipping_zone",
+                name: "SHIPPING_ZONE",
+                column: "SHIPPING_ZONE",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "shipping_zone_id",
-                column: "shipping_zone_id",
+                name: "SHIPPING_ZONE_ID",
+                column: "SHIPPING_ZONE_ID",
                 type: "INT",
                 required: true
             },
             {
-                name: "shipping_address_format",
-                column: "shipping_address_format",
+                name: "SHIPPING_ADDRESS_FORMAT",
+                column: "SHIPPING_ADDRESS_FORMAT",
                 type: "TEXT",
                 required: true
             },
             {
-                name: "shipping_custom_field",
-                column: "shipping_custom_field",
+                name: "SHIPPING_CUSTOM_FIELD",
+                column: "SHIPPING_CUSTOM_FIELD",
                 type: "TEXT",
                 required: true
             },
             {
-                name: "shipping_method",
-                column: "shipping_method",
+                name: "SHIPPING_METHOD",
+                column: "SHIPPING_METHOD",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "shipping_code",
-                column: "shipping_code",
+                name: "SHIPPING_CODE",
+                column: "SHIPPING_CODE",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "comment",
-                column: "comment",
+                name: "COMMENT",
+                column: "COMMENT",
                 type: "TEXT",
                 required: true
             },
             {
-                name: "total",
-                column: "total",
+                name: "TOTAL",
+                column: "TOTAL",
                 type: "DECIMAL",
                 required: true
             },
             {
-                name: "order_status_id",
-                column: "order_status_id",
+                name: "ORDER_STATUS_ID",
+                column: "ORDER_STATUS_ID",
                 type: "INT",
                 required: true
             },
             {
-                name: "affiliate_id",
-                column: "affiliate_id",
+                name: "AFFILIATE_ID",
+                column: "AFFILIATE_ID",
                 type: "INT",
                 required: true
             },
             {
-                name: "commission",
-                column: "commission",
+                name: "COMMISSION",
+                column: "COMMISSION",
                 type: "DECIMAL",
                 required: true
             },
             {
-                name: "marketing_id",
-                column: "marketing_id",
+                name: "MARKETING_ID",
+                column: "MARKETING_ID",
                 type: "INT",
                 required: true
             },
             {
-                name: "tracking",
-                column: "tracking",
+                name: "TRACKING",
+                column: "TRACKING",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "language_id",
-                column: "language_id",
+                name: "LANGUAGE_ID",
+                column: "LANGUAGE_ID",
                 type: "INT",
                 required: true
             },
             {
-                name: "currency_id",
-                column: "currency_id",
+                name: "CURRENCY_ID",
+                column: "CURRENCY_ID",
                 type: "INT",
                 required: true
             },
             {
-                name: "currency_code",
-                column: "currency_code",
+                name: "CURRENCY_CODE",
+                column: "CURRENCY_CODE",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "currency_value",
-                column: "currency_value",
+                name: "CURRENCY_VALUE",
+                column: "CURRENCY_VALUE",
                 type: "DECIMAL",
                 required: true
             },
             {
-                name: "ip",
-                column: "ip",
+                name: "IP",
+                column: "IP",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "forwarded_ip",
-                column: "forwarded_ip",
+                name: "FORWARDED_IP",
+                column: "FORWARDED_IP",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "user_agent",
-                column: "user_agent",
+                name: "USER_AGENT",
+                column: "USER_AGENT",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "accept_language",
-                column: "accept_language",
+                name: "ACCEPT_LANGUAGE",
+                column: "ACCEPT_LANGUAGE",
                 type: "VARCHAR",
                 required: true
             },
             {
-                name: "date_added",
-                column: "date_added",
+                name: "DATE_ADDED",
+                column: "DATE_ADDED",
                 type: "DATETIME",
                 required: true
             },
             {
-                name: "date_modified",
-                column: "date_modified",
+                name: "DATE_MODIFIED",
+                column: "DATE_MODIFIED",
                 type: "DATETIME",
                 required: true
             }
@@ -978,7 +978,7 @@ export class oc_orderRepository {
 
     private readonly dao;
 
-    constructor(dataSource = "OpenCartDB") {
+    constructor(dataSource = "DefaultDB") {
         this.dao = daoApi.create(oc_orderRepository.DEFINITION, null, dataSource);
     }
 
@@ -995,11 +995,11 @@ export class oc_orderRepository {
         const id = this.dao.insert(entity);
         this.triggerEvent({
             operation: "create",
-            table: "oc_order",
+            table: "OC_ORDER",
             entity: entity,
             key: {
-                name: "order_id",
-                column: "order_id",
+                name: "ORDER_ID",
+                column: "ORDER_ID",
                 value: id
             }
         });
@@ -1011,12 +1011,12 @@ export class oc_orderRepository {
         this.dao.update(entity);
         this.triggerEvent({
             operation: "update",
-            table: "oc_order",
+            table: "OC_ORDER",
             entity: entity,
             previousEntity: previousEntity,
             key: {
-                name: "order_id",
-                column: "order_id",
+                name: "ORDER_ID",
+                column: "ORDER_ID",
                 value: entity.order_id
             }
         });
@@ -1042,11 +1042,11 @@ export class oc_orderRepository {
         this.dao.remove(id);
         this.triggerEvent({
             operation: "delete",
-            table: "oc_order",
+            table: "OC_ORDER",
             entity: entity,
             key: {
-                name: "order_id",
-                column: "order_id",
+                name: "ORDER_ID",
+                column: "ORDER_ID",
                 value: id
             }
         });
@@ -1057,7 +1057,7 @@ export class oc_orderRepository {
     }
 
     public customDataCount(): number {
-        const resultSet = query.execute('SELECT COUNT(*) AS COUNT FROM "oc_order"');
+        const resultSet = query.execute('SELECT COUNT(*) AS COUNT FROM "OC_ORDER"');
         if (resultSet !== null && resultSet[0] !== null) {
             if (resultSet[0].COUNT !== undefined && resultSet[0].COUNT !== null) {
                 return resultSet[0].COUNT;

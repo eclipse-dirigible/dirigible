@@ -3,7 +3,7 @@
         {
             "table": "OC_ORDER",
             "schema": "PUBLIC",
-            "file": "/orders-etl/csvim/oc_order.csv",
+            "file": "orders-etl/csvim/oc_order.csv",
             "header": true,
             "useHeaderNames": true,
             "delimField": ",",

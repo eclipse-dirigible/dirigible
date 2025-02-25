@@ -29,13 +29,13 @@
             expression:
               simple:
                 id: simple-5db1
-                expression: SELECT * FROM oc_order
+                expression: SELECT * FROM OC_ORDER
         - to:
             id: execute-get-orders
             description: Get all orders
             uri: spring-jdbc
             parameters:
-              dataSourceName: OpenCartDB
+              dataSourceName: DefaultDB
         - split:
             id: split-to-single-order
             description: Split to single order
