@@ -88,32 +88,7 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
 
     @Test
     void testCreateBPMProcessAndApproveIt() throws MessagingException {
-        // Step 1: Create users
-        createSecurityUsers();
-
-        // Step 2: Log in as employee
-        ide = createIdeFromUser(EMPLOYEE_USERNAME);
-
-        // Open the submit form
-        ide.openPath(SUBMIT_FORM_URL);
-
-        // Fill the form and send it
-        fillForm();
-
-        // Waits for the email to be sent
-        SleepUtil.sleepSeconds(5);
-
-        // Test if the email has been sent
-        testSendEmailForm();
-
-        // Clears cookies but should check why it only works with this:
-        // It works bc it isnt logged in otherwise as emily
-        browser.clearCookies();
-
-        // Step 3: Logs in as a manager and decline
-        ide = createIdeFromUser(EMPLOYEE_MANAGER_USERNAME);
-
-        processRequest();
+        preparingRequestToBeApprovedOrDeclined();
 
         declineOrApproveRequest("Approve");
 
@@ -124,6 +99,20 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
 
     @Test
     void testCreateBPMProcessAndDeclineIt() throws MessagingException {
+        preparingRequestToBeApprovedOrDeclined();
+
+        declineOrApproveRequest("Decline");
+
+        testDeclineEmail();
+    }
+
+    @AfterEach
+    public void tearDown() {
+        greenMail.stop();
+        browser.clearCookies();
+    }
+
+    public void preparingRequestToBeApprovedOrDeclined() throws MessagingException {
         // Step 1: Create users
         createSecurityUsers();
 
@@ -149,16 +138,6 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
         ide = createIdeFromUser(EMPLOYEE_MANAGER_USERNAME);
 
         processRequest();
-
-        declineOrApproveRequest("Decline");
-
-        testDeclineEmail();
-    }
-
-    @AfterEach
-    public void tearDown() {
-        greenMail.stop();
-        browser.clearCookies();
     }
 
     public void createSecurityUsers() {
@@ -185,15 +164,16 @@ class BPMProcessIT extends UserInterfaceIntegrationTest {
         browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Claim");
         browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Close");
 
-        String firstTdText = browser.getFirstTdTextInRowContaining("Process request"); // this gets the id bc it is not always 17
+        String firstTdText = browser.getFirstTdTextInRowContaining("Process request");
         browser.openPath(
                 "/services/web/leave-request/gen/process-leave-request/forms/process-leave-request/index.html?taskId=" + firstTdText);
-        // browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Open Form");
+        // browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Open Form"); //this doesnt work
+        // because it opens in a new tab and it should be just redirected
     }
 
     public void declineOrApproveRequest(String option) {
         // browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Decline"); //check why this doesnt
-        // work
+        // work - it doesnt because it has something that prevents it from clicking it
         SelenideElement approveButton = browser.findElementInAllFrames(Selectors.byText(option), Condition.visible);
         Selenide.executeJavaScript("arguments[0].click();", approveButton);
 
