@@ -12,8 +12,8 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <name>Components - Security - OAuth2</name>
-    <artifactId>dirigible-components-security-oauth2</artifactId>
+    <name>Components - Security - Cognito</name>
+    <artifactId>dirigible-components-security-cognito</artifactId>
     <packaging>jar</packaging>
 
 
@@ -24,6 +24,11 @@
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-core-base</artifactId>
         </dependency>
+
+        <dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-core-tenants</artifactId>
+		</dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

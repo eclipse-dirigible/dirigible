@@ -9,14 +9,13 @@
  */
 package org.eclipse.dirigible.components.tenants.tenant;
 
-import org.eclipse.dirigible.components.base.tenant.Tenant;
-
 import java.util.Objects;
+import org.eclipse.dirigible.components.base.tenant.Tenant;
 
 /**
  * The Class TenantImpl.
  */
-class TenantImpl implements Tenant {
+public class TenantImpl implements Tenant {
 
     /** The Constant DEFAULT_TENANT_ID. */
     private static final String DEFAULT_TENANT_ID = "default-tenant";
@@ -61,7 +60,7 @@ class TenantImpl implements Tenant {
      *
      * @return the default tenant
      */
-    static Tenant getDefaultTenant() {
+    public static Tenant getDefaultTenant() {
         return DEFAULT_TENANT;
     }
 
@@ -71,7 +70,7 @@ class TenantImpl implements Tenant {
      * @param tenant the tenant
      * @return the tenant
      */
-    static Tenant createFromEntity(org.eclipse.dirigible.components.tenants.domain.Tenant tenant) {
+    public static Tenant createFromEntity(org.eclipse.dirigible.components.tenants.domain.Tenant tenant) {
         return new TenantImpl(tenant.getId(), tenant.getName(), tenant.getSubdomain());
     }
 
