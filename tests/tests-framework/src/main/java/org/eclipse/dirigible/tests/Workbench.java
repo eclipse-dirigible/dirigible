@@ -12,6 +12,7 @@ package org.eclipse.dirigible.tests;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
+import org.eclipse.dirigible.tests.util.SynchronizationUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -40,6 +41,8 @@ public class Workbench {
     public void publishAll() {
         clickPublishAll();
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Published all projects in");
+
+        SynchronizationUtil.waitForSynchronizationExecution();
     }
 
     public void clickPublishAll() {

@@ -145,26 +145,37 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
         processSynchronizers();
     }
 
-    /**
-     * Process synchronizers.
-     */
-    public void processSynchronizers() {
-        logger.debug("Processing synchronizers...");
+    public boolean isSynchronizationNeeded() {
+        logger.debug("Checking whether synchronization is needed...");
 
         if (!this.synchronizationWatcher.isModified() && initialized.get()) {
             logger.debug("Skipped synchronization as NO changes in the Registry.");
-            return;
+            return false;
         }
 
         if (!prepared.get()) {
             logger.debug("Skipped synchronization as the runtime is NOT prepared yet.");
-            return;
+            return false;
         }
 
         if (processing.get()) {
             logger.debug("Skipped synchronization as it is CURRENTLY IN PROGRESS.");
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Process synchronizers.
+     */
+    public void processSynchronizers() {
+
+        if (!isSynchronizationNeeded()) {
+            logger.debug("Skipping synchronization since it is not needed...");
             return;
         }
+        logger.debug("Executing synchronization synchronizers...");
 
         processing.set(true);
         synchronizationWatcher.reset();

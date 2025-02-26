@@ -9,14 +9,12 @@
  */
 package org.eclipse.dirigible.tests;
 
-import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
-import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -68,11 +66,6 @@ public class IDE {
 
     public void assertStatusBarMessage(String expectedMessage) {
         browser.assertElementExistsByTypeAndText(HtmlElementType.SPAN, expectedMessage);
-    }
-
-    public void assertPublishedProjectMessage(String projectName) {
-        String publishedMessage = "Published '/workspace/" + projectName + "'";
-        assertStatusBarMessage(publishedMessage);
     }
 
     public void assertJSHttpResponse(String projectName, String fileRelativePath, int expectedStatusCode, String expectedBody) {
@@ -133,9 +126,6 @@ public class IDE {
     public void openHomePage() {
         browser.openPath(ROOT_PATH);
         login(false);
-
-        SleepUtil.sleepMillis(500);
-        browser.reload();
     }
 
     public void createNewBlankProject(String projectName) {
@@ -144,6 +134,11 @@ public class IDE {
         workbench.createNewProject(projectName);
 
         assertPublishedProjectMessage(projectName);
+    }
+
+    public void assertPublishedProjectMessage(String projectName) {
+        String publishedMessage = "Published '/workspace/" + projectName + "'";
+        assertStatusBarMessage(publishedMessage);
     }
 
     public void openSpringBootAdmin() {

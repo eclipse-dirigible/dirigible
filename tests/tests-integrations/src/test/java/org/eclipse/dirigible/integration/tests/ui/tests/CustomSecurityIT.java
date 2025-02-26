@@ -13,7 +13,6 @@ import org.eclipse.dirigible.tests.IDE;
 import org.eclipse.dirigible.tests.IDEFactory;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.util.SecurityUtil;
-import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,9 +37,6 @@ class CustomSecurityIT extends UserInterfaceIntegrationTest {
         ide.createAndPublishProjectFromResources("CustomSecurityIT");
 
         browser.clearCookies();
-
-        // wait some time synchronizers to complete their execution
-        SleepUtil.sleepSeconds(12);
     }
 
     @Test

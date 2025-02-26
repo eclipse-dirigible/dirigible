@@ -163,7 +163,7 @@ class BrowserImpl implements Browser {
                 conditions);
 
         reload();
-        SleepUtil.sleepSeconds(3);
+        SleepUtil.sleepSeconds(5);
 
         Optional<SelenideElement> element = findSingleElementInAllFrames(by);
         if (element.isPresent()) {
