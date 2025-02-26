@@ -137,7 +137,7 @@
                               simple:
                                 id: simple-merge-postgresql
                                 expression: |-
-                                  INSERT INTO ORDERS (ID, TOTAL, DATEADDED)
+                                  INSERT INTO "ORDERS" (ID, TOTAL, DATEADDED)
                                   VALUES (
                                       ${body['ORDER_ID']},
                                       ${body['TOTAL']} * ${exchangeProperty.currencyExchangeRate},
