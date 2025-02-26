@@ -64,7 +64,6 @@ public class LeaveRequestTestProject {
         projectUtil.copyResourceProjectToDefaultUserWorkspace(PROJECT_ROOT_FOLDER);
         Workbench workbench = ide.openWorkbench();
         workbench.expandProject(PROJECT_ROOT_FOLDER);
-<<<<<<< HEAD
         workbench.openFile(PROCESS_LEAVE_REQUEST_FORM_FILENAME);
 
         FormView formView = workbench.getFormView();
@@ -77,43 +76,5 @@ public class LeaveRequestTestProject {
 
         workbench.clickPublishAll();
         workbench.publishAll(true);
-=======
-        workbench.publishAll();
-    }
-
-    public void verify(DirigibleTestTenant tenant) {
-        LOGGER.info("Verifying leave-request project for tenant [{}]...", tenant);
-        try {
-            verifyHomePage(tenant);
-            verifyProcessService(tenant);
-            LOGGER.info("Leave-request project verified successfully!");
-        } catch (RuntimeException | Error ex) {
-            throw new AssertionError("Failed to verify leave-request project", ex);
-        }
-    }
-
-    private void verifyHomePage(DirigibleTestTenant tenant) {
-        Browser browser = browserFactory.createByHost(tenant.getHost());
-        browser.openPath(UI_HOME_PATH);
-        IDE ide = ideFactory.create(browser, tenant.getUsername(), tenant.getPassword());
-        ide.login(!tenant.isDefaultTenant());
-        browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER3, "Leave Request System");
-    }
-
-    private void verifyProcessService(DirigibleTestTenant tenant) {
-        String jsonPayload = "{\"requester\": \"John Doe\", \"daysRequested\": 5}";
-        given().contentType(ContentType.JSON)
-               .body(jsonPayload)
-               .when()
-               .post(API_PATH)
-               .then()
-               .statusCode(201);
-        given().when()
-               .get(API_PATH)
-               .then()
-               .statusCode(200)
-               .body("$.requester", equalTo("John Doe"))
-               .body("$.daysRequested", equalTo(5));
->>>>>>> 705ecb8ba8 (feat: adding tests for hyperion)
     }
 }
