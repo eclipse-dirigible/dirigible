@@ -21,7 +21,7 @@ const MERGE_SQL = `
 `;
 
 const POSTGRES_SQL = `
-    INSERT INTO ORDERS
+    INSERT INTO "ORDERS"
         (ID, TOTAL, DATEADDED) 
     VALUES (?, ?, ?)
     ON CONFLICT (ID) DO UPDATE SET
