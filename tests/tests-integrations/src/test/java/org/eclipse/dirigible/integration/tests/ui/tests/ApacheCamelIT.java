@@ -122,9 +122,8 @@ class ApacheCamelIT extends UserInterfaceIntegrationTest {
             resultSet.next();
             long count = resultSet.getLong(1);
 
-            assertThat(count)
-                    .as("ORDERS table should have at least one record after ETL execution")
-                    .isGreaterThan(0);
+            assertThat(count).as("ORDERS table should have at least one record after ETL execution")
+                             .isGreaterThan(0);
 
         } catch (SQLException e) {
             throw new RuntimeException("Database check for ORDERS table failed", e);

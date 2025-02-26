@@ -9,22 +9,22 @@ import org.springframework.stereotype.Component;
 @Lazy
 @Component
 public class CamelTestProject {
-        private static final String PROJECT_CAMEL_RESOURCES_PATH = "orders-etl";
+    private static final String PROJECT_CAMEL_RESOURCES_PATH = "orders-etl";
 
-        private final IDE ide;
-        private final ProjectUtil projectUtil;
+    private final IDE ide;
+    private final ProjectUtil projectUtil;
 
-        public CamelTestProject(IDE ide, ProjectUtil projectUtil) {
-            this.ide = ide;
-            this.projectUtil = projectUtil;
+    public CamelTestProject(IDE ide, ProjectUtil projectUtil) {
+        this.ide = ide;
+        this.projectUtil = projectUtil;
 
-        }
+    }
 
-        public void publishCamel() {
-            projectUtil.copyResourceProjectToDefaultUserWorkspace(PROJECT_CAMEL_RESOURCES_PATH);
+    public void publishCamel() {
+        projectUtil.copyResourceProjectToDefaultUserWorkspace(PROJECT_CAMEL_RESOURCES_PATH);
 
-            Workbench workbench = ide.openWorkbench();
+        Workbench workbench = ide.openWorkbench();
 
-            workbench.publishAll();
-        }
+        workbench.publishAll();
+    }
 }
