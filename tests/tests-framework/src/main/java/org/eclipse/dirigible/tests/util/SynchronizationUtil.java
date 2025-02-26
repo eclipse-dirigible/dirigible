@@ -20,8 +20,12 @@ public class SynchronizationUtil {
         LOGGER.debug("Waiting until the synchronization is not needed...");
 
         await().atMost(30, TimeUnit.SECONDS)
-               .pollDelay(5, TimeUnit.SECONDS) // wait initially until the changes are detected
                .pollInterval(500, TimeUnit.MILLISECONDS)
-               .until(() -> !synchronizationProcessor.isSynchronizationNeeded());
+               .until(() -> {
+                   boolean synchNotNeeded = !synchronizationProcessor.isSynchronizationNeeded();
+                   boolean synchNotRunning = !synchronizationProcessor.isSynchronizationRunning();
+                   LOGGER.debug("Synchronization NOT needed: [{}], synch NOT running [{}]", synchNotNeeded, synchNotRunning);
+                   return synchNotNeeded && synchNotRunning;
+               });
     }
 }

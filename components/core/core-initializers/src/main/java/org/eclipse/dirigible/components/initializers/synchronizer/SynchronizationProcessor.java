@@ -406,12 +406,16 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
             return false;
         }
 
-        if (processing.get()) {
+        if (isSynchronizationRunning()) {
             logger.debug("Skipped synchronization as it is CURRENTLY IN PROGRESS.");
             return false;
         }
 
         return true;
+    }
+
+    public boolean isSynchronizationRunning() {
+        return processing.get();
     }
 
     /**
