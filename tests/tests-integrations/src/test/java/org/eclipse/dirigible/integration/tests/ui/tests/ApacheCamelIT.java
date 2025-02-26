@@ -105,13 +105,13 @@ class ApacheCamelIT extends UserInterfaceIntegrationTest {
 
         try (Connection testConnection = DriverManager.getConnection("jdbc:postgresql://localhost:5432/postgres", "postgres", "postgres")) {
             url = "jdbc:postgresql://localhost:5432/postgres";
-            user = "postgres";
-            password = "postgres";
+            user = "testuser";
+            password = "testpass";
         } catch (SQLException e) {
             // If PostgreSQL is unavailable, fall back to H2
             url = "jdbc:h2:file:./target/dirigible/h2/DefaultDB";
-            user = "sa";
-            password = "sa";
+            user = "admin";
+            password = "admin";
         }
 
         try (Connection connection = DriverManager.getConnection(url, user, password);
