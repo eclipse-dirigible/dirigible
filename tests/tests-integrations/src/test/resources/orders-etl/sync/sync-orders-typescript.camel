@@ -7,7 +7,7 @@
       uri: cron
       parameters:
         schedule: 30 * * ? * *
-        name: TriggerOrdersReplication
+        name: TriggerOrdersReplicationTypeScript
       steps:
         - log:
             id: log-ac34

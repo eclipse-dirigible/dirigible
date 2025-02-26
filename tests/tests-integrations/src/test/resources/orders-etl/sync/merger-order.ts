@@ -20,7 +20,7 @@ const MERGE_SQL = `
     VALUES (?, ?, ?)
 `;
 
-const POSTGRES_UPSERT_SQL = `
+const POSTGRES_SQL = `
     INSERT INTO ORDERS
         (ID, TOTAL, DATEADDED) 
     VALUES (?, ?, ?)
@@ -33,10 +33,11 @@ function upsertOrder(openCartOrder: oc_orderEntity, exchangeRate: number) {
     const totalEuro = openCartOrder.TOTAL * exchangeRate;
 
     const connection = database.getConnection();
-    const databaseType = database.getDatabaseSystem();
-    console.log(" Database type: " + databaseType);
+    const databaseType = connection.getDatabaseSystem();
+    console.log("TypeScript Database type: " + databaseType);
 
-    const statement = connection.prepareStatement(MERGE_SQL);
+    // 3 is Enum for H2 databasse
+    const statement = databaseType == 3 ? connection.prepareStatement(MERGE_SQL) : connection.prepareStatement(POSTGRES_SQL);
     try {
         statement.setLong(1, openCartOrder.ORDER_ID);
         statement.setDouble(2, totalEuro);

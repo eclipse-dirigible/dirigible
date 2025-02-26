@@ -12,6 +12,7 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 import ch.qos.logback.classic.Level;
 import org.eclipse.dirigible.integration.tests.ui.TestProject;
 import org.eclipse.dirigible.tests.logging.LogsAsserter;
+import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,10 +52,10 @@ class ApacheCamelIT extends UserInterfaceIntegrationTest {
 
     @Test
     public void testImplementETLUsingJDBC() {
-        await().atMost(30, TimeUnit.SECONDS)
+        await().atMost(60, TimeUnit.SECONDS)
                .pollInterval(5, TimeUnit.SECONDS)
                .until(() -> openCartLogAsserter.containsMessage(EXPECTED_JDBC_START_MESSAGE, Level.INFO));
-        await().atMost(30, TimeUnit.SECONDS)
+        await().atMost(60, TimeUnit.SECONDS)
                .pollInterval(5, TimeUnit.SECONDS)
                .until(() -> openCartLogAsserter.containsMessage(EXPECTED_JDBC_SUCCESS_MESSAGE, Level.INFO));
 
@@ -66,27 +67,27 @@ class ApacheCamelIT extends UserInterfaceIntegrationTest {
 
     @Test
     public void testImplementETLUsingTypescript() {
-        await().atMost(30, TimeUnit.SECONDS)
+        await().atMost(60, TimeUnit.SECONDS)
                .pollInterval(5, TimeUnit.SECONDS)
                .until(() -> openCartLogAsserter.containsMessage("Replicating orders from OpenCart using TypeScript...", Level.INFO));
 
-        await().atMost(30, TimeUnit.SECONDS)
+        await().atMost(60, TimeUnit.SECONDS)
                .pollInterval(5, TimeUnit.SECONDS)
                .until(() -> consoleLogAsserter.containsMessage(EXPECTED_UPSERT_ORDER_1_START, Level.INFO));
 
-        await().atMost(30, TimeUnit.SECONDS)
+        await().atMost(60, TimeUnit.SECONDS)
                .pollInterval(5, TimeUnit.SECONDS)
                .until(() -> consoleLogAsserter.containsMessage(EXPECTED_UPSERT_ORDER_1_SUCCESS, Level.INFO));
 
-        await().atMost(30, TimeUnit.SECONDS)
+        await().atMost(60, TimeUnit.SECONDS)
                .pollInterval(5, TimeUnit.SECONDS)
                .until(() -> consoleLogAsserter.containsMessage(EXPECTED_UPSERT_ORDER_2_START, Level.INFO));
 
-        await().atMost(30, TimeUnit.SECONDS)
+        await().atMost(60, TimeUnit.SECONDS)
                .pollInterval(5, TimeUnit.SECONDS)
                .until(() -> consoleLogAsserter.containsMessage(EXPECTED_UPSERT_ORDER_2_SUCCESS, Level.INFO));
 
-        await().atMost(30, TimeUnit.SECONDS)
+        await().atMost(60, TimeUnit.SECONDS)
                .pollInterval(5, TimeUnit.SECONDS)
                .until(() -> openCartLogAsserter.containsMessage("Successfully replicated orders from OpenCart using TypeScript",
                        Level.INFO));
