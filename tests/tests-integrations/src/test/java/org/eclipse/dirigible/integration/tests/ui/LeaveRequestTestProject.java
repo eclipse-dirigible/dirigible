@@ -64,7 +64,7 @@ public class LeaveRequestTestProject {
         projectUtil.copyResourceProjectToDefaultUserWorkspace(PROJECT_ROOT_FOLDER);
         Workbench workbench = ide.openWorkbench();
         workbench.expandProject(PROJECT_ROOT_FOLDER);
-        workbench.publishAll();
+        workbench.publishAll(true);
     }
 
     public void verify(DirigibleTestTenant tenant) {
