@@ -9,14 +9,12 @@
  */
 package org.eclipse.dirigible.tests;
 
-import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
-import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,7 +22,6 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
-import java.util.Map;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.containsString;
@@ -70,11 +67,6 @@ public class IDE {
         browser.assertElementExistsByTypeAndText(HtmlElementType.SPAN, expectedMessage);
     }
 
-    public void assertPublishedProjectMessage(String projectName) {
-        String publishedMessage = "Published '/workspace/" + projectName + "'";
-        assertStatusBarMessage(publishedMessage);
-    }
-
     public void assertJSHttpResponse(String projectName, String fileRelativePath, int expectedStatusCode, String expectedBody) {
         String path = "/services/js/" + projectName + "/" + fileRelativePath;
         restAssuredExecutor.execute( //
@@ -112,14 +104,14 @@ public class IDE {
     }
 
     public void createAndPublishProjectFromResources(String resourcesFolderPath) {
-        createAndPublishProjectFromResources(resourcesFolderPath, Collections.emptyMap());
+        createAndPublishProjectFromResources(resourcesFolderPath, true);
     }
 
-    public void createAndPublishProjectFromResources(String resourcesFolderPath, Map<String, String> placeholders) {
-        projectUtil.copyResourceProjectToUserWorkspace(username, resourcesFolderPath, placeholders);
+    public void createAndPublishProjectFromResources(String resourcesFolderPath, boolean waitForSynchronizationExecution) {
+        projectUtil.copyResourceProjectToUserWorkspace(username, resourcesFolderPath, Collections.emptyMap());
 
         Workbench workbench = openWorkbench();
-        workbench.publishAll();
+        workbench.publishAll(waitForSynchronizationExecution);
     }
 
     public Workbench openWorkbench() {
@@ -133,9 +125,6 @@ public class IDE {
     public void openHomePage() {
         browser.openPath(ROOT_PATH);
         login(false);
-
-        SleepUtil.sleepMillis(500);
-        browser.reload();
     }
 
     public void createNewBlankProject(String projectName) {
@@ -144,6 +133,11 @@ public class IDE {
         workbench.createNewProject(projectName);
 
         assertPublishedProjectMessage(projectName);
+    }
+
+    public void assertPublishedProjectMessage(String projectName) {
+        String publishedMessage = "Published '/workspace/" + projectName + "'";
+        assertStatusBarMessage(publishedMessage);
     }
 
     public void openSpringBootAdmin() {

@@ -12,6 +12,7 @@ package org.eclipse.dirigible.tests;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
+import org.eclipse.dirigible.tests.util.SynchronizationUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -37,9 +38,13 @@ public class Workbench {
         browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, fileName);
     }
 
-    public void publishAll() {
+    public void publishAll(boolean waitForSynchronizationExecution) {
         clickPublishAll();
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Published all projects in");
+
+        if (waitForSynchronizationExecution) {
+            SynchronizationUtil.waitForSynchronizationExecution();
+        }
     }
 
     public void clickPublishAll() {

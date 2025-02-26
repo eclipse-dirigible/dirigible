@@ -1,7 +1,7 @@
 {
     "constraints": [
         {
-            "path": "/dirigible-test-project/security/protected_page.html",
+            "path": "/CustomSecurityIT/security/protected_page.html",
             "method": "*",
             "scope": "HTTP",
             "roles": [

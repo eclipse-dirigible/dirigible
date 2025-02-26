@@ -1,0 +1,7 @@
+{
+    "location": "/MultitenancyIT/listeners/entity/book-entity-events.listener",
+    "name": "MultitenancyIT-Books-Book",
+    "kind": "T",
+    "handler": "MultitenancyIT/listeners/entity/book-entity-events-handler.ts",
+    "description": "Book entity events listener"
+}
