@@ -38,11 +38,13 @@ public class Workbench {
         browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, fileName);
     }
 
-    public void publishAll() {
+    public void publishAll(boolean waitForSynchronizationExecution) {
         clickPublishAll();
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Published all projects in");
 
-        SynchronizationUtil.waitForSynchronizationExecution();
+        if (waitForSynchronizationExecution) {
+            SynchronizationUtil.waitForSynchronizationExecution();
+        }
     }
 
     public void clickPublishAll() {

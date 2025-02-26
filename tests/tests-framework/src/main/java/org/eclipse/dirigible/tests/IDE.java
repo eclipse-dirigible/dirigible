@@ -22,7 +22,6 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
-import java.util.Map;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.containsString;
@@ -105,14 +104,14 @@ public class IDE {
     }
 
     public void createAndPublishProjectFromResources(String resourcesFolderPath) {
-        createAndPublishProjectFromResources(resourcesFolderPath, Collections.emptyMap());
+        createAndPublishProjectFromResources(resourcesFolderPath, true);
     }
 
-    public void createAndPublishProjectFromResources(String resourcesFolderPath, Map<String, String> placeholders) {
-        projectUtil.copyResourceProjectToUserWorkspace(username, resourcesFolderPath, placeholders);
+    public void createAndPublishProjectFromResources(String resourcesFolderPath, boolean waitForSynchronizationExecution) {
+        projectUtil.copyResourceProjectToUserWorkspace(username, resourcesFolderPath, Collections.emptyMap());
 
         Workbench workbench = openWorkbench();
-        workbench.publishAll();
+        workbench.publishAll(waitForSynchronizationExecution);
     }
 
     public Workbench openWorkbench() {

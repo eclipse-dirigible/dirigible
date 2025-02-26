@@ -75,6 +75,10 @@ public class MultitenancyTestProject {
     }
 
     public void publish() {
+        publish(true);
+    }
+
+    public void publish(boolean waitForSynchronizationExecution) {
         projectUtil.copyResourceProjectToDefaultUserWorkspace(PROJECT_RESOURCES_PATH);
 
         Workbench workbench = ide.openWorkbench();
@@ -83,7 +87,7 @@ public class MultitenancyTestProject {
 
         edmView.regenerate();
 
-        workbench.publishAll();
+        workbench.publishAll(true);
     }
 
     public void verify(DirigibleTestTenant tenant) {
