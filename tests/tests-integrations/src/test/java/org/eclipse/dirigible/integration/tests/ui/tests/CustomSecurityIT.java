@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.eclipse.dirigible.integration.tests.ui.TestProject;
 import org.eclipse.dirigible.tests.IDE;
 import org.eclipse.dirigible.tests.IDEFactory;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
@@ -25,19 +24,19 @@ class CustomSecurityIT extends UserInterfaceIntegrationTest {
     private static final String EMPLOYEE_USERNAME = "test-employee";
     private static final String EMPLOYEE_MANAGER_ROLE = "employee-manager";
     private static final String EMPLOYEE_MANAGER_USERNAME = "test-employee-manager";
-    private static final String PROTECTED_PAGE_PATH = "/services/web/dirigible-test-project/security/protected_page.html";
+    private static final String PROTECTED_PAGE_PATH = "/services/web/CustomSecurityIT/security/protected_page.html";
     private static final String PROTECTED_PAGE_HEADER = "This is a protected page";
 
     @Autowired
-    private TestProject testProject;
-    @Autowired
     private IDEFactory ideFactory;
+    
     @Autowired
     private SecurityUtil securityUtil;
 
     @BeforeEach
     void setUp() {
-        testProject.publish();
+        ide.createAndPublishProjectFromResources("CustomSecurityIT");
+
         browser.clearCookies();
 
         // wait some time synchronizers to complete their execution

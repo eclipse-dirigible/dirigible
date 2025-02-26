@@ -36,19 +36,19 @@ import static org.hamcrest.Matchers.hasSize;
 
 @Lazy
 @Component
-public class TestProject {
+public class MultitenancyTestProject {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(TestProject.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(MultitenancyTestProject.class);
 
-    private static final String UI_HOME_PATH = "/services/web/dirigible-test-project/gen/edm/index.html";
-    private static final String BOOKS_SERVICE_PATH = "/services/ts/dirigible-test-project/gen/edm/api/Books/BookService.ts";
+    private static final String UI_HOME_PATH = "/services/web/MultitenancyIT/gen/edm/index.html";
+    private static final String BOOKS_SERVICE_PATH = "/services/ts/MultitenancyIT/gen/edm/api/Books/BookService.ts";
     private static final String EDM_FILE_NAME = "edm.edm";
     private static final String READERS_ODATA_ENTITY_PATH = "/odata/v2/Readers";
-    private static final String READERS_VIEW_SERVICE_PATH = "/services/ts/dirigible-test-project/views/ReaderViewService.ts";
-    private static final String PROJECT_ROOT_FOLDER = "dirigible-test-project";
-    private static final String DOCUMENTS_SERVICE_PATH = "/services/ts/dirigible-test-project/cmis/DocumentService.ts/documents";
+    private static final String READERS_VIEW_SERVICE_PATH = "/services/ts/MultitenancyIT/views/ReaderViewService.ts";
+    private static final String PROJECT_ROOT_FOLDER = "MultitenancyIT";
+    private static final String DOCUMENTS_SERVICE_PATH = "/services/ts/MultitenancyIT/cmis/DocumentService.ts/documents";
 
-    private static final String PROJECT_RESOURCES_PATH = "dirigible-test-project";
+    private static final String PROJECT_RESOURCES_PATH = "MultitenancyIT";
     private static final String UI_PROJECT_TITLE = "Dirigible Test Project";
 
     private final BrowserFactory browserFactory;
@@ -61,7 +61,7 @@ public class TestProject {
     private final LogsAsserter testJobLogsAsserter;
     private final LogsAsserter eventListenerLogsAsserter;
 
-    public TestProject(BrowserFactory browserFactory, IDE ide, EdmView edmView, RestAssuredExecutor restAssuredExecutor,
+    public MultitenancyTestProject(BrowserFactory browserFactory, IDE ide, EdmView edmView, RestAssuredExecutor restAssuredExecutor,
             IDEFactory ideFactory, ProjectUtil projectUtil) {
         this.browserFactory = browserFactory;
         this.ide = ide;
@@ -112,10 +112,8 @@ public class TestProject {
     }
 
     /**
-     * Verifies indirectly:<br>
-     * - dirigible-test-project/views/readers.view is created and it is working<br>
-     * - dirigible-test-project/csvim/data.csvim is imported <br>
-     * - default DB datasource is resolved correctly
+     * Verifies indirectly:<br> - MultitenancyIT/views/readers.view is created and it is working<br> - MultitenancyIT/csvim/data.csvim is
+     * imported <br> - default DB datasource is resolved correctly
      */
     private void verifyView(DirigibleTestTenant tenant) {
 
@@ -128,17 +126,12 @@ public class TestProject {
                              .body("[0].READER_FIRST_NAME", equalTo("Ivan"))
                              .body("[0].READER_LAST_NAME", equalTo("Ivanov"))
                              .body("[1].READER_FIRST_NAME", equalTo("Maria"))
-                             .body("[1].READER_LAST_NAME", equalTo("Petrova")),
-                25);
+                             .body("[1].READER_LAST_NAME", equalTo("Petrova")), 25);
     }
 
     /**
-     * Verifies indirectly:<br>
-     * - edm generated schema is created<br>
-     * - generated REST is created and it works<br>
-     * - topic listener works<br>
-     * - job has been executed<br>
-     * - default DB datasource is resolved correctly
+     * Verifies indirectly:<br> - edm generated schema is created<br> - generated REST is created and it works<br> - topic listener
+     * works<br> - job has been executed<br> - default DB datasource is resolved correctly
      */
     private void verifyEdmGeneratedResources(DirigibleTestTenant tenant) {
         restAssuredExecutor.execute(tenant, () -> verifyBookREST(tenant));
@@ -174,8 +167,9 @@ public class TestProject {
     }
 
     private void verifyJobExecuted(DirigibleTestTenant tenant) {
-        String expectedMessage = "Job: found [1] books. Books: [[{\"Id\":1,\"Title\":\"Title[" + tenant.getName()
-                + "]\",\"Author\":\"Author[" + tenant.getName() + "]\"}]]";
+        String expectedMessage =
+                "Job: found [1] books. Books: [[{\"Id\":1,\"Title\":\"Title[" + tenant.getName() + "]\",\"Author\":\"Author["
+                        + tenant.getName() + "]\"}]]";
         verifyMessageLogged(expectedMessage, testJobLogsAsserter);
     }
 
@@ -187,18 +181,15 @@ public class TestProject {
     }
 
     private void verifyListenerExecuted(DirigibleTestTenant tenant) {
-        String expectedMessage = "Listener: found [1] books. Books: [[{\"Id\":1,\"Title\":\"Title[" + tenant.getName()
-                + "]\",\"Author\":\"Author[" + tenant.getName() + "]\"}]]";
+        String expectedMessage =
+                "Listener: found [1] books. Books: [[{\"Id\":1,\"Title\":\"Title[" + tenant.getName() + "]\",\"Author\":\"Author["
+                        + tenant.getName() + "]\"}]]";
         verifyMessageLogged(expectedMessage, eventListenerLogsAsserter);
     }
 
     /**
-     * Verifies indirectly:<br>
-     * - dirigible-test-project/tables/reader.table is created<br>
-     * - dirigible-test-project/csvim/data.csvim is imported <br>
-     * - dirigible-test-project/odata/readers.odata is configured <br>
-     * - OData is working<br>
-     * - default DB datasource is resolved correctly
+     * Verifies indirectly:<br> - MultitenancyIT/tables/reader.table is created<br> - MultitenancyIT/csvim/data.csvim is imported <br> -
+     * MultitenancyIT/odata/readers.odata is configured <br> - OData is working<br> - default DB datasource is resolved correctly
      */
     private void verifyOData(DirigibleTestTenant tenant) {
         restAssuredExecutor.execute(tenant, () -> {

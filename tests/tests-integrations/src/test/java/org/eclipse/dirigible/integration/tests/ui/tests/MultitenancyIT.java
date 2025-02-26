@@ -12,7 +12,7 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
-import org.eclipse.dirigible.integration.tests.ui.TestProject;
+import org.eclipse.dirigible.integration.tests.ui.MultitenancyTestProject;
 import org.eclipse.dirigible.tests.DirigibleTestTenant;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.BrowserFactory;
@@ -27,7 +27,7 @@ import java.util.List;
 class MultitenancyIT extends UserInterfaceIntegrationTest {
 
     @Autowired
-    private TestProject testProject;
+    private MultitenancyTestProject testProject;
 
     @Autowired
     @DefaultTenant

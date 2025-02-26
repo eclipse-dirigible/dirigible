@@ -1,5 +1,5 @@
 {
-  "guid": "MultitenancyIT",
+  "guid": "CustomSecurityIT",
   "actions": [
     {
       "name": "Build TypeScript",
