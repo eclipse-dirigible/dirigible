@@ -13,8 +13,7 @@ export function onMessage(message: any) {
     return message;
 }
 
-// Define SQL statements for H2 and PostgreSQL
-const H2_MERGE_SQL = `
+const MERGE_SQL = `
     MERGE INTO ORDERS
         (ID, TOTAL, DATEADDED) 
     KEY(ID)
@@ -34,12 +33,10 @@ function upsertOrder(openCartOrder: oc_orderEntity, exchangeRate: number) {
     const totalEuro = openCartOrder.TOTAL * exchangeRate;
 
     const connection = database.getConnection();
-    const databaseType = connection.getMetaData().getDatabaseProductName().toLowerCase();
+    const databaseType = database.getDatabaseSystem();
+    console.log(" Database type: " + databaseType);
 
-    // Choose the appropriate SQL statement based on the database type
-    const sql = databaseType.includes("postgresql") ? POSTGRES_UPSERT_SQL : H2_MERGE_SQL;
-
-    const statement = connection.prepareStatement(sql);
+    const statement = connection.prepareStatement(MERGE_SQL);
     try {
         statement.setLong(1, openCartOrder.ORDER_ID);
         statement.setDouble(2, totalEuro);
@@ -49,4 +46,5 @@ function upsertOrder(openCartOrder: oc_orderEntity, exchangeRate: number) {
         statement.close();
         connection.close();
     }
+
 }

@@ -14,8 +14,7 @@ public enum HtmlAttribute {
     TYPE("type"), //
     PLACEHOLDER("placeholder"), //
     ROLE("role"), //
-    TITLE("title"), //
-    CLASS("class");
+    TITLE("title");
 
     private final String attribute;
 

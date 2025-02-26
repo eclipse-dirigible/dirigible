@@ -287,31 +287,6 @@ class BrowserImpl implements Browser {
     }
 
     @Override
-    public void rightClickOnElementContainingText(HtmlElementType elementType, String text) {
-        rightClickOnElementContainingText(elementType.getType(), text);
-    }
-
-    @Override
-    public void rightClickOnElementContainingText(String elementType, String text) {
-        SelenideElement element = getElementByAttributeAndContainsText(elementType, text);
-
-        element.shouldBe(Condition.visible);
-
-        rightClickElement(element);
-    }
-
-    @Override
-    public void rightClickOnElementByAttributeValue(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String attributeValue) {
-        clickOnElementByAttributeValue(htmlElementType.getType(), htmlAttribute.getAttribute(), attributeValue);
-    }
-
-    @Override
-    public void rightClickOnElementByAttributeValue(String htmlElementType, String htmlAttribute, String attributeValue) {
-        By by = constructCssSelectorByTypeAndAttribute(htmlElementType, htmlAttribute, attributeValue);
-        handleElementInAllFrames(by, this::rightClickElement, Condition.visible, Condition.enabled);
-    }
-
-    @Override
     public void clickOnElementByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern, String text) {
         clickOnElementByAttributePatternAndText(elementType.getType(), attribute.getAttribute(), pattern, text);
     }
@@ -345,20 +320,6 @@ class BrowserImpl implements Browser {
     }
 
     @Override
-    public void clickOnElementFromListByAttributePattern(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String pattern,
-            int index) {
-        clickOnElementFromListByAttributePattern(htmlElementType.getType(), htmlAttribute.getAttribute(), pattern, index);
-    }
-
-    @Override
-    public void clickOnElementFromListByAttributePattern(String htmlElementType, String htmlAttribute, String pattern, int index) {
-        By by = constructCssSelectorByTypeAndAttribute(htmlElementType, htmlAttribute, pattern);
-        ElementsCollection elements = Selenide.$$(by);
-        SelenideElement element = elements.get(index);
-        clickElement(element);
-    }
-
-    @Override
     public void doubleClickOnElementContainingText(HtmlElementType elementType, String text) {
         doubleClickOnElementContainingText(elementType.getType(), text);
     }
@@ -366,8 +327,6 @@ class BrowserImpl implements Browser {
     @Override
     public void doubleClickOnElementContainingText(String elementType, String text) {
         SelenideElement element = getElementByAttributeAndContainsText(elementType, text);
-
-        element.shouldBe(Condition.visible);
 
         element.doubleClick();
     }

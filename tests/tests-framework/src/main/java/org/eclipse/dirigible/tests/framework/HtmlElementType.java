@@ -24,7 +24,6 @@ public enum HtmlElementType {
     SPAN("span"), //
     DIV("div"), //
     LI("li"), //
-    I("I"), //
     FD_MESSAGE_PAGE_TITLE("bk-message-page-title");
 
 

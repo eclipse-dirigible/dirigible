@@ -6,8 +6,8 @@
       description: Trigger Orders Replication
       uri: cron
       parameters:
-        schedule: 0/10 * * ? * *
-        name: TriggerOrdersReplicationJDBC
+        schedule: 0 * * ? * *
+        name: TriggerOrdersReplication
       steps:
         - log:
             id: log-ac34
@@ -52,9 +52,9 @@
                       id: simple-7d10
                       expression: |
                         MERGE INTO ORDERS
-                            (ID, TOTAL, DATEADDED)
+                            (ID, TOTAL, DATEADDED) 
                         KEY(ID)
-                        VALUES
+                        VALUES 
                             (
                                 ${body['ORDER_ID']},
                                 ${body['TOTAL']} * ${exchangeProperty.currencyExchangeRate},
