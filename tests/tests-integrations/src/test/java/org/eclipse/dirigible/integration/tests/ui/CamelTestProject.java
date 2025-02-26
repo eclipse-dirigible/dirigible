@@ -25,6 +25,6 @@ public class CamelTestProject {
 
         Workbench workbench = ide.openWorkbench();
 
-        workbench.publishAll();
+        workbench.publishAll(false);
     }
 }
