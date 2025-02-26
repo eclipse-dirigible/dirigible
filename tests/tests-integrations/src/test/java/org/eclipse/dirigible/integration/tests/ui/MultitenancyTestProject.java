@@ -112,8 +112,10 @@ public class MultitenancyTestProject {
     }
 
     /**
-     * Verifies indirectly:<br> - MultitenancyIT/views/readers.view is created and it is working<br> - MultitenancyIT/csvim/data.csvim is
-     * imported <br> - default DB datasource is resolved correctly
+     * Verifies indirectly:<br>
+     * - MultitenancyIT/views/readers.view is created and it is working<br>
+     * - MultitenancyIT/csvim/data.csvim is imported <br>
+     * - default DB datasource is resolved correctly
      */
     private void verifyView(DirigibleTestTenant tenant) {
 
@@ -126,12 +128,17 @@ public class MultitenancyTestProject {
                              .body("[0].READER_FIRST_NAME", equalTo("Ivan"))
                              .body("[0].READER_LAST_NAME", equalTo("Ivanov"))
                              .body("[1].READER_FIRST_NAME", equalTo("Maria"))
-                             .body("[1].READER_LAST_NAME", equalTo("Petrova")), 25);
+                             .body("[1].READER_LAST_NAME", equalTo("Petrova")),
+                25);
     }
 
     /**
-     * Verifies indirectly:<br> - edm generated schema is created<br> - generated REST is created and it works<br> - topic listener
-     * works<br> - job has been executed<br> - default DB datasource is resolved correctly
+     * Verifies indirectly:<br>
+     * - edm generated schema is created<br>
+     * - generated REST is created and it works<br>
+     * - topic listener works<br>
+     * - job has been executed<br>
+     * - default DB datasource is resolved correctly
      */
     private void verifyEdmGeneratedResources(DirigibleTestTenant tenant) {
         restAssuredExecutor.execute(tenant, () -> verifyBookREST(tenant));
@@ -167,9 +174,8 @@ public class MultitenancyTestProject {
     }
 
     private void verifyJobExecuted(DirigibleTestTenant tenant) {
-        String expectedMessage =
-                "Job: found [1] books. Books: [[{\"Id\":1,\"Title\":\"Title[" + tenant.getName() + "]\",\"Author\":\"Author["
-                        + tenant.getName() + "]\"}]]";
+        String expectedMessage = "Job: found [1] books. Books: [[{\"Id\":1,\"Title\":\"Title[" + tenant.getName()
+                + "]\",\"Author\":\"Author[" + tenant.getName() + "]\"}]]";
         verifyMessageLogged(expectedMessage, testJobLogsAsserter);
     }
 
@@ -181,15 +187,18 @@ public class MultitenancyTestProject {
     }
 
     private void verifyListenerExecuted(DirigibleTestTenant tenant) {
-        String expectedMessage =
-                "Listener: found [1] books. Books: [[{\"Id\":1,\"Title\":\"Title[" + tenant.getName() + "]\",\"Author\":\"Author["
-                        + tenant.getName() + "]\"}]]";
+        String expectedMessage = "Listener: found [1] books. Books: [[{\"Id\":1,\"Title\":\"Title[" + tenant.getName()
+                + "]\",\"Author\":\"Author[" + tenant.getName() + "]\"}]]";
         verifyMessageLogged(expectedMessage, eventListenerLogsAsserter);
     }
 
     /**
-     * Verifies indirectly:<br> - MultitenancyIT/tables/reader.table is created<br> - MultitenancyIT/csvim/data.csvim is imported <br> -
-     * MultitenancyIT/odata/readers.odata is configured <br> - OData is working<br> - default DB datasource is resolved correctly
+     * Verifies indirectly:<br>
+     * - MultitenancyIT/tables/reader.table is created<br>
+     * - MultitenancyIT/csvim/data.csvim is imported <br>
+     * - MultitenancyIT/odata/readers.odata is configured <br>
+     * - OData is working<br>
+     * - default DB datasource is resolved correctly
      */
     private void verifyOData(DirigibleTestTenant tenant) {
         restAssuredExecutor.execute(tenant, () -> {
