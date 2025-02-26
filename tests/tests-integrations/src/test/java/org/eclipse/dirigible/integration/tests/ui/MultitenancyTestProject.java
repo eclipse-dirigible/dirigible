@@ -36,19 +36,19 @@ import static org.hamcrest.Matchers.hasSize;
 
 @Lazy
 @Component
-public class TestProject {
+public class MultitenancyTestProject {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(TestProject.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(MultitenancyTestProject.class);
 
-    private static final String UI_HOME_PATH = "/services/web/dirigible-test-project/gen/edm/index.html";
-    private static final String BOOKS_SERVICE_PATH = "/services/ts/dirigible-test-project/gen/edm/api/Books/BookService.ts";
+    private static final String UI_HOME_PATH = "/services/web/MultitenancyIT/gen/edm/index.html";
+    private static final String BOOKS_SERVICE_PATH = "/services/ts/MultitenancyIT/gen/edm/api/Books/BookService.ts";
     private static final String EDM_FILE_NAME = "edm.edm";
     private static final String READERS_ODATA_ENTITY_PATH = "/odata/v2/Readers";
-    private static final String READERS_VIEW_SERVICE_PATH = "/services/ts/dirigible-test-project/views/ReaderViewService.ts";
-    private static final String PROJECT_ROOT_FOLDER = "dirigible-test-project";
-    private static final String DOCUMENTS_SERVICE_PATH = "/services/ts/dirigible-test-project/cmis/DocumentService.ts/documents";
+    private static final String READERS_VIEW_SERVICE_PATH = "/services/ts/MultitenancyIT/views/ReaderViewService.ts";
+    private static final String PROJECT_ROOT_FOLDER = "MultitenancyIT";
+    private static final String DOCUMENTS_SERVICE_PATH = "/services/ts/MultitenancyIT/cmis/DocumentService.ts/documents";
 
-    private static final String PROJECT_RESOURCES_PATH = "dirigible-test-project";
+    private static final String PROJECT_RESOURCES_PATH = "MultitenancyIT";
     private static final String UI_PROJECT_TITLE = "Dirigible Test Project";
 
     private final BrowserFactory browserFactory;
@@ -61,7 +61,7 @@ public class TestProject {
     private final LogsAsserter testJobLogsAsserter;
     private final LogsAsserter eventListenerLogsAsserter;
 
-    public TestProject(BrowserFactory browserFactory, IDE ide, EdmView edmView, RestAssuredExecutor restAssuredExecutor,
+    public MultitenancyTestProject(BrowserFactory browserFactory, IDE ide, EdmView edmView, RestAssuredExecutor restAssuredExecutor,
             IDEFactory ideFactory, ProjectUtil projectUtil) {
         this.browserFactory = browserFactory;
         this.ide = ide;
@@ -75,6 +75,10 @@ public class TestProject {
     }
 
     public void publish() {
+        publish(true);
+    }
+
+    public void publish(boolean waitForSynchronizationExecution) {
         projectUtil.copyResourceProjectToDefaultUserWorkspace(PROJECT_RESOURCES_PATH);
 
         Workbench workbench = ide.openWorkbench();
@@ -83,7 +87,7 @@ public class TestProject {
 
         edmView.regenerate();
 
-        workbench.publishAll();
+        workbench.publishAll(true);
     }
 
     public void verify(DirigibleTestTenant tenant) {
@@ -113,8 +117,8 @@ public class TestProject {
 
     /**
      * Verifies indirectly:<br>
-     * - dirigible-test-project/views/readers.view is created and it is working<br>
-     * - dirigible-test-project/csvim/data.csvim is imported <br>
+     * - MultitenancyIT/views/readers.view is created and it is working<br>
+     * - MultitenancyIT/csvim/data.csvim is imported <br>
      * - default DB datasource is resolved correctly
      */
     private void verifyView(DirigibleTestTenant tenant) {
@@ -194,9 +198,9 @@ public class TestProject {
 
     /**
      * Verifies indirectly:<br>
-     * - dirigible-test-project/tables/reader.table is created<br>
-     * - dirigible-test-project/csvim/data.csvim is imported <br>
-     * - dirigible-test-project/odata/readers.odata is configured <br>
+     * - MultitenancyIT/tables/reader.table is created<br>
+     * - MultitenancyIT/csvim/data.csvim is imported <br>
+     * - MultitenancyIT/odata/readers.odata is configured <br>
      * - OData is working<br>
      * - default DB datasource is resolved correctly
      */

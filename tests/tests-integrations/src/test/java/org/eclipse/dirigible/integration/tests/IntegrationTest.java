@@ -35,6 +35,11 @@ import java.util.concurrent.TimeUnit;
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT, classes = DirigibleApplication.class)
 public abstract class IntegrationTest {
 
+    // uncomment the following if you want to run the tests in headless mode
+    // static {
+    // com.codeborne.selenide.Configuration.headless = true;
+    // }
+
     @Autowired
     private TenantCreator tenantCreator;
 
