@@ -11,7 +11,7 @@
  */
 const viewData = {
 	id: 'database',
-	label: 'DB Explorer',
+	label: 'Explorer',
 	region: 'left',
 	lazyLoad: false,
 	autoFocusTab: false,

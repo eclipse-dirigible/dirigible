@@ -11,7 +11,7 @@
  */
 const viewData = {
 	id: 'sql',
-	label: 'SQL',
+	label: 'Statements',
 	region: 'center',
 	lazyLoad: false,
 	autoFocusTab: false,
