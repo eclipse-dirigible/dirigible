@@ -22,11 +22,11 @@ const MERGE_SQL = `
 
 const POSTGRES_SQL = `
     INSERT INTO "ORDERS"
-        (ID, TOTAL, DATEADDED) 
+        ("ID", "TOTAL", "DATEADDED") 
     VALUES (?, ?, ?)
-    ON CONFLICT (ID) DO UPDATE SET
-        TOTAL = EXCLUDED.TOTAL,
-        DATEADDED = EXCLUDED.DATEADDED
+    ON CONFLICT ("ID") DO UPDATE SET
+        "TOTAL" = EXCLUDED."TOTAL",
+        "DATEADDED" = EXCLUDED."DATEADDED"
 `;
 
 function upsertOrder(openCartOrder: oc_orderEntity, exchangeRate: number) {
