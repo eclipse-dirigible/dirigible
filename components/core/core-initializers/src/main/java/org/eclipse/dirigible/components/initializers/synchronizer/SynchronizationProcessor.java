@@ -154,7 +154,7 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
             logger.debug("Skipping synchronization since it is not needed...");
             return;
         }
-        logger.debug("Executing synchronization synchronizers...");
+        logger.debug("Executing synchronization...");
 
         processing.set(true);
         synchronizationWatcher.reset();
