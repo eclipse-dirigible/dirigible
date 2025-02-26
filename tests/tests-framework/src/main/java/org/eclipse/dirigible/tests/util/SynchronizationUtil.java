@@ -18,8 +18,9 @@ public class SynchronizationUtil {
         SynchronizationProcessor synchronizationProcessor = BeanProvider.getBean(SynchronizationProcessor.class);
 
         LOGGER.debug("Waiting until the synchronization is not needed...");
-        await().atMost(30, TimeUnit.SECONDS)
 
+        await().atMost(30, TimeUnit.SECONDS)
+               .pollDelay(5, TimeUnit.SECONDS) // wait initially until the changes are detected
                .pollInterval(500, TimeUnit.MILLISECONDS)
                .until(() -> !synchronizationProcessor.isSynchronizationNeeded());
     }
