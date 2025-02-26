@@ -10,22 +10,25 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import ch.qos.logback.classic.Level;
+import org.eclipse.dirigible.integration.tests.ui.CamelTestProject;
 import org.eclipse.dirigible.integration.tests.ui.TestProject;
 import org.eclipse.dirigible.tests.logging.LogsAsserter;
-import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.sql.*;
+
 import java.util.concurrent.TimeUnit;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 class ApacheCamelIT extends UserInterfaceIntegrationTest {
 
     @Autowired
-    private TestProject testProject;
+    private CamelTestProject testProject;
     private LogsAsserter consoleLogAsserter;
     private LogsAsserter openCartLogAsserter;
 
@@ -38,8 +41,6 @@ class ApacheCamelIT extends UserInterfaceIntegrationTest {
     public static final String EXPECTED_UPSERT_ORDER_1_SUCCESS = "Upserted Open cart order [1]";
     public static final String EXPECTED_UPSERT_ORDER_2_START = "About to upsert Open cart order [2] using exchange rate";
     public static final String EXPECTED_UPSERT_ORDER_2_SUCCESS = "Upserted Open cart order [2]";
-
-
 
     @BeforeEach
     void setUp() {
@@ -60,16 +61,14 @@ class ApacheCamelIT extends UserInterfaceIntegrationTest {
                .until(() -> openCartLogAsserter.containsMessage(EXPECTED_JDBC_SUCCESS_MESSAGE, Level.INFO));
 
         // CHECK DATABASE IF THE DATA IS REPLICATED
-
-        // CHECK IF THE CONVERSION IS SUCCESSFUL
-
+        assertOrdersTablePopulated();
     }
 
     @Test
     public void testImplementETLUsingTypescript() {
         await().atMost(60, TimeUnit.SECONDS)
                .pollInterval(5, TimeUnit.SECONDS)
-               .until(() -> openCartLogAsserter.containsMessage("Replicating orders from OpenCart using TypeScript...", Level.INFO));
+               .until(() -> openCartLogAsserter.containsMessage(EXPECTED_TYPESCRIPT_START_MESSAGE, Level.INFO));
 
         await().atMost(60, TimeUnit.SECONDS)
                .pollInterval(5, TimeUnit.SECONDS)
@@ -89,17 +88,47 @@ class ApacheCamelIT extends UserInterfaceIntegrationTest {
 
         await().atMost(60, TimeUnit.SECONDS)
                .pollInterval(5, TimeUnit.SECONDS)
-               .until(() -> openCartLogAsserter.containsMessage("Successfully replicated orders from OpenCart using TypeScript",
-                       Level.INFO));
+               .until(() -> openCartLogAsserter.containsMessage(EXPECTED_TYPESCRIPT_SUCCESS_MESSAGE, Level.INFO));
+
         // CHECK DATABASE IF THE DATA IS REPLICATED
-
-        // CHECK IF THE CONVERSION IS SUCCESSFUL
-
+        assertOrdersTablePopulated();
     }
 
     @AfterEach
     public void tearDown() {
         browser.clearCookies();
+    }
+
+    private void assertOrdersTablePopulated() {
+        String url;
+        String user;
+        String password;
+
+        try (Connection testConnection = DriverManager.getConnection("jdbc:postgresql://localhost:5432/postgres", "postgres", "postgres")) {
+            url = "jdbc:postgresql://localhost:5432/postgres";
+            user = "postgres";
+            password = "postgres";
+        } catch (SQLException e) {
+            // If PostgreSQL is unavailable, fall back to H2
+            url = "jdbc:h2:file:./target/dirigible/h2/DefaultDB";
+            user = "sa";
+            password = "sa";
+        }
+
+        try (Connection connection = DriverManager.getConnection(url, user, password);
+                PreparedStatement statement = connection.prepareStatement("SELECT COUNT(*) FROM \"ORDERS\"");
+                ResultSet resultSet = statement.executeQuery()) {
+
+            resultSet.next();
+            long count = resultSet.getLong(1);
+
+            assertThat(count)
+                    .as("ORDERS table should have at least one record after ETL execution")
+                    .isGreaterThan(0);
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Database check for ORDERS table failed", e);
+        }
     }
 
 }
