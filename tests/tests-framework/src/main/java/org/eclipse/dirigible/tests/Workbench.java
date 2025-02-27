@@ -9,6 +9,10 @@
  */
 package org.eclipse.dirigible.tests;
 
+import com.codeborne.selenide.Condition;
+import com.codeborne.selenide.Selectors;
+import com.codeborne.selenide.Selenide;
+import com.codeborne.selenide.SelenideElement;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
@@ -72,6 +76,20 @@ public class Workbench {
         browser.enterTextInElementById(PROJECT_NAME_INPUT_ID, projectName);
 
         browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_PROJECT_BUTTON_TEXT);
+    }
+
+    public void clickOnButtonViaJsWithText(String buttonText) {
+        browser.clickOnButtonViaJsWithText(buttonText);
+    }
+
+    public void createFileInProject(String projectName, String fileName, String newFileType) {
+        expandProject(projectName);
+        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
+
+        clickOnButtonViaJsWithText(newFileType);
+        clickOnButtonViaJsWithText("Create");
+
+        browser.reload();
     }
 
 }

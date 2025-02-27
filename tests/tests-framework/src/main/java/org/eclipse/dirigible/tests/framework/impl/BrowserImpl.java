@@ -12,6 +12,7 @@ package org.eclipse.dirigible.tests.framework.impl;
 import com.codeborne.selenide.*;
 import com.codeborne.selenide.ex.ListSizeMismatch;
 import org.apache.commons.lang3.StringUtils;
+import org.assertj.core.api.Assertions;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
@@ -287,6 +288,29 @@ class BrowserImpl implements Browser {
     }
 
     @Override
+    public void rightClickOnElementContainingText(HtmlElementType elementType, String text) {
+        rightClickOnElementContainingText(elementType.getType(), text);
+    }
+
+    @Override
+    public void rightClickOnElementContainingText(String elementType, String text) {
+        SelenideElement element = getElementByAttributeAndContainsText(elementType, text);
+        element.shouldBe(Condition.visible);
+        rightClickElement(element);
+    }
+
+    @Override
+    public void rightClickOnElementByAttributeValue(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String attributeValue) {
+        clickOnElementByAttributeValue(htmlElementType.getType(), htmlAttribute.getAttribute(), attributeValue);
+    }
+
+    @Override
+    public void rightClickOnElementByAttributeValue(String htmlElementType, String htmlAttribute, String attributeValue) {
+        By by = constructCssSelectorByTypeAndAttribute(htmlElementType, htmlAttribute, attributeValue);
+        handleElementInAllFrames(by, this::rightClickElement, Condition.visible, Condition.enabled);
+    }
+
+    @Override
     public void clickOnElementByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern, String text) {
         clickOnElementByAttributePatternAndText(elementType.getType(), attribute.getAttribute(), pattern, text);
     }
@@ -327,7 +351,7 @@ class BrowserImpl implements Browser {
     @Override
     public void doubleClickOnElementContainingText(String elementType, String text) {
         SelenideElement element = getElementByAttributeAndContainsText(elementType, text);
-
+        element.shouldBe(Condition.visible);
         element.doubleClick();
     }
 
@@ -354,9 +378,7 @@ class BrowserImpl implements Browser {
     @Override
     public void clickOnElementContainingText(String elementType, String text) {
         SelenideElement element = getElementByAttributeAndContainsText(elementType, text);
-
         element.shouldBe(Condition.visible);
-
         element.click();
     }
 
@@ -395,6 +417,24 @@ class BrowserImpl implements Browser {
     }
 
     @Override
+    public void assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text) {
+        assertElementDoesNotExistsByTypeAndContainsText(htmlElementType.getType(), text);
+    }
+
+    @Override
+    public void assertElementDoesNotExistsByTypeAndContainsText(String elementType, String text) {
+        By selector = constructCssSelectorByType(elementType);
+        try {
+            SelenideElement element = findElementInAllFrames(selector, Condition.exist, Condition.matchText(Pattern.quote(text)));
+            Assertions.fail("Expected AssertionError was not thrown");
+        } catch (AssertionError e) {
+            Assertions.assertThat(e.getMessage())
+                      .contains(text);
+        }
+    }
+
+
+    @Override
     public void clickOnElementById(String id) {
         By by = Selectors.byId(id);
         handleElementInAllFrames(by, this::clickElement, Condition.visible, Condition.enabled);
@@ -415,6 +455,12 @@ class BrowserImpl implements Browser {
     @Override
     public String getPageTitle() {
         return Selenide.title();
+    }
+
+    @Override
+    public void clickOnButtonViaJsWithText(String buttonText) {
+        SelenideElement button = findElementInAllFrames(Selectors.byText(buttonText), Condition.visible);
+        Selenide.executeJavaScript("arguments[0].click();", button);
     }
 
 }
