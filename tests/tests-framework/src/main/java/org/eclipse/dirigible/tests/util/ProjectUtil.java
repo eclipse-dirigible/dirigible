@@ -12,9 +12,9 @@ package org.eclipse.dirigible.tests.util;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.filefilter.TrueFileFilter;
 import org.apache.commons.lang3.StringUtils;
-import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
+import org.eclipse.dirigible.tests.DirigibleTestTenant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -43,7 +43,9 @@ public class ProjectUtil {
     }
 
     public void copyResourceProjectToDefaultUserWorkspace(String resourcesFolder, Map<String, String> placeholders) {
-        copyResourceProjectToUserWorkspace(getDefaultUser(), resourcesFolder, placeholders);
+        copyResourceProjectToUserWorkspace(DirigibleTestTenant.createDefaultTenant()
+                                                              .getUsername(),
+                resourcesFolder, placeholders);
     }
 
     public void copyResourceProjectToUserWorkspace(String user, String resourcesFolder, Map<String, String> placeholders) {
@@ -113,10 +115,6 @@ public class ProjectUtil {
     private String createUserWorkspaceFolderPath(String user, String projectName) {
         return repository.getRepositoryPath() + File.separator + IRepositoryStructure.KEYWORD_USERS + File.separator + user + File.separator
                 + IRepositoryStructure.KEYWORD_WORKSPACE + File.separator + projectName;
-    }
-
-    private String getDefaultUser() {
-        return DirigibleConfig.BASIC_ADMIN_USERNAME.getFromBase64Value();
     }
 
 }

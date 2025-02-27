@@ -1,4 +1,4 @@
 {
-    "name": "${projectName}-dialog-window",
+    "name": "dialog-window",
     "description": "${projectName} - Extension Point for the Application Dialog Window Providers"
 }

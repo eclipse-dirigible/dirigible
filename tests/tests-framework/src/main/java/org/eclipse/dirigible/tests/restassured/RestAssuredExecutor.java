@@ -13,7 +13,6 @@ import io.restassured.RestAssured;
 import io.restassured.authentication.AuthenticationScheme;
 import io.restassured.filter.log.RequestLoggingFilter;
 import io.restassured.filter.log.ResponseLoggingFilter;
-import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.tests.DirigibleTestTenant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -118,8 +117,9 @@ public class RestAssuredExecutor {
     }
 
     public void execute(CallableNoResultAndNoException callable) {
-        String user = DirigibleConfig.BASIC_ADMIN_USERNAME.getFromBase64Value();
-        String pass = DirigibleConfig.BASIC_ADMIN_PASS.getFromBase64Value();
+        DirigibleTestTenant defaultTenant = DirigibleTestTenant.createDefaultTenant();
+        String user = defaultTenant.getUsername();
+        String pass = defaultTenant.getPassword();
         this.execute(callable, "localhost", user, pass);
     }
 

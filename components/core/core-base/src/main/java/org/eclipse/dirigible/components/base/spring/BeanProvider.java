@@ -18,8 +18,12 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.stereotype.Component;
 
+import java.lang.annotation.Annotation;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The Class BeanProvider.
@@ -44,10 +48,14 @@ public class BeanProvider implements ApplicationContextAware {
     }
 
     public static <T> T getBean(String beanName, Class<T> clazz) {
+        assertSpringIsInitialized();
+        return context.getBean(beanName, clazz);
+    }
+
+    private static void assertSpringIsInitialized() {
         if (!isInitialzed()) {
             throw new IllegalStateException("Spring is not initialized yet.");
         }
-        return context.getBean(beanName, clazz);
     }
 
     /**
@@ -57,6 +65,23 @@ public class BeanProvider implements ApplicationContextAware {
      */
     public static boolean isInitialzed() {
         return context != null;
+    }
+
+    public static <T> T getBeanByAnnotation(Class<T> interfaceType, Class<? extends Annotation> annotationClass) {
+        assertSpringIsInitialized();
+        Map<String, Object> beans = context.getBeansWithAnnotation(annotationClass);
+        Set<Object> matchedBeans = beans.values()
+                                        .stream()
+                                        .filter(bean -> interfaceType.isAssignableFrom(bean.getClass()))
+                                        .collect(Collectors.toSet());
+        if (matchedBeans.size() != 1) {
+
+            throw new IllegalStateException(
+                    "Found [" + matchedBeans.size() + "] of type [" + interfaceType + "] annotated with [" + annotationClass + "]");
+        }
+
+        return (T) matchedBeans.iterator()
+                               .next();
     }
 
     /**
@@ -76,16 +101,12 @@ public class BeanProvider implements ApplicationContextAware {
      * @return the bean
      */
     public static <T> T getBean(Class<T> clazz) {
-        if (!isInitialzed()) {
-            throw new IllegalStateException("Spring is not initialized yet.");
-        }
+        assertSpringIsInitialized();
         return context.getBean(clazz);
     }
 
     public static <T> Optional<T> getOptionalBean(Class<T> clazz) {
-        if (!isInitialzed()) {
-            throw new IllegalStateException("Spring is not initialized yet.");
-        }
+        assertSpringIsInitialized();
         try {
             return Optional.of(context.getBean(clazz));
         } catch (NoSuchBeanDefinitionException ex) {
@@ -95,10 +116,9 @@ public class BeanProvider implements ApplicationContextAware {
     }
 
     public static <T> Collection<T> getBeans(Class<T> clazz) {
-        if (!isInitialzed()) {
-            throw new IllegalStateException("Spring is not initialized yet.");
-        }
+        assertSpringIsInitialized();
         return context.getBeansOfType(clazz)
                       .values();
     }
+
 }

@@ -49,7 +49,7 @@
                 .constant('extensionPoint', {
                     perspectives: "{{projectName}}",
                     views: "{{projectName}}-view",
-                    dialogWindows: "{{projectName}}-dialog-window"
+                    dialogWindows: "dialog-window"
                 })
                 .config(["messageHubProvider", function (messageHubProvider) {
                     messageHubProvider.eventIdPrefix = '{{projectName}}.launchpad.Home';

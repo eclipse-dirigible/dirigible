@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.tests;
 
-import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
@@ -299,7 +298,9 @@ public class DirigibleCleaner {
 
     private void deleteCurrentUserFolder() {
         File usersFolder = getUsersRepoFolder();
-        String currentUserFolder = usersFolder.getPath() + File.separator + DirigibleConfig.BASIC_ADMIN_USERNAME.getFromBase64Value();
+
+        DirigibleTestTenant defaultTenant = DirigibleTestTenant.createDefaultTenant();
+        String currentUserFolder = usersFolder.getPath() + File.separator + defaultTenant.getUsername();
         LOGGER.info("Will delete current user folder [{}]", currentUserFolder);
         FileUtil.deleteFolder(currentUserFolder);
     }
