@@ -5,26 +5,26 @@
     <serviceTask id="notify-approvers" name="Notify approvers" flowable:async="true" flowable:delegateExpression="${JSTask}">
       <extensionElements>
         <flowable:field name="handler">
-          <flowable:string><![CDATA[leave-request/tasks/notify-approvers-task.ts]]></flowable:string>
+          <flowable:string><![CDATA[LeaveRequestApprovalProcessIT/tasks/notify-approvers-task.ts]]></flowable:string>
         </flowable:field>
       </extensionElements>
     </serviceTask>
     <sequenceFlow id="sid-797626AE-B2F6-4C00-ABEE-FB30ADC177E4" sourceRef="start-event" targetRef="notify-approvers"></sequenceFlow>
     <endEvent id="end-event"></endEvent>
-    <userTask id="process-request" name="Process request" flowable:candidateGroups="employee-manager" flowable:formKey="/services/web/leave-request/gen/process-leave-request/forms/process-leave-request/index.html"></userTask>
+    <userTask id="process-request" name="Process request" flowable:candidateGroups="employee-manager" flowable:formKey="/services/web/LeaveRequestApprovalProcessIT/gen/process-leave-request/forms/process-leave-request/index.html"></userTask>
     <sequenceFlow id="sid-645847E8-C959-48BD-816B-2E9CC4A2F08A" sourceRef="notify-approvers" targetRef="process-request"></sequenceFlow>
     <sequenceFlow id="sid-EC1DFE1D-DDF3-4731-8104-266E1434AA40" sourceRef="process-request" targetRef="sid-8DB88F3F-76D9-4497-AAB1-895550B8919F"></sequenceFlow>
     <serviceTask id="send-approved-notification" name="Send approved notification" flowable:async="true" flowable:delegateExpression="${JSTask}">
       <extensionElements>
         <flowable:field name="handler">
-          <flowable:string><![CDATA[leave-request/tasks/send-approved-notification.ts]]></flowable:string>
+          <flowable:string><![CDATA[LeaveRequestApprovalProcessIT/tasks/send-approved-notification.ts]]></flowable:string>
         </flowable:field>
       </extensionElements>
     </serviceTask>
     <serviceTask id="send-declined-notification" name="Send declined notification" flowable:async="true" flowable:delegateExpression="${JSTask}">
       <extensionElements>
         <flowable:field name="handler">
-          <flowable:string><![CDATA[leave-request/tasks/send-declined-notification.ts]]></flowable:string>
+          <flowable:string><![CDATA[LeaveRequestApprovalProcessIT/tasks/send-declined-notification.ts]]></flowable:string>
         </flowable:field>
       </extensionElements>
     </serviceTask>
