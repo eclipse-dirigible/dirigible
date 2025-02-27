@@ -49,7 +49,7 @@ public class DependsOnTestProject {
 
     public void verifyDependsOn() {
         browser.openPath("/services/web/dirigible-depends-on-test-project/gen/edm/ui/entities/index.html");
-//        browser.assertElementExistsByTypeAndContainsText("h1", "Entity Data Model");
-//        browser.clickOnElementWithText("a", "Entities");
+        // browser.assertElementExistsByTypeAndContainsText("h1", "Entity Data Model");
+        // browser.clickOnElementWithText("a", "Entities");
     }
 }
