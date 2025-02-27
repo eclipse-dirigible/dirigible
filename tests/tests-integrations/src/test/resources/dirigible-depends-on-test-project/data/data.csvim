@@ -1,0 +1,26 @@
+{
+  "files": [
+    {
+      "table": "DIRIGIBLE_COUNTRY",
+      "schema": "PUBLIC",
+      "file": "dirigible-depends-on-test-project/data/Country.csv",
+      "header": true,
+      "useHeaderNames": true,
+      "delimField": ",",
+      "delimEnclosing": "\"",
+      "distinguishEmptyFromNull": true,
+      "version": "1.0.1"
+    },
+    {
+      "table": "DIRIGIBLE_CITY",
+      "schema": "PUBLIC",
+      "file": "dirigible-depends-on-test-project/data/City.csv",
+      "header": true,
+      "useHeaderNames": true,
+      "delimField": ",",
+      "delimEnclosing": "\"",
+      "distinguishEmptyFromNull": true,
+      "version": "1.0.0"
+    }
+  ]
+}

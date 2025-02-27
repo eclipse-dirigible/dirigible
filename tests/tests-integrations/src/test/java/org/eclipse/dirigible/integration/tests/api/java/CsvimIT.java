@@ -83,7 +83,7 @@ public class CsvimIT extends UserInterfaceIntegrationTest {
      */
     @Test
     void testImportData() throws SQLException {
-        ide.createAndPublishProjectFromResources(TEST_PROJECT_FOLDER_PATH);
+        ide.createAndPublishProjectFromResources(TEST_PROJECT_FOLDER_PATH, false);
 
         verifyDataInTable("TEST_TABLE_READERS", CSV_READERS);
         assertThat(isTableExists(UNDEFINIED_TABLE_NAME)).isFalse();

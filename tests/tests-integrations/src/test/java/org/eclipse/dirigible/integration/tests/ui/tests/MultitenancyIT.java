@@ -12,12 +12,11 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
-import org.eclipse.dirigible.integration.tests.ui.TestProject;
+import org.eclipse.dirigible.integration.tests.ui.MultitenancyTestProject;
 import org.eclipse.dirigible.tests.DirigibleTestTenant;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.BrowserFactory;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
-import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,7 +26,7 @@ import java.util.List;
 class MultitenancyIT extends UserInterfaceIntegrationTest {
 
     @Autowired
-    private TestProject testProject;
+    private MultitenancyTestProject testProject;
 
     @Autowired
     @DefaultTenant
@@ -53,7 +52,7 @@ class MultitenancyIT extends UserInterfaceIntegrationTest {
         List<DirigibleTestTenant> tenants = createTenants();
         waitForTenantsProvisioning(tenants);
 
-        testProject.publishDefault();
+        testProject.publish();
 
         verifyTenants(tenants);
     }
@@ -80,7 +79,6 @@ class MultitenancyIT extends UserInterfaceIntegrationTest {
     }
 
     private void verifyTenants(List<DirigibleTestTenant> tenants) {
-        SleepUtil.sleepSeconds(12);
         tenants.forEach(testProject::verify);
     }
 

@@ -4,7 +4,7 @@
   "title": "Dirigible Test Project",
   "description": "Dirigible Test Project description",
   "tablePrefix": "",
-  "projectName": "dirigible-test-project",
+  "projectName": "MultitenancyIT",
   "workspaceName": "workspace",
   "filePath": "edm.model",
   "templateId": "template-application-angular/template/template.js",

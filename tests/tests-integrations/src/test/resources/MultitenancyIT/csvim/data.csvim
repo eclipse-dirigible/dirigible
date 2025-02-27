@@ -3,7 +3,7 @@
     {
       "table": "READERS",
       "schema": "PUBLIC",
-      "file": "/dirigible-test-project/csvim/readers.csv",
+      "file": "/MultitenancyIT/csvim/readers.csv",
       "header": true,
       "useHeaderNames": true,
       "delimField": ",",

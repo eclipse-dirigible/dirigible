@@ -128,9 +128,89 @@
                 "title": "City",
                 "tooltip": "City",
                 "type": "PRIMARY"
+            },
+            {
+                "properties": [
+                    {
+                        "dataAutoIncrement": "true",
+                        "dataName": "ORDERS_ID",
+                        "dataNullable": "true",
+                        "dataPrimaryKey": "true",
+                        "dataType": "INTEGER",
+                        "description": "",
+                        "name": "Id",
+                        "tooltip": "",
+                        "widgetIsMajor": "true",
+                        "widgetLength": "20",
+                        "widgetSize": "",
+                        "widgetType": "TEXTBOX"
+                    },
+                    {
+                        "dataName": "ORDERS_COUNTRY",
+                        "dataNullable": "true",
+                        "dataType": "INTEGER",
+                        "description": "",
+                        "name": "Country",
+                        "tooltip": "",
+                        "widgetIsMajor": "true",
+                        "widgetLength": "20",
+                        "widgetSize": "",
+                        "widgetType": "TEXTBOX",
+                        "relationshipName": "Orders_Country",
+                        "relationshipEntityName": "Country",
+                        "relationshipEntityPerspectiveName": "entities",
+                        "relationshipEntityPerspectiveLabel": "Entities"
+                    },
+                    {
+                        "dataName": "ORDERS_CITY",
+                        "dataNullable": "true",
+                        "dataType": "INTEGER",
+                        "description": "",
+                        "name": "City",
+                        "tooltip": "",
+                        "widgetIsMajor": "true",
+                        "widgetLength": "20",
+                        "widgetSize": "",
+                        "widgetType": "TEXTBOX",
+                        "relationshipName": "Orders_City",
+                        "relationshipEntityName": "City",
+                        "relationshipEntityPerspectiveName": "entities",
+                        "relationshipEntityPerspectiveLabel": "Entities"
+                    }
+                ],
+                "caption": "Manage entity Orders",
+                "dataCount": "SELECT COUNT(*) AS COUNT FROM \"${tablePrefix}ORDERS\"",
+                "dataName": "ORDERS",
+                "dataQuery": "",
+                "description": "Manage entity Orders",
+                "generateDefaultRoles": "false",
+                "generateReport": "false",
+                "icon": "/services/web/resources/unicons/file.svg",
+                "layoutType": "MANAGE",
+                "menuIndex": "100",
+                "menuKey": "orders",
+                "menuLabel": "Orders",
+                "name": "Orders",
+                "navigationPath": "/Home",
+                "perspectiveIcon": "/services/web/resources/unicons/award.svg",
+                "perspectiveLabel": "Orders",
+                "perspectiveName": "Orders",
+                "perspectiveOrder": "100",
+                "perspectiveRole": "",
+                "title": "Orders",
+                "tooltip": "Orders",
+                "type": "PRIMARY"
             }
         ],
-        "perspectives": [],
+        "perspectives": [
+            {
+                "name": "Orders",
+                "label": "Orders",
+                "icon": "/services/web/resources/unicons/award.svg",
+                "order": "100",
+                "role": {}
+            }
+        ],
         "navigations": []
     }
 }

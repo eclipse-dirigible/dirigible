@@ -16,7 +16,6 @@ import jakarta.mail.Message;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
-import org.eclipse.dirigible.integration.tests.ui.TestProject;
 import org.eclipse.dirigible.tests.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.util.PortUtil;
 import org.junit.jupiter.api.AfterEach;
@@ -44,9 +43,8 @@ class MailIT extends UserInterfaceIntegrationTest {
     }
 
     @Autowired
-    private TestProject testProject;
-    @Autowired
     private RestAssuredExecutor restAssuredExecutor;
+
     private GreenMail greenMail;
 
     @BeforeEach
@@ -58,7 +56,6 @@ class MailIT extends UserInterfaceIntegrationTest {
 
         greenMail.setUser(USER, PASSWORD);
 
-        testProject.publishDefault();
     }
 
     @AfterEach
@@ -68,8 +65,10 @@ class MailIT extends UserInterfaceIntegrationTest {
 
     @Test
     void testSendEmail() throws MessagingException {
+        ide.createAndPublishProjectFromResources("MailIT");
+
         restAssuredExecutor.execute(() -> given().when()
-                                                 .post("/services/ts/dirigible-test-project/mail/MailService.ts/sendTestEmail")
+                                                 .post("/services/ts/MailIT/mail/MailService.ts/sendTestEmail")
                                                  .then()
                                                  .statusCode(200)
                                                  .body(containsString("Mail has been sent")));

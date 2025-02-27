@@ -163,7 +163,7 @@ class BrowserImpl implements Browser {
                 conditions);
 
         reload();
-        SleepUtil.sleepSeconds(3);
+        SleepUtil.sleepSeconds(5);
 
         Optional<SelenideElement> element = findSingleElementInAllFrames(by);
         if (element.isPresent()) {
@@ -350,9 +350,7 @@ class BrowserImpl implements Browser {
     @Override
     public void doubleClickOnElementContainingText(String elementType, String text) {
         SelenideElement element = getElementByAttributeAndContainsText(elementType, text);
-
         element.shouldBe(Condition.visible);
-
         element.doubleClick();
     }
 
@@ -379,9 +377,7 @@ class BrowserImpl implements Browser {
     @Override
     public void clickOnElementContainingText(String elementType, String text) {
         SelenideElement element = getElementByAttributeAndContainsText(elementType, text);
-
         element.shouldBe(Condition.visible);
-
         element.click();
     }
 

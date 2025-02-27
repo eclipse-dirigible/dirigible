@@ -3,6 +3,6 @@
     "type": "VIEW",
     "query": "SELECT \"READER_FIRST_NAME\", \"READER_LAST_NAME\" FROM \"READERS\"",
     "dependencies": [
-        "table:/dirigible-test-project/tables/reader.table:READERS"
+        "table:/MultitenancyIT/tables/reader.table:READERS"
     ]
 }
