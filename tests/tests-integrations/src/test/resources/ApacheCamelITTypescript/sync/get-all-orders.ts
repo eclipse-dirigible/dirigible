@@ -1,4 +1,4 @@
-import { oc_orderRepository } from "/ApacheCamelITTypescript/dao/oc_orderRepository";
+import { oc_orderRepository } from "../dao/oc_orderRepository";
 import { client } from "sdk/http";
 
 export function onMessage(message: any) {
