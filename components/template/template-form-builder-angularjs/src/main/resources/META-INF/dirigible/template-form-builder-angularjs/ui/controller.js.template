@@ -1,7 +1,7 @@
 #set($dollar = '$')
-const formView = angular.module('forms', ['ideUI', 'ideView']);
+const formView = angular.module('forms', ['blimpKit', 'platformView']);
 
-formView.controller('FormController', ['$scope', '$http', function ($scope, $http) {
+formView.controller('FormController', ($scope, $http) => {
 
     $scope.forms = {
         form: {}
@@ -70,4 +70,4 @@ formView.controller('FormController', ['$scope', '$http', function ($scope, $htt
 $code
 
 #end
-}]);
+});
