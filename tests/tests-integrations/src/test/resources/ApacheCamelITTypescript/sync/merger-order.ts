@@ -1,4 +1,4 @@
-import { oc_orderEntity } from "orders-etl/dao/oc_orderRepository";
+import { oc_orderEntity } from "/ApacheCamelITTypescript/dao/oc_orderRepository";
 import { database } from "sdk/db";
 
 export function onMessage(message: any) {

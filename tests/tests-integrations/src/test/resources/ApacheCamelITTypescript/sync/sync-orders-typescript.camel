@@ -22,7 +22,7 @@
             expression:
               constant:
                 id: get-all-orders-8de2
-                expression: orders-etl/sync/get-all-orders.ts
+                expression: ApacheCamelITTypescript/sync/get-all-orders.ts
         - to:
             id: get-all-oc-orders
             description: Get all OpenCart orders
@@ -44,7 +44,7 @@
                   expression:
                     constant:
                       id: constant-0a9e
-                      expression: orders-etl/sync/merger-order.ts
+                      expression: ApacheCamelITTypescript/sync/merger-order.ts
               - to:
                   id: to-eb1b
                   description: Merge order

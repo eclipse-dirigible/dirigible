@@ -5,7 +5,7 @@
       id: trigger-orders-replication-cron
       uri: cron
       parameters:
-        schedule: 0 * * ? * *
+        schedule: 30 * * ? * *
         name: TriggerOrdersReplicationCamel
       steps:
         - log:
@@ -23,7 +23,7 @@
             expression:
               simple:
                 id: simple-db-type
-                expression: orders-etl/sync/get-db-type.ts
+                expression: ApacheCamelITJDBC/sync/get-db-type.ts
 
         # Invoke JavaScript to determine the database type
         - to:
