@@ -438,4 +438,10 @@ class BrowserImpl implements Browser {
         return Selenide.title();
     }
 
+    @Override
+    public void clickOnButtonViaJsWithText(String buttonText) {
+        SelenideElement button = browser.findElementInAllFrames(Selectors.byText(buttonText), Condition.visible);
+        Selenide.executeJavaScript("arguments[0].click();", button);
+    }
+
 }

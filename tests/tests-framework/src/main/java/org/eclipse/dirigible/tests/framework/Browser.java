@@ -81,4 +81,5 @@ public interface Browser {
 
     void handleElementInAllFrames(By by, Consumer<SelenideElement> elementHandler, WebElementCondition... conditions);
 
+    void clickOnButtonViaJsWithText(String buttonText);
 }

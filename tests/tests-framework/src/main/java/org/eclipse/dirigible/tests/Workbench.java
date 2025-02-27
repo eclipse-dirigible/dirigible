@@ -80,17 +80,16 @@ public class Workbench {
         browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_PROJECT_BUTTON_TEXT);
     }
 
-    public void clickOnButtonWithJs(String buttonText) {
-        SelenideElement button = browser.findElementInAllFrames(Selectors.byText(buttonText), Condition.visible);
-        Selenide.executeJavaScript("arguments[0].click();", button);
+    public void clickOnButtonViaJsWithText(String buttonText) {
+        browser.clickOnButtonViaJsWithText(buttonText);
     }
 
     public void createFileInProject(String projectName, String fileName, String newFileType) {
         expandProject(projectName);
         browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
 
-        clickOnButtonWithJs(newFileType);
-        clickOnButtonWithJs("Create");
+        clickOnButtonViaJsWithText(newFileType);
+        clickOnButtonViaJsWithText("Create");
 
         browser.reload();
     }
