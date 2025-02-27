@@ -85,47 +85,17 @@ class ApacheCamelJdbcTypescriptIT extends UserInterfaceIntegrationTest {
             password = "";
         }
 
-        try (Connection connection = DriverManager.getConnection(url, user, password)) {
-            // Log all databases
-            String selectDatabasesSQL = "SELECT datname FROM pg_database";
-            try (PreparedStatement selectDatabasesStmt = connection.prepareStatement(selectDatabasesSQL);
-                    ResultSet databasesResultSet = selectDatabasesStmt.executeQuery()) {
+        try (Connection connection = DriverManager.getConnection(url, user, password);
+                PreparedStatement statement = connection.prepareStatement("SELECT COUNT(*) FROM \"ORDERS\"");
+                ResultSet resultSet = statement.executeQuery()) {
 
-                LOGGER.info("Databases:");
-                while (databasesResultSet.next()) {
-                    String databaseName = databasesResultSet.getString("datname");
-                    LOGGER.info(" - {}", databaseName);
-                }
-            }
+            resultSet.next();
+            long count = resultSet.getLong(1);
 
-            // Log all tables in the current database
-            String selectTablesSQL =
-                    "SELECT table_schema, table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('pg_catalog', 'information_schema')";
-            try (PreparedStatement selectTablesStmt = connection.prepareStatement(selectTablesSQL);
-                    ResultSet tablesResultSet = selectTablesStmt.executeQuery()) {
-
-                LOGGER.info("Tables:");
-                while (tablesResultSet.next()) {
-                    String schemaName = tablesResultSet.getString("table_schema");
-                    String tableName = tablesResultSet.getString("table_name");
-                    LOGGER.info(" - Schema: {}, Table: {}", schemaName, tableName);
-                }
-            }
-
-            // Check ORDERS table
-            try (PreparedStatement statement = connection.prepareStatement("SELECT COUNT(*) FROM \"ORDERS\"");
-                    ResultSet resultSet = statement.executeQuery()) {
-
-                resultSet.next();
-                long count = resultSet.getLong(1);
-
-                assertThat(count).as("ORDERS table should have at least one record after ETL execution")
-                                 .isGreaterThan(0);
-            }
-
+            assertThat(count).as("ORDERS table should have at least one record after ETL execution")
+                             .isGreaterThan(0);
         } catch (SQLException e) {
             throw new RuntimeException("Database check for ORDERS table failed", e);
-
         }
     }
 }
