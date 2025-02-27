@@ -111,7 +111,7 @@ class ApacheCamelIT extends UserInterfaceIntegrationTest {
             // If PostgreSQL is unavailable, fall back to H2
             url = "jdbc:h2:file:./target/dirigible/h2/DefaultDB";
             user = "sa";
-            password = "sa";
+            password = "";
         }
 
         try (Connection connection = DriverManager.getConnection(url, user, password);
