@@ -48,8 +48,9 @@ export function getSources(parameters) {
 			collection: "uiReportChartModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-chart/dialog-window-filter/view.extension",
+			location: "/template-application-ui-angular/ui/perspective/report-chart/dialog-window-filter/view.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window-filter/view.extension",
 			collection: "uiReportChartModels"
 		},
@@ -75,14 +76,16 @@ export function getSources(parameters) {
 			collection: "uiReportChartModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-chart/tile.extension",
+			location: "/template-application-ui-angular/ui/perspective/report-chart/tile.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.extension",
 			collection: "uiReportChartModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-chart/tile-portal.extension",
+			location: "/template-application-ui-angular/ui/perspective/report-chart/tile-portal.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile-portal.extension",
 			collection: "uiReportChartModels"
 		},
@@ -94,8 +97,9 @@ export function getSources(parameters) {
 			collection: "uiReportChartModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-chart/view.extension",
+			location: "/template-application-ui-angular/ui/perspective/report-chart/view.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/view.extension",
 			collection: "uiReportChartModels"
 		},

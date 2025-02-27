@@ -12,16 +12,6 @@ exports.getTile = function () {
         // icon: "file-o",
         location: "/services/web/${projectName}/gen/${genFolderName}/ui/Reports/index.html",
         order: "${menuIndex}",
-        groupOrder: "999",
-#if($perspectiveRole || $roleRead)
-        roles: [
-#if($perspectiveRole)
-            "${perspectiveRole}",
-#end
-#if($roleRead)
-            "${roleRead}",
-#end
-        ]
-#end
+        groupOrder: "999"
     };
 };

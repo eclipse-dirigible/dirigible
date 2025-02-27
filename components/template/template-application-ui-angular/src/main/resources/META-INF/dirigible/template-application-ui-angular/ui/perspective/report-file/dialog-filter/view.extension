@@ -1,5 +1,0 @@
-{
-    "module": "{{projectName}}/gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-filter/view.js",
-    "extensionPoint": "dialog-window",
-    "description": "{{projectName}} - Application Dialog Window"
-}

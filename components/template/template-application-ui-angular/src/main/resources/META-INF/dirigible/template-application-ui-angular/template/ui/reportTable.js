@@ -48,8 +48,9 @@ export function getSources(parameters) {
 			collection: "uiReportTableModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/dialog-window/view.extension",
+			location: "/template-application-ui-angular/ui/perspective/report-table/dialog-window/view.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/view.extension",
 			collection: "uiReportTableModels"
 		},
@@ -75,8 +76,9 @@ export function getSources(parameters) {
 			collection: "uiReportTableModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/dialog-window-filter/view.extension",
+			location: "/template-application-ui-angular/ui/perspective/report-table/dialog-window-filter/view.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window-filter/view.extension",
 			collection: "uiReportTableModels"
 		},
@@ -102,14 +104,16 @@ export function getSources(parameters) {
 			collection: "uiReportTableModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/tile.extension",
+			location: "/template-application-ui-angular/ui/perspective/report-table/tile.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.extension",
 			collection: "uiReportTableModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/tile-portal.extension",
+			location: "/template-application-ui-angular/ui/perspective/report-table/tile-portal.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile-portal.extension",
 			collection: "uiReportTableModels"
 		},
@@ -121,8 +125,9 @@ export function getSources(parameters) {
 			collection: "uiReportTableModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/view.extension",
+			location: "/template-application-ui-angular/ui/perspective/report-table/view.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/view.extension",
 			collection: "uiReportTableModels"
 		},

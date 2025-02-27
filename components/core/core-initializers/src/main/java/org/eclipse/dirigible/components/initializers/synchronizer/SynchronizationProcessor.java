@@ -149,22 +149,12 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
      * Process synchronizers.
      */
     public void processSynchronizers() {
-        logger.debug("Processing synchronizers...");
 
-        if (!this.synchronizationWatcher.isModified() && initialized.get()) {
-            logger.debug("Skipped synchronization as NO changes in the Registry.");
+        if (!isSynchronizationNeeded()) {
+            logger.debug("Skipping synchronization since it is not needed...");
             return;
         }
-
-        if (!prepared.get()) {
-            logger.debug("Skipped synchronization as the runtime is NOT prepared yet.");
-            return;
-        }
-
-        if (processing.get()) {
-            logger.debug("Skipped synchronization as it is CURRENTLY IN PROGRESS.");
-            return;
-        }
+        logger.debug("Executing synchronization...");
 
         processing.set(true);
         synchronizationWatcher.reset();
@@ -401,6 +391,31 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
             initialized.set(true);
             processing.set(false);
         }
+    }
+
+    public boolean isSynchronizationNeeded() {
+        logger.debug("Checking whether synchronization is needed...");
+
+        if (!this.synchronizationWatcher.isModified() && initialized.get()) {
+            logger.debug("Skipped synchronization as NO changes in the Registry.");
+            return false;
+        }
+
+        if (!prepared.get()) {
+            logger.debug("Skipped synchronization as the runtime is NOT prepared yet.");
+            return false;
+        }
+
+        if (isSynchronizationRunning()) {
+            logger.debug("Skipped synchronization as it is CURRENTLY IN PROGRESS.");
+            return false;
+        }
+
+        return true;
+    }
+
+    public boolean isSynchronizationRunning() {
+        return processing.get();
     }
 
     /**

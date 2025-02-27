@@ -213,15 +213,10 @@
 		<module>ui/view-preview</module>
 		<module>ui/view-problems</module>
 		<module>ui/view-properties</module>
-		<module>ui/view-git-branches</module>
-		<module>ui/view-git-staging</module>
-		<module>ui/view-git-history</module>
-		<module>ui/view-git-projects</module>
+		<module>ui/view-git</module>
 		<module>ui/view-terminal</module>
 		<module>ui/view-debugger</module>
 		<module>ui/view-databases</module>
-		<module>ui/view-db-explorer</module>
-		<module>ui/view-result</module>
 		<module>ui/view-sql</module>
 		<module>ui/view-transfer</module>
 		<module>ui/view-artefacts</module>
@@ -263,6 +258,7 @@
 		<module>ui/editor-csv</module>
 		<module>ui/editor-csvim</module>
 		<module>ui/editor-form-builder</module>
+		
 		<module>ui/menu-bpm</module>
 		<module>ui/menu-database</module>
 		<module>ui/menu-entity</module>
@@ -274,6 +270,7 @@
 		<module>ui/menu-schema</module>
 		<module>ui/menu-security</module>
 		<module>ui/menu-websockets</module>
+		<module>ui/menu-csv</module>
 
 		<!-- Resources -->
 		<module>resources/resources-core</module>
@@ -1250,22 +1247,7 @@
 			</dependency>
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-view-git-branches</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-view-git-staging</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-view-git-history</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-view-git-projects</artifactId>
+				<artifactId>dirigible-components-ui-view-git</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
@@ -1281,16 +1263,6 @@
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
 				<artifactId>dirigible-components-ui-view-databases</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-view-db-explorer</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-view-result</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
@@ -1554,6 +1526,11 @@
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
 				<artifactId>dirigible-components-ui-menu-websockets</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-ui-menu-csv</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			

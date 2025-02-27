@@ -94,7 +94,7 @@
             <bk-button state="transparent" glyph="sap-icon--clear-all" title="Clear Log" aria-label="Clear Log" ng-click="clearLog()"></bk-button>
         </bk-toolbar>
         <div id="logContent" class="bk-stretch" bk-scrollbar>
-            <div class="fd-text bk-padding--tiny logLine" data-loglevel="{{::log.level}}" ng-repeat="log in logs track by log.id">
+            <div class="fd-text bk-padding--tiny logLine" data-loglevel="{{::log.level}}" ng-repeat="log in logs track by $index">
                 {{::log.date}} {{::log.message}}
             </div>
         </div>
