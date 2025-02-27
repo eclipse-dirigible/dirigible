@@ -39,7 +39,7 @@ public class LeaveRequestTestProject {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LeaveRequestTestProject.class);
 
-    private static final String PROJECT_ROOT_FOLDER = "leave-request";
+    private static final String PROJECT_ROOT_FOLDER = "LeaveRequestApprovalProcessIT";
     private static final String API_PATH = "/services/ts/leave-request/api/ProcessService.ts";
     private static final String UI_HOME_PATH = "/services/web/leave-request/gen/index.html";
 
