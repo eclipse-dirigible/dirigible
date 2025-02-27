@@ -139,8 +139,12 @@ class LeaveRequestApprovalProcessIT extends UserInterfaceIntegrationTest {
 
         String firstTdText = browser.getFirstTdTextInRowContaining("Process request");
         browser.openPath(
+<<<<<<< HEAD
                 "/services/web/LeaveRequestApprovalProcessIT/gen/process-leave-request/forms/process-leave-request/index.html?taskId="
                         + firstTdText);
+=======
+                "/services/web/LeaveRequestApprovalProcessIT/gen/process-leave-request/forms/process-leave-request/index.html?taskId=" + firstTdText);
+>>>>>>> b4aa97c2cf (fix: fixing after review)
         // browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Open Form");
         // this doesnt work because it opens in a new tab and it should be just redirected
     }
@@ -153,22 +157,37 @@ class LeaveRequestApprovalProcessIT extends UserInterfaceIntegrationTest {
         Selenide.executeJavaScript("arguments[0].click();", approveButton);
 
         await().atMost(10, TimeUnit.SECONDS)
+<<<<<<< HEAD
                .pollInterval(1, TimeUnit.SECONDS)
                .until(() -> greenMail.getReceivedMessages().length >= 2);
+=======
+                .pollInterval(1, TimeUnit.SECONDS)
+                .until(() -> greenMail.getReceivedMessages().length >= 2);
+>>>>>>> b4aa97c2cf (fix: fixing after review)
 
     }
 
     private void testDeclineEmail() throws MessagingException {
         awaitEmailReceived(2);
         MimeMessage sentEmail = greenMail.getReceivedMessages()[1];
+<<<<<<< HEAD
         EmailAssertions.assertEmailReceived(sentEmail, "Your leave request has been declined",
+=======
+        EmailAssertions.assertEmailReceived(sentEmail,
+                "Your leave request has been declined",
+>>>>>>> b4aa97c2cf (fix: fixing after review)
                 "has been declined by [emily.stone.mngr@example.com]</h4>");
     }
 
     private void testApprovalEmail() throws MessagingException {
         awaitEmailReceived(2);
         MimeMessage sentEmail = greenMail.getReceivedMessages()[1];
+<<<<<<< HEAD
         EmailAssertions.assertEmailReceived(sentEmail, "Your leave request has been approved",
+=======
+        EmailAssertions.assertEmailReceived(sentEmail,
+                "Your leave request has been approved",
+>>>>>>> b4aa97c2cf (fix: fixing after review)
                 "has been approved by [emily.stone.mngr@example.com]</h4>");
     }
 
@@ -179,6 +198,7 @@ class LeaveRequestApprovalProcessIT extends UserInterfaceIntegrationTest {
         assertThat(sentEmail.getSubject()).isEqualTo("New leave request");
         assertThat(sentEmail.getFrom()[0].toString()).isEqualTo("leave-request-app@example.com");
         assertThat(sentEmail.getRecipients(Message.RecipientType.TO)[0].toString()).isEqualTo("managers-dl@example.com");
+<<<<<<< HEAD
         assertThat(GreenMailUtil.getBody(sentEmail)
                                 .trim()).contains(
                                         "<h4>A new leave request for [john.doe.employee@example.com] has been created</h4>Open the inbox <a href=\"http://localhost:80/services/web/inbox/\" target=\"_blank\">here</a> to process the request.");
@@ -187,5 +207,13 @@ class LeaveRequestApprovalProcessIT extends UserInterfaceIntegrationTest {
     private void awaitEmailReceived(int expectedCount) {
         await().atMost(10, TimeUnit.SECONDS)
                .until(() -> greenMail.getReceivedMessages().length >= expectedCount);
+=======
+        assertThat(GreenMailUtil.getBody(sentEmail).trim()).contains(
+                "<h4>A new leave request for [john.doe.employee@example.com] has been created</h4>Open the inbox <a href=\"http://localhost:80/services/web/inbox/\" target=\"_blank\">here</a> to process the request.");
+    }
+
+    private void awaitEmailReceived(int expectedCount) {
+        await().atMost(10, TimeUnit.SECONDS).until(() -> greenMail.getReceivedMessages().length >= expectedCount);
+>>>>>>> b4aa97c2cf (fix: fixing after review)
     }
 }
