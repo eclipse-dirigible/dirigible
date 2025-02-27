@@ -13,7 +13,7 @@ formView.controller('FormController', ['$scope', '$http', function ($scope, $htt
     
     $scope.onSubmitClicked = function(){
         console.log("Model:" + JSON.stringify($scope.model));
-        $http.post("/services/ts/leave-request/api/ProcessService.ts/requests", JSON.stringify($scope.model)).then(function (response) {
+        $http.post("/services/ts/LeaveRequestApprovalProcessIT/api/ProcessService.ts/requests", JSON.stringify($scope.model)).then(function (response) {
             if (response.status != 202) {
                 alert(`Unable to create new leave request: '${response.message}'`);
                 return;
