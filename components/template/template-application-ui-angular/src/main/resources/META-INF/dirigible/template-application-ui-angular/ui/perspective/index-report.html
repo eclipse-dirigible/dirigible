@@ -52,7 +52,7 @@
                 .constant('extensionPoint', {
                     perspectives: '${projectName}',
                     views: '${projectName}-view',
-                    dialogWindows: '${projectName}-dialog-window'
+                    dialogWindows: 'dialog-window'
                 })
                 .controller('ApplicationController', ['$scope', 'messageHub', 'Extensions', function ($scope, messageHub, Extensions) {
                     $scope.state = {

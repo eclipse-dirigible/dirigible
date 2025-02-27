@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.ui;
+package org.eclipse.dirigible.integration.tests.ui.tests.projects;
 
 import ch.qos.logback.classic.Level;
 import io.restassured.http.ContentType;
@@ -36,60 +36,47 @@ import static org.hamcrest.Matchers.hasSize;
 
 @Lazy
 @Component
-public class MultitenancyTestProject {
+public class MultitenancyITTestProject extends BaseTestProject implements MultitenantTestProject {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(MultitenancyTestProject.class);
-
-    private static final String UI_HOME_PATH = "/services/web/MultitenancyIT/gen/edm/index.html";
-    private static final String BOOKS_SERVICE_PATH = "/services/ts/MultitenancyIT/gen/edm/api/Books/BookService.ts";
-    private static final String EDM_FILE_NAME = "edm.edm";
-    private static final String READERS_ODATA_ENTITY_PATH = "/odata/v2/Readers";
-    private static final String READERS_VIEW_SERVICE_PATH = "/services/ts/MultitenancyIT/views/ReaderViewService.ts";
-    private static final String PROJECT_ROOT_FOLDER = "MultitenancyIT";
-    private static final String DOCUMENTS_SERVICE_PATH = "/services/ts/MultitenancyIT/cmis/DocumentService.ts/documents";
+    private static final Logger LOGGER = LoggerFactory.getLogger(MultitenancyITTestProject.class);
 
     private static final String PROJECT_RESOURCES_PATH = "MultitenancyIT";
-    private static final String UI_PROJECT_TITLE = "Dirigible Test Project";
+
+    private static final String UI_HOME_PATH = "/services/web/" + PROJECT_RESOURCES_PATH + "/gen/edm/index.html";
+
+    private static final String TS_BASE_PATH = "/services/ts/" + PROJECT_RESOURCES_PATH + "/";
+    private static final String READERS_VIEW_SERVICE_PATH = TS_BASE_PATH + "views/ReaderViewService.ts";
+    private static final String DOCUMENTS_SERVICE_PATH = TS_BASE_PATH + "cmis/DocumentService.ts/documents";
+    private static final String BOOKS_SERVICE_PATH = TS_BASE_PATH + "gen/edm/api/Books/BookService.ts";
+
+    private static final String READERS_ODATA_ENTITY_PATH = "/odata/v2/Readers";
 
     private final BrowserFactory browserFactory;
-    private final IDE ide;
     private final EdmView edmView;
     private final RestAssuredExecutor restAssuredExecutor;
     private final IDEFactory ideFactory;
-    private final ProjectUtil projectUtil;
 
     private final LogsAsserter testJobLogsAsserter;
     private final LogsAsserter eventListenerLogsAsserter;
 
-    public MultitenancyTestProject(BrowserFactory browserFactory, IDE ide, EdmView edmView, RestAssuredExecutor restAssuredExecutor,
+    MultitenancyITTestProject(BrowserFactory browserFactory, EdmView edmView, RestAssuredExecutor restAssuredExecutor,
             IDEFactory ideFactory, ProjectUtil projectUtil) {
+        super(PROJECT_RESOURCES_PATH, ideFactory.create(), projectUtil);
         this.browserFactory = browserFactory;
-        this.ide = ide;
         this.edmView = edmView;
         this.restAssuredExecutor = restAssuredExecutor;
         this.ideFactory = ideFactory;
-        this.projectUtil = projectUtil;
 
         this.testJobLogsAsserter = new LogsAsserter("app.test-job-handler.ts", Level.DEBUG);
         this.eventListenerLogsAsserter = new LogsAsserter("app.book-entity-events-handler.ts", Level.DEBUG);
     }
 
-    public void publish() {
-        publish(true);
+    @Override
+    public void verify() {
+        verify(DirigibleTestTenant.createDefaultTenant());
     }
 
-    public void publish(boolean waitForSynchronizationExecution) {
-        projectUtil.copyResourceProjectToDefaultUserWorkspace(PROJECT_RESOURCES_PATH);
-
-        Workbench workbench = ide.openWorkbench();
-        workbench.expandProject(PROJECT_ROOT_FOLDER);
-        workbench.openFile(EDM_FILE_NAME);
-
-        edmView.regenerate();
-
-        workbench.publishAll(true);
-    }
-
+    @Override
     public void verify(DirigibleTestTenant tenant) {
         LOGGER.info("Verifying test project for tenant [{}]...", tenant);
         try {
@@ -112,7 +99,7 @@ public class MultitenancyTestProject {
         boolean forceLogin = !tenant.isDefaultTenant();
         ide.login(forceLogin);
 
-        browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER3, UI_PROJECT_TITLE);
+        browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER3, "Dirigible Test Project");
     }
 
     /**
@@ -286,4 +273,14 @@ public class MultitenancyTestProject {
                    .body(equalTo(JsonHelper.toJson(documentContent)));
         });
     }
+
+    public void generateEDM() {
+        Workbench workbench = getIde().openWorkbench();
+        workbench.expandProject(getProjectResourcesFolder());
+        workbench.openFile("edm.edm");
+
+        edmView.regenerate();
+
+    }
+
 }

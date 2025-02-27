@@ -3,7 +3,7 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-import * as generateUtils from "ide-generate-service/template/generateUtils";
+import * as generateUtils from "service-generate/template/generateUtils";
 
 export function generate(model, parameters) {
     const templateModel = JSON.parse(model);

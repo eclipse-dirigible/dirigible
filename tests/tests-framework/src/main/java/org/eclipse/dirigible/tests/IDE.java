@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.tests;
 
-import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
@@ -46,8 +45,11 @@ public class IDE {
 
     @Autowired
     public IDE(Browser browser, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil) {
-        this(browser, restAssuredExecutor, DirigibleConfig.BASIC_ADMIN_USERNAME.getFromBase64Value(),
-                DirigibleConfig.BASIC_ADMIN_PASS.getFromBase64Value(), projectUtil);
+        this(browser, restAssuredExecutor, DirigibleTestTenant.createDefaultTenant()
+                                                              .getUsername(),
+                DirigibleTestTenant.createDefaultTenant()
+                                   .getPassword(),
+                projectUtil);
     }
 
     public IDE(Browser browser, RestAssuredExecutor restAssuredExecutor, String username, String password, ProjectUtil projectUtil) {

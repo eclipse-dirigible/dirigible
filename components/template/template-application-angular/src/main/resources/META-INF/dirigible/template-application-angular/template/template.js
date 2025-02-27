@@ -7,8 +7,8 @@ import * as schemaTemplateManager from "template-application-schema/template/tem
 import * as feedTemplateManager from "template-application-feed/template/template";
 import * as uiAngularjsTemplateManager from "template-application-ui-angular/template/template";
 import * as odataTemplateManager from "template-application-odata/template/template";
-import * as generateUtils from "ide-generate-service/template/generateUtils";
-import * as parameterUtils from "ide-generate-service/template/parameterUtils";
+import * as generateUtils from "service-generate/template/generateUtils";
+import * as parameterUtils from "service-generate/template/parameterUtils";
 
 export function generate(model, parameters) {
     model = JSON.parse(model).model;
