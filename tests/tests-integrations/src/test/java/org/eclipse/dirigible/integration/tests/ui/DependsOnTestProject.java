@@ -4,6 +4,8 @@ import org.eclipse.dirigible.tests.EdmView;
 import org.eclipse.dirigible.tests.IDE;
 import org.eclipse.dirigible.tests.Workbench;
 import org.eclipse.dirigible.tests.framework.Browser;
+import org.eclipse.dirigible.tests.framework.HtmlAttribute;
+import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
 import org.springframework.stereotype.Component;
 import org.springframework.context.annotation.Lazy;
@@ -15,6 +17,8 @@ public class DependsOnTestProject {
     private static final String EDM_FILE_NAME = "edm.edm";
     private static final String PROJECT_ROOT_FOLDER_DEPENDS_ON = "dirigible-depends-on-test-project";
     private static final String PROJECT_RESOURCES_PATH_DEPENDS_ON = "dirigible-depends-on-test-project";
+    private static final String VERIFICATION_URI = "/services/web/dirigible-depends-on-test-project/gen/edm/ui/Orders/index.html";
+
 
     private final IDE ide;
     private final ProjectUtil projectUtil;
@@ -48,8 +52,17 @@ public class DependsOnTestProject {
 
 
     public void verifyDependsOn() {
-        browser.openPath("/services/web/dirigible-depends-on-test-project/gen/edm/ui/entities/index.html");
-        // browser.assertElementExistsByTypeAndContainsText("h1", "Entity Data Model");
-        // browser.clickOnElementWithText("a", "Entities");
+        browser.openPath(VERIFICATION_URI);
+        browser.clickOnButtonViaJsWithText("Create");
+        browser.enterTextInElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Country ...", "Bulgaria");
+
+        // click out of the input field to trigger the search
+        browser.clickOnElementContainingText(HtmlElementType.HEADER1, "Create Order");
+
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search City ...");
+
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Sofia");
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Varna");
+        browser.assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType.SPAN, "Milano");
     }
 }

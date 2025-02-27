@@ -12,6 +12,7 @@ package org.eclipse.dirigible.tests.framework.impl;
 import com.codeborne.selenide.*;
 import com.codeborne.selenide.ex.ListSizeMismatch;
 import org.apache.commons.lang3.StringUtils;
+import org.assertj.core.api.Assertions;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
@@ -414,6 +415,24 @@ class BrowserImpl implements Browser {
     public void assertElementExistsByTypeAndContainsText(String elementType, String text) {
         getElementByAttributeAndContainsText(elementType, text);
     }
+
+    @Override
+    public void assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text) {
+        assertElementDoesNotExistsByTypeAndContainsText(htmlElementType.getType(), text);
+    }
+
+    @Override
+    public void assertElementDoesNotExistsByTypeAndContainsText(String elementType, String text) {
+        By selector = constructCssSelectorByType(elementType);
+        try {
+            SelenideElement element = findElementInAllFrames(selector, Condition.exist, Condition.matchText(Pattern.quote(text)));
+            Assertions.fail("Expected AssertionError was not thrown");
+        } catch (AssertionError e) {
+            Assertions.assertThat(e.getMessage())
+                      .contains(text);
+        }
+    }
+
 
     @Override
     public void clickOnElementById(String id) {

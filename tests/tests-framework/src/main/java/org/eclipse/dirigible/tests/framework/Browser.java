@@ -35,6 +35,10 @@ public interface Browser {
 
     void assertElementExistsByTypeAndContainsText(String htmlElementType, String text);
 
+    void assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text);
+
+    void assertElementDoesNotExistsByTypeAndContainsText(String htmlElementType, String text);
+
     void clickOnElementById(String id);
 
     void clickOnElementByAttributeValue(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String attributeValue);
