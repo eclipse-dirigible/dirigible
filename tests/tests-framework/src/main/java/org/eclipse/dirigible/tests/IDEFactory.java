@@ -23,11 +23,14 @@ public class IDEFactory {
     private final BrowserFactory browserFactory;
     private final RestAssuredExecutor restAssuredExecutor;
     private final ProjectUtil projectUtil;
+    private final WorkbenchFactory workbenchFactory;
 
-    IDEFactory(BrowserFactory browserFactory, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil) {
+    IDEFactory(BrowserFactory browserFactory, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil,
+            WorkbenchFactory workbenchFactory) {
         this.browserFactory = browserFactory;
         this.restAssuredExecutor = restAssuredExecutor;
         this.projectUtil = projectUtil;
+        this.workbenchFactory = workbenchFactory;
     }
 
     public IDE create() {
@@ -40,6 +43,6 @@ public class IDEFactory {
     }
 
     public IDE create(Browser browser, String username, String password) {
-        return new IDE(browser, restAssuredExecutor, username, password, projectUtil);
+        return new IDE(browser, username, password, restAssuredExecutor, projectUtil, workbenchFactory);
     }
 }

@@ -42,33 +42,28 @@ public class IDE {
     private final String username;
     private final String password;
     private final ProjectUtil projectUtil;
+    private final WorkbenchFactory workbenchFactory;
 
     @Autowired
-    public IDE(Browser browser, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil) {
-        this(browser, restAssuredExecutor, DirigibleTestTenant.createDefaultTenant()
-                                                              .getUsername(),
+    IDE(Browser browser, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil, WorkbenchFactory workbenchFactory) {
+        this(browser, DirigibleTestTenant.createDefaultTenant()
+                                         .getUsername(),
                 DirigibleTestTenant.createDefaultTenant()
                                    .getPassword(),
-                projectUtil);
+                restAssuredExecutor, projectUtil, workbenchFactory);
     }
 
-    public IDE(Browser browser, RestAssuredExecutor restAssuredExecutor, String username, String password, ProjectUtil projectUtil) {
+    IDE(Browser browser, String username, String password, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil,
+            WorkbenchFactory workbenchFactory) {
         this.browser = browser;
         this.restAssuredExecutor = restAssuredExecutor;
         this.username = username;
         this.password = password;
         this.projectUtil = projectUtil;
+        this.workbenchFactory = workbenchFactory;
     }
 
-    public void assertPublishingProjectMessage(String projectName) {
-        String publishingMessage = "Publishing '/" + projectName + "'...";
-        assertStatusBarMessage(publishingMessage);
-    }
-
-    public void assertStatusBarMessage(String expectedMessage) {
-        browser.assertElementExistsByTypeAndText(HtmlElementType.SPAN, expectedMessage);
-    }
-
+    // Note: this method is used in Kronos
     public void assertJSHttpResponse(String projectName, String fileRelativePath, int expectedStatusCode, String expectedBody) {
         String path = "/services/js/" + projectName + "/" + fileRelativePath;
         restAssuredExecutor.execute( //
@@ -82,6 +77,10 @@ public class IDE {
 
     public void assertPublishedAllProjectsMessage() {
         assertStatusBarMessage("Published all projects in 'workspace'");
+    }
+
+    public void assertStatusBarMessage(String expectedMessage) {
+        browser.assertElementExistsByTypeAndText(HtmlElementType.SPAN, expectedMessage);
     }
 
     public void openPath(String path) {
@@ -121,7 +120,7 @@ public class IDE {
 
         browser.clickOnElementById("perspective-workbench");
 
-        return new Workbench(browser);
+        return workbenchFactory.create(browser);
     }
 
     public void openHomePage() {
