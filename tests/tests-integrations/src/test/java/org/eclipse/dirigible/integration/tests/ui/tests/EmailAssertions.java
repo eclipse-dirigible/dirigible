@@ -14,7 +14,8 @@ public class EmailAssertions {
         assertThat(email.getFrom()[0].toString()).isEqualTo("leave-request-app@example.com");
         assertThat(email.getRecipients(Message.RecipientType.TO)[0].toString()).isEqualTo("john.doe.employee@example.com");
 
-        String emailBody = GreenMailUtil.getBody(email).trim();
+        String emailBody = GreenMailUtil.getBody(email)
+                                        .trim();
 
         String extractedFromDate = extractDate(emailBody, "from \\[");
         String extractedToDate = extractDate(emailBody, "to \\[");
