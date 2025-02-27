@@ -26,10 +26,6 @@ public abstract class BaseTestProject implements TestProject {
         this.projectUtil = projectUtil;
     }
 
-    protected IDE getIde() {
-        return ide;
-    }
-
     protected String getProjectResourcesFolder() {
         return projectResourcesFolder;
     }

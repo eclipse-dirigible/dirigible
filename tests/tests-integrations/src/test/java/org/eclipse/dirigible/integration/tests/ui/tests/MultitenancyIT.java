@@ -54,7 +54,7 @@ class MultitenancyIT extends UserInterfaceIntegrationTest {
     }
 
     private List<DirigibleTestTenant> createTenants() {
-        DirigibleTestTenant defaultTenant = DirigibleTestTenant.createDefaultTenant();
+        DirigibleTestTenant defaultTenant = createDefaultTenant();
         DirigibleTestTenant tenant1 = new DirigibleTestTenant("test-tenant-1");
         DirigibleTestTenant tenant2 = new DirigibleTestTenant("test-tenant-2");
 
@@ -63,6 +63,16 @@ class MultitenancyIT extends UserInterfaceIntegrationTest {
         createTenants(tenants);
 
         return tenants;
+    }
+
+    private DirigibleTestTenant createDefaultTenant() {
+        DirigibleTestTenant defaultTenant = DirigibleTestTenant.createDefaultTenant();
+        return new DirigibleTestTenant(true, //
+                defaultTenant.getName(), //
+                defaultTenant.getId(), //
+                defaultTenant.getSubdomain(), //
+                DirigibleConfig.BASIC_ADMIN_USERNAME.getFromBase64Value(), //
+                DirigibleConfig.BASIC_ADMIN_PASS.getFromBase64Value());
     }
 
     private void verifyTenants(List<DirigibleTestTenant> tenants) {

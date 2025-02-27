@@ -41,17 +41,17 @@ public class MultitenancyITTestProject extends BaseTestProject implements Multit
     private static final Logger LOGGER = LoggerFactory.getLogger(MultitenancyITTestProject.class);
 
     private static final String PROJECT_RESOURCES_PATH = "MultitenancyIT";
-
     private static final String UI_HOME_PATH = "/services/web/" + PROJECT_RESOURCES_PATH + "/gen/edm/index.html";
-
-    private static final String TS_BASE_PATH = "/services/ts/" + PROJECT_RESOURCES_PATH + "/";
-    private static final String READERS_VIEW_SERVICE_PATH = TS_BASE_PATH + "views/ReaderViewService.ts";
-    private static final String DOCUMENTS_SERVICE_PATH = TS_BASE_PATH + "cmis/DocumentService.ts/documents";
-    private static final String BOOKS_SERVICE_PATH = TS_BASE_PATH + "gen/edm/api/Books/BookService.ts";
-
+    private static final String BOOKS_SERVICE_PATH = "/services/ts/" + PROJECT_RESOURCES_PATH + "/gen/edm/api/Books/BookService.ts";
+    private static final String EDM_FILE_NAME = "edm.edm";
     private static final String READERS_ODATA_ENTITY_PATH = "/odata/v2/Readers";
+    private static final String READERS_VIEW_SERVICE_PATH = "/services/ts/" + PROJECT_RESOURCES_PATH + "/views/ReaderViewService.ts";
+    private static final String DOCUMENTS_SERVICE_PATH = "/services/ts/" + PROJECT_RESOURCES_PATH + "/cmis/DocumentService.ts/documents";
+
+    private static final String UI_PROJECT_TITLE = "Dirigible Test Project";
 
     private final BrowserFactory browserFactory;
+    private final IDE ide;
     private final EdmView edmView;
     private final RestAssuredExecutor restAssuredExecutor;
     private final IDEFactory ideFactory;
@@ -59,10 +59,11 @@ public class MultitenancyITTestProject extends BaseTestProject implements Multit
     private final LogsAsserter testJobLogsAsserter;
     private final LogsAsserter eventListenerLogsAsserter;
 
-    MultitenancyITTestProject(BrowserFactory browserFactory, EdmView edmView, RestAssuredExecutor restAssuredExecutor,
+    MultitenancyITTestProject(BrowserFactory browserFactory, IDE ide, EdmView edmView, RestAssuredExecutor restAssuredExecutor,
             IDEFactory ideFactory, ProjectUtil projectUtil) {
-        super(PROJECT_RESOURCES_PATH, ideFactory.create(), projectUtil);
+        super("MultitenancyIT", ide, projectUtil);
         this.browserFactory = browserFactory;
+        this.ide = ide;
         this.edmView = edmView;
         this.restAssuredExecutor = restAssuredExecutor;
         this.ideFactory = ideFactory;
@@ -99,7 +100,7 @@ public class MultitenancyITTestProject extends BaseTestProject implements Multit
         boolean forceLogin = !tenant.isDefaultTenant();
         ide.login(forceLogin);
 
-        browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER3, "Dirigible Test Project");
+        browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER3, UI_PROJECT_TITLE);
     }
 
     /**
@@ -275,9 +276,9 @@ public class MultitenancyITTestProject extends BaseTestProject implements Multit
     }
 
     public void generateEDM() {
-        Workbench workbench = getIde().openWorkbench();
+        Workbench workbench = ide.openWorkbench();
         workbench.expandProject(getProjectResourcesFolder());
-        workbench.openFile("edm.edm");
+        workbench.openFile(EDM_FILE_NAME);
 
         edmView.regenerate();
 
