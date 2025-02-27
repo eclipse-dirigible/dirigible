@@ -10,11 +10,17 @@
 package org.eclipse.dirigible.components.security.cognito;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.http.access.HttpSecurityURIConfigurator;
+import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.components.base.util.AuthoritiesUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -32,6 +38,15 @@ import org.springframework.security.web.SecurityFilterChain;
 @Profile("cognito")
 @Configuration
 public class CognitoSecurityConfiguration {
+
+    /** The Constant LOGGER. */
+    private static final Logger LOGGER = LoggerFactory.getLogger(CognitoSecurityConfiguration.class);
+
+    private final boolean trialModeEnabled;
+
+    public CognitoSecurityConfiguration() {
+        trialModeEnabled = DirigibleConfig.TRIAL_ENABLED.getBooleanValue();
+    }
 
     /**
      * Filter chain.
@@ -61,12 +76,19 @@ public class CognitoSecurityConfiguration {
     @Bean
     public GrantedAuthoritiesMapper userAuthoritiesMapper() {
         return (authorities) -> {
-            OidcUserAuthority oidcUserAuthority = (OidcUserAuthority) new ArrayList<>(authorities).get(0);
-            List<String> cognitoGroups = (ArrayList<String>) oidcUserAuthority.getAttributes()
-                                                                              .get("cognito:groups");
             Set<GrantedAuthority> grantedAuthorities = new HashSet<>();
-            if (cognitoGroups != null) {
-                grantedAuthorities.addAll(AuthoritiesUtil.toAuthorities(cognitoGroups));
+            if (trialModeEnabled) {
+                LOGGER.debug("Trial enabled - returning all available system roles for the current user.");
+                grantedAuthorities.addAll(AuthoritiesUtil.toAuthorities(Arrays.stream(Roles.values())
+                                                                              .map(Roles::getRoleName)
+                                                                              .collect(Collectors.toSet())));
+            } else {
+                OidcUserAuthority oidcUserAuthority = (OidcUserAuthority) new ArrayList<>(authorities).get(0);
+                List<String> cognitoGroups = (ArrayList<String>) oidcUserAuthority.getAttributes()
+                                                                                  .get("cognito:groups");
+                if (cognitoGroups != null) {
+                    grantedAuthorities.addAll(AuthoritiesUtil.toAuthorities(cognitoGroups));
+                }
             }
             return grantedAuthorities;
         };
