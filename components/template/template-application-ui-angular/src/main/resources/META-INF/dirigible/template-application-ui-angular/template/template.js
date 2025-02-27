@@ -5,8 +5,8 @@
  */
 import * as restTemplateManager from "template-application-rest/template/template";
 import * as uiTemplate from "template-application-ui-angular/template/ui/template";
-import * as generateUtils from "ide-generate-service/template/generateUtils";
-import * as parameterUtils from "ide-generate-service/template/parameterUtils";
+import * as generateUtils from "service-generate/template/generateUtils";
+import * as parameterUtils from "service-generate/template/parameterUtils";
 
 export function generate(model, parameters) {
     model = JSON.parse(model).model;

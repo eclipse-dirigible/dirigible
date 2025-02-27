@@ -21,16 +21,8 @@ public class WelcomeView {
 
     private final Browser browser;
 
-    public WelcomeView(Browser browser) {
+    protected WelcomeView(Browser browser) {
         this.browser = browser;
-    }
-
-    public void expandProject(String projectName) {
-        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
-    }
-
-    public void openFile(String fileName) {
-        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, fileName);
     }
 
     public void searchForTemplate(String template) {

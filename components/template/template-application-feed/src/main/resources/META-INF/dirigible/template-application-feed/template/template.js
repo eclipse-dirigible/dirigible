@@ -4,8 +4,8 @@
  * Do not modify the content as it may be re-generated again.
  */
 import * as daoTemplateManager from "template-application-dao/template/template";
-import * as generateUtils from "ide-generate-service/template/generateUtils";
-import * as parameterUtils from "ide-generate-service/template/parameterUtils";
+import * as generateUtils from "service-generate/template/generateUtils";
+import * as parameterUtils from "service-generate/template/parameterUtils";
 
 export function generate(model, parameters) {
     model = JSON.parse(model).model;

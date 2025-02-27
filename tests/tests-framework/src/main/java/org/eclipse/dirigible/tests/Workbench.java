@@ -17,11 +17,7 @@ import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.util.SynchronizationUtil;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
 
-@Lazy
-@Component
 public class Workbench {
 
     public static final String PROJECTS_VIEW_ID = "pvtree";
@@ -29,9 +25,11 @@ public class Workbench {
     private static final String PROJECTS_CONTEXT_MENU_NEW_PROJECT = "New Project";
     private static final String CREATE_PROJECT_BUTTON_TEXT = "Create";
     private final Browser browser;
+    private final WelcomeViewFactory welcomeViewFactory;
 
-    public Workbench(Browser browser) {
+    protected Workbench(Browser browser, WelcomeViewFactory welcomeViewFactory) {
         this.browser = browser;
+        this.welcomeViewFactory = welcomeViewFactory;
     }
 
     public void expandProject(String projectName) {
@@ -57,12 +55,12 @@ public class Workbench {
 
     public WelcomeView openWelcomeView() {
         focusOnOpenedFile("Welcome");
-        return new WelcomeView(browser);
+        return welcomeViewFactory.create(browser);
     }
 
     public WelcomeView focusOnOpenedFile(String fileName) {
         browser.clickOnElementContainingText(HtmlElementType.ANCHOR, fileName);
-        return new WelcomeView(browser);
+        return welcomeViewFactory.create(browser);
     }
 
     public FormView getFormView() {
