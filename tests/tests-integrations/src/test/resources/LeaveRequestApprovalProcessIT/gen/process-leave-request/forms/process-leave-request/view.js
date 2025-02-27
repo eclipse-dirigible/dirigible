@@ -8,7 +8,7 @@ const viewData = {
 	label: "leave-request Form",
 	factory: "frame",
 	region: "bottom",
-	link: "leave-request/gen/process-leave-request/forms/process-leave-request/index.html",
+	link: "LeaveRequestApprovalProcessIT/gen/process-leave-request/forms/process-leave-request/index.html",
 };
 if (typeof exports !== 'undefined') {
 	exports.getView = function () {
