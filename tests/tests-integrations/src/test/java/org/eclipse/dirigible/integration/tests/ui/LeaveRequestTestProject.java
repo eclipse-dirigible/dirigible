@@ -42,6 +42,8 @@ public class LeaveRequestTestProject {
     private static final String PROJECT_ROOT_FOLDER = "LeaveRequestApprovalProcessIT";
     private static final String API_PATH = "/services/ts/leave-request/api/ProcessService.ts";
     private static final String UI_HOME_PATH = "/services/web/leave-request/gen/index.html";
+    private static final String PROCESS_LEAVE_REQUEST_FORM_FILENAME = "process-leave-request.form";
+    private static final String SUBMIT_LEAVE_REQUEST_FORM_FILENAME = "submit-leave-request.form";
 
     private final BrowserFactory browserFactory;
     private final IDE ide;
