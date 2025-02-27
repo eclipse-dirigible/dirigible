@@ -9,6 +9,9 @@
  */
 package org.eclipse.dirigible.components.security.keycloak;
 
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
@@ -27,14 +30,11 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.util.Arrays;
-import java.util.Set;
-import java.util.stream.Collectors;
-
 /**
  * The Class CustomOidcUserService.
  */
-@Profile("keycloak")
+// @Profile("keycloak")
+@Profile("disabled")
 @Service
 public class CustomOidcUserService extends OidcUserService {
 

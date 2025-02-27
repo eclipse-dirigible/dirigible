@@ -1,0 +1,5 @@
+{
+    "module": "view-security/configs/client-registrations-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Client Registrations View"
+}
