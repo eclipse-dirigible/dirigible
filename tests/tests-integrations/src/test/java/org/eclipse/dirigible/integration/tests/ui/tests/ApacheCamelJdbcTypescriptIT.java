@@ -11,9 +11,12 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import ch.qos.logback.classic.Level;
 import org.eclipse.dirigible.integration.tests.ui.tests.projects.CamelTestProject;
+import org.eclipse.dirigible.tests.DirigibleCleaner;
 import org.eclipse.dirigible.tests.logging.LogsAsserter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.sql.*;
@@ -28,6 +31,7 @@ class ApacheCamelJdbcTypescriptIT extends UserInterfaceIntegrationTest {
     private CamelTestProject testProject;
     private LogsAsserter camelLogAsserter;
     private LogsAsserter openCartLogAsserter;
+    private static final Logger LOGGER = LoggerFactory.getLogger(ApacheCamelJdbcTypescriptIT.class);
 
     @BeforeEach
     void setUp() {
@@ -70,7 +74,7 @@ class ApacheCamelJdbcTypescriptIT extends UserInterfaceIntegrationTest {
         String user;
         String password;
 
-        try (Connection testConnection = DriverManager.getConnection("jdbc:postgresql://localhost:5432/postgres", "postgres", "postgres")) {
+        try (Connection testConnection = DriverManager.getConnection("jdbc:postgresql://localhost:5432/testdb", "testuser", "testpass")) {
             url = "jdbc:postgresql://localhost:5432/testdb";
             user = "testuser";
             password = "testpass";
@@ -81,18 +85,47 @@ class ApacheCamelJdbcTypescriptIT extends UserInterfaceIntegrationTest {
             password = "";
         }
 
-        try (Connection connection = DriverManager.getConnection(url, user, password);
-                PreparedStatement statement = connection.prepareStatement("SELECT COUNT(*) FROM \"ORDERS\"");
-                ResultSet resultSet = statement.executeQuery()) {
+        try (Connection connection = DriverManager.getConnection(url, user, password)) {
+            // Log all databases
+            String selectDatabasesSQL = "SELECT datname FROM pg_database";
+            try (PreparedStatement selectDatabasesStmt = connection.prepareStatement(selectDatabasesSQL);
+                    ResultSet databasesResultSet = selectDatabasesStmt.executeQuery()) {
 
-            resultSet.next();
-            long count = resultSet.getLong(1);
+                LOGGER.info("Databases:");
+                while (databasesResultSet.next()) {
+                    String databaseName = databasesResultSet.getString("datname");
+                    LOGGER.info(" - {}", databaseName);
+                }
+            }
 
-            assertThat(count).as("ORDERS table should have at least one record after ETL execution")
-                             .isGreaterThan(0);
+            // Log all tables in the current database
+            String selectTablesSQL =
+                    "SELECT table_schema, table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('pg_catalog', 'information_schema')";
+            try (PreparedStatement selectTablesStmt = connection.prepareStatement(selectTablesSQL);
+                    ResultSet tablesResultSet = selectTablesStmt.executeQuery()) {
+
+                LOGGER.info("Tables:");
+                while (tablesResultSet.next()) {
+                    String schemaName = tablesResultSet.getString("table_schema");
+                    String tableName = tablesResultSet.getString("table_name");
+                    LOGGER.info(" - Schema: {}, Table: {}", schemaName, tableName);
+                }
+            }
+
+            // Check ORDERS table
+            try (PreparedStatement statement = connection.prepareStatement("SELECT COUNT(*) FROM \"ORDERS\"");
+                    ResultSet resultSet = statement.executeQuery()) {
+
+                resultSet.next();
+                long count = resultSet.getLong(1);
+
+                assertThat(count).as("ORDERS table should have at least one record after ETL execution")
+                                 .isGreaterThan(0);
+            }
 
         } catch (SQLException e) {
             throw new RuntimeException("Database check for ORDERS table failed", e);
+
         }
     }
 }
