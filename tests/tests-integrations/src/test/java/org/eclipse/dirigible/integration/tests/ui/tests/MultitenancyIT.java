@@ -10,9 +10,7 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
-import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
-import org.eclipse.dirigible.components.base.tenant.Tenant;
-import org.eclipse.dirigible.integration.tests.ui.MultitenancyTestProject;
+import org.eclipse.dirigible.integration.tests.ui.tests.projects.MultitenancyITTestProject;
 import org.eclipse.dirigible.tests.DirigibleTestTenant;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.BrowserFactory;
@@ -26,11 +24,7 @@ import java.util.List;
 class MultitenancyIT extends UserInterfaceIntegrationTest {
 
     @Autowired
-    private MultitenancyTestProject testProject;
-
-    @Autowired
-    @DefaultTenant
-    private Tenant defTenant;
+    private MultitenancyITTestProject testProject;
 
     @Autowired
     private BrowserFactory browserFactory;
@@ -52,6 +46,8 @@ class MultitenancyIT extends UserInterfaceIntegrationTest {
         List<DirigibleTestTenant> tenants = createTenants();
         waitForTenantsProvisioning(tenants);
 
+        testProject.copyToWorkspace();
+        testProject.generateEDM();
         testProject.publish();
 
         verifyTenants(tenants);
@@ -70,10 +66,11 @@ class MultitenancyIT extends UserInterfaceIntegrationTest {
     }
 
     private DirigibleTestTenant createDefaultTenant() {
+        DirigibleTestTenant defaultTenant = DirigibleTestTenant.createDefaultTenant();
         return new DirigibleTestTenant(true, //
-                defTenant.getName(), //
-                defTenant.getId(), //
-                defTenant.getSubdomain(), //
+                defaultTenant.getName(), //
+                defaultTenant.getId(), //
+                defaultTenant.getSubdomain(), //
                 DirigibleConfig.BASIC_ADMIN_USERNAME.getFromBase64Value(), //
                 DirigibleConfig.BASIC_ADMIN_PASS.getFromBase64Value());
     }
