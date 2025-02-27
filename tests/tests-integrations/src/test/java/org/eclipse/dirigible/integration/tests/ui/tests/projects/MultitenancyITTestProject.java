@@ -42,14 +42,14 @@ public class MultitenancyITTestProject extends BaseTestProject implements Multit
 
     private static final String PROJECT_RESOURCES_PATH = "MultitenancyIT";
 
-    private static final String EDM_GEN_PATH = "/services/web/" + PROJECT_RESOURCES_PATH + "/gen/edm/";
-    private static final String UI_HOME_PATH = EDM_GEN_PATH + "index.html";
-    private static final String BOOKS_SERVICE_PATH = EDM_GEN_PATH + "api/Books/BookService.ts";
-    private static final String READERS_ODATA_ENTITY_PATH = "/odata/v2/Readers";
+    private static final String UI_HOME_PATH = "/services/web/" + PROJECT_RESOURCES_PATH + "/gen/edm/index.html";
 
-    private static final String TS_PATH = "/services/ts/" + PROJECT_RESOURCES_PATH + "/";
-    private static final String READERS_VIEW_SERVICE_PATH = TS_PATH + "views/ReaderViewService.ts";
-    private static final String DOCUMENTS_SERVICE_PATH = TS_PATH + "cmis/DocumentService.ts/documents";
+    private static final String TS_BASE_PATH = "/services/ts/" + PROJECT_RESOURCES_PATH + "/";
+    private static final String READERS_VIEW_SERVICE_PATH = TS_BASE_PATH + "views/ReaderViewService.ts";
+    private static final String DOCUMENTS_SERVICE_PATH = TS_BASE_PATH + "cmis/DocumentService.ts/documents";
+    private static final String BOOKS_SERVICE_PATH = TS_BASE_PATH + "gen/edm/api/Books/BookService.ts";
+
+    private static final String READERS_ODATA_ENTITY_PATH = "/odata/v2/Readers";
 
     private final BrowserFactory browserFactory;
     private final EdmView edmView;
