@@ -30,6 +30,11 @@ public class IDEFactory {
         this.projectUtil = projectUtil;
     }
 
+    public IDE create() {
+        DirigibleTestTenant defaultTenant = DirigibleTestTenant.createDefaultTenant();
+        return create(defaultTenant.getUsername(), defaultTenant.getPassword());
+    }
+
     public IDE create(String username, String password) {
         return create(browserFactory.create(), username, password);
     }
@@ -37,5 +42,4 @@ public class IDEFactory {
     public IDE create(Browser browser, String username, String password) {
         return new IDE(browser, restAssuredExecutor, username, password, projectUtil);
     }
-
 }

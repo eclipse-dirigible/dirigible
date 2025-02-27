@@ -18,6 +18,7 @@ import org.eclipse.dirigible.components.base.tenant.Tenant;
 import java.util.UUID;
 
 public class DirigibleTestTenant {
+
     private static final String LOCALHOST = "localhost";
 
     private final String name;
