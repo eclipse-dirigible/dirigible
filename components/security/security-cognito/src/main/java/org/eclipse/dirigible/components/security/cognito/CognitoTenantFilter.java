@@ -48,7 +48,8 @@ public class CognitoTenantFilter extends OncePerRequestFilter {
     public CognitoTenantFilter(TenantExtractor tenantExtractor) {
         this.tenantExtractor = tenantExtractor;
         this.multitenantModeEnabled = DirigibleConfig.MULTI_TENANT_MODE_ENABLED.getBooleanValue();
-        this.multitenantModeCognitoSingleUserPoolEnabled = DirigibleConfig.MULTI_TENANT_MODE_COGNITO_SINGLE_USER_POOL_ENABLED.getBooleanValue();
+        this.multitenantModeCognitoSingleUserPoolEnabled =
+                DirigibleConfig.MULTI_TENANT_MODE_COGNITO_SINGLE_USER_POOL_ENABLED.getBooleanValue();
     }
 
     /**
