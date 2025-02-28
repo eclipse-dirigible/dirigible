@@ -9,11 +9,10 @@
  */
 package org.eclipse.dirigible.commons.config;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The Enum DirigibleConfig.
@@ -60,6 +59,12 @@ public enum DirigibleConfig {
 
     /** The multi tenant mode enabled. */
     MULTI_TENANT_MODE_ENABLED("DIRIGIBLE_MULTI_TENANT_MODE", Boolean.FALSE.toString()),
+
+    /** The multi tenant mode cognito single user pool enabled. */
+    MULTI_TENANT_MODE_COGNITO_SINGLE_USER_POOL_ENABLED("DIRIGIBLE_MULTI_TENANT_MODE_COGNITO_SINGLE_USER_POOL", Boolean.FALSE.toString()),
+
+    /** The multi tenant mode keycloak single realm enabled. */
+    MULTI_TENANT_MODE_KEYCLOAK_SINGLE_REALM_ENABLED("DIRIGIBLE_MULTI_TENANT_MODE_KEYCLOAK_SINGLE_REALM", Boolean.FALSE.toString()),
 
     /** The tenant subdomain regex. */
     TENANT_SUBDOMAIN_REGEX("DIRIGIBLE_TENANT_SUBDOMAIN_REGEX", "^([^\\.]+)\\..+$"),

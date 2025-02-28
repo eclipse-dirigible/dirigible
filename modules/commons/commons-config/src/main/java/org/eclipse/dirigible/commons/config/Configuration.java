@@ -9,19 +9,24 @@
  */
 package org.eclipse.dirigible.commons.config;
 
-import org.apache.commons.lang3.reflect.FieldUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import static java.text.MessageFormat.format;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-
-import static java.text.MessageFormat.format;
+import org.apache.commons.lang3.reflect.FieldUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Configuration Facade class keeps all the configurations in the Dirigible instance It has the
@@ -273,7 +278,8 @@ public class Configuration {
                 "SERVER_MAXHTTPHEADERSIZE", "DIRIGIBLE_PUBLISH_DISABLED", "AWS_DEFAULT_REGION", "AWS_ACCESS_KEY_ID",
                 "AWS_SECRET_ACCESS_KEY", "DIRIGIBLE_S3_PROVIDER", "DIRIGIBLE_S3_BUCKET", "DIRIGIBLE_DATABASE_SYSTEM_DRIVER",
                 "DIRIGIBLE_DATABASE_SYSTEM_URL", "DIRIGIBLE_DATABASE_SYSTEM_USERNAME", "DIRIGIBLE_DATABASE_SYSTEM_PASSWORD",
-                "SNOWFLAKE_DEFAULT_TABLE_TYPE", "DIRIGIBLE_PROJECT_TYPESCRIPT");
+                "SNOWFLAKE_DEFAULT_TABLE_TYPE", "DIRIGIBLE_PROJECT_TYPESCRIPT", "DIRIGIBLE_MULTI_TENANT_MODE",
+                "DIRIGIBLE_MULTI_TENANT_MODE_SINGLE_USER_POOL", "DIRIGIBLE_TENANT_SUBDOMAIN_REGEX");
         Set<String> configs = Arrays.stream(DirigibleConfig.values())
                                     .map(DirigibleConfig::getKey)
                                     .collect(Collectors.toSet());

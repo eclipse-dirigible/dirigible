@@ -21,7 +21,7 @@ import org.springframework.security.web.SecurityFilterChain;
 /**
  * The Class OAuth2SecurityConfiguration.
  */
-@Profile(value = {"github", "cognito"})
+@Profile("github")
 @Configuration
 public class OAuth2SecurityConfiguration {
 

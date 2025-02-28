@@ -55,9 +55,9 @@ angular.module('platformContextMenu', []).directive('contextMenu', () => ({
 
         $scope.canScroll = () => {
             for (let i = 0; i < $scope.menuConfig.items.length; i++) {
-                if ($scope.menuConfig.items[i].items) return false;
+                if ($scope.menuConfig.items[i]['items']) return false;
             }
-            return false
+            return true;
         };
 
         this.itemClick = (itemId, event) => {
@@ -78,22 +78,20 @@ angular.module('platformContextMenu', []).directive('contextMenu', () => ({
         });
     }],
     template: `<div ng-style="backdropStyle()" ng-click="itemClick(undefined, $event)" ng-on-contextmenu="itemClick(undefined, $event)">
-    <bk-menu show="::true" ng-style="menuPos" aria-label="{{menuConfig.ariaLabel || 'system contextmenu'}}" no-backdrop="true" can-scroll="canScroll()" has-icons="menuConfig.icons">
+    <bk-menu ng-if="menuConfig.items.length" show="true" ng-style="menuPos" aria-label="{{menuConfig.ariaLabel || 'system contextmenu'}}" no-backdrop="true" can-scroll="canScroll()" has-icons="menuConfig.icons">
         <context-menu-submenu items="menuConfig.items"></context-menu-submenu>
     </bk-menu><div>`,
 })).directive('contextMenuSubmenu', () => ({
     restrict: "E",
     replace: true,
     require: '^^contextMenu',
-    scope: {
-        items: '='
-    },
+    scope: { items: '=' },
     link: (scope, _element, _attrs, contextMenuCtrl) => {
-        scope.canScroll = () => {
-            for (let i = 0; i < scope.items.length; i++) {
-                if (scope.items[i].items) return false;
+        scope.canScroll = (sublistItems) => {
+            for (let i = 0; i < sublistItems.length; i++) {
+                if (sublistItems[i]['items']) return false;
             }
-            return false
+            return true;
         };
 
         scope.itemClick = (itemId, event) => {
@@ -101,5 +99,5 @@ angular.module('platformContextMenu', []).directive('contextMenu', () => ({
         };
     },
     template: `<div><bk-menu-item ng-repeat-start="item in items track by item.id" ng-if="!item.items" title="{{item.label}}" shortcut="{{item.shortcut}}" left-icon-class="{{item.leftIconClass}}" left-icon-path="{{item.leftIconPath}}" right-icon-class="{{item.rightIconClass}}" right-icon-path="{{item.rightIconPath}}" ng-click="!item.disabled && itemClick(item.id)" is-disabled="item.disabled" has-separator="item.separator"></bk-menu-item>
-    <bk-menu-sublist ng-if="item.items" title="{{item.label}}" icon-class="{{item.iconClass}}" icon-path="{{item.iconPath}}" can-scroll="canScroll()" is-disabled="item.disabled" has-separator="item.separator" ng-repeat-end><context-menu-submenu items="item.items"></context-menu-submenu></bk-menu-sublist></div>`,
+    <bk-menu-sublist ng-if="item.items" title="{{item.label}}" icon-class="{{item.iconClass}}" icon-path="{{item.iconPath}}" can-scroll="canScroll(item.items)" is-disabled="item.disabled" has-separator="item.separator" ng-repeat-end><context-menu-submenu items="item.items"></context-menu-submenu></bk-menu-sublist></div>`,
 }));

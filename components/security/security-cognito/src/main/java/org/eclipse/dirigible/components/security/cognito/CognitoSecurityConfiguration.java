@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.security.keycloak;
+package org.eclipse.dirigible.components.security.cognito;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -19,59 +19,49 @@ import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.http.access.HttpSecurityURIConfigurator;
 import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.components.base.util.AuthoritiesUtil;
-import org.eclipse.dirigible.components.tenants.tenant.TenantContextInitFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.config.Customizer;
-import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
-import org.springframework.security.oauth2.client.web.OAuth2LoginAuthenticationFilter;
 import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
- * The Class KeycloakSecurityConfiguration.
+ * The Class OAuth2SecurityConfiguration.
  */
-@Profile("keycloak")
+@Profile("cognito")
 @Configuration
-@EnableWebSecurity
-@EnableMethodSecurity
-public class KeycloakSecurityConfiguration {
+public class CognitoSecurityConfiguration {
 
     /** The Constant LOGGER. */
-    private static final Logger LOGGER = LoggerFactory.getLogger(KeycloakSecurityConfiguration.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(CognitoSecurityConfiguration.class);
 
     private final boolean trialModeEnabled;
 
-    public KeycloakSecurityConfiguration() {
+    public CognitoSecurityConfiguration() {
         trialModeEnabled = DirigibleConfig.TRIAL_ENABLED.getBooleanValue();
     }
 
     /**
-     * Configure.
+     * Filter chain.
      *
      * @param http the http
-     * @param tenantContextInitFilter the tenant context init filter
      * @return the security filter chain
      * @throws Exception the exception
      */
     @Bean
-    SecurityFilterChain configure(HttpSecurity http, TenantContextInitFilter tenantContextInitFilter,
-            HttpSecurityURIConfigurator httpSecurityURIConfigurator) throws Exception {
+    SecurityFilterChain filterChain(HttpSecurity http, HttpSecurityURIConfigurator httpSecurityURIConfigurator) throws Exception {
         http.authorizeHttpRequests(authz -> authz.requestMatchers("/oauth2/**", "/login/**")
                                                  .permitAll())
             .csrf(csrf -> csrf.disable())
-            .addFilterBefore(tenantContextInitFilter, OAuth2LoginAuthenticationFilter.class)
-            .headers(headers -> headers.frameOptions(frameOpts -> frameOpts.sameOrigin()))
+            .headers(headers -> headers.frameOptions(frameOpts -> frameOpts.disable()))
             .oauth2Client(Customizer.withDefaults())
-            .oauth2Login(Customizer.withDefaults())
             .oauth2Login(oauth2 -> {
                 oauth2.userInfoEndpoint(userInfoEndpointConfig -> userInfoEndpointConfig.userAuthoritiesMapper(userAuthoritiesMapper()));
             })
@@ -94,10 +84,10 @@ public class KeycloakSecurityConfiguration {
                                                                               .collect(Collectors.toSet())));
             } else {
                 OidcUserAuthority oidcUserAuthority = (OidcUserAuthority) new ArrayList<>(authorities).get(0);
-                List<String> keycloakGroups = (ArrayList<String>) oidcUserAuthority.getAttributes()
-                                                                                   .get("groups");
-                if (keycloakGroups != null) {
-                    grantedAuthorities.addAll(AuthoritiesUtil.toAuthorities(keycloakGroups));
+                List<String> cognitoGroups = (ArrayList<String>) oidcUserAuthority.getAttributes()
+                                                                                  .get("cognito:groups");
+                if (cognitoGroups != null) {
+                    grantedAuthorities.addAll(AuthoritiesUtil.toAuthorities(cognitoGroups));
                 }
             }
             return grantedAuthorities;
