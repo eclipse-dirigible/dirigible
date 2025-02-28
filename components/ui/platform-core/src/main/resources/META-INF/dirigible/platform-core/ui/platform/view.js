@@ -130,16 +130,13 @@ angular.module('platformView', ['platformExtensions', 'platformTheming'])
             },
             template: `<iframe title={{::view.label}} loading="{{::view.lazyLoad ? 'lazy' : 'eager'}}" ng-src="{{::view.path}}" data-parameters="{{::view.params}}"></iframe>`
         }
-    }).directive('brandIcon', () => {
-        if (!brandingInfo) throw Error("brandIcon: missing brandingInfo");
-        return {
-            restrict: 'A',
-            transclude: false,
-            replace: true,
-            link: (scope) => { scope.icon = brandingInfo.icons.faviconIco },
-            template: `<link rel="icon" type="image/x-icon" ng-href="{{::icon}}">`
-        }
-    }).directive('brandTitle', (shellState) => ({
+    }).directive('configIcons', () => ({
+        restrict: 'A',
+        transclude: false,
+        replace: true,
+        link: (scope) => { scope.icon = getBrandingInfo().icons.faviconIco },
+        template: '<link rel="icon" type="image/x-icon" ng-href="{{::icon}}">'
+    })).directive('shellTitle', (shellState) => ({
         restrict: 'A',
         transclude: false,
         replace: false,
@@ -148,7 +145,7 @@ angular.module('platformView', ['platformExtensions', 'platformTheming'])
             shellState.registerStateListener((data) => {
                 scope.perspective = data.label;
             });
-            scope.name = brandingInfo.name;
+            scope.name = getBrandingInfo().name;
         },
         template: '{{perspective || "Loading..."}} | {{::name}}'
     })).directive('configTitle', ($window) => ({

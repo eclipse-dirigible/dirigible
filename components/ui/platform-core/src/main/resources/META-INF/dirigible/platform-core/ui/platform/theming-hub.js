@@ -10,13 +10,17 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 class ThemingHub extends MessageHubApi {
+    constructor() {
+        super(arguments[0]);
+        this.storageKey = `${getBrandingInfo().keyPrefix}.platform.theme`;
+    }
 
     getSavedTheme() {
-        return JSON.parse(localStorage.getItem(`${brandingInfo.keyPrefix}.platform.theme`) || '{}');
+        return JSON.parse(localStorage.getItem(this.storageKey) || '{}');
     }
 
     setSavedTheme(theme) {
-        localStorage.setItem(`${brandingInfo.keyPrefix}.platform.theme`, JSON.stringify(theme));
+        localStorage.setItem(this.storageKey, JSON.stringify(theme));
     }
 
     /**

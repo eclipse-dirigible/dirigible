@@ -26,7 +26,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
             const VIEW = 'view';
             const EDITOR = 'editor';
 
-            const layoutStateKey = `${brandingInfo.keyPrefix}.${layoutConstants.stateKey}.${perspectiveData.id}`;
+            const layoutStateKey = `${getBrandingInfo().keyPrefix}.${layoutConstants.stateKey}.${perspectiveData.id}`;
 
             $scope.perspectiveName = '';
             $scope.perspectiveStyle = {

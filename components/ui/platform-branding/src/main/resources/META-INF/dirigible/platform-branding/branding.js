@@ -9,15 +9,30 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const brandingInfo = {
-    name: 'Eclipse Dirigible',
+// @ts-nocheck
+if (!top.hasOwnProperty('PlatformBranding')) top.PlatformBranding = {
+    name: 'Dirigible',
     brand: 'Eclipse Dirigible',
     brandUrl: 'https://www.dirigible.io/',
     icons: {
         faviconIco: '/services/web/platform-branding/images/favicon.ico',
-        favicon32: '/services/web/platform-branding/images/favicon-32x32.png',
-        favicon16: '/services/web/platform-branding/images/favicon-16x16.png',
     },
     logo: '/services/web/platform-branding/images/dirigible.svg',
     keyPrefix: 'dirigible'
 };
+
+function getBrandingInfo() {
+    if (top.hasOwnProperty('PlatformBranding')) return top.PlatformBranding;
+    throw Error("PlatformBranding is not set!");
+}
+
+function setBrandingInfo({ name, brand, brandUrl, icons, logo, keyPrefix } = {}) {
+    if (name) top.PlatformBranding.name = name;
+    if (brand) top.PlatformBranding.brand = brand;
+    if (brandUrl) top.PlatformBranding.brandUrl = brandUrl;
+    if (icons) {
+        if (icons['faviconIco']) top.PlatformBranding.icons.faviconIco = icons['faviconIco'];
+    }
+    if (logo) top.PlatformBranding.logo = logo;
+    if (keyPrefix) top.PlatformBranding.keyPrefix = keyPrefix;
+}

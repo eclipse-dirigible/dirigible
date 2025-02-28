@@ -9,26 +9,27 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-angular.module('WorkspaceService', []).constant('workspaceStorageKey', `${brandingInfo.keyPrefix ?? 'DIRIGIBLE'}.workspace.selected`).provider('WorkspaceService', function WorkspaceServiceProvider(workspaceStorageKey) {
+angular.module('WorkspaceService', []).provider('WorkspaceService', function WorkspaceServiceProvider() {
     this.workspacesServiceUrl = '/services/ide/workspaces';
     this.workspaceManagerServiceUrl = '/services/ide/workspace';
     this.workspaceSearchServiceUrl = '/services/ide/workspace-search';
+    this.storageKey = `${getBrandingInfo().keyPrefix}.workspace.selected`;
     this.$get = ['$http', function workspaceApiFactory($http) {
-        const setWorkspace = (workspace) => {
+        const setWorkspace = function (workspace) {
             if (workspace === undefined || workspace === null || typeof workspace !== 'string')
                 throw Error("setWorkspace: workspace parameter must be an string");
-            localStorage.setItem(workspaceStorageKey, workspace);
+            localStorage.setItem(this.storageKey, workspace);
             return workspace;
-        };
+        }.bind(this);
 
         /**
          * Returns the currently selected workspace.
          */
-        const getCurrentWorkspace = () => {
-            let storedWorkspace = localStorage.getItem(workspaceStorageKey);
+        const getCurrentWorkspace = function () {
+            let storedWorkspace = localStorage.getItem(this.storageKey);
             if (!storedWorkspace) storedWorkspace = setWorkspace('workspace');
             return storedWorkspace;
-        };
+        }.bind(this);
 
         /**
          * Returns the default workspace name.

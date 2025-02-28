@@ -7,6 +7,8 @@ const statusBarHub = new StatusBarHub();
 const layoutHub = new LayoutHub();
 const workspaceHub = new WorkspaceHub();
 
+const brandingInfo = getBrandingInfo();
+
 let csrfToken;
 let lineDecorations = [];
 

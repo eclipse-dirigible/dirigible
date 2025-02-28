@@ -61,7 +61,8 @@ angular.module('platformShell', ['ngCookies', 'platformUser', 'platformExtension
         restrict: 'E',
         replace: true,
         link: (scope, element) => {
-            const notificationStateKey = `${brandingInfo.keyPrefix}.notifications`;
+            scope.branding = getBrandingInfo();
+            const notificationStateKey = `${scope.branding.keyPrefix}.notifications`;
             const dialogHub = new DialogHub();
             scope.perspectiveId = shellState.perspective.id;
             shellState.registerStateListener((data) => {
@@ -78,7 +79,6 @@ angular.module('platformShell', ['ngCookies', 'platformUser', 'platformExtension
                 localStorage.setItem(notificationStateKey, JSON.stringify(scope.notifications));
             };
             scope.selectedNotification = '';
-            scope.branding = brandingInfo;
             scope.username = undefined;
             User.getName().then((data) => {
                 scope.username = data.data;
@@ -217,7 +217,7 @@ angular.module('platformShell', ['ngCookies', 'platformUser', 'platformExtension
                 }
             },
             post: (scope) => {
-                const selectedPerspectiveKey = `${brandingInfo.keyPrefix ?? 'DIRIGIBLE'}.shell.selected-perspective`;
+                const selectedPerspectiveKey = `${getBrandingInfo().keyPrefix}.shell.selected-perspective`;
                 scope.activeId = localStorage.getItem(selectedPerspectiveKey);
                 shellState.registerStateListener((data) => {
                     scope.activeId = data.id;
