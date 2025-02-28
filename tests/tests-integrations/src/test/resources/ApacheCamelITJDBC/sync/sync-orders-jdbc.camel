@@ -5,7 +5,7 @@
       id: trigger-orders-replication-cron
       uri: cron
       parameters:
-        schedule: 30 * * ? * *
+        schedule: 0/10 * * * * ?
         name: TriggerOrdersReplicationCamel
       steps:
         - log:

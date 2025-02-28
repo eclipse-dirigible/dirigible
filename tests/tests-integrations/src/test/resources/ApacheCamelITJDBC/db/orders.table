@@ -13,7 +13,7 @@
             "name": "ID"
         },
         {
-            "type": "DECIMAL",
+            "type": "DOUBLE",
             "length": 19,
             "precision": "15",
             "scale": "4",

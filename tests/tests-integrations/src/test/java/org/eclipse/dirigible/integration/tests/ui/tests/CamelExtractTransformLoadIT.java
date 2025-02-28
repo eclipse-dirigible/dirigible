@@ -10,28 +10,44 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import ch.qos.logback.classic.Level;
-import org.eclipse.dirigible.integration.tests.ui.tests.projects.CamelTestProject;
-import org.eclipse.dirigible.tests.DirigibleCleaner;
+import org.eclipse.dirigible.integration.tests.ui.tests.projects.CamelJDBCTestProject;
+import org.eclipse.dirigible.integration.tests.ui.tests.projects.CamelTypescriptTestProject;
 import org.eclipse.dirigible.tests.logging.LogsAsserter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+// ! REMOVE LOGGER
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+//
 import org.springframework.beans.factory.annotation.Autowired;
+import javax.sql.DataSource;
 
-import java.sql.*;
+import org.assertj.db.type.Table;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.concurrent.TimeUnit;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.assertj.db.api.Assertions;
 import static org.awaitility.Awaitility.await;
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 
-class ApacheCamelJdbcTypescriptIT extends UserInterfaceIntegrationTest {
+class CamelExtractTransformLoadIT extends UserInterfaceIntegrationTest {
 
     @Autowired
-    private CamelTestProject testProject;
+    private CamelJDBCTestProject JdbcTestProject;
+    @Autowired
+    private CamelTypescriptTestProject TypescriptTestProject;
+
+    @Autowired
+    private DataSourcesManager dataSourcesManager;
+
     private LogsAsserter camelLogAsserter;
     private LogsAsserter openCartLogAsserter;
-    private static final Logger LOGGER = LoggerFactory.getLogger(ApacheCamelJdbcTypescriptIT.class);
+    // Remove logger
+    private static final Logger LOGGER = LoggerFactory.getLogger(CamelExtractTransformLoadIT.class);
 
     @BeforeEach
     void setUp() {
@@ -41,7 +57,7 @@ class ApacheCamelJdbcTypescriptIT extends UserInterfaceIntegrationTest {
 
     @Test
     void testImplementETLUsingJDBC() {
-        testProject.publishJDBC();
+        JdbcTestProject.publish();
 
         assertLogContainsMessage(openCartLogAsserter, "Replicating orders from OpenCart using JDBC...", Level.INFO);
         assertLogContainsMessage(openCartLogAsserter, "Successfully replicated orders from OpenCart using JDBC", Level.INFO);
@@ -51,7 +67,7 @@ class ApacheCamelJdbcTypescriptIT extends UserInterfaceIntegrationTest {
 
     @Test
     void testImplementETLUsingTypescript() {
-        testProject.publishTypescript();
+        TypescriptTestProject.publish();
 
         assertLogContainsMessage(openCartLogAsserter, "Replicating orders from OpenCart using TypeScript", Level.INFO);
         assertLogContainsMessage(camelLogAsserter, "About to upsert Open cart order [1] using exchange rate", Level.INFO);
@@ -64,38 +80,43 @@ class ApacheCamelJdbcTypescriptIT extends UserInterfaceIntegrationTest {
     }
 
     private void assertLogContainsMessage(LogsAsserter logAsserter, String message, Level level) {
-        await().atMost(60, TimeUnit.SECONDS)
+        await().atMost(45, TimeUnit.SECONDS)
                .pollInterval(5, TimeUnit.SECONDS)
                .until(() -> logAsserter.containsMessage(message, level));
     }
 
     private void assertDatabaseETLCompletion() {
-        String url;
-        String user;
-        String password;
+        DataSource dataSource = dataSourcesManager.getDefaultDataSource();
 
-        try (Connection testConnection = DriverManager.getConnection("jdbc:postgresql://localhost:5432/testdb", "testuser", "testpass")) {
-            url = "jdbc:postgresql://localhost:5432/testdb";
-            user = "testuser";
-            password = "testpass";
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setSchema("DefaultDB");
+
+            Table ordersTable = new Table(dataSource, "\"ORDERS\"");
+
+            Assertions.assertThat(ordersTable)
+                      .hasNumberOfRows(2);
+
+            Assertions.assertThat(ordersTable)
+                      .row(0)
+                      .column("ID")
+                      .value()
+                      .isEqualTo(1)
+                      .column("TOTAL")
+                      .value()
+                      .isEqualTo(92)
+
+                      .row(1)
+                      .column("ID")
+                      .value()
+                      .isEqualTo(2)
+                      .column("TOTAL")
+                      .value()
+                      .isEqualTo(230.46);
+
         } catch (SQLException e) {
-            // If PostgreSQL is unavailable, fall back to H2
-            url = "jdbc:h2:file:./target/dirigible/h2/DefaultDB";
-            user = "sa";
-            password = "";
-        }
-
-        try (Connection connection = DriverManager.getConnection(url, user, password);
-                PreparedStatement statement = connection.prepareStatement("SELECT COUNT(*) FROM \"ORDERS\"");
-                ResultSet resultSet = statement.executeQuery()) {
-
-            resultSet.next();
-            long count = resultSet.getLong(1);
-
-            assertThat(count).as("ORDERS table should have at least one record after ETL execution")
-                             .isGreaterThan(0);
-        } catch (SQLException e) {
-            throw new RuntimeException("Database check for ORDERS table failed", e);
+            LOGGER.error("Error while querying the ORDERS table: ", e);
         }
     }
+
+
 }

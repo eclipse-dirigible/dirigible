@@ -13,84 +13,7 @@
             "name": "ORDER_ID"
         },
         {
-            "type": "INTEGER",
-            "length": 0,
-            "nullable": true,
-            "name": "INVOICE_NO"
-        },
-        {
-            "type": "VARCHAR",
-            "length": 50,
-            "nullable": true,
-            "name": "INVOICE_PREFIX"
-        },
-        {
-            "type": "INTEGER",
-            "length": 0,
-            "nullable": true,
-            "name": "STORE_ID"
-        },
-        {
-            "type": "VARCHAR",
-            "length": 255,
-            "nullable": true,
-            "name": "STORE_NAME"
-        },
-        {
-            "type": "VARCHAR",
-            "length": 255,
-            "nullable": true,
-            "name": "STORE_URL"
-        },
-        {
-            "type": "INTEGER",
-            "length": 0,
-            "nullable": true,
-            "name": "CUSTOMER_ID"
-        },
-        {
-            "type": "INTEGER",
-            "length": 0,
-            "nullable": true,
-            "name": "CUSTOMER_GROUP_ID"
-        },
-        {
-            "type": "VARCHAR",
-            "length": 50,
-            "nullable": true,
-            "name": "FIRSTNAME"
-        },
-        {
-            "type": "VARCHAR",
-            "length": 50,
-            "nullable": true,
-            "name": "LASTNAME"
-        },
-        {
-            "type": "VARCHAR",
-            "length": 100,
-            "nullable": true,
-            "name": "EMAIL"
-        },
-        {
-            "type": "VARCHAR",
-            "length": 32,
-            "nullable": true,
-            "name": "TELEPHONE"
-        },
-        {
-            "type": "VARCHAR",
-            "length": 32,
-            "nullable": true,
-            "name": "FAX"
-        },
-        {
-            "type": "TEXT",
-            "nullable": true,
-            "name": "CUSTOM_FIELD"
-        },
-        {
-            "type": "DECIMAL",
+            "type": "DOUBLE",
             "length": 19,
             "precision": "15",
             "scale": "4",
@@ -98,98 +21,10 @@
             "name": "TOTAL"
         },
         {
-            "type": "INTEGER",
-            "length": 0,
-            "nullable": true,
-            "name": "ORDER_STATUS_ID"
-        },
-        {
-            "type": "INTEGER",
-            "length": 0,
-            "nullable": true,
-            "name": "AFFILIATE_ID"
-        },
-        {
-            "type": "DECIMAL",
-            "length": 10,
-            "precision": "8",
-            "scale": "2",
-            "nullable": true,
-            "name": "COMMISSION"
-        },
-        {
-            "type": "INTEGER",
-            "length": 0,
-            "nullable": true,
-            "name": "MARKETING_ID"
-        },
-        {
-            "type": "VARCHAR",
-            "length": 255,
-            "nullable": true,
-            "name": "TRACKING"
-        },
-        {
-            "type": "INTEGER",
-            "length": 0,
-            "nullable": true,
-            "name": "LANGUAGE_ID"
-        },
-        {
-            "type": "INTEGER",
-            "length": 0,
-            "nullable": true,
-            "name": "CURRENCY_ID"
-        },
-        {
-            "type": "VARCHAR",
-            "length": 10,
-            "nullable": true,
-            "name": "CURRENCY_CODE"
-        },
-        {
-            "type": "DECIMAL",
-            "length": 15,
-            "precision": "8",
-            "scale": "4",
-            "nullable": true,
-            "name": "CURRENCY_VALUE"
-        },
-        {
-            "type": "VARCHAR",
-            "length": 40,
-            "nullable": true,
-            "name": "IP"
-        },
-        {
-            "type": "VARCHAR",
-            "length": 40,
-            "nullable": true,
-            "name": "FORWARDED_IP"
-        },
-        {
-            "type": "VARCHAR",
-            "length": 255,
-            "nullable": true,
-            "name": "USER_AGENT"
-        },
-        {
-            "type": "VARCHAR",
-            "length": 255,
-            "nullable": true,
-            "name": "ACCEPT_LANGUAGE"
-        },
-        {
             "type": "TIMESTAMP",
             "length": 20,
             "nullable": true,
             "name": "DATE_ADDED"
-        },
-        {
-            "type": "TIMESTAMP",
-            "length": 20,
-            "nullable": true,
-            "name": "DATE_MODIFIED"
         }
     ]
 }
