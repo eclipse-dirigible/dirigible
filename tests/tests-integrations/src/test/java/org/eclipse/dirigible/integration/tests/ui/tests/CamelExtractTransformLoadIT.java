@@ -15,18 +15,12 @@ import org.eclipse.dirigible.integration.tests.ui.tests.projects.CamelTypescript
 import org.eclipse.dirigible.tests.logging.LogsAsserter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-// ! REMOVE LOGGER
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-//
 import org.springframework.beans.factory.annotation.Autowired;
 import javax.sql.DataSource;
 
 import org.assertj.db.type.Table;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.concurrent.TimeUnit;
 
@@ -46,8 +40,6 @@ class CamelExtractTransformLoadIT extends UserInterfaceIntegrationTest {
 
     private LogsAsserter camelLogAsserter;
     private LogsAsserter openCartLogAsserter;
-    // Remove logger
-    private static final Logger LOGGER = LoggerFactory.getLogger(CamelExtractTransformLoadIT.class);
 
     @BeforeEach
     void setUp() {
@@ -87,35 +79,27 @@ class CamelExtractTransformLoadIT extends UserInterfaceIntegrationTest {
 
     private void assertDatabaseETLCompletion() {
         DataSource dataSource = dataSourcesManager.getDefaultDataSource();
+        Table ordersTable = new Table(dataSource, "\"ORDERS\"");
 
-        try (Connection connection = dataSource.getConnection()) {
-            connection.setSchema("DefaultDB");
+        Assertions.assertThat(ordersTable)
+                  .hasNumberOfRows(2);
 
-            Table ordersTable = new Table(dataSource, "\"ORDERS\"");
+        Assertions.assertThat(ordersTable)
+                  .row(0)
+                  .column("ID")
+                  .value()
+                  .isEqualTo(1)
+                  .column("TOTAL")
+                  .value()
+                  .isEqualTo(92)
 
-            Assertions.assertThat(ordersTable)
-                      .hasNumberOfRows(2);
-
-            Assertions.assertThat(ordersTable)
-                      .row(0)
-                      .column("ID")
-                      .value()
-                      .isEqualTo(1)
-                      .column("TOTAL")
-                      .value()
-                      .isEqualTo(92)
-
-                      .row(1)
-                      .column("ID")
-                      .value()
-                      .isEqualTo(2)
-                      .column("TOTAL")
-                      .value()
-                      .isEqualTo(230.46);
-
-        } catch (SQLException e) {
-            LOGGER.error("Error while querying the ORDERS table: ", e);
-        }
+                  .row(1)
+                  .column("ID")
+                  .value()
+                  .isEqualTo(2)
+                  .column("TOTAL")
+                  .value()
+                  .isEqualTo(230.46);
     }
 
 

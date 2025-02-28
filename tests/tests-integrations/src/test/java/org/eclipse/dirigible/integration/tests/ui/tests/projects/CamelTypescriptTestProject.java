@@ -22,7 +22,7 @@ public class CamelTypescriptTestProject {
 
         Workbench workbench = ide.openWorkbench();
 
-        workbench.publishAll(true);
+        workbench.publishAll(false);
     }
 
 }
