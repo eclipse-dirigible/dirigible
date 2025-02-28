@@ -7,41 +7,29 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.ui;
+package org.eclipse.dirigible.integration.tests.ui.tests.projects;
 
 import ch.qos.logback.classic.Level;
-import io.restassured.http.ContentType;
 import org.eclipse.dirigible.tests.*;
-import org.eclipse.dirigible.tests.awaitility.AwaitilityExecutor;
-import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.BrowserFactory;
-import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.logging.LogsAsserter;
 import org.eclipse.dirigible.tests.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 
-import java.util.concurrent.TimeUnit;
-
-import static io.restassured.RestAssured.given;
-import static org.awaitility.Awaitility.await;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;
 
 @Lazy
 @Component
-public class LeaveRequestTestProject {
+public class LeaveRequestITTestProject extends BaseTestProject {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(LeaveRequestTestProject.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(LeaveRequestITTestProject.class);
 
-    private static final String PROJECT_ROOT_FOLDER = "LeaveRequestApprovalProcessIT";
-    private static final String API_PATH = "/services/ts/leave-request/api/ProcessService.ts";
-    private static final String UI_HOME_PATH = "/services/web/leave-request/gen/index.html";
+    private static final String PROJECT_ROOT_FOLDER = "BPMLeaveRequestIT";
+    private static final String API_PATH = "/services/ts/" + PROJECT_ROOT_FOLDER + "/api/ProcessService.ts";
+    private static final String UI_HOME_PATH = "/services/web/" + PROJECT_ROOT_FOLDER + "/gen/index.html";
     private static final String PROCESS_LEAVE_REQUEST_FORM_FILENAME = "process-leave-request.form";
     private static final String SUBMIT_LEAVE_REQUEST_FORM_FILENAME = "submit-leave-request.form";
 
@@ -52,8 +40,9 @@ public class LeaveRequestTestProject {
     private final ProjectUtil projectUtil;
     private final LogsAsserter testLogsAsserter;
 
-    public LeaveRequestTestProject(BrowserFactory browserFactory, IDE ide, RestAssuredExecutor restAssuredExecutor, IDEFactory ideFactory,
+    public LeaveRequestITTestProject(BrowserFactory browserFactory, IDE ide, RestAssuredExecutor restAssuredExecutor, IDEFactory ideFactory,
             ProjectUtil projectUtil) {
+        super(PROJECT_ROOT_FOLDER, ideFactory.create(), projectUtil);
         this.browserFactory = browserFactory;
         this.ide = ide;
         this.restAssuredExecutor = restAssuredExecutor;
@@ -62,21 +51,25 @@ public class LeaveRequestTestProject {
         this.testLogsAsserter = new LogsAsserter("leave-request-process.bpmn", Level.DEBUG);
     }
 
-    public void publish() {
+    public void generateFromFormFiles() {
         projectUtil.copyResourceProjectToDefaultUserWorkspace(PROJECT_ROOT_FOLDER);
         Workbench workbench = ide.openWorkbench();
         workbench.expandProject(PROJECT_ROOT_FOLDER);
         workbench.openFile(PROCESS_LEAVE_REQUEST_FORM_FILENAME);
 
+        regenerateForm(workbench, PROCESS_LEAVE_REQUEST_FORM_FILENAME);
+        regenerateForm(workbench, SUBMIT_LEAVE_REQUEST_FORM_FILENAME);
+    }
+
+    private void regenerateForm(Workbench workbench, String fileName) {
+        workbench.openFile(fileName);
         FormView formView = workbench.getFormView();
         formView.regenerateForm();
-        ide.assertStatusBarMessage("Generated from model '" + PROCESS_LEAVE_REQUEST_FORM_FILENAME + "'");
+        ide.assertStatusBarMessage("Generated from model '" + fileName + "'");
+    }
 
-        workbench.openFile(SUBMIT_LEAVE_REQUEST_FORM_FILENAME);
-        formView.regenerateForm();
-        ide.assertStatusBarMessage("Generated from model '" + SUBMIT_LEAVE_REQUEST_FORM_FILENAME + "'");
-
-        workbench.clickPublishAll();
-        workbench.publishAll(true);
+    @Override
+    public void verify() {
+        // something
     }
 }

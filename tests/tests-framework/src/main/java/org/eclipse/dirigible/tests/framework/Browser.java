@@ -72,6 +72,4 @@ public interface Browser {
     SelenideElement findElementInAllFrames(By by, WebElementCondition... conditions);
 
     void handleElementInAllFrames(By by, Consumer<SelenideElement> elementHandler, WebElementCondition... conditions);
-
-    String getFirstTdTextInRowContaining(String searchText);
 }
