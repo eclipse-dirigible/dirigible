@@ -78,16 +78,12 @@ public class Workbench {
         browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_PROJECT_BUTTON_TEXT);
     }
 
-    public void clickOnButtonViaJsWithText(String buttonText) {
-        browser.clickOnButtonViaJsWithText(buttonText);
-    }
-
     public void createFileInProject(String projectName, String fileName, String newFileType) {
         expandProject(projectName);
         browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
 
-        clickOnButtonViaJsWithText(newFileType);
-        clickOnButtonViaJsWithText("Create");
+        browser.clickOnButtonViaJsWithText(newFileType);
+        browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
 
         browser.reload();
     }

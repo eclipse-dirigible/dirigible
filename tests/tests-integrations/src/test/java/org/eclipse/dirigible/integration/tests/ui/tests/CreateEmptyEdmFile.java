@@ -10,7 +10,8 @@ class CreateEmptyEdmFileIT extends UserInterfaceIntegrationTest {
     private CreateEmptyFileTestProject testProject;
 
     @Test
-    void dependsOnTest() {
+    void test() {
         testProject.publishEmptyFile("edm.edm", FileTypes.ENTITY_DATA_MODEL);
+        testProject.verifyFileCreated("edm.edm");
     }
 }

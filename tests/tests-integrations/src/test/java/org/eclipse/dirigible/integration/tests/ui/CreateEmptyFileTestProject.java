@@ -28,6 +28,10 @@ public class CreateEmptyFileTestProject {
         ide.createNewBlankProject(UI_PROJECT_TITLE);
         Workbench workbench = ide.openWorkbench();
         workbench.createFileInProject(UI_PROJECT_TITLE, fileName, fileType);
+    }
+
+    public void verifyFileCreated(String fileName) {
+        Workbench workbench = ide.openWorkbench();
         workbench.openFile(fileName);
     }
 

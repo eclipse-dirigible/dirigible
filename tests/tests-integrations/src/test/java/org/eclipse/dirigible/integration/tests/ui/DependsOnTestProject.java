@@ -33,10 +33,11 @@ public class DependsOnTestProject {
     }
 
     public void publishDependsOn() {
-        publish(PROJECT_RESOURCES_PATH_DEPENDS_ON, PROJECT_ROOT_FOLDER_DEPENDS_ON, EDM_FILE_NAME);
+        setupAndPublish(PROJECT_RESOURCES_PATH_DEPENDS_ON, PROJECT_ROOT_FOLDER_DEPENDS_ON, EDM_FILE_NAME);
+        verifyDependsOn();
     }
 
-    public void publish(String projectResourcesPath, String projectRootFolder, String edmFileName) {
+    public void setupAndPublish(String projectResourcesPath, String projectRootFolder, String edmFileName) {
         projectUtil.copyResourceProjectToDefaultUserWorkspace(projectResourcesPath);
 
         Workbench workbench = ide.openWorkbench();
@@ -46,14 +47,12 @@ public class DependsOnTestProject {
         edmView.regenerate();
 
         workbench.publishAll(false);
-
-        verifyDependsOn();
     }
 
 
     public void verifyDependsOn() {
         browser.openPath(VERIFICATION_URI);
-        browser.clickOnButtonViaJsWithText("Create");
+        browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
         browser.enterTextInElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Country ...", "Bulgaria");
 
         // click out of the input field to trigger the search
