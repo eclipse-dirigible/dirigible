@@ -462,20 +462,25 @@ stagingView.controller('StagingViewController', ($scope, GitService, ButtonState
         $scope.jstreeStaged.jstree(true).refresh();
     };
 
+    let canReloadSameProject = true;
+
     const repoSelectedListener = notificationHub.addMessageListener({
         topic: 'git.repository.selected',
         handler: (data) => {
-            if ($scope.selectedWorkspace !== data.workspace || $scope.selectedRepository !== data.project) {
-                $scope.$evalAsync(() => {
-                    if (data.isGitProject) {
-                        $scope.selectedWorkspace = data.workspace;
-                        $scope.selectedRepository = data.project;
-                        $scope.loadRepositoryStatus();
-                    } else {
-                        $scope.clearList();
-                    }
-                });
-            }
+            if ($scope.selectedWorkspace === data.workspace && $scope.selectedRepository === data.project && !canReloadSameProject) return;
+            $scope.$evalAsync(() => {
+                if (data.isGitProject) {
+                    $scope.selectedWorkspace = data.workspace;
+                    $scope.selectedRepository = data.project;
+                    $scope.loadRepositoryStatus();
+                } else {
+                    $scope.clearList();
+                }
+            });
+            canReloadSameProject = false;
+            setTimeout(() => {
+                canReloadSameProject = true;
+            }, 5000);
         }
     });
 
