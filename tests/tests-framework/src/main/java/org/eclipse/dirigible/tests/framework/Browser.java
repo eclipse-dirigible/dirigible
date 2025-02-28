@@ -87,6 +87,4 @@ public interface Browser {
     Optional<SelenideElement> findOptionalElementInAllFrames(By by, long totalTimeoutSeconds, WebElementCondition... conditions);
 
     void handleElementInAllFrames(By by, Consumer<SelenideElement> elementHandler, WebElementCondition... conditions);
-
-    String getFirstTdTextInRowContaining(String searchText);
 }
