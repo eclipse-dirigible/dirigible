@@ -1,5 +1,6 @@
 package org.eclipse.dirigible.integration.tests.ui;
 
+import org.eclipse.dirigible.integration.tests.ui.tests.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.EdmView;
 import org.eclipse.dirigible.tests.IDE;
 import org.eclipse.dirigible.tests.Workbench;
@@ -12,35 +13,31 @@ import org.springframework.context.annotation.Lazy;
 
 @Lazy
 @Component
-public class DependsOnTestProject {
+public class DependsOnTestProject extends BaseTestProject {
 
     private static final String EDM_FILE_NAME = "edm.edm";
     private static final String PROJECT_ROOT_FOLDER_DEPENDS_ON = "dirigible-depends-on-test-project";
     private static final String PROJECT_RESOURCES_PATH_DEPENDS_ON = "dirigible-depends-on-test-project";
     private static final String VERIFICATION_URI = "/services/web/dirigible-depends-on-test-project/gen/edm/ui/Orders/index.html";
 
-
-    private final IDE ide;
-    private final ProjectUtil projectUtil;
     private final EdmView edmView;
     private final Browser browser;
 
     DependsOnTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, Browser browser) {
-        this.ide = ide;
-        this.projectUtil = projectUtil;
+        super(PROJECT_RESOURCES_PATH_DEPENDS_ON, ide, projectUtil);
         this.edmView = edmView;
         this.browser = browser;
     }
 
     public void publishDependsOn() {
         setupAndPublish(PROJECT_RESOURCES_PATH_DEPENDS_ON, PROJECT_ROOT_FOLDER_DEPENDS_ON, EDM_FILE_NAME);
-        verifyDependsOn();
+        verify();
     }
 
     public void setupAndPublish(String projectResourcesPath, String projectRootFolder, String edmFileName) {
-        projectUtil.copyResourceProjectToDefaultUserWorkspace(projectResourcesPath);
+        copyToWorkspace();
 
-        Workbench workbench = ide.openWorkbench();
+        Workbench workbench = getIde().openWorkbench();
         workbench.expandProject(projectRootFolder);
         workbench.openFile(edmFileName);
 
@@ -50,7 +47,8 @@ public class DependsOnTestProject {
     }
 
 
-    public void verifyDependsOn() {
+    @Override
+    public void verify() {
         browser.openPath(VERIFICATION_URI);
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
         browser.enterTextInElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Country ...", "Bulgaria");
