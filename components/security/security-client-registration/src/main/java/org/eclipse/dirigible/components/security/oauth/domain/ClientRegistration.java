@@ -81,8 +81,17 @@ public class ClientRegistration extends Artefact {
      * @param location the location
      * @param name the name
      * @param description the description
-     * @param subdomain the subdomain
-     * @param status the status
+     * @param clientId
+     * @param clientSecret
+     * @param redirectUri
+     * @param authorizationGrantType
+     * @param scope
+     * @param tokenUri
+     * @param authorizationUri
+     * @param userInfoUri
+     * @param issuerUri
+     * @param jwkSetUri
+     * @param userNameAttributeName
      */
     public ClientRegistration(String location, String name, String description, String clientId, String clientSecret, String redirectUri,
             String authorizationGrantType, String scope, String tokenUri, String authorizationUri, String userInfoUri, String issuerUri,
@@ -319,7 +328,7 @@ public class ClientRegistration extends Artefact {
     /**
      * Sets the user name attribute name.
      *
-     * @param jwkSetUri the user name attribute name
+     * @param userNameAttributeName the user name attribute name
      */
     public void setUserNameAttributeName(String userNameAttributeName) {
         this.userNameAttributeName = userNameAttributeName;
