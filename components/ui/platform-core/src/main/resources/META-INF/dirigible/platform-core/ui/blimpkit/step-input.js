@@ -25,6 +25,7 @@ blimpkit.directive('bkStepInput', (classNames) => ({
         state: '@?',
         isFocus: '<?',
         isReadonly: '<?',
+        ngRequired: '<?',
     },
     link: (scope, element, attrs, ngModel) => {
         if (!scope.inputId)
@@ -67,6 +68,6 @@ blimpkit.directive('bkStepInput', (classNames) => ({
         });
     },
     template: `<div class="fd-step-input" ng-class="getClasses()"><button aria-label="Step down" class="fd-button fd-button--transparent fd-step-input__button" ng-class="getButtonClasses()" tabindex="-1" type="button" ng-click="stepDown()"><i class="sap-icon--less"></i></button>
-<input ng-attr-id="{{inputId}}" class="fd-input fd-input--no-number-spinner fd-step-input__input" ng-class="getClasses(true)" type="number" ng-attr-name="{{name}}" placeholder="{{placeholder}}" ng-model="model.value" ng-attr-max="{{max}}" ng-attr-min="{{min}}" ng-attr-step="{{step}}" ng-readonly="isReadonly === true"/>
+<input ng-attr-id="{{inputId}}" class="fd-input fd-input--no-number-spinner fd-step-input__input" ng-required="ngRequired" ng-class="getClasses(true)" type="number" ng-attr-name="{{name}}" placeholder="{{placeholder}}" ng-model="model.value" ng-attr-max="{{max}}" ng-attr-min="{{min}}" ng-attr-step="{{step}}" ng-readonly="isReadonly === true"/>
 <button aria-label="Step up" class="fd-button fd-button--transparent fd-step-input__button" ng-class="getButtonClasses()" tabindex="-1" type="button" ng-click="stepUp()"><i class="sap-icon--add"></i></button></div>`,
 }));
