@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.security.cognito;
+package org.eclipse.dirigible.components.security.keycloak;
 
 import java.io.IOException;
 import java.security.Principal;
@@ -29,26 +29,26 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 /**
- * The Class CognitoTenantFilter.
+ * The Class KeycloakTenantFilter.
  */
-@Profile("cognito")
+@Profile("keycloak")
 @Component
-public class CognitoTenantFilter extends OncePerRequestFilter {
+public class KeycloakTenantFilter extends OncePerRequestFilter {
 
     /** The tenant service. */
     private final TenantExtractor tenantExtractor;
     private final boolean multitenantModeEnabled;
-    private final boolean multitenantModeCognitoSingleUserPoolEnabled;
+    private final boolean multitenantModeKeycloakSingleRealm;
 
     /**
      * Instantiates a new tenant context init filter.
      *
      * @param tenantExtractor the tenant extractor
      */
-    public CognitoTenantFilter(TenantExtractor tenantExtractor) {
+    public KeycloakTenantFilter(TenantExtractor tenantExtractor) {
         this.tenantExtractor = tenantExtractor;
         this.multitenantModeEnabled = DirigibleConfig.MULTI_TENANT_MODE_ENABLED.getBooleanValue();
-        this.multitenantModeCognitoSingleUserPoolEnabled = DirigibleConfig.MULTI_TENANT_MODE_COGNITO_SINGLE_USER_POOL_ENABLED.getBooleanValue();
+        this.multitenantModeKeycloakSingleRealm = DirigibleConfig.MULTI_TENANT_MODE_KEYCLOAK_SINGLE_REALM_ENABLED.getBooleanValue();
     }
 
     /**
@@ -63,7 +63,7 @@ public class CognitoTenantFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        if (multitenantModeEnabled && multitenantModeCognitoSingleUserPoolEnabled) {
+        if (multitenantModeEnabled && multitenantModeKeycloakSingleRealm) {
             Optional<Tenant> currentTenant = tenantExtractor.determineTenantSubdomain(request);
             if (currentTenant.isEmpty()) {
                 response.sendError(HttpServletResponse.SC_NOT_FOUND, "There is no registered tenant for the current host");

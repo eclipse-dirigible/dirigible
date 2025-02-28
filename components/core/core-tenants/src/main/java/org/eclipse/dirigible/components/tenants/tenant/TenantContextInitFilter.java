@@ -48,7 +48,7 @@ public class TenantContextInitFilter extends OncePerRequestFilter {
     /**
      * Instantiates a new tenant context init filter.
      *
-     * @param tenantService the tenant service
+     * @param tenantExtractor the tenant service
      * @param tenantContext the tenant context
      */
     public TenantContextInitFilter(TenantExtractor tenantExtractor, TenantContext tenantContext) {
