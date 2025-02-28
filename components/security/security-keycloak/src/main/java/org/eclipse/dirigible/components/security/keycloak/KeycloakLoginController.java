@@ -27,9 +27,9 @@ public class KeycloakLoginController {
     @GetMapping("/{registrationId}")
     public String login(@PathVariable String registrationId, HttpServletRequest request) {
         Set<String> provisionedClients = tenantService.findByStatus(TenantStatus.PROVISIONED)
-                                                .stream()
-                                                .map(e -> e.getSubdomain())
-                                                .collect(Collectors.toSet());
+                                                      .stream()
+                                                      .map(e -> e.getSubdomain())
+                                                      .collect(Collectors.toSet());
         if (!provisionedClients.contains(registrationId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Invalid OAuth2 client");
         }
