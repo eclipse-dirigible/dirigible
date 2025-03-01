@@ -35,6 +35,10 @@ public interface Browser {
 
     void assertElementExistsByTypeAndContainsText(String htmlElementType, String text);
 
+    void assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text);
+
+    void assertElementDoesNotExistsByTypeAndContainsText(String htmlElementType, String text);
+
     void clickOnElementById(String id);
 
     void clickOnElementByAttributeValue(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String attributeValue);
@@ -63,6 +67,14 @@ public interface Browser {
 
     void rightClickOnElementById(String id);
 
+    void rightClickOnElementContainingText(HtmlElementType htmlElementType, String text);
+
+    void rightClickOnElementContainingText(String htmlElementType, String text);
+
+    void rightClickOnElementByAttributeValue(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String attributeValue);
+
+    void rightClickOnElementByAttributeValue(String htmlElementType, String htmlAttribute, String attributeValue);
+
     void reload();
 
     String createScreenshot();
@@ -73,4 +85,5 @@ public interface Browser {
 
     void handleElementInAllFrames(By by, Consumer<SelenideElement> elementHandler, WebElementCondition... conditions);
 
+    void clickOnButtonViaJsWithText(String buttonText);
 }
