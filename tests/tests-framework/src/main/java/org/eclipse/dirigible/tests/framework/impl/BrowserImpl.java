@@ -416,5 +416,4 @@ class BrowserImpl implements Browser {
     public String getPageTitle() {
         return Selenide.title();
     }
-
 }
