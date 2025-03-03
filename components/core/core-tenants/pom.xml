@@ -31,13 +31,13 @@
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-engine-security</artifactId>
 		</dependency>
-		
+
 		<!-- Database -->
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-core-database</artifactId>
 		</dependency>
-		
+
 		<!-- Repository -->
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>

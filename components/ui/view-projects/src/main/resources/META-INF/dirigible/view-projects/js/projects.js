@@ -136,7 +136,7 @@ projectsView.controller('ProjectsViewController', (
                 return true;
             }
         },
-        state: { key: `${brandingInfo.keyPrefix}.view-projects.state` },
+        state: { key: `${getBrandingInfo().keyPrefix}.view-projects.state` },
         types: {
             '#': {
                 valid_children: ['project']
@@ -165,7 +165,7 @@ projectsView.controller('ProjectsViewController', (
     };
 
     function getAutoReveal() {
-        const autoRevealKey = `${brandingInfo.keyPrefix}.settings.general.autoReveal`;
+        const autoRevealKey = `${getBrandingInfo().keyPrefix}.settings.general.autoReveal`;
         let autoReveal = $window.localStorage.getItem(autoRevealKey);
         if (autoReveal === null) {
             autoReveal = true;

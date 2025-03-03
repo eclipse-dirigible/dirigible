@@ -1,0 +1,138 @@
+<!--
+
+    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="clientRegistrationDialog" ng-controller="ClientRegistrationDialogController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-security/configs/client-registration-dialog.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="/services/web/view-security/dialogs/client-registration-dialog.js"></script>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
+        <div class="bk-padding bk-fill-parent" bk-scrollbar ng-show="!state.error && !state.isBusy">
+            <bk-fieldset ng-form="forms.clientRegistrationForm">
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="name" required colon="true">Name</bk-form-label>
+                        <bk-input id="name" name="name" type="text" placeholder="Enter a name" ng-model="clientRegistration.name" input-rules="inputRules" state="{{ forms.clientRegistrationForm['name'].$valid ? '' : 'error' }}" ng-required="true" ng-trim="false">
+                        </bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="clientId" required colon="true">Client Id</bk-form-label>
+                        <bk-input id="clientId" name="clientId" type="text" placeholder="Enter client id" ng-model="clientRegistration.clientId" input-rules="inputRules" ng-trim="false"
+                            state="{{ forms.clientRegistrationForm['clientId'].$valid ? '' : 'error' }}" ng-required="true"></bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="clientSecret" required colon="true">Client Secret</bk-form-label>
+                        <bk-input id="clientSecret" name="clientSecret" type="text" placeholder="Enter client secret" ng-model="clientRegistration.clientSecret" input-rules="inputRules" ng-trim="false"
+                            state="{{ forms.clientRegistrationForm['clientSecret'].$valid ? '' : 'error' }}" ng-required="true"></bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="redirectUri" required colon="true">Redirect URI</bk-form-label>
+                        <bk-input id="redirectUri" name="redirectUri" type="text" placeholder="Enter redirect uri" ng-model="clientRegistration.redirectUri" input-rules="inputRules" ng-trim="false"
+                            state="{{ forms.clientRegistrationForm['redirectUri'].$valid ? '' : 'error' }}" ng-required="true"></bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="authorizationGrantType" required colon="true">Authorization Grant Type</bk-form-label>
+                        <bk-input id="authorizationGrantType" name="authorizationGrantType" type="text" placeholder="Enter authorization grant type" ng-model="clientRegistration.authorizationGrantType" input-rules="inputRules" ng-trim="false"
+                            state="{{ forms.clientRegistrationForm['authorizationGrantType'].$valid ? '' : 'error' }}" ng-required="true"></bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="scope" required colon="true">Scope</bk-form-label>
+                        <bk-input id="scope" name="scope" type="text" placeholder="Enter scope" ng-model="clientRegistration.scope" input-rules="inputRules" ng-trim="false"
+                            state="{{ forms.clientRegistrationForm['scope'].$valid ? '' : 'error' }}" ng-required="true"></bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="userNameAttributeName" required colon="true">User Name Attribute Name</bk-form-label>
+                        <bk-input id="userNameAttributeName" name="userNameAttributeName" type="text" placeholder="Enter user name attribute name" ng-model="clientRegistration.userNameAttributeName" input-rules="inputRules" ng-trim="false"
+                            state="{{ forms.clientRegistrationForm['userNameAttributeName'].$valid ? '' : 'error' }}" ng-required="true"></bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="tokenUri" required colon="true">Token URI</bk-form-label>
+                        <bk-input id="tokenUri" name="tokenUri" type="text" placeholder="Enter token uri" ng-model="clientRegistration.tokenUri" input-rules="inputRules" ng-trim="false"
+                            state="{{ forms.clientRegistrationForm['tokenUri'].$valid ? '' : 'error' }}" ng-required="true"></bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="authorizationUri" required colon="true">Authorization URI</bk-form-label>
+                        <bk-input id="authorizationUri" name="authorizationUri" type="text" placeholder="Enter authorization uri" ng-model="clientRegistration.authorizationUri" input-rules="inputRules" ng-trim="false"
+                            state="{{ forms.clientRegistrationForm['authorizationUri'].$valid ? '' : 'error' }}" ng-required="true"></bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="userInfoUri" required colon="true">User Info URI</bk-form-label>
+                        <bk-input id="userInfoUri" name="userInfoUri" type="text" placeholder="Enter user info uri" ng-model="clientRegistration.userInfoUri" input-rules="inputRules" ng-trim="false"
+                            state="{{ forms.clientRegistrationForm['userInfoUri'].$valid ? '' : 'error' }}" ng-required="true"></bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="issuerUri" required colon="true">Issuer URI</bk-form-label>
+                        <bk-input id="issuerUri" name="issuerUri" type="text" placeholder="Enter issuer uri" ng-model="clientRegistration.issuerUri" input-rules="inputRules" ng-trim="false"
+                            state="{{ forms.clientRegistrationForm['issuerUri'].$valid ? '' : 'error' }}" ng-required="true"></bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="jwkSetUri" required colon="true">JWK Set URI</bk-form-label>
+                        <bk-input id="jwkSetUri" name="jwkSetUri" type="text" placeholder="Enter jwk set uri" ng-model="clientRegistration.jwkSetUri" input-rules="inputRules" ng-trim="false"
+                            state="{{ forms.clientRegistrationForm['jwkSetUri'].$valid ? '' : 'error' }}" ng-required="true"></bk-input>
+                    </bk-form-item>
+                </bk-form-group>
+            </bk-fieldset>
+        </div>
+        <bk-bar bar-design="footer" compact="true" ng-show="!state.error && !state.isBusy">
+            <bk-bar-right>
+                <bk-bar-element>
+                    <bk-button label="{{editMode ? 'Save' : 'Create'}}" ng-click="save()" state="emphasized" ng-disabled="!forms.clientRegistrationForm.$valid"></bk-button>
+                </bk-bar-element>
+                <bk-bar-element>
+                    <bk-button label="Cancel" ng-click="cancel()" state="transparent"></bk-button>
+                </bk-bar-element>
+            </bk-bar-right>
+        </bk-bar>
+        <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+            <bk-message-page-title>Dialog encounterd an error!</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+            <bk-message-page-actions>
+                <bk-button compact="true" ng-click="cancel()" label="Close" state="emphasized"></bk-button>
+            </bk-message-page-actions>
+        </bk-message-page>
+        <theme></theme>
+    </body>
+
+</html>

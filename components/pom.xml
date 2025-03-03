@@ -34,6 +34,8 @@
 		<module>security/security-keycloak</module>
 		<module>security/security-oauth2</module>
 		<module>security/security-snowflake</module>
+		<module>security/security-cognito</module>
+		<module>security/security-client-registration</module>
 
 		<!-- Data -->
 		<module>data/data-structures</module>
@@ -258,6 +260,7 @@
 		<module>ui/editor-csv</module>
 		<module>ui/editor-csvim</module>
 		<module>ui/editor-form-builder</module>
+		<module>ui/ext-documents-content-type-ms</module>
 		
 		<module>ui/menu-bpm</module>
 		<module>ui/menu-database</module>
@@ -475,6 +478,16 @@
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
 				<artifactId>dirigible-components-security-snowflake</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-security-cognito</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-security-client-registration</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
@@ -1469,6 +1482,11 @@
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
 				<artifactId>dirigible-components-ui-editor-form-builder</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-ui-ext-documents-content-type-ms</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 

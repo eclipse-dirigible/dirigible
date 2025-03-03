@@ -14,7 +14,7 @@ resultView.constant('Dialogs', new DialogHub());
 resultView.constant('StatusBar', new StatusBarHub());
 resultView.constant('Layout', new LayoutHub());
 resultView.controller('DatabaseResultController', ($scope, $http, Dialogs, StatusBar, Layout) => {
-    const lastSelectedDatabaseKey = `${brandingInfo.keyPrefix ?? 'DIRIGIBLE'}.view-db-explorer.database`;
+    const lastSelectedDatabaseKey = `${getBrandingInfo().keyPrefix}.view-db-explorer.database`;
     let selectedDatabase = JSON.parse(localStorage.getItem(lastSelectedDatabaseKey) ?? 'null');
     if (!selectedDatabase) {
         selectedDatabase = {
