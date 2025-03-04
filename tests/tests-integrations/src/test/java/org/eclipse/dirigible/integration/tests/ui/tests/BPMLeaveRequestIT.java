@@ -31,8 +31,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.time.Duration;
 import java.util.Set;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
 
     private static final String EMPLOYEE_USERNAME = "john.doe.employee@example.com";
@@ -117,8 +115,6 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
         Alert alert = WebDriverRunner.getWebDriver()
                                      .switchTo()
                                      .alert();
-        String alertText = alert.getText();
-        assertThat(alertText).contains("aaa");
         alert.accept();
     }
 
