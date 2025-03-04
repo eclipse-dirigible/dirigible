@@ -9,10 +9,6 @@
  */
 package org.eclipse.dirigible.tests;
 
-import com.codeborne.selenide.Condition;
-import com.codeborne.selenide.Selectors;
-import com.codeborne.selenide.Selenide;
-import com.codeborne.selenide.SelenideElement;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
@@ -30,10 +26,6 @@ public class Workbench {
     protected Workbench(Browser browser, WelcomeViewFactory welcomeViewFactory) {
         this.browser = browser;
         this.welcomeViewFactory = welcomeViewFactory;
-    }
-
-    public void expandProject(String projectName) {
-        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
     }
 
     public void openFile(String fileName) {
@@ -78,14 +70,16 @@ public class Workbench {
         browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_PROJECT_BUTTON_TEXT);
     }
 
-    public void createFileInProject(String projectName, String fileName, String newFileType) {
+    public void createFileInProject(String projectName, String newFileType) {
         expandProject(projectName);
         browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
 
-        browser.clickOnButtonViaJsWithText(newFileType);
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", newFileType);
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
+    }
 
-        browser.reload();
+    public void expandProject(String projectName) {
+        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
     }
 
 }

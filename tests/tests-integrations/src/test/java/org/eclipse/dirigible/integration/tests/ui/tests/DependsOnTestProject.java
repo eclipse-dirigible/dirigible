@@ -1,4 +1,4 @@
-package org.eclipse.dirigible.integration.tests.ui;
+package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import org.eclipse.dirigible.integration.tests.ui.tests.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.EdmView;
@@ -8,8 +8,8 @@ import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
-import org.springframework.stereotype.Component;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Component;
 
 @Lazy
 @Component
@@ -45,7 +45,6 @@ public class DependsOnTestProject extends BaseTestProject {
 
         workbench.publishAll(false);
     }
-
 
     @Override
     public void verify() {

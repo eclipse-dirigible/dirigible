@@ -300,19 +300,16 @@ class BrowserImpl implements Browser {
     }
 
     @Override
-    public void rightClickOnElementByAttributeValue(HtmlElementType htmlElementType, HtmlAttribute htmlAttribute, String attributeValue) {
-        clickOnElementByAttributeValue(htmlElementType.getType(), htmlAttribute.getAttribute(), attributeValue);
-    }
-
-    @Override
-    public void rightClickOnElementByAttributeValue(String htmlElementType, String htmlAttribute, String attributeValue) {
-        By by = constructCssSelectorByTypeAndAttribute(htmlElementType, htmlAttribute, attributeValue);
-        handleElementInAllFrames(by, this::rightClickElement, Condition.visible, Condition.enabled);
-    }
-
-    @Override
     public void clickOnElementByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern, String text) {
         clickOnElementByAttributePatternAndText(elementType.getType(), attribute.getAttribute(), pattern, text);
+    }
+
+    @Override
+    public void assertElementExistByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern,
+            String text) {
+        By by = constructCssSelectorByTypeAndAttribute(elementType.getType(), attribute.getAttribute(), pattern);
+
+        findElementInAllFrames(by, Condition.visible, Condition.enabled, Condition.exactText(text), Condition.exist);
     }
 
     @Override
@@ -433,7 +430,6 @@ class BrowserImpl implements Browser {
         }
     }
 
-
     @Override
     public void clickOnElementById(String id) {
         By by = Selectors.byId(id);
@@ -455,12 +451,6 @@ class BrowserImpl implements Browser {
     @Override
     public String getPageTitle() {
         return Selenide.title();
-    }
-
-    @Override
-    public void clickOnButtonViaJsWithText(String buttonText) {
-        SelenideElement button = findElementInAllFrames(Selectors.byText(buttonText), Condition.visible);
-        Selenide.executeJavaScript("arguments[0].click();", button);
     }
 
 }
