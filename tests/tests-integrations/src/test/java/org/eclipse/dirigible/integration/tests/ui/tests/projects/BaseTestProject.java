@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.integration.tests.ui.tests.projects;
 
 import org.eclipse.dirigible.tests.EdmView;
+import org.eclipse.dirigible.tests.FormView;
 import org.eclipse.dirigible.tests.IDE;
 import org.eclipse.dirigible.tests.Workbench;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
@@ -59,8 +60,21 @@ public abstract class BaseTestProject implements TestProject {
         return edmView;
     }
 
-    protected String getProjectResourcesFolder() {
+    public String getProjectResourcesFolder() {
         return projectResourcesFolder;
     }
 
+    protected void generateForms(String projectName, String... formFileNames) {
+        Workbench workbench = ide.openWorkbench();
+        workbench.expandProject(projectName);
+
+        for (String formFileName : formFileNames) {
+            workbench.openFile(formFileName);
+
+            FormView formView = workbench.getFormView();
+            formView.regenerateForm();
+            ide.assertStatusBarMessage("Generated from model '" + formFileName + "'");
+
+        }
+    }
 }

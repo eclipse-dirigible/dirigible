@@ -16,6 +16,7 @@ import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.util.SleepUtil;
+import org.openqa.selenium.Alert;
 import org.openqa.selenium.By;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.chrome.ChromeOptions;
@@ -32,6 +33,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
 @Lazy
@@ -151,6 +153,29 @@ class BrowserImpl implements Browser {
                     + "] cannot be found in any iframe OR found multiple matches. Check logs for more details.");
         }
         return element.get();
+    }
+
+    @Override
+    public void close() {
+        Selenide.closeWebDriver();
+    }
+
+    @Override
+    public void assertAlertWithMessage(String message) {
+        String alertMessage = getAlertMessage();
+        assertThat(alertMessage).contains(message);
+    }
+
+    @Override
+    public String getAlertMessage() {
+        Alert alert = Selenide.switchTo()
+                              .alert();
+        return alert.getText();
+    }
+
+    @Override
+    public void closeWindow() {
+        Selenide.closeWindow();
     }
 
     private void failWithScreenshot(String message) {
@@ -338,10 +363,6 @@ class BrowserImpl implements Browser {
 
         SelenideElement element = findElementInAllFrames(by, Condition.visible, Condition.enabled, Condition.exactText(text));
         clickElement(element);
-    }
-
-    private static WebElementCondition containsText(String text) {
-        return Condition.text(text);
     }
 
     private void clickElement(SelenideElement element) {
