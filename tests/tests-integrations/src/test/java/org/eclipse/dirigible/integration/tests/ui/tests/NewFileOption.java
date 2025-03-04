@@ -24,7 +24,7 @@ enum NewFileOption {
     FORM_DEFINITION("Form Definition", "form.form"), //
     MESSAGE_LISTENER("Message Listener", "listener.listener"), //
     REPORT_MODEL("Report Model", "report-model.report"), //
-    ROLES_DEFINITION("Roles Definition", "roles.roles"), //
+    ROLES_DEFINITION("Roles Definitions", "roles.roles"), //
     SCHEDULED_JOB("Scheduled Job", "job.job"), //
     WEBSOCKET("WebSocket", "websocket.websocket"), //
     HTML5_PAGE("HTML5 Page", "html.html"); //
