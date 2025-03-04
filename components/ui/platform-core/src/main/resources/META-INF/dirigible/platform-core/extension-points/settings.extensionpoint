@@ -1,0 +1,4 @@
+{
+    "name": "platform-settings",
+    "description": "Extension point for settings"
+}
