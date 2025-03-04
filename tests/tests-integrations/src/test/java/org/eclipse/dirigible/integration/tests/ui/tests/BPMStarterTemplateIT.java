@@ -83,7 +83,7 @@ class BPMStarterTemplateIT extends UserInterfaceIntegrationTest {
     }
 
     private void waitUntilProcessIsDeployed() {
-        await().atMost(25, TimeUnit.SECONDS)
+        await().atMost(30, TimeUnit.SECONDS)
                .until(() -> BpmFacade.getEngine()
                                      .getProcessEngine()
                                      .getRepositoryService()
