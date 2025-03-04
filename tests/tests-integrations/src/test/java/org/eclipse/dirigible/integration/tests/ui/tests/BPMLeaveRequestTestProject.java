@@ -32,7 +32,7 @@ class BPMLeaveRequestTestProject extends BaseTestProject {
     }
 
     void generateForms() {
-        generateForms(PROCESS_LEAVE_REQUEST_FORM_FILENAME, SUBMIT_LEAVE_REQUEST_FORM_FILENAME);
+        generateForms(getProjectResourcesFolder(), PROCESS_LEAVE_REQUEST_FORM_FILENAME, SUBMIT_LEAVE_REQUEST_FORM_FILENAME);
     }
 
 }

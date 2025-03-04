@@ -78,6 +78,8 @@ public interface Browser {
 
     String createScreenshot();
 
+    void closeWindow();
+
     void clearCookies();
 
     SelenideElement findElementInAllFrames(By by, WebElementCondition... conditions);
@@ -87,4 +89,15 @@ public interface Browser {
     Optional<SelenideElement> findOptionalElementInAllFrames(By by, long totalTimeoutSeconds, WebElementCondition... conditions);
 
     void handleElementInAllFrames(By by, Consumer<SelenideElement> elementHandler, WebElementCondition... conditions);
+
+    void close();
+
+    String getAlertMessage();
+
+    /**
+     * Assert that there is an alert which contains a given message
+     *
+     * @param message
+     */
+    void assertAlertWithMessage(String message);
 }

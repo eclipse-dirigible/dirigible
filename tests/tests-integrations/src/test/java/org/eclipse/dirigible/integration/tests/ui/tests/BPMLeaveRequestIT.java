@@ -17,31 +17,27 @@ import jakarta.mail.internet.MimeMessage;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.tests.IDE;
 import org.eclipse.dirigible.tests.IDEFactory;
+import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.mail.EmailAsserter;
 import org.eclipse.dirigible.tests.util.SecurityUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.openqa.selenium.Alert;
-import org.openqa.selenium.support.ui.ExpectedConditions;
-import org.openqa.selenium.support.ui.WebDriverWait;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import java.time.Duration;
 import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
 
     private static final String EMPLOYEE_USERNAME = "john.doe.employee@example.com";
-    private static final String EMPLOYEE_PASSWORD = "randomPassword";
-    private static final String EMPLOYEE_MANAGER_USERNAME = "emily.stone.mngr@example.com";
-    private static final String EMPLOYEE_MANAGER_PASSWORD = "anotherPassword";
+    private static final String EMPLOYEE_PASSWORD = "employeePassword";
 
-    private static final String MAIL_USER = "user";
-    private static final String MAIL_PASSWORD = "password";
+    private static final String EMPLOYEE_MANAGER_USERNAME = "emily.stone.mngr@example.com";
+    private static final String EMPLOYEE_MANAGER_PASSWORD = "managerPassword";
+
+    private static final String MAIL_USER = "mailUser";
+    private static final String MAIL_PASSWORD = "mailPassword";
     private static final int MAIL_PORT = 56565;
 
     static {
@@ -75,13 +71,13 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
         testProject.copyToWorkspace();
         testProject.generateForms();
         testProject.publish();
+        browser.close();
 
-        createSecurityUsers();
+        createTestUsers();
 
         submitLeaveRequest();
-        assertNotificationEmailReceived();
 
-        claimRequest();
+        assertNotificationEmailReceived();
     }
 
     private void startGreenMailServer() {
@@ -92,60 +88,28 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
     }
 
     private void submitLeaveRequest() {
-        browser.clearCookies();
         IDE employeeIde = ideFactory.create(EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD);
 
         employeeIde.openPath("/services/web/" + testProject.getProjectResourcesFolder()
                 + "/gen/submit-leave-request/forms/submit-leave-request/index.html");
-        fillLeaveRequestForm();
+        fillLeaveRequestForm(employeeIde.getBrowser());
+
+        employeeIde.getBrowser()
+                   .assertAlertWithMessage("Leave request has been created.");
+
+        employeeIde.close();
     }
 
-    private void fillLeaveRequestForm() {
+    private void fillLeaveRequestForm(Browser browser) {
         browser.enterTextInElementById("fromId", "02/02/2002");
         browser.enterTextInElementById("toId", "03/03/2002");
 
         browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Submit");
-
-        assertAlert();
     }
 
-    private void assertAlert() {
-        WebDriverWait wait = new WebDriverWait(WebDriverRunner.getWebDriver(), Duration.ofMillis(1000));
-        wait.until(ExpectedConditions.alertIsPresent());
-
-        Alert alert = WebDriverRunner.getWebDriver()
-                                     .switchTo()
-                                     .alert();
-
-        String alertText = alert.getText();
-        assertThat(alertText).contains("Leave request has been created.");
-        alert.accept();
-    }
-
-    private void createSecurityUsers() {
+    private void createTestUsers() {
         securityUtil.createUser(EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD, "employee");
         securityUtil.createUser(EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_PASSWORD, "employee-manager");
-    }
-
-    private void claimRequest() {
-        browser.clearCookies();
-        IDE managerIde = ideFactory.create(EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD);
-
-        managerIde.openPath("/services/web/inbox/");
-
-        browser.clickOnElementContainingText(HtmlElementType.TR, "Process request");
-
-        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Claim");
-        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Close");
-        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Open Form");
-
-        Set<String> windowHandles = WebDriverRunner.getWebDriver()
-                                                   .getWindowHandles();
-
-        String newTabHandle = windowHandles.toArray(new String[0])[windowHandles.size() - 1];
-        WebDriverRunner.getWebDriver()
-                       .switchTo()
-                       .window(newTabHandle);
     }
 
     private void assertNotificationEmailReceived() throws MessagingException {
@@ -165,13 +129,37 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
     }
 
     private void processRequest(boolean approve) {
-        String buttonLabel = approve ? "Approve" : "Decline";
-        browser.clickOnElementContainingText(HtmlElementType.BUTTON, buttonLabel);
+        IDE managerIDE = ideFactory.create(EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_PASSWORD);
 
-        assertAlert();
+        claimRequest(managerIDE);
+
+        Browser managerBrowser = managerIDE.getBrowser();
+
+        String buttonLabel = approve ? "Approve" : "Decline";
+        managerBrowser.clickOnElementContainingText(HtmlElementType.BUTTON, buttonLabel);
+
+        String alertMessage = approve ? "Request Approved" : "Request Declined";
+        managerBrowser.assertAlertWithMessage(alertMessage);
 
         EmailAsserter.assertReceivedEmailsCount(greenMail, 2);
+    }
 
+    private void claimRequest(IDE managerIDE) {
+        managerIDE.openPath("/services/web/inbox/");
+
+        browser.clickOnElementContainingText(HtmlElementType.TR, "Process request");
+
+        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Claim");
+        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Close");
+        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Open Form");
+
+        Set<String> windowHandles = WebDriverRunner.getWebDriver()
+                                                   .getWindowHandles();
+
+        String newTabHandle = windowHandles.toArray(new String[0])[windowHandles.size() - 1];
+        WebDriverRunner.getWebDriver()
+                       .switchTo()
+                       .window(newTabHandle);
     }
 
     private void assertApprovalEmailReceived() throws MessagingException {
