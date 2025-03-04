@@ -9,14 +9,15 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import com.codeborne.selenide.*;
+import com.codeborne.selenide.WebDriverRunner;
 import com.icegreen.greenmail.util.GreenMail;
 import com.icegreen.greenmail.util.ServerSetup;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.integration.tests.ui.tests.projects.LeaveRequestITTestProject;
-import org.eclipse.dirigible.tests.*;
+import org.eclipse.dirigible.tests.IDE;
+import org.eclipse.dirigible.tests.IDEFactory;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.util.SecurityUtil;
 import org.junit.jupiter.api.AfterEach;
@@ -34,15 +35,16 @@ import java.util.concurrent.TimeUnit;
 import static org.awaitility.Awaitility.await;
 
 class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
+
     private static final String EMPLOYEE_USERNAME = "john.doe.employee@example.com";
     private static final String EMPLOYEE_PASSWORD = "john.doe.employee@example.com";
     private static final String EMPLOYEE_MANAGER_USERNAME = "emily.stone.mngr@example.com";
     private static final String EMPLOYEE_MANAGER_PASSWORD = "emily.stone.mngr@example.com";
 
-
     private static final String MAIL_USER = "user";
     private static final String MAIL_PASSWORD = "password";
     private static final int MAIL_PORT = 56565;
+
     static {
         DirigibleConfig.MAIL_USERNAME.setStringValue(MAIL_USER);
         DirigibleConfig.MAIL_PASSWORD.setStringValue(MAIL_PASSWORD);
@@ -91,33 +93,15 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
         fillFormAndSubmitIt();
     }
 
-
-    @Test
-    public void testCreateBPMProcessAndApproveIt() throws MessagingException {
-        processRequest(true);
-
-        testApprovalEmail();
-    }
-
-    @Test
-    public void testCreateBPMProcessAndDeclineIt() throws MessagingException {
-        processRequest(false);
-
-        testDeclineEmail();
-    }
-
-    @AfterEach
-    public void tearDown() {
-        greenMail.stop();
-    }
-
-    private void createSecurityUsers() {
-        securityUtil.createUser(EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD, "employee");
-        securityUtil.createUser(EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_PASSWORD, "employee-manager");
-    }
-
     private IDE createIdeForUser(String username, String password) {
         return ideFactory.create(username, password);
+    }
+
+    private void fillFormAndSubmitIt() {
+        browser.enterTextInElementById("fromId", "02/02/2002");
+        browser.enterTextInElementById("toId", "03/03/2002");
+        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Submit");
+        handleAlertAccept();
     }
 
     private void handleAlertAccept() {
@@ -130,13 +114,10 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
         alert.accept();
     }
 
-    private void fillFormAndSubmitIt() {
-        browser.enterTextInElementById("fromId", "02/02/2002");
-        browser.enterTextInElementById("toId", "03/03/2002");
-        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Submit");
-        handleAlertAccept();
+    private void createSecurityUsers() {
+        securityUtil.createUser(EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD, "employee");
+        securityUtil.createUser(EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_PASSWORD, "employee-manager");
     }
-
 
     private void claimRequest() {
         IDE ide2 = createIdeForUser(EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_PASSWORD);
@@ -157,32 +138,6 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
                        .window(newTabHandle);
     }
 
-    private void processRequest(boolean approve) {
-        String option = approve ? "Approve" : "Decline";
-        browser.clickOnElementContainingText(HtmlElementType.BUTTON, option);
-
-        handleAlertAccept();
-
-        assertReceivedEmailsCount(2);
-
-    }
-
-    private void testDeclineEmail() throws MessagingException {
-        assertReceivedEmailsCount(2);
-        MimeMessage sentEmail = greenMail.getReceivedMessages()[1];
-        EmailAsserter.assertEmailReceived(sentEmail, "Your leave request has been declined",
-                "has been declined by [emily.stone.mngr@example.com]</h4>", "leave-request-app@example.com",
-                "john.doe.employee@example.com");
-    }
-
-    private void testApprovalEmail() throws MessagingException {
-        assertReceivedEmailsCount(2);
-        MimeMessage sentEmail = greenMail.getReceivedMessages()[1];
-        EmailAsserter.assertEmailReceived(sentEmail, "Your leave request has been approved",
-                "has been approved by [emily.stone.mngr@example.com]</h4>", "leave-request-app@example.com",
-                "john.doe.employee@example.com");
-    }
-
     private void assertNotificationEmailSent() throws MessagingException {
         assertReceivedEmailsCount(1);
         MimeMessage sentEmail = greenMail.getReceivedMessages()[0];
@@ -195,5 +150,50 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
     private void assertReceivedEmailsCount(int expectedCount) {
         await().atMost(10, TimeUnit.SECONDS)
                .until(() -> greenMail.getReceivedMessages().length >= expectedCount);
+    }
+
+    @Test
+    public void testCreateBPMProcessAndApproveIt() throws MessagingException {
+        processRequest(true);
+
+        testApprovalEmail();
+    }
+
+    private void processRequest(boolean approve) {
+        String option = approve ? "Approve" : "Decline";
+        browser.clickOnElementContainingText(HtmlElementType.BUTTON, option);
+
+        handleAlertAccept();
+
+        assertReceivedEmailsCount(2);
+
+    }
+
+    private void testApprovalEmail() throws MessagingException {
+        assertReceivedEmailsCount(2);
+        MimeMessage sentEmail = greenMail.getReceivedMessages()[1];
+        EmailAsserter.assertEmailReceived(sentEmail, "Your leave request has been approved",
+                "has been approved by [emily.stone.mngr@example.com]</h4>", "leave-request-app@example.com",
+                "john.doe.employee@example.com");
+    }
+
+    @Test
+    public void testCreateBPMProcessAndDeclineIt() throws MessagingException {
+        processRequest(false);
+
+        testDeclineEmail();
+    }
+
+    private void testDeclineEmail() throws MessagingException {
+        assertReceivedEmailsCount(2);
+        MimeMessage sentEmail = greenMail.getReceivedMessages()[1];
+        EmailAsserter.assertEmailReceived(sentEmail, "Your leave request has been declined",
+                "has been declined by [emily.stone.mngr@example.com]</h4>", "leave-request-app@example.com",
+                "john.doe.employee@example.com");
+    }
+
+    @AfterEach
+    public void tearDown() {
+        greenMail.stop();
     }
 }
