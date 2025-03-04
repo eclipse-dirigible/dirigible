@@ -11,7 +11,6 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import org.eclipse.dirigible.integration.tests.ui.tests.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.IDE;
-import org.eclipse.dirigible.tests.Workbench;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -33,11 +32,7 @@ class BPMLeaveRequestTestProject extends BaseTestProject {
     }
 
     void generateForms() {
-        Workbench workbench = getIde().openWorkbench();
-        workbench.expandProject(getProjectResourcesFolder());
-
-        generateForm(PROCESS_LEAVE_REQUEST_FORM_FILENAME);
-        generateForm(SUBMIT_LEAVE_REQUEST_FORM_FILENAME);
+        generateForms(PROCESS_LEAVE_REQUEST_FORM_FILENAME, SUBMIT_LEAVE_REQUEST_FORM_FILENAME);
     }
 
 }
