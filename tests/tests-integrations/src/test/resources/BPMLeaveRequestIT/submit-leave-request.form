@@ -1,7 +1,7 @@
 {
     "feeds": [],
     "scripts": [],
-    "code": "$scope.model.fromDate = new Date();\n$scope.model.toDate = new Date();\n\n$scope.onSubmitClicked = function(){\n    console.log(\"Model:\" + JSON.stringify($scope.model));\n    $http.post(\"/services/ts/LeaveRequestApprovalProcessIT/api/ProcessService.ts/requests\", JSON.stringify($scope.model)).then(function (response) {\n        if (response.status != 202) {\n            alert(`Unable to create new leave request: '${response.message}'`);\n            return;\n        }\n        alert(\"Leave request has been created.\\nResponse: \" + JSON.stringify(response.data));\n    });\n}\n",
+    "code": "$scope.model.fromDate = new Date();\n$scope.model.toDate = new Date();\n\n$scope.onSubmitClicked = function(){\n    console.log(\"Model:\" + JSON.stringify($scope.model));\n    $http.post(\"/services/ts/BPMLeaveRequestIT/api/ProcessService.ts/requests\", JSON.stringify($scope.model)).then(function (response) {\n        if (response.status != 202) {\n            alert(`Unable to create new leave request: '${response.message}'`);\n            return;\n        }\n        alert(\"Leave request has been created.\\nResponse: \" + JSON.stringify(response.data));\n    });\n}\n",
     "form": [
         {
             "controlId": "header",

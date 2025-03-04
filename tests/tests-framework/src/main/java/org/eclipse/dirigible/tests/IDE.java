@@ -149,4 +149,8 @@ public class IDE {
     public void login() {
         login(true);
     }
+
+    public void reload() {
+        browser.reload();
+    }
 }

@@ -1,5 +1,5 @@
 {
-  "guid": "leave-request",
+  "guid": "BPMLeaveRequestIT",
   "actions": [
     {
       "name": "Build TypeScript",

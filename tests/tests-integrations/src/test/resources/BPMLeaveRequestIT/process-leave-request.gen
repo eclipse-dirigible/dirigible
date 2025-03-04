@@ -1,7 +1,7 @@
 {
   "fileName": "process-leave-request",
   "genFolderName": "process-leave-request",
-  "projectName": "LeaveRequestApprovalProcessIT",
+  "projectName": "BPMLeaveRequestIT",
   "workspaceName": "workspace",
   "filePath": "process-leave-request.form",
   "templateId": "template-form-builder-angularjs/template/template.js"

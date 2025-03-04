@@ -15,10 +15,10 @@ import com.icegreen.greenmail.util.ServerSetup;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
-import org.eclipse.dirigible.integration.tests.ui.tests.projects.LeaveRequestITTestProject;
 import org.eclipse.dirigible.tests.IDE;
 import org.eclipse.dirigible.tests.IDEFactory;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
+import org.eclipse.dirigible.tests.mail.EmailAsserter;
 import org.eclipse.dirigible.tests.util.SecurityUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,32 +30,26 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.Duration;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
-import static org.awaitility.Awaitility.await;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
 
     private static final String EMPLOYEE_USERNAME = "john.doe.employee@example.com";
-    private static final String EMPLOYEE_PASSWORD = "john.doe.employee@example.com";
+    private static final String EMPLOYEE_PASSWORD = "randomPassword";
     private static final String EMPLOYEE_MANAGER_USERNAME = "emily.stone.mngr@example.com";
-    private static final String EMPLOYEE_MANAGER_PASSWORD = "emily.stone.mngr@example.com";
+    private static final String EMPLOYEE_MANAGER_PASSWORD = "anotherPassword";
 
     private static final String MAIL_USER = "user";
     private static final String MAIL_PASSWORD = "password";
     private static final int MAIL_PORT = 56565;
 
     static {
-        DirigibleConfig.MAIL_USERNAME.setStringValue(MAIL_USER);
-        DirigibleConfig.MAIL_PASSWORD.setStringValue(MAIL_PASSWORD);
-        DirigibleConfig.MAIL_TRANSPORT_PROTOCOL.setStringValue("smtp");
-        DirigibleConfig.MAIL_SMTP_HOST.setStringValue("localhost");
-        DirigibleConfig.MAIL_SMTP_PORT.setIntValue(MAIL_PORT);
-        DirigibleConfig.MAIL_SMTP_AUTH.setBooleanValue(true);
+        configureEmail();
     }
 
     @Autowired
-    private LeaveRequestITTestProject leaveRequestTestProject;
+    private BPMLeaveRequestTestProject testProject;
 
     @Autowired
     private SecurityUtil securityUtil;
@@ -65,16 +59,27 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
 
     private GreenMail greenMail;
 
+    private static void configureEmail() {
+        DirigibleConfig.MAIL_USERNAME.setStringValue(MAIL_USER);
+        DirigibleConfig.MAIL_PASSWORD.setStringValue(MAIL_PASSWORD);
+        DirigibleConfig.MAIL_TRANSPORT_PROTOCOL.setStringValue("smtp");
+        DirigibleConfig.MAIL_SMTP_HOST.setStringValue("localhost");
+        DirigibleConfig.MAIL_SMTP_PORT.setIntValue(MAIL_PORT);
+        DirigibleConfig.MAIL_SMTP_AUTH.setBooleanValue(true);
+    }
+
     @BeforeEach
-    public void setUp() throws MessagingException {
+    void setUp() throws MessagingException {
         startGreenMailServer();
-        leaveRequestTestProject.generateFromFormFiles();
-        leaveRequestTestProject.publish(true);
-        browser.clearCookies();
+
+        testProject.copyToWorkspace();
+        testProject.generateForms();
+        testProject.publish();
+
         createSecurityUsers();
 
         submitLeaveRequest();
-        assertNotificationEmailSent();
+        assertNotificationEmailReceived();
 
         browser.clearCookies();
         claimRequest();
@@ -88,29 +93,32 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
     }
 
     private void submitLeaveRequest() {
-        ide = createIdeForUser(EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD);
-        ide.openPath("/services/web/LeaveRequestApprovalProcessIT/gen/submit-leave-request/forms/submit-leave-request/index.html");
-        fillFormAndSubmitIt();
+        browser.clearCookies();
+        IDE employeeIde = ideFactory.create(EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD);
+
+        employeeIde.openPath("/services/web/" + testProject.getProjectResourcesFolder()
+                + "/gen/submit-leave-request/forms/submit-leave-request/index.html");
+        fillLeaveRequestForm();
+
+        acceptAlert();
     }
 
-    private IDE createIdeForUser(String username, String password) {
-        return ideFactory.create(username, password);
-    }
-
-    private void fillFormAndSubmitIt() {
+    private void fillLeaveRequestForm() {
         browser.enterTextInElementById("fromId", "02/02/2002");
         browser.enterTextInElementById("toId", "03/03/2002");
+
         browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Submit");
-        handleAlertAccept();
     }
 
-    private void handleAlertAccept() {
+    private void acceptAlert() {
         WebDriverWait wait = new WebDriverWait(WebDriverRunner.getWebDriver(), Duration.ofMillis(1000));
         wait.until(ExpectedConditions.alertIsPresent());
 
         Alert alert = WebDriverRunner.getWebDriver()
                                      .switchTo()
                                      .alert();
+        String alertText = alert.getText();
+        assertThat(alertText).contains("aaa");
         alert.accept();
     }
 
@@ -120,15 +128,16 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
     }
 
     private void claimRequest() {
-        IDE ide2 = createIdeForUser(EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_PASSWORD);
+        IDE managerIde = ideFactory.create(EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD);
 
-        ide2.openPath("/services/web/inbox/");
+        managerIde.openPath("/services/web/inbox/");
 
         browser.clickOnElementContainingText(HtmlElementType.TR, "Process request");
 
         browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Claim");
         browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Close");
         browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Open Form");
+
         Set<String> windowHandles = WebDriverRunner.getWebDriver()
                                                    .getWindowHandles();
 
@@ -138,8 +147,8 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
                        .window(newTabHandle);
     }
 
-    private void assertNotificationEmailSent() throws MessagingException {
-        assertReceivedEmailsCount(1);
+    private void assertNotificationEmailReceived() throws MessagingException {
+        EmailAsserter.assertReceivedEmailsCount(greenMail, 1);
         MimeMessage sentEmail = greenMail.getReceivedMessages()[0];
 
         EmailAsserter.assertEmailReceived(sentEmail, "New leave request",
@@ -147,30 +156,26 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
                 "leave-request-app@example.com", "managers-dl@example.com");
     }
 
-    private void assertReceivedEmailsCount(int expectedCount) {
-        await().atMost(10, TimeUnit.SECONDS)
-               .until(() -> greenMail.getReceivedMessages().length >= expectedCount);
-    }
-
     @Test
-    public void testCreateBPMProcessAndApproveIt() throws MessagingException {
+    void testApproveLeaveRequest() throws MessagingException {
         processRequest(true);
 
-        testApprovalEmail();
+        assertApprovalEmailReceived();
     }
 
     private void processRequest(boolean approve) {
-        String option = approve ? "Approve" : "Decline";
-        browser.clickOnElementContainingText(HtmlElementType.BUTTON, option);
+        String buttonLabel = approve ? "Approve" : "Decline";
+        browser.clickOnElementContainingText(HtmlElementType.BUTTON, buttonLabel);
 
-        handleAlertAccept();
+        acceptAlert();
 
-        assertReceivedEmailsCount(2);
+        EmailAsserter.assertReceivedEmailsCount(greenMail, 2);
 
     }
 
-    private void testApprovalEmail() throws MessagingException {
-        assertReceivedEmailsCount(2);
+    private void assertApprovalEmailReceived() throws MessagingException {
+        EmailAsserter.assertReceivedEmailsCount(greenMail, 2);
+
         MimeMessage sentEmail = greenMail.getReceivedMessages()[1];
         EmailAsserter.assertEmailReceived(sentEmail, "Your leave request has been approved",
                 "has been approved by [emily.stone.mngr@example.com]</h4>", "leave-request-app@example.com",
@@ -178,14 +183,14 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
     }
 
     @Test
-    public void testCreateBPMProcessAndDeclineIt() throws MessagingException {
+    void testDeclineLeaveRequest() throws MessagingException {
         processRequest(false);
 
-        testDeclineEmail();
+        assertDeclinedEmalReceived();
     }
 
-    private void testDeclineEmail() throws MessagingException {
-        assertReceivedEmailsCount(2);
+    private void assertDeclinedEmalReceived() throws MessagingException {
+        EmailAsserter.assertReceivedEmailsCount(greenMail, 2);
         MimeMessage sentEmail = greenMail.getReceivedMessages()[1];
         EmailAsserter.assertEmailReceived(sentEmail, "Your leave request has been declined",
                 "has been declined by [emily.stone.mngr@example.com]</h4>", "leave-request-app@example.com",
@@ -193,7 +198,7 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
     }
 
     @AfterEach
-    public void tearDown() {
+    void tearDown() {
         greenMail.stop();
     }
 }
