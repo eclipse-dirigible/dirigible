@@ -81,7 +81,6 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
         submitLeaveRequest();
         assertNotificationEmailReceived();
 
-        browser.clearCookies();
         claimRequest();
     }
 
@@ -99,8 +98,6 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
         employeeIde.openPath("/services/web/" + testProject.getProjectResourcesFolder()
                 + "/gen/submit-leave-request/forms/submit-leave-request/index.html");
         fillLeaveRequestForm();
-
-        acceptAlert();
     }
 
     private void fillLeaveRequestForm() {
@@ -108,15 +105,18 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
         browser.enterTextInElementById("toId", "03/03/2002");
 
         browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Submit");
+
+        assertAlert();
     }
 
-    private void acceptAlert() {
+    private void assertAlert() {
         WebDriverWait wait = new WebDriverWait(WebDriverRunner.getWebDriver(), Duration.ofMillis(1000));
         wait.until(ExpectedConditions.alertIsPresent());
 
         Alert alert = WebDriverRunner.getWebDriver()
                                      .switchTo()
                                      .alert();
+
         String alertText = alert.getText();
         assertThat(alertText).contains("Leave request has been created.");
         alert.accept();
@@ -128,6 +128,7 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
     }
 
     private void claimRequest() {
+        browser.clearCookies();
         IDE managerIde = ideFactory.create(EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD);
 
         managerIde.openPath("/services/web/inbox/");
@@ -167,7 +168,7 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
         String buttonLabel = approve ? "Approve" : "Decline";
         browser.clickOnElementContainingText(HtmlElementType.BUTTON, buttonLabel);
 
-        acceptAlert();
+        assertAlert();
 
         EmailAsserter.assertReceivedEmailsCount(greenMail, 2);
 
