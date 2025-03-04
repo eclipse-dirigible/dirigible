@@ -12,10 +12,9 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 
 enum NewFileOption {
     ENTITY_DATA_MODEL("Entity Data Model", "edm.edm"), //
-    FILE("File", "aaa"), //
     JAVASCRIPT_SERVICE("JavaScript Service", "javascript-esm.mjs"), //
     TYPESCRIPT_SERVICE("TypeScript Service", "typescript.ts"), //
-    BUSINESS_PROCESS_MODEL("Business Process Model", "bpmn.bpmn"), //
+    BUSINESS_PROCESS_MODEL("Business Process Model", "bpmn-new.bpmn"), //
     ACCESS_CONSTRAINTS("Access Constraints", "access.access"), //
     DATABASE_SCHEMA_MODEL("Database Schema Model", "schema.dsm"), //
     DATABASE_TABLE("Database Table", "database-table.table"), //
