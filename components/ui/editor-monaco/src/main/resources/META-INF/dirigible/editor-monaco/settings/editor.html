@@ -102,6 +102,7 @@
 			const settings = angular.module('settings', ['blimpKit', 'platformView']);
 			settings.controller('SettingsController', ($scope, $window) => {
 				const messageHub = new MessageHubApi();
+				const brandingInfo = getBrandingInfo();
 				const autoFormatKey = `${brandingInfo.keyPrefix}.code-editor.autoFormat`;
 				const autoFormatExcludedKey = `${brandingInfo.keyPrefix}.code-editor.autoFormat.excluded`;
 				const autoBracketsKey = `${brandingInfo.keyPrefix}.code-editor.autoBrackets`;

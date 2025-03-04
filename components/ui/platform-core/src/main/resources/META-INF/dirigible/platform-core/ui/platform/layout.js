@@ -26,7 +26,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
             const VIEW = 'view';
             const EDITOR = 'editor';
 
-            const layoutStateKey = `${brandingInfo.keyPrefix}.${layoutConstants.stateKey}.${perspectiveData.id}`;
+            const layoutStateKey = `${getBrandingInfo().keyPrefix}.${layoutConstants.stateKey}.${perspectiveData.id}`;
 
             $scope.perspectiveName = '';
             $scope.perspectiveStyle = {
@@ -701,11 +701,11 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
             }
 
             function reloadCenterTab(editorPath, params) {
-                let result = findCenterSplittedTabViewByPath(params.filePath);
+                const result = findCenterSplittedTabViewByPath(params.filePath);
                 if (result) {
                     const tab = result.tabsView.tabs[result.index];
                     tab.path = editorPath;
-                    tab.params = params;
+                    tab.params = { ...tab.params, ...params };
                 }
             }
 
@@ -1141,7 +1141,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                 perspectiveId: perspectiveData.id,
             });
         },
-        template: `<iframe title="{{::tab.label}}" tab-id={{::tab.id}} loading="{{::tab.lazyLoad ? 'lazy' : 'eager'}}" ng-src="{{::tab.path}}" data-parameters="{{getParams()}}"></iframe>`,
+        template: `<iframe title="{{tab.label}}" tab-id={{::tab.id}} loading="{{::tab.lazyLoad ? 'lazy' : 'eager'}}" ng-src="{{tab.path}}" data-parameters="{{getParams()}}"></iframe>`,
     }))
     .directive('splittedTabs', () => ({
         restrict: 'E',

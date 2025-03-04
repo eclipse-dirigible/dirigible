@@ -12,9 +12,10 @@ package org.eclipse.dirigible.components.tenants.service;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
+import org.eclipse.dirigible.components.tenants.tenant.TenantExtractor;
+import org.eclipse.dirigible.components.tenants.tenant.TenantImpl;
 import org.springframework.stereotype.Service;
 
 /**
@@ -71,7 +72,9 @@ public class TenantService {
      * @return the tenant
      */
     public Tenant save(Tenant tenant) {
-        return tenantRepository.save(tenant);
+        Tenant newTenant = tenantRepository.save(tenant);
+        TenantExtractor.TENANT_CACHE.put(newTenant.getSubdomain(), Optional.of(TenantImpl.createFromEntity(newTenant)));
+        return newTenant;
     }
 
     /**
@@ -91,6 +94,7 @@ public class TenantService {
      */
     public void delete(Tenant tenant) {
         tenantRepository.delete(tenant);
+        TenantExtractor.TENANT_CACHE.invalidate(tenant.getSubdomain());
     }
 
 }

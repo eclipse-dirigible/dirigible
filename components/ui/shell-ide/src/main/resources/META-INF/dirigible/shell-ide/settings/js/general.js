@@ -13,6 +13,7 @@ const general = angular.module('general', ['ngCookies', 'blimpKit', 'platformVie
 general.controller('GeneralController', ($scope, $http, $cookies, $window, theming, ButtonStates) => {
     const dialogHub = new DialogHub();
     const themingHub = new ThemingHub();
+    const brandingInfo = getBrandingInfo();
     const autoRevealKey = `${brandingInfo.keyPrefix}.settings.general.autoReveal`;
     $scope.themes = [];
     $scope.switches = {
