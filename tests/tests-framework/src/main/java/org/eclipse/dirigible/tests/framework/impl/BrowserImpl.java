@@ -28,6 +28,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
@@ -39,17 +40,14 @@ class BrowserImpl implements Browser {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BrowserImpl.class);
 
-    private static final String BROWSER = "chrome";
     private static final String PATH_SEPARATOR = "/";
+
     private static final int FRAME_SEARCH_TOTAL_SECONDS = 45;
     private static final int ELEMENT_EXISTENCE_SEARCH_TIME_SECONDS = 10;
-    private static final int SELENIDE_TIMEOUT_SECONDS = FRAME_SEARCH_TOTAL_SECONDS;
     private static final int ELEMENT_SEARCH_IN_FRAME_MILLIS = 100;
 
     static {
-        Configuration.timeout = SELENIDE_TIMEOUT_SECONDS;
-        Configuration.browser = BROWSER;
-        Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
+        configureSelenide();
     }
 
     private final String protocol;
@@ -75,6 +73,12 @@ class BrowserImpl implements Browser {
         ProtocolType(String protocol) {
             this.protocol = protocol;
         }
+    }
+
+    private static void configureSelenide() {
+        Configuration.timeout = TimeUnit.SECONDS.toMillis(15);
+        Configuration.browser = "chrome";
+        Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
     }
 
     @Override

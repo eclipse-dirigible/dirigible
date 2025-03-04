@@ -45,7 +45,6 @@ class MultitenancyITTestProject extends BaseTestProject implements MultitenantTe
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MultitenancyITTestProject.class);
 
-    private static final String EDM_FILE_NAME = "edm.edm";
     private static final String PROJECT_RESOURCES_PATH = "MultitenancyIT";
     private static final String UI_HOME_PATH = "/services/web/" + PROJECT_RESOURCES_PATH + "/gen/edm/index.html";
     private static final String TS_BASE_PATH = "/services/ts/" + PROJECT_RESOURCES_PATH + "/";
@@ -53,6 +52,7 @@ class MultitenancyITTestProject extends BaseTestProject implements MultitenantTe
     private static final String DOCUMENTS_SERVICE_PATH = TS_BASE_PATH + "cmis/DocumentService.ts/documents";
     private static final String BOOKS_SERVICE_PATH = TS_BASE_PATH + "gen/edm/api/Books/BookService.ts";
     private static final String READERS_ODATA_ENTITY_PATH = "/odata/v2/Readers";
+
     private final BrowserFactory browserFactory;
     private final RestAssuredExecutor restAssuredExecutor;
     private final IDEFactory ideFactory;
@@ -275,7 +275,7 @@ class MultitenancyITTestProject extends BaseTestProject implements MultitenantTe
     }
 
     void generateEDM() {
-        generateEDM(EDM_FILE_NAME);
+        generateEDM("edm.edm");
     }
 
 }
