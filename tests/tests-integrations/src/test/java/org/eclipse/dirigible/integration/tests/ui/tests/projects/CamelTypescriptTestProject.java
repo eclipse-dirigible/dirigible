@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 
 @Lazy
 @Component
-public class CamelTypescriptTestProject extends BaseTestProject{
+public class CamelTypescriptTestProject extends BaseTestProject {
     public CamelTypescriptTestProject(IDE ide, ProjectUtil projectUtil) {
         super("CamelExtractTransformLoadIT_testTypeScriptScenario", ide, projectUtil);
     }
