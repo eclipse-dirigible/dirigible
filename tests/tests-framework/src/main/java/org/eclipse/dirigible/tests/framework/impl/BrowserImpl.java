@@ -12,7 +12,6 @@ package org.eclipse.dirigible.tests.framework.impl;
 import com.codeborne.selenide.*;
 import com.codeborne.selenide.ex.ListSizeMismatch;
 import org.apache.commons.lang3.StringUtils;
-import org.assertj.core.api.Assertions;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
@@ -29,7 +28,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
@@ -42,13 +40,14 @@ class BrowserImpl implements Browser {
     private static final Logger LOGGER = LoggerFactory.getLogger(BrowserImpl.class);
 
     private static final String BROWSER = "chrome";
-    private static final long SELENIDE_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(15);
     private static final String PATH_SEPARATOR = "/";
-    private static final int TOTAL_ELEMENT_SEARCH_TIMEOUT = 60 * 1000;
-    private static final long ELEMENT_SEARCH_IN_FRAME_MILLIS = 100;
+    private static final int FRAME_SEARCH_TOTAL_SECONDS = 30;
+    private static final int ELEMENT_EXISTENCE_SEARCH_TIME_SECONDS = 10;
+    private static final int SELENIDE_TIMEOUT_SECONDS = FRAME_SEARCH_TOTAL_SECONDS;
+    private static final int ELEMENT_SEARCH_IN_FRAME_MILLIS = 100;
 
     static {
-        Configuration.timeout = SELENIDE_TIMEOUT_MILLIS;
+        Configuration.timeout = SELENIDE_TIMEOUT_SECONDS;
         Configuration.browser = BROWSER;
         Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
     }
@@ -141,14 +140,30 @@ class BrowserImpl implements Browser {
     }
 
     @Override
+    public SelenideElement findElementInAllFrames(By by, WebElementCondition... conditions) {
+        Optional<SelenideElement> element = findOptionalElementInAllFrames(by, FRAME_SEARCH_TOTAL_SECONDS, conditions);
+        if (element.isEmpty()) {
+            failWithScreenshot("Element by [" + by + "] and conditions [" + Arrays.toString(conditions)
+                    + "] cannot be found in any iframe OR found multiple matches. Check logs for more details.");
+        }
+        return element.get();
+    }
+
+    private void failWithScreenshot(String message) {
+        String screenshot = createScreenshot();
+        fail(message + "\nScreenshot path: " + screenshot);
+    }
+
+    @Override
     public String createScreenshot() {
         return Selenide.screenshot(UUID.randomUUID()
                                        .toString());
     }
 
     @Override
-    public SelenideElement findElementInAllFrames(By by, WebElementCondition... conditions) {
-        long maxWaitTime = System.currentTimeMillis() + TOTAL_ELEMENT_SEARCH_TIMEOUT;
+    public Optional<SelenideElement> findOptionalElementInAllFrames(By by, long totalSearchTimeoutSeconds,
+            WebElementCondition... conditions) {
+        long maxWaitTime = System.currentTimeMillis() + (totalSearchTimeoutSeconds * 1000);
 
         do {
             Optional<SelenideElement> element = findSingleElementInAllFrames(by, conditions);
@@ -156,7 +171,7 @@ class BrowserImpl implements Browser {
                 LOGGER.debug("Element by [{}] and conditions [{}] was NOT found. Will try again.", by, conditions);
             } else {
                 LOGGER.debug("Element by [{}] and conditions [{}] was FOUND.", by, conditions);
-                return element.get();
+                return element;
             }
         } while (System.currentTimeMillis() < maxWaitTime);
 
@@ -169,19 +184,20 @@ class BrowserImpl implements Browser {
         Optional<SelenideElement> element = findSingleElementInAllFrames(by);
         if (element.isPresent()) {
             LOGGER.debug("Element [{}] was FOUND after page reload.", element);
-            return element.get();
+            return element;
         } else {
-            String screenshot = createScreenshot();
-            fail("Element by [" + by + "] and conditions [" + Arrays.toString(conditions)
-                    + "] cannot be found in any iframe OR found multiple matches. Check logs for more details. Screenshot path: "
-                    + screenshot);
-            throw new IllegalStateException("Will not be thrown");
+            return Optional.empty();
         }
     }
 
     @Override
     public void reload() {
         Selenide.refresh();
+    }
+
+    @Override
+    public Optional<SelenideElement> findOptionalElementInAllFrames(By by, WebElementCondition... conditions) {
+        return findOptionalElementInAllFrames(by, FRAME_SEARCH_TOTAL_SECONDS, conditions);
     }
 
     private Optional<SelenideElement> findSingleElementInAllFrames(By by, WebElementCondition... conditions) {
@@ -420,14 +436,10 @@ class BrowserImpl implements Browser {
 
     @Override
     public void assertElementDoesNotExistsByTypeAndContainsText(String elementType, String text) {
-        By selector = constructCssSelectorByType(elementType);
-        try {
-            SelenideElement element = findElementInAllFrames(selector, Condition.exist, Condition.matchText(Pattern.quote(text)));
-            Assertions.fail("Expected AssertionError was not thrown");
-        } catch (AssertionError e) {
-            Assertions.assertThat(e.getMessage())
-                      .contains(text);
-        }
+        By by = constructCssSelectorByType(elementType);
+
+        Optional<SelenideElement> element = findOptionalElementInAllFrames(by, ELEMENT_EXISTENCE_SEARCH_TIME_SECONDS);
+        failWithScreenshot("Element with selector [" + by + "] was not found");
     }
 
     @Override

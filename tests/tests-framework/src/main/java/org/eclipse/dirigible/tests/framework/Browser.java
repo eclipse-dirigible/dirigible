@@ -13,6 +13,7 @@ import com.codeborne.selenide.SelenideElement;
 import com.codeborne.selenide.WebElementCondition;
 import org.openqa.selenium.By;
 
+import java.util.Optional;
 import java.util.function.Consumer;
 
 public interface Browser {
@@ -80,6 +81,10 @@ public interface Browser {
     void clearCookies();
 
     SelenideElement findElementInAllFrames(By by, WebElementCondition... conditions);
+
+    Optional<SelenideElement> findOptionalElementInAllFrames(By by, WebElementCondition... conditions);
+
+    Optional<SelenideElement> findOptionalElementInAllFrames(By by, long totalTimeoutSeconds, WebElementCondition... conditions);
 
     void handleElementInAllFrames(By by, Consumer<SelenideElement> elementHandler, WebElementCondition... conditions);
 
