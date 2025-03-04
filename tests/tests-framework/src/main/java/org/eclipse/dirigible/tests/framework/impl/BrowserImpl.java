@@ -439,7 +439,9 @@ class BrowserImpl implements Browser {
         By by = constructCssSelectorByType(elementType);
 
         Optional<SelenideElement> element = findOptionalElementInAllFrames(by, ELEMENT_EXISTENCE_SEARCH_TIME_SECONDS);
-        failWithScreenshot("Element with selector [" + by + "] was not found");
+        if (element.isPresent()) {
+            failWithScreenshot("Element with selector [" + by + "] was not found");
+        }
     }
 
     @Override
