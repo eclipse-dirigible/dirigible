@@ -11,6 +11,7 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import org.eclipse.dirigible.integration.tests.ui.tests.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.IDE;
+import org.eclipse.dirigible.tests.util.ProjectUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -21,7 +22,7 @@ class BPMLeaveRequestTestProject extends BaseTestProject {
     private static final String PROCESS_LEAVE_REQUEST_FORM_FILENAME = "process-leave-request.form";
     private static final String SUBMIT_LEAVE_REQUEST_FORM_FILENAME = "submit-leave-request.form";
 
-    BPMLeaveRequestTestProject(IDE ide) {
+    BPMLeaveRequestTestProject(IDE ide, ProjectUtil projectUtil) {
         super("BPMLeaveRequestIT", ide, projectUtil);
     }
 
