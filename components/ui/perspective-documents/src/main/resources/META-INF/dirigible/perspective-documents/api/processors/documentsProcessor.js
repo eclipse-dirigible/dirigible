@@ -34,7 +34,7 @@ export const get = (path) => {
 export const list = (path) => {
 	let folder = folderUtils.getFolderOrRoot(path);
 	let result = folderUtils.readFolder(folder);
-	filterByAccessDefinitions(result);
+	// filterByAccessDefinitions(result);
 	return result;
 };
 
@@ -74,6 +74,7 @@ export const remove = (objects, forceDelete) => {
 	}
 };
 
+/*
 function filterByAccessDefinitions(folder) {
 	let accessDefinitions = JSON.parse(registry.getText("ide-documents/security/roles.access"));
 	folder.children = folder.children.filter(e => {
@@ -106,3 +107,4 @@ function hasAccessPermissions(constraints, path) {
 	}
 	return true;
 }
+*/

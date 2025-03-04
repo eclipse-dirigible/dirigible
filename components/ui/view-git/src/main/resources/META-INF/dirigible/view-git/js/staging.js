@@ -474,7 +474,7 @@ stagingView.controller('StagingViewController', ($scope, GitService, ButtonState
                     $scope.selectedRepository = data.project;
                     $scope.loadRepositoryStatus();
                 } else {
-                    $scope.clearList();
+                    $scope.clearLists();
                 }
             });
             canReloadSameProject = false;

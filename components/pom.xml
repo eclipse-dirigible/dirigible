@@ -260,6 +260,7 @@
 		<module>ui/editor-csv</module>
 		<module>ui/editor-csvim</module>
 		<module>ui/editor-form-builder</module>
+		<module>ui/ext-documents-content-type-ms</module>
 		
 		<module>ui/menu-bpm</module>
 		<module>ui/menu-database</module>
@@ -1482,6 +1483,11 @@
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
 				<artifactId>dirigible-components-ui-editor-form-builder</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-ui-ext-documents-content-type-ms</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 
