@@ -41,7 +41,7 @@ class BrowserImpl implements Browser {
 
     private static final String BROWSER = "chrome";
     private static final String PATH_SEPARATOR = "/";
-    private static final int FRAME_SEARCH_TOTAL_SECONDS = 30;
+    private static final int FRAME_SEARCH_TOTAL_SECONDS = 45;
     private static final int ELEMENT_EXISTENCE_SEARCH_TIME_SECONDS = 10;
     private static final int SELENIDE_TIMEOUT_SECONDS = FRAME_SEARCH_TOTAL_SECONDS;
     private static final int ELEMENT_SEARCH_IN_FRAME_MILLIS = 100;
