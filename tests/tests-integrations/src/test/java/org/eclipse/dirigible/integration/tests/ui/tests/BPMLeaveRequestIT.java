@@ -31,6 +31,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.time.Duration;
 import java.util.Set;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
 
     private static final String EMPLOYEE_USERNAME = "john.doe.employee@example.com";
@@ -115,6 +117,8 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
         Alert alert = WebDriverRunner.getWebDriver()
                                      .switchTo()
                                      .alert();
+        String alertText = alert.getText();
+        assertThat(alertText).contains("Leave request has been created.");
         alert.accept();
     }
 
@@ -147,8 +151,8 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
         EmailAsserter.assertReceivedEmailsCount(greenMail, 1);
         MimeMessage sentEmail = greenMail.getReceivedMessages()[0];
 
-        EmailAsserter.assertEmailReceived(sentEmail, "New leave request",
-                "<h4>A new leave request for [john.doe.employee@example.com] has been created</h4>Open the inbox <a href=\"http://localhost:80/services/web/inbox/\" target=\"_blank\">here</a> to process the request.",
+        EmailAsserter.assertEmailReceived(sentEmail, "New leave request", "<h4>A new leave request for [" + EMPLOYEE_USERNAME
+                + "] has been created</h4>Open the inbox <a href=\"http://localhost:80/services/web/inbox/\" target=\"_blank\">here</a> to process the request.",
                 "leave-request-app@example.com", "managers-dl@example.com");
     }
 
@@ -174,8 +178,7 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
 
         MimeMessage sentEmail = greenMail.getReceivedMessages()[1];
         EmailAsserter.assertEmailReceived(sentEmail, "Your leave request has been approved",
-                "has been approved by [emily.stone.mngr@example.com]</h4>", "leave-request-app@example.com",
-                "john.doe.employee@example.com");
+                "has been approved by [" + EMPLOYEE_MANAGER_USERNAME + "]</h4>", "leave-request-app@example.com", EMPLOYEE_USERNAME);
     }
 
     @Test
@@ -189,8 +192,7 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
         EmailAsserter.assertReceivedEmailsCount(greenMail, 2);
         MimeMessage sentEmail = greenMail.getReceivedMessages()[1];
         EmailAsserter.assertEmailReceived(sentEmail, "Your leave request has been declined",
-                "has been declined by [emily.stone.mngr@example.com]</h4>", "leave-request-app@example.com",
-                "john.doe.employee@example.com");
+                "has been declined by [" + EMPLOYEE_MANAGER_USERNAME + "]</h4>", "leave-request-app@example.com", EMPLOYEE_USERNAME);
     }
 
     @AfterEach
