@@ -28,10 +28,6 @@ public class Workbench {
         this.welcomeViewFactory = welcomeViewFactory;
     }
 
-    public void openFile(String fileName) {
-        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, fileName);
-    }
-
     public void publishAll(boolean waitForSynchronizationExecution) {
         clickPublishAll();
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Published all projects in");
@@ -82,4 +78,12 @@ public class Workbench {
         browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
     }
 
+    public void openFile(String projectName, String fileName) {
+        expandProject(projectName);
+        openFile(fileName);
+    }
+
+    public void openFile(String fileName) {
+        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, fileName);
+    }
 }

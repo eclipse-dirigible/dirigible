@@ -1,9 +1,17 @@
+/*
+ * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
+ */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import org.eclipse.dirigible.integration.tests.ui.tests.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.EdmView;
 import org.eclipse.dirigible.tests.IDE;
-import org.eclipse.dirigible.tests.Workbench;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
@@ -13,37 +21,21 @@ import org.springframework.stereotype.Component;
 
 @Lazy
 @Component
-public class DependsOnTestProject extends BaseTestProject {
+class DependsOnTestProject extends BaseTestProject {
 
     private static final String EDM_FILE_NAME = "edm.edm";
-    private static final String PROJECT_ROOT_FOLDER_DEPENDS_ON = "dirigible-depends-on-test-project";
-    private static final String PROJECT_RESOURCES_PATH_DEPENDS_ON = "dirigible-depends-on-test-project";
-    private static final String VERIFICATION_URI = "/services/web/dirigible-depends-on-test-project/gen/edm/ui/Orders/index.html";
+    private static final String PROJECT_RESOURCES_PATH = "DependsOnIT";
+    private static final String VERIFICATION_URI = "/services/web/" + PROJECT_RESOURCES_PATH + "/gen/edm/ui/Orders/index.html";
 
-    private final EdmView edmView;
     private final Browser browser;
 
     DependsOnTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, Browser browser) {
-        super(PROJECT_RESOURCES_PATH_DEPENDS_ON, ide, projectUtil);
-        this.edmView = edmView;
+        super(PROJECT_RESOURCES_PATH, ide, projectUtil, edmView);
         this.browser = browser;
     }
 
-    public void publishDependsOn() {
-        setupAndPublish(PROJECT_RESOURCES_PATH_DEPENDS_ON, PROJECT_ROOT_FOLDER_DEPENDS_ON, EDM_FILE_NAME);
-        verify();
-    }
-
-    public void setupAndPublish(String projectResourcesPath, String projectRootFolder, String edmFileName) {
-        copyToWorkspace();
-
-        Workbench workbench = getIde().openWorkbench();
-        workbench.expandProject(projectRootFolder);
-        workbench.openFile(edmFileName);
-
-        edmView.regenerate();
-
-        workbench.publishAll(false);
+    void generateEDM() {
+        generateEDM(EDM_FILE_NAME);
     }
 
     @Override

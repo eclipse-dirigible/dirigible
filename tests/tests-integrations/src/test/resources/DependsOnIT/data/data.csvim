@@ -3,7 +3,7 @@
     {
       "table": "DIRIGIBLE_COUNTRY",
       "schema": "PUBLIC",
-      "file": "dirigible-depends-on-test-project/data/Country.csv",
+      "file": "DependsOnIT/data/Country.csv",
       "header": true,
       "useHeaderNames": true,
       "delimField": ",",
@@ -14,7 +14,7 @@
     {
       "table": "DIRIGIBLE_CITY",
       "schema": "PUBLIC",
-      "file": "dirigible-depends-on-test-project/data/City.csv",
+      "file": "DependsOnIT/data/City.csv",
       "header": true,
       "useHeaderNames": true,
       "delimField": ",",
