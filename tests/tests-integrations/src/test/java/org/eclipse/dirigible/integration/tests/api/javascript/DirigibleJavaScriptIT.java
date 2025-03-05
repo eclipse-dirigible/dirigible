@@ -10,7 +10,7 @@
 package org.eclipse.dirigible.integration.tests.api.javascript;
 
 import org.eclipse.dirigible.components.ide.workspace.domain.ProjectStatusProvider;
-import org.eclipse.dirigible.integration.tests.IntegrationTest;
+import org.eclipse.dirigible.tests.IntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DynamicContainer;
 import org.junit.jupiter.api.TestFactory;

@@ -7,16 +7,15 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests;
+package org.eclipse.dirigible.tests;
 
-import org.eclipse.dirigible.tests.IDE;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.projects.TestProject;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
-public abstract class PredefinedProjectIT extends IntegrationTest {
+public abstract class PredefinedProjectIT extends UserInterfaceIntegrationTest {
 
     @Autowired
     protected Browser browser;
