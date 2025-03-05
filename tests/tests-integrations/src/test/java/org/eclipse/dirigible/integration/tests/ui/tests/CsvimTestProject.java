@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.api.java;
+package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
@@ -52,7 +52,6 @@ class CsvimTestProject extends BaseTestProject {
         super("CsvimIT", ide, projectUtil, edmView);
         this.dataSourcesManager = dataSourcesManager;
     }
-
 
     private record Reader(int id, String firstName, String lastName) {
 

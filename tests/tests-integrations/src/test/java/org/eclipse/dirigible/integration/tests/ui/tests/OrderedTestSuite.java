@@ -10,7 +10,6 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import org.eclipse.dirigible.integration.tests.api.SecurityIT;
-import org.eclipse.dirigible.integration.tests.api.java.CsvimIT;
 import org.eclipse.dirigible.integration.tests.api.java.messaging.MessagingFacadeIT;
 import org.junit.platform.suite.api.SelectClasses;
 import org.junit.platform.suite.api.Suite;
