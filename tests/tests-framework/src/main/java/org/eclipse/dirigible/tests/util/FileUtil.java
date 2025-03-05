@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class FileUtil {
+    public static final String FILE_PREFIX = "file:";
     private static final Logger LOGGER = LoggerFactory.getLogger(FileUtil.class);
 
     public static List<Path> findFiles(File folder, String fileExtension) throws IOException {
@@ -70,5 +71,16 @@ public class FileUtil {
 
     public static List<Path> findFiles(String folder) throws IOException {
         return findFiles(Path.of(folder));
+    }
+
+    public static void deleteFile(String filePath) {
+        String path =
+                filePath.startsWith(FILE_PREFIX) ? filePath.substring(filePath.indexOf(FILE_PREFIX) + FILE_PREFIX.length()) : filePath;
+        File file = new File(path);
+        LOGGER.debug("Will delete file [{}]", file);
+        boolean deleted = file.delete();
+        if (!deleted) {
+            throw new IllegalStateException("Failed to delete file: " + file);
+        }
     }
 }
