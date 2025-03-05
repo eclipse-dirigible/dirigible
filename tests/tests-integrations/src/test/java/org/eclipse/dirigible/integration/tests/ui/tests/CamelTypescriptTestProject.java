@@ -10,7 +10,7 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import ch.qos.logback.classic.Level;
-import org.eclipse.dirigible.integration.tests.ui.tests.projects.BaseTestProject;
+import org.eclipse.dirigible.integration.tests.ui.tests.projects.BaseCamelTestProject;
 import org.eclipse.dirigible.tests.EdmView;
 import org.eclipse.dirigible.tests.IDE;
 import org.eclipse.dirigible.tests.logging.LogsAsserter;
@@ -18,13 +18,9 @@ import org.eclipse.dirigible.tests.util.ProjectUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-import java.util.concurrent.TimeUnit;
-
-import static org.awaitility.Awaitility.await;
-
 @Lazy
 @Component
-class CamelTypescriptTestProject extends BaseTestProject {
+class CamelTypescriptTestProject extends BaseCamelTestProject {
     private LogsAsserter camelLogAsserter;
     private LogsAsserter consoleLogAsserter;
 
@@ -40,12 +36,8 @@ class CamelTypescriptTestProject extends BaseTestProject {
         assertLogContainsMessage(consoleLogAsserter, "About to upsert Open cart order [2] using exchange rate", Level.INFO);
         assertLogContainsMessage(consoleLogAsserter, "Upserted Open cart order [2]", Level.INFO);
         assertLogContainsMessage(camelLogAsserter, "Successfully replicated orders from OpenCart using TypeScript", Level.INFO);
-    }
+        assertDatabaseETLCompletion();
 
-    private void assertLogContainsMessage(LogsAsserter logAsserter, String message, Level level) {
-        await().atMost(30, TimeUnit.SECONDS)
-               .pollInterval(1, TimeUnit.SECONDS)
-               .until(() -> logAsserter.containsMessage(message, level));
     }
 
     public void setLogsAsserter(LogsAsserter camelLogAsserter, LogsAsserter consoleLogAsserter) {

@@ -10,17 +10,10 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import ch.qos.logback.classic.Level;
-import org.assertj.db.api.Assertions;
-import org.assertj.db.type.AssertDbConnection;
-import org.assertj.db.type.AssertDbConnectionFactory;
-import org.assertj.db.type.Table;
-import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.tests.logging.LogsAsserter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-
-import javax.sql.DataSource;
 
 class CamelExtractTransformLoadIT extends UserInterfaceIntegrationTest {
 
@@ -29,9 +22,6 @@ class CamelExtractTransformLoadIT extends UserInterfaceIntegrationTest {
 
     @Autowired
     private CamelTypescriptTestProject typescriptTestProject;
-
-    @Autowired
-    private DataSourcesManager dataSourcesManager;
 
     private LogsAsserter consoleLogAsserter;
     private LogsAsserter camelLogAsserter;
@@ -49,8 +39,6 @@ class CamelExtractTransformLoadIT extends UserInterfaceIntegrationTest {
         jdbcTestProject.publish();
 
         jdbcTestProject.verify();
-
-        assertDatabaseETLCompletion();
     }
 
     @Test
@@ -60,34 +48,5 @@ class CamelExtractTransformLoadIT extends UserInterfaceIntegrationTest {
         typescriptTestProject.publish();
 
         typescriptTestProject.verify();
-
-        assertDatabaseETLCompletion();
     }
-
-
-
-    private void assertDatabaseETLCompletion() {
-        DataSource dataSource = dataSourcesManager.getDefaultDataSource();
-        AssertDbConnection connection = AssertDbConnectionFactory.of(dataSource)
-                                                                 .create();
-
-        Table ordersTable = connection.table("\"ORDERS\"")
-                                      .build();
-
-        Assertions.assertThat(ordersTable)
-                  .hasNumberOfRows(2)
-                  .row(0)
-                  .value("ID")
-                  .isEqualTo(1)
-                  .value("TOTAL")
-                  .isEqualTo(92)
-                  .row(1)
-                  .value("ID")
-                  .isEqualTo(2)
-                  .value("TOTAL")
-                  .isEqualTo(230.46);
-    }
-
-
-
 }
