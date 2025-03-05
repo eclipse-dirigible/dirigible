@@ -23,7 +23,7 @@ import static io.restassured.RestAssured.given;
 import static org.awaitility.Awaitility.await;
 import static org.hamcrest.Matchers.containsString;
 
-class CamelDirigibleJavaScriptComponentIT extends UserInterfaceIntegrationTest {
+class CamelDirigibleJavaScriptComponentHttpRouteIT extends UserInterfaceIntegrationTest {
 
     @Autowired
     private RestAssuredExecutor restAssuredExecutor;

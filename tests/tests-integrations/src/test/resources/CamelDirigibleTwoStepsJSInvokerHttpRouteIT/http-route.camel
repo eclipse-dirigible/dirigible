@@ -16,7 +16,7 @@
             expression:
               simple:
                 id: simple-a11f
-                expression: http-route-call-dirigible-js-two-steps/handler.ts
+                expression: CamelDirigibleTwoStepsJSInvokerHttpRouteIT/handler.ts
         - to:
             id: to-7ddb
             description: Execute TS file

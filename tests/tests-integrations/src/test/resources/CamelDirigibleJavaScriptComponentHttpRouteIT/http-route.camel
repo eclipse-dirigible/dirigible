@@ -14,4 +14,4 @@
             description: Call handler.ts
             uri: dirigible-java-script
             parameters:
-              javaScriptPath: http-route-call-dirigible-js-custom-component/handler.ts
+              javaScriptPath: CamelDirigibleJavaScriptComponentHttpRouteIT/handler.ts

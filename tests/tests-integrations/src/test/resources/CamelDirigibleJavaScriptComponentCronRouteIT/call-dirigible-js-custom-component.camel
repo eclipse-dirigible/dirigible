@@ -25,7 +25,7 @@
             description: Invoke handler.ts
             uri: dirigible-java-script
             parameters:
-              javaScriptPath: call-dirigible-js-custom-component/handler.ts
+              javaScriptPath: CamelDirigibleJavaScriptComponentCronRouteIT/handler.ts
         - log:
             id: log-9803
             description: Log completed

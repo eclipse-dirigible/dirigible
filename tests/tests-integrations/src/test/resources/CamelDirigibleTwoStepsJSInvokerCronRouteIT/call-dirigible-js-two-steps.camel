@@ -27,7 +27,7 @@
             expression:
               simple:
                 id: simple-2782
-                expression: call-dirigible-js-two-steps/handler.ts
+                expression: CamelDirigibleTwoStepsJSInvokerCronRouteIT/handler.ts
         - to:
             id: to-9e30
             description: Execute JS
