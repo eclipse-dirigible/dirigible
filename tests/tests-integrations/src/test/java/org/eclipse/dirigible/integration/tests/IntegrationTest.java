@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.integration.tests;
 
-import org.eclipse.dirigible.DirigibleApplication;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.tests.DirigibleCleaner;
 import org.junit.jupiter.api.AfterAll;
@@ -23,7 +22,7 @@ import org.springframework.test.annotation.DirtiesContext.ClassMode;
 
 @AutoConfigureMockMvc
 @DirtiesContext(classMode = ClassMode.AFTER_EACH_TEST_METHOD)
-@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT, classes = DirigibleApplication.class)
+@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 public abstract class IntegrationTest {
 
     // set config to false if you want to disable the headless mode
