@@ -59,6 +59,7 @@ abstract class BPMLeaveRequestTestProject extends BaseTestProject {
         generateForms(getProjectResourcesFolder(), PROCESS_LEAVE_REQUEST_FORM_FILENAME, SUBMIT_LEAVE_REQUEST_FORM_FILENAME);
 
         publish();
+        getIde().close();
 
         createTestUsers();
     }
@@ -130,6 +131,8 @@ abstract class BPMLeaveRequestTestProject extends BaseTestProject {
 
         String alertMessage = approve ? "Request Approved" : "Request Declined";
         managerBrowser.assertAlertWithMessage(alertMessage);
+
+        managerIDE.close();
     }
 
     protected abstract boolean shouldApproveRequest();
