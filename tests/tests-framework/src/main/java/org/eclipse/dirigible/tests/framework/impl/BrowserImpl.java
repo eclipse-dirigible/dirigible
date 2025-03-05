@@ -15,6 +15,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
+import org.eclipse.dirigible.tests.util.FileUtil;
 import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.openqa.selenium.Alert;
 import org.openqa.selenium.By;
@@ -27,6 +28,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
+import java.io.Serializable;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -308,9 +310,19 @@ class BrowserImpl implements Browser {
 
             return Optional.of(foundElements.first());
         } catch (ListSizeMismatch ex) {
+            Serializable matchedElements = ex.getActual()
+                                             .getValue();
+            boolean zeroMatches = Integer.valueOf(0)
+                                         .equals(matchedElements);
             LOGGER.debug(
-                    "Element with selector [{}] and conditions [{}] does NOT exist in the current frame or MULTIPLE found. Consider using more precise selector and conditions.\nFound elements: {}.\nCause error message: {}",
-                    by, allConditions, describeCollection(by, foundElements, conditions), ex.getMessage());
+                    "Found [{}] elements with selector [{}] and conditions [{}] but expected ONLY ONE. Consider using more precise selector and conditions.\nFound elements: {}.\nCause error message: {}",
+                    matchedElements, by, allConditions, describeCollection(by, foundElements, conditions), ex.getMessage());
+            if (zeroMatches) {
+                FileUtil.deleteFile(ex.getScreenshot()
+                                      .getImage());
+                FileUtil.deleteFile(ex.getScreenshot()
+                                      .getSource());
+            }
             return Optional.empty();
         }
     }
