@@ -1,0 +1,60 @@
+- route:
+    id: orders-sync-route-ts
+    description: Sync orders from OpenCart
+    from:
+      id: trigger-orders-replication-cron
+      description: Trigger Orders Replication
+      uri: cron
+      parameters:
+        schedule: 0/10 * * * * ?
+        name: TriggerOrdersReplicationTypeScript
+      steps:
+        - log:
+            id: log-ac34
+            description: Log starting
+            message: Replicating orders from OpenCart using TypeScript...
+            loggingLevel: INFO
+            logName: OpenCartOrdersReplication
+        - setProperty:
+            id: set-js-orders-1
+            description: Set get-all-orders.ts file
+            name: resource
+            expression:
+              constant:
+                id: get-all-orders-8de2
+                expression: CamelExtractTransformLoadIT_testTypeScriptScenario/sync/get-all-orders.ts
+        - to:
+            id: get-all-oc-orders
+            description: Get all OpenCart orders
+            uri: class
+            parameters:
+              beanName: org.eclipse.dirigible.components.engine.camel.invoke.Invoker
+        - split:
+            id: split-to-single-order
+            description: Split to single order
+            expression:
+              simple:
+                id: simple-60cb
+                expression: ${body}
+            steps:
+              - setProperty:
+                  id: setProperty-8a5e
+                  description: Set merger-order.ts file
+                  name: resource
+                  expression:
+                    constant:
+                      id: constant-0a9e
+                      expression: CamelExtractTransformLoadIT_testTypeScriptScenario/sync/merger-order.ts
+              - to:
+                  id: to-eb1b
+                  description: Merge order
+                  uri: class
+                  parameters:
+                    beanName: >-
+                      org.eclipse.dirigible.components.engine.camel.invoke.Invoker
+        - log:
+            id: log-orders-replication-completed
+            description: Log completed
+            message: Successfully replicated orders from OpenCart using TypeScript
+            loggingLevel: INFO
+            logName: OpenCartOrdersReplication
