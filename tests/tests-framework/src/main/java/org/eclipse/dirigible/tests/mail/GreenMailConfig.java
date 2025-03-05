@@ -6,6 +6,8 @@ import jakarta.annotation.PreDestroy;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.spring.BeanProvider;
 import org.eclipse.dirigible.tests.util.PortUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -13,6 +15,8 @@ import java.util.Optional;
 
 @Configuration
 public class GreenMailConfig {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(GreenMailConfig.class);
 
     private static final String MAIL_USER = "mailUser";
     private static final String MAIL_PASSWORD = "mailPassword";
@@ -31,10 +35,13 @@ public class GreenMailConfig {
     @PreDestroy
     public void shutdownGreenMail() {
         Optional<GreenMail> greenMail = BeanProvider.getOptionalBean(GreenMail.class);
-        greenMail.ifPresent((gm) -> gm.stop());
+        greenMail.ifPresent((gm) -> {
+            LOGGER.info("Shutting down green mail...");
+            gm.stop();
+        });
     }
 
-    public static void configureDirigibleEmailService() {
+    private static void configureDirigibleEmailService() {
         DirigibleConfig.MAIL_USERNAME.setStringValue(MAIL_USER);
         DirigibleConfig.MAIL_PASSWORD.setStringValue(MAIL_PASSWORD);
         DirigibleConfig.MAIL_TRANSPORT_PROTOCOL.setStringValue("smtp");
