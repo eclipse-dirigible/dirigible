@@ -87,8 +87,12 @@ public class IDE {
     }
 
     public void openPath(String path) {
+        openPath(path, false);
+    }
+
+    public void openPath(String path, boolean forceLogin) {
         browser.openPath(path);
-        login(true);
+        login(forceLogin);
     }
 
     public void login(boolean forceLogin) {
@@ -158,6 +162,7 @@ public class IDE {
     }
 
     public void close() {
+        browser.clearCookies();
         browser.close();
     }
 }

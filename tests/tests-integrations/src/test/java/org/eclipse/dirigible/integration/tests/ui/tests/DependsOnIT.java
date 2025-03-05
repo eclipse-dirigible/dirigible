@@ -9,20 +9,17 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.junit.jupiter.api.Test;
+import org.eclipse.dirigible.tests.PredefinedProjectIT;
+import org.eclipse.dirigible.tests.projects.TestProject;
 import org.springframework.beans.factory.annotation.Autowired;
 
-class DependsOnIT extends UserInterfaceIntegrationTest {
+class DependsOnIT extends PredefinedProjectIT {
 
     @Autowired
     private DependsOnTestProject testProject;
 
-    @Test
-    void test() {
-        testProject.copyToWorkspace();
-        testProject.generateEDM();
-        testProject.publish();
-
-        testProject.verify();
+    @Override
+    protected TestProject getTestProject() {
+        return testProject;
     }
 }

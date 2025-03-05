@@ -9,13 +9,17 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
-import org.junit.jupiter.api.Test;
+import org.eclipse.dirigible.tests.PredefinedProjectIT;
+import org.eclipse.dirigible.tests.projects.TestProject;
+import org.springframework.beans.factory.annotation.Autowired;
 
-class CreateNewProjectIT extends UserInterfaceIntegrationTest {
+class CamelDirigibleTwoStepsJSInvokerHttpRouteIT extends PredefinedProjectIT {
 
-    @Test
-    void testCreateNewBlankProject() {
-        ide.createNewBlankProject("create-project-ui-test");
+    @Autowired
+    private CamelDirigibleTwoStepsJSInvokerHttpRouteTestProject testProject;
+
+    @Override
+    protected TestProject getTestProject() {
+        return testProject;
     }
 }

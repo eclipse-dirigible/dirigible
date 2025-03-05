@@ -12,8 +12,6 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 import ch.qos.logback.classic.Level;
 import io.restassured.http.ContentType;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
-import org.eclipse.dirigible.integration.tests.ui.tests.projects.BaseTestProject;
-import org.eclipse.dirigible.integration.tests.ui.tests.projects.MultitenantTestProject;
 import org.eclipse.dirigible.tests.DirigibleTestTenant;
 import org.eclipse.dirigible.tests.EdmView;
 import org.eclipse.dirigible.tests.IDE;
@@ -23,6 +21,7 @@ import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.BrowserFactory;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.logging.LogsAsserter;
+import org.eclipse.dirigible.tests.projects.BaseMultitenantTestProject;
 import org.eclipse.dirigible.tests.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
 import org.slf4j.Logger;
@@ -41,7 +40,7 @@ import static org.hamcrest.Matchers.hasSize;
 
 @Lazy
 @Component
-class MultitenancyITTestProject extends BaseTestProject implements MultitenantTestProject {
+class MultitenancyITTestProject extends BaseMultitenantTestProject {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MultitenancyITTestProject.class);
 
@@ -72,8 +71,10 @@ class MultitenancyITTestProject extends BaseTestProject implements MultitenantTe
     }
 
     @Override
-    public void verify() {
-        verify(DirigibleTestTenant.createDefaultTenant());
+    public void configure() {
+        copyToWorkspace();
+        generateEDM("edm.edm");
+        publish();
     }
 
     @Override
@@ -272,10 +273,6 @@ class MultitenancyITTestProject extends BaseTestProject implements MultitenantTe
                    .statusCode(200)
                    .body(equalTo(JsonHelper.toJson(documentContent)));
         });
-    }
-
-    void generateEDM() {
-        generateEDM("edm.edm");
     }
 
 }

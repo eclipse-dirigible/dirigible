@@ -7,24 +7,22 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.ui.tests;
+package org.eclipse.dirigible.tests;
 
-import org.eclipse.dirigible.tests.PredefinedProjectIT;
-import org.eclipse.dirigible.tests.mail.GreenMailConfig;
-import org.eclipse.dirigible.tests.projects.TestProject;
+import org.eclipse.dirigible.tests.framework.Browser;
+import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 
-class MailIT extends PredefinedProjectIT {
-
-    static {
-        GreenMailConfig.configureDirigibleEmailService();
-    }
+public abstract class UserInterfaceIntegrationTest extends IntegrationTest {
 
     @Autowired
-    private MailITTestProject testProject;
+    protected Browser browser;
 
-    @Override
-    protected TestProject getTestProject() {
-        return testProject;
+    @Autowired
+    protected IDE ide;
+
+    @AfterEach
+    final void closeBrowser() {
+        browser.close();
     }
 }

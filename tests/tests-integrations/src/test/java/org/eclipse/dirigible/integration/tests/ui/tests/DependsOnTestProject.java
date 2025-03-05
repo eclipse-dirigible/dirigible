@@ -9,12 +9,12 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.eclipse.dirigible.integration.tests.ui.tests.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.EdmView;
 import org.eclipse.dirigible.tests.IDE;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
+import org.eclipse.dirigible.tests.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -34,8 +34,11 @@ class DependsOnTestProject extends BaseTestProject {
         this.browser = browser;
     }
 
-    void generateEDM() {
+    @Override
+    public void configure() {
+        copyToWorkspace();
         generateEDM(EDM_FILE_NAME);
+        publish();
     }
 
     @Override
