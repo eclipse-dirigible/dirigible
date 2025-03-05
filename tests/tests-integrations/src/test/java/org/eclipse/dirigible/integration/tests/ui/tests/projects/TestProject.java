@@ -12,6 +12,18 @@ package org.eclipse.dirigible.integration.tests.ui.tests.projects;
 public interface TestProject {
 
     /**
+     * Configure the test project. Add logic like regenerate edm, forms, copy the project to workspace,
+     * publish the project, etc.
+     */
+    void configure();
+
+    /**
+     * Execute all the needed steps to configure and verify the project to assert that it works
+     * properly.
+     */
+    void test();
+
+    /**
      * Opens IDE and publishes the project.
      */
     void publish();

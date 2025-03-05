@@ -11,7 +11,23 @@ package org.eclipse.dirigible.integration.tests.ui.tests.projects;
 
 import org.eclipse.dirigible.tests.DirigibleTestTenant;
 
+import java.util.List;
+
 public interface MultitenantTestProject {
 
+    /**
+     * Execute all the needed steps to configure and verify the project to assert that it works properly
+     * for the provided tenants.
+     *
+     * @param tenants
+     */
+    void test(List<DirigibleTestTenant> tenants);
+
+    /**
+     * Verify test project is working for the provided tenant
+     *
+     * @param tenant
+     */
     void verify(DirigibleTestTenant tenant);
+
 }

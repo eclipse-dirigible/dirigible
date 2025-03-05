@@ -45,11 +45,7 @@ class MultitenancyIT extends UserInterfaceIntegrationTest {
         List<DirigibleTestTenant> tenants = createTenants();
         waitForTenantsProvisioning(tenants);
 
-        testProject.copyToWorkspace();
-        testProject.generateEDM();
-        testProject.publish();
-
-        verifyTenants(tenants);
+        testProject.test(tenants);
     }
 
     private List<DirigibleTestTenant> createTenants() {
@@ -62,10 +58,6 @@ class MultitenancyIT extends UserInterfaceIntegrationTest {
         createTenants(tenants);
 
         return tenants;
-    }
-
-    private void verifyTenants(List<DirigibleTestTenant> tenants) {
-        tenants.forEach(testProject::verify);
     }
 
 }

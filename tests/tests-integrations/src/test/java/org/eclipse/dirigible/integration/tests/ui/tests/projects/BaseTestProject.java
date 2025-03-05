@@ -32,6 +32,17 @@ public abstract class BaseTestProject implements TestProject {
     }
 
     @Override
+    public final void test() {
+        configure();
+        verify();
+    }
+
+    @Override
+    public void configure() {
+        publish();
+    }
+
+    @Override
     public final void publish() {
         publish(true);
     }
@@ -77,4 +88,5 @@ public abstract class BaseTestProject implements TestProject {
 
         }
     }
+
 }
