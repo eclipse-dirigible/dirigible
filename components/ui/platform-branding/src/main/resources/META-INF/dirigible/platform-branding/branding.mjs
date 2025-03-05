@@ -28,21 +28,6 @@ const BRANDING_LOGO_DEFAULT = '/services/web/platform-branding/images/dirigible.
 const BRANDING_THEME_DEFAULT = 'blimpkit-auto';
 const BRANDING_KEY_PREFIX_DEFAULT = 'dirigible';
 
-function getBrandingInfo() {
-    if (top.hasOwnProperty('PlatformBranding')) return top.PlatformBranding;
-    throw Error("PlatformBranding is not set!");
-}
-
-function setBrandingInfo({ name, brand, brandUrl, icons, logo, theme, keyPrefix } = {}) {
-    if (name) top.PlatformBranding.name = name;
-    if (brand) top.PlatformBranding.brand = brand;
-    if (brandUrl) top.PlatformBranding.brandUrl = brandUrl;
-    if (icons && icons['favicon']) top.PlatformBranding.icons.faviconIco = icons['favicon'];
-    if (logo) top.PlatformBranding.logo = logo;
-    if (theme) top.PlatformBranding.theme = theme;
-    if (keyPrefix) top.PlatformBranding.keyPrefix = keyPrefix;
-}
-
 export function getBrandingJs() {
     return `if (!top.hasOwnProperty('PlatformBranding')) top.PlatformBranding = {
     name: '${Configurations.get(BRANDING_NAME, BRANDING_NAME_DEFAULT)}',
@@ -54,9 +39,7 @@ export function getBrandingJs() {
     logo: '${Configurations.get(BRANDING_LOGO, BRANDING_LOGO_DEFAULT)}',
 	theme: '${Configurations.get(BRANDING_THEME, BRANDING_THEME_DEFAULT)}',
     keyPrefix: '${Configurations.get(BRANDING_KEY_PREFIX, BRANDING_KEY_PREFIX_DEFAULT)}'
-};
-${getBrandingInfo.toString()}
-${setBrandingInfo.toString()}`;
+};`;
 }
 
 export function getKeyPrefix() {
