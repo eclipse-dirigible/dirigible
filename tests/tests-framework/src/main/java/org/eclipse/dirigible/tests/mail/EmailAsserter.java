@@ -16,8 +16,6 @@ import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -29,29 +27,25 @@ public class EmailAsserter {
                .until(() -> greenMail.getReceivedMessages().length >= expectedCount);
     }
 
-    public static void assertEmailReceived(MimeMessage email, String expectedSubject, String expectedContent, String expectedFrom,
-            String expectedTo) throws MessagingException {
-        assertThat(email.getSubject()).isEqualTo(expectedSubject);
-        assertThat(email.getFrom()[0].toString()).isEqualTo(expectedFrom);
-        assertThat(email.getRecipients(Message.RecipientType.TO)[0].toString()).isEqualTo(expectedTo);
+    public static void assertEmail(MimeMessage email, EmailAssertion emailAssertion) throws MessagingException {
+        assertThat(email.getFrom()[0].toString()).isEqualTo(emailAssertion.from());
+        assertThat(email.getRecipients(Message.RecipientType.TO)[0].toString()).isEqualTo(emailAssertion.to());
+        assertThat(email.getSubject()).isEqualTo(emailAssertion.subject());
 
+        assertBody(email, emailAssertion);
+
+    }
+
+    private static void assertBody(MimeMessage email, EmailAssertion emailAssertion) {
         String emailBody = GreenMailUtil.getBody(email)
                                         .trim();
 
-        String extractedFromDate = extractDateFromBody(emailBody, "from \\[");
-        String extractedToDate = extractDateFromBody(emailBody, "to \\[");
-
-        if (!extractedFromDate.isEmpty() && !extractedToDate.isEmpty()) {
-            assertThat(extractedFromDate).isEqualTo("2002-02-02");
-            assertThat(extractedToDate).isEqualTo("2002-03-03");
-        } else {
-            assertThat(emailBody).contains(expectedContent);
+        if (emailAssertion.toContainExactBody() != null) {
+            assertThat(emailBody).contains(emailAssertion.toContainExactBody());
         }
-    }
 
-    private static String extractDateFromBody(String emailBody, String pattern) {
-        Pattern regexPattern = Pattern.compile(pattern + "(\\d{4}-\\d{2}-\\d{2})");
-        Matcher matcher = regexPattern.matcher(emailBody);
-        return matcher.find() ? matcher.group(1) : "";
+        if (emailAssertion.bodyRegex() != null) {
+            assertThat(emailBody).containsPattern(emailAssertion.bodyRegex());
+        }
     }
 }

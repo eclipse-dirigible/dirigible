@@ -20,6 +20,8 @@ import org.eclipse.dirigible.tests.IDEFactory;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.mail.EmailAsserter;
+import org.eclipse.dirigible.tests.mail.EmailAssertion;
+import org.eclipse.dirigible.tests.mail.EmailAssertionBuilder;
 import org.eclipse.dirigible.tests.util.SecurityUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,15 +29,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Set;
+import java.util.regex.Pattern;
 
 class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
 
     private static final String EMPLOYEE_USERNAME = "john.doe.employee@example.com";
     private static final String EMPLOYEE_PASSWORD = "employeePassword";
-
     private static final String EMPLOYEE_MANAGER_USERNAME = "emily.stone.mngr@example.com";
     private static final String EMPLOYEE_MANAGER_PASSWORD = "managerPassword";
-
     private static final String MAIL_USER = "mailUser";
     private static final String MAIL_PASSWORD = "mailPassword";
     private static final int MAIL_PORT = 56565;
@@ -114,18 +115,29 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
 
     private void assertNotificationEmailReceived() throws MessagingException {
         EmailAsserter.assertReceivedEmailsCount(greenMail, 1);
-        MimeMessage sentEmail = greenMail.getReceivedMessages()[0];
+        MimeMessage receivedEmail = getLatestReceivedEmailMessage();
 
-        EmailAsserter.assertEmailReceived(sentEmail, "New leave request", "<h4>A new leave request for [" + EMPLOYEE_USERNAME
-                + "] has been created</h4>Open the inbox <a href=\"http://localhost:80/services/web/inbox/\" target=\"_blank\">here</a> to process the request.",
-                "leave-request-app@example.com", "managers-dl@example.com");
+        EmailAssertion emailAssertion = new EmailAssertionBuilder().expectedFrom("leave-request-app@example.com")
+                                                                   .expectedTo("managers-dl@example.com")
+                                                                   .expectedSubject("New leave request")
+                                                                   .expectedToContainBody("<h4>A new leave request for ["
+                                                                           + EMPLOYEE_USERNAME
+                                                                           + "] has been created</h4>Open the inbox <a href=\"http://localhost:80/services/web/inbox/\" target=\"_blank\">here</a> to process the request.")
+                                                                   .build();
+        EmailAsserter.assertEmail(receivedEmail, emailAssertion);
+    }
+
+    private MimeMessage getLatestReceivedEmailMessage() {
+        MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
+        return receivedMessages[receivedMessages.length - 1];
     }
 
     @Test
     void testApproveLeaveRequest() throws MessagingException {
-        processRequest(true);
+        boolean approve = true;
+        processRequest(approve);
 
-        assertApprovalEmailReceived();
+        assertLeaveRequestEmail(approve);
     }
 
     private void processRequest(boolean approve) {
@@ -140,8 +152,6 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
 
         String alertMessage = approve ? "Request Approved" : "Request Declined";
         managerBrowser.assertAlertWithMessage(alertMessage);
-
-        EmailAsserter.assertReceivedEmailsCount(greenMail, 2);
     }
 
     private void claimRequest(IDE managerIDE) {
@@ -162,26 +172,30 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
                        .window(newTabHandle);
     }
 
-    private void assertApprovalEmailReceived() throws MessagingException {
+    private void assertLeaveRequestEmail(boolean approve) throws MessagingException {
         EmailAsserter.assertReceivedEmailsCount(greenMail, 2);
 
-        MimeMessage sentEmail = greenMail.getReceivedMessages()[1];
-        EmailAsserter.assertEmailReceived(sentEmail, "Your leave request has been approved",
-                "has been approved by [" + EMPLOYEE_MANAGER_USERNAME + "]</h4>", "leave-request-app@example.com", EMPLOYEE_USERNAME);
+        MimeMessage receivedEmail = getLatestReceivedEmailMessage();
+
+        String decision = approve ? "approved" : "declined";
+        String bodyRegex = "<h4>Your leave request from \\[\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z] to "
+                + "\\[\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z] has been " + decision + " by \\["
+                + Pattern.quote(EMPLOYEE_MANAGER_USERNAME) + "]</h4>";
+
+        EmailAssertion emailAssertion = new EmailAssertionBuilder().expectedFrom("leave-request-app@example.com")
+                                                                   .expectedTo(EMPLOYEE_USERNAME)
+                                                                   .expectedSubject("Your leave request has been " + decision)
+                                                                   .expectedBodyRegex(bodyRegex)
+                                                                   .build();
+        EmailAsserter.assertEmail(receivedEmail, emailAssertion);
     }
 
     @Test
     void testDeclineLeaveRequest() throws MessagingException {
-        processRequest(false);
+        boolean approve = false;
+        processRequest(approve);
 
-        assertDeclinedEmalReceived();
-    }
-
-    private void assertDeclinedEmalReceived() throws MessagingException {
-        EmailAsserter.assertReceivedEmailsCount(greenMail, 2);
-        MimeMessage sentEmail = greenMail.getReceivedMessages()[1];
-        EmailAsserter.assertEmailReceived(sentEmail, "Your leave request has been declined",
-                "has been declined by [" + EMPLOYEE_MANAGER_USERNAME + "]</h4>", "leave-request-app@example.com", EMPLOYEE_USERNAME);
+        assertLeaveRequestEmail(approve);
     }
 
     @AfterEach
