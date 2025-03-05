@@ -3,7 +3,7 @@
         {
             "table": "TEST_TABLE_READERS",
             "schema": "PUBLIC",
-            "file": "/csvim-test-project/csvim/readers.csv",
+            "file": "/CsvimIT/csvim/readers.csv",
             "header": true,
             "useHeaderNames": true,
             "delimField": ",",
@@ -14,7 +14,7 @@
         {
             "table": "TEST_TABLE_READERS2",
             "schema": "PUBLIC",
-            "file": "/csvim-test-project/csvim/readers.csv",
+            "file": "/CsvimIT/csvim/readers.csv",
             "header": true,
             "useHeaderNames": true,
             "delimField": ",",
@@ -25,7 +25,7 @@
         {
             "table": "TEST_TABLE_READERS3",
             "schema": "PUBLIC",
-            "file": "/csvim-test-project/csvim/readers.csv",
+            "file": "/CsvimIT/csvim/readers.csv",
             "header": true,
             "useHeaderNames": true,
             "delimField": ",",
