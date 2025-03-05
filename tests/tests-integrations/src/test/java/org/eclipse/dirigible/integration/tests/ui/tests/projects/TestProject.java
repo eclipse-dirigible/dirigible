@@ -21,29 +21,16 @@ public interface TestProject {
      * Execute all the needed steps to configure and verify the project to assert that it works
      * properly.
      */
-    void test();
+    void test() throws Exception;
 
     /**
-     * Opens IDE and publishes the project.
+     * Verify test project is working. Perform the test scenario and assert that it the project works as
+     * expected.
      */
-    void publish();
+    void verify() throws Exception;
 
     /**
-     * Copy project files to the workspace
+     * Implement cleanup logic if needed
      */
-    void copyToWorkspace();
-
-    /**
-     * Opens IDE and publishes the project. If waitForSynchronizationExecution is true, it waits for
-     * synchronization to complete its execution.
-     *
-     * @param waitForSynchronizationExecution whether to wait for synchronization execution
-     */
-    void publish(boolean waitForSynchronizationExecution);
-
-    /**
-     * Verify test project is working
-     */
-    void verify();
-
+    void cleanup();
 }

@@ -32,29 +32,27 @@ public abstract class BaseTestProject implements TestProject {
     }
 
     @Override
-    public final void test() {
+    public final void test() throws Exception {
         configure();
         verify();
     }
 
     @Override
     public void configure() {
+        copyToWorkspace();
         publish();
     }
 
-    @Override
-    public final void publish() {
+    protected final void publish() {
         publish(true);
     }
 
-    @Override
-    public final void publish(boolean waitForSynchronizationExecution) {
+    protected final void publish(boolean waitForSynchronizationExecution) {
         Workbench workbench = ide.openWorkbench();
         workbench.publishAll(waitForSynchronizationExecution);
     }
 
-    @Override
-    public final void copyToWorkspace() {
+    protected final void copyToWorkspace() {
         projectUtil.copyResourceProjectToDefaultUserWorkspace(projectResourcesFolder);
     }
 
@@ -89,4 +87,8 @@ public abstract class BaseTestProject implements TestProject {
         }
     }
 
+    @Override
+    public void cleanup() {
+        // nothing to cleanup by default
+    }
 }

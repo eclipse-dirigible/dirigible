@@ -34,8 +34,11 @@ class DependsOnTestProject extends BaseTestProject {
         this.browser = browser;
     }
 
-    void generateEDM() {
+    @Override
+    public void configure() {
+        copyToWorkspace();
         generateEDM(EDM_FILE_NAME);
+        publish();
     }
 
     @Override
