@@ -174,6 +174,16 @@ class BrowserImpl implements Browser {
     }
 
     @Override
+    public void switchToLatestTab() {
+        Selenide.switchTo()
+                .window(Selenide.webdriver()
+                                .object()
+                                .getWindowHandles()
+                                .size()
+                        - 1);
+    }
+
+    @Override
     public void closeWindow() {
         Selenide.closeWindow();
     }

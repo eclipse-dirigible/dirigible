@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import com.codeborne.selenide.WebDriverRunner;
 import com.icegreen.greenmail.util.GreenMail;
 import com.icegreen.greenmail.util.ServerSetup;
 import jakarta.mail.MessagingException;
@@ -28,7 +27,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import java.util.Set;
 import java.util.regex.Pattern;
 
 class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
@@ -161,15 +159,9 @@ class BPMLeaveRequestIT extends UserInterfaceIntegrationTest {
 
         browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Claim");
         browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Close");
+
         browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Open Form");
-
-        Set<String> windowHandles = WebDriverRunner.getWebDriver()
-                                                   .getWindowHandles();
-
-        String newTabHandle = windowHandles.toArray(new String[0])[windowHandles.size() - 1];
-        WebDriverRunner.getWebDriver()
-                       .switchTo()
-                       .window(newTabHandle);
+        browser.switchToLatestTab();
     }
 
     private void assertLeaveRequestEmail(boolean approve) throws MessagingException {

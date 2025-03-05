@@ -100,4 +100,6 @@ public interface Browser {
      * @param message
      */
     void assertAlertWithMessage(String message);
+
+    void switchToLatestTab();
 }
