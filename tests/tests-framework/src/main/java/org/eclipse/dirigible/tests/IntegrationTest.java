@@ -35,9 +35,10 @@ public abstract class IntegrationTest {
     }
 
     @Autowired
-    private DirigibleCleaner dirigibleCleaner;
-    @Autowired
     private TenantCreator tenantCreator;
+
+    @Autowired
+    private DirigibleCleaner dirigibleCleaner;
 
     @AfterEach
     final void cleanUp() {

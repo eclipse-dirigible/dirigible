@@ -162,6 +162,7 @@ public class IDE {
     }
 
     public void close() {
+        browser.clearCookies();
         browser.close();
     }
 }
