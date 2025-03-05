@@ -25,7 +25,7 @@ import static org.awaitility.Awaitility.await;
 @Lazy
 @Component
 class CamelJDBCTestProject extends BaseTestProject {
-    private LogsAsserter openCartLogAsserter;
+    private LogsAsserter camelLogAsserter;
 
     public CamelJDBCTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView) {
         super("CamelExtractTransformLoadIT_testJDBCScenario", ide, projectUtil, edmView);
@@ -33,8 +33,8 @@ class CamelJDBCTestProject extends BaseTestProject {
 
     @Override
     public void verify() {
-        assertLogContainsMessage(openCartLogAsserter, "Replicating orders from OpenCart using JDBC...", Level.INFO);
-        assertLogContainsMessage(openCartLogAsserter, "Successfully replicated orders from OpenCart using JDBC", Level.INFO);
+        assertLogContainsMessage(camelLogAsserter, "Replicating orders from OpenCart using JDBC...", Level.INFO);
+        assertLogContainsMessage(camelLogAsserter, "Successfully replicated orders from OpenCart using JDBC", Level.INFO);
     }
 
     private void assertLogContainsMessage(LogsAsserter logAsserter, String message, Level level) {
@@ -44,7 +44,7 @@ class CamelJDBCTestProject extends BaseTestProject {
     }
 
     public void setLogsAsserter(LogsAsserter logsAsserter) {
-        this.openCartLogAsserter = logsAsserter;
+        this.camelLogAsserter = logsAsserter;
     }
 
 }

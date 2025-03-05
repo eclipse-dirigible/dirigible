@@ -25,7 +25,7 @@ import static org.awaitility.Awaitility.await;
 @Lazy
 @Component
 class CamelTypescriptTestProject extends BaseTestProject {
-    private LogsAsserter openCartLogAsserter;
+    private LogsAsserter camelLogAsserter;
     private LogsAsserter consoleLogAsserter;
 
     public CamelTypescriptTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView) {
@@ -34,12 +34,12 @@ class CamelTypescriptTestProject extends BaseTestProject {
 
     @Override
     public void verify() {
-        assertLogContainsMessage(openCartLogAsserter, "Replicating orders from OpenCart using TypeScript", Level.INFO);
+        assertLogContainsMessage(camelLogAsserter, "Replicating orders from OpenCart using TypeScript", Level.INFO);
         assertLogContainsMessage(consoleLogAsserter, "About to upsert Open cart order [1] using exchange rate", Level.INFO);
         assertLogContainsMessage(consoleLogAsserter, "Upserted Open cart order [1]", Level.INFO);
         assertLogContainsMessage(consoleLogAsserter, "About to upsert Open cart order [2] using exchange rate", Level.INFO);
         assertLogContainsMessage(consoleLogAsserter, "Upserted Open cart order [2]", Level.INFO);
-        assertLogContainsMessage(openCartLogAsserter, "Successfully replicated orders from OpenCart using TypeScript", Level.INFO);
+        assertLogContainsMessage(camelLogAsserter, "Successfully replicated orders from OpenCart using TypeScript", Level.INFO);
     }
 
     private void assertLogContainsMessage(LogsAsserter logAsserter, String message, Level level) {
@@ -48,11 +48,8 @@ class CamelTypescriptTestProject extends BaseTestProject {
                .until(() -> logAsserter.containsMessage(message, level));
     }
 
-    public void setConsoleLogAsserter(LogsAsserter consoleLogAsserter) {
+    public void setLogsAsserter(LogsAsserter camelLogAsserter, LogsAsserter consoleLogAsserter) {
+        this.camelLogAsserter = camelLogAsserter;
         this.consoleLogAsserter = consoleLogAsserter;
-    }
-
-    public void setOpenCartLogAsserter(LogsAsserter openCartLogAsserter) {
-        this.openCartLogAsserter = openCartLogAsserter;
     }
 }

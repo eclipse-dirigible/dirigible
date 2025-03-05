@@ -34,17 +34,17 @@ class CamelExtractTransformLoadIT extends UserInterfaceIntegrationTest {
     private DataSourcesManager dataSourcesManager;
 
     private LogsAsserter consoleLogAsserter;
-    private LogsAsserter openCartLogAsserter;
+    private LogsAsserter camelLogAsserter;
 
     @BeforeEach
     void setUp() {
         this.consoleLogAsserter = new LogsAsserter("app.out", Level.INFO);
-        this.openCartLogAsserter = new LogsAsserter("OpenCartOrdersReplication", Level.INFO);
+        this.camelLogAsserter = new LogsAsserter("OpenCartOrdersReplication", Level.INFO);
     }
 
     @Test
     void testJDBCScenario() {
-        jdbcTestProject.setLogsAsserter(openCartLogAsserter);
+        jdbcTestProject.setLogsAsserter(camelLogAsserter);
         jdbcTestProject.copyToWorkspace();
         jdbcTestProject.publish();
 
@@ -55,9 +55,7 @@ class CamelExtractTransformLoadIT extends UserInterfaceIntegrationTest {
 
     @Test
     void testTypeScriptScenario() {
-        typescriptTestProject.setConsoleLogAsserter(consoleLogAsserter);
-        typescriptTestProject.setOpenCartLogAsserter(openCartLogAsserter);
-
+        typescriptTestProject.setLogsAsserter(camelLogAsserter, consoleLogAsserter);
         typescriptTestProject.copyToWorkspace();
         typescriptTestProject.publish();
 
