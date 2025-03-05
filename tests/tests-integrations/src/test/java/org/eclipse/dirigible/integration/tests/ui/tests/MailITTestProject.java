@@ -10,7 +10,6 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import com.icegreen.greenmail.util.GreenMail;
-import com.icegreen.greenmail.util.ServerSetup;
 import jakarta.mail.internet.MimeMessage;
 import org.eclipse.dirigible.integration.tests.ui.tests.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.EdmView;
@@ -30,26 +29,13 @@ import static org.hamcrest.Matchers.containsString;
 @Component
 class MailITTestProject extends BaseTestProject {
 
-    static final String MAIL_USER = "mailUser";
-    static final String MAIL_PASSWORD = "mailPassword";
-    static final int MAIL_PORT = 56565;
-
     private final GreenMail greenMail;
     private final RestAssuredExecutor restAssuredExecutor;
 
-    MailITTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, RestAssuredExecutor restAssuredExecutor) {
+    MailITTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, RestAssuredExecutor restAssuredExecutor, GreenMail greenMail) {
         super("MailIT", ide, projectUtil, edmView);
         this.restAssuredExecutor = restAssuredExecutor;
-        this.greenMail = startGreenMailServer();
-    }
-
-    private GreenMail startGreenMailServer() {
-        ServerSetup serverSetup = new ServerSetup(MAIL_PORT, "localhost", "smtp");
-        GreenMail greenMail = new GreenMail(serverSetup);
-        greenMail.start();
-        greenMail.setUser(MAIL_USER, MAIL_PASSWORD);
-
-        return greenMail;
+        this.greenMail = greenMail;
     }
 
     @Override
@@ -70,10 +56,5 @@ class MailITTestProject extends BaseTestProject {
         MimeMessage receivedEmail = greenMail.getReceivedMessages()[0];
 
         EmailAsserter.assertEmail(receivedEmail, emailAssertion);
-    }
-
-    @Override
-    public void cleanup() {
-        greenMail.stop();
     }
 }

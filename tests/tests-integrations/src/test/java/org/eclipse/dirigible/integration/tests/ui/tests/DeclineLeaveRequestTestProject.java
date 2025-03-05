@@ -1,5 +1,6 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
+import com.icegreen.greenmail.util.GreenMail;
 import org.eclipse.dirigible.tests.EdmView;
 import org.eclipse.dirigible.tests.IDE;
 import org.eclipse.dirigible.tests.IDEFactory;
@@ -12,8 +13,9 @@ import org.springframework.stereotype.Component;
 @Component
 class DeclineLeaveRequestTestProject extends BPMLeaveRequestTestProject {
 
-    DeclineLeaveRequestTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, SecurityUtil securityUtil, IDEFactory ideFactory) {
-        super(ide, projectUtil, edmView, securityUtil, ideFactory);
+    DeclineLeaveRequestTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, SecurityUtil securityUtil, IDEFactory ideFactory,
+            GreenMail greenMail) {
+        super(ide, projectUtil, edmView, securityUtil, ideFactory, greenMail);
     }
 
     @Override

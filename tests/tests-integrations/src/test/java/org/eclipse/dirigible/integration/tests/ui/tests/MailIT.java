@@ -9,28 +9,19 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.integration.tests.ui.tests.projects.PredefinedProjectIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.projects.TestProject;
+import org.eclipse.dirigible.tests.mail.GreenMailConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 
 class MailIT extends PredefinedProjectIT {
 
     static {
-        configureEmail();
+        GreenMailConfig.configureDirigibleEmailService();
     }
 
     @Autowired
     private MailITTestProject testProject;
-
-    private static void configureEmail() {
-        DirigibleConfig.MAIL_USERNAME.setStringValue(org.eclipse.dirigible.integration.tests.ui.tests.MailITTestProject.MAIL_USER);
-        DirigibleConfig.MAIL_PASSWORD.setStringValue(org.eclipse.dirigible.integration.tests.ui.tests.MailITTestProject.MAIL_PASSWORD);
-        DirigibleConfig.MAIL_TRANSPORT_PROTOCOL.setStringValue("smtp");
-        DirigibleConfig.MAIL_SMTP_HOST.setStringValue("localhost");
-        DirigibleConfig.MAIL_SMTP_PORT.setIntValue(org.eclipse.dirigible.integration.tests.ui.tests.MailITTestProject.MAIL_PORT);
-        DirigibleConfig.MAIL_SMTP_AUTH.setBooleanValue(true);
-    }
 
     @Override
     protected TestProject getTestProject() {

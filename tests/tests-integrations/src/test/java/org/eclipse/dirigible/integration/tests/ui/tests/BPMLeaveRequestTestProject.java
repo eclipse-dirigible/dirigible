@@ -10,7 +10,6 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import com.icegreen.greenmail.util.GreenMail;
-import com.icegreen.greenmail.util.ServerSetup;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import org.eclipse.dirigible.integration.tests.ui.tests.projects.BaseTestProject;
@@ -33,13 +32,12 @@ import java.util.regex.Pattern;
 @Component
 abstract class BPMLeaveRequestTestProject extends BaseTestProject {
 
-    static final String MAIL_USER = "mailUser";
-    static final String MAIL_PASSWORD = "mailPassword";
-    static final int MAIL_PORT = 56565;
     private static final String EMPLOYEE_USERNAME = "john.doe.employee@example.com";
     private static final String EMPLOYEE_PASSWORD = "employeePassword";
+
     private static final String EMPLOYEE_MANAGER_USERNAME = "emily.stone.mngr@example.com";
     private static final String EMPLOYEE_MANAGER_PASSWORD = "managerPassword";
+
     private static final String PROCESS_LEAVE_REQUEST_FORM_FILENAME = "process-leave-request.form";
     private static final String SUBMIT_LEAVE_REQUEST_FORM_FILENAME = "submit-leave-request.form";
 
@@ -47,26 +45,16 @@ abstract class BPMLeaveRequestTestProject extends BaseTestProject {
     private final SecurityUtil securityUtil;
     private final IDEFactory ideFactory;
 
-    BPMLeaveRequestTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, SecurityUtil securityUtil, IDEFactory ideFactory) {
+    BPMLeaveRequestTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, SecurityUtil securityUtil, IDEFactory ideFactory,
+            GreenMail greenMail) {
         super("BPMLeaveRequestIT", ide, projectUtil, edmView);
         this.securityUtil = securityUtil;
         this.ideFactory = ideFactory;
-        this.greenMail = startGreenMailServer();
-    }
-
-    private GreenMail startGreenMailServer() {
-        ServerSetup serverSetup = new ServerSetup(MAIL_PORT, "localhost", "smtp");
-        GreenMail greenMail = new GreenMail(serverSetup);
-        greenMail.start();
-        greenMail.setUser(MAIL_USER, MAIL_PASSWORD);
-
-        return greenMail;
+        this.greenMail = greenMail;
     }
 
     @Override
     public void configure() {
-        startGreenMailServer();
-
         copyToWorkspace();
         generateForms(getProjectResourcesFolder(), PROCESS_LEAVE_REQUEST_FORM_FILENAME, SUBMIT_LEAVE_REQUEST_FORM_FILENAME);
 
@@ -175,10 +163,5 @@ abstract class BPMLeaveRequestTestProject extends BaseTestProject {
                                                                    .expectedBodyRegex(bodyRegex)
                                                                    .build();
         EmailAsserter.assertEmail(receivedEmail, emailAssertion);
-    }
-
-    @Override
-    public void cleanup() {
-        greenMail.stop();
     }
 }
