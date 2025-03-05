@@ -11,12 +11,12 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import com.icegreen.greenmail.util.GreenMail;
 import jakarta.mail.internet.MimeMessage;
-import org.eclipse.dirigible.integration.tests.ui.tests.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.EdmView;
 import org.eclipse.dirigible.tests.IDE;
 import org.eclipse.dirigible.tests.mail.EmailAsserter;
 import org.eclipse.dirigible.tests.mail.EmailAssertion;
 import org.eclipse.dirigible.tests.mail.EmailAssertionBuilder;
+import org.eclipse.dirigible.tests.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
 import org.springframework.context.annotation.Lazy;

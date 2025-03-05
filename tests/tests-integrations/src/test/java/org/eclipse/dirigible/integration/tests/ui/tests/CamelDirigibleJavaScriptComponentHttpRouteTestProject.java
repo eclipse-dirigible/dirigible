@@ -7,11 +7,11 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.services.integrations;
+package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.eclipse.dirigible.integration.tests.ui.tests.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.EdmView;
 import org.eclipse.dirigible.tests.IDE;
+import org.eclipse.dirigible.tests.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
 import org.springframework.context.annotation.Lazy;
@@ -24,13 +24,13 @@ import static org.hamcrest.Matchers.containsString;
 
 @Lazy
 @Component
-class CamelDirigibleTwoStepsJSInvokerHttpRouteTestProject extends BaseTestProject {
+class CamelDirigibleJavaScriptComponentHttpRouteTestProject extends BaseTestProject {
 
     private final RestAssuredExecutor restAssuredExecutor;
 
-    CamelDirigibleTwoStepsJSInvokerHttpRouteTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView,
+    CamelDirigibleJavaScriptComponentHttpRouteTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView,
             RestAssuredExecutor restAssuredExecutor) {
-        super("CamelDirigibleTwoStepsJSInvokerHttpRouteIT", ide, projectUtil, edmView);
+        super("CamelDirigibleJavaScriptComponentHttpRouteIT", ide, projectUtil, edmView);
         this.restAssuredExecutor = restAssuredExecutor;
     }
 
@@ -41,7 +41,7 @@ class CamelDirigibleTwoStepsJSInvokerHttpRouteTestProject extends BaseTestProjec
                              .get("/services/integrations/http-route")
                              .then()
                              .statusCode(200)
-                             .body(containsString("This is a body set by the handler")),
+                             .body(containsString("Body set by the handler")),
                 25);
     }
 

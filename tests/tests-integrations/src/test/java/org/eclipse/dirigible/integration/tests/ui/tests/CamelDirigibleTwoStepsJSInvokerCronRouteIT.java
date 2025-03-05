@@ -9,22 +9,17 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.eclipse.dirigible.integration.tests.IntegrationTest;
-import org.eclipse.dirigible.tests.IDE;
-import org.eclipse.dirigible.tests.framework.Browser;
-import org.junit.jupiter.api.AfterEach;
+import org.eclipse.dirigible.tests.projects.PredefinedProjectIT;
+import org.eclipse.dirigible.tests.projects.TestProject;
 import org.springframework.beans.factory.annotation.Autowired;
 
-public abstract class UserInterfaceIntegrationTest extends IntegrationTest {
+class CamelDirigibleTwoStepsJSInvokerCronRouteIT extends PredefinedProjectIT {
 
     @Autowired
-    protected Browser browser;
+    private CamelDirigibleTwoStepsJSInvokerCronRouteTestProject testProject;
 
-    @Autowired
-    protected IDE ide;
-
-    @AfterEach
-    final void closeBrowser() {
-        browser.close();
+    @Override
+    protected TestProject getTestProject() {
+        return testProject;
     }
 }

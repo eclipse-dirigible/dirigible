@@ -9,14 +9,15 @@
  */
 package org.eclipse.dirigible.integration.tests.api.javascript;
 
-import java.util.List;
 import org.eclipse.dirigible.components.ide.workspace.domain.ProjectStatusProvider;
-import org.eclipse.dirigible.integration.tests.IntegrationTest;
+import org.eclipse.dirigible.tests.IntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DynamicContainer;
 import org.junit.jupiter.api.TestFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
+
+import java.util.List;
 
 class DirigibleJavaScriptIT extends IntegrationTest {
 

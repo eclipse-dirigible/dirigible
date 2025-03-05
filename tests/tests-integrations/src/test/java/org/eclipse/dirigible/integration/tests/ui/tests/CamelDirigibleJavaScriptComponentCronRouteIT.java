@@ -7,10 +7,10 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.services.integrations;
+package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.eclipse.dirigible.integration.tests.ui.tests.projects.PredefinedProjectIT;
-import org.eclipse.dirigible.integration.tests.ui.tests.projects.TestProject;
+import org.eclipse.dirigible.tests.projects.PredefinedProjectIT;
+import org.eclipse.dirigible.tests.projects.TestProject;
 import org.springframework.beans.factory.annotation.Autowired;
 
 class CamelDirigibleJavaScriptComponentCronRouteIT extends PredefinedProjectIT {

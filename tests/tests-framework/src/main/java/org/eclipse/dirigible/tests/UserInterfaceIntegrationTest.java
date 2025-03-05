@@ -7,19 +7,22 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.services.integrations;
+package org.eclipse.dirigible.tests;
 
-import org.eclipse.dirigible.integration.tests.ui.tests.projects.PredefinedProjectIT;
-import org.eclipse.dirigible.integration.tests.ui.tests.projects.TestProject;
+import org.eclipse.dirigible.tests.framework.Browser;
+import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 
-class CamelDirigibleTwoStepsJSInvokerHttpRouteIT extends PredefinedProjectIT {
+public abstract class UserInterfaceIntegrationTest extends IntegrationTest {
 
     @Autowired
-    private CamelDirigibleTwoStepsJSInvokerHttpRouteTestProject testProject;
+    protected Browser browser;
 
-    @Override
-    protected TestProject getTestProject() {
-        return testProject;
+    @Autowired
+    protected IDE ide;
+
+    @AfterEach
+    final void closeBrowser() {
+        browser.close();
     }
 }

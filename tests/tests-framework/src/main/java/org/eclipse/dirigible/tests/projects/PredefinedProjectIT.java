@@ -7,10 +7,10 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.ui.tests.projects;
+package org.eclipse.dirigible.tests.projects;
 
-import org.eclipse.dirigible.integration.tests.IntegrationTest;
 import org.eclipse.dirigible.tests.IDE;
+import org.eclipse.dirigible.tests.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
