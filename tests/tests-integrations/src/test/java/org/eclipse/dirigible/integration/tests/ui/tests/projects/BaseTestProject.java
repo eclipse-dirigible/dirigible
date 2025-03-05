@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests.projects;
 
+import org.eclipse.dirigible.tests.EdmView;
 import org.eclipse.dirigible.tests.IDE;
 import org.eclipse.dirigible.tests.Workbench;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
@@ -16,22 +17,17 @@ import org.eclipse.dirigible.tests.util.ProjectUtil;
 public abstract class BaseTestProject implements TestProject {
 
     private final String projectResourcesFolder;
+
     private final IDE ide;
     private final ProjectUtil projectUtil;
+    private final EdmView edmView;
 
-    protected BaseTestProject(String projectResourcesFolder, IDE ide, ProjectUtil projectUtil) {
+    protected BaseTestProject(String projectResourcesFolder, IDE ide, ProjectUtil projectUtil, EdmView edmView) {
         this.projectResourcesFolder = projectResourcesFolder;
 
         this.ide = ide;
         this.projectUtil = projectUtil;
-    }
-
-    protected IDE getIde() {
-        return ide;
-    }
-
-    protected String getProjectResourcesFolder() {
-        return projectResourcesFolder;
+        this.edmView = edmView;
     }
 
     @Override
@@ -48,6 +44,23 @@ public abstract class BaseTestProject implements TestProject {
     @Override
     public final void copyToWorkspace() {
         projectUtil.copyResourceProjectToDefaultUserWorkspace(projectResourcesFolder);
+    }
+
+    protected void generateEDM(String edmFileName) {
+        ide.openWorkbench();
+        edmView.regenerate(projectResourcesFolder, edmFileName);
+    }
+
+    protected IDE getIde() {
+        return ide;
+    }
+
+    protected EdmView getEdmView() {
+        return edmView;
+    }
+
+    protected String getProjectResourcesFolder() {
+        return projectResourcesFolder;
     }
 
 }

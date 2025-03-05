@@ -40,16 +40,14 @@ class BrowserImpl implements Browser {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BrowserImpl.class);
 
-    private static final String BROWSER = "chrome";
-    private static final long SELENIDE_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(15);
     private static final String PATH_SEPARATOR = "/";
-    private static final int TOTAL_ELEMENT_SEARCH_TIMEOUT = 60 * 1000;
-    private static final long ELEMENT_SEARCH_IN_FRAME_MILLIS = 100;
+
+    private static final int FRAME_SEARCH_TOTAL_SECONDS = 45;
+    private static final int ELEMENT_EXISTENCE_SEARCH_TIME_SECONDS = 10;
+    private static final int ELEMENT_SEARCH_IN_FRAME_MILLIS = 100;
 
     static {
-        Configuration.timeout = SELENIDE_TIMEOUT_MILLIS;
-        Configuration.browser = BROWSER;
-        Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
+        configureSelenide();
     }
 
     private final String protocol;
@@ -75,6 +73,12 @@ class BrowserImpl implements Browser {
         ProtocolType(String protocol) {
             this.protocol = protocol;
         }
+    }
+
+    private static void configureSelenide() {
+        Configuration.timeout = TimeUnit.SECONDS.toMillis(15);
+        Configuration.browser = "chrome";
+        Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
     }
 
     @Override
@@ -140,14 +144,30 @@ class BrowserImpl implements Browser {
     }
 
     @Override
+    public SelenideElement findElementInAllFrames(By by, WebElementCondition... conditions) {
+        Optional<SelenideElement> element = findOptionalElementInAllFrames(by, FRAME_SEARCH_TOTAL_SECONDS, conditions);
+        if (element.isEmpty()) {
+            failWithScreenshot("Element by [" + by + "] and conditions [" + Arrays.toString(conditions)
+                    + "] cannot be found in any iframe OR found multiple matches. Check logs for more details.");
+        }
+        return element.get();
+    }
+
+    private void failWithScreenshot(String message) {
+        String screenshot = createScreenshot();
+        fail(message + "\nScreenshot path: " + screenshot);
+    }
+
+    @Override
     public String createScreenshot() {
         return Selenide.screenshot(UUID.randomUUID()
                                        .toString());
     }
 
     @Override
-    public SelenideElement findElementInAllFrames(By by, WebElementCondition... conditions) {
-        long maxWaitTime = System.currentTimeMillis() + TOTAL_ELEMENT_SEARCH_TIMEOUT;
+    public Optional<SelenideElement> findOptionalElementInAllFrames(By by, long totalSearchTimeoutSeconds,
+            WebElementCondition... conditions) {
+        long maxWaitTime = System.currentTimeMillis() + (totalSearchTimeoutSeconds * 1000);
 
         do {
             Optional<SelenideElement> element = findSingleElementInAllFrames(by, conditions);
@@ -155,7 +175,7 @@ class BrowserImpl implements Browser {
                 LOGGER.debug("Element by [{}] and conditions [{}] was NOT found. Will try again.", by, conditions);
             } else {
                 LOGGER.debug("Element by [{}] and conditions [{}] was FOUND.", by, conditions);
-                return element.get();
+                return element;
             }
         } while (System.currentTimeMillis() < maxWaitTime);
 
@@ -168,19 +188,20 @@ class BrowserImpl implements Browser {
         Optional<SelenideElement> element = findSingleElementInAllFrames(by);
         if (element.isPresent()) {
             LOGGER.debug("Element [{}] was FOUND after page reload.", element);
-            return element.get();
+            return element;
         } else {
-            String screenshot = createScreenshot();
-            fail("Element by [" + by + "] and conditions [" + Arrays.toString(conditions)
-                    + "] cannot be found in any iframe OR found multiple matches. Check logs for more details. Screenshot path: "
-                    + screenshot);
-            throw new IllegalStateException("Will not be thrown");
+            return Optional.empty();
         }
     }
 
     @Override
     public void reload() {
         Selenide.refresh();
+    }
+
+    @Override
+    public Optional<SelenideElement> findOptionalElementInAllFrames(By by, WebElementCondition... conditions) {
+        return findOptionalElementInAllFrames(by, FRAME_SEARCH_TOTAL_SECONDS, conditions);
     }
 
     private Optional<SelenideElement> findSingleElementInAllFrames(By by, WebElementCondition... conditions) {
@@ -287,8 +308,28 @@ class BrowserImpl implements Browser {
     }
 
     @Override
+    public void rightClickOnElementContainingText(HtmlElementType elementType, String text) {
+        rightClickOnElementContainingText(elementType.getType(), text);
+    }
+
+    @Override
+    public void rightClickOnElementContainingText(String elementType, String text) {
+        SelenideElement element = getElementByAttributeAndContainsText(elementType, text);
+        element.shouldBe(Condition.visible);
+        rightClickElement(element);
+    }
+
+    @Override
     public void clickOnElementByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern, String text) {
         clickOnElementByAttributePatternAndText(elementType.getType(), attribute.getAttribute(), pattern, text);
+    }
+
+    @Override
+    public void assertElementExistByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern,
+            String text) {
+        By by = constructCssSelectorByTypeAndAttribute(elementType.getType(), attribute.getAttribute(), pattern);
+
+        findElementInAllFrames(by, Condition.visible, Condition.enabled, Condition.exactText(text), Condition.exist);
     }
 
     @Override
@@ -327,7 +368,7 @@ class BrowserImpl implements Browser {
     @Override
     public void doubleClickOnElementContainingText(String elementType, String text) {
         SelenideElement element = getElementByAttributeAndContainsText(elementType, text);
-
+        element.shouldBe(Condition.visible);
         element.doubleClick();
     }
 
@@ -354,9 +395,7 @@ class BrowserImpl implements Browser {
     @Override
     public void clickOnElementContainingText(String elementType, String text) {
         SelenideElement element = getElementByAttributeAndContainsText(elementType, text);
-
         element.shouldBe(Condition.visible);
-
         element.click();
     }
 
@@ -392,6 +431,21 @@ class BrowserImpl implements Browser {
     @Override
     public void assertElementExistsByTypeAndContainsText(String elementType, String text) {
         getElementByAttributeAndContainsText(elementType, text);
+    }
+
+    @Override
+    public void assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text) {
+        assertElementDoesNotExistsByTypeAndContainsText(htmlElementType.getType(), text);
+    }
+
+    @Override
+    public void assertElementDoesNotExistsByTypeAndContainsText(String elementType, String text) {
+        By by = constructCssSelectorByType(elementType);
+
+        Optional<SelenideElement> element = findOptionalElementInAllFrames(by, ELEMENT_EXISTENCE_SEARCH_TIME_SECONDS);
+        if (element.isPresent()) {
+            failWithScreenshot("Element with selector [" + by + "] was not found");
+        }
     }
 
     @Override

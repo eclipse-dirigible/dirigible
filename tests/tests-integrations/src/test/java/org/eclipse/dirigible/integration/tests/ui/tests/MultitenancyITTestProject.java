@@ -7,12 +7,17 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.ui.tests.projects;
+package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import ch.qos.logback.classic.Level;
 import io.restassured.http.ContentType;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
-import org.eclipse.dirigible.tests.*;
+import org.eclipse.dirigible.integration.tests.ui.tests.projects.BaseTestProject;
+import org.eclipse.dirigible.integration.tests.ui.tests.projects.MultitenantTestProject;
+import org.eclipse.dirigible.tests.DirigibleTestTenant;
+import org.eclipse.dirigible.tests.EdmView;
+import org.eclipse.dirigible.tests.IDE;
+import org.eclipse.dirigible.tests.IDEFactory;
 import org.eclipse.dirigible.tests.awaitility.AwaitilityExecutor;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.BrowserFactory;
@@ -36,23 +41,19 @@ import static org.hamcrest.Matchers.hasSize;
 
 @Lazy
 @Component
-public class MultitenancyITTestProject extends BaseTestProject implements MultitenantTestProject {
+class MultitenancyITTestProject extends BaseTestProject implements MultitenantTestProject {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MultitenancyITTestProject.class);
 
     private static final String PROJECT_RESOURCES_PATH = "MultitenancyIT";
-
     private static final String UI_HOME_PATH = "/services/web/" + PROJECT_RESOURCES_PATH + "/gen/edm/index.html";
-
     private static final String TS_BASE_PATH = "/services/ts/" + PROJECT_RESOURCES_PATH + "/";
     private static final String READERS_VIEW_SERVICE_PATH = TS_BASE_PATH + "views/ReaderViewService.ts";
     private static final String DOCUMENTS_SERVICE_PATH = TS_BASE_PATH + "cmis/DocumentService.ts/documents";
     private static final String BOOKS_SERVICE_PATH = TS_BASE_PATH + "gen/edm/api/Books/BookService.ts";
-
     private static final String READERS_ODATA_ENTITY_PATH = "/odata/v2/Readers";
 
     private final BrowserFactory browserFactory;
-    private final EdmView edmView;
     private final RestAssuredExecutor restAssuredExecutor;
     private final IDEFactory ideFactory;
 
@@ -61,9 +62,8 @@ public class MultitenancyITTestProject extends BaseTestProject implements Multit
 
     MultitenancyITTestProject(BrowserFactory browserFactory, EdmView edmView, RestAssuredExecutor restAssuredExecutor,
             IDEFactory ideFactory, ProjectUtil projectUtil) {
-        super(PROJECT_RESOURCES_PATH, ideFactory.create(), projectUtil);
+        super(PROJECT_RESOURCES_PATH, ideFactory.create(), projectUtil, edmView);
         this.browserFactory = browserFactory;
-        this.edmView = edmView;
         this.restAssuredExecutor = restAssuredExecutor;
         this.ideFactory = ideFactory;
 
@@ -91,7 +91,7 @@ public class MultitenancyITTestProject extends BaseTestProject implements Multit
         }
     }
 
-    public void verifyHomePageAccessibleByTenant(DirigibleTestTenant tenant) {
+    void verifyHomePageAccessibleByTenant(DirigibleTestTenant tenant) {
         Browser browser = browserFactory.createByHost(tenant.getHost());
         browser.openPath(UI_HOME_PATH);
 
@@ -274,13 +274,8 @@ public class MultitenancyITTestProject extends BaseTestProject implements Multit
         });
     }
 
-    public void generateEDM() {
-        Workbench workbench = getIde().openWorkbench();
-        workbench.expandProject(getProjectResourcesFolder());
-        workbench.openFile("edm.edm");
-
-        edmView.regenerate();
-
+    void generateEDM() {
+        generateEDM("edm.edm");
     }
 
 }

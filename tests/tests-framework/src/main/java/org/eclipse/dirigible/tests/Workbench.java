@@ -28,14 +28,6 @@ public class Workbench {
         this.welcomeViewFactory = welcomeViewFactory;
     }
 
-    public void expandProject(String projectName) {
-        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
-    }
-
-    public void openFile(String fileName) {
-        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, fileName);
-    }
-
     public void publishAll(boolean waitForSynchronizationExecution) {
         clickPublishAll();
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Published all projects in");
@@ -74,4 +66,24 @@ public class Workbench {
         browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_PROJECT_BUTTON_TEXT);
     }
 
+    public void createFileInProject(String projectName, String newFileType) {
+        expandProject(projectName);
+        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
+
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", newFileType);
+        browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
+    }
+
+    public void expandProject(String projectName) {
+        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
+    }
+
+    public void openFile(String projectName, String fileName) {
+        expandProject(projectName);
+        openFile(fileName);
+    }
+
+    public void openFile(String fileName) {
+        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, fileName);
+    }
 }
