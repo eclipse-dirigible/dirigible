@@ -11,19 +11,16 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import ch.qos.logback.classic.Level;
 import org.assertj.db.api.Assertions;
+import org.assertj.db.type.AssertDbConnection;
+import org.assertj.db.type.AssertDbConnectionFactory;
 import org.assertj.db.type.Table;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
-import org.eclipse.dirigible.integration.tests.ui.tests.projects.CamelJDBCTestProject;
-import org.eclipse.dirigible.integration.tests.ui.tests.projects.CamelTypescriptTestProject;
 import org.eclipse.dirigible.tests.logging.LogsAsserter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import javax.sql.DataSource;
-import java.util.concurrent.TimeUnit;
-
-import static org.awaitility.Awaitility.await;
 
 class CamelExtractTransformLoadIT extends UserInterfaceIntegrationTest {
 
@@ -47,60 +44,52 @@ class CamelExtractTransformLoadIT extends UserInterfaceIntegrationTest {
 
     @Test
     void testJDBCScenario() {
+        jdbcTestProject.setLogsAsserter(openCartLogAsserter);
         jdbcTestProject.copyToWorkspace();
         jdbcTestProject.publish();
 
-        assertLogContainsMessage(openCartLogAsserter, "Replicating orders from OpenCart using JDBC...", Level.INFO);
-        assertLogContainsMessage(openCartLogAsserter, "Successfully replicated orders from OpenCart using JDBC", Level.INFO);
+        jdbcTestProject.verify();
 
         assertDatabaseETLCompletion();
     }
 
     @Test
     void testTypeScriptScenario() {
+        typescriptTestProject.setConsoleLogAsserter(consoleLogAsserter);
+        typescriptTestProject.setOpenCartLogAsserter(openCartLogAsserter);
+
         typescriptTestProject.copyToWorkspace();
         typescriptTestProject.publish();
 
-        assertLogContainsMessage(openCartLogAsserter, "Replicating orders from OpenCart using TypeScript", Level.INFO);
-        assertLogContainsMessage(consoleLogAsserter, "About to upsert Open cart order [1] using exchange rate", Level.INFO);
-        assertLogContainsMessage(consoleLogAsserter, "Upserted Open cart order [1]", Level.INFO);
-        assertLogContainsMessage(consoleLogAsserter, "About to upsert Open cart order [2] using exchange rate", Level.INFO);
-        assertLogContainsMessage(consoleLogAsserter, "Upserted Open cart order [2]", Level.INFO);
-        assertLogContainsMessage(openCartLogAsserter, "Successfully replicated orders from OpenCart using TypeScript", Level.INFO);
+        typescriptTestProject.verify();
 
         assertDatabaseETLCompletion();
     }
 
-    private void assertLogContainsMessage(LogsAsserter logAsserter, String message, Level level) {
-        await().atMost(30, TimeUnit.SECONDS)
-               .pollInterval(1, TimeUnit.SECONDS)
-               .until(() -> logAsserter.containsMessage(message, level));
-    }
+
 
     private void assertDatabaseETLCompletion() {
         DataSource dataSource = dataSourcesManager.getDefaultDataSource();
-        Table ordersTable = new Table(dataSource, "\"ORDERS\"");
+        AssertDbConnection connection = AssertDbConnectionFactory.of(dataSource)
+                                                                 .create();
+
+        Table ordersTable = connection.table("\"ORDERS\"")
+                                      .build();
 
         Assertions.assertThat(ordersTable)
-                  .hasNumberOfRows(2);
-
-        Assertions.assertThat(ordersTable)
+                  .hasNumberOfRows(2)
                   .row(0)
-                  .column("ID")
-                  .value()
+                  .value("ID")
                   .isEqualTo(1)
-                  .column("TOTAL")
-                  .value()
+                  .value("TOTAL")
                   .isEqualTo(92)
-
                   .row(1)
-                  .column("ID")
-                  .value()
+                  .value("ID")
                   .isEqualTo(2)
-                  .column("TOTAL")
-                  .value()
+                  .value("TOTAL")
                   .isEqualTo(230.46);
     }
+
 
 
 }
