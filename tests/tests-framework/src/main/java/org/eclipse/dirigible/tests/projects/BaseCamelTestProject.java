@@ -17,13 +17,18 @@ import java.util.concurrent.TimeUnit;
 
 import static org.awaitility.Awaitility.await;
 
-public class BaseCamelTestProject extends BaseTestProject implements TestProject {
+public abstract class BaseCamelTestProject extends BaseTestProject implements TestProject {
+
+    protected final LogsAsserter camelLogAsserter;
+    protected final LogsAsserter consoleLogAsserter;
 
     @Autowired
     private DataSourcesManager dataSourcesManager;
 
     protected BaseCamelTestProject(String projectResourcesFolder, IDE ide, ProjectUtil projectUtil, EdmView edmView) {
         super(projectResourcesFolder, ide, projectUtil, edmView);
+        this.consoleLogAsserter = new LogsAsserter("app.out", Level.INFO);
+        this.camelLogAsserter = new LogsAsserter("OpenCartOrdersReplication", Level.INFO);
     }
 
     protected void assertLogContainsMessage(LogsAsserter logAsserter, String message, Level level) {
@@ -52,10 +57,5 @@ public class BaseCamelTestProject extends BaseTestProject implements TestProject
                   .isEqualTo(2)
                   .value("TOTAL")
                   .isEqualTo(230.46);
-    }
-
-    @Override
-    public void verify() {
-
     }
 }

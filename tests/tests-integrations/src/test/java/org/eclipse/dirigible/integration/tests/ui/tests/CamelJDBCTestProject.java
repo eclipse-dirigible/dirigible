@@ -12,7 +12,6 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 import ch.qos.logback.classic.Level;
 import org.eclipse.dirigible.tests.EdmView;
 import org.eclipse.dirigible.tests.IDE;
-import org.eclipse.dirigible.tests.logging.LogsAsserter;
 import org.eclipse.dirigible.tests.projects.BaseCamelTestProject;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
 import org.springframework.context.annotation.Lazy;
@@ -21,11 +20,8 @@ import org.springframework.stereotype.Component;
 @Lazy
 @Component
 class CamelJDBCTestProject extends BaseCamelTestProject {
-    private final LogsAsserter camelLogAsserter;
-
     public CamelJDBCTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView) {
         super("CamelExtractTransformLoadIT_testJDBCScenario", ide, projectUtil, edmView);
-        this.camelLogAsserter = new LogsAsserter("OpenCartOrdersReplication", Level.INFO);
     }
 
     @Override
