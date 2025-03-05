@@ -21,11 +21,13 @@ import org.springframework.stereotype.Component;
 @Lazy
 @Component
 class CamelTypescriptTestProject extends BaseCamelTestProject {
-    private LogsAsserter camelLogAsserter;
-    private LogsAsserter consoleLogAsserter;
+    private final LogsAsserter camelLogAsserter;
+    private final LogsAsserter consoleLogAsserter;
 
     public CamelTypescriptTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView) {
         super("CamelExtractTransformLoadIT_testTypeScriptScenario", ide, projectUtil, edmView);
+        this.consoleLogAsserter = new LogsAsserter("app.out", Level.INFO);
+        this.camelLogAsserter = new LogsAsserter("OpenCartOrdersReplication", Level.INFO);
     }
 
     @Override
@@ -38,10 +40,5 @@ class CamelTypescriptTestProject extends BaseCamelTestProject {
         assertLogContainsMessage(camelLogAsserter, "Successfully replicated orders from OpenCart using TypeScript", Level.INFO);
         assertDatabaseETLCompletion();
 
-    }
-
-    public void setLogsAsserter(LogsAsserter camelLogAsserter, LogsAsserter consoleLogAsserter) {
-        this.camelLogAsserter = camelLogAsserter;
-        this.consoleLogAsserter = consoleLogAsserter;
     }
 }

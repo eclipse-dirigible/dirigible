@@ -9,9 +9,6 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import ch.qos.logback.classic.Level;
-import org.eclipse.dirigible.tests.logging.LogsAsserter;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -23,18 +20,9 @@ class CamelExtractTransformLoadIT extends UserInterfaceIntegrationTest {
     @Autowired
     private CamelTypescriptTestProject typescriptTestProject;
 
-    private LogsAsserter consoleLogAsserter;
-    private LogsAsserter camelLogAsserter;
-
-    @BeforeEach
-    void setUp() {
-        this.consoleLogAsserter = new LogsAsserter("app.out", Level.INFO);
-        this.camelLogAsserter = new LogsAsserter("OpenCartOrdersReplication", Level.INFO);
-    }
 
     @Test
     void testJDBCScenario() {
-        jdbcTestProject.setLogsAsserter(camelLogAsserter);
         jdbcTestProject.copyToWorkspace();
         jdbcTestProject.publish();
 
@@ -43,7 +31,6 @@ class CamelExtractTransformLoadIT extends UserInterfaceIntegrationTest {
 
     @Test
     void testTypeScriptScenario() {
-        typescriptTestProject.setLogsAsserter(camelLogAsserter, consoleLogAsserter);
         typescriptTestProject.copyToWorkspace();
         typescriptTestProject.publish();
 
