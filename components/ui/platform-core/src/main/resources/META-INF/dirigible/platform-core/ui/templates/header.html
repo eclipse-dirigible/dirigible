@@ -14,7 +14,7 @@
 <div class="main-header">
     <bk-shellbar>
         <bk-shellbar-group position="left" style="flex:0">
-            <span ng-if="!collapseMenu" bk-shellbar-logo><img ng-src="{{ ::branding.logo }}" alt="{{ ::branding.brand }}" width="32" height="32"></span>
+            <span ng-if="!collapseMenu" bk-shellbar-logo><img ng-src="{{ ::branding.logo }}" alt="{{ ::branding.name }}" width="32" height="32"></span>
             <bk-popover ng-if="collapseMenu">
                 <bk-popover-control>
                     <bk-button bk-shellbar-button glyph="sap-icon--menu2" aria-label="main menu button">
@@ -34,7 +34,7 @@
                     </bk-menu>
                 </bk-popover-body>
             </bk-popover>
-            <span bk-shellbar-title>{{ ::branding.brand }}</span>
+            <span bk-shellbar-title>{{ ::branding.name }}</span>
             <div class="bk-hbox" ng-if="!collapseMenu">
                 <bk-popover ng-repeat="menuItem in menus[perspectiveId].items track by $index">
                     <bk-popover-control>

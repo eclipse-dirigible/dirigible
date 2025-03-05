@@ -134,7 +134,7 @@ angular.module('platformView', ['platformExtensions', 'platformTheming'])
         restrict: 'A',
         transclude: false,
         replace: true,
-        link: (scope) => { scope.icon = getBrandingInfo().icons.faviconIco },
+        link: (scope) => { scope.icon = getBrandingInfo().icons.favicon },
         template: '<link rel="icon" type="image/x-icon" ng-href="{{::icon}}">'
     })).directive('shellTitle', (shellState) => ({
         restrict: 'A',

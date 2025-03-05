@@ -9,30 +9,13 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-// @ts-nocheck
-if (!top.hasOwnProperty('PlatformBranding')) top.PlatformBranding = {
-    name: 'Dirigible',
-    brand: 'Eclipse Dirigible',
-    brandUrl: 'https://www.dirigible.io/',
-    icons: {
-        faviconIco: '/services/web/platform-branding/images/favicon.ico',
-    },
-    logo: '/services/web/platform-branding/images/dirigible.svg',
-    keyPrefix: 'dirigible'
-};
+import { rs } from 'sdk/http';
+import { getBrandingJs } from './branding.mjs';
 
-function getBrandingInfo() {
-    if (top.hasOwnProperty('PlatformBranding')) return top.PlatformBranding;
-    throw Error("PlatformBranding is not set!");
-}
-
-function setBrandingInfo({ name, brand, brandUrl, icons, logo, keyPrefix } = {}) {
-    if (name) top.PlatformBranding.name = name;
-    if (brand) top.PlatformBranding.brand = brand;
-    if (brandUrl) top.PlatformBranding.brandUrl = brandUrl;
-    if (icons) {
-        if (icons['faviconIco']) top.PlatformBranding.icons.faviconIco = icons['faviconIco'];
-    }
-    if (logo) top.PlatformBranding.logo = logo;
-    if (keyPrefix) top.PlatformBranding.keyPrefix = keyPrefix;
-}
+rs.service()
+    .resource('')
+    .get(function (_ctx, _request, response) {
+        response.setContentType("text/javascript");
+        response.println(getBrandingJs());
+    })
+    .execute();
