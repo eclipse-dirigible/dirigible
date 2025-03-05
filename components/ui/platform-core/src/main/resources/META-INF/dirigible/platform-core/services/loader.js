@@ -12,8 +12,9 @@
 import { request, response } from 'sdk/http';
 import { registry } from 'sdk/platform';
 import { uuid } from 'sdk/utils';
+import { getBrandingJs, getKeyPrefix } from '/platform-branding/branding.mjs';
 
-const COOKIE_PREFIX = 'DIRIGIBLE.platform-core.loader.';
+const COOKIE_PREFIX = `${getKeyPrefix()}.platform-core.loader.`;
 
 const scriptIds = request.getParameter('ids') ?? request.getParameter('id');
 if (scriptIds) {
@@ -64,15 +65,19 @@ function processScriptRequest(scriptIds) {
     let contentType = ids[0].endsWith('-js') ? 'text/javascript;charset=UTF-8' : 'text/css';
     let responseContent = '';
     for (let i = 0; i < ids.length; i++) {
-        const locations = getLocations(ids[i]);
-        if (locations) {
-            locations.forEach(function (scriptLocation) {
-                let text = registry.getText(scriptLocation);
-                if (text.includes('//# sourceMappingURL=')) {
-                    text = text.replace('//# sourceMappingURL=', `//# sourceMappingURL=/webjars${scriptLocation.slice(0, scriptLocation.lastIndexOf('/') + 1)}`);
-                    text += '\n';
+        const scriptList = getScriptList(ids[i]);
+        if (scriptList) {
+            scriptList.forEach(function (script) {
+                if (typeof script === 'string') {
+                    let text = registry.getText(script);
+                    if (text.includes('//# sourceMappingURL=')) {
+                        text = text.replace('//# sourceMappingURL=', `//# sourceMappingURL=/webjars${script.slice(0, script.lastIndexOf('/') + 1)}`);
+                        text += '\n';
+                    }
+                    responseContent += text;
+                } else {
+                    responseContent += script() + '\n';
                 }
-                responseContent += text;
             });
         } else {
             responseBadRequest(`Loader: '${ids[i]}' is not a valid id.`);
@@ -83,14 +88,14 @@ function processScriptRequest(scriptIds) {
     response.println(responseContent);
 }
 
-function getLocations(scriptId) {
+function getScriptList(scriptId) {
     const baseJs = [
         '/jquery/3.7.1/jquery.min.js',
         '/angularjs/1.8.2/angular.min.js',
         '/angularjs/1.8.2/angular-resource.min.js',
         '/angular-aria/1.8.2/angular-aria.min.js',
         '/angularjs/1.8.2/angular-sanitize.min.js',
-        '/platform-branding/branding.js',
+        getBrandingJs,
         '/platform-core/utilities/uri-builder.js',
         '/platform-core/utilities/view-parameters.js',
         '/platform-core/utilities/uuid.js',

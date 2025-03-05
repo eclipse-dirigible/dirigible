@@ -15,11 +15,12 @@ angular.module('platformTheming', ['platformExtensions'])
         this.$get = ['ThemeHub', 'Extensions', function editorsFactory(ThemeHub, Extensions) {
             let theme = ThemeHub.getSavedTheme();
             let themes = [];
+            const branding = getBrandingInfo();
 
             Extensions.getThemes().then((response) => {
                 themes = response.data;
                 if (!theme.version) {
-                    setTheme('blimpkit-auto');
+                    setTheme(branding.theme);
                 } else {
                     for (let i = 0; i < themes.length; i++) {
                         if (themes[i].id === theme.id) {
@@ -37,6 +38,7 @@ angular.module('platformTheming', ['platformExtensions'])
                 for (let i = 0; i < themes.length; i++) {
                     if (themes[i].id === themeId) {
                         setThemeObject(themes[i], sendEvent);
+                        break;
                     }
                 }
             }
@@ -58,12 +60,12 @@ angular.module('platformTheming', ['platformExtensions'])
                     'name': item['name']
                 })),
                 getCurrentTheme: () => ({
-                    id: theme['id'] || 'blimpkit-auto',
-                    name: theme['name'] || 'BlimpKit',
+                    id: theme['id'] ?? branding.theme,
+                    name: theme['name'] ?? 'Default',
                 }),
                 reset: () => {
                     // setting sendEvent to false because the application will reload anyway
-                    setTheme('blimpkit-auto', false);
+                    setTheme(branding.theme, false);
                 }
             }
         }];
