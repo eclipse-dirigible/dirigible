@@ -10,10 +10,10 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import ch.qos.logback.classic.Level;
-import org.eclipse.dirigible.integration.tests.ui.tests.projects.BaseCamelTestProject;
 import org.eclipse.dirigible.tests.EdmView;
 import org.eclipse.dirigible.tests.IDE;
 import org.eclipse.dirigible.tests.logging.LogsAsserter;
+import org.eclipse.dirigible.tests.projects.BaseCamelTestProject;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;

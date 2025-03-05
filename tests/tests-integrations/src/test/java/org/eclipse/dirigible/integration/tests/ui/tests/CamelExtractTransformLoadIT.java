@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
+import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -23,17 +24,19 @@ class CamelExtractTransformLoadIT extends UserInterfaceIntegrationTest {
 
     @Test
     void testJDBCScenario() {
-        jdbcTestProject.copyToWorkspace();
-        jdbcTestProject.publish();
-
-        jdbcTestProject.verify();
+        try {
+            jdbcTestProject.test();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Test
     void testTypeScriptScenario() {
-        typescriptTestProject.copyToWorkspace();
-        typescriptTestProject.publish();
-
-        typescriptTestProject.verify();
+        try {
+            typescriptTestProject.test();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 }

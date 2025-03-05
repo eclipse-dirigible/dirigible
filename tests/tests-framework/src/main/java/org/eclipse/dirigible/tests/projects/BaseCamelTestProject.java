@@ -1,4 +1,4 @@
-package org.eclipse.dirigible.integration.tests.ui.tests.projects;
+package org.eclipse.dirigible.tests.projects;
 
 import ch.qos.logback.classic.Level;
 import org.assertj.db.api.Assertions;
@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.awaitility.Awaitility.await;
 
-public class BaseCamelTestProject extends BaseTestProject {
+public class BaseCamelTestProject extends BaseTestProject implements TestProject {
 
     @Autowired
     private DataSourcesManager dataSourcesManager;
