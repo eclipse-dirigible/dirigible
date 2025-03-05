@@ -41,7 +41,7 @@ public class GreenMailConfig {
         });
     }
 
-    private static void configureDirigibleEmailService() {
+    public static void configureDirigibleEmailService() {
         DirigibleConfig.MAIL_USERNAME.setStringValue(MAIL_USER);
         DirigibleConfig.MAIL_PASSWORD.setStringValue(MAIL_PASSWORD);
         DirigibleConfig.MAIL_TRANSPORT_PROTOCOL.setStringValue("smtp");
