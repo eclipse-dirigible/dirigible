@@ -9,54 +9,17 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.eclipse.dirigible.tests.IDE;
-import org.eclipse.dirigible.tests.IDEFactory;
-import org.eclipse.dirigible.tests.framework.HtmlElementType;
-import org.eclipse.dirigible.tests.util.SecurityUtil;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.eclipse.dirigible.integration.tests.ui.tests.projects.PredefinedProjectIT;
+import org.eclipse.dirigible.integration.tests.ui.tests.projects.TestProject;
 import org.springframework.beans.factory.annotation.Autowired;
 
-class CustomSecurityIT extends UserInterfaceIntegrationTest {
-
-    private static final String EMPLOYEE_ROLE = "employee";
-    private static final String EMPLOYEE_USERNAME = "test-employee";
-    private static final String EMPLOYEE_PASSWORD = "test-employee";
-    private static final String EMPLOYEE_MANAGER_ROLE = "employee-manager";
-    private static final String EMPLOYEE_MANAGER_USERNAME = "test-employee-manager";
-    private static final String EMPLOYEE_MANAGER_PASSWORD = "test-employee-manager";
-    private static final String PROTECTED_PAGE_PATH = "/services/web/CustomSecurityIT/security/protected_page.html";
-    private static final String PROTECTED_PAGE_HEADER = "This is a protected page";
+class CustomSecurityIT extends PredefinedProjectIT {
 
     @Autowired
-    private IDEFactory ideFactory;
+    private CustomSecurityTestProject testProject;
 
-    @Autowired
-    private SecurityUtil securityUtil;
-
-    @BeforeEach
-    void setUp() {
-        ide.createAndPublishProjectFromResources("CustomSecurityIT");
-
-        browser.clearCookies();
+    @Override
+    protected TestProject getTestProject() {
+        return testProject;
     }
-
-    @Test
-    void testAccessProtectedPage_withUserWithRole() {
-        securityUtil.createUser(EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD, EMPLOYEE_ROLE);
-
-        IDE ide = ideFactory.create(EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD);
-        ide.openPath(PROTECTED_PAGE_PATH);
-        browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER1, PROTECTED_PAGE_HEADER);
-    }
-
-    @Test
-    void testAccessProtectedPage_withUserWithoutRole() {
-        securityUtil.createUser(EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_PASSWORD, EMPLOYEE_MANAGER_ROLE);
-
-        IDE ide = ideFactory.create(EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_PASSWORD);
-        ide.openPath(PROTECTED_PAGE_PATH);
-        browser.assertElementExistsByTypeAndText(HtmlElementType.DIV, "Access Denied");
-    }
-
 }

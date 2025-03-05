@@ -41,6 +41,7 @@ public abstract class BaseTestProject implements TestProject {
     public void configure() {
         copyToWorkspace();
         publish();
+        ide.close();
     }
 
     protected final void publish() {
