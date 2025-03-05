@@ -12,6 +12,7 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 import org.eclipse.dirigible.integration.tests.IntegrationTest;
 import org.eclipse.dirigible.tests.IDE;
 import org.eclipse.dirigible.tests.framework.Browser;
+import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 
 public abstract class UserInterfaceIntegrationTest extends IntegrationTest {
@@ -22,4 +23,8 @@ public abstract class UserInterfaceIntegrationTest extends IntegrationTest {
     @Autowired
     protected IDE ide;
 
+    @AfterEach
+    final void closeBrowser() {
+        browser.close();
+    }
 }

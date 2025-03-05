@@ -10,12 +10,13 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import com.icegreen.greenmail.util.GreenMail;
-import com.icegreen.greenmail.util.GreenMailUtil;
 import com.icegreen.greenmail.util.ServerSetup;
-import jakarta.mail.Message;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.tests.mail.EmailAsserter;
+import org.eclipse.dirigible.tests.mail.EmailAssertion;
+import org.eclipse.dirigible.tests.mail.EmailAssertionBuilder;
 import org.eclipse.dirigible.tests.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.util.PortUtil;
 import org.junit.jupiter.api.AfterEach;
@@ -24,16 +25,24 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import static io.restassured.RestAssured.given;
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 
 class MailIT extends UserInterfaceIntegrationTest {
 
-    private static final String USER = "user";
-    private static final String PASSWORD = "password";
+    private static final String USER = "emailUser";
+    private static final String PASSWORD = "emailPassword";
     private static final int PORT = PortUtil.getFreeRandomPort();
 
     static {
+        configureEmail();
+    }
+
+    @Autowired
+    private RestAssuredExecutor restAssuredExecutor;
+
+    private GreenMail greenMail;
+
+    private static void configureEmail() {
         DirigibleConfig.MAIL_USERNAME.setStringValue(USER);
         DirigibleConfig.MAIL_PASSWORD.setStringValue(PASSWORD);
         DirigibleConfig.MAIL_TRANSPORT_PROTOCOL.setStringValue("smtp");
@@ -42,20 +51,18 @@ class MailIT extends UserInterfaceIntegrationTest {
         DirigibleConfig.MAIL_SMTP_AUTH.setBooleanValue(true);
     }
 
-    @Autowired
-    private RestAssuredExecutor restAssuredExecutor;
-
-    private GreenMail greenMail;
-
     @BeforeEach
     void setUp() {
+        startEmailMock();
+    }
+
+    private void startEmailMock() {
         ServerSetup serverSetup = new ServerSetup(PORT, "localhost", "smtp");
         greenMail = new GreenMail(serverSetup);
 
         greenMail.start();
 
         greenMail.setUser(USER, PASSWORD);
-
     }
 
     @AfterEach
@@ -73,17 +80,16 @@ class MailIT extends UserInterfaceIntegrationTest {
                                                  .statusCode(200)
                                                  .body(containsString("Mail has been sent")));
 
-        MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
-        assertThat(receivedMessages).hasSize(1);
+        EmailAssertion emailAssertion = new EmailAssertionBuilder().expectedFrom("from@example.com")
+                                                                   .expectedTo("to@example.com")
+                                                                   .expectedSubject("A test email")
+                                                                   .expectedToContainBody("<h2>Test email content</h2>")
+                                                                   .build();
 
-        MimeMessage sentEmail = receivedMessages[0];
+        EmailAsserter.assertReceivedEmailsCount(greenMail, 1);
+        MimeMessage receivedEmail = greenMail.getReceivedMessages()[0];
 
-        assertThat(sentEmail.getSubject()).isEqualTo("A test email");
-        assertThat(sentEmail.getFrom()[0].toString()).isEqualTo("from@example.com");
-        assertThat(sentEmail.getRecipients(Message.RecipientType.TO)[0].toString()).isEqualTo("to@example.com");
-        assertThat(GreenMailUtil.getBody(sentEmail)
-                                .trim()).contains("<h2>Test email content</h2>");
-
+        EmailAsserter.assertEmail(receivedEmail, emailAssertion);
     }
 
 }

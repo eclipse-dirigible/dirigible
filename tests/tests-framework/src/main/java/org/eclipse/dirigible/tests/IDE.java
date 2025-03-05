@@ -36,7 +36,6 @@ public class IDE {
     private static final String PASSWORD_FIELD_ID = "password";
     private static final String SUBMIT_TYPE = "submit";
     private static final String SIGN_IN_BUTTON_TEXT = "Sign in";
-
     private final Browser browser;
     private final RestAssuredExecutor restAssuredExecutor;
     private final String username;
@@ -61,6 +60,10 @@ public class IDE {
         this.password = password;
         this.projectUtil = projectUtil;
         this.workbenchFactory = workbenchFactory;
+    }
+
+    public Browser getBrowser() {
+        return browser;
     }
 
     // Note: this method is used in Kronos
@@ -148,5 +151,13 @@ public class IDE {
 
     public void login() {
         login(true);
+    }
+
+    public void reload() {
+        browser.reload();
+    }
+
+    public void close() {
+        browser.close();
     }
 }
