@@ -10,7 +10,7 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import org.eclipse.dirigible.components.base.http.roles.Roles;
-import org.eclipse.dirigible.tests.IntegrationTest;
+import org.eclipse.dirigible.integration.tests.IntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;

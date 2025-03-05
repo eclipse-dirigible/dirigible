@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2025 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -7,47 +7,20 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.tests;
+package org.eclipse.dirigible.integration.tests;
 
 import org.awaitility.Awaitility;
-import org.eclipse.dirigible.commons.config.Configuration;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
+import org.eclipse.dirigible.tests.DirigibleTestTenant;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
-import org.springframework.test.annotation.DirtiesContext;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-@AutoConfigureMockMvc
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
-@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
-public abstract class IntegrationTest {
-
-    // uncomment the following if you want to run the tests in headless mode
-    // static {
-    // com.codeborne.selenide.Configuration.headless = true;
-    // }
+public abstract class DirigibleIntegrationTest extends IntegrationTest {
 
     @Autowired
     private TenantCreator tenantCreator;
-
-    @Autowired
-    private DirigibleCleaner dirigibleCleaner;
-
-    @AfterEach
-    final void cleanUp() {
-        dirigibleCleaner.clean();
-    }
-
-    @AfterAll
-    public static final void reloadConfigurations() {
-        Configuration.reloadConfigurations();
-    }
 
     protected void createTenants(DirigibleTestTenant... tenants) {
         createTenants(Arrays.asList(tenants));
@@ -67,5 +40,4 @@ public abstract class IntegrationTest {
                   .atMost(35, TimeUnit.SECONDS)
                   .until(() -> tenantCreator.isTenantProvisioned(tenant));
     }
-
 }
