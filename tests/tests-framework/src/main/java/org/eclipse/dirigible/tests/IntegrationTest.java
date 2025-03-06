@@ -31,7 +31,7 @@ public abstract class IntegrationTest {
 
     // set config to false if you want to disable the headless mode
     static {
-        com.codeborne.selenide.Configuration.headless = true;
+        com.codeborne.selenide.Configuration.headless = false;
     }
 
     @Autowired

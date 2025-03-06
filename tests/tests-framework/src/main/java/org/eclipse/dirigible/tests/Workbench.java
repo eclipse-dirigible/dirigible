@@ -20,12 +20,15 @@ public class Workbench {
     public static final String PROJECT_NAME_INPUT_ID = "pgfi1";
     private static final String PROJECTS_CONTEXT_MENU_NEW_PROJECT = "New Project";
     private static final String CREATE_PROJECT_BUTTON_TEXT = "Create";
+
     private final Browser browser;
     private final WelcomeViewFactory welcomeViewFactory;
+    private final TerminalFactory terminalFactory;
 
-    protected Workbench(Browser browser, WelcomeViewFactory welcomeViewFactory) {
+    protected Workbench(Browser browser, WelcomeViewFactory welcomeViewFactory, TerminalFactory terminalFactory) {
         this.browser = browser;
         this.welcomeViewFactory = welcomeViewFactory;
+        this.terminalFactory = terminalFactory;
     }
 
     public void publishAll(boolean waitForSynchronizationExecution) {
@@ -86,4 +89,10 @@ public class Workbench {
     public void openFile(String fileName) {
         browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, fileName);
     }
+
+    public Terminal openTerminal() {
+        browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Terminal");
+        return terminalFactory.create(browser);
+    }
+
 }

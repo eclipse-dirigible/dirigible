@@ -12,6 +12,7 @@ package org.eclipse.dirigible.tests.framework;
 import com.codeborne.selenide.SelenideElement;
 import com.codeborne.selenide.WebElementCondition;
 import org.openqa.selenium.By;
+import org.openqa.selenium.Keys;
 
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -102,4 +103,14 @@ public interface Browser {
     void assertAlertWithMessage(String message);
 
     void switchToLatestTab();
+
+    void pressEnter();
+
+    void pressKey(Keys key);
+
+    void type(String text);
+
+    By constructCssSelectorByTypeAndAttribute(String elementType, String attribute, String attributePattern);
+
+    By constructCssSelectorByTypeAndAttribute(HtmlElementType elementType, HtmlAttribute attribute, String attributePattern);
 }
