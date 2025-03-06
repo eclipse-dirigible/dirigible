@@ -20,7 +20,7 @@ public class WorkbenchFactory {
     private final Browser browser;
     private final WelcomeViewFactory welcomeViewFactory;
 
-    WorkbenchFactory(Browser browser, WelcomeViewFactory welcomeViewFactory) {
+    protected WorkbenchFactory(Browser browser, WelcomeViewFactory welcomeViewFactory) {
         this.browser = browser;
         this.welcomeViewFactory = welcomeViewFactory;
     }

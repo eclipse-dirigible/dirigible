@@ -1,0 +1,174 @@
+- route:
+    id: orders-sync-route-jdbc
+    nodePrefixId: route-opencart-sync
+    from:
+      id: trigger-orders-replication-cron
+      uri: cron
+      parameters:
+        schedule: 0/10 * * * * ?
+        name: TriggerOrdersReplicationCamel
+      steps:
+        - log:
+            id: log-start
+            description: Log starting
+            message: Replicating orders from OpenCart using JDBC...
+            loggingLevel: INFO
+            logName: OpenCartOrdersReplication
+
+        # Set resource to JavaScript file path
+        - setProperty:
+            id: set-db-type-resource
+            description: Set JavaScript resource property
+            name: resource
+            expression:
+              simple:
+                id: simple-db-type
+                expression: CamelExtractTransformLoadJdbcIT/sync/get-db-type.ts
+
+        # Invoke JavaScript to determine the database type
+        - to:
+            id: invoke-db-type-script
+            description: Execute JavaScript to determine database type
+            uri: class
+            parameters:
+              beanName: org.eclipse.dirigible.components.engine.camel.invoke.Invoker
+
+        # Store the database type in an exchange property
+        - setProperty:
+            id: set-database-type
+            description: Set Database Type Property
+            name: databaseType
+            expression:
+              simple:
+                id: simple-set-db-type
+                expression: "${exchangeProperty.db_type}"
+
+        # Log the detected database type
+        - log:
+            id: log-database-type
+            description: Log detected database type
+            message: "Detected Database Type (via JavaScript): ${exchangeProperty.databaseType}"
+            loggingLevel: INFO
+            logName: DatabaseTypeCheck
+
+        - setProperty:
+            id: set-rate-property
+            description: Set USD to EU exchange rate property
+            name: currencyExchangeRate
+            expression:
+              simple:
+                id: simple-exchange-rate
+                expression: '0.92'
+
+        - setBody:
+            id: create-order-select-statement
+            description: Create orders SELECT statement
+            expression:
+              simple:
+                id: simple-select-orders
+                expression: SELECT * FROM "OC_ORDER"
+
+        - to:
+            id: execute-get-orders
+            description: Get all orders
+            uri: spring-jdbc
+            parameters:
+              dataSourceName: DefaultDB
+
+        - split:
+            id: split-to-single-order
+            description: Split to single order
+            expression:
+              simple:
+                id: simple-split-orders
+                expression: ${body}
+            steps:
+              - choice:
+                  id: choice-dbtype
+                  description: Choose SQL based on database type
+                  when:
+                    - id: when-h2
+                      description: If database is H2
+                      expression:
+                        simple:
+                          id: simple-check-h2
+                          expression: "${exchangeProperty.databaseType} == 'H2'"
+                      steps:
+                        - log:
+                            id: log-h2-detected
+                            description: Log using H2
+                            message: "Using H2 database syntax for merging orders."
+                            loggingLevel: INFO
+                            logName: SQLTypeCheck
+                        - setBody:
+                            id: create-order-merge-statement-h2
+                            description: Create MERGE statement for H2
+                            expression:
+                              simple:
+                                id: simple-merge-h2
+                                expression: |
+                                  MERGE INTO ORDERS
+                                      (ID, TOTAL, DATEADDED) 
+                                  KEY(ID)
+                                  VALUES 
+                                      (
+                                          ${body['ORDER_ID']},
+                                          ${body['TOTAL']} * ${exchangeProperty.currencyExchangeRate},
+                                          '${body['DATE_ADDED']}'
+                                      );
+
+                    - id: when-postgresql
+                      description: If database is PostgreSQL
+                      expression:
+                        simple:
+                          id: simple-check-postgresql
+                          expression: "${exchangeProperty.databaseType} == 'Postgres'"
+                      steps:
+                        - log:
+                            id: log-postgresql-detected
+                            description: Log using PostgreSQL
+                            message: "Using PostgreSQL database syntax for merging orders."
+                            loggingLevel: INFO
+                            logName: SQLTypeCheck
+                        - setBody:
+                            id: create-order-merge-statement-postgresql
+                            description: Create MERGE statement for PostgreSQL
+                            expression:
+                              simple:
+                                id: simple-merge-postgresql
+                                expression: |-
+                                  INSERT INTO "ORDERS" ("ID", "TOTAL", "DATEADDED")
+                                  VALUES (
+                                      ${body['ORDER_ID']},
+                                      ${body['TOTAL']} * ${exchangeProperty.currencyExchangeRate},
+                                      '${body['DATE_ADDED']}'
+                                  )
+                                  ON CONFLICT ("ID")
+                                  DO UPDATE SET 
+                                      "TOTAL" = EXCLUDED."TOTAL",
+                                      "DATEADDED" = EXCLUDED."DATEADDED";
+
+                  otherwise:
+                    id: otherwise-unsupported
+                    description: Log unsupported database
+                    steps:
+                      - log:
+                          id: log-unsupported-db
+                          description: Log unsupported database
+                          message: "Unsupported database type: ${exchangeProperty.databaseType}"
+                          loggingLevel: ERROR
+                          logName: DatabaseTypeCheck
+
+              - to:
+                  id: merge-order
+                  description: Merge order
+                  uri: spring-jdbc
+                  parameters:
+                    dataSourceName: DefaultDB
+
+        - log:
+            id: log-orders-replication-completed
+            description: Log completed
+            message: Successfully replicated orders from OpenCart using JDBC
+            loggingLevel: INFO
+            logName: OpenCartOrdersReplication

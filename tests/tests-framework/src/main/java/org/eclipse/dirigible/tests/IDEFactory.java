@@ -25,7 +25,7 @@ public class IDEFactory {
     private final ProjectUtil projectUtil;
     private final WorkbenchFactory workbenchFactory;
 
-    IDEFactory(BrowserFactory browserFactory, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil,
+    protected IDEFactory(BrowserFactory browserFactory, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil,
             WorkbenchFactory workbenchFactory) {
         this.browserFactory = browserFactory;
         this.restAssuredExecutor = restAssuredExecutor;
