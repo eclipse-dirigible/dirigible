@@ -19,7 +19,7 @@ public class WelcomeViewFactory {
 
     private final Browser defaultBrowser;
 
-    WelcomeViewFactory(Browser defaultBrowser) {
+    protected WelcomeViewFactory(Browser defaultBrowser) {
         this.defaultBrowser = defaultBrowser;
     }
 
