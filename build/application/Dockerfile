@@ -3,6 +3,10 @@ FROM amazoncorretto:21-alpine
 
 VOLUME /tmp
 
+RUN apk update && \
+    apk add --no-cache \
+    ttyd
+
 RUN apk add nodejs npm
 RUN npm i -g esbuild
 RUN npm i -g typescript

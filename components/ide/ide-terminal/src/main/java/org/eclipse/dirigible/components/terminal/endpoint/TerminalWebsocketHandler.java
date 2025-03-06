@@ -24,8 +24,6 @@ import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -181,9 +179,7 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
      */
     private TerminalWebsocketClientEndpoint startClientWebsocket(WebSocketSession session) throws URISyntaxException {
 
-        // final TerminalWebsocketClientEndpoint clientEndPoint = new TerminalWebsocketClientEndpoint(new
-        // URI("ws://localhost:9000/ws"));
-        final TerminalWebsocketClientEndpoint clientEndPoint = new TerminalWebsocketClientEndpoint(new URI(getTerminalURI()));
+        final TerminalWebsocketClientEndpoint clientEndPoint = new TerminalWebsocketClientEndpoint(new URI("ws://localhost:9000/ws"));
 
         // add listener
         clientEndPoint.addMessageHandler(new TerminalWebsocketClientEndpoint.MessageHandler() {
@@ -193,14 +189,6 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
         });
 
         return clientEndPoint;
-    }
-
-    private static String getTerminalURI() {
-        return isRunningInDocker() ? "ws://host.docker.internal:9000/ws" : "ws://localhost:9000/ws";
-    }
-
-    public static boolean isRunningInDocker() {
-        return Files.exists(Paths.get("/.dockerenv")) || Files.exists(Paths.get("/proc/1/cgroup"));
     }
 
     /**
