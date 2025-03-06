@@ -25,10 +25,12 @@ class CustomSecurityTestProject extends BaseTestProject {
 
     private static final String EMPLOYEE_ROLE = "employee";
     private static final String EMPLOYEE_USERNAME = "test-employee";
-    private static final String EMPLOYEE_PASSWORD = "test-employee";
+    private static final String EMPLOYEE_PASSWORD = "test-employee-password";
+
     private static final String EMPLOYEE_MANAGER_ROLE = "employee-manager";
     private static final String EMPLOYEE_MANAGER_USERNAME = "test-employee-manager";
-    private static final String EMPLOYEE_MANAGER_PASSWORD = "test-employee-manager";
+    private static final String EMPLOYEE_MANAGER_PASSWORD = "test-employee-manager-password";
+
     private static final String PROTECTED_PAGE_PATH = "/services/web/CustomSecurityIT/security/protected_page.html";
     private static final String PROTECTED_PAGE_HEADER = "This is a protected page";
 
