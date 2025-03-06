@@ -58,13 +58,11 @@ export const getMenu = () => {
 			const item = e.trim();
 			menu.items.push({
 				label: config.get(`DIRIGIBLE_BRANDING_HELP_ITEM_${item}_NAME`, item),
-				order: parseInt(config.get(`DIRIGIBLE_BRANDING_HELP_ITEM_${item}_ORDER`, '0')),
 				action: 'open',
 				link: config.get(`DIRIGIBLE_BRANDING_HELP_ITEM_${item}_URL`, '#'),
 				separator: config.get(`DIRIGIBLE_BRANDING_HELP_ITEM_${item}_DIVIDER`, 'false').toLowerCase() === 'true'
 			});
 		});
-		menu.items.sort((a, b) => a.order - b.order);
 	} else {
 		menu.items = defaultMenuItems;
 	}
