@@ -3,7 +3,7 @@
         {
             "table": "OC_ORDER",
             "schema": "PUBLIC",
-            "file": "CamelExtractTransformLoadIT_testJDBCScenario/csvim/oc_order.csv",
+            "file": "CamelExtractTransformLoadJdbcIT/csvim/oc_order.csv",
             "header": true,
             "useHeaderNames": true,
             "delimField": ",",

@@ -22,7 +22,7 @@
             expression:
               constant:
                 id: get-all-orders-8de2
-                expression: CamelExtractTransformLoadIT_testTypeScriptScenario/sync/get-all-orders.ts
+                expression: CamelExtractTransformLoadTypescriptIT/sync/get-all-orders.ts
         - to:
             id: get-all-oc-orders
             description: Get all OpenCart orders
@@ -44,7 +44,7 @@
                   expression:
                     constant:
                       id: constant-0a9e
-                      expression: CamelExtractTransformLoadIT_testTypeScriptScenario/sync/merger-order.ts
+                      expression: CamelExtractTransformLoadTypescriptIT/sync/merger-order.ts
               - to:
                   id: to-eb1b
                   description: Merge order

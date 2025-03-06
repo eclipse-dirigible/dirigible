@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.ui.tests;
+package org.eclipse.dirigible.integration.tests.ui.tests.camel;
 
 import ch.qos.logback.classic.Level;
 import org.eclipse.dirigible.tests.EdmView;
@@ -19,9 +19,9 @@ import org.springframework.stereotype.Component;
 
 @Lazy
 @Component
-class CamelTypescriptTestProject extends BaseCamelTestProject {
-    public CamelTypescriptTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView) {
-        super("CamelExtractTransformLoadIT_testTypeScriptScenario", ide, projectUtil, edmView);
+class CamelExtractTransformLoadTypescriptTestProject extends BaseCamelTestProject {
+    public CamelExtractTransformLoadTypescriptTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView) {
+        super("CamelExtractTransformLoadTypescriptIT", ide, projectUtil, edmView);
     }
 
     @Override

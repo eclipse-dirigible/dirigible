@@ -23,7 +23,7 @@
             expression:
               simple:
                 id: simple-db-type
-                expression: CamelExtractTransformLoadIT_testJDBCScenario/sync/get-db-type.ts
+                expression: CamelExtractTransformLoadJdbcIT/sync/get-db-type.ts
 
         # Invoke JavaScript to determine the database type
         - to:

@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.ui.tests;
+package org.eclipse.dirigible.integration.tests.ui.tests.camel;
 
 import ch.qos.logback.classic.Level;
 import org.eclipse.dirigible.tests.EdmView;
@@ -25,20 +25,20 @@ import static org.awaitility.Awaitility.await;
 
 @Lazy
 @Component
-class CamelDirigibleJavaScriptComponentCronRouteTestProject extends BaseTestProject {
+class CamelDirigibleTwoStepsJSInvokerCronRouteTestProject extends BaseTestProject {
 
     private final LogsAsserter logsAsserter;
 
-    CamelDirigibleJavaScriptComponentCronRouteTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView) {
-        super("CamelDirigibleJavaScriptComponentCronRouteIT", ide, projectUtil, edmView);
-        this.logsAsserter = new LogsAsserter("CustomComponentLogger", Level.INFO);
+    CamelDirigibleTwoStepsJSInvokerCronRouteTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView) {
+        super("CamelDirigibleTwoStepsJSInvokerCronRouteIT", ide, projectUtil, edmView);
+        this.logsAsserter = new LogsAsserter("TwoStepsLogger", Level.INFO);
     }
 
     @Override
     public void verify() throws SQLException {
         // this log message is expected to be logged by the final camel log step
         await().atMost(20, TimeUnit.SECONDS)
-               .until(() -> logsAsserter.containsMessage("Completed execution. Body: [MY TEST BODY]", Level.INFO));
+               .until(() -> logsAsserter.containsMessage("Completed execution. Body: [THIS IS A TEST BODY]", Level.INFO));
     }
 
 }
