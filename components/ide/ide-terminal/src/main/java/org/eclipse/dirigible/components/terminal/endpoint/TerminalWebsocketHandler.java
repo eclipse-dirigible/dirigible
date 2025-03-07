@@ -9,17 +9,6 @@
  */
 package org.eclipse.dirigible.components.terminal.endpoint;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
 import org.eclipse.dirigible.components.terminal.client.TerminalWebsocketClientEndpoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +17,16 @@ import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.SubProtocolCapable;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.BinaryWebSocketHandler;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The Console Websocket Handler.
@@ -41,12 +40,95 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
     private static final Logger logger = LoggerFactory.getLogger(TerminalWebsocketHandler.class);
 
     /** The open sessions. */
-    private static Map<String, WebSocketSession> OPEN_SESSIONS = new ConcurrentHashMap<String, WebSocketSession>();
+    private static final Map<String, WebSocketSession> OPEN_SESSIONS = new ConcurrentHashMap<String, WebSocketSession>();
 
     /** The session to client. */
-    private static Map<String, TerminalWebsocketClientEndpoint> SESSION_TO_CLIENT =
+    private static final Map<String, TerminalWebsocketClientEndpoint> SESSION_TO_CLIENT =
             new ConcurrentHashMap<String, TerminalWebsocketClientEndpoint>();
 
+
+    /**
+     * The Process Runnable.
+     */
+    static class ProcessRunnable implements Runnable {
+
+        /** The command. */
+        private final String command;
+
+        /** The process. */
+        private Process process;
+
+        /**
+         * Instantiates a new process runnable.
+         *
+         * @param command the command
+         */
+        ProcessRunnable(String command) {
+            this.command = command;
+        }
+
+        /**
+         * Gets the process.
+         *
+         * @return the process
+         */
+        public Process getProcess() {
+            return process;
+        }
+
+        /**
+         * Run.
+         */
+        @Override
+        public void run() {
+            try {
+                this.process = Runtime.getRuntime()
+                                      .exec(this.command);
+
+                Thread reader = new Thread(new Runnable() {
+                    public void run() {
+                        try {
+                            try (BufferedReader input = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                                String line;
+
+                                while ((line = input.readLine()) != null) {
+                                    if (logger.isDebugEnabled()) {
+                                        logger.debug(TERMINAL_PREFIX + line);
+                                    }
+                                }
+                            }
+                        } catch (IOException e) {
+                            logger.error(TERMINAL_PREFIX + e.getMessage(), e);
+                        }
+                    }
+                });
+                reader.start();
+
+                Thread error = new Thread(new Runnable() {
+                    public void run() {
+                        try {
+                            try (BufferedReader input = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+                                String line;
+
+                                while ((line = input.readLine()) != null) {
+                                    logger.error(TERMINAL_PREFIX + line);
+                                }
+                            }
+                        } catch (IOException e) {
+                            logger.error(TERMINAL_PREFIX + e.getMessage(), e);
+                        }
+                    }
+                });
+                error.start();
+
+                // logger.info("[ws:terminal] " + process.exitValue());
+            } catch (IOException e) {
+                logger.error(TERMINAL_PREFIX + e.getMessage(), e);
+            }
+
+        }
+
+    }
 
     /**
      * After connection established.
@@ -86,6 +168,27 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
             }
         }
         OPEN_SESSIONS.put(session.getId(), session);
+    }
+
+    /**
+     * Start the WebSocket proxy.
+     *
+     * @param session the source session
+     * @return the x terminal websocket client endpoint
+     * @throws URISyntaxException the URI syntax exception
+     */
+    private TerminalWebsocketClientEndpoint startClientWebsocket(WebSocketSession session) throws URISyntaxException {
+
+        final TerminalWebsocketClientEndpoint clientEndPoint = new TerminalWebsocketClientEndpoint(new URI("ws://localhost:9000/ws"));
+
+        // add listener
+        clientEndPoint.addMessageHandler(new TerminalWebsocketClientEndpoint.MessageHandler() {
+            public void handleMessage(ByteBuffer message) throws IOException {
+                session.sendMessage(new BinaryMessage(message));
+            }
+        });
+
+        return clientEndPoint;
     }
 
     /**
@@ -158,112 +261,7 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
      */
     @Override
     public List<String> getSubProtocols() {
-        return Arrays.asList("tty");
-    }
-
-    /**
-     * Start the WebSocket proxy.
-     *
-     * @param session the source session
-     * @return the x terminal websocket client endpoint
-     * @throws URISyntaxException the URI syntax exception
-     */
-    private TerminalWebsocketClientEndpoint startClientWebsocket(WebSocketSession session) throws URISyntaxException {
-
-        final TerminalWebsocketClientEndpoint clientEndPoint = new TerminalWebsocketClientEndpoint(new URI("ws://localhost:9000/ws"));
-
-        // add listener
-        clientEndPoint.addMessageHandler(new TerminalWebsocketClientEndpoint.MessageHandler() {
-            public void handleMessage(ByteBuffer message) throws IOException {
-                session.sendMessage(new BinaryMessage(message));
-            }
-        });
-
-        return clientEndPoint;
-    }
-
-    /**
-     * The Process Runnable.
-     */
-    static class ProcessRunnable implements Runnable {
-
-        /** The command. */
-        private String command;
-
-        /** The process. */
-        private Process process;
-
-        /**
-         * Instantiates a new process runnable.
-         *
-         * @param command the command
-         */
-        ProcessRunnable(String command) {
-            this.command = command;
-        }
-
-        /**
-         * Gets the process.
-         *
-         * @return the process
-         */
-        public Process getProcess() {
-            return process;
-        }
-
-        /**
-         * Run.
-         */
-        @Override
-        public void run() {
-            try {
-                this.process = Runtime.getRuntime()
-                                      .exec(this.command);
-
-                Thread reader = new Thread(new Runnable() {
-                    public void run() {
-                        try {
-                            try (BufferedReader input = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                                String line;
-
-                                while ((line = input.readLine()) != null) {
-                                    if (logger.isDebugEnabled()) {
-                                        logger.debug(TERMINAL_PREFIX + line);
-                                    }
-                                }
-                            }
-                        } catch (IOException e) {
-                            logger.error(TERMINAL_PREFIX + e.getMessage(), e);
-                        }
-                    }
-                });
-                reader.start();
-
-
-                Thread error = new Thread(new Runnable() {
-                    public void run() {
-                        try {
-                            try (BufferedReader input = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-                                String line;
-
-                                while ((line = input.readLine()) != null) {
-                                    logger.error(TERMINAL_PREFIX + line);
-                                }
-                            }
-                        } catch (IOException e) {
-                            logger.error(TERMINAL_PREFIX + e.getMessage(), e);
-                        }
-                    }
-                });
-                error.start();
-
-                // logger.info("[ws:terminal] " + process.exitValue());
-            } catch (IOException e) {
-                logger.error(TERMINAL_PREFIX + e.getMessage(), e);
-            }
-
-        }
-
+        return List.of("tty");
     }
 
 }

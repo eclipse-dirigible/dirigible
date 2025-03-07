@@ -19,6 +19,7 @@ import org.eclipse.dirigible.tests.util.FileUtil;
 import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.openqa.selenium.Alert;
 import org.openqa.selenium.By;
+import org.openqa.selenium.Keys;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.slf4j.Logger;
@@ -136,7 +137,13 @@ class BrowserImpl implements Browser {
         };
     }
 
-    private By constructCssSelectorByTypeAndAttribute(String elementType, String attribute, String attributePattern) {
+    @Override
+    public By constructCssSelectorByTypeAndAttribute(HtmlElementType elementType, HtmlAttribute attribute, String attributePattern) {
+        return constructCssSelectorByTypeAndAttribute(elementType.getType(), attribute.getAttribute(), attributePattern);
+    }
+
+    @Override
+    public By constructCssSelectorByTypeAndAttribute(String elementType, String attribute, String attributePattern) {
         String cssSelector = elementType + "[" + attribute + "*='" + attributePattern + "']";
         return Selectors.byCssSelector(cssSelector);
     }
@@ -183,6 +190,25 @@ class BrowserImpl implements Browser {
                                 .getWindowHandles()
                                 .size()
                         - 1);
+    }
+
+    @Override
+    public void pressEnter() {
+        pressKey(Keys.ENTER);
+    }
+
+    @Override
+    public void pressKey(Keys key) {
+        Selenide.actions()
+                .sendKeys(key)
+                .perform();
+    }
+
+    @Override
+    public void type(String text) {
+        Selenide.actions()
+                .sendKeys(text)
+                .perform();
     }
 
     @Override

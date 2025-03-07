@@ -15,23 +15,19 @@ import org.springframework.stereotype.Component;
 
 @Lazy
 @Component
-public class WorkbenchFactory {
+public class TerminalFactory {
 
     private final Browser browser;
-    private final WelcomeViewFactory welcomeViewFactory;
-    private final TerminalFactory terminalFactory;
 
-    protected WorkbenchFactory(Browser browser, WelcomeViewFactory welcomeViewFactory, TerminalFactory terminalFactory) {
+    protected TerminalFactory(Browser browser) {
         this.browser = browser;
-        this.welcomeViewFactory = welcomeViewFactory;
-        this.terminalFactory = terminalFactory;
     }
 
-    public Workbench create() {
+    public Terminal create() {
         return create(browser);
     }
 
-    public Workbench create(Browser browser) {
-        return new Workbench(browser, welcomeViewFactory, terminalFactory);
+    public Terminal create(Browser browser) {
+        return new Terminal(browser);
     }
 }

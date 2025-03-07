@@ -9,25 +9,21 @@
  */
 package org.eclipse.dirigible.components.terminal.endpoint;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.Charset;
-
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.terminal.endpoint.TerminalWebsocketHandler.ProcessRunnable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
+import java.io.*;
+import java.nio.charset.Charset;
 
 /**
  * The Class TerminalWebsocketConfig.
@@ -49,6 +45,8 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(TerminalWebsocketConfig.class);
+    /** The started. */
+    static volatile boolean started = false;
 
     static {
         runTTYD();
@@ -74,9 +72,6 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
         return new TerminalWebsocketHandler();
     }
 
-    /** The started. */
-    static volatile boolean started = false;
-
     /**
      * Run TTYD.
      */
@@ -92,12 +87,12 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
                 String os = System.getProperty("os.name")
                                   .toLowerCase();
                 if ((os.indexOf("nix") >= 0 || os.indexOf("nux") >= 0 || os.indexOf("aix") > 0)) {
-                    command = "bash -c ./ttyd.sh";
+                    command = "sh -c ./ttyd.sh";
                     File ttydShell = new File("./ttyd.sh");
                     if (!ttydShell.exists()) {
                         // ttyd binary should be placed in advance to $CATALINA_HOME/bin
 
-                        createShellScript(ttydShell, "./ttyd -p 9000 -W bash");
+                        createShellScript(ttydShell, "./ttyd -p 9000 sh");
                         if (ttydShell.setExecutable(true)) {
                             File ttydExecutable = new File("./ttyd");
                             createExecutable(TerminalWebsocketConfig.class.getResourceAsStream("/ttyd_linux.x86_64_1.6.0"), ttydExecutable);
@@ -113,7 +108,7 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
                         }
                     }
                 } else if (os.indexOf("mac") >= 0) {
-                    command = "bash -c ./ttyd.sh";
+                    command = "sh -c ./ttyd.sh";
                     File ttydShell = new File("./ttyd.sh");
                     if (!ttydShell.exists()) {
                         // ttyd should be pre-installed with: brew install ttyd
@@ -121,7 +116,7 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
                         // new Thread(processRunnable).start();
                         // processRunnable.getProcess().waitFor();
 
-                        createShellScript(ttydShell, "ttyd -p 9000 -W bash");
+                        createShellScript(ttydShell, "ttyd -p 9000 sh");
                         ttydShell.setExecutable(true);
                     }
                 } else if (os.indexOf("win") >= 0) {
@@ -130,6 +125,7 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
                     logger.error("Unknown OS: " + os);
                 }
 
+                logger.info("Starting ttyd using command [{}]", command);
                 ProcessRunnable processRunnable = new ProcessRunnable(command);
                 new Thread(processRunnable).start();
 
