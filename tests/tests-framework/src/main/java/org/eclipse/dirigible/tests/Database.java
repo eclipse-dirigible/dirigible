@@ -1,0 +1,87 @@
+package org.eclipse.dirigible.tests;
+
+import org.eclipse.dirigible.tests.framework.Browser;
+import org.eclipse.dirigible.tests.framework.HtmlAttribute;
+import org.eclipse.dirigible.tests.framework.HtmlElementType;
+import org.eclipse.dirigible.tests.util.SynchronizationUtil;
+
+public class Database {
+    public static final String PROJECTS_VIEW_ID = "pvtree";
+    public static final String PROJECT_NAME_INPUT_ID = "pgfi1";
+    private static final String PROJECTS_CONTEXT_MENU_NEW_PROJECT = "New Project";
+    private static final String CREATE_PROJECT_BUTTON_TEXT = "Create";
+
+    private final Browser browser;
+    private final WelcomeViewFactory welcomeViewFactory;
+    private final TerminalFactory terminalFactory;
+
+    protected Database(Browser browser, WelcomeViewFactory welcomeViewFactory, TerminalFactory terminalFactory) {
+        this.browser = browser;
+        this.welcomeViewFactory = welcomeViewFactory;
+        this.terminalFactory = terminalFactory;
+    }
+
+    public void publishAll(boolean waitForSynchronizationExecution) {
+        clickPublishAll();
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Published all projects in");
+
+        if (waitForSynchronizationExecution) {
+            SynchronizationUtil.waitForSynchronizationExecution();
+        }
+    }
+
+    public void clickPublishAll() {
+        browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.TITLE, "Publish all");
+    }
+
+    public WelcomeView openWelcomeView() {
+        return focusOnOpenedFile("Welcome");
+    }
+
+    public WelcomeView focusOnOpenedFile(String fileName) {
+        browser.clickOnElementContainingText(HtmlElementType.ANCHOR, fileName);
+        return welcomeViewFactory.create(browser);
+    }
+
+    public FormView getFormView() {
+        return new FormView(browser);
+    }
+
+    public void createNewProject(String projectName) {
+        browser.rightClickOnElementById(PROJECTS_VIEW_ID);
+
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.ROLE, "menuitem",
+                PROJECTS_CONTEXT_MENU_NEW_PROJECT);
+
+        browser.enterTextInElementById(PROJECT_NAME_INPUT_ID, projectName);
+
+        browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_PROJECT_BUTTON_TEXT);
+    }
+
+    public void createFileInProject(String projectName, String newFileType) {
+        expandProject(projectName);
+        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
+
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", newFileType);
+        browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
+    }
+
+    public void expandProject(String projectName) {
+        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
+    }
+
+    public void openFile(String projectName, String fileName) {
+        expandProject(projectName);
+        openFile(fileName);
+    }
+
+    public void openFile(String fileName) {
+        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, fileName);
+    }
+
+    public Terminal openTerminal() {
+        browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Terminal");
+        return terminalFactory.create(browser);
+    }
+
+}
