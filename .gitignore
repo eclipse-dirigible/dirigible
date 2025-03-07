@@ -31,3 +31,7 @@ package.json
 package-lock.json
 **/logs
 **/ttyd.sh
+
+# Develocity
+.mvn/.develocity/develocity-workspace-id
+
