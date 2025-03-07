@@ -1,0 +1,30 @@
+{
+    "name": "OC_ORDER",
+    "type": "TABLE",
+    "columns": [
+        {
+            "type": "INTEGER",
+            "length": 0,
+            "primaryKey": true,
+            "identity": true,
+            "precision": "NaN",
+            "scale": "NaN",
+            "nullable": false,
+            "name": "ORDER_ID"
+        },
+        {
+            "type": "DOUBLE",
+            "length": 19,
+            "precision": "15",
+            "scale": "4",
+            "nullable": true,
+            "name": "TOTAL"
+        },
+        {
+            "type": "TIMESTAMP",
+            "length": 20,
+            "nullable": true,
+            "name": "DATE_ADDED"
+        }
+    ]
+}

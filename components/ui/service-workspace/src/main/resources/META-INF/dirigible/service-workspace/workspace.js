@@ -13,7 +13,7 @@ angular.module('WorkspaceService', []).provider('WorkspaceService', function Wor
     this.workspacesServiceUrl = '/services/ide/workspaces';
     this.workspaceManagerServiceUrl = '/services/ide/workspace';
     this.workspaceSearchServiceUrl = '/services/ide/workspace-search';
-    this.storageKey = `${getBrandingInfo().keyPrefix}.workspace.selected`;
+    this.storageKey = `${getBrandingInfo().prefix}.workspace.selected`;
     this.$get = ['$http', function workspaceApiFactory($http) {
         const setWorkspace = function (workspace) {
             if (workspace === undefined || workspace === null || typeof workspace !== 'string')

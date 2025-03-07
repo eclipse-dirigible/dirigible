@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 /**
  * Multitenant mode must be enabled by default
  */
+
 class EnabledMultitenantModeIT extends TenantDeterminationIT {
 
     @BeforeAll

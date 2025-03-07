@@ -11,7 +11,7 @@ package org.eclipse.dirigible.integration.tests.api.java.camel;
 
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.test.spring.junit5.CamelSpringBootTest;
-import org.eclipse.dirigible.integration.tests.IntegrationTest;
+import org.eclipse.dirigible.tests.IntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 

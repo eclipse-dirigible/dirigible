@@ -1,0 +1,45 @@
+{
+    "feeds": [],
+    "scripts": [],
+    "code": "$scope.model.fromDate = new Date();\n$scope.model.toDate = new Date();\n\n$scope.onSubmitClicked = function(){\n    console.log(\"Model:\" + JSON.stringify($scope.model));\n    $http.post(\"/services/ts/BPMLeaveRequestIT/api/ProcessService.ts/requests\", JSON.stringify($scope.model)).then(function (response) {\n        if (response.status != 202) {\n            alert(`Unable to create new leave request: '${response.message}'`);\n            return;\n        }\n        alert(\"Leave request has been created.\\nResponse: \" + JSON.stringify(response.data));\n    });\n}\n",
+    "form": [
+        {
+            "controlId": "header",
+            "groupId": "fb-display",
+            "title": "Submit new leave request",
+            "size": 1
+        },
+        {
+            "controlId": "input-date",
+            "groupId": "fb-controls",
+            "id": "fromId",
+            "label": "From",
+            "horizontal": false,
+            "isCompact": false,
+            "type": "date",
+            "model": "fromDate",
+            "required": true
+        },
+        {
+            "controlId": "input-date",
+            "groupId": "fb-controls",
+            "id": "toId",
+            "label": "To",
+            "horizontal": false,
+            "isCompact": false,
+            "type": "date",
+            "model": "toDate",
+            "required": true
+        },
+        {
+            "controlId": "button",
+            "groupId": "fb-controls",
+            "label": "Submit",
+            "type": "emphasized",
+            "sizeToText": false,
+            "isSubmit": true,
+            "isCompact": false,
+            "callback": "onSubmitClicked()"
+        }
+    ]
+}

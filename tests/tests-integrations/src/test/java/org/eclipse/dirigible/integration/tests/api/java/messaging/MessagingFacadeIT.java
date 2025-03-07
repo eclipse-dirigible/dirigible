@@ -12,7 +12,7 @@ package org.eclipse.dirigible.integration.tests.api.java.messaging;
 import org.awaitility.Awaitility;
 import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
 import org.eclipse.dirigible.components.api.messaging.TimeoutException;
-import org.eclipse.dirigible.integration.tests.IntegrationTest;
+import org.eclipse.dirigible.tests.IntegrationTest;
 import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 
-public class MessagingFacadeIT extends IntegrationTest {
+class MessagingFacadeIT extends IntegrationTest {
 
     private static final String TEST_MESSAGE = "Test message";
     private static final String TEST_MESSAGE_2 = "Test message 2";

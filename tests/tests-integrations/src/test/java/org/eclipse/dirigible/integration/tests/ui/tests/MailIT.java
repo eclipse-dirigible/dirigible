@@ -9,81 +9,22 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import com.icegreen.greenmail.util.GreenMail;
-import com.icegreen.greenmail.util.GreenMailUtil;
-import com.icegreen.greenmail.util.ServerSetup;
-import jakarta.mail.Message;
-import jakarta.mail.MessagingException;
-import jakarta.mail.internet.MimeMessage;
-import org.eclipse.dirigible.commons.config.DirigibleConfig;
-import org.eclipse.dirigible.tests.restassured.RestAssuredExecutor;
-import org.eclipse.dirigible.tests.util.PortUtil;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.eclipse.dirigible.tests.PredefinedProjectIT;
+import org.eclipse.dirigible.tests.mail.GreenMailConfig;
+import org.eclipse.dirigible.tests.projects.TestProject;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import static io.restassured.RestAssured.given;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.containsString;
-
-class MailIT extends UserInterfaceIntegrationTest {
-
-    private static final String USER = "user";
-    private static final String PASSWORD = "password";
-    private static final int PORT = PortUtil.getFreeRandomPort();
+class MailIT extends PredefinedProjectIT {
 
     static {
-        DirigibleConfig.MAIL_USERNAME.setStringValue(USER);
-        DirigibleConfig.MAIL_PASSWORD.setStringValue(PASSWORD);
-        DirigibleConfig.MAIL_TRANSPORT_PROTOCOL.setStringValue("smtp");
-        DirigibleConfig.MAIL_SMTP_HOST.setStringValue("localhost");
-        DirigibleConfig.MAIL_SMTP_PORT.setIntValue(PORT);
-        DirigibleConfig.MAIL_SMTP_AUTH.setBooleanValue(true);
+        GreenMailConfig.configureDirigibleEmailService();
     }
 
     @Autowired
-    private RestAssuredExecutor restAssuredExecutor;
+    private MailITTestProject testProject;
 
-    private GreenMail greenMail;
-
-    @BeforeEach
-    void setUp() {
-        ServerSetup serverSetup = new ServerSetup(PORT, "localhost", "smtp");
-        greenMail = new GreenMail(serverSetup);
-
-        greenMail.start();
-
-        greenMail.setUser(USER, PASSWORD);
-
+    @Override
+    protected TestProject getTestProject() {
+        return testProject;
     }
-
-    @AfterEach
-    public void tearDown() {
-        greenMail.stop();
-    }
-
-    @Test
-    void testSendEmail() throws MessagingException {
-        ide.createAndPublishProjectFromResources("MailIT");
-
-        restAssuredExecutor.execute(() -> given().when()
-                                                 .post("/services/ts/MailIT/mail/MailService.ts/sendTestEmail")
-                                                 .then()
-                                                 .statusCode(200)
-                                                 .body(containsString("Mail has been sent")));
-
-        MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
-        assertThat(receivedMessages).hasSize(1);
-
-        MimeMessage sentEmail = receivedMessages[0];
-
-        assertThat(sentEmail.getSubject()).isEqualTo("A test email");
-        assertThat(sentEmail.getFrom()[0].toString()).isEqualTo("from@example.com");
-        assertThat(sentEmail.getRecipients(Message.RecipientType.TO)[0].toString()).isEqualTo("to@example.com");
-        assertThat(GreenMailUtil.getBody(sentEmail)
-                                .trim()).contains("<h2>Test email content</h2>");
-
-    }
-
 }

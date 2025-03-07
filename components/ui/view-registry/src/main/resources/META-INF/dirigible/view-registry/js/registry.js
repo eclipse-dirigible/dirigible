@@ -78,7 +78,7 @@ registryView.controller('RegistryController', ($scope, $document, clientOS, Stat
 				return 0;
 			}
 		},
-		state: { key: `${getBrandingInfo().keyPrefix}.view-registry.state` },
+		state: { key: `${getBrandingInfo().prefix}.view-registry.state` },
 		types: {
 			'default': {
 				icon: 'sap-icon--question-mark',

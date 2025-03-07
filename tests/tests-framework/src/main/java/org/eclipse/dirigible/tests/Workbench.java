@@ -20,20 +20,15 @@ public class Workbench {
     public static final String PROJECT_NAME_INPUT_ID = "pgfi1";
     private static final String PROJECTS_CONTEXT_MENU_NEW_PROJECT = "New Project";
     private static final String CREATE_PROJECT_BUTTON_TEXT = "Create";
+
     private final Browser browser;
     private final WelcomeViewFactory welcomeViewFactory;
+    private final TerminalFactory terminalFactory;
 
-    protected Workbench(Browser browser, WelcomeViewFactory welcomeViewFactory) {
+    protected Workbench(Browser browser, WelcomeViewFactory welcomeViewFactory, TerminalFactory terminalFactory) {
         this.browser = browser;
         this.welcomeViewFactory = welcomeViewFactory;
-    }
-
-    public void expandProject(String projectName) {
-        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
-    }
-
-    public void openFile(String fileName) {
-        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, fileName);
+        this.terminalFactory = terminalFactory;
     }
 
     public void publishAll(boolean waitForSynchronizationExecution) {
@@ -72,6 +67,32 @@ public class Workbench {
         browser.enterTextInElementById(PROJECT_NAME_INPUT_ID, projectName);
 
         browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_PROJECT_BUTTON_TEXT);
+    }
+
+    public void createFileInProject(String projectName, String newFileType) {
+        expandProject(projectName);
+        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
+
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", newFileType);
+        browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
+    }
+
+    public void expandProject(String projectName) {
+        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
+    }
+
+    public void openFile(String projectName, String fileName) {
+        expandProject(projectName);
+        openFile(fileName);
+    }
+
+    public void openFile(String fileName) {
+        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, fileName);
+    }
+
+    public Terminal openTerminal() {
+        browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Terminal");
+        return terminalFactory.create(browser);
     }
 
 }

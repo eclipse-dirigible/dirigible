@@ -10,8 +10,8 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
-import org.eclipse.dirigible.integration.tests.ui.tests.projects.MultitenancyITTestProject;
 import org.eclipse.dirigible.tests.DirigibleTestTenant;
+import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.BrowserFactory;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
@@ -46,11 +46,7 @@ class MultitenancyIT extends UserInterfaceIntegrationTest {
         List<DirigibleTestTenant> tenants = createTenants();
         waitForTenantsProvisioning(tenants);
 
-        testProject.copyToWorkspace();
-        testProject.generateEDM();
-        testProject.publish();
-
-        verifyTenants(tenants);
+        testProject.test(tenants);
     }
 
     private List<DirigibleTestTenant> createTenants() {
@@ -63,10 +59,6 @@ class MultitenancyIT extends UserInterfaceIntegrationTest {
         createTenants(tenants);
 
         return tenants;
-    }
-
-    private void verifyTenants(List<DirigibleTestTenant> tenants) {
-        tenants.forEach(testProject::verify);
     }
 
 }

@@ -1,0 +1,37 @@
+{
+    "files": [
+        {
+            "table": "TEST_TABLE_READERS",
+            "schema": "PUBLIC",
+            "file": "/CsvimIT/csvim/readers.csv",
+            "header": true,
+            "useHeaderNames": true,
+            "delimField": ",",
+            "delimEnclosing": "\"",
+            "distinguishEmptyFromNull": true,
+            "version": "1.0"
+        },
+        {
+            "table": "TEST_TABLE_READERS2",
+            "schema": "PUBLIC",
+            "file": "/CsvimIT/csvim/readers.csv",
+            "header": true,
+            "useHeaderNames": true,
+            "delimField": ",",
+            "delimEnclosing": "\"",
+            "distinguishEmptyFromNull": true,
+            "version": "1.0"
+        },
+        {
+            "table": "TEST_TABLE_READERS3",
+            "schema": "PUBLIC",
+            "file": "/CsvimIT/csvim/readers.csv",
+            "header": true,
+            "useHeaderNames": true,
+            "delimField": ",",
+            "delimEnclosing": "\"",
+            "distinguishEmptyFromNull": true,
+            "version": "1.0"
+        }
+    ]
+}

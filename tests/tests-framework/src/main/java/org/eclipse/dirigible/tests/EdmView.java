@@ -20,12 +20,17 @@ import org.springframework.stereotype.Component;
 public class EdmView {
 
     private final Browser browser;
+    private final WorkbenchFactory workbenchFactory;
 
-    public EdmView(Browser browser) {
+    public EdmView(Browser browser, WorkbenchFactory workbenchFactory) {
         this.browser = browser;
+        this.workbenchFactory = workbenchFactory;
     }
 
-    public void regenerate() {
+    public void regenerate(String projectName, String edmFileName) {
+        Workbench workbench = workbenchFactory.create(browser);
+        workbench.openFile(projectName, edmFileName);
+
         browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.TITLE, "Regenerate");
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Generated from model");
     }

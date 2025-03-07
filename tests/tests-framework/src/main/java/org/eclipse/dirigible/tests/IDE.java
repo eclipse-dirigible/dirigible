@@ -36,7 +36,6 @@ public class IDE {
     private static final String PASSWORD_FIELD_ID = "password";
     private static final String SUBMIT_TYPE = "submit";
     private static final String SIGN_IN_BUTTON_TEXT = "Sign in";
-
     private final Browser browser;
     private final RestAssuredExecutor restAssuredExecutor;
     private final String username;
@@ -63,6 +62,10 @@ public class IDE {
         this.workbenchFactory = workbenchFactory;
     }
 
+    public Browser getBrowser() {
+        return browser;
+    }
+
     // Note: this method is used in Kronos
     public void assertJSHttpResponse(String projectName, String fileRelativePath, int expectedStatusCode, String expectedBody) {
         String path = "/services/js/" + projectName + "/" + fileRelativePath;
@@ -84,8 +87,12 @@ public class IDE {
     }
 
     public void openPath(String path) {
+        openPath(path, false);
+    }
+
+    public void openPath(String path, boolean forceLogin) {
         browser.openPath(path);
-        login(true);
+        login(forceLogin);
     }
 
     public void login(boolean forceLogin) {
@@ -148,5 +155,14 @@ public class IDE {
 
     public void login() {
         login(true);
+    }
+
+    public void reload() {
+        browser.reload();
+    }
+
+    public void close() {
+        browser.clearCookies();
+        browser.close();
     }
 }

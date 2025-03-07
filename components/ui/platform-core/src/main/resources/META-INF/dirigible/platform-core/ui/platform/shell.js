@@ -9,7 +9,12 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-angular.module('platformShell', ['ngCookies', 'platformUser', 'platformExtensions', 'platformDialogs', 'platformContextMenu'])
+if (window !== top) {
+    angular.module('platformShell', []).run(() => {
+        document.body.innerHTML = '';
+        document.body.innerText = 'Shell cannot be loaded in an iframe!'
+    });
+} else angular.module('platformShell', ['ngCookies', 'platformUser', 'platformExtensions', 'platformDialogs', 'platformContextMenu'])
     .value('shellState', {
         perspectiveInternal: {
             id: '',
@@ -62,7 +67,7 @@ angular.module('platformShell', ['ngCookies', 'platformUser', 'platformExtension
         replace: true,
         link: (scope, element) => {
             scope.branding = getBrandingInfo();
-            const notificationStateKey = `${scope.branding.keyPrefix}.notifications`;
+            const notificationStateKey = `${scope.branding.prefix}.notifications`;
             const dialogHub = new DialogHub();
             scope.perspectiveId = shellState.perspective.id;
             shellState.registerStateListener((data) => {
@@ -217,7 +222,7 @@ angular.module('platformShell', ['ngCookies', 'platformUser', 'platformExtension
                 }
             },
             post: (scope) => {
-                const selectedPerspectiveKey = `${getBrandingInfo().keyPrefix}.shell.selected-perspective`;
+                const selectedPerspectiveKey = `${getBrandingInfo().prefix}.shell.selected-perspective`;
                 scope.activeId = localStorage.getItem(selectedPerspectiveKey);
                 shellState.registerStateListener((data) => {
                     scope.activeId = data.id;

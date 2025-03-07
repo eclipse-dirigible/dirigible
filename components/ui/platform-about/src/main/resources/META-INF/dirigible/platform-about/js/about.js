@@ -9,35 +9,35 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-angular.module('about', ['blimpKit', 'platformView'])
-    .controller('AboutController', ($scope, $http) => {
-        $scope.blimpKitVersion = angular.module('blimpKit').info().version;
-        $scope.jobs = [];
+angular.module('about', ['blimpKit', 'platformView']).controller('AboutController', ($scope, $http) => {
+    $scope.branding = getBrandingInfo();
+    $scope.blimpKitVersion = angular.module('blimpKit').info().version;
+    $scope.jobs = [];
 
-        function getHealthStatus() {
-            $http({
-                method: 'GET',
-                url: '/services/core/healthcheck'
-            }).then((healthStatus) => {
-                $scope.jobs.length = 0;
-                for (const [key, value] of Object.entries(healthStatus.data.jobs.statuses)) {
-                    $scope.jobs.push({
-                        name: key,
-                        status: value,
-                    });
-                }
-            }, (e) => {
-                console.error('Error retreiving the health status', e);
-            });
-        };
-
-        setInterval(() => {
-            getHealthStatus();
-        }, 10000);
-
-        $http.get('/services/core/version').then((response) => {
-            $scope.version = response.data;
+    function getHealthStatus() {
+        $http({
+            method: 'GET',
+            url: '/services/core/healthcheck'
+        }).then((healthStatus) => {
+            $scope.jobs.length = 0;
+            for (const [key, value] of Object.entries(healthStatus.data.jobs.statuses)) {
+                $scope.jobs.push({
+                    name: key,
+                    status: value,
+                });
+            }
+        }, (e) => {
+            console.error('Error retreiving the health status', e);
         });
+    };
 
+    setInterval(() => {
         getHealthStatus();
+    }, 10000);
+
+    $http.get('/services/core/version').then((response) => {
+        $scope.version = response.data;
     });
+
+    getHealthStatus();
+});

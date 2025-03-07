@@ -10,7 +10,7 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import org.eclipse.dirigible.components.base.http.roles.Roles;
-import org.eclipse.dirigible.integration.tests.IntegrationTest;
+import org.eclipse.dirigible.tests.IntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -23,7 +23,7 @@ import java.util.Set;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-public class SecurityIT extends IntegrationTest {
+class SecurityIT extends IntegrationTest {
 
     @Autowired
     private MockMvc mvc;

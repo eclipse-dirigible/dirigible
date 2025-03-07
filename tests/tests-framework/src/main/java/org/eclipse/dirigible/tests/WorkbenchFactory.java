@@ -19,10 +19,12 @@ public class WorkbenchFactory {
 
     private final Browser browser;
     private final WelcomeViewFactory welcomeViewFactory;
+    private final TerminalFactory terminalFactory;
 
-    WorkbenchFactory(Browser browser, WelcomeViewFactory welcomeViewFactory) {
+    protected WorkbenchFactory(Browser browser, WelcomeViewFactory welcomeViewFactory, TerminalFactory terminalFactory) {
         this.browser = browser;
         this.welcomeViewFactory = welcomeViewFactory;
+        this.terminalFactory = terminalFactory;
     }
 
     public Workbench create() {
@@ -30,6 +32,6 @@ public class WorkbenchFactory {
     }
 
     public Workbench create(Browser browser) {
-        return new Workbench(browser, welcomeViewFactory);
+        return new Workbench(browser, welcomeViewFactory, terminalFactory);
     }
 }
