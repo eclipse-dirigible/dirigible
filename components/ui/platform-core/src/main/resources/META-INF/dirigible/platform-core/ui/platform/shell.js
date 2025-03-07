@@ -9,7 +9,12 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-angular.module('platformShell', ['ngCookies', 'platformUser', 'platformExtensions', 'platformDialogs', 'platformContextMenu'])
+if (window !== top) {
+    angular.module('platformShell', []).run(() => {
+        document.body.innerHTML = '';
+        document.body.innerText = 'Shell cannot be loaded in an iframe!'
+    });
+} else angular.module('platformShell', ['ngCookies', 'platformUser', 'platformExtensions', 'platformDialogs', 'platformContextMenu'])
     .value('shellState', {
         perspectiveInternal: {
             id: '',
