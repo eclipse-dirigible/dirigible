@@ -73,7 +73,7 @@ gitProjectsView.controller('GitProjectsController', ($scope, StatusBar, Dialogs,
                 return true;
             },
         },
-        state: { key: `${getBrandingInfo().keyPrefix}.view-git-projects.state` },
+        state: { key: `${getBrandingInfo().prefix}.view-git-projects.state` },
         types: {
             '#': {
                 valid_children: ['project']

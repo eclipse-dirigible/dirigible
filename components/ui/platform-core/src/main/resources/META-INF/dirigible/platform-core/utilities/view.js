@@ -49,14 +49,14 @@ function getBrandingInfo() {
     if (top.hasOwnProperty('PlatformBranding')) return top.PlatformBranding;
     throw Error("PlatformBranding is not set!");
 }
-function setBrandingInfo({ name, brand, brandUrl, icons, logo, theme, keyPrefix } = {}) {
+function setBrandingInfo({ name, brand, brandUrl, icons, logo, theme, prefix } = {}) {
     if (name) top.PlatformBranding.name = name;
     if (brand) top.PlatformBranding.brand = brand;
     if (brandUrl) top.PlatformBranding.brandUrl = brandUrl;
     if (icons && icons['favicon']) top.PlatformBranding.icons.favicon = icons['favicon'];
     if (logo) top.PlatformBranding.logo = logo;
     if (theme) top.PlatformBranding.theme = theme;
-    if (keyPrefix) top.PlatformBranding.keyPrefix = keyPrefix;
+    if (prefix) top.PlatformBranding.prefix = prefix;
 }
 function getViewParameters({ vframe = window, attribute = 'data-parameters' } = {}) {
     if (vframe.frameElement && vframe.frameElement.hasAttribute(attribute)) {

@@ -19,8 +19,8 @@ previewView.controller('PreviewController', ($scope, $document, ButtonStates) =>
     const dialogHub = new DialogHub();
     const layoutHub = new LayoutHub();
     const notificationHub = new NotificationHub();
-    const customParamsId = `${getBrandingInfo().keyPrefix}.preview.customParameters`;
-    const urlLockedId = `${getBrandingInfo().keyPrefix}.preview.urlLocked`;
+    const customParamsId = `${getBrandingInfo().prefix}.preview.customParameters`;
+    const urlLockedId = `${getBrandingInfo().prefix}.preview.urlLocked`;
     let isDebugPreview = false;
     let iframe;
 

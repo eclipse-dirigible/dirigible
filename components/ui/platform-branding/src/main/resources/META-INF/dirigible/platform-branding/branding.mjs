@@ -18,7 +18,7 @@ const BRANDING_BRAND_URL = 'DIRIGIBLE_BRANDING_BRAND_URL';
 const BRANDING_FAVICON = 'DIRIGIBLE_BRANDING_FAVICON';
 const BRANDING_LOGO = 'DIRIGIBLE_BRANDING_LOGO';
 const BRANDING_THEME = 'DIRIGIBLE_BRANDING_THEME';
-const BRANDING_KEY_PREFIX = 'DIRIGIBLE_KEY_PREFIX';
+const BRANDING_PREFIX = 'DIRIGIBLE_BRANDING_PREFIX';
 
 const BRANDING_NAME_DEFAULT = 'Dirigible';
 const BRANDING_BRAND_DEFAULT = 'Eclipse';
@@ -26,7 +26,7 @@ const BRANDING_BRAND_URL_DEFAULT = "https://www.dirigible.io/";
 const BRANDING_FAVICON_DEFAULT = '/services/web/platform-branding/images/favicon.ico';
 const BRANDING_LOGO_DEFAULT = '/services/web/platform-branding/images/dirigible.svg';
 const BRANDING_THEME_DEFAULT = 'blimpkit-auto';
-const BRANDING_KEY_PREFIX_DEFAULT = 'dirigible';
+const BRANDING_PREFIX_DEFAULT = 'dirigible';
 
 export function getBrandingJs() {
     return `if (!top.hasOwnProperty('PlatformBranding')) top.PlatformBranding = {
@@ -38,10 +38,10 @@ export function getBrandingJs() {
     },
     logo: '${Configurations.get(BRANDING_LOGO, BRANDING_LOGO_DEFAULT)}',
 	theme: '${Configurations.get(BRANDING_THEME, BRANDING_THEME_DEFAULT)}',
-    keyPrefix: '${Configurations.get(BRANDING_KEY_PREFIX, BRANDING_KEY_PREFIX_DEFAULT)}'
+    prefix: '${Configurations.get(BRANDING_PREFIX, BRANDING_PREFIX_DEFAULT)}'
 };`;
 }
 
 export function getKeyPrefix() {
-    return Configurations.get(BRANDING_KEY_PREFIX, BRANDING_KEY_PREFIX_DEFAULT);
+    return Configurations.get(BRANDING_PREFIX, BRANDING_PREFIX_DEFAULT);
 }

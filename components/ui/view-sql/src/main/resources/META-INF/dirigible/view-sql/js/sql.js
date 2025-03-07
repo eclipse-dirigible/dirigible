@@ -223,7 +223,7 @@ function createExecuteAction() {
     });
 })();
 
-const savedSqlCommandKey = `${getBrandingInfo().keyPrefix}.view-sql.command`;
+const savedSqlCommandKey = `${getBrandingInfo().prefix}.view-sql.command`;
 
 function saveSQLCommand(sqlCommands) {
     localStorage.setItem(savedSqlCommandKey, sqlCommands);
