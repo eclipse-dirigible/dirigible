@@ -103,12 +103,12 @@
 			settings.controller('SettingsController', ($scope, $window) => {
 				const messageHub = new MessageHubApi();
 				const brandingInfo = getBrandingInfo();
-				const autoFormatKey = `${brandingInfo.keyPrefix}.code-editor.autoFormat`;
-				const autoFormatExcludedKey = `${brandingInfo.keyPrefix}.code-editor.autoFormat.excluded`;
-				const autoBracketsKey = `${brandingInfo.keyPrefix}.code-editor.autoBrackets`;
-				const minimapAutohideKey = `${brandingInfo.keyPrefix}.code-editor.minimapAutohide`;
-				const whitespaceKey = `${brandingInfo.keyPrefix}.code-editor.whitespace`;
-				const wordWrapKey = `${brandingInfo.keyPrefix}.code-editor.wordWrap`;
+				const autoFormatKey = `${brandingInfo.prefix}.code-editor.autoFormat`;
+				const autoFormatExcludedKey = `${brandingInfo.prefix}.code-editor.autoFormat.excluded`;
+				const autoBracketsKey = `${brandingInfo.prefix}.code-editor.autoBrackets`;
+				const minimapAutohideKey = `${brandingInfo.prefix}.code-editor.minimapAutohide`;
+				const whitespaceKey = `${brandingInfo.prefix}.code-editor.whitespace`;
+				const wordWrapKey = `${brandingInfo.prefix}.code-editor.wordWrap`;
 
 				$scope.autoFormatExcluded = JSON.parse($window.localStorage.getItem(autoFormatExcludedKey) || '[]');
 

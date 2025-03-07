@@ -410,13 +410,13 @@ class FileIO {
 }
 
 class EditorActionsProvider {
-    static #autoFormatExcludedKey = `${brandingInfo.keyPrefix}.code-editor.autoFormat.excluded`;
+    static #autoFormatExcludedKey = `${brandingInfo.prefix}.code-editor.autoFormat.excluded`;
     static _toggleAutoFormattingActionRegistration = undefined;
     static #autoFormatEnabled = undefined;
 
     static isAutoFormattingEnabled() {
         if (EditorActionsProvider.#autoFormatEnabled === undefined) {
-            const autoFormat = window.localStorage.getItem(`${brandingInfo.keyPrefix}.code-editor.autoFormat`);
+            const autoFormat = window.localStorage.getItem(`${brandingInfo.prefix}.code-editor.autoFormat`);
             return autoFormat === null || autoFormat === 'true';
         }
         return EditorActionsProvider.#autoFormatEnabled;
@@ -537,22 +537,22 @@ class DirigibleEditor {
     static computeDiff = new Worker("js/workers/computeDiff.js");
 
     static isAutoBracketsEnabled() {
-        const autoBracketsEnabled = window.localStorage.getItem(`${brandingInfo.keyPrefix}.code-editor.autoBrackets`);
+        const autoBracketsEnabled = window.localStorage.getItem(`${brandingInfo.prefix}.code-editor.autoBrackets`);
         return autoBracketsEnabled === null || autoBracketsEnabled === 'true';
     }
 
     static isMinimapAutohideEnabled() {
-        const minimapAutohideEnabled = window.localStorage.getItem(`${brandingInfo.keyPrefix}.code-editor.minimapAutohide`);
+        const minimapAutohideEnabled = window.localStorage.getItem(`${brandingInfo.prefix}.code-editor.minimapAutohide`);
         return minimapAutohideEnabled === null || minimapAutohideEnabled === 'true';
     }
 
     static getRenderWhitespace() {
-        const whitespace = window.localStorage.getItem(`${brandingInfo.keyPrefix}.code-editor.whitespace`);
+        const whitespace = window.localStorage.getItem(`${brandingInfo.prefix}.code-editor.whitespace`);
         return whitespace ?? 'trailing';
     }
 
     static getWordWrap() {
-        const wordWrap = window.localStorage.getItem(`${brandingInfo.keyPrefix}.code-editor.wordWrap`);
+        const wordWrap = window.localStorage.getItem(`${brandingInfo.prefix}.code-editor.wordWrap`);
         return wordWrap ?? 'off';
     }
 

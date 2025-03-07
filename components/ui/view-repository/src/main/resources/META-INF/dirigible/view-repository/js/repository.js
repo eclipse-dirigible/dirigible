@@ -78,7 +78,7 @@ repositoryView.controller('RepositoryViewController', ($scope, $document, client
                 return 0;
             }
         },
-        state: { key: `${getBrandingInfo().keyPrefix}.view-repository.state` },
+        state: { key: `${getBrandingInfo().prefix}.view-repository.state` },
         types: {
             'default': {
                 icon: 'sap-icon--question-mark',

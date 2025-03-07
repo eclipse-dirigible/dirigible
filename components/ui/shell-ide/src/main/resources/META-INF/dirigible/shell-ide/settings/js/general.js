@@ -14,7 +14,7 @@ general.controller('GeneralController', ($scope, $http, $cookies, $window, themi
     const dialogHub = new DialogHub();
     const themingHub = new ThemingHub();
     const brandingInfo = getBrandingInfo();
-    const autoRevealKey = `${brandingInfo.keyPrefix}.settings.general.autoReveal`;
+    const autoRevealKey = `${brandingInfo.prefix}.settings.general.autoReveal`;
     $scope.themes = [];
     $scope.switches = {
         autoReveal: getAutoReveal(),

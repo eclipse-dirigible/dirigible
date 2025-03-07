@@ -12,7 +12,7 @@
 class ThemingHub extends MessageHubApi {
     constructor() {
         super(arguments[0]);
-        this.storageKey = `${getBrandingInfo().keyPrefix}.platform.theme`;
+        this.storageKey = `${getBrandingInfo().prefix}.platform.theme`;
     }
 
     getSavedTheme() {

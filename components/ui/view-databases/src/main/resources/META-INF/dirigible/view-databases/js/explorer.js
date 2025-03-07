@@ -16,7 +16,7 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 	const databasesSvcUrl = '/services/data/';
 	const databasesInvalidateSvcUrl = '/services/data/metadata/invalidate-cache';
 	const brandingInfo = getBrandingInfo();
-	const lastSelectedDatabaseKey = `${brandingInfo.keyPrefix}.view-db-explorer.database`;
+	const lastSelectedDatabaseKey = `${brandingInfo.prefix}.view-db-explorer.database`;
 	$scope.selectedDatabase;
 	let lastSelectedDatabase = JSON.parse(localStorage.getItem(lastSelectedDatabaseKey) ?? 'null');
 	const jstreeWidget = angular.element('#dgDatabases');
@@ -52,7 +52,7 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 			large_drop_target: true,
 			large_drag_target: true,
 		},
-		state: { key: `${brandingInfo.keyPrefix}.view-db-explorer.state` },
+		state: { key: `${brandingInfo.prefix}.view-db-explorer.state` },
 		types: {
 			'default': {
 				icon: 'jstree-file',

@@ -25,10 +25,9 @@
     <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
     <script src="js/welcome.js" type="text/javascript"></script>
     <style>
-      .imgColor {
-        background-color: var(--sapBrandColor);
-        color: var(--sapTextColor);
-        fill: var(--sapTextColor);
+      .imgColor path {
+        background-color: var(--fdAvatarBackgroundColor);
+        fill: var(--fdAvatarColor);
       }
 
     </style>
@@ -40,13 +39,11 @@
         <h3 class="fd-section__title">Welcome to Eclipse Dirigible™</h3>
       </div>
       <p class="fd-text">
-        <bk-link href="http://www.dirigible.io" target="_blank">Eclipse Dirigible™</bk-link>
-        is a Cloud Development Platform providing development tools and runtime environment. It supports full
-        development life-cycle of on-demand applications by leveraging in-system programming models and rapid
-        application development techniques.
+        <bk-link href="http://www.dirigible.io" target="_blank">Eclipse Dirigible™</bk-link> is a Cloud Development Platform providing development tools and runtime environment. It supports full development life-cycle of on-demand
+        applications by leveraging in-system programming models and rapid application development techniques.
       </p>
       <br>
-      <bk-panel fixed="::true" expanded="::true">
+      <bk-panel fixed="true" expanded="true">
         <bk-toolbar type="transparent">
           <bk-toolbar-title>Create a new project</bk-toolbar-title>
           <bk-toolbar-spacer></bk-toolbar-spacer>
@@ -60,7 +57,9 @@
                 <bk-card-header title="{{::template.name}}" subtitle="{{::template.description}}" interactive="true" description="Create project from template {{::template.name}}">
                   <bk-avatar ng-if="!template.glyph && !template.image" glyph="sap-icon--example" style="font-size:2rem" size="s" aria-label="project template icon"></bk-avatar>
                   <bk-avatar ng-if="template.glyph && !template.image" glyph="{{::template.glyph}}" style="font-size:2rem" size="s" aria-label="project template icon"></bk-avatar>
-                  <bk-avatar ng-if="!template.glyph && template.image" class="imgColor" image="{{::template.image}}" style="font-size:1.5rem" size="s" aria-label="project template icon"></bk-avatar>
+                  <bk-avatar ng-if="!template.glyph && template.image" size="s" aria-label="project template icon">
+                    <span class="imgColor bk-fill-parent bk-center bk-icon--svg bk-icon--scale sap-icon" role="presentation" ng-include="::template.image"></span>
+                  </bk-avatar>
                 </bk-card-header>
               </bk-card>
             </div>
@@ -68,11 +67,10 @@
         </div>
       </bk-panel>
       <bk-pagination current-page="currentPage" display-total-items="true" items-per-page="pageSize" total-items="filteredTemplates.length"></bk-pagination>
-      <p class="fd-text">You can model the database
-        schema of your web application, create server-side scripting services by using the <bk-link href="http://www.dirigible.io/api" target="_blank">Enterprise Javascript API</bk-link>
+      <p class="fd-text">You can model the database schema of your web application, create server-side scripting services by using the <bk-link href="http://www.dirigible.io/api" target="_blank">Enterprise Javascript API</bk-link>
         or just design your web pages in HTML5 by using your favorite client-side framework.
         <br>
-        All source code is licensed under the <bk-link href="https://www.eclipse.org/legal/epl-v20.html" target="_blank">Eclipse Public License - v 2.0</bk-link> and maintained at <bk-link href="https://github.com/eclipse/dirigible"
+        All source code is licensed under the <bk-link href="https://www.eclipse.org/legal/epl-v20.html" target="_blank">Eclipse Public License 2.0</bk-link> and maintained at <bk-link href="https://github.com/eclipse/dirigible"
           target="_blank">GitHub</bk-link>.
       </p>
     </section>

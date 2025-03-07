@@ -26,7 +26,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
             const VIEW = 'view';
             const EDITOR = 'editor';
 
-            const layoutStateKey = `${getBrandingInfo().keyPrefix}.${layoutConstants.stateKey}.${perspectiveData.id}`;
+            const layoutStateKey = `${getBrandingInfo().prefix}.${layoutConstants.stateKey}.${perspectiveData.id}`;
 
             $scope.perspectiveName = '';
             $scope.perspectiveStyle = {
@@ -1116,7 +1116,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
             });
         },
         template: `<div class="bk-vbox bk-full-height pf-accordion">
-            <bk-panel class="pf-accordion-panel" ng-attr-shrink="{{!view.expanded}}" compact="::true" expanded="view.expanded" ng-repeat="view in views track by view.id">
+            <bk-panel class="pf-accordion-panel" ng-attr-shrink="{{!view.expanded}}" compact="true" expanded="view.expanded" ng-repeat="view in views track by view.id">
                 <bk-panel-header>
                     <bk-panel-expand hint="{{view.expanded ? 'Collapse' : 'Expand' }} '{{::view.label}}' view"></bk-panel-expand>
                     <h4 bk-panel-title>{{::view.label}}</h4>

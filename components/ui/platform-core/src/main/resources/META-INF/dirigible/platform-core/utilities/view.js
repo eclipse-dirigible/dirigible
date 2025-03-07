@@ -38,3 +38,29 @@ function UriBuilder() {
     };
     return this;
 };
+function UUIDGenerate() {
+    function _p8(s) {
+        const p = (Math.random().toString(16) + '000000000').substring(2, 10);
+        return s ? `-${p.substring(0, 4)}-${p.substring(4, 8)}` : p;
+    }
+    return _p8() + _p8(true) + _p8(true) + _p8();
+}
+function getBrandingInfo() {
+    if (top.hasOwnProperty('PlatformBranding')) return top.PlatformBranding;
+    throw Error("PlatformBranding is not set!");
+}
+function setBrandingInfo({ name, brand, brandUrl, icons, logo, theme, prefix } = {}) {
+    if (name) top.PlatformBranding.name = name;
+    if (brand) top.PlatformBranding.brand = brand;
+    if (brandUrl) top.PlatformBranding.brandUrl = brandUrl;
+    if (icons && icons['favicon']) top.PlatformBranding.icons.favicon = icons['favicon'];
+    if (logo) top.PlatformBranding.logo = logo;
+    if (theme) top.PlatformBranding.theme = theme;
+    if (prefix) top.PlatformBranding.prefix = prefix;
+}
+function getViewParameters({ vframe = window, attribute = 'data-parameters' } = {}) {
+    if (vframe.frameElement && vframe.frameElement.hasAttribute(attribute)) {
+        return JSON.parse(vframe.frameElement.getAttribute(attribute) ?? '{}');
+    }
+    return {};
+}
