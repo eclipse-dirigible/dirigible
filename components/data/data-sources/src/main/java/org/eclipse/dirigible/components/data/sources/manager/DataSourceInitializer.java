@@ -9,38 +9,28 @@
  */
 package org.eclipse.dirigible.components.data.sources.manager;
 
-import static java.text.MessageFormat.format;
-import java.io.File;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Properties;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.concurrent.TimeUnit;
+import com.zaxxer.hikari.HikariConfig;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.data.sources.config.DefaultDataSourceName;
 import org.eclipse.dirigible.components.data.sources.config.SystemDataSourceName;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
 import org.eclipse.dirigible.components.data.sources.domain.DataSourceProperty;
-import org.eclipse.dirigible.components.database.DatabaseConfigurator;
-import org.eclipse.dirigible.components.database.DatabaseParameters;
-import org.eclipse.dirigible.components.database.DatabaseSystem;
-import org.eclipse.dirigible.components.database.DatabaseSystemDeterminer;
-import org.eclipse.dirigible.components.database.DirigibleDataSource;
+import org.eclipse.dirigible.components.database.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.stereotype.Component;
-import com.zaxxer.hikari.HikariConfig;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
+
+import static java.text.MessageFormat.format;
 
 /**
  * The Class DataSourceInitializer.
@@ -147,7 +137,6 @@ public class DataSourceInitializer {
 
         config.setSchema(schema);
         config.setPoolName(name);
-        config.setAutoCommit(true);
         config.setMaximumPoolSize(20);
 
         config.setMinimumIdle(10);
@@ -189,6 +178,25 @@ public class DataSourceInitializer {
         };
         long delayMillis = unit.toMillis(duration);
         timer.schedule(repeatedTask, delayMillis);
+    }
+
+    /**
+     * Removes the initialized data source.
+     *
+     * @param dataSourceName the data source name
+     */
+    public void removeInitializedDataSource(String dataSourceName) {
+        String name = tenantDataSourceNameManager.getTenantDataSourceName(dataSourceName);
+        DirigibleDataSource removedDataSource = DATASOURCES.remove(name);
+        logger.info("DataSource [{}] with name [{}] will be removed if exists...", removedDataSource, name);
+        if (null != removedDataSource) {
+            removedDataSource.close();
+
+            GenericApplicationContext genericAppContext = (GenericApplicationContext) applicationContext;
+            ConfigurableListableBeanFactory beanFactory = genericAppContext.getBeanFactory();
+            beanFactory.destroyBean(name);
+            logger.info("DataSource [{}] with name [{}] was removed", removedDataSource, name);
+        }
     }
 
     /**
@@ -261,25 +269,6 @@ public class DataSourceInitializer {
             return;
         }
         beanFactory.registerSingleton(name, dataSource);
-    }
-
-    /**
-     * Removes the initialized data source.
-     *
-     * @param dataSourceName the data source name
-     */
-    public void removeInitializedDataSource(String dataSourceName) {
-        String name = tenantDataSourceNameManager.getTenantDataSourceName(dataSourceName);
-        DirigibleDataSource removedDataSource = DATASOURCES.remove(name);
-        logger.info("DataSource [{}] with name [{}] will be removed if exists...", removedDataSource, name);
-        if (null != removedDataSource) {
-            removedDataSource.close();
-
-            GenericApplicationContext genericAppContext = (GenericApplicationContext) applicationContext;
-            ConfigurableListableBeanFactory beanFactory = genericAppContext.getBeanFactory();
-            beanFactory.destroyBean(name);
-            logger.info("DataSource [{}] with name [{}] was removed", removedDataSource, name);
-        }
     }
 
 }

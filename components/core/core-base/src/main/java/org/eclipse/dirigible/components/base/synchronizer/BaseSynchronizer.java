@@ -22,6 +22,7 @@ import org.eclipse.dirigible.components.base.tenant.TenantResult;
 import org.eclipse.dirigible.components.open.telemetry.OpenTelemetryProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -31,6 +32,7 @@ import java.util.List;
 /**
  * The Class BaseSynchronizer.
  */
+@Transactional
 public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchronizer<A, ID> {
 
     /** The Constant logger. */
@@ -165,6 +167,7 @@ public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchr
      *
      * @param artefact the artefact
      */
+    @Override
     public final void cleanup(A artefact) {
         Tracer tracer = OpenTelemetryProvider.get()
                                              .getTracer("eclipse-dirigible");

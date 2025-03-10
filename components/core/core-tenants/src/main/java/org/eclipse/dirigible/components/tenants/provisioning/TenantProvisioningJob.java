@@ -16,14 +16,17 @@ import org.quartz.JobExecutionException;
 import org.quartz.SimpleScheduleBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import static org.quartz.SimpleScheduleBuilder.simpleSchedule;
 
 @Component
+@Transactional
 class TenantProvisioningJob extends SystemJob {
 
-    private final Logger logger = LoggerFactory.getLogger(this.getClass());
+    private static final Logger LOGGER = LoggerFactory.getLogger(TenantProvisioningJob.class);
 
     /** The tenants provisioner. */
     private final TenantsProvisioner tenantsProvisioner;
@@ -33,15 +36,16 @@ class TenantProvisioningJob extends SystemJob {
      *
      * @param tenantsProvisioner the tenants provisioner
      */
+    @Autowired
     TenantProvisioningJob(TenantsProvisioner tenantsProvisioner) {
         this.tenantsProvisioner = tenantsProvisioner;
     }
 
     @Override
-    public final void execute(JobExecutionContext context) throws JobExecutionException {
-        logger.debug("Triggered tenants provisioning job...");
+    public void execute(JobExecutionContext context) throws JobExecutionException {
+        LOGGER.debug("Triggered tenants provisioning job...");
         tenantsProvisioner.provision();
-        logger.debug("Tenants provisioning job has completed.");
+        LOGGER.debug("Tenants provisioning job has completed.");
     }
 
     @Override
@@ -67,7 +71,7 @@ class TenantProvisioningJob extends SystemJob {
     @Override
     protected SimpleScheduleBuilder getSchedule() {
         int frequencyInSec = DirigibleConfig.TENANTS_PROVISIONING_FREQUENCY_SECONDS.getIntValue();
-        logger.info("Configuring tenant provisioning job to fire every [{}] seconds", frequencyInSec);
+        LOGGER.info("Configuring tenant provisioning job to fire every [{}] seconds", frequencyInSec);
 
         return simpleSchedule().withIntervalInSeconds(frequencyInSec)
                                .repeatForever()
