@@ -4,13 +4,10 @@ import org.eclipse.dirigible.tests.framework.Browser;
 
 public class DatabaseFactory {
     private final Browser browser;
-    private final WelcomeViewFactory welcomeViewFactory;
-    private final TerminalFactory terminalFactory;
 
-    protected DatabaseFactory(Browser browser, WelcomeViewFactory welcomeViewFactory, TerminalFactory terminalFactory) {
+
+    protected DatabaseFactory(Browser browser) {
         this.browser = browser;
-        this.welcomeViewFactory = welcomeViewFactory;
-        this.terminalFactory = terminalFactory;
     }
 
     public Database create() {
@@ -18,6 +15,6 @@ public class DatabaseFactory {
     }
 
     public Database create(Browser browser) {
-        return new Database(browser, welcomeViewFactory, terminalFactory);
+        return new Database(browser);
     }
 }
