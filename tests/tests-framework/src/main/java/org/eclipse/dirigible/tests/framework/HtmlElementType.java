@@ -25,7 +25,9 @@ public enum HtmlElementType {
     DIV("div"), //
     FD_MESSAGE_PAGE_TITLE("bk-message-page-title"), //
     CANVAS("canvas"), //
-    TR("tr");
+    TR("tr"), //
+    TEXT_AREA("textarea"), //
+    LI("li"); //
 
     private final String type;
 
