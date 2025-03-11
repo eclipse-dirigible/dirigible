@@ -32,6 +32,7 @@ public class HttpSecurityURIConfigurator {
     private static final String[] PUBLIC_PATTERNS = { //
             "/", //
             "/home", //
+            "/.well-known/**", //
             "/index.html", //
             "/logout", //
             "/index-busy.html", //

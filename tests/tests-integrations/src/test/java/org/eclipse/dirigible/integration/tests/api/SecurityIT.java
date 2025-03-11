@@ -35,6 +35,9 @@ class SecurityIT extends IntegrationTest {
             mvc.perform(get(path))
                .andExpect(status().is(HttpStatus.OK.value()));
         }
+        
+        mvc.perform(get("/.well-known/security.txt"))
+           .andExpect(status().is(HttpStatus.NOT_FOUND.value()));
 
     }
 
