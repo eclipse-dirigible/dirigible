@@ -9,14 +9,16 @@
  */
 package org.eclipse.dirigible.components.base.artefact;
 
-import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 /**
  * The Class BaseArtefactService.
- *
  */
+@Transactional
 public abstract class BaseArtefactService<A extends Artefact, ID> implements ArtefactService<A, ID> {
 
     /** The repository. */
@@ -39,6 +41,15 @@ public abstract class BaseArtefactService<A extends Artefact, ID> implements Art
     @Override
     public final List<A> getAll() {
         return getRepo().findAll();
+    }
+
+    /**
+     * Gets the repo.
+     *
+     * @return the repo
+     */
+    protected ArtefactRepository<A, ID> getRepo() {
+        return repository;
     }
 
     /**
@@ -128,15 +139,6 @@ public abstract class BaseArtefactService<A extends Artefact, ID> implements Art
     @Override
     public void setRunningToAll(boolean running) {
         getRepo().setRunningToAll(running);
-    }
-
-    /**
-     * Gets the repo.
-     *
-     * @return the repo
-     */
-    protected ArtefactRepository<A, ID> getRepo() {
-        return repository;
     }
 
 }

@@ -9,15 +9,20 @@
  */
 package org.eclipse.dirigible.commons.config;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
 /**
  * The Enum DirigibleConfig.
  */
 public enum DirigibleConfig {
+
+    SYNCHRONIZER_CROSS_RETRY_COUNT("DIRIGIBLE_SYNCHRONIZER_CROSS_RETRY_COUNT", "10"), //
+
+    SYNCHRONIZER_CROSS_RETRY_INTERVAL_MILLIS("DIRIGIBLE_SYNCHRONIZER_CROSS_RETRY_INTERVAL_MILLIS", "10000"), //
 
     HOME_URL("DIRIGIBLE_HOME_URL", "services/web/shell-ide/"), //
 

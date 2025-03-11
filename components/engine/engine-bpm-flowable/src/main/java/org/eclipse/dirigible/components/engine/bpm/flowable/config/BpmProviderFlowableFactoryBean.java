@@ -17,8 +17,8 @@ import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.FactoryBean;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
-import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import javax.sql.DataSource;
 
@@ -79,7 +79,7 @@ class BpmProviderFlowableFactoryBean implements FactoryBean<BpmProviderFlowable>
         if (null == bpmProviderFlowable) {
             DataSource datasource = applicationContext.getBean("SystemDB", DataSource.class);
             IRepository repository = applicationContext.getBean(IRepository.class);
-            DataSourceTransactionManager dataSourceTransactionManager = applicationContext.getBean(DataSourceTransactionManager.class);
+            PlatformTransactionManager dataSourceTransactionManager = applicationContext.getBean(PlatformTransactionManager.class);
 
             bpmProviderFlowable = new BpmProviderFlowable(datasource, repository, dataSourceTransactionManager, applicationContext);
         }

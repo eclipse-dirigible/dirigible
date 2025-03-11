@@ -23,6 +23,7 @@ import org.quartz.JobExecutionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.Path;
 import java.util.Date;
@@ -30,6 +31,7 @@ import java.util.Date;
 /**
  * The built-in scripting service job handler.
  */
+@Transactional
 public class JobHandler implements Job {
 
     /** The Constant TENANT_PARAMETER. */
@@ -61,6 +63,7 @@ public class JobHandler implements Job {
      * @param context the context
      * @throws JobExecutionException the job execution exception
      */
+
     @Override
     public void execute(JobExecutionContext context) throws JobExecutionException {
         JobDataMap params = context.getJobDetail()
