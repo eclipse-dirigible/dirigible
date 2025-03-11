@@ -45,7 +45,8 @@ public class IDE {
     private final DatabaseFactory databaseFactory;
 
     @Autowired
-    IDE(Browser browser, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil, WorkbenchFactory workbenchFactory, DatabaseFactory databaseFactory) {
+    IDE(Browser browser, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil, WorkbenchFactory workbenchFactory,
+            DatabaseFactory databaseFactory) {
         this(browser, DirigibleTestTenant.createDefaultTenant()
                                          .getUsername(),
                 DirigibleTestTenant.createDefaultTenant()
