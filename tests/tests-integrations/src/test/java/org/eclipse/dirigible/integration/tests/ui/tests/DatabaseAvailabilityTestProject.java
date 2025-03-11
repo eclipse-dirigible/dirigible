@@ -1,25 +1,33 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
+import org.eclipse.dirigible.tests.Database;
 import org.eclipse.dirigible.tests.EdmView;
 import org.eclipse.dirigible.tests.IDE;
+import org.eclipse.dirigible.tests.IDEFactory;
 import org.eclipse.dirigible.tests.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.projects.TestProject;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
-import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Lazy
 @Component
 public class DatabaseAvailabilityTestProject extends BaseTestProject implements TestProject {
-    protected DatabaseAvailabilityTestProject(String projectResourcesFolder, IDE ide, ProjectUtil projectUtil, EdmView edmView) {
-        super(projectResourcesFolder, ide, projectUtil, edmView);
+    private final IDEFactory ideFactory;
+
+    protected DatabaseAvailabilityTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, IDEFactory ideFactory) {
+        super("DatabaseIT", ide, projectUtil, edmView);
+        this.ideFactory = ideFactory;
     }
 
     @Override
     public void configure() {
-        getIde().login();
-        SleepUtil.sleepSeconds(5);
+        IDE ide = ideFactory.create();
+        Database database = ide.openDatabase();
+
+        database.expandSubviews();
+
+        database.assertAvailabilityOfSubitems();
         // getIde().openPath("databases");
         // verify Check availability of the views:
         // Explorer
@@ -46,5 +54,7 @@ public class DatabaseAvailabilityTestProject extends BaseTestProject implements 
     }
 
     @Override
-    public void verify() throws Exception {}
+    public void verify() throws Exception {
+
+    }
 }

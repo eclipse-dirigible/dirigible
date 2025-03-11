@@ -53,6 +53,7 @@ class BrowserImpl implements Browser {
 
     static {
         configureSelenide();
+
     }
 
     private final String protocol;
@@ -70,20 +71,12 @@ class BrowserImpl implements Browser {
         this.port = port;
     }
 
-    enum ProtocolType {
-        HTTP("http"), HTTPS("https");
-
-        private final String protocol;
-
-        ProtocolType(String protocol) {
-            this.protocol = protocol;
-        }
-    }
-
     private static void configureSelenide() {
         Configuration.timeout = TimeUnit.SECONDS.toMillis(15);
         Configuration.browser = "chrome";
         Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
+        Configuration.headless = false;
+
     }
 
     @Override
@@ -188,8 +181,7 @@ class BrowserImpl implements Browser {
                 .window(Selenide.webdriver()
                                 .object()
                                 .getWindowHandles()
-                                .size()
-                        - 1);
+                                .size() - 1);
     }
 
     @Override
@@ -538,5 +530,15 @@ class BrowserImpl implements Browser {
     @Override
     public String getPageTitle() {
         return Selenide.title();
+    }
+
+    enum ProtocolType {
+        HTTP("http"), HTTPS("https");
+
+        private final String protocol;
+
+        ProtocolType(String protocol) {
+            this.protocol = protocol;
+        }
     }
 }

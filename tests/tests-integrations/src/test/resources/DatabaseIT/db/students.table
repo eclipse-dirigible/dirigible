@@ -1,0 +1,32 @@
+{
+    "name": "STUDENTS",
+    "type": "TABLE",
+    "columns": [
+        {
+            "type": "INTEGER",
+            "length": 0,
+            "primaryKey": true,
+            "identity": true,
+            "precision": "NaN",
+            "scale": "NaN",
+            "nullable": true,
+            "name": "ID"
+        },
+        {
+            "type": "DOUBLE",
+            "length": 19,
+            "precision": "15",
+            "scale": "4",
+            "nullable": true,
+            "name": "NAME"
+        },
+        {
+            "type": "TIMESTAMP",
+            "length": 20,
+            "precision": "NaN",
+            "scale": "NaN",
+            "nullable": true,
+            "name": "CITY"
+        }
+    ]
+}
