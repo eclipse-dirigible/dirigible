@@ -13,7 +13,6 @@ import org.eclipse.dirigible.components.base.artefact.Artefact;
 
 /**
  * The Class MultitenantBaseSynchronizer.
- *
  */
 public abstract class MultitenantBaseSynchronizer<A extends Artefact, ID> extends BaseSynchronizer<A, ID> {
 
@@ -23,7 +22,7 @@ public abstract class MultitenantBaseSynchronizer<A extends Artefact, ID> extend
      * @return true, if successful
      */
     @Override
-    public final boolean multitenantExecution() {
+    public boolean multitenantExecution() {
         return true;
     }
 
