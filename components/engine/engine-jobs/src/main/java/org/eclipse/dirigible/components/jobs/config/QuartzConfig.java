@@ -25,6 +25,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.scheduling.quartz.SchedulerFactoryBean;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import javax.sql.DataSource;
 import java.io.IOException;
@@ -70,11 +71,14 @@ class QuartzConfig {
      * @throws IOException Signals that an I/O exception has occurred.
      */
     @Bean
-    SchedulerFactoryBean schedulerFactoryBean(AutoWiringSpringBeanJobFactory jobFactory, @SystemDataSourceName String systemDataSourceName)
-            throws IOException {
+    SchedulerFactoryBean schedulerFactoryBean(AutoWiringSpringBeanJobFactory jobFactory, @SystemDataSourceName String systemDataSourceName,
+            PlatformTransactionManager transactionManager) throws IOException {
         SchedulerFactoryBean factory = new SchedulerFactoryBean();
         factory.setJobFactory(jobFactory);
         factory.setQuartzProperties(quartzProperties(systemDataSourceName));
+        factory.setTransactionManager(transactionManager);
+
+        logger.info("Creating QUARTZ with transaction manager [{}] for data source [{}]", transactionManager, systemDataSourceName);
 
         return factory;
     }

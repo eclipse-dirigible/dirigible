@@ -9,14 +9,16 @@
  */
 package org.eclipse.dirigible.components.base.artefact;
 
-import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 /**
  * The Class BaseArtefactService.
- *
  */
+@Transactional
 public abstract class BaseArtefactService<A extends Artefact, ID> implements ArtefactService<A, ID> {
 
     /** The repository. */
@@ -37,8 +39,17 @@ public abstract class BaseArtefactService<A extends Artefact, ID> implements Art
      * @return the all
      */
     @Override
-    public final List<A> getAll() {
+    public List<A> getAll() {
         return getRepo().findAll();
+    }
+
+    /**
+     * Gets the repo.
+     *
+     * @return the repo
+     */
+    protected ArtefactRepository<A, ID> getRepo() {
+        return repository;
     }
 
     /**
@@ -48,7 +59,7 @@ public abstract class BaseArtefactService<A extends Artefact, ID> implements Art
      * @return the pages
      */
     @Override
-    public final Page<A> getPages(Pageable pageable) {
+    public Page<A> getPages(Pageable pageable) {
         return getRepo().findAll(pageable);
     }
 
@@ -59,7 +70,7 @@ public abstract class BaseArtefactService<A extends Artefact, ID> implements Art
      * @return the a
      */
     @Override
-    public final A findById(ID id) {
+    public A findById(ID id) {
         return getRepo().findById(id)
                         .orElseThrow(() -> new IllegalArgumentException(this.getClass() + ": missing artefact with [" + id + "]"));
     }
@@ -83,7 +94,7 @@ public abstract class BaseArtefactService<A extends Artefact, ID> implements Art
      * @return the list
      */
     @Override
-    public final List<A> findByLocation(String location) {
+    public List<A> findByLocation(String location) {
         return getRepo().findByLocation(location);
     }
 
@@ -94,7 +105,7 @@ public abstract class BaseArtefactService<A extends Artefact, ID> implements Art
      * @return the a
      */
     @Override
-    public final A findByKey(String key) {
+    public A findByKey(String key) {
         return getRepo().findByKey(key)
                         .orElse(null);
     }
@@ -128,15 +139,6 @@ public abstract class BaseArtefactService<A extends Artefact, ID> implements Art
     @Override
     public void setRunningToAll(boolean running) {
         getRepo().setRunningToAll(running);
-    }
-
-    /**
-     * Gets the repo.
-     *
-     * @return the repo
-     */
-    protected ArtefactRepository<A, ID> getRepo() {
-        return repository;
     }
 
 }

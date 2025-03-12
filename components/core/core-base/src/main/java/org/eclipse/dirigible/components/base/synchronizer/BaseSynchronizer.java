@@ -22,6 +22,7 @@ import org.eclipse.dirigible.components.base.tenant.TenantResult;
 import org.eclipse.dirigible.components.open.telemetry.OpenTelemetryProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -31,13 +32,14 @@ import java.util.List;
 /**
  * The Class BaseSynchronizer.
  */
+@Transactional
 public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchronizer<A, ID> {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(BaseSynchronizer.class);
 
     @Override
-    public final List<A> parse(String location, byte[] content) throws ParseException {
+    public List<A> parse(String location, byte[] content) throws ParseException {
         Tracer tracer = OpenTelemetryProvider.get()
                                              .getTracer("eclipse-dirigible");
 
@@ -75,7 +77,7 @@ public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchr
      * @return true, if successful
      */
     @Override
-    public final boolean complete(TopologyWrapper<A> wrapper, ArtefactPhase flow) {
+    public boolean complete(TopologyWrapper<A> wrapper, ArtefactPhase flow) {
         Tracer tracer = OpenTelemetryProvider.get()
                                              .getTracer("eclipse-dirigible");
 
@@ -165,7 +167,8 @@ public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchr
      *
      * @param artefact the artefact
      */
-    public final void cleanup(A artefact) {
+    @Override
+    public void cleanup(A artefact) {
         Tracer tracer = OpenTelemetryProvider.get()
                                              .getTracer("eclipse-dirigible");
 

@@ -20,8 +20,10 @@ import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfigurat
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.springframework.web.client.RestTemplate;
 
+@EnableTransactionManagement
 @CamelOpenTelemetry
 @EnableAdminServer
 @SpringBootApplication(exclude = {DataSourceAutoConfiguration.class, DataSourceTransactionManagerAutoConfiguration.class,
@@ -29,7 +31,14 @@ import org.springframework.web.client.RestTemplate;
 @EnableScheduling
 public class DirigibleApplication {
 
+    private static long startedAt;
+
+    public static long getStartedAt() {
+        return startedAt;
+    }
+
     public static void main(String[] args) {
+        startedAt = System.currentTimeMillis();
         SpringApplication.run(DirigibleApplication.class, args);
     }
 

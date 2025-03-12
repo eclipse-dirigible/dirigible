@@ -27,7 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
 import org.springframework.context.ApplicationContext;
-import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import javax.sql.DataSource;
 import java.io.IOException;
@@ -75,7 +75,7 @@ public class BpmProviderFlowable implements BpmProvider {
     /** The repository. */
     private final IRepository repository;
 
-    private final DataSourceTransactionManager transactionManager;
+    private final PlatformTransactionManager transactionManager;
     private final ApplicationContext applicationContext;
 
     /**
@@ -84,7 +84,7 @@ public class BpmProviderFlowable implements BpmProvider {
      * @param datasource the datasource
      * @param repository the repository
      */
-    public BpmProviderFlowable(DataSource datasource, IRepository repository, DataSourceTransactionManager transactionManager,
+    public BpmProviderFlowable(DataSource datasource, IRepository repository, PlatformTransactionManager transactionManager,
             ApplicationContext applicationContext) {
         this.datasource = datasource;
         this.repository = repository;

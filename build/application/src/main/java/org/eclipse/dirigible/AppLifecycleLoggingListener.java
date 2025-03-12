@@ -13,6 +13,7 @@ import org.eclipse.dirigible.components.base.ApplicationListenersOrder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.boot.context.event.ApplicationStartedEvent;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.ContextClosedEvent;
@@ -25,11 +26,22 @@ class AppLifecycleLoggingListener implements ApplicationListener<ApplicationEven
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AppLifecycleLoggingListener.class);
 
+    private long createdContextAt;
+
     @Override
     public void onApplicationEvent(ApplicationEvent event) {
+        if (event instanceof ApplicationStartedEvent) {
+            createdContextAt = System.currentTimeMillis();
+            LOGGER.info("------------------------ Eclipse Dirigible initializing ------------------------");
+        }
+
         if (event instanceof ApplicationReadyEvent) {
             LOGGER.info("------------------------ Eclipse Dirigible started ------------------------");
+            long currentTime = System.currentTimeMillis();
+            LOGGER.info("------------------------ Start time [{}] millis. Init time [{}] millis ------------------------",
+                    (currentTime - DirigibleApplication.getStartedAt()), (currentTime - createdContextAt));
         }
+
         if (event instanceof ContextClosedEvent) {
             LOGGER.info("------------------------ Eclipse Dirigible stopped ------------------------");
         }

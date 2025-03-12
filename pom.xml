@@ -55,760 +55,777 @@
 
  -->
 <project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-		 xmlns="http://maven.apache.org/POM/4.0.0"
-		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
-	<modelVersion>4.0.0</modelVersion>
+    <modelVersion>4.0.0</modelVersion>
 
-	<parent>
-		<groupId>org.sonatype.oss</groupId>
-		<artifactId>oss-parent</artifactId>
-		<version>9</version>
-	</parent>
+    <parent>
+        <groupId>org.sonatype.oss</groupId>
+        <artifactId>oss-parent</artifactId>
+        <version>9</version>
+    </parent>
 
-	<name>Dirigible - Parent</name>
-	<description>Dirigible Parent</description>
-	<groupId>org.eclipse.dirigible</groupId>
-	<artifactId>dirigible-parent</artifactId>
-	<version>12.0.0-SNAPSHOT</version>
-	<packaging>pom</packaging>
+    <name>Dirigible - Parent</name>
+    <description>Dirigible Parent</description>
+    <groupId>org.eclipse.dirigible</groupId>
+    <artifactId>dirigible-parent</artifactId>
+    <version>12.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
 
-	<inceptionYear>2010</inceptionYear>
+    <inceptionYear>2010</inceptionYear>
 
-	<licenses>
-		<license>
-			<name>Eclipse Public License - v 2.0</name>
-			<url>https://www.eclipse.org/legal/epl-v20.html</url>
-			<distribution>repo</distribution>
-		</license>
-	</licenses>
+    <licenses>
+        <license>
+            <name>Eclipse Public License - v 2.0</name>
+            <url>https://www.eclipse.org/legal/epl-v20.html</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
 
-	<url>http://www.dirigible.io</url>
+    <url>http://www.dirigible.io</url>
 
-	<organization>
-		<name>Eclipse Foundation</name>
-		<url>http://www.eclipse.org</url>
-	</organization>
+    <organization>
+        <name>Eclipse Foundation</name>
+        <url>http://www.eclipse.org</url>
+    </organization>
 
-	<properties>
-		<project.title>Eclipse Dirigible</project.title>
-		
-		<!-- Encoding -->
-		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    <properties>
+        <project.title>Eclipse Dirigible</project.title>
 
-		<!-- Java -->
-		<java.version>17</java.version>
-		<maven.compiler.source>17</maven.compiler.source>
-		<maven.compiler.target>17</maven.compiler.target>
+        <!-- Encoding -->
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
-		<!-- Maven -->
-		<maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
-		<maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
-		<maven-surefire-plugin.version>3.5.1</maven-surefire-plugin.version>
-		<maven-failsafe-plugin.version>3.5.0</maven-failsafe-plugin.version>
-		<maven-source-plugin.version>3.3.1</maven-source-plugin.version>
-		<maven-gpg-plugin.version>3.2.7</maven-gpg-plugin.version>
-		<maven-jacoco-plugin.version>0.8.12</maven-jacoco-plugin.version>
-		<maven-spotbugs-plugin.version>4.9.2.0</maven-spotbugs-plugin.version>
-		<maven-formatter-plugin.version>2.25.0</maven-formatter-plugin.version>
-		<maven-exec-plugin.version>3.5.0</maven-exec-plugin.version>
-		<maven-git-commit-id-plugin.version>4.9.10</maven-git-commit-id-plugin.version>
-		<maven-license-plugin.version>4.6</maven-license-plugin.version>
+        <!-- Java -->
+        <java.version>17</java.version>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
 
-		<!-- Spring -->
-		<spring.boot.version>3.4.3</spring.boot.version>
-		<spring.admin.version>3.4.4</spring.admin.version>
-		<springdoc.version>2.8.5</springdoc.version>
-		
-		<!-- Webjars -->
-		<webjars.bootstrap.version>5.3.2</webjars.bootstrap.version>
-		<webjars.locator.version>0.52</webjars.locator.version>
-		<webjars.locator.core.version>0.59</webjars.locator.core.version>
+        <!-- Maven -->
+        <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
+        <maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
+        <maven-surefire-plugin.version>3.5.1</maven-surefire-plugin.version>
+        <maven-failsafe-plugin.version>3.5.0</maven-failsafe-plugin.version>
+        <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
+        <maven-gpg-plugin.version>3.2.7</maven-gpg-plugin.version>
+        <maven-jacoco-plugin.version>0.8.12</maven-jacoco-plugin.version>
+        <maven-spotbugs-plugin.version>4.9.2.0</maven-spotbugs-plugin.version>
+        <maven-formatter-plugin.version>2.25.0</maven-formatter-plugin.version>
+        <maven-exec-plugin.version>3.5.0</maven-exec-plugin.version>
+        <maven-git-commit-id-plugin.version>4.9.10</maven-git-commit-id-plugin.version>
+        <maven-license-plugin.version>4.6</maven-license-plugin.version>
 
-		<!-- GraalVM -->
-		<graalvm.version>24.0.1</graalvm.version>
+        <!-- Spring -->
+        <spring.boot.version>3.4.3</spring.boot.version>
+        <spring.admin.version>3.4.4</spring.admin.version>
+        <springdoc.version>2.8.5</springdoc.version>
 
-		<!-- Commons -->
-		<commons.io>2.18.0</commons.io>
-		<commons.lang3>3.17.0</commons.lang3>
-		<commons.exec>1.4.0</commons.exec>
-		<commons-csv.version>1.13.0</commons-csv.version>
+        <!-- Webjars -->
+        <webjars.bootstrap.version>5.3.2</webjars.bootstrap.version>
+        <webjars.locator.version>0.52</webjars.locator.version>
+        <webjars.locator.core.version>0.59</webjars.locator.core.version>
 
-		<apache-httpcomponents-httpmime.version>4.5.14</apache-httpcomponents-httpmime.version>
-		<apache-httpcomponents-httpclient.version>4.5.14</apache-httpcomponents-httpclient.version>
-		<apache-httpcomponents-httpasyncclient.version>4.1.5</apache-httpcomponents-httpasyncclient.version>
-		<okhttp.version>4.12.0</okhttp.version>
+        <!-- GraalVM -->
+        <graalvm.version>24.0.1</graalvm.version>
 
-		<jaxb.version>2.3.1</jaxb.version>
-		
-		<!-- Lucene -->
-		<lucene.version>9.12.0</lucene.version>
-		
-		<!-- Chemistry -->
-		<chemistry.version>1.1.0</chemistry.version>
-		
-		<!-- Olingo -->
-		<olingo.version>3.1.4</olingo.version>
-		
-		<!-- FTP -->
-		<mina-core.version>2.2.4</mina-core.version>
-		<sshd-core.version>2.15.0</sshd-core.version>
-		<ftpserver.version>1.2.1</ftpserver.version>
-		
-		<!-- ActiveMQ -->
-		<activemq.version>6.1.0</activemq.version>
-		
-		<!-- Camel -->
-		<camel.version>4.10.1</camel.version>
-		
-		<!-- Velocity -->
-		<velocity.version>2.4</velocity.version>
-		
-		<!-- JGit -->
-		<jgit.version>6.10.0.202406032230-r</jgit.version>
+        <!-- Commons -->
+        <commons.io>2.18.0</commons.io>
+        <commons.lang3>3.17.0</commons.lang3>
+        <commons.exec>1.4.0</commons.exec>
+        <commons-csv.version>1.13.0</commons-csv.version>
 
-		<!-- Flowable -->
-		<flowable.version>6.8.1</flowable.version>
+        <apache-httpcomponents-httpmime.version>4.5.14</apache-httpcomponents-httpmime.version>
+        <apache-httpcomponents-httpclient.version>4.5.14</apache-httpcomponents-httpclient.version>
+        <apache-httpcomponents-httpasyncclient.version>4.1.5</apache-httpcomponents-httpasyncclient.version>
+        <okhttp.version>4.12.0</okhttp.version>
 
-		<!-- Wiki -->
-		<wikitext.version>3.0.48.202308291007</wikitext.version>
-		<flexmark.version>0.64.8</flexmark.version>
+        <jaxb.version>2.3.1</jaxb.version>
 
-		<!-- JDBC -->
-		<mongodb.version>3.12.14</mongodb.version>
-		<ngdbc.version>2.23.10</ngdbc.version>
-		<snowflake.version>3.23.0</snowflake.version>
-		<mysql.version>8.4.0</mysql.version>
-		
-		<!-- QLDB -->
-		<qldb.driver.version>2.3.1</qldb.driver.version>
-		<qldb.sdk.version>1.12.782</qldb.sdk.version>
-		
-		<!-- jETCD -->
-		<jetcd.core.version>0.8.5</jetcd.core.version>
-		
-		<!-- Various -->
-		<c3p0.version>0.11.0-pre2</c3p0.version>
-		<guava.version>33.4.0-jre</guava.version>
-		<icu4j.version>76.1</icu4j.version>
-		<classgraph.version>4.8.179</classgraph.version>
-		<logcaptor.version>2.10.1</logcaptor.version>
+        <!-- Lucene -->
+        <lucene.version>9.12.0</lucene.version>
 
-		<!-- UI -->
-		<jquery-ui.version>1.13.0</jquery-ui.version>
-		<sap-theming__theming-base-content.version>11.18.2</sap-theming__theming-base-content.version>
-		<chart.js.version>4.4.3</chart.js.version>
-		<sortablejs.version>1.15.2</sortablejs.version>
-		<fundamental-styles.version>0.38.0</fundamental-styles.version>
-		<angular-aria.version>1.8.2</angular-aria.version>
-		<split.js.version>1.6.5</split.js.version>
-		<diff.version>5.1.0</diff.version>
-		<monaco-editor.version>0.40.0</monaco-editor.version>
-		<requirejs.version>2.3.6</requirejs.version>
-		<jstree.version>3.3.12</jstree.version>
-		<jquery.version>3.7.1</jquery.version>
-		<jqplot.version>1.0.8r1250</jqplot.version>
-		<es5-shim.version>4.6.7</es5-shim.version>
-		<angular-file-upload.version>2.6.1</angular-file-upload.version>
-		<angularjs.version>1.8.2</angularjs.version>
-		<fontawesome.version>4.7.0</fontawesome.version>
-		<ag-grid.version>27.1.0</ag-grid.version>
-		<papaparse.version>5.3.2</papaparse.version>
+        <!-- Chemistry -->
+        <chemistry.version>1.1.0</chemistry.version>
 
-		<!-- Tests -->
-		<testcontainers.version>1.20.6</testcontainers.version>
+        <!-- Olingo -->
+        <olingo.version>3.1.4</olingo.version>
 
-		<profile.content.phase>none</profile.content.phase>
+        <!-- FTP -->
+        <mina-core.version>2.2.4</mina-core.version>
+        <sshd-core.version>2.15.0</sshd-core.version>
+        <ftpserver.version>1.2.1</ftpserver.version>
 
-		<license.header.location>licensing-header.txt</license.header.location>
+        <!-- ActiveMQ -->
+        <activemq.version>6.1.0</activemq.version>
 
-		<parent.pom.folder>./</parent.pom.folder>
-		<formatter.location>${parent.pom.folder}/dirigible-formatter.xml</formatter.location>
-		<formatter.java.version>${java.version}</formatter.java.version>
-	</properties>
+        <!-- Camel -->
+        <camel.version>4.10.2</camel.version>
 
-	<build>
-		<plugins>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-compiler-plugin</artifactId>
-			</plugin>
-			<plugin>
-				<groupId>net.revelc.code.formatter</groupId>
-				<artifactId>formatter-maven-plugin</artifactId>
-			</plugin>
-		</plugins>
-		<pluginManagement>
-			<plugins>
-				<plugin>
-					<groupId>org.springframework.boot</groupId>
-					<artifactId>spring-boot-maven-plugin</artifactId>
-					<version>${spring.boot.version}</version>
-				</plugin>
-				<plugin>
-					<groupId>pl.project13.maven</groupId>
-					<artifactId>git-commit-id-plugin</artifactId>
-					<version>${maven-git-commit-id-plugin.version}</version>
-				</plugin>
-				<plugin>
-					<groupId>org.codehaus.mojo</groupId>
-					<artifactId>exec-maven-plugin</artifactId>
-					<version>${maven-exec-plugin.version}</version>
-				</plugin>
-				<plugin>
-					<groupId>com.mycila</groupId>
-					<artifactId>license-maven-plugin</artifactId>
-					<version>${maven-license-plugin.version}</version>
-				</plugin>
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-compiler-plugin</artifactId>
-					<version>${maven-compiler-plugin.version}</version>
-					<configuration>
-						<parameters>true</parameters>
-						<source>${maven.compiler.source}</source>
-						<target>${maven.compiler.target}</target>
-						<debug>true</debug>
-						<debuglevel>lines,vars,source</debuglevel>
-					</configuration>
-				</plugin>
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-javadoc-plugin</artifactId>
-					<version>${maven-javadoc-plugin.version}</version>
-				</plugin>
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-surefire-plugin</artifactId>
-					<version>${maven-surefire-plugin.version}</version>
-				</plugin>
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-failsafe-plugin</artifactId>
-					<version>${maven-failsafe-plugin.version}</version>
-				</plugin>
-				<plugin>
-					<groupId>net.revelc.code.formatter</groupId>
-					<artifactId>formatter-maven-plugin</artifactId>
-					<version>${maven-formatter-plugin.version}</version>
-					<configuration>
-						<configFile>${formatter.location}</configFile>
-						<compilerSource>${formatter.java.version}</compilerSource>
-						<compilerCompliance>${formatter.java.version}</compilerCompliance>
-						<compilerTargetPlatform>${formatter.java.version}</compilerTargetPlatform>
-					</configuration>
-					<executions>
-						<execution>
-							<id>format-java-code</id>
-							<phase>process-sources</phase>
-							<goals>
-								<goal>format</goal>
-							</goals>
-						</execution>
-					</executions>
-				</plugin>
-				<plugin>
-					<groupId>com.github.spotbugs</groupId>
-					<artifactId>spotbugs-maven-plugin</artifactId>
-					<version>${maven-spotbugs-plugin.version}</version>
-				</plugin>
-				<plugin>
-					<groupId>org.jacoco</groupId>
-					<artifactId>jacoco-maven-plugin</artifactId>
-					<version>${maven-jacoco-plugin.version}</version>
-				</plugin>
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-source-plugin</artifactId>
-					<version>${maven-source-plugin.version}</version>
-				</plugin>
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-gpg-plugin</artifactId>
-					<version>${maven-gpg-plugin.version}</version>
-				</plugin>
-			</plugins>
-		</pluginManagement>
-	</build>
+        <!-- Velocity -->
+        <velocity.version>2.4</velocity.version>
 
-	<profiles>
-		<profile>
-			<id>default</id>
-			<activation>
-				<activeByDefault>true</activeByDefault>
-			</activation>
-			<properties>
-				<maven.javadoc.skip>true</maven.javadoc.skip>
-				<skipTCs>true</skipTCs>
-			</properties>
-			<build>
-				<plugins>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-surefire-plugin</artifactId>
-						<configuration>
-							<argLine>
-								--add-opens java.base/java.lang=ALL-UNNAMED
-								--add-opens java.base/java.math=ALL-UNNAMED
-								--add-opens java.base/java.util=ALL-UNNAMED
-								--add-opens
-								java.base/java.util.concurrent=ALL-UNNAMED
-								--add-opens java.base/java.net=ALL-UNNAMED
-								--add-opens java.base/java.text=ALL-UNNAMED
-							</argLine>
-						</configuration>
-					</plugin>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-javadoc-plugin</artifactId>
-						<configuration>
-							<source>${java.version}</source>
-						</configuration>
-						<executions>
-							<execution>
-								<id>attach-javadocs</id>
-								<goals>
-									<goal>jar</goal>
-								</goals>
-							</execution>
-						</executions>
-						<!-- <configuration>
-							<failOnError>false</failOnError>
-						</configuration> -->
-						<dependencies>
-							<dependency>
-								<groupId>org.apache.commons</groupId>
-								<artifactId>commons-lang3</artifactId>
-								<version>${commons.lang3}</version>
-							</dependency>
-						</dependencies>
-					</plugin>
-					<plugin>
-						<groupId>com.mycila</groupId>
-						<artifactId>license-maven-plugin</artifactId>
-					</plugin>
-				</plugins>
-			</build>
-		</profile>
+        <!-- JGit -->
+        <jgit.version>6.10.0.202406032230-r</jgit.version>
 
-		<profile>
-			<id>license</id>
-			<activation>
-				<activeByDefault>true</activeByDefault>
-			</activation>
-			<build>
-				<plugins>
-					<plugin>
-						<groupId>com.mycila</groupId>
-						<artifactId>license-maven-plugin</artifactId>
-						<inherited>true</inherited>
-						<configuration>
-							<header>${license.header.location}</header>
-							<aggregate>true</aggregate>
-							<properties>
-								<inceptionYear>${project.inceptionYear}</inceptionYear>
-								<currentYear>${currentYear}</currentYear>
-							</properties>
-							<includes>
-								<include>src/**/*.java</include>
-								<include>src/**/*.xml</include>
-								<include>src/**/*.html</include>
-								<include>src/**/*.css</include>
-								<include>src/**/*.js</include>
-								<include>src/**/*.mjs</include>
-								<include>src/**/*.cjs</include>
-								<include>src/**/*.properties</include>
-								<include>src/**/project.json</include>
-							</includes>
-							<excludes>
-								<exclude>**/logback.xml</exclude>
-								<exclude>**/logback-test.xml</exclude>
-								<exclude>**/src/test/resources/**</exclude>
-								<exclude>
-									**/src/main/resources/META-INF/dirigible/font-awesome-4.7.0/**</exclude>
-								<exclude>
-									**/src/main/resources/META-INF/dirigible/font-dirigible/**</exclude>
-								<exclude>
-									**/src/main/resources/META-INF/dirigible/ide-bpm/**</exclude>
-								<exclude>
-									**/src/main/resources/META-INF/dirigible/editor-bpm/**</exclude>
-								<exclude>
-									**/src/main/resources/META-INF/dirigible/ide-monaco/**</exclude>
-									<exclude>
-									**/src/main/resources/META-INF/dirigible/editor-monaco/**</exclude>
-								<exclude>
-									**/src/main/resources/META-INF/dirigible/ide-swagger/**</exclude>
-								<exclude>
-									**/src/main/resources/META-INF/dirigible/editor-swagger/**</exclude>
-								<exclude>
-									**/src/main/resources/META-INF/dirigible/resources-core/ui/**</exclude>
-								<exclude>
-									**/src/main/resources/META-INF/dirigible/platform-core/ui/**</exclude>
-								<exclude>
-									**/src/main/resources/META-INF/dirigible/ide-terminal/js/**</exclude>
-								<exclude>
-									**/src/main/resources/META-INF/dirigible/view-terminal/js/**</exclude>
-								<exclude>
-									**/src/main/resources/META-INF/dirigible/dev-tools/**</exclude>
-								<exclude>
-									**/src/main/resources/META-INF/dirigible/template-mobile-hello-world/node_modules/**</exclude>
-								<exclude>
-									**/src/main/resources/META-INF/dirigible/utils/jsonpath.js</exclude>
-								<exclude>
-									**/src/main/resources/META-INF/dirigible/ide-designer/designer/**</exclude>
-								<exclude>
-									**/src/main/resources/META-INF/dirigible/editor-designer/designer/**</exclude>
-							</excludes>
-							<skipExistingHeaders>true</skipExistingHeaders>
-						</configuration>
-						<dependencies>
-							<dependency>
-								<groupId>com.mycila</groupId>
-								<artifactId>license-maven-plugin-git</artifactId>
-								<version>${maven-license-plugin.version}</version>
-							</dependency>
-						</dependencies>
-						<executions>
-							<execution>
-								<id>format-license</id>
-								<phase>initialize</phase>
-								<goals>
-									<goal>format</goal>
-								</goals>
-							</execution>
-						</executions>
-					</plugin>
-				</plugins>
-			</build>
-		</profile>
+        <!-- Flowable -->
+        <flowable.version>7.1.0</flowable.version>
 
-		<profile>
-			<id>spotbugs</id>
-			<activation>
-				<activeByDefault>false</activeByDefault>
-			</activation>
-			<build>
-				<plugins>
-					<plugin>
-						<groupId>com.github.spotbugs</groupId>
-						<artifactId>spotbugs-maven-plugin</artifactId>
-						<dependencies>
-							<!-- overwrite dependency on spotbugs if you want to
-							specify the version of spotbugs -->
-							<dependency>
-								<groupId>com.github.spotbugs</groupId>
-								<artifactId>spotbugs</artifactId>
-								<version>4.9.2</version>
-							</dependency>
-						</dependencies>
-					</plugin>
+        <!-- Wiki -->
+        <wikitext.version>3.0.48.202308291007</wikitext.version>
+        <flexmark.version>0.64.8</flexmark.version>
 
-				</plugins>
+        <!-- JDBC -->
+        <mongodb.version>3.12.14</mongodb.version>
+        <ngdbc.version>2.23.10</ngdbc.version>
+        <snowflake.version>3.23.0</snowflake.version>
+        <mysql.version>8.4.0</mysql.version>
 
-			</build>
-		</profile>
+        <!-- QLDB -->
+        <qldb.driver.version>2.3.1</qldb.driver.version>
+        <qldb.sdk.version>1.12.782</qldb.sdk.version>
 
-		<profile>
-			<id>coverage</id>
-			<build>
-				<plugins>
-					<plugin>
-						<groupId>org.jacoco</groupId>
-						<artifactId>jacoco-maven-plugin</artifactId>
-						<executions>
-							<execution>
-								<goals>
-									<goal>prepare-agent</goal>
-								</goals>
-							</execution>
-							<execution>
-								<id>generate-code-coverage-report</id>
-								<phase>test</phase>
-								<goals>
-									<goal>report</goal>
-								</goals>
-							</execution>
-						</executions>
-					</plugin>
-				</plugins>
-			</build>
-		</profile>
+        <!-- jETCD -->
+        <jetcd.core.version>0.8.5</jetcd.core.version>
 
-		<profile>
-			<id>release</id>
-			<activation>
-				<activeByDefault>false</activeByDefault>
-			</activation>
-			<build>
-				<plugins>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-source-plugin</artifactId>
-						<executions>
-							<execution>
-								<id>attach-sources</id>
-								<goals>
-									<goal>jar-no-fork</goal>
-								</goals>
-							</execution>
-						</executions>
-					</plugin>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-javadoc-plugin</artifactId>
-						<executions>
-							<execution>
-								<id>attach-javadocs</id>
-								<goals>
-									<goal>jar</goal>
-								</goals>
-							</execution>
-						</executions>
-						<!-- <configuration>
-							<failOnError>false</failOnError>
-						</configuration> -->
-						<dependencies>
-							<dependency>
-								<groupId>org.apache.commons</groupId>
-								<artifactId>commons-lang3</artifactId>
-								<version>${commons.lang3}</version>
-							</dependency>
-						</dependencies>
-					</plugin>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-gpg-plugin</artifactId>
-						<executions>
-							<execution>
-								<id>sign-artifacts</id>
-								<phase>verify</phase>
-								<goals>
-									<goal>sign</goal>
-								</goals>
-								<configuration>
-									<!-- Prevent gpg from using pinentry
-									programs -->
-									<gpgArguments>
-										<arg>--pinentry-mode</arg>
-										<arg>loopback</arg>
-									</gpgArguments>
-								</configuration>
-							</execution>
-						</executions>
-					</plugin>
-				</plugins>
-			</build>
-		</profile>
-		<profile>
-			<id>testcontainers</id>
-			<properties>
-				<skipTCs>false</skipTCs>
-			</properties>
-			<build>
-				<plugins>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-compiler-plugin</artifactId>
-						<version>${maven.compiler.plugin.version}</version>
-						<configuration>
-							<source>${maven.compiler.source}</source>
-							<target>${maven.compiler.target}</target>
-							<debug>true</debug>
-							<debuglevel>lines,vars,source</debuglevel>
-						</configuration>
-					</plugin>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-surefire-plugin</artifactId>
-						<version>${maven-surefire-plugin.version}</version>
-						<configuration>
-							<argLine>
-								--add-opens java.base/java.lang=ALL-UNNAMED
-								--add-opens java.base/java.math=ALL-UNNAMED
-								--add-opens java.base/java.util=ALL-UNNAMED
-								--add-opens
-								java.base/java.util.concurrent=ALL-UNNAMED
-								--add-opens java.base/java.net=ALL-UNNAMED
-								--add-opens java.base/java.text=ALL-UNNAMED
-							</argLine>
-						</configuration>
-					</plugin>
-				</plugins>
-			</build>
-		</profile>
-	</profiles>
+        <!-- Various -->
+        <c3p0.version>0.11.0-pre2</c3p0.version>
+        <guava.version>33.4.0-jre</guava.version>
+        <icu4j.version>76.1</icu4j.version>
+        <classgraph.version>4.8.179</classgraph.version>
+        <logcaptor.version>2.10.1</logcaptor.version>
 
-	<repositories>
-		<repository>
-			<id>ossrh</id>
-			<url>https://repo1.maven.org/maven2</url>
-			<snapshots>
-				<enabled>false</enabled>
-			</snapshots>
-			<releases>
-				<enabled>true</enabled>
-			</releases>
-		</repository>
-	</repositories>
+        <!-- UI -->
+        <jquery-ui.version>1.13.0</jquery-ui.version>
+        <sap-theming__theming-base-content.version>11.18.2</sap-theming__theming-base-content.version>
+        <chart.js.version>4.4.3</chart.js.version>
+        <sortablejs.version>1.15.2</sortablejs.version>
+        <fundamental-styles.version>0.38.0</fundamental-styles.version>
+        <angular-aria.version>1.8.2</angular-aria.version>
+        <split.js.version>1.6.5</split.js.version>
+        <diff.version>5.1.0</diff.version>
+        <monaco-editor.version>0.40.0</monaco-editor.version>
+        <requirejs.version>2.3.6</requirejs.version>
+        <jstree.version>3.3.12</jstree.version>
+        <jquery.version>3.7.1</jquery.version>
+        <jqplot.version>1.0.8r1250</jqplot.version>
+        <es5-shim.version>4.6.7</es5-shim.version>
+        <angular-file-upload.version>2.6.1</angular-file-upload.version>
+        <angularjs.version>1.8.2</angularjs.version>
+        <fontawesome.version>4.7.0</fontawesome.version>
+        <ag-grid.version>27.1.0</ag-grid.version>
+        <papaparse.version>5.3.2</papaparse.version>
 
-	<pluginRepositories>
-		<pluginRepository>
-			<id>sonatype-public-repository</id>
-			<url>https://oss.sonatype.org/content/groups/public</url>
-			<snapshots>
-				<enabled>false</enabled>
-			</snapshots>
-			<releases>
-				<enabled>true</enabled>
-			</releases>
-		</pluginRepository>
-	</pluginRepositories>
+        <!-- Tests -->
+        <testcontainers.version>1.20.6</testcontainers.version>
 
-	<distributionManagement>
-		<snapshotRepository>
-			<id>ossrh</id>
-			<url>https://oss.sonatype.org/content/repositories/snapshots</url>
-		</snapshotRepository>
-		<repository>
-			<id>ossrh</id>
-			<url>https://oss.sonatype.org/service/local/staging/deploy/maven2</url>
-		</repository>
-	</distributionManagement>
+        <profile.content.phase>none</profile.content.phase>
 
-	<issueManagement>
-		<url>http://bugs.dirigible.io</url>
-	</issueManagement>
+        <license.header.location>licensing-header.txt</license.header.location>
 
-	<modules>
-		<module>modules</module>
-		<module>components</module>
-		<module>build</module>
-		<module>dependencies</module>
-		<module>tests</module>
-	</modules>
+        <parent.pom.folder>./</parent.pom.folder>
+        <formatter.location>${parent.pom.folder}/dirigible-formatter.xml</formatter.location>
+        <formatter.java.version>${java.version}</formatter.java.version>
+    </properties>
 
-	<dependencies>
-		<dependency>
-			<groupId>org.slf4j</groupId>
-			<artifactId>slf4j-api</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>ch.qos.logback</groupId>
-			<artifactId>logback-core</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>ch.qos.logback</groupId>
-			<artifactId>logback-classic</artifactId>
-		</dependency>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>net.revelc.code.formatter</groupId>
+                <artifactId>formatter-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>${spring.boot.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>pl.project13.maven</groupId>
+                    <artifactId>git-commit-id-plugin</artifactId>
+                    <version>${maven-git-commit-id-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>exec-maven-plugin</artifactId>
+                    <version>${maven-exec-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>com.mycila</groupId>
+                    <artifactId>license-maven-plugin</artifactId>
+                    <version>${maven-license-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${maven-compiler-plugin.version}</version>
+                    <configuration>
+                        <parameters>true</parameters>
+                        <source>${maven.compiler.source}</source>
+                        <target>${maven.compiler.target}</target>
+                        <debug>true</debug>
+                        <debuglevel>lines,vars,source</debuglevel>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-javadoc-plugin</artifactId>
+                    <version>${maven-javadoc-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${maven-surefire-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-failsafe-plugin</artifactId>
+                    <version>${maven-failsafe-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>net.revelc.code.formatter</groupId>
+                    <artifactId>formatter-maven-plugin</artifactId>
+                    <version>${maven-formatter-plugin.version}</version>
+                    <configuration>
+                        <configFile>${formatter.location}</configFile>
+                        <compilerSource>${formatter.java.version}</compilerSource>
+                        <compilerCompliance>${formatter.java.version}</compilerCompliance>
+                        <compilerTargetPlatform>${formatter.java.version}</compilerTargetPlatform>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>format-java-code</id>
+                            <phase>process-sources</phase>
+                            <goals>
+                                <goal>format</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>com.github.spotbugs</groupId>
+                    <artifactId>spotbugs-maven-plugin</artifactId>
+                    <version>${maven-spotbugs-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.jacoco</groupId>
+                    <artifactId>jacoco-maven-plugin</artifactId>
+                    <version>${maven-jacoco-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <version>${maven-source-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-gpg-plugin</artifactId>
+                    <version>${maven-gpg-plugin.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
 
-		<dependency>
-			<groupId>com.google.code.gson</groupId>
-			<artifactId>gson</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>commons-io</groupId>
-			<artifactId>commons-io</artifactId>
-			<version>${commons.io}</version>
-		</dependency>
+    <profiles>
+        <profile>
+            <id>default</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <properties>
+                <maven.javadoc.skip>true</maven.javadoc.skip>
+                <skipTCs>true</skipTCs>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <argLine>
+                                --add-opens java.base/java.lang=ALL-UNNAMED
+                                --add-opens java.base/java.math=ALL-UNNAMED
+                                --add-opens java.base/java.util=ALL-UNNAMED
+                                --add-opens
+                                java.base/java.util.concurrent=ALL-UNNAMED
+                                --add-opens java.base/java.net=ALL-UNNAMED
+                                --add-opens java.base/java.text=ALL-UNNAMED
+                            </argLine>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <configuration>
+                            <source>${java.version}</source>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <!-- <configuration>
+                            <failOnError>false</failOnError>
+                        </configuration> -->
+                        <dependencies>
+                            <dependency>
+                                <groupId>org.apache.commons</groupId>
+                                <artifactId>commons-lang3</artifactId>
+                                <version>${commons.lang3}</version>
+                            </dependency>
+                        </dependencies>
+                    </plugin>
+                    <plugin>
+                        <groupId>com.mycila</groupId>
+                        <artifactId>license-maven-plugin</artifactId>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
 
-		<dependency>
-			<groupId>org.apache.commons</groupId>
-			<artifactId>commons-lang3</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>com.fasterxml.jackson.core</groupId>
-			<artifactId>jackson-databind</artifactId>
-		</dependency>
+        <profile>
+            <id>license</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.mycila</groupId>
+                        <artifactId>license-maven-plugin</artifactId>
+                        <inherited>true</inherited>
+                        <configuration>
+                            <header>${license.header.location}</header>
+                            <aggregate>true</aggregate>
+                            <properties>
+                                <inceptionYear>${project.inceptionYear}</inceptionYear>
+                                <currentYear>${currentYear}</currentYear>
+                            </properties>
+                            <includes>
+                                <include>src/**/*.java</include>
+                                <include>src/**/*.xml</include>
+                                <include>src/**/*.html</include>
+                                <include>src/**/*.css</include>
+                                <include>src/**/*.js</include>
+                                <include>src/**/*.mjs</include>
+                                <include>src/**/*.cjs</include>
+                                <include>src/**/*.properties</include>
+                                <include>src/**/project.json</include>
+                            </includes>
+                            <excludes>
+                                <exclude>**/logback.xml</exclude>
+                                <exclude>**/logback-test.xml</exclude>
+                                <exclude>**/src/test/resources/**</exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/font-awesome-4.7.0/**
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/font-dirigible/**
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/ide-bpm/**
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/editor-bpm/**
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/ide-monaco/**
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/editor-monaco/**
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/ide-swagger/**
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/editor-swagger/**
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/resources-core/ui/**
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/platform-core/ui/**
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/ide-terminal/js/**
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/view-terminal/js/**
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/dev-tools/**
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/template-mobile-hello-world/node_modules/**
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/utils/jsonpath.js
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/ide-designer/designer/**
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/editor-designer/designer/**
+                                </exclude>
+                            </excludes>
+                            <skipExistingHeaders>true</skipExistingHeaders>
+                        </configuration>
+                        <dependencies>
+                            <dependency>
+                                <groupId>com.mycila</groupId>
+                                <artifactId>license-maven-plugin-git</artifactId>
+                                <version>${maven-license-plugin.version}</version>
+                            </dependency>
+                        </dependencies>
+                        <executions>
+                            <execution>
+                                <id>format-license</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>format</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
 
-		<dependency>
-		    <groupId>jakarta.xml.bind</groupId>
-		    <artifactId>jakarta.xml.bind-api</artifactId>
-		</dependency>
-		<dependency>
-		    <groupId>org.glassfish.jaxb</groupId>
-		    <artifactId>jaxb-runtime</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>jakarta.xml.ws</groupId>
-			<artifactId>jakarta.xml.ws-api</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>com.google.guava</groupId>
-			<artifactId>guava</artifactId>
-			<version>${guava.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>net.bytebuddy</groupId>
-			<artifactId>byte-buddy</artifactId>
-		</dependency>
+        <profile>
+            <id>spotbugs</id>
+            <activation>
+                <activeByDefault>false</activeByDefault>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.github.spotbugs</groupId>
+                        <artifactId>spotbugs-maven-plugin</artifactId>
+                        <dependencies>
+                            <!-- overwrite dependency on spotbugs if you want to
+                            specify the version of spotbugs -->
+                            <dependency>
+                                <groupId>com.github.spotbugs</groupId>
+                                <artifactId>spotbugs</artifactId>
+                                <version>4.9.2</version>
+                            </dependency>
+                        </dependencies>
+                    </plugin>
 
-		<!-- Test Dependencies -->
-		<dependency>
-			<groupId>com.squareup.okhttp3</groupId>
-			<artifactId>okhttp</artifactId>
-			<scope>test</scope>
+                </plugins>
+
+            </build>
+        </profile>
+
+        <profile>
+            <id>coverage</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>prepare-agent</goal>
+                                </goals>
+                            </execution>
+                            <execution>
+                                <id>generate-code-coverage-report</id>
+                                <phase>test</phase>
+                                <goals>
+                                    <goal>report</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>release</id>
+            <activation>
+                <activeByDefault>false</activeByDefault>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <!-- <configuration>
+                            <failOnError>false</failOnError>
+                        </configuration> -->
+                        <dependencies>
+                            <dependency>
+                                <groupId>org.apache.commons</groupId>
+                                <artifactId>commons-lang3</artifactId>
+                                <version>${commons.lang3}</version>
+                            </dependency>
+                        </dependencies>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                                <configuration>
+                                    <!-- Prevent gpg from using pinentry
+                                    programs -->
+                                    <gpgArguments>
+                                        <arg>--pinentry-mode</arg>
+                                        <arg>loopback</arg>
+                                    </gpgArguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>testcontainers</id>
+            <properties>
+                <skipTCs>false</skipTCs>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <version>${maven.compiler.plugin.version}</version>
+                        <configuration>
+                            <source>${maven.compiler.source}</source>
+                            <target>${maven.compiler.target}</target>
+                            <debug>true</debug>
+                            <debuglevel>lines,vars,source</debuglevel>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>${maven-surefire-plugin.version}</version>
+                        <configuration>
+                            <argLine>
+                                --add-opens java.base/java.lang=ALL-UNNAMED
+                                --add-opens java.base/java.math=ALL-UNNAMED
+                                --add-opens java.base/java.util=ALL-UNNAMED
+                                --add-opens
+                                java.base/java.util.concurrent=ALL-UNNAMED
+                                --add-opens java.base/java.net=ALL-UNNAMED
+                                --add-opens java.base/java.text=ALL-UNNAMED
+                            </argLine>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
+    <repositories>
+        <repository>
+            <id>ossrh</id>
+            <url>https://repo1.maven.org/maven2</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+        </repository>
+    </repositories>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>sonatype-public-repository</id>
+            <url>https://oss.sonatype.org/content/groups/public</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+        </pluginRepository>
+    </pluginRepositories>
+
+    <distributionManagement>
+        <snapshotRepository>
+            <id>ossrh</id>
+            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+        </snapshotRepository>
+        <repository>
+            <id>ossrh</id>
+            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2</url>
+        </repository>
+    </distributionManagement>
+
+    <issueManagement>
+        <url>http://bugs.dirigible.io</url>
+    </issueManagement>
+
+    <modules>
+        <module>modules</module>
+        <module>components</module>
+        <module>build</module>
+        <module>dependencies</module>
+        <module>tests</module>
+    </modules>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>${commons.io}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>jakarta.xml.bind</groupId>
+            <artifactId>jakarta.xml.bind-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.jaxb</groupId>
+            <artifactId>jaxb-runtime</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.xml.ws</groupId>
+            <artifactId>jakarta.xml.ws-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>${guava.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy</artifactId>
+        </dependency>
+
+        <!-- Test Dependencies -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <scope>test</scope>
             <version>${okhttp.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>com.squareup.okhttp3</groupId>
-			<artifactId>okhttp-urlconnection</artifactId>
-			<scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp-urlconnection</artifactId>
+            <scope>test</scope>
             <version>${okhttp.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.mockito</groupId>
-			<artifactId>mockito-core</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<!-- End Test Dependencies -->
-	</dependencies>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- End Test Dependencies -->
+    </dependencies>
 
-	<dependencyManagement>
-		<dependencies>
-			<dependency>
-				<groupId>io.opentelemetry.instrumentation</groupId>
-				<artifactId>opentelemetry-instrumentation-bom</artifactId>
-				<version>2.13.3</version>
-				<type>pom</type>
-				<scope>import</scope>
-			</dependency>
-			<dependency>
-				<groupId>org.springframework.boot</groupId>
-				<artifactId>spring-boot-dependencies</artifactId>
-				<version>${spring.boot.version}</version>
-				<type>pom</type>
-				<scope>import</scope>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-application</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.junit.vintage</groupId>
-				<artifactId>junit-vintage-engine</artifactId>
-				<version>5.11.4</version>
-				<scope>test</scope>
-			</dependency>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.opentelemetry.instrumentation</groupId>
+                <artifactId>opentelemetry-instrumentation-bom</artifactId>
+                <version>2.13.3</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring.boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-application</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.vintage</groupId>
+                <artifactId>junit-vintage-engine</artifactId>
+                <version>5.11.4</version>
+                <scope>test</scope>
+            </dependency>
 
-			<dependency>
-				<groupId>org.seleniumhq.selenium</groupId>
-				<artifactId>selenium-java</artifactId>
-				<version>4.29.0</version>
-				<scope>test</scope>
-			</dependency>
-			<dependency>
-				<groupId>commons-collections</groupId>
-				<artifactId>commons-collections</artifactId>
-				<version>3.2.2</version>
-			</dependency>
-			<dependency>
-				<groupId>org.dom4j</groupId>
-				<artifactId>dom4j</artifactId>
-				<version>2.1.4</version>
-			</dependency>
-		</dependencies>
-	</dependencyManagement>
+            <dependency>
+                <groupId>org.seleniumhq.selenium</groupId>
+                <artifactId>selenium-java</artifactId>
+                <version>4.29.0</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>commons-collections</groupId>
+                <artifactId>commons-collections</artifactId>
+                <version>3.2.2</version>
+            </dependency>
+            <dependency>
+                <groupId>org.dom4j</groupId>
+                <artifactId>dom4j</artifactId>
+                <version>2.1.4</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
 </project>
