@@ -65,6 +65,8 @@ public interface Browser {
 
     void clickOnElementByAttributePattern(String htmlElementType, String htmlAttribute, String pattern);
 
+    void clickOnElementWithExactClass(HtmlElementType elementType, String className);
+
     void doubleClickOnElementContainingText(HtmlElementType htmlElementType, String text);
 
     void doubleClickOnElementContainingText(String htmlElementType, String text);
@@ -107,6 +109,8 @@ public interface Browser {
     void pressEnter();
 
     void pressKey(Keys key);
+
+    void pressMultipleKeys(Keys modifier, CharSequence key);
 
     void type(String text);
 

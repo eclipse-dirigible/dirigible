@@ -62,6 +62,11 @@ public class DatabaseView {
     }
 
     public void createTestTable() {
+        clearEditor();
+
+        browser.clickOnElementByAttributePattern(HtmlElementType.DIV, HtmlAttribute.CLASS, "view-lines monaco-mouse-cursor-text");
+        browser.clickOnElementWithExactClass(HtmlElementType.DIV, "view-line");
+
         browser.enterTextInElementByAttributePattern(HtmlElementType.TEXT_AREA, HtmlAttribute.CLASS, "inputarea monaco-mouse-cursor-text",
                 testCreateTableStatement);
 
@@ -71,12 +76,19 @@ public class DatabaseView {
     }
 
     public void createTestRecord() {
+        clearEditor();
         browser.enterTextInElementByAttributePattern(HtmlElementType.TEXT_AREA, HtmlAttribute.CLASS, "inputarea monaco-mouse-cursor-text",
                 testInsertStatement);
 
         // select text
+        browser.pressMultipleKeys(Keys.COMMAND, "a");
         browser.pressKey(Keys.F8);
+    }
 
+    private void clearEditor() {
+        browser.clickOnElementWithExactClass(HtmlElementType.DIV, "view-line");
+        browser.pressMultipleKeys(Keys.COMMAND, "a");
+        browser.pressKey(Keys.DELETE);
     }
 }
 

@@ -75,7 +75,7 @@ class BrowserImpl implements Browser {
         Configuration.timeout = TimeUnit.SECONDS.toMillis(15);
         Configuration.browser = "chrome";
         Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
-        Configuration.headless = false;
+        // Configuration.headless = false;
 
     }
 
@@ -141,6 +141,15 @@ class BrowserImpl implements Browser {
         return Selectors.byCssSelector(cssSelector);
     }
 
+    public By constructCssSelectorByTypeAndExactAttribute(String elementType, String attribute, String value) {
+        String cssSelector = elementType + "[" + attribute + "='" + value + "']";
+        return Selectors.byCssSelector(cssSelector);
+    }
+
+    public By constructCssSelectorByTypeAndExactAttribute(HtmlElementType elementType, HtmlAttribute attribute, String value) {
+        return constructCssSelectorByTypeAndExactAttribute(elementType.getType(), attribute.getAttribute(), value);
+    }
+
     @Override
     public void handleElementInAllFrames(By by, Consumer<SelenideElement> elementHandler, WebElementCondition... conditions) {
         SelenideElement element = findElementInAllFrames(by, conditions);
@@ -196,6 +205,16 @@ class BrowserImpl implements Browser {
                 .sendKeys(key)
                 .perform();
     }
+
+    @Override
+    public void pressMultipleKeys(Keys modifier, CharSequence key) {
+        Selenide.actions()
+                .keyDown(modifier)
+                .sendKeys(key)
+                .keyUp(modifier)
+                .perform();
+    }
+
 
     @Override
     public void type(String text) {
@@ -471,6 +490,12 @@ class BrowserImpl implements Browser {
         SelenideElement element = getElementByAttributeAndText(elementType, text);
 
         element.click();
+    }
+
+    @Override
+    public void clickOnElementWithExactClass(HtmlElementType elementType, String className) {
+        By by = constructCssSelectorByTypeAndExactAttribute(elementType, HtmlAttribute.CLASS, className);
+        handleElementInAllFrames(by, this::clickElement, Condition.visible, Condition.enabled);
     }
 
     @Override
