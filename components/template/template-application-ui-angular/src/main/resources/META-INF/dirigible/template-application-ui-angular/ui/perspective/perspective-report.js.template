@@ -5,14 +5,11 @@
  */
 const perspectiveData = {
 	id: 'Reports',
-	name: 'Reports',
-	link: '/services/web/${projectName}/gen/${genFolderName}/ui/Reports/index.html',
+	label: 'Reports',
+	path: '/services/web/${projectName}/gen/${genFolderName}/ui/Reports/index.html',
 	order: 999,
 	icon: '/services/web/resources/unicons/dashboard.svg'
 };
-
 if (typeof exports !== 'undefined') {
-	exports.getPerspective = function () {
-		return perspectiveData;
-	}
+	exports.getPerspective = () => perspectiveData;
 }

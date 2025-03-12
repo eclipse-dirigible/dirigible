@@ -47,6 +47,8 @@ viewLoop: for (let i = 0; i < viewExtensions?.length; i++) {
 			}
 		}
 		if (!view.region) view.autoFocusTab = false;
+		else if ((view.region === 'center' || view.region === 'bottom') && !view.hasOwnProperty('autoFocusTab')) view.autoFocusTab = true;
+		else if ((view.region === 'left' || view.region === 'right') && !view.hasOwnProperty('autoFocusTab')) view.autoFocusTab = false;
 		views.push(view);
 	}
 }

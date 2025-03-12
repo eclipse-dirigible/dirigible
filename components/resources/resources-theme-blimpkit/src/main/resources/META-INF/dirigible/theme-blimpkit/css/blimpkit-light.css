@@ -1416,7 +1416,7 @@
     --fdMessageStrip_Icon_Color_Success: var(--sapPositiveElementColor);
     --fdMessageStrip_Icon_Color_Error: var(--sapNegativeElementColor);
     --fdMessageStrip_Icon_Color_Warning: var(--sapCriticalElementColor);
-    --fdMessageStrip_Icon_Color_Neutral: var(--sapNeutralElementColor);
+    --fdMessageStrip_Icon_Color_Neutral: var(--sapTextColor);
     --fdMessageStrip_Icon_Color_Information: var(--sapInformativeElementColor);
 
     --fdPage_List_Background: var(--sapGroup_ContentBackground);
@@ -1677,4 +1677,16 @@ input {
 
 .fd-shellbar {
     border-bottom: 0.0625rem solid var(--sapPageHeader_BorderColor);
+}
+
+.fd-input.is-alert::placeholder,
+.fd-input.is-error::placeholder,
+.fd-input.is-warning::placeholder {
+    color: var(--sapField_PlaceholderTextColor);
+}
+
+.fd-textarea.is-alert::placeholder,
+.fd-textarea.is-error::placeholder,
+.fd-textarea.is-warning::placeholder {
+    color: var(--sapField_PlaceholderTextColor);
 }

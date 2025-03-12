@@ -5,14 +5,11 @@
  */
 const perspectiveData = {
 	id: 'home',
-	name: 'Home',
-	link: '/services/web/portal/index.html',
+	label: 'Home',
+	path: '/services/web/portal/index.html',
 	icon: '/services/web/resources/unicons/estate.svg',
 	order: 1,
 };
-
 if (typeof exports !== 'undefined') {
-	exports.getPerspective = function () {
-		return perspectiveData;
-	}
+	exports.getPerspective = () => perspectiveData;
 }

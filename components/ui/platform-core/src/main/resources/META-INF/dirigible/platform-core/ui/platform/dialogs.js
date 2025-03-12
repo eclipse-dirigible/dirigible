@@ -125,7 +125,7 @@ angular.module('platformDialogs', ['blimpKit', 'platformView']).directive('dialo
         const dialogWindowListener = dialogHub.onWindow((data) => {
             if (data.close) {
                 scope.$apply(() => {
-                    scope.closeDialogWindow();
+                    scope.closeDialogWindow(data['id'], data['path']);
                 });
             } else if (data.id) {
                 const viewConfig = cachedWindows.find(v => v.id === data.id);
@@ -146,9 +146,27 @@ angular.module('platformDialogs', ['blimpKit', 'platformView']).directive('dialo
                 });
             } else scope.$apply(() => scope.dialogWindows.push(data));
         });
-        scope.closeDialogWindow = () => {
-            dialogHub.triggerEvent(scope.dialogWindows[0].closeTopic);
-            scope.dialogWindows.shift();
+        scope.closeDialogWindow = (id, path) => {
+            if (id) {
+                for (let w = 0; w < scope.dialogWindows.length; w++) {
+                    if (scope.dialogWindows.id === id) {
+                        dialogHub.triggerEvent(scope.dialogWindows[w].closeTopic);
+                        scope.dialogWindows.splice(w, 1);
+                        return;
+                    }
+                }
+            } else if (path) {
+                for (let w = 0; w < scope.dialogWindows.length; w++) {
+                    if (scope.dialogWindows.path === path) {
+                        dialogHub.triggerEvent(scope.dialogWindows[w].closeTopic);
+                        scope.dialogWindows.splice(w, 1);
+                        return;
+                    }
+                }
+            } else {
+                dialogHub.triggerEvent(scope.dialogWindows[0].closeTopic);
+                scope.dialogWindows.shift();
+            }
         };
 
         scope.$on('$destroy', () => {

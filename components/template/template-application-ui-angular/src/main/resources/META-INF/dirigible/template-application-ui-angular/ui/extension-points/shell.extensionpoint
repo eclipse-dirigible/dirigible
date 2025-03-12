@@ -1,0 +1,4 @@
+{
+    "name": "${projectName}-shells",
+    "description": "${projectName} - Extension Point for the Application Shell Providers"
+}

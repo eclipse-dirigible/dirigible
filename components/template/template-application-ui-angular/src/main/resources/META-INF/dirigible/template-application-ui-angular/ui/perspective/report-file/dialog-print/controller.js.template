@@ -1,13 +1,10 @@
 #set($dollar = '$')
-angular.module('page', ["ideUI", "ideView", "entityApi"])
-    .config(["messageHubProvider", function (messageHubProvider) {
-        messageHubProvider.eventIdPrefix = '${projectName}.Reports.${name}';
-    }])
+angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
     .config(["entityApiProvider", function (entityApiProvider) {
         entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
     }])
-    .controller('PageController', ['$scope', 'messageHub', 'entityApi', 'ViewParameters', function ($scope, messageHub, entityApi, ViewParameters) {
-
+    .controller('PageController', function ($scope, entityApi, ViewParameters) {
+        const Dialogs = new DialogHub();
 		let params = ViewParameters.get();
 		if (Object.keys(params).length) {         
             const filterEntity = params.filterEntity ?? {};
@@ -39,7 +36,11 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
             }
             request.then(function (response) {
                 if (response.status != 200) {
-                    messageHub.showAlertError("${name}", `Unable to list/filter ${name}: '${response.message}'`);
+                    Dialogs.showAlert({
+                        title: "${name}",
+                        message: `Unable to list/filter ${name}: '${response.message}'`,
+                        type: AlertTypes.Error
+                    });
                     return;
                 }
 #if($hasDates)
@@ -65,7 +66,6 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
         $scope.loadPage($scope.filter);
 
         window.onafterprint = () => {
-            messageHub.closeDialogWindow("${projectName}-Reports-${name}-print");
+            Dialogs.closeWindow({ path: viewData.path });
         }
-
-    }]);
+    });

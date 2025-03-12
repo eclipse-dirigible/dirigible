@@ -1,13 +1,10 @@
 #set($dollar = '$')
-angular.module('page', ["ideUI", "ideView", "entityApi"])
-	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = '${projectName}.${perspectiveName}.${name}';
-	}])
+angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
 	.config(["entityApiProvider", function (entityApiProvider) {
 		entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
 	}])
-	.controller('PageController', ['$scope', 'messageHub', 'ViewParameters', 'entityApi', function ($scope, messageHub, ViewParameters, entityApi) {
-
+	.controller('PageController', function ($scope, ViewParameters, entityApi) {
+		const Dialogs = new DialogHub();
 		$scope.entity = {};
 		$scope.forms = {
 			details: {},
@@ -44,17 +41,25 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 #end
 		}
 
-		$scope.create = function () {
+		$scope.create = () => {
 			let entity = $scope.entity;
 			entity[$scope.selectedMainEntityKey] = $scope.selectedMainEntityId;
 			entityApi.create(entity).then(function (response) {
 				if (response.status != 201) {
-					messageHub.showAlertError("${name}", `Unable to create ${name}: '${response.message}'`);
+					Dialogs.showAlert({
+						title: "${name}",
+						message: `Unable to create ${name}: '${response.message}'`,
+						type: AlertTypes.Error
+					});
 					return;
 				}
-				messageHub.postMessage("entityCreated", response.data);
+				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityCreated', data: response.data });
 				$scope.cancel();
-				messageHub.showAlertSuccess("${name}", "${name} successfully created");
+				Dialogs.showAlert({
+					title: "${name}",
+					message: '${name} successfully created',
+					type: AlertTypes.Success
+				});
 			});
 		};
 
@@ -64,12 +69,20 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 			entity[$scope.selectedMainEntityKey] = $scope.selectedMainEntityId;
 			entityApi.update(id, entity).then(function (response) {
 				if (response.status != 200) {
-					messageHub.showAlertError("${name}", `Unable to update ${name}: '${response.message}'`);
+					Dialogs.showAlert({
+						title: "${name}",
+						message: `Unable to update ${name}: '${response.message}'`,
+						type: AlertTypes.Error
+					});
 					return;
 				}
-				messageHub.postMessage("entityUpdated", response.data);
+				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityUpdated', data: response.data });
 				$scope.cancel();
-				messageHub.showAlertSuccess("${name}", "${name} successfully updated");
+				Dialogs.showAlert({
+					title: "${name}",
+					message: '${name} successfully updated',
+					type: AlertTypes.Success
+				});
 			});
 		};
 
@@ -117,10 +130,19 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 
 #end
 #end
-		$scope.cancel = function () {
-			$scope.entity = {};
-			$scope.action = 'select';
-			messageHub.closeDialogWindow("${name}-details");
+		$scope.alert = (message) => {
+			Dialogs.showAlert({
+				title: 'Description',
+				message: message,
+				type: AlertTypes.Information,
+				preformatted: true,
+			});
 		};
 
-	}]);
+		$scope.cancel = () => {
+			$scope.entity = {};
+			$scope.action = 'select';
+			Dialogs.closeWindow({ id: '${name}-details' });
+		};
+
+	});

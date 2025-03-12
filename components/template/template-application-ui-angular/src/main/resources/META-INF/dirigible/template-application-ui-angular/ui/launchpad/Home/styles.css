@@ -53,7 +53,7 @@
     overflow: visible;
 }
 
-.fd-avatar[dg-size="s"]>i {
+.fd-avatar[size="s"]>i {
     font-size: 2rem;
 }
 

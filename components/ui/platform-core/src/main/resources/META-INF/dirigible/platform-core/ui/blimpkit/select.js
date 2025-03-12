@@ -251,7 +251,7 @@ blimpkit.directive('bkSelect', (uuid, $window, $timeout, ScreenEdgeMargin, class
     template: `<div class="fd-popover">
         <div class="fd-popover__control" aria-disabled="{{ !!isDisabled }}" ng-mouseover="setMessageVisibility(true)" ng-mouseleave="setMessageVisibility(false)">
             <div ng-class="getClasses()">
-                <button id="{{ buttonId }}" ng-class="getControlClasses()" ng-click="onControlClick($event)" aria-labelledby="{{ [labelId, textId].join(' ') }}" aria-expanded="{{ bodyExpanded }}" aria-haspopup="listbox" aria-disabled="{{ !!isDisabled }}" tabindex="0">
+                <button id="{{ buttonId }}" ng-class="getControlClasses()" ng-click="!isReadonly && onControlClick($event)" aria-labelledby="{{ [labelId, textId].join(' ') }}" aria-expanded="{{ bodyExpanded }}" aria-haspopup="{{isReadonly ? 'false' : 'listbox'}}" aria-disabled="{{ !!isDisabled }}" tabindex="0">
                     <span id="{{ textId }}" class="fd-select__text-content">{{ getSelectedItemText() }}</span>
                     <span class="fd-button fd-button--transparent fd-select__button"><i class="{{iconClass}}"></i></span>
                 </button>
@@ -261,7 +261,7 @@ blimpkit.directive('bkSelect', (uuid, $window, $timeout, ScreenEdgeMargin, class
             <div ng-if="message" aria-live="assertive" ng-class="getListMessageClasses()" role="alert">{{ message }}</div>
             <ul ng-class="getListClasses()" aria-activedescendant="{{ getSelectedItemId() }}" aria-labelledby="{{ labelId }}" role="listbox" ng-transclude></ul>
         </div>
-        <div ng-if="message && state && messageVisibile" class="fd-popover__body fd-popover__body--no-arrow" aria-hidden="{{ bodyExpanded }}" ng-style="getStyle()">
+        <div ng-if="!isReadonly && message && state && messageVisibile" class="fd-popover__body fd-popover__body--no-arrow" aria-hidden="{{ bodyExpanded }}" ng-style="getStyle()">
             <span ng-class="getFormMessageClasses()">{{ message }}</span>
         </div>
     </div>`

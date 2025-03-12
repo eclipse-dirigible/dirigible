@@ -3,15 +3,12 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-exports.getTile = function () {
-    return {
-        group: "Reports",
-        name: "${name} Report",
-        caption: "Report for entity ${name}",
-        tooltip: "${tooltip}",
-        // icon: "file-o",
-        location: "/services/web/${projectName}/gen/${genFolderName}/ui/Reports/index.html",
-        order: "${menuIndex}",
-        groupOrder: "999"
-    };
-};
+exports.getTile = () => ({
+    group: "Reports",
+    name: "${name} Report",
+    caption: "Report for entity ${name}",
+    tooltip: "${tooltip}",
+    location: "/services/web/${projectName}/gen/${genFolderName}/ui/Reports/index.html",
+    order: "${menuIndex}",
+    groupOrder: "999"
+});

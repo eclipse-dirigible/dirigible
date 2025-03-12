@@ -10,15 +10,12 @@
 #set($hasDropdowns = true)
 #end
 #end
-angular.module('page', ["ideUI", "ideView", "entityApi"])
-	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = '${projectName}.${perspectiveName}.${name}';
-	}])
+angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
 	.config(["entityApiProvider", function (entityApiProvider) {
 		entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
 	}])
-	.controller('PageController', ['${dollar}scope',#if($hasDropdowns) '${dollar}http',#end 'messageHub', 'entityApi', function (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end messageHub, entityApi) {
-
+	.controller('PageController', function (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end entityApi) {
+		const Dialogs = new DialogHub();
 		$scope.filter = {};
 
 		const ctx = document.getElementById('myChart');
@@ -43,22 +40,30 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		});
 
 		//-----------------Events-------------------//
-		messageHub.onDidReceiveMessage("filter", function (msg) {
-			$scope.filter = msg.data;
+		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.filter', handler: (data) => {
+			$scope.filter = data;
 			${dollar}scope.loadPage();
-		});
+		}});
 		//-----------------Events-------------------//
 
 		$scope.loadPage = function () {
 			entityApi.count($scope.filter).then(function (response) {
 				if (response.status != 200) {
-					messageHub.showAlertError("${name}", `Unable to count ${name}: '${response.message}'`);
+					Dialogs.showAlert({
+						title: "${name}",
+						message: `Unable to count ${name}: '${response.message}'`,
+						type: AlertTypes.Error
+					});
 					return;
 				}
 				$scope.dataCount = response.data;
 				entityApi.list($scope.filter).then(function (response) {
 					if (response.status != 200) {
-						messageHub.showAlertError("${name}", `Unable to list ${name}: '${response.message}'`);
+						Dialogs.showAlert({
+							title: "${name}",
+							message: `Unable to list ${name}: '${response.message}'`,
+							type: AlertTypes.Error
+						});
 						return;
 					}
 #if($hasDates)
@@ -101,20 +106,23 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		};
 		$scope.loadPage();
 
-		$scope.openFilter = function () {
-			messageHub.showDialogWindow("${name}-details-filter", {
-				action: "filter",
-				filter: $scope.filter,
+		$scope.openFilter = () => {
+			Dialogs.showWindow({
+				id: '${name}-details-filter',
+				params: {
+					action: "filter",
+					filter: $scope.filter,
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-				options${property.name}: $scope.options${property.name},
+					options${property.name}: $scope.options${property.name},
 #end
 #end
 #foreach ($property in $filter.properties)
 #if($property.widgetType == "DROPDOWN")
-				options${property.name}: $scope.options${property.name},
+					options${property.name}: $scope.options${property.name},
 #end
 #end
+				},
 			});
 		};
 
@@ -183,4 +191,4 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		//----------------Dropdowns-----------------//
 #end
 
-	}]);
+	});

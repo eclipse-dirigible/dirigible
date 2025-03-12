@@ -1,12 +1,12 @@
 #set($dollar = '$')
-angular.module('page', ["ideUI", "ideView"])
-	.controller('PageController', ['$scope', 'ViewParameters', function ($scope, ViewParameters) {
+angular.module('page', ['blimpKit', 'platformView'])
+	.controller('PageController', function ($scope, ViewParameters) {
 
 		$scope.entity = {};
 
 		let params = ViewParameters.get();
 		if (Object.keys(params).length) {
-			$scope.action = "select";;
+			$scope.action = "select";
 
 #foreach ($property in $properties)
 #if($property.isDateType)
@@ -23,4 +23,4 @@ angular.module('page', ["ideUI", "ideView"])
 #end
 		}
 
-	}]);
+	});

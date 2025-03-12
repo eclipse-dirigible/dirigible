@@ -1,0 +1,4 @@
+{
+    "name": "${projectName}-settings",
+    "description": "${projectName} - Extension Point for the Application Setting Providers"
+}
