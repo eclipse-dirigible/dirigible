@@ -28,29 +28,6 @@ class DatabaseAvailabilityIT extends UserInterfaceIntegrationTest {
 
         database.createTestRecord();
         database.assertResult();
-
-        // verify Check availability of the views:
-        // Explorer
-        // Statements
-        // Result
-        // Find PUBLIC element within the Explorer view
-        // Double-click on PUBLIC
-        // Check availability of the sub-items
-        // Tables
-        // Views
-        // Procedures
-        // Functions
-        // Sequences
-        // Double-click on Tables
-        // Find & right-click on STUDENT
-        // Find & click on Show Content
-        // Check the content in the Result view as Empty result
-        // Enter in the Statements view
-        //
-        // INSERT INTO STUDENT VALUES (1, 'John Smith', 'Sofia, Bulgaria')
-        //
-        // Select all and click F8
-        // Repeat the steps of Show Content by checking one record in the Result view
     }
 
 }
