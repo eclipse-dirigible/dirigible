@@ -49,8 +49,11 @@ public class DatabaseView {
     public void assertResult() {
         browser.rightClickOnElementById("j1_215_anchor"); // Student table id
         browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Show contents");
-        browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.CLASS, "tdSingleLine",
-                "1"); // Assert if table ID is 1 -> successfully inserted
+        browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.CLASS, "tdSingleLine", "1"); // Assert if
+                                                                                                                            // table ID is 1
+                                                                                                                            // ->
+                                                                                                                            // successfully
+                                                                                                                            // inserted
     }
 
     private void expandSchema(String schemaName) {
@@ -58,9 +61,8 @@ public class DatabaseView {
     }
 
     public void createTestTable() {
-        String testCreateTableStatement =
-                "CREATE TABLE IF NOT EXISTS STUDENT (" + " id SERIAL PRIMARY KEY, " + " name TEXT NOT NULL, " + " address TEXT NOT NULL"
-                        + ");";
+        String testCreateTableStatement = "CREATE TABLE IF NOT EXISTS STUDENT (" + " id SERIAL PRIMARY KEY, " + " name TEXT NOT NULL, "
+                + " address TEXT NOT NULL" + ");";
         insertIntoEditor(testCreateTableStatement);
         browser.pressMultipleKeys(Keys.COMMAND, "a");
         browser.pressKey(Keys.F8);
