@@ -75,7 +75,7 @@ class BrowserImpl implements Browser {
         Configuration.timeout = TimeUnit.SECONDS.toMillis(15);
         Configuration.browser = "chrome";
         Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
-        Configuration.headless = false;
+        //        Configuration.headless = false;
     }
 
     @Override
@@ -189,8 +189,7 @@ class BrowserImpl implements Browser {
                 .window(Selenide.webdriver()
                                 .object()
                                 .getWindowHandles()
-                                .size()
-                        - 1);
+                                .size() - 1);
     }
 
     @Override
@@ -393,13 +392,16 @@ class BrowserImpl implements Browser {
 
     @Override
     public void rightClickOnElementByText(String elementType, String text) {
-        SelenideElement element = getElementByAttributeAndContainsText(elementType, text);
+        SelenideElement element = getElementByAttributeAndExactText(elementType, text);
+
         element.shouldBe(Condition.visible);
+        element.shouldBe(Condition.exactText(text));
+
         rightClickElement(element);
     }
 
     private void rightClickElement(SelenideElement element) {
-        element.scrollIntoView(false)
+        element.scrollIntoView(true)
                .contextClick();
     }
 
@@ -410,11 +412,8 @@ class BrowserImpl implements Browser {
 
     @Override
     public void rightClickOnElementContainingText(String elementType, String text) {
-        SelenideElement element = getElementByAttributeAndExactText(elementType, text);
-
+        SelenideElement element = getElementByAttributeAndContainsText(elementType, text);
         element.shouldBe(Condition.visible);
-        element.shouldBe(Condition.matchText(text));
-
         rightClickElement(element);
     }
 
