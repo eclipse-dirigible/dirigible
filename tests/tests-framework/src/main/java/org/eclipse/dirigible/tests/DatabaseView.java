@@ -40,8 +40,6 @@ public class DatabaseView {
     }
 
     public void assertEmptyTable() {
-        // browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, "STUDENT");
-
         browser.rightClickOnElementById("j1_215_anchor"); // Student table id
         browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Show contents");
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.CLASS, "fd-message-page__title",
@@ -51,7 +49,9 @@ public class DatabaseView {
     public void assertResult() {
         browser.rightClickOnElementById("j1_215_anchor");
         browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Show contents");
-        browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.CLASS, "tdSingleLine", "1"); // Assert if
+
+        // Assert if table id is 1 -> correct insertion
+        browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.CLASS, "tdSingleLine", "1");
     }
 
     private void expandSchema(String schemaName) {
@@ -59,16 +59,16 @@ public class DatabaseView {
     }
 
     public void createTestTable() {
-        String testCreateTableStatement = "CREATE TABLE IF NOT EXISTS STUDENT (" + " id SERIAL PRIMARY KEY, " + " name TEXT NOT NULL, "
-                + " address TEXT NOT NULL" + ");";
-        insertIntoEditor(testCreateTableStatement);
+        insertIntoEditor(
+                "CREATE TABLE IF NOT EXISTS STUDENT (" + " id SERIAL PRIMARY KEY, " + " name TEXT NOT NULL, " + " address TEXT NOT NULL"
+                        + ");");
         selectAll();
         browser.pressKey(Keys.F8);
     }
 
     public void createTestRecord() {
-        String testInsertStatement = "INSERT INTO STUDENT VALUES (1, 'John Smith', 'Sofia, Bulgaria')";
-        insertIntoEditor(testInsertStatement);
+        insertIntoEditor("INSERT INTO STUDENT VALUES (1, 'John Smith', 'Sofia, Bulgaria')");
+
         selectAll();
         browser.pressKey(Keys.F8);
     }
