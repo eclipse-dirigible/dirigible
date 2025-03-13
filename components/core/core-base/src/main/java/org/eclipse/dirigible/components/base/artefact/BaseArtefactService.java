@@ -39,7 +39,7 @@ public abstract class BaseArtefactService<A extends Artefact, ID> implements Art
      * @return the all
      */
     @Override
-    public final List<A> getAll() {
+    public List<A> getAll() {
         return getRepo().findAll();
     }
 
@@ -59,7 +59,7 @@ public abstract class BaseArtefactService<A extends Artefact, ID> implements Art
      * @return the pages
      */
     @Override
-    public final Page<A> getPages(Pageable pageable) {
+    public Page<A> getPages(Pageable pageable) {
         return getRepo().findAll(pageable);
     }
 
@@ -70,7 +70,7 @@ public abstract class BaseArtefactService<A extends Artefact, ID> implements Art
      * @return the a
      */
     @Override
-    public final A findById(ID id) {
+    public A findById(ID id) {
         return getRepo().findById(id)
                         .orElseThrow(() -> new IllegalArgumentException(this.getClass() + ": missing artefact with [" + id + "]"));
     }
@@ -94,7 +94,7 @@ public abstract class BaseArtefactService<A extends Artefact, ID> implements Art
      * @return the list
      */
     @Override
-    public final List<A> findByLocation(String location) {
+    public List<A> findByLocation(String location) {
         return getRepo().findByLocation(location);
     }
 
@@ -105,7 +105,7 @@ public abstract class BaseArtefactService<A extends Artefact, ID> implements Art
      * @return the a
      */
     @Override
-    public final A findByKey(String key) {
+    public A findByKey(String key) {
         return getRepo().findByKey(key)
                         .orElse(null);
     }

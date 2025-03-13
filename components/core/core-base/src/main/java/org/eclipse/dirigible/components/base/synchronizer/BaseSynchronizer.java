@@ -39,7 +39,7 @@ public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchr
     private static final Logger logger = LoggerFactory.getLogger(BaseSynchronizer.class);
 
     @Override
-    public final List<A> parse(String location, byte[] content) throws ParseException {
+    public List<A> parse(String location, byte[] content) throws ParseException {
         Tracer tracer = OpenTelemetryProvider.get()
                                              .getTracer("eclipse-dirigible");
 
@@ -77,7 +77,7 @@ public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchr
      * @return true, if successful
      */
     @Override
-    public final boolean complete(TopologyWrapper<A> wrapper, ArtefactPhase flow) {
+    public boolean complete(TopologyWrapper<A> wrapper, ArtefactPhase flow) {
         Tracer tracer = OpenTelemetryProvider.get()
                                              .getTracer("eclipse-dirigible");
 
@@ -168,7 +168,7 @@ public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchr
      * @param artefact the artefact
      */
     @Override
-    public final void cleanup(A artefact) {
+    public void cleanup(A artefact) {
         Tracer tracer = OpenTelemetryProvider.get()
                                              .getTracer("eclipse-dirigible");
 
