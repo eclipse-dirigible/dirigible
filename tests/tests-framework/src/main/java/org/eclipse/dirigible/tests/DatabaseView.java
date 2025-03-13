@@ -23,11 +23,7 @@ public class DatabaseView {
 
     private final String testInsertStatement = "INSERT INTO STUDENT VALUES (1, 'John Smith', 'Sofia, Bulgaria')";
     private final String testCreateTableStatement =
-            "CREATE TABLE IF NOT EXISTS STUDENT (" +
-                    " id SERIAL PRIMARY KEY, " +
-                    " name TEXT NOT NULL, " +
-                    " address TEXT NOT NULL" +
-                    ");";
+            "CREATE TABLE IF NOT EXISTS STUDENT (" + " id SERIAL PRIMARY KEY, " + " name TEXT NOT NULL, " + " address TEXT NOT NULL" + ");";
 
     protected DatabaseView(Browser browser) {
         this.browser = browser;
@@ -47,14 +43,15 @@ public class DatabaseView {
     }
 
     public void assertEmptyTable() {
-        //        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, "STUDENT");
+        // browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, "STUDENT");
         browser.rightClickOnElementById("j1_215_anchor"); // Student table id
         browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Show contents");
-        browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.CLASS, "fd-message-page__title", "Empty result");
+        browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.CLASS, "fd-message-page__title",
+                "Empty result");
     }
 
     public void assertResult() {
-//        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, "STUDENT");
+        // browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, "STUDENT");
         browser.rightClickOnElementById("j1_215_anchor"); // Student table id
         browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Show contents");
         // Assert correct insert
