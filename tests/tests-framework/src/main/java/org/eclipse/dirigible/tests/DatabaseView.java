@@ -29,7 +29,13 @@ public class DatabaseView {
     }
 
     public void expandSubviews() {
-        expandSchema("PUBLIC");
+        String url = System.getenv("DIRIGIBLE_DATASOURCE_DEFAULT_URL");
+
+        if (url.contains("postgresql"))
+            expandSchema("public");
+        else
+            expandSchema("PUBLIC");
+
         expandSchema("Tables");
 
         browser.clickElementByAttributes(HtmlElementType.BUTTON,
