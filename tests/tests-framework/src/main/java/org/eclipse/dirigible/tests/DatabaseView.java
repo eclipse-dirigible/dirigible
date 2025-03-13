@@ -31,7 +31,7 @@ public class DatabaseView {
     public void expandSubviews() {
         String url = System.getenv("DIRIGIBLE_DATASOURCE_DEFAULT_URL");
 
-        if (url.contains("postgresql"))
+        if (url != null && url.contains("postgresql"))
             expandSchema("public");
         else
             expandSchema("PUBLIC");
@@ -70,8 +70,9 @@ public class DatabaseView {
     }
 
     public void createTestTable() {
-        insertIntoEditor("CREATE TABLE IF NOT EXISTS STUDENT (" + " id SERIAL PRIMARY KEY, " + " name TEXT NOT NULL, "
-                + " address TEXT NOT NULL" + ");");
+        insertIntoEditor(
+                "CREATE TABLE IF NOT EXISTS STUDENT (" + " id SERIAL PRIMARY KEY, " + " name TEXT NOT NULL, " + " address TEXT NOT NULL"
+                        + ");");
         selectAll();
         browser.pressKey(Keys.F8);
     }
