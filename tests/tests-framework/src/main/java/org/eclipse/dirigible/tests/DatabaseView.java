@@ -17,6 +17,8 @@ import org.openqa.selenium.Keys;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
+import java.util.Map;
+
 @Lazy
 @Component
 public class DatabaseView {
@@ -29,6 +31,9 @@ public class DatabaseView {
     public void expandSubviews() {
         expandSchema("PUBLIC");
         expandSchema("Tables");
+
+        browser.clickElementByAttributes(HtmlElementType.BUTTON,
+                Map.of(HtmlAttribute.CLASS, "fd-button fd-button--transparent", HtmlAttribute.TITLE, "Refresh"));
     }
 
     public void assertAvailabilityOfSubitems() {
@@ -40,14 +45,14 @@ public class DatabaseView {
     }
 
     public void assertEmptyTable() {
-        browser.rightClickOnElementById("j1_215_anchor"); // Student table id
+        browser.rightClickOnElementByText(HtmlElementType.ANCHOR, "STUDENT");
         browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Show contents");
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.CLASS, "fd-message-page__title",
                 "Empty result");
     }
 
     public void assertResult() {
-        browser.rightClickOnElementById("j1_215_anchor");
+        browser.rightClickOnElementByText(HtmlElementType.ANCHOR, "STUDENT");
         browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Show contents");
 
         // Assert if table id is 1 -> correct insertion
@@ -59,9 +64,8 @@ public class DatabaseView {
     }
 
     public void createTestTable() {
-        insertIntoEditor(
-                "CREATE TABLE IF NOT EXISTS STUDENT (" + " id SERIAL PRIMARY KEY, " + " name TEXT NOT NULL, " + " address TEXT NOT NULL"
-                        + ");");
+        insertIntoEditor("CREATE TABLE IF NOT EXISTS STUDENT (" + " id SERIAL PRIMARY KEY, " + " name TEXT NOT NULL, "
+                + " address TEXT NOT NULL" + ");");
         selectAll();
         browser.pressKey(Keys.F8);
     }

@@ -28,7 +28,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
-import com.codeborne.selenide.WebDriverRunner;
 
 import java.io.Serializable;
 import java.time.Duration;
@@ -76,7 +75,7 @@ class BrowserImpl implements Browser {
         Configuration.timeout = TimeUnit.SECONDS.toMillis(15);
         Configuration.browser = "chrome";
         Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
-        // Configuration.headless = false;
+        Configuration.headless = false;
     }
 
     @Override
@@ -387,6 +386,18 @@ class BrowserImpl implements Browser {
         handleElementInAllFrames(by, this::rightClickElement, Condition.visible, Condition.enabled);
     }
 
+    @Override
+    public void rightClickOnElementByText(HtmlElementType elementType, String text) {
+        rightClickOnElementByText(elementType.getType(), text);
+    }
+
+    @Override
+    public void rightClickOnElementByText(String elementType, String text) {
+        SelenideElement element = getElementByAttributeAndContainsText(elementType, text);
+        element.shouldBe(Condition.visible);
+        rightClickElement(element);
+    }
+
     private void rightClickElement(SelenideElement element) {
         element.scrollIntoView(false)
                .contextClick();
@@ -399,8 +410,11 @@ class BrowserImpl implements Browser {
 
     @Override
     public void rightClickOnElementContainingText(String elementType, String text) {
-        SelenideElement element = getElementByAttributeAndContainsText(elementType, text);
+        SelenideElement element = getElementByAttributeAndExactText(elementType, text);
+
         element.shouldBe(Condition.visible);
+        element.shouldBe(Condition.matchText(text));
+
         rightClickElement(element);
     }
 
@@ -451,6 +465,12 @@ class BrowserImpl implements Browser {
         SelenideElement element = getElementByAttributeAndContainsText(elementType, text);
         element.shouldBe(Condition.visible);
         element.doubleClick();
+    }
+
+    private SelenideElement getElementByAttributeAndExactText(String elementType, String text) {
+        By selector = constructCssSelectorByType(elementType);
+
+        return findElementInAllFrames(selector, Condition.exist, Condition.exactText(text));
     }
 
     private SelenideElement getElementByAttributeAndContainsText(String elementType, String text) {
@@ -509,6 +529,26 @@ class BrowserImpl implements Browser {
 
         handleElementInAllFrames(by, SelenideElement::click);
     }
+
+    @Override
+    public void clickElementByAttributes(HtmlElementType elementType, Map<HtmlAttribute, String> attributes) {
+        if (attributes.isEmpty()) {
+            throw new IllegalArgumentException("Attributes map cannot be empty");
+        }
+
+        StringBuilder cssSelector = new StringBuilder(elementType.getType());
+        attributes.forEach((attribute, value) -> {
+            cssSelector.append("[")
+                       .append(attribute.getAttribute())
+                       .append("='")
+                       .append(value)
+                       .append("']");
+        });
+
+        By by = Selectors.byCssSelector(cssSelector.toString());
+        handleElementInAllFrames(by, SelenideElement::click, Condition.visible);
+    }
+
 
     @Override
     public void assertElementExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text) {

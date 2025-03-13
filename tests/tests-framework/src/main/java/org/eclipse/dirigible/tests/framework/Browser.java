@@ -14,6 +14,7 @@ import com.codeborne.selenide.WebElementCondition;
 import org.openqa.selenium.By;
 import org.openqa.selenium.Keys;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -67,6 +68,8 @@ public interface Browser {
 
     void clickOnElementWithExactClass(HtmlElementType elementType, String className);
 
+    void clickElementByAttributes(HtmlElementType elementType, Map<HtmlAttribute, String> attributes);
+
     void doubleClickOnElementContainingText(HtmlElementType htmlElementType, String text);
 
     void doubleClickOnElementContainingText(String htmlElementType, String text);
@@ -76,6 +79,10 @@ public interface Browser {
     void rightClickOnElementContainingText(HtmlElementType htmlElementType, String text);
 
     void rightClickOnElementContainingText(String htmlElementType, String text);
+
+    void rightClickOnElementByText(HtmlElementType elementType, String text);
+
+    void rightClickOnElementByText(String elementType, String text);
 
     void executeJavaScript(String script, Object... args);
 

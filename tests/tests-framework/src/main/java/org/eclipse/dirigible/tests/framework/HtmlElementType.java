@@ -27,6 +27,7 @@ public enum HtmlElementType {
     CANVAS("canvas"), //
     TR("tr"), //
     TEXT_AREA("textarea"), //
+    ICON("i"), //
     LI("li"); //
 
     private final String type;
