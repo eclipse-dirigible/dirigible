@@ -77,6 +77,8 @@ public interface Browser {
 
     void rightClickOnElementContainingText(String htmlElementType, String text);
 
+    void executeJavaScript(String script, Object... args);
+
     void reload();
 
     String createScreenshot();
@@ -109,6 +111,7 @@ public interface Browser {
     void pressEnter();
 
     void pressKey(Keys key);
+
 
     void pressMultipleKeys(Keys modifier, CharSequence key);
 

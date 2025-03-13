@@ -28,6 +28,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
+import com.codeborne.selenide.WebDriverRunner;
 
 import java.io.Serializable;
 import java.time.Duration;
@@ -75,8 +76,7 @@ class BrowserImpl implements Browser {
         Configuration.timeout = TimeUnit.SECONDS.toMillis(15);
         Configuration.browser = "chrome";
         Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
-        // Configuration.headless = false;
-
+        Configuration.headless = false;
     }
 
     @Override
@@ -551,6 +551,11 @@ class BrowserImpl implements Browser {
         By selector = constructCssSelectorByType(elementType);
 
         findElementInAllFrames(selector, Condition.exist, Condition.exactText(text));
+    }
+
+    @Override
+    public void executeJavaScript(String script, Object... args) {
+        Selenide.executeJavaScript(script, args);
     }
 
     @Override

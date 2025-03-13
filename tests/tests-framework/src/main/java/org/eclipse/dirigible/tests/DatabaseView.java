@@ -23,7 +23,11 @@ public class DatabaseView {
 
     private final String testInsertStatement = "INSERT INTO STUDENT VALUES (1, 'John Smith', 'Sofia, Bulgaria')";
     private final String testCreateTableStatement =
-            "CREATE TABLE STUDENT (" + "id SERIAL PRIMARY KEY," + "name TEXT NOT NULL," + "address TEXT NOT NULL" + ");";
+            "CREATE TABLE IF NOT EXISTS STUDENT (" +
+                    " id SERIAL PRIMARY KEY, " +
+                    " name TEXT NOT NULL, " +
+                    " address TEXT NOT NULL" +
+                    ");";
 
     protected DatabaseView(Browser browser) {
         this.browser = browser;
@@ -43,18 +47,18 @@ public class DatabaseView {
     }
 
     public void assertEmptyTable() {
-        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, "STUDENT");
+        //        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, "STUDENT");
+        browser.rightClickOnElementById("j1_215_anchor"); // Student table id
         browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Show contents");
-
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.DIV, "Empty result");
-        // Assert empty set
+        browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.CLASS, "fd-message-page__title", "Empty result");
     }
 
     public void assertResult() {
-        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, "STUDENT");
+//        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, "STUDENT");
+        browser.rightClickOnElementById("j1_215_anchor"); // Student table id
         browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Show contents");
-
         // Assert correct insert
+
     }
 
     private void expandSchema(String schemaName) {
@@ -62,33 +66,25 @@ public class DatabaseView {
     }
 
     public void createTestTable() {
-        clearEditor();
-
-        browser.clickOnElementByAttributePattern(HtmlElementType.DIV, HtmlAttribute.CLASS, "view-lines monaco-mouse-cursor-text");
-        browser.clickOnElementWithExactClass(HtmlElementType.DIV, "view-line");
-
-        browser.enterTextInElementByAttributePattern(HtmlElementType.TEXT_AREA, HtmlAttribute.CLASS, "inputarea monaco-mouse-cursor-text",
-                testCreateTableStatement);
-
-        // select text
+        insertIntoEditor(testCreateTableStatement);
+        browser.pressMultipleKeys(Keys.COMMAND, "a");
         browser.pressKey(Keys.F8);
-
     }
 
     public void createTestRecord() {
-        clearEditor();
-        browser.enterTextInElementByAttributePattern(HtmlElementType.TEXT_AREA, HtmlAttribute.CLASS, "inputarea monaco-mouse-cursor-text",
-                testInsertStatement);
-
-        // select text
+        insertIntoEditor(testInsertStatement);
         browser.pressMultipleKeys(Keys.COMMAND, "a");
         browser.pressKey(Keys.F8);
     }
 
-    private void clearEditor() {
+    private void insertIntoEditor(String text) {
+        // Click in the editor to focus it. Does not work with browser.enterText...
         browser.clickOnElementWithExactClass(HtmlElementType.DIV, "view-line");
+
         browser.pressMultipleKeys(Keys.COMMAND, "a");
         browser.pressKey(Keys.DELETE);
+
+        browser.type(text);
     }
 }
 
