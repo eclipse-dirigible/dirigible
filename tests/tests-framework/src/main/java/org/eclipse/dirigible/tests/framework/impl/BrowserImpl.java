@@ -75,7 +75,7 @@ class BrowserImpl implements Browser {
         Configuration.timeout = TimeUnit.SECONDS.toMillis(15);
         Configuration.browser = "chrome";
         Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
-        //        Configuration.headless = false;
+        // Configuration.headless = false;
     }
 
     @Override
@@ -189,7 +189,8 @@ class BrowserImpl implements Browser {
                 .window(Selenide.webdriver()
                                 .object()
                                 .getWindowHandles()
-                                .size() - 1);
+                                .size()
+                        - 1);
     }
 
     @Override
