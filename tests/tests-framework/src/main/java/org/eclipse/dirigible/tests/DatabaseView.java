@@ -40,6 +40,7 @@ public class DatabaseView {
 
     public void assertEmptyTable() {
         // browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, "STUDENT");
+
         browser.rightClickOnElementById("j1_215_anchor"); // Student table id
         browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Show contents");
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.CLASS, "fd-message-page__title",
@@ -47,7 +48,7 @@ public class DatabaseView {
     }
 
     public void assertResult() {
-        browser.rightClickOnElementById("j1_215_anchor"); // Student table id
+        browser.rightClickOnElementById("j1_215_anchor");
         browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Show contents");
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.CLASS, "tdSingleLine", "1"); // Assert if
     }
@@ -60,14 +61,14 @@ public class DatabaseView {
         String testCreateTableStatement = "CREATE TABLE IF NOT EXISTS STUDENT (" + " id SERIAL PRIMARY KEY, " + " name TEXT NOT NULL, "
                 + " address TEXT NOT NULL" + ");";
         insertIntoEditor(testCreateTableStatement);
-        browser.pressMultipleKeys(Keys.COMMAND, "a");
+        selectAll();
         browser.pressKey(Keys.F8);
     }
 
     public void createTestRecord() {
         String testInsertStatement = "INSERT INTO STUDENT VALUES (1, 'John Smith', 'Sofia, Bulgaria')";
         insertIntoEditor(testInsertStatement);
-        browser.pressMultipleKeys(Keys.COMMAND, "a");
+        selectAll();
         browser.pressKey(Keys.F8);
     }
 
@@ -75,10 +76,20 @@ public class DatabaseView {
         // Click in the editor to focus it. Does not work with browser.enterText...
         browser.clickOnElementWithExactClass(HtmlElementType.DIV, "view-line");
 
-        browser.pressMultipleKeys(Keys.COMMAND, "a");
+        selectAll();
         browser.pressKey(Keys.DELETE);
 
         browser.type(text);
+    }
+
+    private void selectAll() {
+        if (System.getProperty("os.name")
+                  .toLowerCase()
+                  .contains("mac"))
+            browser.pressMultipleKeys(Keys.COMMAND, "a");
+        else
+            browser.pressMultipleKeys(Keys.CONTROL, "a");
+
     }
 }
 
