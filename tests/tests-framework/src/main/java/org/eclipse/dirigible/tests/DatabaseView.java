@@ -50,10 +50,6 @@ public class DatabaseView {
         browser.rightClickOnElementById("j1_215_anchor"); // Student table id
         browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Show contents");
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.CLASS, "tdSingleLine", "1"); // Assert if
-                                                                                                                            // table ID is 1
-                                                                                                                            // ->
-                                                                                                                            // successfully
-                                                                                                                            // inserted
     }
 
     private void expandSchema(String schemaName) {

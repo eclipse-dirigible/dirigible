@@ -18,13 +18,15 @@ class DatabaseAvailabilityIT extends UserInterfaceIntegrationTest {
     @Test
     void testDatabaseFunctionality() {
         DatabaseView database = ide.openDatabase();
-        SleepUtil.sleepSeconds(2);
+        SleepUtil.sleepMillis(2000);
 
         database.expandSubviews();
         database.assertAvailabilityOfSubitems();
+        SleepUtil.sleepMillis(2000);
 
         database.createTestTable();
         database.assertEmptyTable();
+        SleepUtil.sleepMillis(2000);
 
         database.createTestRecord();
         database.assertResult();
