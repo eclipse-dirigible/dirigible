@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.tests;
 
+import org.apache.commons.lang3.SystemUtils;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
@@ -83,9 +84,7 @@ public class DatabaseView {
     }
 
     private void selectAll() {
-        if (System.getProperty("os.name")
-                  .toLowerCase()
-                  .contains("mac"))
+        if (SystemUtils.IS_OS_MAC)
             browser.pressMultipleKeys(Keys.COMMAND, "a");
         else
             browser.pressMultipleKeys(Keys.CONTROL, "a");
