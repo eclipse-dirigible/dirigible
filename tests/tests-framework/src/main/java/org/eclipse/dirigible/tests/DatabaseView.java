@@ -70,9 +70,8 @@ public class DatabaseView {
     }
 
     public void createTestTable() {
-        insertIntoEditor(
-                "CREATE TABLE IF NOT EXISTS STUDENT (" + " id SERIAL PRIMARY KEY, " + " name TEXT NOT NULL, " + " address TEXT NOT NULL"
-                        + ");");
+        insertIntoEditor("CREATE TABLE IF NOT EXISTS STUDENT (" + " id SERIAL PRIMARY KEY, " + " name TEXT NOT NULL, "
+                + " address TEXT NOT NULL" + ");");
         selectAll();
         browser.pressKey(Keys.F8);
     }
