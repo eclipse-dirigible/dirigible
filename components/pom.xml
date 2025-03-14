@@ -241,7 +241,6 @@
 		<module>ui/service-publisher</module>
 		<module>ui/service-generate</module>
 		<module>ui/service-actions</module>
-		<module>ui/service-entity</module>
 		<module>ui/service-git</module>
 		<module>ui/service-extensions</module>
 		<module>ui/editor-monaco</module>
@@ -1387,11 +1386,6 @@
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
 				<artifactId>dirigible-components-ui-service-actions</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-service-entity</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
