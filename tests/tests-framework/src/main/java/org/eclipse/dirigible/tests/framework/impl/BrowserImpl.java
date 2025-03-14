@@ -53,6 +53,7 @@ class BrowserImpl implements Browser {
 
     static {
         configureSelenide();
+
     }
 
     private final String protocol;
@@ -68,16 +69,6 @@ class BrowserImpl implements Browser {
         this.protocol = protocolType.protocol;
         this.host = host;
         this.port = port;
-    }
-
-    enum ProtocolType {
-        HTTP("http"), HTTPS("https");
-
-        private final String protocol;
-
-        ProtocolType(String protocol) {
-            this.protocol = protocol;
-        }
     }
 
     private static void configureSelenide() {
@@ -148,6 +139,15 @@ class BrowserImpl implements Browser {
         return Selectors.byCssSelector(cssSelector);
     }
 
+    public By constructCssSelectorByTypeAndExactAttribute(String elementType, String attribute, String value) {
+        String cssSelector = elementType + "[" + attribute + "='" + value + "']";
+        return Selectors.byCssSelector(cssSelector);
+    }
+
+    public By constructCssSelectorByTypeAndExactAttribute(HtmlElementType elementType, HtmlAttribute attribute, String value) {
+        return constructCssSelectorByTypeAndExactAttribute(elementType.getType(), attribute.getAttribute(), value);
+    }
+
     @Override
     public void handleElementInAllFrames(By by, Consumer<SelenideElement> elementHandler, WebElementCondition... conditions) {
         SelenideElement element = findElementInAllFrames(by, conditions);
@@ -203,6 +203,16 @@ class BrowserImpl implements Browser {
                 .sendKeys(key)
                 .perform();
     }
+
+    @Override
+    public void pressMultipleKeys(Keys modifier, CharSequence charSequence) {
+        Selenide.actions()
+                .keyDown(modifier)
+                .sendKeys(charSequence)
+                .keyUp(modifier)
+                .perform();
+    }
+
 
     @Override
     public void type(String text) {
@@ -375,8 +385,23 @@ class BrowserImpl implements Browser {
         handleElementInAllFrames(by, this::rightClickElement, Condition.visible, Condition.enabled);
     }
 
+    @Override
+    public void rightClickOnElementByText(HtmlElementType elementType, String text) {
+        rightClickOnElementByText(elementType.getType(), text);
+    }
+
+    @Override
+    public void rightClickOnElementByText(String elementType, String text) {
+        SelenideElement element = getElementByAttributeAndExactText(elementType, text);
+
+        element.shouldBe(Condition.visible);
+        element.shouldBe(Condition.exactText(text));
+
+        rightClickElement(element);
+    }
+
     private void rightClickElement(SelenideElement element) {
-        element.scrollIntoView(false)
+        element.scrollIntoView(true)
                .contextClick();
     }
 
@@ -441,6 +466,12 @@ class BrowserImpl implements Browser {
         element.doubleClick();
     }
 
+    private SelenideElement getElementByAttributeAndExactText(String elementType, String text) {
+        By selector = constructCssSelectorByType(elementType);
+
+        return findElementInAllFrames(selector, Condition.exist, Condition.exactText(text));
+    }
+
     private SelenideElement getElementByAttributeAndContainsText(String elementType, String text) {
         By selector = constructCssSelectorByType(elementType);
 
@@ -481,6 +512,12 @@ class BrowserImpl implements Browser {
     }
 
     @Override
+    public void clickOnElementWithExactClass(HtmlElementType elementType, String className) {
+        By by = constructCssSelectorByTypeAndExactAttribute(elementType, HtmlAttribute.CLASS, className);
+        handleElementInAllFrames(by, this::clickElement, Condition.visible, Condition.enabled);
+    }
+
+    @Override
     public void clickOnElementByAttributePattern(HtmlElementType elementType, HtmlAttribute attribute, String pattern) {
         clickOnElementByAttributePattern(elementType.getType(), attribute.getAttribute(), pattern);
     }
@@ -491,6 +528,26 @@ class BrowserImpl implements Browser {
 
         handleElementInAllFrames(by, SelenideElement::click);
     }
+
+    @Override
+    public void clickElementByAttributes(HtmlElementType elementType, Map<HtmlAttribute, String> attributes) {
+        if (attributes.isEmpty()) {
+            throw new IllegalArgumentException("Attributes map cannot be empty");
+        }
+
+        StringBuilder cssSelector = new StringBuilder(elementType.getType());
+        attributes.forEach((attribute, value) -> {
+            cssSelector.append("[")
+                       .append(attribute.getAttribute())
+                       .append("='")
+                       .append(value)
+                       .append("']");
+        });
+
+        By by = Selectors.byCssSelector(cssSelector.toString());
+        handleElementInAllFrames(by, SelenideElement::click, Condition.visible);
+    }
+
 
     @Override
     public void assertElementExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text) {
@@ -538,5 +595,15 @@ class BrowserImpl implements Browser {
     @Override
     public String getPageTitle() {
         return Selenide.title();
+    }
+
+    enum ProtocolType {
+        HTTP("http"), HTTPS("https");
+
+        private final String protocol;
+
+        ProtocolType(String protocol) {
+            this.protocol = protocol;
+        }
     }
 }
