@@ -1,5 +1,5 @@
 {
-    "module": "portal/services/dashboard.js",
-    "extensionPoint": "ide-view",
-    "description": "Dashboard View"
+    "module": "portal/configs/dashboard.js",
+    "extensionPoint": "platform-shells",
+    "description": "Dashboard Shell"
 }

@@ -7,20 +7,20 @@ export function getSources(parameters) {
 	return [
 		// Location: "gen/{{genFolderName}}/ui/perspective"
 		{
-			location: "/template-application-ui-angular/ui/perspective/index.html",
+			location: "/template-application-ui-angular/ui/perspective/index.html.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/index.html",
 			collection: "uiReportChartModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/perspective.extension",
+			location: "/template-application-ui-angular/ui/perspective/perspective.extension.template",
 			action: "generate",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/perspective.extension",
 			collection: "uiReportChartModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/perspective-portal.extension",
+			location: "/template-application-ui-angular/ui/perspective/perspective-portal.extension.template",
 			action: "generate",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/perspective-portal.extension",
 			collection: "uiReportChartModels"

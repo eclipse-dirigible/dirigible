@@ -1,9 +1,9 @@
 #set($dollar = '$')
-angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
-	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
+angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+	.config(["EntityServiceProvider", function (EntityServiceProvider) {
+		EntityServiceProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
 	}])
-	.controller('PageController', function ($scope,#if($hasDropdowns) ${dollar}http,#end, entityApi, Extensions) {
+	.controller('PageController', function ($scope,#if($hasDropdowns) ${dollar}http,#end, EntityService, Extensions) {
 		const Dialogs = new DialogHub();
 		$scope.dataPage = 1;
 		$scope.dataCount = 0;
@@ -13,7 +13,7 @@ angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
 
 		//-----------------Custom Actions-------------------//
 		Extensions.getWindows(['${projectName}-custom-action']).then((response) => {
-			$scope.pageActions = response.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && (e.type === "page" || e.type === undefined));
+			$scope.pageActions = response.data.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && (e.type === "page" || e.type === undefined));
 		});
 
 		$scope.triggerPageAction = (action) => {
@@ -61,7 +61,7 @@ angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
 				filter = {};
 			}
 			$scope.selectedEntity = null;
-			entityApi.count(filter).then(function (response) {
+			EntityService.count(filter).then(function (response) {
 				if (response.status != 200) {
 					Dialogs.showAlert({
 						title: "${name}",
@@ -80,7 +80,7 @@ angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
 					filter.$offset = 0;
 					filter.$limit = $scope.dataPage * $scope.dataLimit;
 				}
-				entityApi.search(filter).then(function (response) {
+				EntityService.search(filter).then(function (response) {
 					if (response.status != 200) {
 						Dialogs.showAlert({
 						title: "${name}",

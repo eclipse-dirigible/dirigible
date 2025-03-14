@@ -1,9 +1,9 @@
 #set($dollar = '$')
-angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
-	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
+angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+	.config(["EntityServiceProvider", function (EntityServiceProvider) {
+		EntityServiceProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
 	}])
-	.controller('PageController', function ($scope, ViewParameters, entityApi) {
+	.controller('PageController', function ($scope, ViewParameters, EntityService) {
 		const Dialogs = new DialogHub();
 		$scope.entity = {};
 		$scope.forms = {
@@ -44,7 +44,7 @@ angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
 		$scope.create = () => {
 			let entity = $scope.entity;
 			entity[$scope.selectedMainEntityKey] = $scope.selectedMainEntityId;
-			entityApi.create(entity).then(function (response) {
+			EntityService.create(entity).then(function (response) {
 				if (response.status != 201) {
 					Dialogs.showAlert({
 						title: "${name}",
@@ -67,7 +67,7 @@ angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
 			let id = ${dollar}scope.entity.${primaryKeysString};
 			let entity = $scope.entity;
 			entity[$scope.selectedMainEntityKey] = $scope.selectedMainEntityId;
-			entityApi.update(id, entity).then(function (response) {
+			EntityService.update(id, entity).then(function (response) {
 				if (response.status != 200) {
 					Dialogs.showAlert({
 						title: "${name}",
@@ -96,13 +96,13 @@ angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
 #if($property.widgetDependsOnProperty)
 		${dollar}scope.${dollar}watch('entity.${property.widgetDependsOnProperty}', function (newValue, oldValue) {
 			if (newValue !== undefined && newValue !== null) {
-				entityApi.${dollar}http.get(${dollar}scope.service${property.widgetDependsOnProperty} + '/' + newValue).then(function (response) {
+				EntityService.${dollar}http.get(${dollar}scope.service${property.widgetDependsOnProperty} + '/' + newValue).then(function (response) {
 					let valueFrom = response.data.${property.widgetDependsOnValueFrom};
 #if($property.widgetType != "DROPDOWN")
 					$scope.entity.${property.name} = valueFrom;
 #end
 #if($property.widgetType == "DROPDOWN")
-					entityApi.${dollar}http.post("${property.widgetDropdownUrl}/search", {
+					EntityService.${dollar}http.post("${property.widgetDropdownUrl}/search", {
 						$filter: {
 							equals: {
 								${property.widgetDependsOnFilterBy}: valueFrom

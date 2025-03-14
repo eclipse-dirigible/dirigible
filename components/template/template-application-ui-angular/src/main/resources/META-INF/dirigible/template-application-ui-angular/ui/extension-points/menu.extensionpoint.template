@@ -1,4 +1,0 @@
-{
-    "name": "${projectName}-menus",
-    "description": "${projectName} - Extension Point for the Application Main Menu"
-}

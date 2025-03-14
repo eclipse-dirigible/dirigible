@@ -12,62 +12,49 @@
 
 -->
 <!DOCTYPE html>
-<html lang="en" ng-app="app" ng-controller="ApplicationController" xmlns="http://www.w3.org/1999/xhtml">
+<html lang="en" ng-app="shell" ng-controller="ApplicationController" xmlns="http://www.w3.org/1999/xhtml">
 
     <head>
         <meta charset="utf-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link rel="icon" href="data:;base64,iVBORw0KGgo=" dg-brand-icon />
-        <title dg-brand-title></title>
-        <script type="text/javascript" src="ui/launchpad/perspective.js"></script>
-        <theme></theme>
-        <script type="text/javascript"
-            src="/services/js/resources-core/services/loader.js?id=application-perspective-js">
-        </script>
-        <link type="text/css" rel="stylesheet"
-            href="/services/js/resources-core/services/loader.js?id=application-perspective-css" />
+        <link rel="icon" href="data:;base64,iVBORw0KGgo=" config-icons />
+        <title shell-title></title>
+        <script type="text/javascript" src="/services/web/portal/ui/launchpad/shell.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=shell-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=shell-css" />
     </head>
 
     <body>
-        <ide-header menu-ext-id="portal-menu"></ide-header>
+        <shell-header></shell-header>
+        <perspective-container condensed="true"></perspective-container>
+        <status-bar></status-bar>
 
-        <ide-container>
-            <view id="portal-home-launchpad"></view>
-        </ide-container>
-
-        <ide-dialogs></ide-dialogs>
-        <ide-status-bar></ide-status-bar>
+        <dialogs></dialogs>
+        <context-menu></context-menu>
+        <notifications></notifications>
 
         <script type="text/javascript">
-            angular.module('app', ['ngResource', 'ideLayout', 'ideUI'])
-                .constant('branding', {
-                    name: 'Applications Portal',
-                    brand: 'Eclipse Dirigible',
-                    brandUrl: 'https://dirigible.io',
-                    icons: {
-                        faviconIco: '/services/web/ide-branding/images/favicon.ico',
-                        favicon32: '/services/web/ide-branding/images/favicon-32x32.png',
-                        favicon16: '/services/web/ide-branding/images/favicon-16x16.png',
-                    },
-                    logo: '/services/web/ide-branding/images/logo.svg',
-                })
-                .constant('extensionPoint', {
-                    perspectives: "portal",
-                    views: "portal-view",
-                    dialogWindows: "portal-dialog-window"
-                })
-                .config(["messageHubProvider", function (messageHubProvider) {
-                    messageHubProvider.eventIdPrefix = 'portal.launchpad.Home';
-                }])
-                .controller('ApplicationController', ["$scope", "messageHub", function ($scope, messageHub) {
-
-                    messageHub.onDidReceiveMessage("openView", function (msg) {
-                        window.location = msg.data.location;
-                    });
-
-                }]);
+            setExtPoints({
+                perspectives: ['application-perspectives'],
+                shells: ['application-shells'],
+                views: ['application-views'],
+                subviews: ['application-subviews'],
+                editors: ['application-editors'],
+                menus: ['application-menus'],
+                windows: ['application-windows']
+            });
+            addExtPoints({
+                theme: 'application-themes',
+            });
+            angular.module('shell', ['blimpKit', 'platformShell'])
+                .controller('ApplicationController', ($scope) => {
+                    const MessageHub = new MessageHubApi();
+                    MessageHub.addMessageListener({ topic: 'portal.launchpad.Home.openView', handler: (data) => {
+                        window.location = data.location;
+                    }});
+                });
         </script>
+        <theme></theme>
     </body>
 
 </html>

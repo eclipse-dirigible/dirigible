@@ -1,5 +1,0 @@
-{
-    "module": "platform-core/extension-services/system-menus/window.js",
-    "extensionPoint": "platform-menus",
-    "description": "Window Menu"
-}

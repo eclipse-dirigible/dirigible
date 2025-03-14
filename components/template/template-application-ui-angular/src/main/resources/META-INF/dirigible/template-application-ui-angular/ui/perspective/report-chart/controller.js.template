@@ -10,11 +10,11 @@
 #set($hasDropdowns = true)
 #end
 #end
-angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
-	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
+angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+	.config(["EntityServiceProvider", function (EntityServiceProvider) {
+		EntityServiceProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
 	}])
-	.controller('PageController', function (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end entityApi) {
+	.controller('PageController', function (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end EntityService) {
 		const Dialogs = new DialogHub();
 		$scope.filter = {};
 
@@ -47,7 +47,7 @@ angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
 		//-----------------Events-------------------//
 
 		$scope.loadPage = function () {
-			entityApi.count($scope.filter).then(function (response) {
+			EntityService.count($scope.filter).then(function (response) {
 				if (response.status != 200) {
 					Dialogs.showAlert({
 						title: "${name}",
@@ -57,7 +57,7 @@ angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
 					return;
 				}
 				$scope.dataCount = response.data;
-				entityApi.list($scope.filter).then(function (response) {
+				EntityService.list($scope.filter).then(function (response) {
 					if (response.status != 200) {
 						Dialogs.showAlert({
 							title: "${name}",

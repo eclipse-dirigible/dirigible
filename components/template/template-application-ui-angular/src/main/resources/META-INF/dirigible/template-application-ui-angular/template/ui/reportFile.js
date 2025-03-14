@@ -18,20 +18,20 @@ function getReportPerspectiveSources() {
     return [
         // Location: "gen/{{genFolderName}}/ui/perspective"
         {
-            location: "/template-application-ui-angular/ui/perspective/index-report-file.html",
+            location: "/template-application-ui-angular/ui/perspective/index-report-file.html.template",
             action: "generate",
             engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/Reports/index.html",
             collection: "generateReportModels"
         },
         {
-            location: "/template-application-ui-angular/ui/perspective/perspective-report-file.extension",
+            location: "/template-application-ui-angular/ui/perspective/perspective-report-file.extension.template",
             action: "generate",
             rename: "gen/{{genFolderName}}/ui/Reports/perspective.extension",
             collection: "generateReportModels"
         },
         {
-            location: "/template-application-ui-angular/ui/perspective/perspective-portal-report.extension",
+            location: "/template-application-ui-angular/ui/perspective/perspective-portal-report.extension.template",
             action: "generate",
             rename: "gen/{{genFolderName}}/ui/Reports/perspective-portal.extension",
             collection: "generateReportModels"

@@ -6,7 +6,7 @@ angular.module('page', ['blimpKit', 'platformView'])
 
 		//-----------------Custom Actions-------------------//
 		Extensions.getWindows(['${projectName}-custom-action']).then((response) => {
-			$scope.entityActions = response.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && e.type === "entity");
+			$scope.entityActions = response.data.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && e.type === "entity");
 		});
 
 		$scope.triggerEntityAction = (action) => {

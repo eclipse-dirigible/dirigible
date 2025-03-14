@@ -1,0 +1,4 @@
+{
+    "name": "application-windows",
+    "description": "Extension Point for the Application Dialog Window Providers"
+}

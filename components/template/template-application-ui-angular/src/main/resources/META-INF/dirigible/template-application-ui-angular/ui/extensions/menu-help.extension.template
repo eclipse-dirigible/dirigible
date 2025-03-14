@@ -1,5 +1,0 @@
-{
-    "module": "${projectName}/gen/${genFolderName}/ui/extension-services/menu-help.js",
-    "extensionPoint": "${projectName}-menus",
-    "description": "Help Menu"
-}

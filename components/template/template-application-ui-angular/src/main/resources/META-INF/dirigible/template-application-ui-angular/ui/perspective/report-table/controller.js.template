@@ -10,11 +10,11 @@
 #set($hasDropdowns = true)
 #end
 #end
-angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
-	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
+angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+	.config(["EntityServiceProvider", function (EntityServiceProvider) {
+		EntityServiceProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
 	}])
-	.controller('PageController', function (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end, entityApi) {
+	.controller('PageController', function (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end, EntityService) {
 		const Dialogs = new DialogHub();
 
 		$scope.filter = {};
@@ -40,13 +40,13 @@ angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
 				...$scope.filter
 			};
 			$scope.dataPage = pageNumber;
-			entityApi.count($scope.filter).then(function (response) {
+			EntityService.count($scope.filter).then(function (response) {
 				if (response.status != 200) {
 					Dialogs.showAlertError({ title: "${name}", message: `Unable to count ${name}: '${response.message}'`, type: AlertTypes.Error });
 					return;
 				}
 				$scope.dataCount = response.data;
-				entityApi.list(listFilter).then(function (response) {
+				EntityService.list(listFilter).then(function (response) {
 					if (response.status != 200) {
 						Dialogs.showAlert({ title: "${name}", message: `Unable to list ${name}: '${response.message}'`, type: AlertTypes.Error });
 						return;

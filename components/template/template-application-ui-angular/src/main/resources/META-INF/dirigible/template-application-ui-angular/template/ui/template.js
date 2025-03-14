@@ -3,8 +3,6 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-import * as extensionPointsTemplate from "template-application-ui-angular/template/ui/extensionPoints";
-import * as extensionsTemplate from "template-application-ui-angular/template/ui/extensions";
 import * as listTemplate from "template-application-ui-angular/template/ui/list";
 import * as manageTemplate from "template-application-ui-angular/template/ui/manage";
 import * as masterDetailsListTemplate from "template-application-ui-angular/template/ui/masterDetailsList";
@@ -13,14 +11,11 @@ import * as reportTemplate from "template-application-ui-angular/template/ui/rep
 import * as reportChartTemplate from "template-application-ui-angular/template/ui/reportChart";
 import * as reportTableTemplate from "template-application-ui-angular/template/ui/reportTable";
 // import * as perspective from "template-application-ui-angular/template/ui/perspective";
-import * as launchpad from "template-application-ui-angular/template/ui/launchpad";
 // import * as tiles from "template-application-ui-angular/template/ui/tiles";
 // import * as menu from "template-application-ui-angular/template/ui/menu";
 
 export function getSources(parameters) {
     return [
-        ...extensionPointsTemplate.getSources(parameters),
-        ...extensionsTemplate.getSources(parameters),
         ...launchpad.getSources(parameters),
         ...listTemplate.getSources(parameters),
         ...manageTemplate.getSources(parameters),

@@ -1,9 +1,9 @@
 #set($dollar = '$')
-angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
-    .config(["entityApiProvider", function (entityApiProvider) {
-        entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
+angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+    .config(["EntityServiceProvider", function (EntityServiceProvider) {
+        EntityServiceProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
     }])
-    .controller('PageController', function ($scope, entityApi, ViewParameters) {
+    .controller('PageController', function ($scope, EntityService, ViewParameters) {
         const Dialogs = new DialogHub();
 		let params = ViewParameters.get();
 		if (Object.keys(params).length) {         
@@ -54,9 +54,9 @@ angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
             }
             let request;
             if (filter) {
-                request = entityApi.search(filter);
+                request = EntityService.search(filter);
             } else {
-                request = entityApi.list();
+                request = EntityService.list();
             }
             request.then(function (response) {
                 if (response.status != 200) {

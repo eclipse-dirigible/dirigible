@@ -1,9 +1,9 @@
 #set($dollar = '$')
-angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
-	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
+angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+	.config(["EntityServiceProvider", function (EntityServiceProvider) {
+		EntityServiceProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
 	}])
-	.controller('PageController', function (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end entityApi, Extensions, ButtonStates) {
+	.controller('PageController', function (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end EntityService, Extensions, ButtonStates) {
 		const Dialogs = new DialogHub();
 		$scope.dataPage = 1;
 		$scope.dataCount = 0;
@@ -11,8 +11,8 @@ angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
 
 		//-----------------Custom Actions-------------------//
 		Extensions.getWindows(['${projectName}-custom-action']).then((response) => {
-			$scope.pageActions = response.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && (e.type === "page" || e.type === undefined));
-			$scope.entityActions = response.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && e.type === "entity");
+			$scope.pageActions = response.data.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && (e.type === "page" || e.type === undefined));
+			$scope.entityActions = response.data.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && e.type === "entity");
 		});
 
 		$scope.triggerPageAction = (action) => {
@@ -64,7 +64,7 @@ angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
 				filter = $scope.filter;
 			}
 			$scope.dataPage = pageNumber;
-			entityApi.count(filter).then(function (response) {
+			EntityService.count(filter).then(function (response) {
 				if (response.status != 200) {
 					Dialogs.showAlert({
 						title: "${name}",
@@ -82,9 +82,9 @@ angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
 				if (filter) {
 					filter.$offset = offset;
 					filter.$limit = limit;
-					request = entityApi.search(filter);
+					request = EntityService.search(filter);
 				} else {
-					request = entityApi.list(offset, limit);
+					request = EntityService.list(offset, limit);
 				}
 				request.then(function (response) {
 					if (response.status != 200) {
@@ -206,7 +206,7 @@ angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
 				}]
 			}).then((buttonId) => {
 				if (buttonId === "delete-btn-yes") {
-					entityApi.delete(id).then(function (response) {
+					EntityService.delete(id).then(function (response) {
 						if (response.status != 204) {
 							Dialogs.showAlert({
 								title: "${name}",
