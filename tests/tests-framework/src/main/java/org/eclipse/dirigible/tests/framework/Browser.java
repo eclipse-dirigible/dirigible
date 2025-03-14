@@ -84,8 +84,6 @@ public interface Browser {
 
     void rightClickOnElementByText(String elementType, String text);
 
-    void executeJavaScript(String script, Object... args);
-
     void reload();
 
     String createScreenshot();
@@ -119,8 +117,7 @@ public interface Browser {
 
     void pressKey(Keys key);
 
-
-    void pressMultipleKeys(Keys modifier, CharSequence key);
+    void pressMultipleKeys(Keys modifier, CharSequence charSequence);
 
     void type(String text);
 

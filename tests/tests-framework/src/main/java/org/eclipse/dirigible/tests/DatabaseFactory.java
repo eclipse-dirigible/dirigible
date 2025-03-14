@@ -23,11 +23,11 @@ public class DatabaseFactory {
         this.browser = browser;
     }
 
-    public DatabaseView create() {
+    public DatabasePerspective create() {
         return create(browser);
     }
 
-    public DatabaseView create(Browser browser) {
-        return new DatabaseView(browser);
+    public DatabasePerspective create(Browser browser) {
+        return new DatabasePerspective(browser);
     }
 }

@@ -21,10 +21,10 @@ import java.util.Map;
 
 @Lazy
 @Component
-public class DatabaseView {
+public class DatabasePerspective {
     private final Browser browser;
 
-    protected DatabaseView(Browser browser) {
+    protected DatabasePerspective(Browser browser) {
         this.browser = browser;
     }
 
@@ -32,65 +32,80 @@ public class DatabaseView {
         String url = System.getenv("DIRIGIBLE_DATASOURCE_DEFAULT_URL");
 
         if (url != null && url.contains("postgresql"))
-            expandSchema("public");
+            expandSubmenu("public");
         else
-            expandSchema("PUBLIC");
+            expandSubmenu("PUBLIC");
 
-        expandSchema("Tables");
+        expandSubmenu("Tables");
+        refreshTables();
+    }
 
-        browser.clickElementByAttributes(HtmlElementType.BUTTON,
-                Map.of(HtmlAttribute.CLASS, "fd-button fd-button--transparent", HtmlAttribute.TITLE, "Refresh"));
+    public void expandSubmenu(String schemaName) {
+        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, schemaName);
     }
 
     public void assertAvailabilityOfSubitems() {
-        browser.assertElementExistsByTypeAndText(HtmlElementType.ANCHOR, "Tables");
-        browser.assertElementExistsByTypeAndText(HtmlElementType.ANCHOR, "Views");
-        browser.assertElementExistsByTypeAndText(HtmlElementType.ANCHOR, "Procedures");
-        browser.assertElementExistsByTypeAndText(HtmlElementType.ANCHOR, "Functions");
-        browser.assertElementExistsByTypeAndText(HtmlElementType.ANCHOR, "Sequences");
+        assertSubmenu("Tables");
+        assertSubmenu("Views");
+        assertSubmenu("Procedures");
+        assertSubmenu("Functions");
+        assertSubmenu("Sequences");
     }
 
-    public void assertEmptyTable() {
-        browser.rightClickOnElementByText(HtmlElementType.ANCHOR, "STUDENT");
+    public void assertSubmenu(String submenu) {
+        browser.assertElementExistsByTypeAndText(HtmlElementType.ANCHOR, submenu);
+    }
+
+    public void showTableContents(String tableName) {
+        browser.rightClickOnElementByText(HtmlElementType.ANCHOR, tableName);
         browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Show contents");
+    }
+
+    public void assertEmptyTable(String tableName) {
+        showTableContents(tableName);
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.CLASS, "fd-message-page__title",
                 "Empty result");
     }
 
-    public void assertResult() {
-        browser.rightClickOnElementByText(HtmlElementType.ANCHOR, "STUDENT");
-        browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Show contents");
-
-        // Assert if table id is 1 -> correct insertion
-        browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.CLASS, "tdSingleLine", "1");
+    public void assertHasColumn(String columnName) {
+        browser.assertElementExistsByTypeAndText(HtmlElementType.TH, columnName);
     }
 
-    private void expandSchema(String schemaName) {
-        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, schemaName);
+    public void assertCellContent(String content) {
+        browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.CLASS, "tdSingleLine", content);
+    }
+
+    public void assertResult() {
+        showTableContents("STUDENT");
+
+        // Assert if table id is 1 -> correct insertion
+        assertCellContent("1");
+    }
+
+    public void refreshTables() {
+        browser.clickElementByAttributes(HtmlElementType.BUTTON,
+                Map.of(HtmlAttribute.CLASS, "fd-button fd-button--transparent", HtmlAttribute.TITLE, "Refresh"));
     }
 
     public void createTestTable() {
-        insertIntoEditor("CREATE TABLE IF NOT EXISTS STUDENT (" + " id SERIAL PRIMARY KEY, " + " name TEXT NOT NULL, "
-                + " address TEXT NOT NULL" + ");");
-        selectAll();
-        browser.pressKey(Keys.F8);
+        executeSql("CREATE TABLE IF NOT EXISTS STUDENT (" + " id SERIAL PRIMARY KEY, " + " name TEXT NOT NULL, " + " address TEXT NOT NULL"
+                + ");");
     }
 
     public void createTestRecord() {
-        insertIntoEditor("INSERT INTO STUDENT VALUES (1, 'John Smith', 'Sofia, Bulgaria')");
-
-        selectAll();
-        browser.pressKey(Keys.F8);
+        executeSql("INSERT INTO STUDENT VALUES (1, 'John Smith', 'Sofia, Bulgaria')");
     }
 
-    private void insertIntoEditor(String text) {
+    public void executeSql(String sql) {
         // Click in the editor to focus it. Does not work with browser.enterText...
         browser.clickOnElementWithExactClass(HtmlElementType.DIV, "view-line");
 
         selectAll();
         browser.pressKey(Keys.DELETE);
 
-        browser.type(text);
+        browser.type(sql);
+        selectAll();
+        browser.pressKey(Keys.F8);
     }
 
     private void selectAll() {

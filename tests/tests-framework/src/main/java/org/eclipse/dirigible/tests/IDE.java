@@ -134,7 +134,7 @@ public class IDE {
         return workbenchFactory.create(browser);
     }
 
-    public DatabaseView openDatabase() {
+    public DatabasePerspective openDatabasePerspective() {
         openHomePage();
 
         browser.clickOnElementById("perspective-database");

@@ -75,7 +75,6 @@ class BrowserImpl implements Browser {
         Configuration.timeout = TimeUnit.SECONDS.toMillis(15);
         Configuration.browser = "chrome";
         Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
-        // Configuration.headless = false;
     }
 
     @Override
@@ -206,10 +205,10 @@ class BrowserImpl implements Browser {
     }
 
     @Override
-    public void pressMultipleKeys(Keys modifier, CharSequence key) {
+    public void pressMultipleKeys(Keys modifier, CharSequence charSequence) {
         Selenide.actions()
                 .keyDown(modifier)
-                .sendKeys(key)
+                .sendKeys(charSequence)
                 .keyUp(modifier)
                 .perform();
     }
@@ -591,11 +590,6 @@ class BrowserImpl implements Browser {
         By selector = constructCssSelectorByType(elementType);
 
         findElementInAllFrames(selector, Condition.exist, Condition.exactText(text));
-    }
-
-    @Override
-    public void executeJavaScript(String script, Object... args) {
-        Selenide.executeJavaScript(script, args);
     }
 
     @Override

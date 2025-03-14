@@ -9,25 +9,23 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.eclipse.dirigible.tests.DatabaseView;
+import org.eclipse.dirigible.tests.DatabasePerspective;
 import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
-import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.junit.jupiter.api.Test;
 
-class DatabaseAvailabilityIT extends UserInterfaceIntegrationTest {
+class DatabasePerspectiveIT extends UserInterfaceIntegrationTest {
     @Test
     void testDatabaseFunctionality() {
-        DatabaseView database = ide.openDatabase();
-        SleepUtil.sleepMillis(2000);
+        DatabasePerspective databasePerspective = ide.openDatabasePerspective();
 
-        database.createTestTable(); // Creating test table first to show in the database view
+        databasePerspective.createTestTable(); // Creating test table first to show in the database view
 
-        database.expandSubviews();
-        database.assertAvailabilityOfSubitems();
+        databasePerspective.expandSubviews();
+        databasePerspective.assertAvailabilityOfSubitems();
 
-        database.assertEmptyTable();
-        database.createTestRecord();
-        database.assertResult();
+        databasePerspective.assertEmptyTable("STUDENT");
+        databasePerspective.createTestRecord();
+        databasePerspective.assertResult();
     }
 
 }
