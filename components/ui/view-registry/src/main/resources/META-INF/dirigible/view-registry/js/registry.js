@@ -30,7 +30,7 @@ registryView.controller('RegistryController', ($scope, $document, clientOS, Stat
 		path: '',
 	};
 	const imageFileExts = ['ico', 'bmp', 'png', 'jpg', 'jpeg', 'gif', 'svg'];
-	const modelFileExts = ['extension', 'extensionpoint', 'edm', 'model', 'dsm', 'schema', 'bpmn', 'job', 'listener', 'websocket', 'roles', 'constraints', 'table', 'view'];
+	const modelFileExts = ['extension', 'extensionpoint', 'edm', 'model', 'dsm', 'schema', 'dmm', 'mapping', 'bpmn', 'job', 'listener', 'websocket', 'roles', 'constraints', 'table', 'view'];
 
 	const treeData = [];
 	$scope.basePath = '/';

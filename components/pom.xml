@@ -251,6 +251,7 @@
 		<module>ui/editor-extensions</module>
 		<module>ui/editor-jobs</module>
 		<module>ui/editor-listeners</module>
+		<module>ui/editor-mapping</module>
 		<module>ui/editor-schema</module>
 		<module>ui/editor-security</module>
 		<module>ui/editor-websockets</module>
@@ -269,6 +270,7 @@
 		<module>ui/menu-form-builder</module>
 		<module>ui/menu-jobs</module>
 		<module>ui/menu-listeners</module>
+		<module>ui/menu-mapping</module>
 		<module>ui/menu-projects</module>
 		<module>ui/menu-schema</module>
 		<module>ui/menu-security</module>
@@ -1442,6 +1444,11 @@
 			</dependency>
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-ui-editor-mapping</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
 				<artifactId>dirigible-components-ui-editor-schema</artifactId>
 				<version>${project.version}</version>
 			</dependency>
@@ -1524,6 +1531,11 @@
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
 				<artifactId>dirigible-components-ui-menu-listeners</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.eclipse.dirigible</groupId>
+				<artifactId>dirigible-components-ui-menu-mapping</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
