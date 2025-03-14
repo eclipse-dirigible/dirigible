@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.tests;
 
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
@@ -43,19 +44,21 @@ public class IDE {
     private final ProjectUtil projectUtil;
     private final WorkbenchFactory workbenchFactory;
     private final DatabasePerspectiveFactory databasePerspectiveFactory;
+    private final DataSourcesManager dataSourcesManager;
 
     @Autowired
     IDE(Browser browser, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil, WorkbenchFactory workbenchFactory,
-            DatabasePerspectiveFactory databasePerspectiveFactory) {
+            DatabasePerspectiveFactory databasePerspectiveFactory, DataSourcesManager dataSourcesManager) {
         this(browser, DirigibleTestTenant.createDefaultTenant()
                                          .getUsername(),
                 DirigibleTestTenant.createDefaultTenant()
                                    .getPassword(),
-                restAssuredExecutor, projectUtil, workbenchFactory, databasePerspectiveFactory);
+                restAssuredExecutor, projectUtil, workbenchFactory, databasePerspectiveFactory, dataSourcesManager);
     }
 
     IDE(Browser browser, String username, String password, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil,
-            WorkbenchFactory workbenchFactory, DatabasePerspectiveFactory databasePerspectiveFactory) {
+            WorkbenchFactory workbenchFactory, DatabasePerspectiveFactory databasePerspectiveFactory,
+            DataSourcesManager dataSourcesManager) {
         this.browser = browser;
         this.restAssuredExecutor = restAssuredExecutor;
         this.username = username;
@@ -63,7 +66,7 @@ public class IDE {
         this.projectUtil = projectUtil;
         this.workbenchFactory = workbenchFactory;
         this.databasePerspectiveFactory = databasePerspectiveFactory;
-
+        this.dataSourcesManager = dataSourcesManager;
     }
 
     public Browser getBrowser() {
@@ -139,7 +142,7 @@ public class IDE {
 
         browser.clickOnElementById("perspective-database");
 
-        return databasePerspectiveFactory.create(browser);
+        return databasePerspectiveFactory.create(browser, dataSourcesManager);
     }
 
     public void openHomePage() {

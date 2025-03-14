@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.tests;
 
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.BrowserFactory;
 import org.eclipse.dirigible.tests.restassured.RestAssuredExecutor;
@@ -25,14 +26,17 @@ public class IDEFactory {
     private final ProjectUtil projectUtil;
     private final WorkbenchFactory workbenchFactory;
     private final DatabasePerspectiveFactory databasePerspectiveFactory;
+    private final DataSourcesManager dataSourcesManager;
 
     protected IDEFactory(BrowserFactory browserFactory, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil,
-            WorkbenchFactory workbenchFactory, DatabasePerspectiveFactory databasePerspectiveFactory) {
+            WorkbenchFactory workbenchFactory, DatabasePerspectiveFactory databasePerspectiveFactory,
+            DataSourcesManager dataSourcesManager) {
         this.browserFactory = browserFactory;
         this.restAssuredExecutor = restAssuredExecutor;
         this.projectUtil = projectUtil;
         this.workbenchFactory = workbenchFactory;
         this.databasePerspectiveFactory = databasePerspectiveFactory;
+        this.dataSourcesManager = dataSourcesManager;
     }
 
     public IDE create() {
@@ -45,6 +49,7 @@ public class IDEFactory {
     }
 
     public IDE create(Browser browser, String username, String password) {
-        return new IDE(browser, username, password, restAssuredExecutor, projectUtil, workbenchFactory, databasePerspectiveFactory);
+        return new IDE(browser, username, password, restAssuredExecutor, projectUtil, workbenchFactory, databasePerspectiveFactory,
+                dataSourcesManager);
     }
 }

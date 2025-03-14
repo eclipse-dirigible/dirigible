@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.tests;
 
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -17,17 +18,18 @@ import org.springframework.stereotype.Component;
 @Component
 public class DatabasePerspectiveFactory {
     private final Browser browser;
+    private final DataSourcesManager dataSourcesManager;
 
-
-    protected DatabasePerspectiveFactory(Browser browser) {
+    protected DatabasePerspectiveFactory(Browser browser, DataSourcesManager dataSourcesManager) {
         this.browser = browser;
+        this.dataSourcesManager = dataSourcesManager;
     }
 
     public DatabasePerspective create() {
-        return create(browser);
+        return create(browser, dataSourcesManager);
     }
 
-    public DatabasePerspective create(Browser browser) {
-        return new DatabasePerspective(browser);
+    public DatabasePerspective create(Browser browser, DataSourcesManager dataSourcesManager) {
+        return new DatabasePerspective(browser, dataSourcesManager);
     }
 }

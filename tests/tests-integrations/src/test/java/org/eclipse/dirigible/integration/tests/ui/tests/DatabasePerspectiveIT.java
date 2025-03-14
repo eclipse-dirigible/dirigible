@@ -18,7 +18,7 @@ class DatabasePerspectiveIT extends UserInterfaceIntegrationTest {
 
     @Test
     void testDatabaseFunctionality() {
-        DatabasePerspective databasePerspective = ide.openDatabasePerspective();
+        this.databasePerspective = ide.openDatabasePerspective();
 
         createTestTable(); // Creating test table first to show in the database view
 
@@ -55,6 +55,9 @@ class DatabasePerspectiveIT extends UserInterfaceIntegrationTest {
 
         // Assert if table id is 1 -> correct insertion
         databasePerspective.assertCellContent("1");
+        databasePerspective.assertRowCount("STUDENT", 1);
+        databasePerspective.assertTableHasColumn("STUDENT", "NAME");
+        databasePerspective.assertRowHasColumnWithValue("STUDENT", 0, "NAME", "John Smith");
     }
 
     private void createTestTable() {
