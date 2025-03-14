@@ -28,28 +28,8 @@ public class DatabasePerspective {
         this.browser = browser;
     }
 
-    public void expandSubviews() {
-        String url = System.getenv("DIRIGIBLE_DATASOURCE_DEFAULT_URL");
-
-        if (url != null && url.contains("postgresql"))
-            expandSubmenu("public");
-        else
-            expandSubmenu("PUBLIC");
-
-        expandSubmenu("Tables");
-        refreshTables();
-    }
-
     public void expandSubmenu(String schemaName) {
         browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, schemaName);
-    }
-
-    public void assertAvailabilityOfSubitems() {
-        assertSubmenu("Tables");
-        assertSubmenu("Views");
-        assertSubmenu("Procedures");
-        assertSubmenu("Functions");
-        assertSubmenu("Sequences");
     }
 
     public void assertSubmenu(String submenu) {
@@ -75,26 +55,11 @@ public class DatabasePerspective {
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.CLASS, "tdSingleLine", content);
     }
 
-    public void assertResult() {
-        showTableContents("STUDENT");
-
-        // Assert if table id is 1 -> correct insertion
-        assertCellContent("1");
-    }
-
     public void refreshTables() {
         browser.clickElementByAttributes(HtmlElementType.BUTTON,
                 Map.of(HtmlAttribute.CLASS, "fd-button fd-button--transparent", HtmlAttribute.TITLE, "Refresh"));
     }
 
-    public void createTestTable() {
-        executeSql("CREATE TABLE IF NOT EXISTS STUDENT (" + " id SERIAL PRIMARY KEY, " + " name TEXT NOT NULL, " + " address TEXT NOT NULL"
-                + ");");
-    }
-
-    public void createTestRecord() {
-        executeSql("INSERT INTO STUDENT VALUES (1, 'John Smith', 'Sofia, Bulgaria')");
-    }
 
     public void executeSql(String sql) {
         // Click in the editor to focus it. Does not work with browser.enterText...

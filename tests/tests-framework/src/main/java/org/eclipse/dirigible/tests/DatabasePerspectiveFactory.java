@@ -15,11 +15,11 @@ import org.springframework.stereotype.Component;
 
 @Lazy
 @Component
-public class DatabaseFactory {
+public class DatabasePerspectiveFactory {
     private final Browser browser;
 
 
-    protected DatabaseFactory(Browser browser) {
+    protected DatabasePerspectiveFactory(Browser browser) {
         this.browser = browser;
     }
 

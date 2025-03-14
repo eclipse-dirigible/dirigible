@@ -42,27 +42,27 @@ public class IDE {
     private final String password;
     private final ProjectUtil projectUtil;
     private final WorkbenchFactory workbenchFactory;
-    private final DatabaseFactory databaseFactory;
+    private final DatabasePerspectiveFactory databasePerspectiveFactory;
 
     @Autowired
     IDE(Browser browser, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil, WorkbenchFactory workbenchFactory,
-            DatabaseFactory databaseFactory) {
+            DatabasePerspectiveFactory databasePerspectiveFactory) {
         this(browser, DirigibleTestTenant.createDefaultTenant()
                                          .getUsername(),
                 DirigibleTestTenant.createDefaultTenant()
                                    .getPassword(),
-                restAssuredExecutor, projectUtil, workbenchFactory, databaseFactory);
+                restAssuredExecutor, projectUtil, workbenchFactory, databasePerspectiveFactory);
     }
 
     IDE(Browser browser, String username, String password, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil,
-            WorkbenchFactory workbenchFactory, DatabaseFactory databaseFactory) {
+            WorkbenchFactory workbenchFactory, DatabasePerspectiveFactory databasePerspectiveFactory) {
         this.browser = browser;
         this.restAssuredExecutor = restAssuredExecutor;
         this.username = username;
         this.password = password;
         this.projectUtil = projectUtil;
         this.workbenchFactory = workbenchFactory;
-        this.databaseFactory = databaseFactory;
+        this.databasePerspectiveFactory = databasePerspectiveFactory;
 
     }
 
@@ -139,7 +139,7 @@ public class IDE {
 
         browser.clickOnElementById("perspective-database");
 
-        return databaseFactory.create(browser);
+        return databasePerspectiveFactory.create(browser);
     }
 
     public void openHomePage() {

@@ -14,18 +14,57 @@ import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
 import org.junit.jupiter.api.Test;
 
 class DatabasePerspectiveIT extends UserInterfaceIntegrationTest {
+    private DatabasePerspective databasePerspective;
+
     @Test
     void testDatabaseFunctionality() {
         DatabasePerspective databasePerspective = ide.openDatabasePerspective();
 
-        databasePerspective.createTestTable(); // Creating test table first to show in the database view
+        createTestTable(); // Creating test table first to show in the database view
 
-        databasePerspective.expandSubviews();
-        databasePerspective.assertAvailabilityOfSubitems();
+        expandSubviews();
+        assertAvailabilityOfSubitems();
 
         databasePerspective.assertEmptyTable("STUDENT");
-        databasePerspective.createTestRecord();
-        databasePerspective.assertResult();
+        insertTestRecord();
+        assertInsertedRecord();
     }
+
+    private void expandSubviews() {
+        String url = System.getenv("DIRIGIBLE_DATASOURCE_DEFAULT_URL");
+
+        if (url != null && url.contains("postgresql"))
+            databasePerspective.expandSubmenu("public");
+        else
+            databasePerspective.expandSubmenu("PUBLIC");
+
+        databasePerspective.expandSubmenu("Tables");
+        databasePerspective.refreshTables();
+    }
+
+    private void assertAvailabilityOfSubitems() {
+        databasePerspective.assertSubmenu("Tables");
+        databasePerspective.assertSubmenu("Views");
+        databasePerspective.assertSubmenu("Procedures");
+        databasePerspective.assertSubmenu("Functions");
+        databasePerspective.assertSubmenu("Sequences");
+    }
+
+    private void assertInsertedRecord() {
+        databasePerspective.showTableContents("STUDENT");
+
+        // Assert if table id is 1 -> correct insertion
+        databasePerspective.assertCellContent("1");
+    }
+
+    private void createTestTable() {
+        databasePerspective.executeSql("CREATE TABLE IF NOT EXISTS STUDENT (" + " id SERIAL PRIMARY KEY, " + " name TEXT NOT NULL, "
+                + " address TEXT NOT NULL" + ");");
+    }
+
+    private void insertTestRecord() {
+        databasePerspective.executeSql("INSERT INTO STUDENT VALUES (1, 'John Smith', 'Sofia, Bulgaria')");
+    }
+
 
 }

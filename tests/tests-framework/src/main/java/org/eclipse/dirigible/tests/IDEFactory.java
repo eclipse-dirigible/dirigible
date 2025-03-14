@@ -24,15 +24,15 @@ public class IDEFactory {
     private final RestAssuredExecutor restAssuredExecutor;
     private final ProjectUtil projectUtil;
     private final WorkbenchFactory workbenchFactory;
-    private final DatabaseFactory databaseFactory;
+    private final DatabasePerspectiveFactory databasePerspectiveFactory;
 
     protected IDEFactory(BrowserFactory browserFactory, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil,
-            WorkbenchFactory workbenchFactory, DatabaseFactory databaseFactory) {
+            WorkbenchFactory workbenchFactory, DatabasePerspectiveFactory databasePerspectiveFactory) {
         this.browserFactory = browserFactory;
         this.restAssuredExecutor = restAssuredExecutor;
         this.projectUtil = projectUtil;
         this.workbenchFactory = workbenchFactory;
-        this.databaseFactory = databaseFactory;
+        this.databasePerspectiveFactory = databasePerspectiveFactory;
     }
 
     public IDE create() {
@@ -45,6 +45,6 @@ public class IDEFactory {
     }
 
     public IDE create(Browser browser, String username, String password) {
-        return new IDE(browser, username, password, restAssuredExecutor, projectUtil, workbenchFactory, databaseFactory);
+        return new IDE(browser, username, password, restAssuredExecutor, projectUtil, workbenchFactory, databasePerspectiveFactory);
     }
 }
