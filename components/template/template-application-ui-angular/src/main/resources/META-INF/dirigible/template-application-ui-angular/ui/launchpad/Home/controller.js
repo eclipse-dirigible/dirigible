@@ -3,15 +3,13 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-angular.module('page', ['ideUI', 'ideView', 'entityApi'])
-	.config(['messageHubProvider', function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = '{{projectName}}.launchpad.Home';
-	}])
+angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
 	.config(['entityApiProvider', function (entityApiProvider) {
 		entityApiProvider.baseUrl = '/services/js/{{projectName}}/gen/{{genFolderName}}/ui/launchpad/Home/tiles.js';
 	}])
-	.controller('PageController', ['$scope', 'messageHub', 'entityApi', '$document', function ($scope, messageHub, entityApi, $document) {
-		const favoritesStoreId = 'DIRIGIBLE.{{projectName}}.favorites';
+	.controller('PageController', function ($scope, entityApi, $document) {
+		const Dialogs = new DialogHub();
+		const favoritesStoreId = `${getBrandingInfo().prefix}.{{projectName}}.favorites`;
 		$scope.state = {
 			isBusy: true,
 			error: false,
@@ -28,13 +26,15 @@ angular.module('page', ['ideUI', 'ideView', 'entityApi'])
 			'setting': 'sap-icon--settings'
 		};
 
-		$scope.openView = function (location, name) {
-			messageHub.postMessage('openView', {
-				location: (name ? `${location.substring(0, location.indexOf('/gen/ui/'))}/gen/ui/Reports/index.html?${name}` : location)
+		$scope.openView = (location, name) => {
+			Dialogs.postMessage({
+				topic: '{{projectName}}.launchpad.Home.openView', data: {
+					location: (name ? `${location.substring(0, location.indexOf('/gen/ui/'))}/gen/ui/Reports/index.html?${name}` : location)
+				}
 			});
 		};
 
-		$scope.toggleEditMode = function () {
+		$scope.toggleEditMode = () => {
 			$scope.editMode = !$scope.editMode;
 		};
 
@@ -46,14 +46,14 @@ angular.module('page', ['ideUI', 'ideView', 'entityApi'])
 			localStorage.setItem(favoritesStoreId, JSON.stringify(favorites));
 		}
 
-		$scope.removeFavorite = function (pos) {
+		$scope.removeFavorite = (pos) => {
 			$scope.favorites.splice(pos, 1);
 			saveFavorites();
 			$scope.hasFavorites = $scope.favorites.length > 0;
 			if ($scope.favorites.length === 0) $scope.editMode = false;
 		};
 
-		$scope.toggleFavorite = function (module, type, name, location, caption) {
+		$scope.toggleFavorite = (module, type, name, location, caption) => {
 			const id = `${module}.${type}.${name}`;
 			if (!$scope.favorites.some((elem, pos) => {
 				if (elem.id === id) {
@@ -73,16 +73,20 @@ angular.module('page', ['ideUI', 'ideView', 'entityApi'])
 			$scope.hasFavorites = $scope.favorites.length > 0;
 		};
 
-		$scope.isFavorite = function (module, type, name) {
+		$scope.isFavorite = (module, type, name) => {
 			const id = `${module}.${type}.${name}`;
 			if ($scope.favorites.some(e => e.id === id)) {
 				return true;
 			} return false;
 		};
 
-		entityApi.list().then(function (response) {
+		entityApi.list().then((response) => {
 			if (response.status != 200) {
-				messageHub.showAlertError('Home', `Unable to get Home Launchpad: '${response.message}'`);
+				Dialogs.showAlert({
+					title: "Home",
+					message: `Unable to get Home Launchpad: '${response.message}'`,
+					type: AlertTypes.Error
+				});
 				$scope.state.isBusy = false;
 				$scope.state.error = true;
 				return;
@@ -139,7 +143,7 @@ angular.module('page', ['ideUI', 'ideView', 'entityApi'])
 			$scope.hasFavorites = $scope.favorites.length > 0;
 			saveFavorites();
 			$scope.state.isBusy = false;
-		}, function (error) {
+		}, (error) => {
 			console.error(error);
 			$scope.state.error = true;
 		});
@@ -152,7 +156,7 @@ angular.module('page', ['ideUI', 'ideView', 'entityApi'])
 			saveFavorites();
 		}
 
-		angular.element($document[0]).ready(function () {
+		angular.element($document[0]).ready(() => {
 			Sortable.create($document[0].getElementById('favorites'), {
 				group: {
 					name: 'favorites',
@@ -163,5 +167,4 @@ angular.module('page', ['ideUI', 'ideView', 'entityApi'])
 				onMove: () => $scope.editMode
 			});
 		});
-	}]);
-
+	});

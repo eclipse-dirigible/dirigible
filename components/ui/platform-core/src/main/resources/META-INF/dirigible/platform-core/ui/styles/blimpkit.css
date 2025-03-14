@@ -829,7 +829,7 @@ ng-transclude:empty {
   padding-right: 2.188rem;
 }
 
-/* fd-input additions */
+/* input, step input and select additions */
 
 .fd-input[type="color"] {
   padding: 0;
@@ -846,6 +846,18 @@ ng-transclude:empty {
 
 .fd-input[type="color"]::-webkit-color-swatch {
   border: none;
+}
+
+.fd-step-input.is-readonly,
+.fd-step-input[aria-readonly="true"],
+.fd-step-input[readonly],
+.fd-select__control.is-readonly,
+.fd-select__control[aria-readonly="true"],
+.fd-select__control[readonly],
+.fd-input.is-readonly,
+.fd-input[aria-readonly="true"],
+.fd-input[readonly] {
+  --sapField_BorderStyle: dashed;
 }
 
 .bk-form-item--horizontal>.fd-popover {
@@ -941,6 +953,13 @@ ng-transclude:empty {
 /* Combobox and Select (when in toolbar) margin fixes */
 .fd-toolbar .fd-popover .fd-input-group {
   margin: 0;
+}
+
+/* Checkbox readonly fix */
+
+.fd-checkbox.is-display+.fd-checkbox__label,
+.fd-checkbox[readonly]+.fd-checkbox__label {
+  pointer-events: none;
 }
 
 /* Table fixes and additions*/

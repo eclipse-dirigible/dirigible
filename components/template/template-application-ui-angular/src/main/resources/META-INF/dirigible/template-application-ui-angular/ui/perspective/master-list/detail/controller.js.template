@@ -1,39 +1,35 @@
 #set($dollar = '$')
-angular.module('page', ["ideUI", "ideView", "entityApi"])
-	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = '${projectName}.${perspectiveName}.${name}';
-	}])
+angular.module('page', ['blimpKit', 'platformView', 'entityApi'])
 	.config(["entityApiProvider", function (entityApiProvider) {
 		entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
 	}])
-	.controller('PageController', ['$scope',#if($hasDropdowns) '${dollar}http',#end 'messageHub', 'entityApi', 'Extensions', function ($scope,#if($hasDropdowns) ${dollar}http,#end messageHub, entityApi, Extensions) {
-
+	.controller('PageController', function ($scope,#if($hasDropdowns) ${dollar}http,#end entityApi, Extensions) {
+		const Dialogs = new DialogHub();
 		//-----------------Custom Actions-------------------//
-		Extensions.get('dialogWindow', '${projectName}-custom-action').then(function (response) {
+		Extensions.getWindows(['${projectName}-custom-action']).then((response) => {
 			$scope.pageActions = response.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && (e.type === "page" || e.type === undefined));
 			$scope.entityActions = response.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && e.type === "entity");
 		});
 
-		$scope.triggerPageAction = function (action) {
-			messageHub.showDialogWindow(
-				action.id,
-				{},
-				null,
-				true,
-				action
-			);
+		$scope.triggerPageAction = (action) => {
+			Dialogs.showWindow({
+				hasHeader: true,
+        		title: action.label,
+				path: action.path,
+				closeButton: true
+			});
 		};
 
-		$scope.triggerEntityAction = function (action) {
-			messageHub.showDialogWindow(
-				action.id,
-				{
+		$scope.triggerEntityAction = (action) => {
+			Dialogs.showWindow({
+				hasHeader: true,
+        		title: action.label,
+				path: action.path,
+				params: {
 					id: $scope.entity.${primaryKeysString}
 				},
-				null,
-				true,
-				action
-			);
+				closeButton: true
+			});
 		};
 		//-----------------Custom Actions-------------------//
 
@@ -45,32 +41,29 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		resetPagination();
 
 		//-----------------Events-------------------//
-		messageHub.onDidReceiveMessage("#if($hasReferencedProjection)${referencedProjectionProjectName}.${referencedProjectionPerspectiveName}#else${projectName}.${perspectiveName}#end.${masterEntity}.entitySelected", function (msg) {
+		Dialogs.addMessageListener({ topic: '#if($hasReferencedProjection)${referencedProjectionProjectName}.${referencedProjectionPerspectiveName}#else${projectName}.${perspectiveName}#end.${masterEntity}.entitySelected', handler: (data) => {
 			resetPagination();
-			$scope.selectedMainEntityId = msg.data.selectedMainEntityId;
+			$scope.selectedMainEntityId = data.selectedMainEntityId;
 			$scope.loadPage($scope.dataPage);
-		}, true);
-
-		messageHub.onDidReceiveMessage("#if($hasReferencedProjection)${referencedProjectionProjectName}.${referencedProjectionPerspectiveName}#else${projectName}.${perspectiveName}#end.${masterEntity}.clearDetails", function (msg) {
-			$scope.$apply(function () {
+		}});
+		Dialogs.addMessageListener({ topic: '#if($hasReferencedProjection)${referencedProjectionProjectName}.${referencedProjectionPerspectiveName}#else${projectName}.${perspectiveName}#end.${masterEntity}.clearDetails', handler: () => {
+			$scope.$evalAsync(() => {
 				resetPagination();
 				$scope.selectedMainEntityId = null;
 				$scope.data = null;
 			});
-		}, true);
-
-		messageHub.onDidReceiveMessage("clearDetails", function (msg) {
-			$scope.$apply(function () {
+		}});
+		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.clearDetails', handler: () => {
+			$scope.$evalAsync(() => {
 				$scope.entity = {};
 			});
-		});
-
-		messageHub.onDidReceiveMessage("entitySearch", function (msg) {
+		}});
+		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.entitySearch', handler: (data) => {
 			resetPagination();
-			$scope.filter = msg.data.filter;
-			$scope.filterEntity = msg.data.entity;
+			$scope.filter = data.filter;
+			$scope.filterEntity = data.entity;
 			$scope.loadPage($scope.dataPage, $scope.filter);
-		});
+		}});
 		//-----------------Events-------------------//
 
 		$scope.loadPage = function (pageNumber, filter) {
@@ -91,7 +84,11 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 			$scope.dataPage = pageNumber;
 			entityApi.count(filter).then(function (response) {
 				if (response.status != 200) {
-					messageHub.showAlertError("${name}", `Unable to count ${name}: '${response.message}'`);
+					Dialogs.showAlert({
+						title: "${name}",
+						message: `Unable to count ${name}: '${response.message}'`,
+						type: AlertTypes.Error
+					});
 					return;
 				}
 				if (response.data) {
@@ -101,7 +98,11 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 				filter.$limit = $scope.dataLimit;
 				entityApi.search(filter).then(function (response) {
 					if (response.status != 200) {
-						messageHub.showAlertError("${name}", `Unable to list/filter ${name}: '${response.message}'`);
+						Dialogs.showAlert({
+							title: "${name}",
+							message: `Unable to list/filter ${name}: '${response.message}'`,
+							type: AlertTypes.Error
+						});
 						return;
 					}
 #if($hasDates)
@@ -122,34 +123,40 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 			});
 		};
 
-		$scope.selectEntity = function (entity) {
+		$scope.selectEntity = (entity) => {
 			$scope.selectedEntity = entity;
 		};
 
-		$scope.openDetails = function (entity) {
+		$scope.openDetails = (entity) => {
 			$scope.selectedEntity = entity;
-			messageHub.showDialogWindow("${name}-details", {
-				entity: entity,
+			Dialogs.showWindow({
+				id: '${name}-details',
+				params: {
+					entity: entity,
 #if($hasDropdowns)
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-				options${property.name}: $scope.options${property.name},
+					options${property.name}: $scope.options${property.name},
 #end
 #end
 #end
+				},
 			});
 		};
 
-		$scope.openFilter = function (entity) {
-			messageHub.showDialogWindow("${name}-filter", {
-				entity: $scope.filterEntity,
+		$scope.openFilter = (entity) => {
+			Dialogs.showWindow({
+				id: '${name}-filter',
+				params: {
+					entity: $scope.filterEntity,
 #if($hasDropdowns)
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-				options${property.name}: $scope.options${property.name},
+					options${property.name}: $scope.options${property.name},
 #end
 #end
 #end
+				},
 			});
 		};
 #if($hasDropdowns)
@@ -188,4 +195,4 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		//----------------Dropdowns-----------------//
 #end
 
-	}]);
+	});

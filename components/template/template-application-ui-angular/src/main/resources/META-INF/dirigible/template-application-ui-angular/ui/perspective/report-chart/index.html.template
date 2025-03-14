@@ -2,27 +2,25 @@
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
 
 	<head>
-		<meta charset="utf-8">
-		<meta http-equiv="X-UA-Compatible" content="IE=edge">
-		<meta name="viewport" content="width=device-width, initial-scale=1">
-		<link rel="icon" href="data:;base64,iVBORw0KGgo=" dg-brand-icon />
-		<title dg-brand-title></title>
-		<theme></theme>
-		<script type="text/javascript"
-			src="/services/js/resources-core/services/loader.js?id=application-view-js"></script>
-
-		<script type="text/javascript" src="/webjars/chart.js/4.4.3/dist/chart.umd.js"></script>
-		<link type="text/css" rel="stylesheet"
-			href="/services/js/resources-core/services/loader.js?id=application-view-css" />
-		<script type="text/javascript" src="controller.js"></script>
+		<meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+		<script type="text/javascript" src="/services/web/${projectName}/gen/${genFolderName}/service/entity-api.js"></script>
+		<script type="text/javascript" src="/webjars/chart.js/dist/chart.umd.js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="controller.js"></script>
 	</head>
 
-	<body class="dg-vbox">
-		<fd-toolbar has-title="true">
-			<fd-toolbar-title>Items <span fd-object-status text="{{dataCount}}" inverted="true"></fd-toolbar-title>
-			<fd-button dg-type="transparent" dg-label="Filter" ng-click="openFilter()"></fd-button>
-		</fd-toolbar>
-		<canvas id="myChart"></canvas>
+	<body class="bk-vbox">
+		<bk-toolbar has-title="true">
+			<bk-toolbar-title>Items <span bk-object-status text="{{dataCount}}" inverted="true"></bk-toolbar-title>
+			<bk-button state="transparent" label="Filter" ng-click="openFilter()"></bk-button>
+		</bk-toolbar>
+		<canvas id="myChart" ng-non-bindable></canvas>
+		<theme></theme>
 	</body>
 
 </html>

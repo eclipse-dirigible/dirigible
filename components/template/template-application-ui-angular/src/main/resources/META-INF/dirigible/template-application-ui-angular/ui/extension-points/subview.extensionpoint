@@ -1,0 +1,4 @@
+{
+    "name": "${projectName}-subviews",
+    "description": "${projectName} - Extension Point for the Application Subview Providers"
+}

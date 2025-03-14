@@ -2,72 +2,68 @@
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
 
 	<head>
-		<meta charset="utf-8">
-		<meta http-equiv="X-UA-Compatible" content="IE=edge">
-		<meta name="viewport" content="width=device-width, initial-scale=1">
-		<link rel="icon" href="data:;base64,iVBORw0KGgo=" dg-brand-icon />
-		<title dg-brand-title></title>
-		<theme></theme>
-		<script type="text/javascript"
-			src="/services/js/resources-core/services/loader.js?id=application-view-js"></script>
-		<link type="text/css" rel="stylesheet"
-			href="/services/js/resources-core/services/loader.js?id=application-view-css" />
-		<script type="text/javascript" src="controller.js"></script>
+		<meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+		<script type="text/javascript" src="/services/web/${projectName}/gen/${genFolderName}/service/entity-api.js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="controller.js"></script>
 	</head>
 
-	<body class="dg-vbox">
-		<fd-toolbar has-title="true">
-			<fd-toolbar-title>Items <span fd-object-status text="{{dataCount}}" inverted="true"></fd-toolbar-title>
+	<body class="bk-vbox">
+		<bk-toolbar has-title="true">
+			<bk-toolbar-title>Items <span bk-object-status text="{{dataCount}}" inverted="true"></bk-toolbar-title>
 #if($parameters.size() > 0)
-			<fd-button compact="true" dg-type="transparent" dg-label="Filter" ng-click="openFilter()"></fd-button>
+			<bk-button compact="true" state="transparent" label="Filter" ng-click="openFilter()"></bk-button>
 #end
-			<fd-button ng-repeat="action in pageActions" compact="true" dg-type="transparent" dg-label="{{action.label}}" ng-click="triggerPageAction(action)"></fd-button>
-			<fd-toolbar-spacer></fd-toolbar-spacer>
-		</fd-toolbar>
+			<bk-button ng-repeat="action in pageActions track by $index" compact="true" state="transparent" label="{{action.label}}" ng-click="triggerPageAction(action)"></bk-button>
+			<bk-toolbar-spacer></bk-toolbar-spacer>
+		</bk-toolbar>
 
-		<fd-scrollbar class="dg-full-height" ng-hide="data == null">
-			<table fd-table display-mode="compact" inner-borders="top" outer-borders="none">
-				<thead fd-table-header sticky="true">
-					<tr fd-table-row>
+		<bk-scrollbar class="bk-full-height" ng-hide="data == null">
+			<table bk-table display-mode="compact" inner-borders="top" outer-borders="none">
+				<thead bk-table-header sticky="true">
+					<tr bk-table-row>
 #foreach ($column in $columns)
-						<th fd-table-header-cell>${column.alias}</th>
+						<th bk-table-header-cell>${column.alias}</th>
 #end
-						<th fd-table-header-cell></th>
+						<th bk-table-header-cell></th>
 					</tr>
 				</thead>
-				<tbody fd-table-body>
-					<tr fd-table-row hoverable="true" ng-show="data.length == 0">
-						<td fd-table-cell no-data="true">No data available.</td>
+				<tbody bk-table-body>
+					<tr bk-table-row hoverable="true" ng-show="data.length == 0">
+						<td bk-table-cell no-data="true">No data available.</td>
 					</tr>
-					<tr fd-table-row hoverable="true" ng-repeat="next in data"
-						dg-selected="next === selectedEntity" ng-click="selectEntity(next)">
+					<tr bk-table-row hoverable="true" ng-repeat="next in data track by $index"
+						selected="next === selectedEntity" ng-click="selectEntity(next)">
 #foreach ($column in $columns) 
-						<td fd-table-cell ng-click="openDetails(next)" hoverable="true" activable="true">{{next['${column.alias}']}}</td>
+						<td bk-table-cell ng-click="openDetails(next)" hoverable="true" activable="true">{{next['${column.alias}']}}</td>
 #end
-						<td fd-table-cell fit-content="true">
-							<fd-popover>
-								<fd-popover-control>
-									<fd-button compact="true" glyph="sap-icon--overflow" dg-type="transparent"
+						<td bk-table-cell fit-content="true">
+							<bk-popover>
+								<bk-popover-control>
+									<bk-button compact="true" glyph="sap-icon--overflow" state="transparent"
 										aria-label="Table Row Menu Button" ng-click="setTristate()">
-									</fd-button>
-								</fd-popover-control>
-								<fd-popover-body dg-align="bottom-right">
-									<fd-menu aria-label="Table Row Menu" no-backdrop="true" no-shadow="true">
-										<fd-menu-item title="View Details" ng-click="openDetails(next)"></fd-menu-item>
-									</fd-menu>
-								</fd-popover-body>
-							</fd-popover>
+									</bk-button>
+								</bk-popover-control>
+								<bk-popover-body align="bottom-right">
+									<bk-menu aria-label="Table Row Menu" no-backdrop="true" no-shadow="true">
+										<bk-menu-item title="View Details" ng-click="openDetails(next)"></bk-menu-item>
+									</bk-menu>
+								</bk-popover-body>
+							</bk-popover>
 						</td>
 					</tr>
 				</tbody>
 			</table>
-		</fd-scrollbar>
-
-		<fd-pagination total-items="dataCount" items-per-page="dataLimit"
-			items-per-page-options="[10, 20, 50]" page-change="loadPage(pageNumber)"
-			items-per-page-change="loadPage(pageNumber)" items-per-page-placement="top-start" compact="true"
-			display-total-items="true" ng-hide="dataCount == 0">
-		</fd-pagination>
+		</bk-scrollbar>
+		<bk-pagination total-items="dataCount" items-per-page="dataLimit" items-per-page-options="[10, 20, 50]" page-change="loadPage(pageNumber)"
+			items-per-page-change="loadPage(pageNumber)" items-per-page-placement="top-start" compact="true" display-total-items="true" ng-hide="dataCount == 0">
+		</bk-pagination>
+		<theme></theme>
 	</body>
 
 </html>

@@ -4,16 +4,14 @@
  * Do not modify the content as it may be re-generated again.
  */
 const viewData = {
-    id: "${projectName}-home-launchpad",
-    label: "Home Launchpad",
-    factory: "frame",
-    region: "center",
-    link: "/services/web/${projectName}/gen/${genFolderName}/ui/launchpad/Home/index.html",
+    id: '${projectName}-home-launchpad',
+    label: 'Home Launchpad',
+    region: 'center',
+    lazyLoad: false,
+    autoFocusTab: true,
+    path: '/services/web/${projectName}/gen/${genFolderName}/ui/launchpad/Home/index.html',
     isLaunchpad: true,
 };
-
 if (typeof exports !== 'undefined') {
-    exports.getView = function () {
-        return viewData;
-    }
+    exports.getView = () => viewData;
 }

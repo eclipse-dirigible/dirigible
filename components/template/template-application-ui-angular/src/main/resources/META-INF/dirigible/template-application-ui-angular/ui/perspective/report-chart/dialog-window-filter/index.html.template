@@ -2,67 +2,60 @@
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
 
     <head>
-        <meta charset="utf-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link rel="icon" href="data:;base64,iVBORw0KGgo=" dg-brand-icon />
-        <title dg-brand-title></title>
-        <theme></theme>
-        <script type="text/javascript"
-            src="/services/js/resources-core/services/loader.js?id=application-view-js"></script>
-        <link type="text/css" rel="stylesheet"
-            href="/services/js/resources-core/services/loader.js?id=application-view-css" />
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
         <script type="text/javascript" src="controller.js"></script>
     </head>
 
-    <body class="dg-vbox">
-        <fd-scrollbar class="dg-full-height">
-            <div class="fd-margin--md fd-message-strip fd-message-strip--error fd-message-strip--dismissible"
-                role="alert" ng-show="errorMessage">
-                <p class="fd-message-strip__text">{{ errorMessage }}</p>
-            </div>
-
-            <fd-fieldset ng-form="forms.details">
-                <fd-form-group dg-header="Report Filter" name="entityForm" class="fd-container fd-form-layout-grid-container">
+    <body class="bk-vbox">
+        <bk-scrollbar class="bk-full-height">
+            <bk-fieldset ng-form="forms.details">
+                <bk-form-group label="Report Filter" name="entityForm" class="fd-container fd-form-layout-grid-container">
 #foreach ($property in $filter.properties)
 #if(!$property.dataAutoIncrement && !$property.dataPrimaryKey)
 #if($property.widgetType == "DROPDOWN")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
-                        <fd-combobox-input id="id${property.name}"
+                        <bk-combobox-input input-id="id${property.name}"
                             name="${property.name}"
                             state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
                             ng-required="${property.isRequiredProperty}"
                             ng-model="entity.${property.name}"
 #if($property.isCalculatedProperty == "true")
-                            dg-disabled="true"
+                            is-readonly="true"
 #end
                             dropdown-items="options${property.name}"
-                            dg-placeholder="Search ${property.widgetLabel} ...">
-                        </fd-combobox-input>
-                    </fd-form-item>
+                            placeholder="Search ${property.widgetLabel} ..."
+                            btn-aria-label="show/hide ${property.name} options" list-aria-label="${property.name} options">
+                        </bk-combobox-input>
+                    </bk-form-item>
 #elseif($property.widgetType == "CHECKBOX")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2"></div>
-                        <fd-checkbox id="id${property.name}"
+                        <bk-checkbox id="id${property.name}"
                             compact="false"
                             ng-required="${property.isRequiredProperty}"
 #if($property.isCalculatedProperty == "true")
-                            ng-disabled="true"
+                            ng-readonly="true"
 #end
                             ng-model="entity.${property.name}">
-                        </fd-checkbox>
-                        <fd-checkbox-label for="id${property.name}" dg-required="${property.isRequiredProperty}">${property.widgetLabel}</fd-checkbox-label>
-                    </fd-form-item>
+                        </bk-checkbox>
+                        <bk-checkbox-label for="id${property.name}" ng-required="${property.isRequiredProperty}">${property.widgetLabel}</bk-checkbox-label>
+                    </bk-form-item>
 #elseif($property.widgetType == "COLOR")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
-                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-                            <fd-input id="id${property.name}"
+                        <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+                            <bk-input id="id${property.name}"
                                 name="${property.name}"
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
@@ -72,35 +65,33 @@
 #end
                                 type="color"
                                 placeholder="Enter ${property.widgetLabel}">
-                            </fd-input>
-                            <fd-form-message dg-type="error">Incorrect Input</fd-form-message>
-                        </fd-form-input-message-group>
-                    </fd-form-item>
+                            </bk-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
 #elseif($property.widgetType == "NUMBER")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
-                        <fd-step-input dg-id="id${property.name}"
+                        <bk-step-input input-id="id${property.name}"
                             class="right-align"
                             name="${property.name}"
                             state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
-                            dg-required="${property.isRequiredProperty}"
+                            ng-required="${property.isRequiredProperty}"
                             ng-model="entity.${property.name}"
 #if($property.isCalculatedProperty == "true")
                             is-readonly="true"
 #end
-                            placeholder="Enter ${property.widgetLabel}"
-                            >
-                        </fd-step-input>
-                    </fd-form-item>
+                            placeholder="Enter ${property.widgetLabel}">
+                        </bk-step-input>
+                    </bk-form-item>
 #elseif($property.widgetType == "MONTH")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
-                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-                            <fd-input id="id${property.name}"
+                        <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+                            <bk-input id="id${property.name}"
                                 name="${property.name}"
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
@@ -109,17 +100,16 @@
                                 ng-readonly="true"
 #end
                                 type="month">
-                            </fd-input>
-                            <fd-form-message dg-type="error">Incorrect Input</fd-form-message>
-                        </fd-form-input-message-group>
-                    </fd-form-item>
+                            </bk-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
 #elseif($property.widgetType == "WEEK")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
-                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-                            <fd-input id="id${property.name}"
+                        <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+                            <bk-input id="id${property.name}"
                                 name="${property.name}"
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
@@ -128,17 +118,16 @@
                                 ng-readonly="true"
 #end
                                 type="week">
-                            </fd-input>
-                            <fd-form-message dg-type="error">Incorrect Input</fd-form-message>
-                        </fd-form-input-message-group>
-                    </fd-form-item>
+                            </bk-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
 #elseif($property.widgetType == "TIME")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
-                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-                            <fd-input id="id${property.name}"
+                        <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+                            <bk-input id="id${property.name}"
                                 name="${property.name}"
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
@@ -147,17 +136,16 @@
                                 ng-readonly="true"
 #end
                                 type="time">
-                            </fd-input>
-                            <fd-form-message dg-type="error">Incorrect Input</fd-form-message>
-                        </fd-form-input-message-group>
-                    </fd-form-item>
+                            </bk-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
 #elseif($property.widgetType == "DATETIME-LOCAL")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
-                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-                            <fd-input id="id${property.name}"
+                        <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+                            <bk-input id="id${property.name}"
                                 name="${property.name}"
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
@@ -166,17 +154,16 @@
                                 ng-readonly="true"
 #end
                                 type="datetime-local">
-                            </fd-input>
-                            <fd-form-message dg-type="error">Incorrect Input</fd-form-message>
-                        </fd-form-input-message-group>
-                    </fd-form-item>
+                            </bk-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
 #elseif($property.widgetType == "DATE")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
-                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-                            <fd-input id="id${property.name}"
+                        <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+                            <bk-input id="id${property.name}"
                                 name="${property.name}"
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
@@ -185,37 +172,37 @@
                                 ng-readonly="true"
 #end
                                 type="date">
-                            </fd-input>
-                            <fd-form-message dg-type="error">Incorrect Input</fd-form-message>
-                        </fd-form-input-message-group>
-                    </fd-form-item>
+                            </bk-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
 #elseif($property.widgetType == "TEXTAREA")
-					<fd-form-item class="fd-row">
+					<bk-form-item class="fd-row">
 						<div class="fd-col fd-col-md--2">
-							<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+							<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
 						</div>
-						<fd-textarea id="id${property.name}"
-							name="${property.name}"
-							state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
-							ng-required="${property.isRequiredProperty}"
-							ng-model="entity.${property.name}"
+                        <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn't match the required pattern: ${property.inputRule}'">
+                            <bk-textarea id="id${property.name}"
+                                name="${property.name}"
+                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
+                                ng-required="${property.isRequiredProperty}"
+                                ng-model="entity.${property.name}"
 #if($property.isCalculatedProperty == "true")
-                            ng-readonly="true"
+                                ng-readonly="true"
 #end
-							ng-minlength="${property.minLength} || 0"
-							ng-maxlength="${property.maxLength} || -1"
-							dg-input-rules="{ patterns: ['${property.inputRule}'] }"
-							placeholder="Enter ${property.widgetLabel}">
-						</fd-textarea>
-						<fd-form-message dg-type="error" ng-show="formErrors.${property.name}">Incorrect Input</fd-form-message>
-					</fd-form-item>
+                                ng-minlength="${property.minLength} || 0"
+                                ng-maxlength="${property.maxLength} || -1"
+                                input-rules="{ patterns: ['${property.inputRule}'] }"
+                                placeholder="Enter ${property.widgetLabel}">
+                            </bk-textarea>
+                        </bk-form-input-message>
+					</bk-form-item>
 #elseif($property.widgetType == "TEL")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
-                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-                            <fd-input id="id${property.name}"
+                        <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn't match the required pattern:#if($property.inputRule == "")^[0-9]{0,14}$#else ${property.inputRule}#end'">
+                            <bk-input id="id${property.name}"
                                 name="${property.name}"
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
@@ -225,20 +212,19 @@
 #end
                                 ng-minlength="${property.minLength} || 0"
                                 ng-maxlength="${property.maxLength} || -1"
-                                dg-input-rules="{ patterns:#if($property.inputRule == "")['^[0-9]{0,14}$']#else ['${property.inputRule}']#end }"
+                                input-rules="{ patterns:#if($property.inputRule == "")['^[0-9]{0,14}$']#else ['${property.inputRule}']#end }"
                                 type="tel"
                                 placeholder="Enter ${property.widgetLabel}">
-                            </fd-input>
-                            <fd-form-message dg-type="error">Incorrect Input</fd-form-message>
-                        </fd-form-input-message-group>
-                    </fd-form-item>
+                            </bk-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
 #elseif($property.widgetType == "URL")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
-                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-                            <fd-input id="id${property.name}"
+                        <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn't match the required pattern: ${property.inputRule}'">
+                            <bk-input id="id${property.name}"
                                 name="${property.name}"
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
@@ -248,20 +234,19 @@
 #end
                                 ng-minlength="${property.minLength} || 0"
                                 ng-maxlength="${property.maxLength} || -1"
-                                dg-input-rules="{ patterns: ['${property.inputRule}'] }"
+                                input-rules="{ patterns: ['${property.inputRule}'] }"
                                 type="url"
                                 placeholder="Enter ${property.widgetLabel}">
-                            </fd-input>
-                            <fd-form-message dg-type="error">Incorrect Input</fd-form-message>
-                        </fd-form-input-message-group>
-                    </fd-form-item>
+                            </bk-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
 #elseif($property.widgetType == "EMAIL")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
-                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-                            <fd-input id="id${property.name}"
+                        <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn't match the required pattern: ${property.inputRule}'">
+                            <bk-input id="id${property.name}"
                                 name="${property.name}"
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
@@ -271,20 +256,19 @@
 #end
                                 ng-minlength="${property.minLength} || 0"
                                 ng-maxlength="${property.maxLength} || -1"
-                                dg-input-rules="{ patterns: ['${property.inputRule}'] }"
+                                input-rules="{ patterns: ['${property.inputRule}'] }"
                                 type="email"
                                 placeholder="Enter ${property.widgetLabel}">
-                            </fd-input>
-                            <fd-form-message dg-type="error">Incorrect Input</fd-form-message>
-                        </fd-form-input-message-group>
-                    </fd-form-item>
+                            </bk-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
 #else
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
-                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-                            <fd-input id="id${property.name}"
+                        <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn't match the required pattern: ${property.inputRule}'">
+                            <bk-input id="id${property.name}"
                                 name="${property.name}"
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
@@ -294,34 +278,33 @@
 #end
                                 ng-minlength="${property.minLength} || 0"
                                 ng-maxlength="${property.maxLength} || -1"
-                                dg-input-rules="{ patterns: ['${property.inputRule}'] }"
+                                input-rules="{ patterns: ['${property.inputRule}'] }"
                                 type="text"
                                 placeholder="Enter ${property.widgetLabel}">
-                            </fd-input>
-                            <fd-form-message dg-type="error">Incorrect Input</fd-form-message>
-                        </fd-form-input-message-group>
-                    </fd-form-item>
+                            </bk-input>
+                        </bk-form-input-message>
+                    </bk-form-item>
 #end
 #end
 #end
-				</fd-form-group>
-            </fd-fieldset>
-        </fd-scrollbar>
+				</bk-form-group>
+            </bk-fieldset>
+        </bk-scrollbar>
 
-        <fd-bar bar-design="footer" compact="true">
-			<fd-bar-right>
-				<fd-bar-element>
-					<fd-button dg-label="Filter" dg-type="emphasized" ng-click="filter()" state="{{ forms.details.$valid ? '' : 'disabled' }}"></fd-button>
-				</fd-bar-element>
-				<fd-bar-element>
-					<fd-button dg-label="Reset" ng-click="resetFilter()"></fd-button>
-				</fd-bar-element>
-				<fd-bar-element>
-					<fd-button dg-label="Cancel" ng-click="cancel()"></fd-button>
-				</fd-bar-element>
-			</fd-bar-right>
-		</fd-bar>
-
+        <bk-bar bar-design="footer" compact="true">
+			<bk-bar-right>
+				<bk-bar-element>
+					<bk-button label="Filter" state="emphasized" ng-click="filter()" ng-disabled="!forms.details.$valid"></bk-button>
+				</bk-bar-element>
+				<bk-bar-element>
+					<bk-button label="Reset" ng-click="resetFilter()"></bk-button>
+				</bk-bar-element>
+				<bk-bar-element>
+					<bk-button label="Cancel" ng-click="cancel()"></bk-button>
+				</bk-bar-element>
+			</bk-bar-right>
+		</bk-bar>
+        <theme></theme>
     </body>
 
 </html>

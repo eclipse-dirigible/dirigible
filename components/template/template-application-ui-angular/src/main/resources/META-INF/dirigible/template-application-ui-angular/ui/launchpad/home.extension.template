@@ -1,0 +1,5 @@
+{
+    "module": "${projectName}/gen/${genFolderName}/ui/launchpad/perspective.js",
+    "extensionPoint": "${projectName}-perspectives",
+    "description": "${projectName} - Application Perspective"
+}

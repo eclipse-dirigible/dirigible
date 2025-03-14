@@ -4,16 +4,14 @@
  * Do not modify the content as it may be re-generated again.
  */
 const viewData = {
-    id: "${name}",
-    label: "${name}",
-    factory: "frame",
-    region: "bottom",
-    link: "/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${masterEntity}/${name}/index.html",
-    perspectiveName: "#if($hasReferencedProjection)${referencedProjectionPerspectiveName}#else${perspectiveName}#end"
+    id: '${name}',
+    label: '${name}',
+    region: 'bottom',
+    lazyLoad: false,
+	autoFocusTab: true,
+    path: '/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${masterEntity}/${name}/index.html',
+    perspectiveName: '#if($hasReferencedProjection)${referencedProjectionPerspectiveName}#else${perspectiveName}#end'
 };
-
 if (typeof exports !== 'undefined') {
-    exports.getView = function () {
-        return viewData;
-    }
+	exports.getView = () => viewData;
 }
