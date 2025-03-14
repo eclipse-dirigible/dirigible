@@ -1,0 +1,5 @@
+{
+    "module": "editor-mapping/configs/mapping-editor.js",
+    "extensionPoint": "platform-editors",
+    "description": "Data Mapping Modeler"
+}
