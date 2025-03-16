@@ -266,55 +266,55 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			};
 
 			// Creates the graph inside the given container
-			var graph = new mxGraph(container);
+			$scope.graph = new mxGraph(container);
 
 			// Uses the entity perimeter (below) as default
-			graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_VERTICAL_ALIGN] = mxConstants.ALIGN_TOP;
-			graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_PERIMETER] =
+			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_VERTICAL_ALIGN] = mxConstants.ALIGN_TOP;
+			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_PERIMETER] =
 				mxPerimeter.EntityPerimeter;
-			graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_SHADOW] = 1;
-			graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_ROUNDED] = true;
-			graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_ARCSIZE] = 4;
-			graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_FILLCOLOR] = '#89c5f5';
+			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_SHADOW] = 1;
+			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_ROUNDED] = true;
+			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_ARCSIZE] = 4;
+			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_FILLCOLOR] = '#89c5f5';
 			// graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_GRADIENTCOLOR] = '#A9C4EB';
-			delete graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_STROKECOLOR];
+			delete $scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_STROKECOLOR];
 
 			// Used for HTML labels that use up the complete vertex space (see
 			// graph.cellRenderer.redrawLabel below for syncing the size)
-			graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_OVERFLOW] = 'fill';
+			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_OVERFLOW] = 'fill';
 
 			// Uses the entity edge style as default
-			graph.stylesheet.getDefaultEdgeStyle()[mxConstants.STYLE_EDGE] =
+			$scope.graph.stylesheet.getDefaultEdgeStyle()[mxConstants.STYLE_EDGE] =
 				mxEdgeStyle.EntityRelation;
-			graph.stylesheet.getDefaultEdgeStyle()[mxConstants.STYLE_STROKECOLOR] = '#117dd4';
-			graph.stylesheet.getDefaultEdgeStyle()[mxConstants.STYLE_FONTCOLOR] = '#117dd4';
-			graph.stylesheet.getDefaultEdgeStyle()[mxConstants.STYLE_OPACITY] = '80';
+			$scope.graph.stylesheet.getDefaultEdgeStyle()[mxConstants.STYLE_STROKECOLOR] = '#117dd4';
+			$scope.graph.stylesheet.getDefaultEdgeStyle()[mxConstants.STYLE_FONTCOLOR] = '#117dd4';
+			$scope.graph.stylesheet.getDefaultEdgeStyle()[mxConstants.STYLE_OPACITY] = '80';
 
 			// Allows new connections to be made but do not allow existing
 			// connections to be changed for the sake of simplicity of this
 			// example
-			graph.setCellsDisconnectable(false);
-			graph.setAllowDanglingEdges(false);
-			graph.setCellsEditable(false);
-			graph.setConnectable(true);
-			graph.setPanning(true);
-			graph.centerZoom = false;
+			$scope.graph.setCellsDisconnectable(false);
+			$scope.graph.setAllowDanglingEdges(false);
+			$scope.graph.setCellsEditable(false);
+			$scope.graph.setConnectable(true);
+			$scope.graph.setPanning(true);
+			$scope.graph.centerZoom = false;
 
 			// Override folding to allow for tables
-			graph.isCellFoldable = function (cell, collapse) {
+			$scope.graph.isCellFoldable = function (cell, collapse) {
 				return this.getModel().isVertex(cell);
 			};
 
 			// Overrides connectable state
-			graph.isCellConnectable = function (cell) {
+			$scope.graph.isCellConnectable = function (cell) {
 				return !this.isCellCollapsed(cell);
 			};
 
 			// Enables HTML markup in all labels
-			graph.setHtmlLabels(true);
+			$scope.graph.setHtmlLabels(true);
 
 			// Scroll events should not start moving the vertex
-			graph.cellRenderer.isLabelEvent = function (state, evt) {
+			$scope.graph.cellRenderer.isLabelEvent = function (state, evt) {
 				var source = mxEvent.getSource(evt);
 
 				return state.text != null && source != state.text.node &&
@@ -323,8 +323,8 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 			// Adds scrollbars to the outermost div and keeps the
 			// DIV position and size the same as the vertex
-			var oldRedrawLabel = graph.cellRenderer.redrawLabel;
-			graph.cellRenderer.redrawLabel = function (state) {
+			var oldRedrawLabel = $scope.graph.cellRenderer.redrawLabel;
+			$scope.graph.cellRenderer.redrawLabel = function (state) {
 				oldRedrawLabel.apply(this, arguments); // "supercall"
 				var graph = state.view.graph;
 				var model = graph.model;
@@ -360,7 +360,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 			// Adds a new function to update the currentRow based on the given event
 			// and return the DOM node for that row
-			graph.connectionHandler.updateRow = function (target) {
+			$scope.graph.connectionHandler.updateRow = function (target) {
 				while (target != null && target.nodeName != 'TR') {
 					target = target.parentNode;
 				}
@@ -389,7 +389,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			};
 
 			// Adds placement of the connect icon based on the mouse event target (row)
-			graph.connectionHandler.updateIcons = function (state, icons, me) {
+			$scope.graph.connectionHandler.updateIcons = function (state, icons, me) {
 				var target = me.getSource();
 				target = this.updateRow(target);
 
@@ -412,8 +412,8 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			};
 
 			// Updates the targetRow in the preview edge State
-			var oldMouseMove = graph.connectionHandler.mouseMove;
-			graph.connectionHandler.mouseMove = function (sender, me) {
+			var oldMouseMove = $scope.graph.connectionHandler.mouseMove;
+			$scope.graph.connectionHandler.mouseMove = function (sender, me) {
 				if (this.edgeState != null) {
 					this.currentRowNode = this.updateRow(me.getSource());
 
@@ -432,7 +432,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			};
 
 			// Creates the edge state that may be used for preview
-			graph.connectionHandler.createEdgeState = function (me) {
+			$scope.graph.connectionHandler.createEdgeState = function (me) {
 				var relation = doc.createElement('Relation');
 				relation.setAttribute('sourceRow', this.currentRow || '0');
 				relation.setAttribute('targetRow', '0');
@@ -449,7 +449,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 			// Overrides getLabel to return empty labels for edges and
 			// short markup for collapsed cells.
-			graph.getLabel = function (cell) {
+			$scope.graph.getLabel = function (cell) {
 				if (this.getModel().isVertex(cell)) {
 					if (this.isCellCollapsed(cell)) {
 						return '<table style="overflow:hidden;" width="100%" height="100%" border="1" cellpadding="4" class="title" style="height:100%;">' +
@@ -486,31 +486,31 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			// relation.setAttribute('targetRow', '6');
 
 			// Enables rubberband selection
-			new mxRubberband(graph);
+			new mxRubberband($scope.graph);
 
 			// Enables key handling (eg. escape)
-			new mxKeyHandler(graph);
+			new mxKeyHandler($scope.graph);
 
 			// Gets the default parent for inserting new cells. This
 			// is normally the first child of the root (ie. layer 0).
-			var parent = graph.getDefaultParent();
+			var parent = $scope.graph.getDefaultParent();
 
 			// Adds cells to the model in a single step
 			var width = 160;
 			var height = 230;
-			graph.getModel().beginUpdate();
+			$scope.graph.getModel().beginUpdate();
 			try {
-				var v1 = graph.insertVertex(parent, null, '', 20, 20, width, height);
+				var v1 = $scope.graph.insertVertex(parent, null, '', 20, 20, width, height);
 				v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
 
-				var v2 = graph.insertVertex(parent, null, '', 400, 20, width, height);
+				var v2 = $scope.graph.insertVertex(parent, null, '', 400, 20, width, height);
 				v2.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
 
-				//graph.insertEdge(parent, null, relation, v1, v2);
+				//$scope.graph.insertEdge(parent, null, relation, v1, v2);
 			}
 			finally {
 				// Updates the display
-				graph.getModel().endUpdate();
+				$scope.graph.getModel().endUpdate();
 			}
 
 		}
