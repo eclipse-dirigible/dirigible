@@ -74,6 +74,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 	}
 
 	function saveContents(text, resourcePath) {
+		debugger
 		WorkspaceService.saveContent(resourcePath, text).then(() => {
 			contents = text;
 			layoutHub.setEditorDirty({
@@ -506,6 +507,43 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 				else {
 					return '';
 				}
+			};
+
+			// Defines a new export action
+			editor.addAction('save', function (editor, cell) {
+				debugger
+				$scope.saveMapping($scope.graph);
+			});
+
+			$scope.save = function () {
+				editor.execute('save');
+			};
+			$scope.properties = function () {
+				editor.execute('properties');
+			};
+			$scope.undo = function () {
+				editor.execute('undo');
+			};
+			$scope.redo = function () {
+				editor.execute('redo');
+			};
+			$scope.delete = function () {
+				editor.execute('delete');
+			};
+			$scope.print = function () {
+				editor.execute('print');
+			};
+			$scope.zoomIn = function () {
+				editor.execute('zoomIn');
+			};
+			$scope.zoomOut = function () {
+				editor.execute('zoomOut');
+			};
+			$scope.actualSize = function () {
+				editor.execute('actualSize');
+			};
+			$scope.fit = function () {
+				editor.execute('fit');
 			};
 
 			// User objects (data) for the individual cells

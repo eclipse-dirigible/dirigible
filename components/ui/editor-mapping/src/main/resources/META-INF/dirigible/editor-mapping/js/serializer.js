@@ -9,7 +9,8 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-function createSchema(graph) {
+function createMapping(graph) {
+	debugger
 	let schema = [];
 	schema.push('<schema>\n');
 	schema.push(' <structures>\n');
@@ -85,7 +86,8 @@ function createSchema(graph) {
 	return schema.join('');
 }
 
-function createSchemaJson(graph) {
+function createMappingJson(graph) {
+	debugger
 	let root = {};
 	root.schema = {};
 	root.schema.structures = [];
