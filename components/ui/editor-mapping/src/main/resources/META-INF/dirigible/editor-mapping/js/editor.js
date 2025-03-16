@@ -128,6 +128,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 	};
 
 	$scope.saveMapping = () => {
+		debugger
 		saveContents(createMapping($scope.graph), $scope.dataParameters.filePath);
 		saveContents(createMappingJson($scope.graph), mappingFile);
 	};
@@ -216,7 +217,11 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 			// Support for certain CSS styles in quirks mode
 			if (mxClient.IS_QUIRKS) {
+				document.body.style.overflow = 'hidden';
 				new mxDivResizer(container);
+				new mxDivResizer(outline);
+				new mxDivResizer(toolbar);
+				new mxDivResizer(sidebar);
 			}
 
 			// Disables the context menu
@@ -266,7 +271,8 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			};
 
 			// Creates the graph inside the given container
-			$scope.graph = new mxGraph(container);
+			let editor = new mxEditor();
+			$scope.graph = editor.graph;
 
 			// Uses the entity perimeter (below) as default
 			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_VERTICAL_ALIGN] = mxConstants.ALIGN_TOP;
@@ -300,6 +306,9 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			$scope.graph.setPanning(true);
 			$scope.graph.centerZoom = false;
 
+			// Forces use of default edge in mxConnectionHandler
+			$scope.graph.connectionHandler.factoryMethod = null;
+
 			// Override folding to allow for tables
 			$scope.graph.isCellFoldable = function (cell, collapse) {
 				return this.getModel().isVertex(cell);
@@ -312,6 +321,28 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 			// Enables HTML markup in all labels
 			$scope.graph.setHtmlLabels(true);
+
+			// Sets the graph container and configures the editor
+			editor.setGraphContainer(container);
+			let config = mxUtils.load(
+				'editors/config/keyhandler-minimal.xml').
+				getDocumentElement();
+			editor.configure(config);
+
+			// Configures the automatic layout for the table columns
+			editor.layoutSwimlanes = true;
+			editor.createSwimlaneLayout = function () {
+				let layout = new mxStackLayout($scope.graph, false);
+				layout.fill = true;
+				layout.resizeParent = true;
+
+				// Overrides the function to always return true
+				layout.isVertexMovable = function () {
+					return true;
+				};
+
+				return layout;
+			};
 
 			// Scroll events should not start moving the vertex
 			$scope.graph.cellRenderer.isLabelEvent = function (state, evt) {
@@ -415,6 +446,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			var oldMouseMove = $scope.graph.connectionHandler.mouseMove;
 			$scope.graph.connectionHandler.mouseMove = function (sender, me) {
 				if (this.edgeState != null) {
+					debugger
 					this.currentRowNode = this.updateRow(me.getSource());
 
 					if (this.currentRow != null) {
