@@ -45,10 +45,22 @@ export async function getWindowMenu(perspectiveExtPoints = [], viewExtPoints = [
 		});
 	}
 
-	for (let i = 0; i < perspectives.length; i++) {
+	for (let p = 0; p < perspectives.perspectives.length; p++) {
 		menu.items[1].items.push({
-			id: perspectives[i].id,
-			label: perspectives[i].label,
+			id: perspectives.perspectives[p].id,
+			label: perspectives.perspectives[p].label,
+			action: 'showPerspective',
+		});
+	}
+
+	if (menu.items[1].items.length) {
+		menu.items[1].items[menu.items[1].items.length - 1].separator = true;
+	}
+
+	for (let u = 0; u < perspectives.utilities.length; u++) {
+		menu.items[1].items.push({
+			id: perspectives.utilities[u].id,
+			label: perspectives.utilities[u].label,
 			action: 'showPerspective',
 		});
 	}

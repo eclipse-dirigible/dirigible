@@ -1,0 +1,5 @@
+{
+    "module": "inbox/configs/inbox-menu.js",
+    "extensionPoint": "application-menus",
+    "description": "Process Inbox menu"
+}

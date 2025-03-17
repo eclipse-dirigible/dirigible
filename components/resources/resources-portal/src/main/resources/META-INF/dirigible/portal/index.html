@@ -26,7 +26,7 @@
 
     <body>
         <shell-header></shell-header>
-        <perspective-container condensed="true"></perspective-container>
+        <perspective-container condensed="false"></perspective-container>
         <status-bar></status-bar>
 
         <dialogs></dialogs>
@@ -46,13 +46,12 @@
             addExtPoints({
                 theme: 'application-themes',
             });
-            angular.module('shell', ['blimpKit', 'platformShell'])
-                .controller('ApplicationController', ($scope) => {
-                    const MessageHub = new MessageHubApi();
-                    MessageHub.addMessageListener({ topic: 'portal.launchpad.Home.openView', handler: (data) => {
-                        window.location = data.location;
-                    }});
-                });
+            angular.module('shell', ['blimpKit', 'platformShell']).controller('ApplicationController', ($scope) => {
+                const MessageHub = new MessageHubApi();
+                MessageHub.addMessageListener({ topic: 'portal.launchpad.Home.openView', handler: (data) => {
+                    window.location = data.location;
+                }});
+            });
         </script>
         <theme></theme>
     </body>

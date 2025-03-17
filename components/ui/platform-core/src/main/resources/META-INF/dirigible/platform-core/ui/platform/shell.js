@@ -173,10 +173,11 @@ if (window !== top) {
                 }
             };
 
-            scope.isScrollable = (items) => {
+            scope.canScroll = (items) => {
                 if (items) {
-                    for (let i = 0; i < items.length; i++)
-                        if (items[i].items) return false;
+                    for (let i = 0; i < items.length; i++) {
+                        if (items[i]['items']) return false;
+                    }
                 }
                 return true;
             };
@@ -195,14 +196,15 @@ if (window !== top) {
         },
         link: (scope) => {
             scope.menuHandler = scope.menuHandler();
-            scope.isScrollable = (index) => {
-                for (let i = 0; i < scope.sublist[index].items.length; i++)
-                    if (scope.sublist[index].items[i].items) return false;
+            scope.canScroll = (sublistItems) => {
+                for (let i = 0; i < sublistItems.length; i++) {
+                    if (sublistItems[i]['items']) return false;
+                }
                 return true;
             };
         },
-        template: `<bk-menu-item ng-repeat-start="item in sublist track by $index" ng-if="!item.items" has-separator="::item.divider" title="{{ ::item.label }}" ng-click="::menuHandler(item)"></bk-menu-item>
-        <bk-menu-sublist ng-if="item.items" has-separator="::item.divider" title="{{ ::item.label }}" can-scroll="::isScrollable($index)" ng-repeat-end><submenu sublist="::item.items" menu-handler="::menuHandler"></submenu></bk-menu-sublist>`,
+        template: `<bk-menu-item ng-repeat-start="item in sublist track by $index" ng-if="!item.items" has-separator="::item.separator" title="{{ ::item.label }}" ng-click="::menuHandler(item)"></bk-menu-item>
+        <bk-menu-sublist ng-if="item.items" has-separator="::item.separator" title="{{ ::item.label }}" can-scroll="::canScroll(item.items)" ng-repeat-end><submenu sublist="::item.items" menu-handler="::menuHandler"></submenu></bk-menu-sublist>`,
     })).directive('perspectiveContainer', (Extensions, shellState, Shell) => ({
         restrict: 'E',
         transclude: true,
