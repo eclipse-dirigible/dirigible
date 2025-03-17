@@ -38,6 +38,9 @@
     <body class="bk-vbox">
         <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
         <bk-toolbar id="toolbarContainer" ng-show="!state.error && !state.isBusy">
+            <bk-button state="transparent" glyph="sap-icon--inbox" aria-label="Source" title="Source" ng-click="source()"></bk-button>
+            <bk-button state="transparent" glyph="sap-icon--outbox" aria-label="Target" title="Target" ng-click="target()"></bk-button>
+            <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="transparent" glyph="sap-icon--undo" aria-label="Undo" title="Undo" ng-click="undo()"></bk-button>
             <bk-button state="transparent" glyph="sap-icon--redo" aria-label="Redo" title="Redo" ng-click="redo()"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>

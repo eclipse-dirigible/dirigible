@@ -42,7 +42,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 	angular.element($window).bind('focus', () => { statusBarHub.showLabel('') });
 
-	const showAlert = (title, message) => {
+	$scope.showAlert = (title, message) => {
 		dialogHub.showAlert({
 			title: title,
 			message: message,
@@ -74,7 +74,6 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 	}
 
 	function saveContents(text, resourcePath) {
-		debugger
 		WorkspaceService.saveContent(resourcePath, text).then(() => {
 			contents = text;
 			layoutHub.setEditorDirty({
@@ -168,6 +167,99 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			$scope.saveMapping();
 		}
 	});
+
+
+
+
+
+	$scope.tableObject = new Table('TABLENAME');
+	$scope.table = new mxCell($scope.tableObject, new mxGeometry(0, 0, 200, 28), 'table');
+	$scope.table.setVertex(true);
+	$scope.table.setConnectable(false);
+
+	$scope.columnObject = new Column('COLUMNNAME');
+	$scope.column = new mxCell($scope.columnObject, new mxGeometry(0, 0, 0, 26));
+	$scope.column.setVertex(true);
+	$scope.column.setConnectable(false);
+
+	$scope.sourceMapping = (graph) => {
+		// Gets the default parent for inserting new cells. This
+		// is normally the first child of the root (ie. layer 0).
+		let parent = graph.getDefaultParent();
+
+		// Adds cells to the model in a single step
+		let width = 160;
+		graph.getModel().beginUpdate();
+		try {
+			let sourceTable = $scope.table.clone();
+			let sourceTableObject = sourceTable.value;
+			sourceTableObject.columns = [];
+
+			debugger
+			sourceTableObject.name = "MYTABLE";
+			sourceTableObject.type = "source";
+
+			let column = $scope.column.clone();
+			column.value.name = 'TABLENAME_ID';
+			column.value.type = 'INTEGER';
+			column.value.columnLength = 0;
+			column.value.primaryKey = 'true';
+			column.value.autoIncrement = 'true';
+			sourceTable.insert(column);
+			sourceTableObject.columns.push(column.value);
+
+			column = $scope.column.clone();
+			column.value.name = 'TABLENAME_NAME';
+			column.value.type = 'VARCHAR';
+			column.value.columnLength = 0;
+			column.value.primaryKey = 'false';
+			column.value.unique = 'true';
+			sourceTable.insert(column);
+			sourceTableObject.columns.push(column.value);
+
+
+			var v1 = graph.insertVertex(parent, sourceTable, sourceTableObject, 20, 20,
+				width, (sourceTableObject.columns.length + 1) * 28);
+			v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
+
+			// var v2 = graph.insertVertex(parent, null, '', 400, 20, width, height);
+			// v2.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
+
+			//$scope.graph.insertEdge(parent, null, relation, v1, v2);
+		}
+		finally {
+			// Updates the display
+			graph.getModel().endUpdate();
+		}
+	};
+
+	$scope.targetMapping = (graph) => {
+		debugger
+		// Gets the default parent for inserting new cells. This
+		// is normally the first child of the root (ie. layer 0).
+		var parent = graph.getDefaultParent();
+
+		// Adds cells to the model in a single step
+		var width = 160;
+		var height = 230;
+		graph.getModel().beginUpdate();
+		try {
+			// var v1 = graph.insertVertex(parent, null, '', 20, 20, width, height);
+			// v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
+
+			var v2 = graph.insertVertex(parent, null, '', 400, 20, width, height);
+			v2.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
+
+			//$scope.graph.insertEdge(parent, null, relation, v1, v2);
+		}
+		finally {
+			// Updates the display
+			graph.getModel().endUpdate();
+		}
+	};
+
+
+
 
 	function main(container, outline, toolbar, sidebar) {
 		if (!mxClient.isBrowserSupported()) {
@@ -279,7 +371,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_VERTICAL_ALIGN] = mxConstants.ALIGN_TOP;
 			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_PERIMETER] =
 				mxPerimeter.EntityPerimeter;
-			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_SHADOW] = 1;
+			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_SHADOW] = false;
 			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_ROUNDED] = true;
 			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_ARCSIZE] = 4;
 			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_FILLCOLOR] = '#89c5f5';
@@ -447,7 +539,6 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			var oldMouseMove = $scope.graph.connectionHandler.mouseMove;
 			$scope.graph.connectionHandler.mouseMove = function (sender, me) {
 				if (this.edgeState != null) {
-					debugger
 					this.currentRowNode = this.updateRow(me.getSource());
 
 					if (this.currentRow != null) {
@@ -483,37 +574,131 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			// Overrides getLabel to return empty labels for edges and
 			// short markup for collapsed cells.
 			$scope.graph.getLabel = function (cell) {
+				debugger
 				if (this.getModel().isVertex(cell)) {
 					if (this.isCellCollapsed(cell)) {
 						return '<table style="overflow:hidden;" width="100%" height="100%" border="1" cellpadding="4" class="title" style="height:100%;">' +
-							'<tr><th>Customers</th></tr>' +
+							'<tr><th>' + cell.value.name + '</th></tr>' +
 							'</table>';
+					} else {
+						let label = '<table style="overflow:hidden;" width="100%" border="1" cellpadding="4" class="title">' +
+							'<tr><th colspan="2">' + cell.value.name + '</th></tr>' +
+							'</table>';
+						label += '<div style="overflow:auto;cursor:default;top:26px;bottom:0px;position:absolute;width:100%;">' +
+							'<table width="100%" height="100%" border="1" cellpadding="4" class="erd">';
+						for (const c of cell.value.columns) {
+							label += '<tr><td>';
+							if (c.primaryKey === 'true') {
+								label += '<i title="Primary Key" class="dsm-table-icon sap-icon--key"></i>';
+							} else {
+								label += '<i class="dsm-table-spacer"></i>';
+							}
+							if (c.autoIncrement === 'true') {
+								label += '<i title="Auto Increment" class="dsm-table-icon sap-icon--add"></i>';
+							} else if (c.unique === 'true') {
+								label += '<i title="Unique" class="dsm-table-icon sap-icon--accept"></i>';
+							} else {
+								label += '<i class="dsm-table-spacer"></i>';
+							}
+							label += '</td>';
+							label += '<td><u>' + c.name + '</u></td></tr>';
+
+						}
+						label += '</table></div>';
+						return label;
 					}
-					else {
-						return '<table style="overflow:hidden;" width="100%" border="1" cellpadding="4" class="title">' +
-							'<tr><th colspan="2">Customers</th></tr>' +
-							'</table>' +
-							'<div style="overflow:auto;cursor:default;top:26px;bottom:0px;position:absolute;width:100%;">' +
-							'<table width="100%" height="100%" border="1" cellpadding="4" class="erd">' +
-							'<tr><td>' +
-							'</td><td>' +
-							'<u>customerId</u></td></tr><tr><td></td><td>number</td></tr>' +
-							'<tr><td></td><td>firstName</td></tr><tr><td></td><td>lastName</td></tr>' +
-							'<tr><td></td><td>streetAddress</td></tr><tr><td></td><td>city</td></tr>' +
-							'<tr><td></td><td>state</td></tr><tr><td></td><td>zip</td></tr>' +
-							'</table></div>';
-					}
-				}
-				else {
+				} else {
 					return '';
 				}
+
+
+				// if (this.isHtmlLabel(cell)) {
+				// 	let label = '';
+				// 	if (cell.value.primaryKey === 'true') {
+				// 		label += '<i title="Primary Key" class="dsm-table-icon sap-icon--key"></i>';
+				// 	} else {
+				// 		label += '<i class="dsm-table-spacer"></i>';
+				// 	}
+				// 	if (cell.value.autoIncrement === 'true') {
+				// 		label += '<i title="Auto Increment" class="dsm-table-icon sap-icon--add"></i>';
+				// 	} else if (cell.value.unique === 'true') {
+				// 		label += '<i title="Unique" class="dsm-table-icon sap-icon--accept"></i>';
+				// 	} else {
+				// 		label += '<i class="dsm-table-spacer"></i>';
+				// 	}
+				// 	let suffix = ': ' + mxUtils.htmlEntities(cell.value.type, false) + (cell.value.columnLength ?
+				// 		'(' + cell.value.columnLength + ')' : '');
+				// 	suffix = cell.value.isSQL ? '' : suffix;
+				// 	return label + mxUtils.htmlEntities(cell.value.name, false) + suffix;
+				// }
+
+				// return mxGraph.prototype.getLabel.apply(this, arguments); // "supercall"
 			};
 
-			// Defines a new export action
+			// Adds all required styles to the graph (see below)
+			// configureStylesheet($scope.graph);
+
+
+
+			// Adds sidebar icon for the table object
+			let tableObject = new Table('TABLENAME');
+			let table = new mxCell(tableObject, new mxGeometry(0, 0, 200, 28), 'table');
+
+			table.setVertex(true);
+			addSidebarIcon($scope.graph, sidebar, table, 'sap-icon--table-view', 'Drag this to the diagram to create a new Table', $scope);
+
+			// Adds sidebar icon for the column object
+			let columnObject = new Column('COLUMNNAME');
+			let column = new mxCell(columnObject, new mxGeometry(0, 0, 0, 26));
+
+			column.setVertex(true);
+			column.setConnectable(false);
+
+			addSidebarIcon($scope.graph, sidebar, column, 'sap-icon--table-column', 'Drag this to a Table to create a new Column', $scope);
+
+			// Adds primary key field into table
+			let firstColumn = column.clone();
+
+			firstColumn.value.name = 'TABLENAME_ID';
+			firstColumn.value.type = 'INTEGER';
+			firstColumn.value.columnLength = 0;
+			firstColumn.value.primaryKey = 'true';
+			firstColumn.value.autoIncrement = 'true';
+
+			table.insert(firstColumn);
+
+
+
+
+
+
+
+
+
+			editor.addAction('source', function (editor, cell) {
+				$scope.sourceMapping($scope.graph);
+			});
+
+			editor.addAction('target', function (editor, cell) {
+				$scope.targetMapping($scope.graph);
+			});
+
+
+
 			editor.addAction('save', function (editor, cell) {
-				debugger
 				$scope.saveMapping($scope.graph);
 			});
+
+
+
+			$scope.source = function () {
+				editor.execute('source');
+			};
+			$scope.target = function () {
+				editor.execute('target');
+			};
+
+
 
 			$scope.save = function () {
 				editor.execute('save');
@@ -555,33 +740,65 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			// relation.setAttribute('sourceRow', '4');
 			// relation.setAttribute('targetRow', '6');
 
+
+
+
+			// // Load document
+			// let doc = mxUtils.parseXml(contents);
+			// let codec = new mxCodec(doc.mxGraphModel);
+			// codec.decode(doc.documentElement.getElementsByTagName('mxGraphModel')[0], $scope.graph.getModel());
+			// $scope.graph.model.addListener(mxEvent.START_EDIT, function (_sender, _evt) {
+			// 	layoutHub.setEditorDirty({
+			// 		path: $scope.dataParameters.filePath,
+			// 		dirty: true,
+			// 	});
+			// });
+
+
+
+
 			// Enables rubberband selection
 			new mxRubberband($scope.graph);
 
 			// Enables key handling (eg. escape)
 			new mxKeyHandler($scope.graph);
 
-			// Gets the default parent for inserting new cells. This
-			// is normally the first child of the root (ie. layer 0).
-			var parent = $scope.graph.getDefaultParent();
 
-			// Adds cells to the model in a single step
-			var width = 160;
-			var height = 230;
-			$scope.graph.getModel().beginUpdate();
-			try {
-				var v1 = $scope.graph.insertVertex(parent, null, '', 20, 20, width, height);
-				v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
 
-				var v2 = $scope.graph.insertVertex(parent, null, '', 400, 20, width, height);
-				v2.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
 
-				//$scope.graph.insertEdge(parent, null, relation, v1, v2);
-			}
-			finally {
-				// Updates the display
-				$scope.graph.getModel().endUpdate();
-			}
+
+
+
+
+
+
+
+
+
+
+			// // Gets the default parent for inserting new cells. This
+			// // is normally the first child of the root (ie. layer 0).
+			// var parent = $scope.graph.getDefaultParent();
+
+			// // Adds cells to the model in a single step
+			// var width = 160;
+			// var height = 230;
+			// $scope.graph.getModel().beginUpdate();
+			// try {
+			// 	var v1 = $scope.graph.insertVertex(parent, null, '', 20, 20, width, height);
+			// 	v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
+
+			// 	var v2 = $scope.graph.insertVertex(parent, null, '', 400, 20, width, height);
+			// 	v2.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
+
+			// 	//$scope.graph.insertEdge(parent, null, relation, v1, v2);
+			// }
+			// finally {
+			// 	// Updates the display
+			// 	$scope.graph.getModel().endUpdate();
+			// }
+
+
 
 		}
 
