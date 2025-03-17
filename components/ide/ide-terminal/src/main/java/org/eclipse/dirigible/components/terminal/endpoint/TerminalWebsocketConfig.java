@@ -23,7 +23,10 @@ import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -36,11 +39,9 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
 
     private static final Logger logger = LoggerFactory.getLogger(TerminalWebsocketConfig.class);
 
-    /** The Constant TERMINAL_PREFIX. */
     private static final String TERMINAL_PREFIX = "[ws:terminal] {}";
     private static final String UNIX_FILE = "ttyd.sh";
-    /** The started. */
-    static volatile boolean started = false;
+    private static volatile boolean started = false;
 
     static {
         runTTYD();
@@ -72,76 +73,54 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
             return;
         }
         startTTYD();
-
     }
 
     private static void startTTYD() {
         try {
-            String command = null;
             if (SystemUtils.IS_OS_UNIX) {
-                command = createUnixCommand();
-            } else {
-                logger.warn("OS [{}] is not supported", System.getProperty("os.name"));
-            }
+                File unixFile = createUnixFile();
 
-            if (null != command) {
-                logger.info("Starting ttyd using command [{}]", command);
+                String command = "./" + unixFile.getName();
                 ProcessRunnable processRunnable = new ProcessRunnable(command);
+
                 new Thread(processRunnable).start();
 
                 started = true;
+            } else {
+                logger.warn("OS [{}] is not supported", System.getProperty("os.name"));
             }
         } catch (Exception e) {
             logger.error(TERMINAL_PREFIX, e.getMessage(), e);
         }
     }
 
-    private static String createUnixCommand() throws IOException {
-        String command = "sh -c ./" + UNIX_FILE + " --writable";
+    private static File createUnixFile() throws IOException {
         File ttydShellFile = new File("./" + UNIX_FILE);
         if (ttydShellFile.exists()) {
             boolean deleted = ttydShellFile.delete();
             logger.info("File [{}] deleted [{}]", ttydShellFile, deleted);
         }
-        createShellScript(ttydShellFile, "./" + UNIX_FILE + " -p 9000 --writable sh");
 
-        if (!ttydShellFile.setExecutable(true)) {
-            logger.warn(TERMINAL_PREFIX, "Failed to set permissions on file");
-            File ttydExecutable = new File("./" + UNIX_FILE + " --writable");
-            createExecutable(TerminalWebsocketConfig.class.getResourceAsStream("/ttyd_linux.x86_64_1.6.0"), ttydExecutable);
-        }
-        return command;
+        createShellScriptFile(ttydShellFile);
+
+        return ttydShellFile;
     }
 
     /**
      * Creates the shell script.
      *
      * @param file the file
-     * @param command the command
      * @throws FileNotFoundException the file not found exception
      * @throws IOException Signals that an I/O exception has occurred.
      */
-    private static void createShellScript(File file, String command) throws FileNotFoundException, IOException {
+    private static void createShellScriptFile(File file) throws FileNotFoundException, IOException {
+        String command = "ttyd -p 9000 --writable sh";
         logger.info("Creating file [{}] with content [{}]", file, command);
         try (FileOutputStream fos = new FileOutputStream(file)) {
             IOUtils.write(command, fos, StandardCharsets.UTF_8);
         }
-        file.setExecutable(true);
-    }
-
-    /**
-     * Creates the executable.
-     *
-     * @param in the in
-     * @param file the file
-     * @throws FileNotFoundException the file not found exception
-     * @throws IOException Signals that an I/O exception has occurred.
-     */
-    private static void createExecutable(InputStream in, File file) throws FileNotFoundException, IOException {
-        try (FileOutputStream fos = new FileOutputStream(file)) {
-            IOUtils.copy(in, fos);
-        }
-        file.setExecutable(true);
+        boolean completed = file.setExecutable(true);
+        logger.info("File [{}] set as executable [{}]", completed);
     }
 
 }
