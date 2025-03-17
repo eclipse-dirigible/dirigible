@@ -33,8 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements SubProtocolCapable {
 
-    /** The Constant TERMINAL_PREFIX. */
-    private static final String TERMINAL_PREFIX = "[ws:terminal] ";
+    private static final String TERMINAL_PREFIX_WITH_MSG = "[ws:terminal] {}";
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(TerminalWebsocketHandler.class);
@@ -93,12 +92,12 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
 
                                 while ((line = input.readLine()) != null) {
                                     if (logger.isDebugEnabled()) {
-                                        logger.debug(TERMINAL_PREFIX + line);
+                                        logger.debug(TERMINAL_PREFIX_WITH_MSG, line);
                                     }
                                 }
                             }
                         } catch (IOException e) {
-                            logger.error(TERMINAL_PREFIX + e.getMessage(), e);
+                            logger.error(TERMINAL_PREFIX_WITH_MSG, e.getMessage(), e);
                         }
                     }
                 });
@@ -111,11 +110,11 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
                                 String line;
 
                                 while ((line = input.readLine()) != null) {
-                                    logger.error(TERMINAL_PREFIX + line);
+                                    logger.info(TERMINAL_PREFIX_WITH_MSG, line);
                                 }
                             }
                         } catch (IOException e) {
-                            logger.error(TERMINAL_PREFIX + e.getMessage(), e);
+                            logger.error(TERMINAL_PREFIX_WITH_MSG, e.getMessage(), e);
                         }
                     }
                 });
@@ -123,7 +122,7 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
 
                 // logger.info("[ws:terminal] " + process.exitValue());
             } catch (IOException e) {
-                logger.error(TERMINAL_PREFIX + e.getMessage(), e);
+                logger.error(TERMINAL_PREFIX_WITH_MSG, e.getMessage(), e);
             }
 
         }
@@ -160,11 +159,11 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
             TerminalWebsocketClientEndpoint clientEndPoint = startClientWebsocket(session);
             SESSION_TO_CLIENT.put(session.getId(), clientEndPoint);
         } catch (Exception e) {
-            logger.error(TERMINAL_PREFIX + e.getMessage(), e);
+            logger.error(TERMINAL_PREFIX_WITH_MSG, e.getMessage(), e);
             try {
                 session.close();
             } catch (Exception e1) {
-                logger.error(TERMINAL_PREFIX + e.getMessage(), e);
+                logger.error(TERMINAL_PREFIX_WITH_MSG, e.getMessage(), e);
             }
         }
         OPEN_SESSIONS.put(session.getId(), session);
@@ -250,7 +249,7 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
                               .close();
             }
         } catch (Exception e) {
-            logger.error(TERMINAL_PREFIX + e.getMessage(), e);
+            logger.error(TERMINAL_PREFIX_WITH_MSG, e.getMessage(), e);
         }
     }
 

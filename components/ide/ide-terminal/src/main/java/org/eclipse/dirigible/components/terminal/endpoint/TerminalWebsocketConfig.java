@@ -120,7 +120,7 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
                         ttydShell.setExecutable(true);
                     }
                 } else if (os.indexOf("win") >= 0) {
-                    logger.error("Windows is not yet supported");
+                    logger.warn("Windows is not yet supported");
                 } else {
                     logger.error("Unknown OS: " + os);
                 }
