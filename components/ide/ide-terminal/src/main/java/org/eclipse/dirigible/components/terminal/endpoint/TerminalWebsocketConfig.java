@@ -123,10 +123,10 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
      */
     private static void createShellScript(File file, String command) throws FileNotFoundException, IOException {
         logger.info("Creating file [{}] with content [{}]", file, command);
-        file.setExecutable(true);
         try (FileOutputStream fos = new FileOutputStream(file)) {
             IOUtils.write(command, fos, StandardCharsets.UTF_8);
         }
+        file.setExecutable(true);
     }
 
     /**
@@ -138,10 +138,10 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
      * @throws IOException Signals that an I/O exception has occurred.
      */
     private static void createExecutable(InputStream in, File file) throws FileNotFoundException, IOException {
-        file.setExecutable(true);
         try (FileOutputStream fos = new FileOutputStream(file)) {
             IOUtils.copy(in, fos);
         }
+        file.setExecutable(true);
     }
 
 }
