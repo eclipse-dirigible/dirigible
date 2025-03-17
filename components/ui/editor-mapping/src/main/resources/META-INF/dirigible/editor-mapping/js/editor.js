@@ -196,7 +196,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			sourceTableObject.columns = [];
 
 			debugger
-			sourceTableObject.name = "MYTABLE";
+			sourceTableObject.name = "MY_SOURCE_TABLE";
 			sourceTableObject.type = "source";
 
 			let column = $scope.column.clone();
@@ -241,16 +241,38 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 		// Adds cells to the model in a single step
 		var width = 160;
-		var height = 230;
 		graph.getModel().beginUpdate();
 		try {
-			// var v1 = graph.insertVertex(parent, null, '', 20, 20, width, height);
-			// v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
+			let sourceTable = $scope.table.clone();
+			let sourceTableObject = sourceTable.value;
+			sourceTableObject.columns = [];
 
-			var v2 = graph.insertVertex(parent, null, '', 400, 20, width, height);
-			v2.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
+			debugger
+			sourceTableObject.name = "MY_TARGET_TABLE";
+			sourceTableObject.type = "source";
 
-			//$scope.graph.insertEdge(parent, null, relation, v1, v2);
+			let column = $scope.column.clone();
+			column.value.name = 'TABLENAME_ID';
+			column.value.type = 'INTEGER';
+			column.value.columnLength = 0;
+			column.value.primaryKey = 'true';
+			column.value.autoIncrement = 'true';
+			sourceTable.insert(column);
+			sourceTableObject.columns.push(column.value);
+
+			column = $scope.column.clone();
+			column.value.name = 'TABLENAME_NAME';
+			column.value.type = 'VARCHAR';
+			column.value.columnLength = 0;
+			column.value.primaryKey = 'false';
+			column.value.unique = 'true';
+			sourceTable.insert(column);
+			sourceTableObject.columns.push(column.value);
+
+
+			var v1 = graph.insertVertex(parent, sourceTable, sourceTableObject, 400, 20,
+				width, (sourceTableObject.columns.length + 1) * 28);
+			v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
 		}
 		finally {
 			// Updates the display
