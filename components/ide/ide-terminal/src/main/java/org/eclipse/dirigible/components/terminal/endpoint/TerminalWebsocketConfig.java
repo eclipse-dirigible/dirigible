@@ -23,7 +23,7 @@ import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 
 import java.io.*;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 
 /**
  * The Class TerminalWebsocketConfig.
@@ -87,14 +87,14 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
                 String os = System.getProperty("os.name")
                                   .toLowerCase();
                 if ((os.indexOf("nix") >= 0 || os.indexOf("nux") >= 0 || os.indexOf("aix") > 0)) {
-                    command = "sh -c ./ttyd.sh";
+                    command = "sh -c ./ttyd.sh --writable";
                     File ttydShell = new File("./ttyd.sh");
                     if (!ttydShell.exists()) {
                         // ttyd binary should be placed in advance to $CATALINA_HOME/bin
 
-                        createShellScript(ttydShell, "./ttyd -p 9000 sh");
+                        createShellScript(ttydShell, "./ttyd -p 9000 --writable sh");
                         if (ttydShell.setExecutable(true)) {
-                            File ttydExecutable = new File("./ttyd");
+                            File ttydExecutable = new File("./ttyd --writable");
                             createExecutable(TerminalWebsocketConfig.class.getResourceAsStream("/ttyd_linux.x86_64_1.6.0"), ttydExecutable);
                             if (!ttydExecutable.setExecutable(true)) {
                                 if (logger.isWarnEnabled()) {
@@ -108,7 +108,7 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
                         }
                     }
                 } else if (os.indexOf("mac") >= 0) {
-                    command = "sh -c ./ttyd.sh";
+                    command = "sh -c ./ttyd.sh --writable";
                     File ttydShell = new File("./ttyd.sh");
                     if (!ttydShell.exists()) {
                         // ttyd should be pre-installed with: brew install ttyd
@@ -116,7 +116,7 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
                         // new Thread(processRunnable).start();
                         // processRunnable.getProcess().waitFor();
 
-                        createShellScript(ttydShell, "ttyd -p 9000 sh");
+                        createShellScript(ttydShell, "ttyd -p 9000 --writable sh");
                         ttydShell.setExecutable(true);
                     }
                 } else if (os.indexOf("win") >= 0) {
@@ -145,8 +145,9 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
      * @throws IOException Signals that an I/O exception has occurred.
      */
     private static void createShellScript(File file, String command) throws FileNotFoundException, IOException {
+        file.setExecutable(true);
         try (FileOutputStream fos = new FileOutputStream(file)) {
-            IOUtils.write(command, fos, Charset.defaultCharset());
+            IOUtils.write(command, fos, StandardCharsets.UTF_8);
         }
     }
 
