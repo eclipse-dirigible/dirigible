@@ -38,7 +38,7 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
 
     /** The Constant TERMINAL_PREFIX. */
     private static final String TERMINAL_PREFIX = "[ws:terminal] {}";
-
+    private static final String UNIX_FILE = "ttyd.sh";
     /** The started. */
     static volatile boolean started = false;
 
@@ -71,6 +71,11 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
             logger.info("TTYD is started");
             return;
         }
+        startTTYD();
+
+    }
+
+    private static void startTTYD() {
         try {
             String command = null;
             if (SystemUtils.IS_OS_UNIX) {
@@ -89,20 +94,21 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
         } catch (Exception e) {
             logger.error(TERMINAL_PREFIX, e.getMessage(), e);
         }
-
     }
 
     private static String createUnixCommand() throws IOException {
-        String command = "sh -c ./ttyd.sh --writable";
-        File ttydShell = new File("./ttyd.sh");
-        if (!ttydShell.exists()) {
-            createShellScript(ttydShell, "./ttyd -p 9000 --writable sh");
+        String command = "sh -c ./" + UNIX_FILE + " --writable";
+        File ttydShellFile = new File("./" + UNIX_FILE);
+        if (ttydShellFile.exists()) {
+            boolean deleted = ttydShellFile.delete();
+            logger.info("File [{}] deleted [{}]", ttydShellFile, deleted);
+        }
+        createShellScript(ttydShellFile, "./" + UNIX_FILE + " -p 9000 --writable sh");
 
-            if (!ttydShell.setExecutable(true)) {
-                logger.warn(TERMINAL_PREFIX, "Failed to set permissions on file");
-                File ttydExecutable = new File("./ttyd --writable");
-                createExecutable(TerminalWebsocketConfig.class.getResourceAsStream("/ttyd_linux.x86_64_1.6.0"), ttydExecutable);
-            }
+        if (!ttydShellFile.setExecutable(true)) {
+            logger.warn(TERMINAL_PREFIX, "Failed to set permissions on file");
+            File ttydExecutable = new File("./" + UNIX_FILE + " --writable");
+            createExecutable(TerminalWebsocketConfig.class.getResourceAsStream("/ttyd_linux.x86_64_1.6.0"), ttydExecutable);
         }
         return command;
     }
@@ -116,6 +122,8 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
      * @throws IOException Signals that an I/O exception has occurred.
      */
     private static void createShellScript(File file, String command) throws FileNotFoundException, IOException {
+        logger.info("Creating file [{}] with content [{}]", file, command);
+        file.setExecutable(true);
         try (FileOutputStream fos = new FileOutputStream(file)) {
             IOUtils.write(command, fos, StandardCharsets.UTF_8);
         }

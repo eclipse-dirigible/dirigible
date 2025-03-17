@@ -91,9 +91,7 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
                                 String line;
 
                                 while ((line = input.readLine()) != null) {
-                                    if (logger.isDebugEnabled()) {
-                                        logger.debug(TERMINAL_PREFIX_WITH_MSG, line);
-                                    }
+                                    logger.info(TERMINAL_PREFIX_WITH_MSG, line);
                                 }
                             }
                         } catch (IOException e) {
