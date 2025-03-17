@@ -18,150 +18,45 @@ import org.springframework.web.socket.SubProtocolCapable;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.BinaryWebSocketHandler;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.eclipse.dirigible.components.terminal.endpoint.TerminalWebsocketConfig.TERMINAL_PREFIX;
+
 /**
  * The Console Websocket Handler.
  */
-public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements SubProtocolCapable {
-
-    private static final String TERMINAL_PREFIX_WITH_MSG = "[ws:terminal] {}";
+class TerminalWebsocketHandler extends BinaryWebSocketHandler implements SubProtocolCapable {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(TerminalWebsocketHandler.class);
 
     /** The open sessions. */
-    private static final Map<String, WebSocketSession> OPEN_SESSIONS = new ConcurrentHashMap<String, WebSocketSession>();
+    private static final Map<String, WebSocketSession> OPEN_SESSIONS = new ConcurrentHashMap<>();
 
     /** The session to client. */
-    private static final Map<String, TerminalWebsocketClientEndpoint> SESSION_TO_CLIENT =
-            new ConcurrentHashMap<String, TerminalWebsocketClientEndpoint>();
-
-
-    /**
-     * The Process Runnable.
-     */
-    static class ProcessRunnable implements Runnable {
-
-        /** The command. */
-        private final String command;
-
-        /** The process. */
-        private Process process;
-
-        /**
-         * Instantiates a new process runnable.
-         *
-         * @param command the command
-         */
-        ProcessRunnable(String command) {
-            this.command = command;
-        }
-
-        /**
-         * Gets the process.
-         *
-         * @return the process
-         */
-        public Process getProcess() {
-            return process;
-        }
-
-        /**
-         * Run.
-         */
-        @Override
-        public void run() {
-            try {
-                this.process = Runtime.getRuntime()
-                                      .exec(this.command);
-
-                Thread reader = new Thread(new Runnable() {
-                    public void run() {
-                        try {
-                            try (BufferedReader input = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                                String line;
-
-                                while ((line = input.readLine()) != null) {
-                                    logger.info(TERMINAL_PREFIX_WITH_MSG, line);
-                                }
-                            }
-                        } catch (IOException e) {
-                            logger.error(TERMINAL_PREFIX_WITH_MSG, e.getMessage(), e);
-                        }
-                    }
-                });
-                reader.start();
-
-                Thread error = new Thread(new Runnable() {
-                    public void run() {
-                        try {
-                            try (BufferedReader input = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-                                String line;
-
-                                while ((line = input.readLine()) != null) {
-                                    logger.info(TERMINAL_PREFIX_WITH_MSG, line);
-                                }
-                            }
-                        } catch (IOException e) {
-                            logger.error(TERMINAL_PREFIX_WITH_MSG, e.getMessage(), e);
-                        }
-                    }
-                });
-                error.start();
-
-                // logger.info("[ws:terminal] " + process.exitValue());
-            } catch (IOException e) {
-                logger.error(TERMINAL_PREFIX_WITH_MSG, e.getMessage(), e);
-            }
-
-        }
-
-    }
+    private static final Map<String, TerminalWebsocketClientEndpoint> SESSION_TO_CLIENT = new ConcurrentHashMap<>();
 
     /**
      * After connection established.
      *
      * @param session the session
-     * @throws Exception the exception
      */
     @Override
-    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
-        // if (Configuration.isAnonymousModeEnabled() || !Configuration.isTerminalEnabled()) {
-        // try {
-        // session.getBasicRemote().sendText(FEATURE_TERMINAL_IS_DISABLED_IN_THIS_MODE, true);
-        // if (logger.isWarnEnabled()) {logger.warn(FEATURE_TERMINAL_IS_DISABLED_IN_THIS_MODE);}
-        // } catch (IOException e) {
-        // logger.error(TERMINAL_PREFIX + e.getMessage(), e);
-        // }
-        // try {
-        // session.close();
-        // } catch (IOException e) {
-        // logger.error(TERMINAL_PREFIX + e.getMessage(), e);
-        // }
-        // return;
-        // }
-
-        if (logger.isDebugEnabled()) {
-            logger.debug("[ws:terminal] onOpen: " + session.getId());
-        }
+    public void afterConnectionEstablished(WebSocketSession session) {
+        logger.debug("[ws:terminal] onOpen: {}", session.getId());
         try {
             TerminalWebsocketClientEndpoint clientEndPoint = startClientWebsocket(session);
             SESSION_TO_CLIENT.put(session.getId(), clientEndPoint);
         } catch (Exception e) {
-            logger.error(TERMINAL_PREFIX_WITH_MSG, e.getMessage(), e);
+            logger.error(TERMINAL_PREFIX, e.getMessage(), e);
             try {
                 session.close();
             } catch (Exception e1) {
-                logger.error(TERMINAL_PREFIX_WITH_MSG, e.getMessage(), e);
+                logger.error(TERMINAL_PREFIX, e.getMessage(), e);
             }
         }
         OPEN_SESSIONS.put(session.getId(), session);
@@ -179,11 +74,7 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
         final TerminalWebsocketClientEndpoint clientEndPoint = new TerminalWebsocketClientEndpoint(new URI("ws://localhost:9000/ws"));
 
         // add listener
-        clientEndPoint.addMessageHandler(new TerminalWebsocketClientEndpoint.MessageHandler() {
-            public void handleMessage(ByteBuffer message) throws IOException {
-                session.sendMessage(new BinaryMessage(message));
-            }
-        });
+        clientEndPoint.addMessageHandler(message -> session.sendMessage(new BinaryMessage(message)));
 
         return clientEndPoint;
     }
@@ -193,14 +84,11 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
      *
      * @param session the session
      * @param message the message
-     * @throws Exception the exception
      */
     @Override
-    protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) throws Exception {
-        if (logger.isTraceEnabled()) {
-            logger.trace("[ws:terminal] onMessage: " + new String(message.getPayload()
-                                                                         .array()));
-        }
+    protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) {
+        logger.trace("[ws:terminal] onMessage: {}", new String(message.getPayload()
+                                                                      .array()));
 
         TerminalWebsocketClientEndpoint clientEndPoint = SESSION_TO_CLIENT.get(session.getId());
 
@@ -217,14 +105,12 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
      *
      * @param session the session
      * @param throwable the throwable
-     * @throws Exception the exception
      */
     @Override
-    public void handleTransportError(WebSocketSession session, Throwable throwable) throws Exception {
+    public void handleTransportError(WebSocketSession session, Throwable throwable) {
         if (logger.isInfoEnabled()) {
-            logger.info(String.format("[ws:terminal] Session %s error %s", session.getId(), throwable.getMessage()));
+            logger.info("[ws:terminal] Session [{}] error [{}]", session.getId(), throwable.getMessage());
         }
-        // logger.error(TERMINAL_PREFIX + throwable.getMessage(), throwable);
     }
 
     /**
@@ -232,13 +118,10 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
      *
      * @param session the session
      * @param status the status
-     * @throws Exception the exception
      */
     @Override
-    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
-        if (logger.isTraceEnabled()) {
-            logger.trace(String.format("[ws:terminal] Session %s closed because of %s", session.getId(), status.getReason()));
-        }
+    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+        logger.trace("[ws:terminal] Session [{}] closed because of [{}]", session.getId(), status.getReason());
         OPEN_SESSIONS.remove(session.getId());
         TerminalWebsocketClientEndpoint clientEndPoint = SESSION_TO_CLIENT.remove(session.getId());
         try {
@@ -247,7 +130,7 @@ public class TerminalWebsocketHandler extends BinaryWebSocketHandler implements 
                               .close();
             }
         } catch (Exception e) {
-            logger.error(TERMINAL_PREFIX_WITH_MSG, e.getMessage(), e);
+            logger.error(TERMINAL_PREFIX, e.getMessage(), e);
         }
     }
 

@@ -12,7 +12,6 @@ package org.eclipse.dirigible.components.terminal.endpoint;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.SystemUtils;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
-import org.eclipse.dirigible.components.terminal.endpoint.TerminalWebsocketHandler.ProcessRunnable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -37,9 +36,8 @@ import java.nio.charset.StandardCharsets;
 @ConditionalOnProperty(name = "terminal.enabled", havingValue = "true")
 public class TerminalWebsocketConfig implements WebSocketConfigurer {
 
+    static final String TERMINAL_PREFIX = "[ws:terminal] {}";
     private static final Logger logger = LoggerFactory.getLogger(TerminalWebsocketConfig.class);
-
-    private static final String TERMINAL_PREFIX = "[ws:terminal] {}";
     private static final String UNIX_FILE = "ttyd.sh";
     private static volatile boolean started = false;
 
@@ -69,7 +67,7 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
 
     private synchronized static void runTTYD() {
         if (started) {
-            logger.info("TTYD is started");
+            logger.warn("TTYD is already started and will not be started again.");
             return;
         }
         startTTYD();
@@ -114,13 +112,16 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
      * @throws IOException Signals that an I/O exception has occurred.
      */
     private static void createShellScriptFile(File file) throws FileNotFoundException, IOException {
-        String command = "ttyd -p 9000 --writable sh";
+        String command = """
+                #!/bin/sh
+                ttyd -p 9000 --writable sh
+                """;
         logger.info("Creating file [{}] with content [{}]", file, command);
         try (FileOutputStream fos = new FileOutputStream(file)) {
             IOUtils.write(command, fos, StandardCharsets.UTF_8);
         }
         boolean completed = file.setExecutable(true);
-        logger.info("File [{}] set as executable [{}]", completed);
+        logger.info("File [{}] set as executable [{}]", file, completed);
     }
 
 }
