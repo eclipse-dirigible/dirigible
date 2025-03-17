@@ -2,7 +2,7 @@ name: Pull Request
 
 on:
   pull_request:
-  
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -12,7 +12,7 @@ jobs:
     runs-on: ${{ matrix.os }}-latest
     strategy:
       matrix:
-        os: [ubuntu]
+        os: [ ubuntu ]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,7 +29,7 @@ jobs:
     runs-on: ${{ matrix.os }}-latest
     strategy:
       matrix:
-        os: [ubuntu, windows]
+        os: [ ubuntu, windows ]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -81,6 +81,10 @@ jobs:
         run: npm i -g esbuild
       - name: Install TypeScript compiler
         run: npm i -g typescript
+      - name: Install ttyd (prebuilt)
+        run: apt install -y ttyd
+      - name: Verify ttyd installation
+        run: ttyd --version
       - name: Maven Build
         run: mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true -U
       - name: Integration tests
@@ -143,6 +147,10 @@ jobs:
         run: npm i -g esbuild
       - name: Install TypeScript compiler
         run: npm i -g typescript
+      - name: Install ttyd (prebuilt)
+        run: apt install -y ttyd
+      - name: Verify ttyd installation
+        run: ttyd --version
       - name: Maven Build
         run: mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true -U
       - name: Integration tests
