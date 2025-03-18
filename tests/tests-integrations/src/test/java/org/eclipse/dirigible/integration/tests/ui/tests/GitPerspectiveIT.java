@@ -22,6 +22,6 @@ public class GitPerspectiveIT extends UserInterfaceIntegrationTest {
         gitPerspective.cloneRepository("https://github.com/codbex/codbex-sample-model-depends-on");
 
         this.workbench = ide.openWorkbench();
-        workbench.publishAll(true);
+        workbench.clickPublishAll();
     }
 }
