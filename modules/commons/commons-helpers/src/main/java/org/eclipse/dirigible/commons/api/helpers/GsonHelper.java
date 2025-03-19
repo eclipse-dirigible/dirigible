@@ -9,23 +9,24 @@
  */
 package org.eclipse.dirigible.commons.api.helpers;
 
+import com.google.gson.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.InputStreamReader;
 import java.lang.reflect.Type;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonParser;
-import com.google.gson.JsonSyntaxException;
 
 /**
  * The GsonHelper utility class.
  */
 public class GsonHelper {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(GsonHelper.class);
+
     /** The GSON instance. */
-    private static final transient Gson GSON = new GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mm:ssZ")
-                                                                .setPrettyPrinting()
-                                                                .create();
+    private static final Gson GSON = new GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mm:ssZ")
+                                                      .setPrettyPrinting()
+                                                      .create();
 
     /**
      * To json.
@@ -103,6 +104,7 @@ public class GsonHelper {
      */
     public static JsonElement parseJson(String src) {
         try {
+            LOGGER.debug("Parsing:\n{}", src);
             return JsonParser.parseString(src);
         } catch (JsonSyntaxException ex) {
             throw new JsonSyntaxException("Invalid json content [" + src + "]", ex);

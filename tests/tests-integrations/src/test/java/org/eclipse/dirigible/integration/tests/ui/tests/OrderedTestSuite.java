@@ -16,7 +16,7 @@ import org.junit.platform.suite.api.SuiteDisplayName;
 
 @Suite
 @SuiteDisplayName("Ordered Test Suite")
-@SelectClasses({CreateNewFileIT.class, MultitenancyIT.class, CmsSuiteIT.class, ApproveLeaveRequestBpmIT.class,
+@SelectClasses({CmsSuiteIT.class, ApproveLeaveRequestBpmIT.class, CreateNewFileIT.class, MultitenancyIT.class,
         DeclineLeaveRequestBpmIT.class})
 class OrderedTestSuite {
     // use this suite class to run tests in specific order if needed

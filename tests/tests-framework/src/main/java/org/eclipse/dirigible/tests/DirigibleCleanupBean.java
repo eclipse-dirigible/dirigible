@@ -28,7 +28,7 @@ class DirigibleCleanupBean implements DisposableBean {
     @Override
     public void destroy() {
         LOGGER.info("Destroying [{}]. Calling cleaner...", this.getClass());
-        DirigibleCleaner.deleteDirigibleFolder();
+        dirigibleCleaner.cleanup();
     }
 }
 
