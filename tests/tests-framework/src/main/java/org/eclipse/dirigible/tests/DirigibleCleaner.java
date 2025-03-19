@@ -17,7 +17,6 @@ import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.tests.util.FileUtil;
-import org.flowable.engine.ProcessEngines;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -52,7 +51,6 @@ class DirigibleCleaner {
         long startTime = System.currentTimeMillis();
         LOGGER.info("Cleaning up Dirigible resources...");
 
-        cleanupFlowable();
         // explicitly all delete and drop to clean the in-memory stuff which otherwise breaks the tests
         deleteDirigibleDBData();
         clearInitializedDataSources();
@@ -68,17 +66,6 @@ class DirigibleCleaner {
             dataSourceInitializer.clear();
         } catch (RuntimeException ex) {
             LOGGER.warn("Failed to clear initialized data sources", ex);
-        }
-    }
-
-    private void cleanupFlowable() {
-        LOGGER.info("Destroying flowable engines...");
-        try {
-            ProcessEngines.destroy();
-
-            LOGGER.info("Flowable engines have been destroyed.");
-        } catch (RuntimeException ex) {
-            LOGGER.warn("Failed to destroy flowable engines", ex);
         }
     }
 
