@@ -19,9 +19,15 @@ public class GitPerspectiveIT extends UserInterfaceIntegrationTest {
     void testGitFunctionality() {
         this.gitPerspective = ide.openGitPerspective();
 
-        gitPerspective.cloneRepository("https://github.com/codbex/codbex-sample-model-depends-on");
+        gitPerspective.cloneRepository("https://github.com/codbex/codbex-sample-test-git");
 
         this.workbench = ide.openWorkbench();
         workbench.clickPublishAll();
+
+        assertWorkingProject();
+    }
+
+    void assertWorkingProject() {
+        // consoleLogAssrter
     }
 }
