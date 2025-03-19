@@ -42,7 +42,7 @@ public class FileUtil {
 
     public static List<Path> findFiles(Path folder) throws IOException {
         if (!Files.exists(folder)) {
-            LOGGER.info("Folder [{}] doesn't exist", folder);
+            LOGGER.debug("Folder [{}] doesn't exist", folder);
             return Collections.emptyList();
         }
         if (!Files.isDirectory(folder)) {
