@@ -12,6 +12,7 @@ package org.eclipse.dirigible.tests.framework.impl;
 import com.codeborne.selenide.*;
 import com.codeborne.selenide.ex.ListSizeMismatch;
 import org.apache.commons.lang3.StringUtils;
+import org.eclipse.dirigible.tests.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
@@ -53,7 +54,6 @@ class BrowserImpl implements Browser {
 
     static {
         configureSelenide();
-
     }
 
     private final String protocol;
@@ -83,6 +83,7 @@ class BrowserImpl implements Browser {
 
     private static void configureSelenide() {
         Configuration.timeout = TimeUnit.SECONDS.toMillis(15);
+        Configuration.headless = IntegrationTest.isHeadlessExecution();
         Configuration.browser = "chrome";
         Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
     }
@@ -374,7 +375,7 @@ class BrowserImpl implements Browser {
                                           .getSource());
                 }
                 if (matchedElementsCount > 1) {
-                    LOGGER.warn(
+                    LOGGER.error(
                             "Found MORE THAN ONE elements [{}] with selector [{}] and conditions [{}] but expected ONLY ONE. Consider using more precise selector and conditions.\nFound elements: {}.\nCause error message: {}",
                             matchedElementsCount, by, allConditions, describeCollection(by, foundElements, conditions), ex.getMessage());
                 }

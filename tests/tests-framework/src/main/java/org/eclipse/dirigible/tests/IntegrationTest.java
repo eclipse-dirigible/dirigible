@@ -13,8 +13,6 @@ import org.awaitility.Awaitility;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -30,21 +28,11 @@ import java.util.concurrent.TimeUnit;
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 public abstract class IntegrationTest {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(IntegrationTest.class);
-
     // set config to false if you want to disable the headless mode
-    private static boolean headlessExecution = true;
-
-    static {
-        com.codeborne.selenide.Configuration.headless = headlessExecution;
-    }
+    private static final boolean headlessExecution = Boolean.parseBoolean(System.getProperty("selenide.headless", Boolean.TRUE.toString()));
 
     @Autowired
     private TenantCreator tenantCreator;
-
-    protected static void setHeadlessExecution(boolean headless) {
-        IntegrationTest.headlessExecution = headless;
-    }
 
     @AfterAll
     public static void reloadConfigurations() {
@@ -73,6 +61,10 @@ public abstract class IntegrationTest {
     @BeforeAll
     static void cleanBeforeTestClassExecution() {
         DirigibleCleaner.deleteDirigibleFolder();
+    }
+
+    public static boolean isHeadlessExecution() {
+        return headlessExecution;
     }
 
 }

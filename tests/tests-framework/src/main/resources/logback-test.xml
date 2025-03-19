@@ -61,7 +61,7 @@
         <appender-ref ref="ConsoleLoggingAppender"/>
     </logger>
 
-    <logger name="app" level="INFO" additivity="false">
+    <logger name="app" level="ERROR" additivity="false">
         <appender-ref ref="STDOUT"/>
         <appender-ref ref="FILE_APPS"/>
         <appender-ref ref="ConsoleLoggingAppender"/>
@@ -74,10 +74,7 @@
     </root>
 
     <logger name="org.eclipse.dirigible.tests" level="DEBUG"/>
-    <logger name="org.eclipse.dirigible.tests.DirigibleCleaner" level="INFO"/>
     <logger name="org.eclipse.dirigible.tests.util.FileUtil" level="INFO"/>
-    <logger name="org.eclipse.dirigible.tests.DirigibleCleanupBean" level="INFO"/>
-    <!--    changing the following severity may affect tests execution since logs are shown in the dirigible UI-->
     <logger name="org.eclipse.dirigible.tests.framework.impl.BrowserImpl" level="INFO"/>
 
     <logger name="org.eclipse.dirigible.components.tenants.tenant" level="INFO"/>
