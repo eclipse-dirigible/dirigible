@@ -56,7 +56,8 @@ class DirigibleCleaner {
     }
 
     /**
-     * Execute this before H2 folder deletion because it is in memory DB. Otherwise, will remain data in memory.
+     * Execute this before H2 folder deletion because it is in memory DB. Otherwise, will remain data in
+     * memory.
      */
     private void deleteDirigibleDBData() {
         LOGGER.info("Deleting Dirigible db data...");
@@ -75,7 +76,7 @@ class DirigibleCleaner {
 
     private void dropAllSequencesInSchema(DirigibleDataSource dataSource) {
         List<String> sequences = getAllSequences(dataSource);
-        LOGGER.info("Will drop [{}] sequences from data source [{}]. Sequences: {}", sequences.size(), dataSource, sequences);
+        LOGGER.debug("Will drop [{}] sequences from data source [{}]. Sequences: {}", sequences.size(), dataSource, sequences);
 
         for (int idx = 0; idx < 4; idx++) {
             Iterator<String> iterator = sequences.iterator();
@@ -88,11 +89,11 @@ class DirigibleCleaner {
                                                   .build();
                     try (PreparedStatement prepareStatement = connection.prepareStatement(sql)) {
                         prepareStatement.executeUpdate();
-                        LOGGER.info("Dropped sequence [{}]", sequence);
+                        LOGGER.debug("Dropped sequence [{}]", sequence);
                         iterator.remove();
                     }
                 } catch (SQLException ex) {
-                    LOGGER.warn("Failed to drop sequence [{}] in data source [{}]", sequence, dataSource, ex);
+                    LOGGER.debug("Failed to drop sequence [{}] in data source [{}]", sequence, dataSource, ex);
                 }
             }
         }
@@ -135,11 +136,11 @@ class DirigibleCleaner {
                                                   .build();
                     try (PreparedStatement prepareStatement = connection.prepareStatement(sql)) {
                         prepareStatement.executeUpdate();
-                        LOGGER.info("Dropped table [{}]", tableName);
+                        LOGGER.debug("Dropped table [{}]", tableName);
                         iterator.remove();
                     }
                 } catch (SQLException ex) {
-                    LOGGER.warn("Failed to drop table [{}] in data source [{}]", tableName, dataSource, ex);
+                    LOGGER.debug("Failed to drop table [{}] in data source [{}]", tableName, dataSource, ex);
                 }
             }
         }
@@ -199,7 +200,7 @@ class DirigibleCleaner {
     }
 
     private void deleteSchema(String schema, DirigibleDataSource dataSource) {
-        LOGGER.info("Will drop schema [{}] from data source [{}]", schema, dataSource);
+        LOGGER.debug("Will drop schema [{}] from data source [{}]", schema, dataSource);
         try (Connection connection = dataSource.getConnection()) {
             ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
             String sql = dialect.drop()
@@ -236,11 +237,11 @@ class DirigibleCleaner {
                                                   .build();
                     try (PreparedStatement prepareStatement = connection.prepareStatement(sql)) {
                         int rowsAffected = prepareStatement.executeUpdate();
-                        LOGGER.info("Deleted [{}] from table [{}]", rowsAffected, table);
+                        LOGGER.debug("Deleted [{}] from table [{}]", rowsAffected, table);
                         iterator.remove();
                     }
                 } catch (SQLException ex) {
-                    LOGGER.warn("Failed to delete data from table [{}] in data source [{}]", table, dataSource, ex);
+                    LOGGER.debug("Failed to delete data from table [{}] in data source [{}]", table, dataSource, ex);
                 }
             }
         }

@@ -19,12 +19,12 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
-// @Order(Ordered.HIGHEST_PRECEDENCE) // Ensures it runs first
 @Order(Ordered.LOWEST_PRECEDENCE) // Ensures it runs last
 @Component
 class TestsSpringEventsListener implements ApplicationListener<ApplicationEvent> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TestsSpringEventsListener.class);
+
     private final DirigibleCleaner dirigibleCleaner;
 
     TestsSpringEventsListener(DirigibleCleaner dirigibleCleaner) {
@@ -39,7 +39,7 @@ class TestsSpringEventsListener implements ApplicationListener<ApplicationEvent>
             return;
         }
 
-        LOGGER.info("Event [{}] WILL NOT be handled.", event);
+        LOGGER.debug("Event [{}] WILL NOT be handled.", event);
     }
 
 }

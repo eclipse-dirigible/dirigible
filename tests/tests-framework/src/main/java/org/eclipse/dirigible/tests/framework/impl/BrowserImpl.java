@@ -48,8 +48,8 @@ class BrowserImpl implements Browser {
     private static final String PATH_SEPARATOR = "/";
 
     private static final int FRAME_SEARCH_TOTAL_SECONDS = 45;
-    private static final int ELEMENT_EXISTENCE_SEARCH_TIME_SECONDS = 10;
-    private static final int ELEMENT_SEARCH_IN_FRAME_MILLIS = 100;
+    private static final int ELEMENT_EXISTENCE_SEARCH_TIME_SECONDS = 5;
+    private static final int ELEMENT_SEARCH_IN_FRAME_MILLIS = 50;
 
     static {
         configureSelenide();
@@ -69,6 +69,16 @@ class BrowserImpl implements Browser {
         this.protocol = protocolType.protocol;
         this.host = host;
         this.port = port;
+    }
+
+    enum ProtocolType {
+        HTTP("http"), HTTPS("https");
+
+        private final String protocol;
+
+        ProtocolType(String protocol) {
+            this.protocol = protocol;
+        }
     }
 
     private static void configureSelenide() {
@@ -213,7 +223,6 @@ class BrowserImpl implements Browser {
                 .perform();
     }
 
-
     @Override
     public void type(String text) {
         Selenide.actions()
@@ -350,7 +359,7 @@ class BrowserImpl implements Browser {
                                              .getValue();
             boolean zeroMatches = Integer.valueOf(0)
                                          .equals(matchedElements);
-            LOGGER.debug(
+            LOGGER.warn(
                     "Found [{}] elements with selector [{}] and conditions [{}] but expected ONLY ONE. Consider using more precise selector and conditions.\nFound elements: {}.\nCause error message: {}",
                     matchedElements, by, allConditions, describeCollection(by, foundElements, conditions), ex.getMessage());
             if (zeroMatches) {
@@ -548,7 +557,6 @@ class BrowserImpl implements Browser {
         handleElementInAllFrames(by, SelenideElement::click, Condition.visible);
     }
 
-
     @Override
     public void assertElementExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text) {
         assertElementExistsByTypeAndContainsText(htmlElementType.getType(), text);
@@ -595,15 +603,5 @@ class BrowserImpl implements Browser {
     @Override
     public String getPageTitle() {
         return Selenide.title();
-    }
-
-    enum ProtocolType {
-        HTTP("http"), HTTPS("https");
-
-        private final String protocol;
-
-        ProtocolType(String protocol) {
-            this.protocol = protocol;
-        }
     }
 }
