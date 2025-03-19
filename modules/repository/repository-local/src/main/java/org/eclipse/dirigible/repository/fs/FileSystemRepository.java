@@ -100,20 +100,19 @@ public abstract class FileSystemRepository implements IRepository {
         }
         this.repositoryDao = new LocalRepositoryDao(this);
 
-        logger.debug("Creating File-based Repository Client for: [{}] ...", root);
-
-        String rf = this.repositorySearcher.getRoot() + IRepository.SEPARATOR + DIRIGIBLE_LOCAL_ROOT;
+        if (logger.isDebugEnabled()) {
+            logger.debug(String.format("Creating File-based Repository Client for: %s ...", root));
+        }
         try {
             initializeRepository(root);
             this.repositorySearcher = new RepositorySearcher(this);
-            this.setParameter(REPOSITORY_ROOT_FOLDER, rf);
+            this.setParameter(REPOSITORY_ROOT_FOLDER, this.repositorySearcher.getRoot() + IRepository.SEPARATOR + DIRIGIBLE_LOCAL_ROOT);
             this.setParameter(REPOSITORY_INDEX_FOLDER, this.repositorySearcher.getRoot());
         } catch (IOException e) {
-            logger.warn("Failed to create searcher for root folder: [{}]", rf, e);
             throw new LocalRepositoryException();
         }
         this.setParameter(REPOSITORY_FILE_BASED, "true");
-        logger.debug("File-based Repository Client for: [{}], has been created.", root);
+        logger.debug(String.format("File-based Repository Client for: %s, has been created.", root));
     }
 
     /**
