@@ -35,7 +35,9 @@ import java.util.stream.Collectors;
 class DirigibleCleaner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleCleaner.class);
+
     private static final String[] SKIPPED_TABLE_PREFIXES = {"QRTZ_", "ACT_", "FLW_", "ACTIVEMQ_"};
+
     private final DataSourcesManager dataSourcesManager;
     private final DataSourceInitializer dataSourceInitializer;
     private final IRepository repository;
@@ -49,22 +51,35 @@ class DirigibleCleaner {
     public void clean() {
         long startTime = System.currentTimeMillis();
         LOGGER.info("Cleaning up Dirigible resources...");
-        cleanupFlowable();
-        try {
-            // explicitly all delete and drop to clean the in-memory stuff which otherwise breaks the tests
-            deleteDirigibleDBData();
-            dataSourceInitializer.clear();
 
-            DirigibleCleaner.deleteDirigibleFolder();
-            repository.searchRefresh();
-            LOGGER.info("Dirigible resources have been cleaned up. It took [{}] ms", System.currentTimeMillis() - startTime);
-        } catch (Throwable ex) {
-            throw new IllegalStateException("Failed to cleanup resources", ex);
+        cleanupFlowable();
+        // explicitly all delete and drop to clean the in-memory stuff which otherwise breaks the tests
+        deleteDirigibleDBData();
+        clearInitializedDataSources();
+
+        DirigibleCleaner.deleteDirigibleFolder();
+        repository.searchRefresh();
+
+        LOGGER.info("Dirigible resources have been cleaned up. It took [{}] ms", System.currentTimeMillis() - startTime);
+    }
+
+    private void clearInitializedDataSources() {
+        try {
+            dataSourceInitializer.clear();
+        } catch (RuntimeException ex) {
+            LOGGER.warn("Failed to clear initialized data sources", ex);
         }
     }
 
     private void cleanupFlowable() {
-        ProcessEngines.destroy();
+        LOGGER.info("Destroying flowable engines...");
+        try {
+            ProcessEngines.destroy();
+
+            LOGGER.info("Flowable engines have been destroyed.");
+        } catch (RuntimeException ex) {
+            LOGGER.warn("Failed to destroy flowable engines", ex);
+        }
     }
 
     /**
@@ -72,18 +87,24 @@ class DirigibleCleaner {
      * memory.
      */
     private void deleteDirigibleDBData() {
-        LOGGER.info("Deleting Dirigible db data...");
+        try {
+            LOGGER.info("Deleting Dirigible db data...");
 
-        DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
-        dropAllTablesInSchema(defaultDataSource);
-        dropAllSequencesInSchema(defaultDataSource);
-        deleteSchemas(defaultDataSource);
+            DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
+            dropAllTablesInSchema(defaultDataSource);
+            dropAllSequencesInSchema(defaultDataSource);
+            deleteSchemas(defaultDataSource);
 
-        DirigibleDataSource systemDataSource = dataSourcesManager.getSystemDataSource();
-        deleteAllTablesDataInSchema(systemDataSource, SKIPPED_TABLE_PREFIXES);
-        dropAllTablesInSchema(systemDataSource, SKIPPED_TABLE_PREFIXES);
+            DirigibleDataSource systemDataSource = dataSourcesManager.getSystemDataSource();
 
-        LOGGER.info("Dirigible db data have been deleted...");
+            // skip framework tables so that they can be closed successfully
+            deleteAllTablesDataInSchema(systemDataSource, SKIPPED_TABLE_PREFIXES);
+            dropAllTablesInSchema(systemDataSource, SKIPPED_TABLE_PREFIXES);
+
+            LOGGER.info("Dirigible db data have been deleted...");
+        } catch (RuntimeException ex) {
+            LOGGER.warn("Failed to delete dirigible DB data", ex);
+        }
     }
 
     private void dropAllSequencesInSchema(DirigibleDataSource dataSource) {
@@ -262,9 +283,13 @@ class DirigibleCleaner {
     public static void deleteDirigibleFolder() {
         String dirigibleFolder = DirigibleConfig.REPOSITORY_LOCAL_ROOT_FOLDER.getStringValue() + File.separator + "dirigible";
         String skippedDirPath = dirigibleFolder + File.separator + "repository" + File.separator + "index";
+        try {
 
-        LOGGER.info("Deleting dirigible folder [{}] by skipping [{}]...", dirigibleFolder, skippedDirPath);
-        FileUtil.deleteFolder(dirigibleFolder, skippedDirPath);
+            LOGGER.info("Deleting dirigible folder [{}] by skipping [{}]...", dirigibleFolder, skippedDirPath);
+            FileUtil.deleteFolder(dirigibleFolder, skippedDirPath);
+        } catch (RuntimeException ex) {
+            LOGGER.warn("Failed to delete dirigible folder [" + dirigibleFolder + "] by skipping [" + skippedDirPath + "]", ex);
+        }
     }
 
 }

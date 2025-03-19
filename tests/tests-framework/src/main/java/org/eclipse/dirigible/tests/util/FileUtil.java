@@ -17,7 +17,6 @@ import org.springframework.util.FileSystemUtils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.*;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -25,7 +24,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class FileUtil {
-
 
     private static final Logger LOGGER = LoggerFactory.getLogger(FileUtil.class);
 
@@ -83,22 +81,16 @@ public class FileUtil {
 
             if (Files.exists(baseDir)) {
                 Files.walkFileTree(baseDir, new SimpleFileVisitor<Path>() {
-                    @Override
-                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                        Files.delete(file);
-                        return FileVisitResult.CONTINUE;
-                    }
 
                     @Override
                     public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
-                        if (!dir.startsWith(excludeDir)) {
-                            try {
-                                Files.delete(dir);
-                            } catch (DirectoryNotEmptyException ex) {
-                                LOGGER.warn("Dir not empty", ex);
-                            }
+                        if (dir.startsWith(excludeDir)) {
+                            LOGGER.debug("Folder [{}] will not be deleted since it is subfolder of [{}]", dir, excludeDir);
+                        } else {
+                            LOGGER.debug("Deleting [{}] ", dir);
+                            deleteFolder(dir.toFile());
                         }
-                        return FileVisitResult.CONTINUE;
+                        return FileVisitResult.SKIP_SUBTREE;
                     }
                 });
             }
@@ -106,7 +98,6 @@ public class FileUtil {
             throw new IllegalStateException("Failed to delete dir " + folderPath + " by skipping " + skippedDirPath, ex);
         }
     }
-
 
     public static List<Path> findFiles(String folder) throws IOException {
         return findFiles(Path.of(folder));
