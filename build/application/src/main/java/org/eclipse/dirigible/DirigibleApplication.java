@@ -39,7 +39,7 @@ public class DirigibleApplication {
 
     public static void main(String[] args) {
         startedAt = System.currentTimeMillis();
-        System.out.println("------------------------ Eclipse Dirigible is starting ------------------------");
+        System.out.println("------- Application is starting -------");
         SpringApplication.run(DirigibleApplication.class, args);
     }
 

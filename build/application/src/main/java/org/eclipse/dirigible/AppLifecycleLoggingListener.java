@@ -12,17 +12,17 @@ package org.eclipse.dirigible;
 import org.eclipse.dirigible.components.base.ApplicationListenersOrder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.boot.context.event.ApplicationStartedEvent;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationListener;
-import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 @Order(ApplicationListenersOrder.APP_LYFECYCLE_LOGGING_LISTENER)
 @Component
-class AppLifecycleLoggingListener implements ApplicationListener<ApplicationEvent> {
+class AppLifecycleLoggingListener implements ApplicationListener<ApplicationEvent>, DisposableBean {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AppLifecycleLoggingListener.class);
 
@@ -32,21 +32,25 @@ class AppLifecycleLoggingListener implements ApplicationListener<ApplicationEven
     public void onApplicationEvent(ApplicationEvent event) {
         if (event instanceof ApplicationStartedEvent) {
             createdContextAt = System.currentTimeMillis();
-            LOGGER.info("------------------------ Eclipse Dirigible is initializing... ------------------------");
+            log("Application is initializing");
         }
 
         if (event instanceof ApplicationReadyEvent) {
-            LOGGER.info("------------------------ Eclipse Dirigible has started ------------------------");
+            log("Application has started");
             long currentTime = System.currentTimeMillis();
-            LOGGER.info("------------------------ Start time: [{}] milliseconds. Init time: [{}] milliseconds ------------------------",
-                    (currentTime - DirigibleApplication.getStartedAt()), (currentTime - createdContextAt));
-        }
-
-        if (event instanceof ContextClosedEvent) {
-            LOGGER.info("------------------------ Eclipse Dirigible stopped ------------------------");
-            LOGGER.info("------------------------ It started at [{}] and has been running for [{}] milliseconds ------------------------",
-                    DirigibleApplication.getStartedAt(), (System.currentTimeMillis() - DirigibleApplication.getStartedAt()));
+            log("Start time: [{}] milliseconds. Init time: [{}] milliseconds", (currentTime - DirigibleApplication.getStartedAt()),
+                    (currentTime - createdContextAt));
         }
     }
 
+    private void log(String messageFormat, Object... argument) {
+        LOGGER.info("------- " + messageFormat + " -------", argument);
+    }
+
+    @Override
+    public void destroy() {
+        log("Application stopped");
+        log("Application started at [{}] and has been running for [{}] milliseconds", DirigibleApplication.getStartedAt(),
+                (System.currentTimeMillis() - DirigibleApplication.getStartedAt()));
+    }
 }
