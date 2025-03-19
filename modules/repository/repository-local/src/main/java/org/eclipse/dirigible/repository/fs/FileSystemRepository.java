@@ -9,16 +9,9 @@
  */
 package org.eclipse.dirigible.repository.fs;
 
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.filefilter.WildcardFileFilter;
-import org.eclipse.dirigible.commons.api.helpers.FileSystemUtils;
-import org.eclipse.dirigible.repository.api.*;
-import org.eclipse.dirigible.repository.local.*;
-import org.eclipse.dirigible.repository.search.RepositorySearcher;
-import org.eclipse.dirigible.repository.zip.RepositoryZipExporter;
-import org.eclipse.dirigible.repository.zip.RepositoryZipImporter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static org.apache.commons.io.IOCase.INSENSITIVE;
+import static org.apache.commons.io.IOCase.SENSITIVE;
+import static org.apache.commons.io.filefilter.TrueFileFilter.TRUE;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -26,46 +19,84 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipInputStream;
 
-import static org.apache.commons.io.IOCase.INSENSITIVE;
-import static org.apache.commons.io.IOCase.SENSITIVE;
-import static org.apache.commons.io.filefilter.TrueFileFilter.TRUE;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.filefilter.WildcardFileFilter;
+import org.eclipse.dirigible.commons.api.helpers.FileSystemUtils;
+import org.eclipse.dirigible.repository.api.ICollection;
+import org.eclipse.dirigible.repository.api.IEntity;
+import org.eclipse.dirigible.repository.api.IRepository;
+import org.eclipse.dirigible.repository.api.IResource;
+import org.eclipse.dirigible.repository.api.RepositoryExportException;
+import org.eclipse.dirigible.repository.api.RepositoryImportException;
+import org.eclipse.dirigible.repository.api.RepositoryPath;
+import org.eclipse.dirigible.repository.api.RepositoryReadException;
+import org.eclipse.dirigible.repository.api.RepositorySearchException;
+import org.eclipse.dirigible.repository.api.RepositoryWriteException;
+import org.eclipse.dirigible.repository.local.LocalCollection;
+import org.eclipse.dirigible.repository.local.LocalRepositoryDao;
+import org.eclipse.dirigible.repository.local.LocalRepositoryException;
+import org.eclipse.dirigible.repository.local.LocalResource;
+import org.eclipse.dirigible.repository.local.LocalWorkspaceMapper;
+import org.eclipse.dirigible.repository.search.RepositorySearcher;
+import org.eclipse.dirigible.repository.zip.RepositoryZipExporter;
+import org.eclipse.dirigible.repository.zip.RepositoryZipImporter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The File System based implementation of {@link IRepository}.
  */
 public abstract class FileSystemRepository implements IRepository {
 
-    /** The Constant PATH_SEGMENT_ROOT. */
-    public static final String PATH_SEGMENT_ROOT = "root";
-    /** The Constant PATH_SEGMENT_VERSIONS. */
-    public static final String PATH_SEGMENT_VERSIONS = "versions";
     /** The Constant REPOSITORY_FILE_BASED. */
     private static final String REPOSITORY_FILE_BASED = "REPOSITORY_FILE_BASED";
+
     /** The Constant REPOSITORY_ROOT_FOLDER. */
     private static final String REPOSITORY_ROOT_FOLDER = "REPOSITORY_ROOT_FOLDER";
+
     /** The Constant REPOSITORY_INDEX_FOLDER. */
     private static final String REPOSITORY_INDEX_FOLDER = "REPOSITORY_INDEX_FOLDER";
+
+    /** The logger. */
+    private static Logger logger = LoggerFactory.getLogger(FileSystemRepository.class);
+
     /** The Constant CURRENT_DIR. */
     private static final String CURRENT_DIR = ".";
+
     /** The Constant DIRIGIBLE_LOCAL. */
     private static final String DIRIGIBLE_LOCAL = "dirigible" + IRepository.SEPARATOR + "repository";
+
+    /** The Constant PATH_SEGMENT_ROOT. */
+    public static final String PATH_SEGMENT_ROOT = "root";
+
+    /** The Constant PATH_SEGMENT_VERSIONS. */
+    public static final String PATH_SEGMENT_VERSIONS = "versions";
+
     /** The Constant DIRIGIBLE_LOCAL_ROOT. */
     private static final String DIRIGIBLE_LOCAL_ROOT = DIRIGIBLE_LOCAL + IRepository.SEPARATOR + PATH_SEGMENT_ROOT;
-    /** The logger. */
-    private static final Logger logger = LoggerFactory.getLogger(FileSystemRepository.class);
-    /** The versioned. */
-    private final boolean versioned = false;
-    /** The parameters. */
-    private final Map<String, String> parameters = Collections.synchronizedMap(new HashMap<>());
+
     /** The repository path. */
     private String repositoryPath = IRepository.SEPARATOR;
+
     /** The repository dao. */
     private LocalRepositoryDao repositoryDao;
+
     /** The repository searcher. */
     private RepositorySearcher repositorySearcher;
+
+    /** The versioned. */
+    private boolean versioned = false;
+
+    /** The parameters. */
+    private Map<String, String> parameters = Collections.synchronizedMap(new HashMap<>());
 
     /**
      * Constructor with default root folder - user.dir and without database initialization
@@ -74,77 +105,6 @@ public abstract class FileSystemRepository implements IRepository {
      */
     public FileSystemRepository() throws LocalRepositoryException {
         createRepository(null, false, false);
-    }
-
-    /**
-     * Creates the repository.
-     *
-     * @param rootFolder the root folder
-     * @param absolute the absolute
-     * @param versioned the versioned
-     */
-    protected void createRepository(String rootFolder, boolean absolute, boolean versioned) {
-        String root;
-        if (absolute) {
-            if (rootFolder != null) {
-                root = rootFolder;
-            } else {
-                throw new LocalRepositoryException("Creating a FileSystemRepository with absolute path flag, but the path itself is null");
-            }
-        } else {
-            root = System.getProperty("user.dir");
-            if ((rootFolder != null) && !rootFolder.equals(CURRENT_DIR)) {
-                root += File.separator;
-                root += rootFolder;
-            }
-        }
-        this.repositoryDao = new LocalRepositoryDao(this);
-
-        if (logger.isDebugEnabled()) {
-            logger.debug(String.format("Creating File-based Repository Client for: %s ...", root));
-        }
-        try {
-            initializeRepository(root);
-            this.repositorySearcher = new RepositorySearcher(this);
-            this.setParameter(REPOSITORY_ROOT_FOLDER, this.repositorySearcher.getRoot() + IRepository.SEPARATOR + DIRIGIBLE_LOCAL_ROOT);
-            this.setParameter(REPOSITORY_INDEX_FOLDER, this.repositorySearcher.getRoot());
-        } catch (IOException e) {
-            throw new LocalRepositoryException();
-        }
-        this.setParameter(REPOSITORY_FILE_BASED, "true");
-        logger.debug(String.format("File-based Repository Client for: %s, has been created.", root));
-    }
-
-    /**
-     * Initialize repository.
-     *
-     * @param rootFolder the root folder
-     * @throws IOException Signals that an I/O exception has occurred.
-     */
-    private void initializeRepository(String rootFolder) throws IOException {
-        repositoryPath = rootFolder + IRepository.SEPARATOR + getRepositoryRootFolder() + IRepository.SEPARATOR + PATH_SEGMENT_ROOT; // $NON-NLS-1$
-        repositoryPath = repositoryPath.replace(IRepository.SEPARATOR, File.separator);
-        repositoryPath = new File(repositoryPath).getAbsolutePath();
-        FileSystemUtils.createFolder(repositoryPath);
-    }
-
-    /**
-     * Gets the repository root folder.
-     *
-     * @return the repository root folder
-     */
-    protected String getRepositoryRootFolder() {
-        return DIRIGIBLE_LOCAL;
-    }
-
-    /**
-     * Sets the parameter.
-     *
-     * @param key the key
-     * @param value the value
-     */
-    protected void setParameter(String key, String value) {
-        parameters.put(key, value);
     }
 
     /**
@@ -188,6 +148,77 @@ public abstract class FileSystemRepository implements IRepository {
      */
     protected void createRepository(String rootFolder, boolean absolute) {
         createRepository(rootFolder, absolute, false);
+    }
+
+    /**
+     * Creates the repository.
+     *
+     * @param rootFolder the root folder
+     * @param absolute the absolute
+     * @param versioned the versioned
+     */
+    protected void createRepository(String rootFolder, boolean absolute, boolean versioned) {
+        String root;
+        if (absolute) {
+            if (rootFolder != null) {
+                root = rootFolder;
+            } else {
+                throw new LocalRepositoryException("Creating a FileSystemRepository with absolute path flag, but the path itself is null");
+            }
+        } else {
+            root = System.getProperty("user.dir");
+            if ((rootFolder != null) && !rootFolder.equals(CURRENT_DIR)) {
+                root += File.separator;
+                root += rootFolder;
+            }
+        }
+        this.repositoryDao = new LocalRepositoryDao(this);
+
+        if (logger.isDebugEnabled()) {
+            logger.debug(String.format("Creating File-based Repository Client for: %s ...", root));
+        }
+        try {
+            initializeRepository(root);
+            this.repositorySearcher = new RepositorySearcher(this);
+            this.setParameter(REPOSITORY_ROOT_FOLDER, this.repositorySearcher.getRoot() + IRepository.SEPARATOR + DIRIGIBLE_LOCAL_ROOT);
+            this.setParameter(REPOSITORY_INDEX_FOLDER, this.repositorySearcher.getRoot());
+        } catch (IOException e) {
+            throw new LocalRepositoryException();
+        }
+        this.setParameter(REPOSITORY_FILE_BASED, "true");
+        logger.debug(String.format("File-based Repository Client for: %s, has been created.", root));
+    }
+
+    /**
+     * Gets the repository path.
+     *
+     * @return the repository path
+     */
+    @Override
+    public String getRepositoryPath() {
+        return repositoryPath;
+    }
+
+    /**
+     * Gets the repository root folder.
+     *
+     * @return the repository root folder
+     */
+    protected String getRepositoryRootFolder() {
+        return DIRIGIBLE_LOCAL;
+    }
+
+    /**
+     * Initialize repository.
+     *
+     * @param rootFolder the root folder
+     * @throws IOException Signals that an I/O exception has occurred.
+     */
+    private void initializeRepository(String rootFolder) throws IOException {
+        repositoryPath = rootFolder + IRepository.SEPARATOR + getRepositoryRootFolder() + IRepository.SEPARATOR + PATH_SEGMENT_ROOT; // $NON-NLS-1$
+        repositoryPath = repositoryPath.replace(IRepository.SEPARATOR, File.separator);
+        repositoryPath = new File(repositoryPath).getAbsolutePath();
+        FileSystemUtils.createFolder(repositoryPath);
     }
 
     /**
@@ -235,6 +266,30 @@ public abstract class FileSystemRepository implements IRepository {
         localCollection.create();
         if (logger.isTraceEnabled()) {
             logger.trace("exiting createCollection"); //$NON-NLS-1$
+        }
+        return localCollection;
+    }
+
+    /**
+     * Gets the collection.
+     *
+     * @param path the path
+     * @return the collection
+     */
+    /*
+     * (non-Javadoc)
+     *
+     * @see org.eclipse.dirigible.repository.api.IRepositoryReader#getCollection(java.lang.String)
+     */
+    @Override
+    public ICollection getCollection(String path) {
+        if (logger.isTraceEnabled()) {
+            logger.trace("entering getCollection"); //$NON-NLS-1$
+        }
+        final RepositoryPath wrapperPath = new RepositoryPath(path);
+        LocalCollection localCollection = new LocalCollection(this, wrapperPath);
+        if (logger.isTraceEnabled()) {
+            logger.trace("exiting getCollection"); //$NON-NLS-1$
         }
         return localCollection;
     }
@@ -425,15 +480,6 @@ public abstract class FileSystemRepository implements IRepository {
     }
 
     /**
-     * Gets the repository dao.
-     *
-     * @return the repository dao
-     */
-    public LocalRepositoryDao getRepositoryDao() {
-        return repositoryDao;
-    }
-
-    /**
      * Removes the resource.
      *
      * @param path the path
@@ -494,6 +540,15 @@ public abstract class FileSystemRepository implements IRepository {
     @Override
     public void dispose() {
         // repositoryDAO.dispose();
+    }
+
+    /**
+     * Gets the repository dao.
+     *
+     * @return the repository dao
+     */
+    public LocalRepositoryDao getRepositoryDao() {
+        return repositoryDao;
     }
 
     /**
@@ -732,16 +787,6 @@ public abstract class FileSystemRepository implements IRepository {
     }
 
     /**
-     * Gets the repository path.
-     *
-     * @return the repository path
-     */
-    @Override
-    public String getRepositoryPath() {
-        return repositoryPath;
-    }
-
-    /**
      * Search path.
      *
      * @param parameter the parameter
@@ -843,6 +888,16 @@ public abstract class FileSystemRepository implements IRepository {
     @Override
     public String getParameter(String key) {
         return parameters.get(key);
+    }
+
+    /**
+     * Sets the parameter.
+     *
+     * @param key the key
+     * @param value the value
+     */
+    protected void setParameter(String key, String value) {
+        parameters.put(key, value);
     }
 
     /**
@@ -949,30 +1004,6 @@ public abstract class FileSystemRepository implements IRepository {
             throw new RepositorySearchException(e);
         }
         return new ArrayList<String>();
-    }
-
-    /**
-     * Gets the collection.
-     *
-     * @param path the path
-     * @return the collection
-     */
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.eclipse.dirigible.repository.api.IRepositoryReader#getCollection(java.lang.String)
-     */
-    @Override
-    public ICollection getCollection(String path) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("entering getCollection"); //$NON-NLS-1$
-        }
-        final RepositoryPath wrapperPath = new RepositoryPath(path);
-        LocalCollection localCollection = new LocalCollection(this, wrapperPath);
-        if (logger.isTraceEnabled()) {
-            logger.trace("exiting getCollection"); //$NON-NLS-1$
-        }
-        return localCollection;
     }
 
     /**
