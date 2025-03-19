@@ -362,22 +362,24 @@ class BrowserImpl implements Browser {
         } catch (ListSizeMismatch ex) {
             Serializable matchedElements = ex.getActual()
                                              .getValue();
-            boolean zeroMatches = Integer.valueOf(0)
-                                         .equals(matchedElements);
-            if (!zeroMatches) {
-                LOGGER.debug(
-                        "Found [{}] elements with selector [{}] and conditions [{}] but expected ONLY ONE. Consider using more precise selector and conditions.\nFound elements: {}.\nCause error message: {}",
-                        matchedElements, by, allConditions, describeCollection(by, foundElements, conditions), ex.getMessage());
+            if (matchedElements instanceof Integer matchedElementsCount) {
+                if (matchedElementsCount == 0) {
+                    LOGGER.debug(
+                            "Found ZERO elements with selector [{}] and conditions [{}] but expected ONLY ONE. Consider using more precise selector and conditions.\nFound elements: {}.\nCause error message: {}",
+                            by, allConditions, describeCollection(by, foundElements, conditions), ex.getMessage());
+
+                    FileUtil.deleteFile(ex.getScreenshot()
+                                          .getImage());
+                    FileUtil.deleteFile(ex.getScreenshot()
+                                          .getSource());
+                }
+                if (matchedElementsCount > 1) {
+                    LOGGER.warn(
+                            "Found MORE THAN ONE elements [{}] with selector [{}] and conditions [{}] but expected ONLY ONE. Consider using more precise selector and conditions.\nFound elements: {}.\nCause error message: {}",
+                            matchedElementsCount, by, allConditions, describeCollection(by, foundElements, conditions), ex.getMessage());
+                }
             }
-            if (zeroMatches) {
-                LOGGER.debug(
-                        "Found ZERO elements with selector [{}] and conditions [{}] but expected ONLY ONE. Consider using more precise selector and conditions.\nFound elements: {}.\nCause error message: {}",
-                        by, allConditions, describeCollection(by, foundElements, conditions), ex.getMessage());
-                FileUtil.deleteFile(ex.getScreenshot()
-                                      .getImage());
-                FileUtil.deleteFile(ex.getScreenshot()
-                                      .getSource());
-            }
+
             return Optional.empty();
         }
     }
