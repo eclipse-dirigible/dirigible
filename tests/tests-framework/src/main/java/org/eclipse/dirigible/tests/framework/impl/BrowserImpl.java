@@ -83,6 +83,7 @@ class BrowserImpl implements Browser {
         Configuration.headless = IntegrationTest.isHeadlessExecution();
         Configuration.browser = "chrome";
         Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
+        Configuration.headless = false;
     }
 
     @Override
@@ -555,6 +556,8 @@ class BrowserImpl implements Browser {
         if (attributes.isEmpty()) {
             throw new IllegalArgumentException("Attributes map cannot be empty");
         }
+
+
 
         StringBuilder cssSelector = new StringBuilder(elementType.getType());
         attributes.forEach((attribute, value) -> {
