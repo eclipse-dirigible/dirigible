@@ -74,7 +74,7 @@ class DirigibleCleaner {
     }
 
     private void createSchema(DirigibleDataSource dataSource, String schemaName) {
-        LOGGER.info("Will create schema [{}] in [{}]", dataSource);
+        LOGGER.info("Will create schema [{}] in [{}]", schemaName, dataSource);
         try (Connection connection = dataSource.getConnection()) {
             ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
             String sql = dialect.create()
