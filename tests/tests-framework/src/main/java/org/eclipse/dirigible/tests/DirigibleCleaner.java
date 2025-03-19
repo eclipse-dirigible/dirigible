@@ -11,8 +11,6 @@ package org.eclipse.dirigible.tests;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.tests.util.FileUtil;
-import org.quartz.Scheduler;
-import org.quartz.SchedulerException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -23,30 +21,6 @@ import java.io.File;
 class DirigibleCleaner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleCleaner.class);
-
-    private final Scheduler scheduler;
-
-    DirigibleCleaner(Scheduler scheduler) {
-        this.scheduler = scheduler;
-    }
-
-    public void clean() {
-        long startTime = System.currentTimeMillis();
-        LOGGER.info("Cleaning up Dirigible resources...");
-
-        stopQuartz();
-        deleteDirigibleFolder();
-
-        LOGGER.info("Dirigible resources have been cleaned up. It took [{}] ms", System.currentTimeMillis() - startTime);
-    }
-
-    private void stopQuartz() {
-        try {
-            scheduler.shutdown();
-        } catch (SchedulerException | RuntimeException ex) {
-            LOGGER.warn("Failed to shutdown quartz", ex);
-        }
-    }
 
     public static void deleteDirigibleFolder() {
         String dirigibleFolder = DirigibleConfig.REPOSITORY_LOCAL_ROOT_FOLDER.getStringValue() + File.separator + "dirigible";

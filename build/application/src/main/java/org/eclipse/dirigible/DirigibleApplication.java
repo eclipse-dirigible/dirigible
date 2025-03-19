@@ -11,8 +11,6 @@ package org.eclipse.dirigible;
 
 import de.codecentric.boot.admin.server.config.EnableAdminServer;
 import org.apache.camel.opentelemetry.starter.CamelOpenTelemetry;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
@@ -32,8 +30,6 @@ import org.springframework.web.client.RestTemplate;
         HibernateJpaAutoConfiguration.class, JdbcTemplateAutoConfiguration.class})
 @EnableScheduling
 public class DirigibleApplication {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleApplication.class);
 
     private static long startedAt;
 
