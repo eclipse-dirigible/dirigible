@@ -12,11 +12,12 @@ package org.eclipse.dirigible.tests;
 import org.awaitility.Awaitility;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.annotation.DirtiesContext.ClassMode;
 
@@ -24,25 +25,29 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+@Import(DirigibleTestConfigurations.class)
 @AutoConfigureMockMvc
 @DirtiesContext(classMode = ClassMode.AFTER_EACH_TEST_METHOD)
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 public abstract class IntegrationTest {
 
     // set config to false if you want to disable the headless mode
+    private static boolean headlessExecution = true;
+
     static {
-        com.codeborne.selenide.Configuration.headless = true;
+        com.codeborne.selenide.Configuration.headless = headlessExecution;
     }
 
     @Autowired
     private TenantCreator tenantCreator;
 
-    @Autowired
-    private DirigibleCleaner dirigibleCleaner;
+    protected static void setHeadlessExecution(boolean headless) {
+        IntegrationTest.headlessExecution = headless;
+    }
 
-    @AfterEach
-    final void cleanUp() {
-        dirigibleCleaner.clean();
+    @BeforeAll
+    static void cleanBeforeTestClassExecution() {
+        DirigibleCleaner.beforeTestClassCleanup();
     }
 
     @AfterAll

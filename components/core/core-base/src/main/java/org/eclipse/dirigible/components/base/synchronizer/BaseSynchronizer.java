@@ -76,6 +76,7 @@ public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchr
      * @param flow the flow
      * @return true, if successful
      */
+    @Transactional
     @Override
     public boolean complete(TopologyWrapper<A> wrapper, ArtefactPhase flow) {
         Tracer tracer = OpenTelemetryProvider.get()

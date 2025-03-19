@@ -32,18 +32,20 @@ class AppLifecycleLoggingListener implements ApplicationListener<ApplicationEven
     public void onApplicationEvent(ApplicationEvent event) {
         if (event instanceof ApplicationStartedEvent) {
             createdContextAt = System.currentTimeMillis();
-            LOGGER.info("------------------------ Eclipse Dirigible initializing ------------------------");
+            LOGGER.info("------------------------ Eclipse Dirigible is initializing... ------------------------");
         }
 
         if (event instanceof ApplicationReadyEvent) {
-            LOGGER.info("------------------------ Eclipse Dirigible started ------------------------");
+            LOGGER.info("------------------------ Eclipse Dirigible has started ------------------------");
             long currentTime = System.currentTimeMillis();
-            LOGGER.info("------------------------ Start time [{}] millis. Init time [{}] millis ------------------------",
+            LOGGER.info("------------------------ Start time: [{}] milliseconds. Init time: [{}] milliseconds ------------------------",
                     (currentTime - DirigibleApplication.getStartedAt()), (currentTime - createdContextAt));
         }
 
         if (event instanceof ContextClosedEvent) {
             LOGGER.info("------------------------ Eclipse Dirigible stopped ------------------------");
+            LOGGER.info("------------------------ It started at [{}] and has been running for [{}] milliseconds ------------------------",
+                    DirigibleApplication.getStartedAt(), (DirigibleApplication.getStartedAt() - System.currentTimeMillis()));
         }
     }
 

@@ -75,18 +75,19 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
 
     private static void startTTYD() {
         try {
-            if (SystemUtils.IS_OS_UNIX) {
-                File unixFile = createUnixFile();
-
-                String command = "./" + unixFile.getName();
-                ProcessRunnable processRunnable = new ProcessRunnable(command);
-
-                new Thread(processRunnable).start();
-
-                started = true;
-            } else {
+            if (!SystemUtils.IS_OS_UNIX) {
                 logger.warn("OS [{}] is not supported", System.getProperty("os.name"));
             }
+
+            File unixFile = createUnixFile();
+
+            String command = "./" + unixFile.getName();
+
+            logger.info("Starting ttyd using command [{}] and file [{}]", command, unixFile);
+            ProcessRunnable processRunnable = new ProcessRunnable(command);
+            new Thread(processRunnable).start();
+
+            started = true;
         } catch (Exception e) {
             logger.error(TERMINAL_PREFIX, e.getMessage(), e);
         }
