@@ -45,7 +45,7 @@ class AppLifecycleLoggingListener implements ApplicationListener<ApplicationEven
         if (event instanceof ContextClosedEvent) {
             LOGGER.info("------------------------ Eclipse Dirigible stopped ------------------------");
             LOGGER.info("------------------------ It started at [{}] and has been running for [{}] milliseconds ------------------------",
-                    DirigibleApplication.getStartedAt(), (DirigibleApplication.getStartedAt() - System.currentTimeMillis()));
+                    DirigibleApplication.getStartedAt(), (System.currentTimeMillis() - DirigibleApplication.getStartedAt()));
         }
     }
 

@@ -62,12 +62,12 @@ public class FileUtil {
 
     public static void deleteFolder(File folder) {
         if (folder.exists()) {
-            LOGGER.debug("Will delete folder [{}]", folder);
+            LOGGER.debug("Will delete folder recursively [{}]", folder);
             Awaitility.await()
                       .atMost(15, TimeUnit.SECONDS)
                       .until(() -> {
                           boolean deleted = FileSystemUtils.deleteRecursively(folder);
-                          LOGGER.debug("Deleted folder [{}]: [{}]", folder, deleted);
+                          LOGGER.debug("Deleted folder [{}] recursively: [{}]", folder, deleted);
                           return deleted;
                       });
         }
@@ -83,7 +83,7 @@ public class FileUtil {
         File file = new File(path);
         LOGGER.debug("Will delete file [{}]", file);
         boolean deleted = file.delete();
-        LOGGER.debug("Deleted file[{}]: [{}]", file, deleted);
+        LOGGER.debug("Deleted file [{}]: [{}]", file, deleted);
         if (!deleted) {
             throw new IllegalStateException("Failed to delete file: " + file);
         }

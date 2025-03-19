@@ -16,7 +16,7 @@ import org.junit.platform.suite.api.SuiteDisplayName;
 @Suite
 @SuiteDisplayName("Ordered Test Suite")
 @SelectClasses({CreateNewProjectIT.class, ApproveLeaveRequestBpmIT.class, DeclineLeaveRequestBpmIT.class})
-public class OrderedTestSuite {
+class OrderedTestSuite {
     // use this suite class to run tests in specific order if needed
     // it is not configured to be executed automatically by the maven plugins
 }

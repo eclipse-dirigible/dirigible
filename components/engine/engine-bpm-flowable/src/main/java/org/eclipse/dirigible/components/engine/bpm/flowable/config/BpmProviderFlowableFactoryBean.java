@@ -26,7 +26,7 @@ import javax.sql.DataSource;
  * The Class BpmProviderFlowableFactoryBean.
  */
 @Component
-class BpmProviderFlowableFactoryBean implements FactoryBean<BpmProviderFlowable>, DisposableBean, ApplicationContextAware {
+class BpmProviderFlowableFactoryBean implements FactoryBean<BpmProviderFlowable>, ApplicationContextAware, DisposableBean {
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(BpmProviderFlowableFactoryBean.class);

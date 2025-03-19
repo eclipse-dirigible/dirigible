@@ -19,7 +19,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.annotation.DirtiesContext;
-import org.springframework.test.annotation.DirtiesContext.ClassMode;
 
 import java.util.Arrays;
 import java.util.List;
@@ -27,7 +26,7 @@ import java.util.concurrent.TimeUnit;
 
 @Import(DirigibleTestConfigurations.class)
 @AutoConfigureMockMvc
-@DirtiesContext(classMode = ClassMode.AFTER_EACH_TEST_METHOD)
+@DirtiesContext
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 public abstract class IntegrationTest {
 
@@ -43,11 +42,6 @@ public abstract class IntegrationTest {
 
     protected static void setHeadlessExecution(boolean headless) {
         IntegrationTest.headlessExecution = headless;
-    }
-
-    @BeforeAll
-    static void cleanBeforeTestClassExecution() {
-        DirigibleCleaner.beforeTestClassCleanup();
     }
 
     @AfterAll
@@ -72,6 +66,11 @@ public abstract class IntegrationTest {
                   .pollInterval(3, TimeUnit.SECONDS)
                   .atMost(35, TimeUnit.SECONDS)
                   .until(() -> tenantCreator.isTenantProvisioned(tenant));
+    }
+
+    @BeforeAll
+    static void cleanBeforeTestClassExecution() {
+        DirigibleCleaner.deleteDirigibleFolder();
     }
 
 }
