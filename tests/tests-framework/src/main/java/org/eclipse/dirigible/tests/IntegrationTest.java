@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit;
 
 @Import(DirigibleTestConfigurations.class)
 @AutoConfigureMockMvc
-@DirtiesContext
+@DirtiesContext(methodMode = DirtiesContext.MethodMode.AFTER_METHOD, classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 public abstract class IntegrationTest {
 

@@ -63,18 +63,23 @@ public class FileUtil {
 
     public static void deleteFolder(File folder) {
         if (folder.exists()) {
-            LOGGER.debug("Will delete folder recursively [{}]", folder);
             Awaitility.await()
                       .atMost(15, TimeUnit.SECONDS)
                       .until(() -> {
-                          boolean deleted = FileSystemUtils.deleteRecursively(folder);
-                          LOGGER.debug("Deleted folder [{}] recursively: [{}]", folder, deleted);
-                          return deleted;
+                          return deleteFolderResursively(folder);
                       });
         }
     }
 
+    private static boolean deleteFolderResursively(File folder) {
+        LOGGER.debug("Will delete folder recursively [{}]", folder);
+        boolean deleted = FileSystemUtils.deleteRecursively(folder);
+        LOGGER.debug("Deleted folder [{}] recursively: [{}]", folder, deleted);
+        return deleted;
+    }
+
     public static void deleteFolder(String folderPath, String skippedDirPath) {
+        LOGGER.info("Deleting folder [{}] by skipping [{}]...", folderPath, skippedDirPath);
         try {
             Path baseDir = Paths.get(folderPath);
             Path excludeDir = Paths.get(skippedDirPath);
@@ -84,12 +89,19 @@ public class FileUtil {
 
                     @Override
                     public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
-                        if (dir.startsWith(excludeDir)) {
+                        boolean subdir = dir.startsWith(excludeDir);
+                        if (subdir) {
                             LOGGER.debug("Folder [{}] will not be deleted since it is subfolder of [{}]", dir, excludeDir);
-                        } else {
-                            LOGGER.debug("Deleting [{}] ", dir);
-                            deleteFolder(dir.toFile());
+                            return FileVisitResult.SKIP_SUBTREE;
                         }
+
+                        boolean parentDir = excludeDir.startsWith(dir);
+                        if (parentDir) {
+                            LOGGER.debug("Folder [{}] will not be deleted since it is parent of [{}]", dir, excludeDir);
+                            return FileVisitResult.CONTINUE;
+                        }
+
+                        deleteFolderResursively(dir.toFile());
                         return FileVisitResult.SKIP_SUBTREE;
                     }
                 });

@@ -11,36 +11,27 @@ package org.eclipse.dirigible.tests;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.context.event.ApplicationStartingEvent;
-import org.springframework.context.ApplicationEvent;
-import org.springframework.context.ApplicationListener;
-import org.springframework.context.event.ContextClosedEvent;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 @Order(Ordered.LOWEST_PRECEDENCE) // Ensures it runs last
 @Component
-class TestsSpringEventsListener implements ApplicationListener<ApplicationEvent> {
+class DirigibleCleanupBean implements DisposableBean {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(TestsSpringEventsListener.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleCleanupBean.class);
 
     private final DirigibleCleaner dirigibleCleaner;
 
-    TestsSpringEventsListener(DirigibleCleaner dirigibleCleaner) {
+    DirigibleCleanupBean(DirigibleCleaner dirigibleCleaner) {
         this.dirigibleCleaner = dirigibleCleaner;
     }
 
     @Override
-    public void onApplicationEvent(ApplicationEvent event) {
-        if (event instanceof ApplicationStartingEvent || event instanceof ContextClosedEvent) {
-            LOGGER.info("Event [{}] will be handled.", event);
-            dirigibleCleaner.clean();
-            return;
-        }
-
-        LOGGER.debug("Event [{}] WILL NOT be handled.", event);
+    public void destroy() {
+        LOGGER.info("Destroying [{}]. Calling cleaner...", this.getClass());
+        dirigibleCleaner.clean();
     }
-
 }
 

@@ -9,14 +9,18 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
+import org.eclipse.dirigible.integration.tests.api.javascript.cms.CmsSuiteIT;
 import org.junit.platform.suite.api.SelectClasses;
 import org.junit.platform.suite.api.Suite;
 import org.junit.platform.suite.api.SuiteDisplayName;
 
 @Suite
 @SuiteDisplayName("Ordered Test Suite")
-@SelectClasses({CreateNewProjectIT.class, ApproveLeaveRequestBpmIT.class, DeclineLeaveRequestBpmIT.class})
+@SelectClasses({CreateNewFileIT.class, MultitenancyIT.class, CmsSuiteIT.class, ApproveLeaveRequestBpmIT.class,
+        DeclineLeaveRequestBpmIT.class})
 class OrderedTestSuite {
     // use this suite class to run tests in specific order if needed
     // it is not configured to be executed automatically by the maven plugins
 }
+
+
