@@ -176,14 +176,14 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 		let parent = graph.getDefaultParent();
 
 		// Adds cells to the model in a single step
-		let width = 260;
+		let width = 360;
 		graph.getModel().beginUpdate();
 		try {
-			$scope.sourceTableObject = new Table('MY_SOURCE_TABLE');
-			$scope.sourceTableObject.columns = [];
+			$scope.source = new Table('MY_SOURCE_TABLE');
+			$scope.source.columns = [];
 
-			$scope.sourceTableObject.name = "MY_SOURCE_TABLE";
-			$scope.sourceTableObject.type = "SOURCE";
+			$scope.source.name = "MY_SOURCE_TABLE";
+			$scope.source.type = "SOURCE";
 
 			let column = new Column('TABLENAME_ID');
 			column.name = 'TABLENAME_ID';
@@ -191,20 +191,22 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			column.columnLength = 0;
 			column.primaryKey = 'true';
 			column.autoIncrement = 'true';
-			$scope.sourceTableObject.columns.push(column);
+			$scope.source.columns.push(column);
 
-			column = new Column('TABLENAME_NAME');
-			column.name = 'TABLENAME_NAME';
-			column.type = 'VARCHAR';
-			column.columnLength = 0;
-			column.primaryKey = 'false';
-			column.unique = 'true';
-			$scope.sourceTableObject.columns.push(column);
+			for (let i = 1; i < 11; i++) {
+				column = new Column('TABLENAME_NAME_' + i);
+				column.name = 'TABLENAME_NAME_' + i;
+				column.type = 'VARCHAR';
+				column.columnLength = 10;
+				column.primaryKey = 'false';
+				column.unique = 'true';
+				$scope.source.columns.push(column);
+			}
 
-			let sourceTable = new mxCell($scope.sourceTableObject, new mxGeometry(0, 0, 200, 28), 'table');
-			var v1 = graph.insertVertex(parent, sourceTable, $scope.sourceTableObject, 20, 20,
-				width, ($scope.sourceTableObject.columns.length + 1) * 28);
-			v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
+			$scope.sourceTable = new mxCell($scope.source, new mxGeometry(0, 0, 200, 28), 'table');
+			$scope.v1 = graph.insertVertex(parent, $scope.sourceTable, $scope.source, 20, 20,
+				width, ($scope.source.columns.length + 1) * 28);
+			$scope.v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
 
 		} finally {
 			// Updates the display
@@ -218,14 +220,14 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 		var parent = graph.getDefaultParent();
 
 		// Adds cells to the model in a single step
-		var width = 260;
+		var width = 360;
 		graph.getModel().beginUpdate();
 		try {
-			$scope.targetTableObject = new Table('MY_TARGET_TABLE');
-			$scope.targetTableObject.columns = [];
+			$scope.target = new Table('MY_TARGET_TABLE');
+			$scope.target.columns = [];
 
-			$scope.targetTableObject.name = "MY_TARGET_TABLE";
-			$scope.targetTableObject.type = "TARGET";
+			$scope.target.name = "MY_TARGET_TABLE";
+			$scope.target.type = "TARGET";
 
 			let column = new Column('TABLENAME_ID');
 			column.name = 'TABLENAME_ID';
@@ -233,21 +235,23 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			column.columnLength = 0;
 			column.primaryKey = 'true';
 			column.autoIncrement = 'true';
-			$scope.targetTableObject.columns.push(column);
+			$scope.target.columns.push(column);
 
-			column = new Column('TABLENAME_NAME');
-			column.name = 'TABLENAME_NAME';
-			column.type = 'VARCHAR';
-			column.columnLength = 0;
-			column.primaryKey = 'false';
-			column.unique = 'true';
-			$scope.targetTableObject.columns.push(column);
+			for (let i = 1; i < 11; i++) {
+				column = new Column('TABLENAME_NAME_' + i);
+				column.name = 'TABLENAME_NAME_' + i;
+				column.type = 'VARCHAR';
+				column.columnLength = 10;
+				column.primaryKey = 'false';
+				column.unique = 'true';
+				$scope.target.columns.push(column);
+			}
 
 
-			let targetTable = new mxCell($scope.targetTableObject, new mxGeometry(0, 0, 200, 28), 'table');
-			var v1 = graph.insertVertex(parent, targetTable, $scope.targetTableObject, 500, 20,
-				width, ($scope.targetTableObject.columns.length + 1) * 28);
-			v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
+			$scope.targetTable = new mxCell($scope.target, new mxGeometry(0, 0, 200, 28), 'table');
+			$scope.v2 = graph.insertVertex(parent, $scope.targetTable, $scope.target, 560, 20,
+				width, ($scope.target.columns.length + 1) * 28);
+			$scope.v2.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
 		}
 		finally {
 			// Updates the display
@@ -255,46 +259,75 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 		}
 	};
 
-
-	openMappingConfig = (columnName) => {
-		const column = $scope.targetTableObject.columns.find((column) => column.name === columnName);
-		alert(JSON.stringify(column));
-		// // assume View's (the only) column
-		// dialogHub.showFormDialog({
-		// 	title: 'Column SQL properties',
-		// 	form: {
-		// 		[`dsmt-${cell.id}`]: {
-		// 			label: 'Name',
-		// 			controlType: 'input',
-		// 			placeholder: 'Enter name',
-		// 			type: 'text',
-		// 			value: cell.value.name,
-		// 			focus: true,
-		// 			required: true,
-		// 			submitOnEnter: true
-		// 		}
-		// 	},
-		// 	submitLabel: 'Update',
-		// 	cancelLabel: 'Cancel'
-		// }).then((form) => {
-		// 	if (form) {
-		// 		// Maybe we should do this with "cell.value.clone()'
-		// 		// let refCell = $scope.graph.model.getCell(cell.id);
-		// 		cell.value.name = form[`dsmt-${cell.id}`];
-		// 		$scope.$evalAsync(() => {
-		// 			$scope.graph.model.setValue(cell, cell.value);
-		// 		});
-		// 	}
-		// }, (error) => {
-		// 	console.error(error);
-		// 	dialogHub.showAlert({
-		// 		title: 'Column SQL properties error',
-		// 		message: 'There was an error while updating the column SQL propertie.',
-		// 		type: AlertTypes.Error,
-		// 		preformatted: false,
-		// 	});
-		// });
+	openMappingConfiguration = (columnName) => {
+		const column = $scope.target.columns.find((column) => column.name === columnName);
+		// alert(JSON.stringify(column));
+		// assume View's (the only) column
+		dialogHub.showFormDialog({
+			title: 'Configuration',
+			form: {
+				[`dt-${column.name}`]: {
+					label: 'Direct',
+					controlType: 'input',
+					placeholder: 'Enter direct connection',
+					type: 'text',
+					value: column.direct,
+					focus: true,
+					required: false,
+					submitOnEnter: true
+				},
+				[`ct-${column.name}`]: {
+					label: 'Constant',
+					controlType: 'input',
+					placeholder: 'Enter constant value',
+					type: 'text',
+					value: column.constant,
+					focus: true,
+					required: false,
+					submitOnEnter: true
+				},
+				[`ft-${column.name}`]: {
+					label: 'Formula',
+					controlType: 'input',
+					placeholder: 'Enter formula',
+					type: 'text',
+					value: column.formula,
+					focus: true,
+					required: false,
+					submitOnEnter: true
+				},
+				[`mt-${column.name}`]: {
+					label: 'Module',
+					controlType: 'input',
+					placeholder: 'Enter module path',
+					type: 'text',
+					value: column.module,
+					focus: true,
+					required: false,
+					submitOnEnter: true
+				}
+			},
+			submitLabel: 'Update',
+			cancelLabel: 'Cancel'
+		}).then((form) => {
+			if (form) {
+				column.direct = form[`dt-${column.name}`];
+				column.constant = form[`ct-${column.name}`];
+				column.formula = form[`ft-${column.name}`];
+				column.module = form[`mt-${column.name}`];
+				$scope.refresh();
+			}
+		}, (error) => {
+			console.error(error);
+			dialogHub.showAlert({
+				title: 'Column configuration error',
+				message: 'There was an error while updating the column configuration.',
+				type: AlertTypes.Error,
+				preformatted: false,
+			});
+		});
 	}
+
 
 
 
@@ -407,25 +440,31 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 			// Uses the entity perimeter (below) as default
 			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_VERTICAL_ALIGN] = mxConstants.ALIGN_TOP;
-			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_PERIMETER] =
-				mxPerimeter.EntityPerimeter;
+			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_PERIMETER] = mxPerimeter.EntityPerimeter;
 			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_SHADOW] = false;
 			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_ROUNDED] = true;
 			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_ARCSIZE] = 4;
-			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_FILLCOLOR] = '#89c5f5';
+			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_FILLCOLOR] = 'transparent';
 			// graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_GRADIENTCOLOR] = '#A9C4EB';
-			delete $scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_STROKECOLOR];
+			// delete $scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_STROKECOLOR];
+
+			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_STROKECOLOR] = '#00cc66';
+			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_FONTCOLOR] = 'var(--sapTextColor)';
+			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_FONTSTYLE] = 0;
+			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_OPACITY] = '80';
+			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_STROKEWIDTH] = '2';
 
 			// Used for HTML labels that use up the complete vertex space (see
 			// graph.cellRenderer.redrawLabel below for syncing the size)
 			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_OVERFLOW] = 'fill';
 
 			// Uses the entity edge style as default
-			$scope.graph.stylesheet.getDefaultEdgeStyle()[mxConstants.STYLE_EDGE] =
-				mxEdgeStyle.EntityRelation;
-			$scope.graph.stylesheet.getDefaultEdgeStyle()[mxConstants.STYLE_STROKECOLOR] = '#117dd4';
-			$scope.graph.stylesheet.getDefaultEdgeStyle()[mxConstants.STYLE_FONTCOLOR] = '#117dd4';
-			$scope.graph.stylesheet.getDefaultEdgeStyle()[mxConstants.STYLE_OPACITY] = '80';
+			$scope.graph.stylesheet.getDefaultEdgeStyle()[mxConstants.STYLE_STROKECOLOR] = '#00cc66';
+			$scope.graph.stylesheet.getDefaultEdgeStyle()[mxConstants.STYLE_STROKEWIDTH] = '2';
+			$scope.graph.stylesheet.getDefaultEdgeStyle()[mxConstants.STYLE_ROUNDED] = true;
+			$scope.graph.stylesheet.getDefaultEdgeStyle()[mxConstants.STYLE_EDGE] = mxEdgeStyle.EntityRelation;
+
+
 
 			// Allows new connections to be made but do not allow existing
 			// connections to be changed for the sake of simplicity of this
@@ -584,8 +623,6 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 					if (this.currentRow != null) {
 						this.edgeState.cell.value.setAttribute('targetRow', this.currentRow);
-						this.edgeState.cell.value.setAttribute('targetColumn', $scope.targetTableObject.columns[this.currentRow - 1].name);
-						$scope.targetTableObject.columns[this.currentRow - 1].source = this.edgeState.cell.value.getAttribute('sourceColumn');
 					} else {
 						this.edgeState.cell.value.setAttribute('targetRow', '0');
 					}
@@ -597,12 +634,37 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 				oldMouseMove.apply(this, arguments);
 			};
 
+			// Updates the column in the preview edge State
+			var oldMouseUp = $scope.graph.connectionHandler.mouseUp;
+			$scope.graph.connectionHandler.mouseUp = function (sender, me) {
+				if (this.edgeState != null) {
+					debugger
+					this.currentRowNode = this.updateRow(me.getSource());
+
+					if (this.currentRow != null) {
+						this.edgeState.cell.value.setAttribute('targetRow', this.currentRow);
+						this.edgeState.cell.value.setAttribute('targetColumn', $scope.target.columns[this.currentRow - 1].name);
+
+						// setting the configuration data
+						let column = $scope.target.columns[this.currentRow - 1];
+						let sourceColumnName = this.edgeState.cell.value.getAttribute('sourceColumn');
+						column.source = sourceColumnName;
+						column.direct = 'SOURCE["' + sourceColumnName + '"]';
+						$scope.refresh();
+					} else {
+						this.edgeState.cell.value.setAttribute('targetRow', '0');
+					}
+				}
+
+				oldMouseUp.apply(this, arguments);
+			};
+
 			// Creates the edge state that may be used for preview
 			$scope.graph.connectionHandler.createEdgeState = function (me) {
 				var relation = doc.createElement('Relation');
 				relation.setAttribute('sourceRow', this.currentRow || '0');
 				relation.setAttribute('targetRow', '0');
-				relation.setAttribute('sourceColumn', $scope.sourceTableObject.columns[this.currentRow - 1].name);
+				relation.setAttribute('sourceColumn', $scope.source.columns[this.currentRow - 1].name);
 
 				var edge = this.createEdge(relation);
 				var style = this.graph.getCellStyle(edge);
@@ -619,19 +681,29 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			$scope.graph.getLabel = function (cell) {
 				if (this.getModel().isVertex(cell)) {
 					if (this.isCellCollapsed(cell)) {
-						return '<table style="overflow:hidden;" width="100%" height="100%" border="1" cellpadding="4" class="title" style="height:100%;">' +
+						return '<table style="overflow:hidden;" width="100%" height="100%" border="0" cellpadding="4" class="title" style="height:100%;">' +
 							'<tr><th>' + cell.value.name + '</th></tr>' +
 							'</table>';
 					} else {
-						let label = '<table style="overflow:hidden;" width="100%" border="1" cellpadding="4" class="title">' +
+						let label = '<table style="overflow:hidden;" width="100%" border="0" cellpadding="4" class="title">' +
 							'<tr><th colspan="2">' + cell.value.name + '</th></tr>' +
 							'</table>';
 						label += '<div style="overflow:auto;cursor:default;top:26px;bottom:0px;position:absolute;width:100%;">' +
-							'<table width="100%" height="100%" border="1" cellpadding="4" class="erd">';
+							'<table width="100%" height="100%" border="0" cellpadding="4" class="erd">';
 						for (const c of cell.value.columns) {
 							label += '<tr>';
 							if (cell.value.type === 'TARGET') {
-								label += '<td><i class="dsm-table-icon sap-icon--circle-task" onclick="openMappingConfig(\'' + c.name + '\')"></i></td>';
+								let config = 'circle-task';
+								if (c.constant) {
+									config = 'tri-state';
+								} else if (c.formula) {
+									config = 'bo-strategy-management';
+								} else if (c.module) {
+									config = 'attachment';
+								} else if (c.direct) {
+									config = 'circle-task-2';
+								}
+								label += '<td><i class="dsm-table-icon sap-icon--' + config + '" onclick="openMappingConfiguration(\'' + c.name + '\')"></i></td>';
 							}
 							label += '<td>';
 							if (c.primaryKey === 'true') {
@@ -647,7 +719,10 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 								label += '<i class="dsm-table-spacer"></i>';
 							}
 							label += '</td>';
-							label += '<td><u>' + c.name + '</u></td></tr>';
+							label += '<td style="text-align: left">'
+								+ c.name + '</td><td>'
+								+ c.type + '</td><td>'
+								+ c.columnLength + '</td></tr>';
 
 						}
 						label += '</table></div>';
@@ -678,7 +753,6 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			editor.addAction('save', function (editor, cell) {
 				$scope.saveMapping($scope.graph);
 			});
-
 
 
 			$scope.source = function () {
@@ -719,6 +793,9 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			};
 			$scope.fit = function () {
 				editor.execute('fit');
+			};
+			$scope.refresh = function () {
+				editor.execute('refresh');
 			};
 
 			// User objects (data) for the individual cells
@@ -908,10 +985,6 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 		return y;
 	};
 
-	//==================================================================
-
-
-
 	$scope.dataParameters = ViewParameters.get();
 	if (!$scope.dataParameters.hasOwnProperty('filePath')) {
 		$scope.state.error = true;
@@ -923,4 +996,5 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 		mappingFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.mapping';
 		loadFileContents();
 	}
+
 });
