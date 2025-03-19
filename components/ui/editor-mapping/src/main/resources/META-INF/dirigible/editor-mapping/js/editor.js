@@ -188,7 +188,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 		let parent = graph.getDefaultParent();
 
 		// Adds cells to the model in a single step
-		let width = 160;
+		let width = 260;
 		graph.getModel().beginUpdate();
 		try {
 			let sourceTable = $scope.table.clone();
@@ -197,7 +197,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 			debugger
 			sourceTableObject.name = "MY_SOURCE_TABLE";
-			sourceTableObject.type = "source";
+			sourceTableObject.type = "SOURCE";
 
 			let column = $scope.column.clone();
 			column.value.name = 'TABLENAME_ID';
@@ -226,8 +226,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			// v2.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
 
 			//$scope.graph.insertEdge(parent, null, relation, v1, v2);
-		}
-		finally {
+		} finally {
 			// Updates the display
 			graph.getModel().endUpdate();
 		}
@@ -240,7 +239,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 		var parent = graph.getDefaultParent();
 
 		// Adds cells to the model in a single step
-		var width = 160;
+		var width = 260;
 		graph.getModel().beginUpdate();
 		try {
 			let sourceTable = $scope.table.clone();
@@ -249,7 +248,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 			debugger
 			sourceTableObject.name = "MY_TARGET_TABLE";
-			sourceTableObject.type = "source";
+			sourceTableObject.type = "TARGET";
 
 			let column = $scope.column.clone();
 			column.value.name = 'TABLENAME_ID';
@@ -270,7 +269,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			sourceTableObject.columns.push(column.value);
 
 
-			var v1 = graph.insertVertex(parent, sourceTable, sourceTableObject, 400, 20,
+			var v1 = graph.insertVertex(parent, sourceTable, sourceTableObject, 500, 20,
 				width, (sourceTableObject.columns.length + 1) * 28);
 			v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
 		}
@@ -536,23 +535,28 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 			// Adds placement of the connect icon based on the mouse event target (row)
 			$scope.graph.connectionHandler.updateIcons = function (state, icons, me) {
-				var target = me.getSource();
-				target = this.updateRow(target);
 
-				if (target != null && this.currentRow != null) {
-					var div = target.parentNode.parentNode.parentNode;
-					var s = state.view.scale;
+				if (state && state.cell && state.cell.value && state.cell.value.type === 'SOURCE') {
+					var target = me.getSource();
+					target = this.updateRow(target);
 
-					icons[0].node.style.visibility = 'visible';
-					icons[0].bounds.x = state.x + target.offsetLeft + Math.min(state.width,
-						target.offsetWidth * s) - this.icons[0].bounds.width - 2;
-					icons[0].bounds.y = state.y - this.icons[0].bounds.height / 2 + (target.offsetTop +
-						target.offsetHeight / 2 - div.scrollTop + div.offsetTop) * s;
-					icons[0].redraw();
+					if (target != null && this.currentRow != null) {
+						debugger
+						var div = target.parentNode.parentNode.parentNode;
+						var s = state.view.scale;
 
-					this.currentRowNode = target;
-				}
-				else {
+						icons[0].node.style.visibility = 'visible';
+						icons[0].bounds.x = state.x + target.offsetLeft + Math.min(state.width,
+							target.offsetWidth * s) - this.icons[0].bounds.width - 2;
+						icons[0].bounds.y = state.y - this.icons[0].bounds.height / 2 + (target.offsetTop +
+							target.offsetHeight / 2 - div.scrollTop + div.offsetTop) * s;
+						icons[0].redraw();
+
+						this.currentRowNode = target;
+					} else {
+						icons[0].node.style.visibility = 'hidden';
+					}
+				} else {
 					icons[0].node.style.visibility = 'hidden';
 				}
 			};
@@ -609,7 +613,11 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 						label += '<div style="overflow:auto;cursor:default;top:26px;bottom:0px;position:absolute;width:100%;">' +
 							'<table width="100%" height="100%" border="1" cellpadding="4" class="erd">';
 						for (const c of cell.value.columns) {
-							label += '<tr><td>';
+							label += '<tr>';
+							if (cell.value.type === 'TARGET') {
+								label += '<td><i class="dsm-table-icon sap-icon--circle-task" onclick="alert(\'' + c.name + '\')"></i></td>';
+							}
+							label += '<td>';
 							if (c.primaryKey === 'true') {
 								label += '<i title="Primary Key" class="dsm-table-icon sap-icon--key"></i>';
 							} else {
@@ -632,66 +640,10 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 				} else {
 					return '';
 				}
-
-
-				// if (this.isHtmlLabel(cell)) {
-				// 	let label = '';
-				// 	if (cell.value.primaryKey === 'true') {
-				// 		label += '<i title="Primary Key" class="dsm-table-icon sap-icon--key"></i>';
-				// 	} else {
-				// 		label += '<i class="dsm-table-spacer"></i>';
-				// 	}
-				// 	if (cell.value.autoIncrement === 'true') {
-				// 		label += '<i title="Auto Increment" class="dsm-table-icon sap-icon--add"></i>';
-				// 	} else if (cell.value.unique === 'true') {
-				// 		label += '<i title="Unique" class="dsm-table-icon sap-icon--accept"></i>';
-				// 	} else {
-				// 		label += '<i class="dsm-table-spacer"></i>';
-				// 	}
-				// 	let suffix = ': ' + mxUtils.htmlEntities(cell.value.type, false) + (cell.value.columnLength ?
-				// 		'(' + cell.value.columnLength + ')' : '');
-				// 	suffix = cell.value.isSQL ? '' : suffix;
-				// 	return label + mxUtils.htmlEntities(cell.value.name, false) + suffix;
-				// }
-
-				// return mxGraph.prototype.getLabel.apply(this, arguments); // "supercall"
 			};
 
 			// Adds all required styles to the graph (see below)
 			// configureStylesheet($scope.graph);
-
-
-
-			// Adds sidebar icon for the table object
-			let tableObject = new Table('TABLENAME');
-			let table = new mxCell(tableObject, new mxGeometry(0, 0, 200, 28), 'table');
-
-			table.setVertex(true);
-			addSidebarIcon($scope.graph, sidebar, table, 'sap-icon--table-view', 'Drag this to the diagram to create a new Table', $scope);
-
-			// Adds sidebar icon for the column object
-			let columnObject = new Column('COLUMNNAME');
-			let column = new mxCell(columnObject, new mxGeometry(0, 0, 0, 26));
-
-			column.setVertex(true);
-			column.setConnectable(false);
-
-			addSidebarIcon($scope.graph, sidebar, column, 'sap-icon--table-column', 'Drag this to a Table to create a new Column', $scope);
-
-			// Adds primary key field into table
-			let firstColumn = column.clone();
-
-			firstColumn.value.name = 'TABLENAME_ID';
-			firstColumn.value.type = 'INTEGER';
-			firstColumn.value.columnLength = 0;
-			firstColumn.value.primaryKey = 'true';
-			firstColumn.value.autoIncrement = 'true';
-
-			table.insert(firstColumn);
-
-
-
-
 
 
 
