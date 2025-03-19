@@ -261,8 +261,10 @@ class DirigibleCleaner {
 
     public static void deleteDirigibleFolder() {
         String dirigibleFolder = DirigibleConfig.REPOSITORY_LOCAL_ROOT_FOLDER.getStringValue() + File.separator + "dirigible";
-        LOGGER.info("Deleting dirigible folder [{}]...", dirigibleFolder);
-        FileUtil.deleteFolder(dirigibleFolder);
+        String skippedDirPath = dirigibleFolder + File.separator + "repository" + File.separator + "index";
+
+        LOGGER.info("Deleting dirigible folder [{}] by skipping [{}]...", dirigibleFolder, skippedDirPath);
+        FileUtil.deleteFolder(dirigibleFolder, skippedDirPath);
     }
 
 }
