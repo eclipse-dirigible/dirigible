@@ -74,6 +74,7 @@
     </root>
 
     <logger name="org.eclipse.dirigible.tests" level="DEBUG"/>
+    <logger name="org.eclipse.dirigible.tests.DirigibleCleaner" level="INFO"/>
     <logger name="org.eclipse.dirigible.components.tenants.tenant" level="INFO"/>
     <logger name="org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer" level="INFO"/>
     <logger name="org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor" level="INFO"/>
