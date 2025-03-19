@@ -11,11 +11,13 @@ package org.eclipse.dirigible.tests;
 
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
+import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.tests.util.FileUtil;
+import org.flowable.engine.ProcessEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -38,15 +40,21 @@ public class DirigibleCleaner {
 
     private final DataSourcesManager dataSourcesManager;
     private final IRepository dirigibleRepo;
+    private final BpmService bpmService;
 
-    DirigibleCleaner(DataSourcesManager dataSourcesManager, IRepository dirigibleRepo) {
+    DirigibleCleaner(DataSourcesManager dataSourcesManager, IRepository dirigibleRepo, BpmService bpmService) {
         this.dataSourcesManager = dataSourcesManager;
         this.dirigibleRepo = dirigibleRepo;
+        this.bpmService = bpmService;
     }
 
     public void clean() {
         long startTime = System.currentTimeMillis();
-        LOGGER.info("Cleaning up Dirigible resources...");
+        ProcessEngine processEngine = bpmService.getBpmProviderFlowable()
+                                                .getProcessEngine();
+        processEngine.close();
+
+        LOGGER.info("Cleaning up Dirigible...");
         try {
             deleteCMSFolderFiles();
             unpublishResources();
