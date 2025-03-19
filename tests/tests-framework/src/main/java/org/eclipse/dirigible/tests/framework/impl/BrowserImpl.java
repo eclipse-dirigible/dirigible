@@ -308,6 +308,11 @@ class BrowserImpl implements Browser {
         ElementsCollection iframes = Selenide.$$(iframeSelector);
         LOGGER.debug("Found [{}] iframes", iframes.size());
 
+        if (iframes.size() == 0) {
+            LOGGER.debug("Found zero iframes");
+            return Optional.empty();
+        }
+
         for (SelenideElement iframe : iframes) {
             Selenide.switchTo()
                     .frame(iframe);
@@ -315,7 +320,7 @@ class BrowserImpl implements Browser {
 
             Optional<SelenideElement> element = findSingleElement(by, conditions);
             if (element.isPresent()) {
-                LOGGER.debug("Element with selector [{}] and conditions [{}] was FOUND in iframe [{}].", by, conditions, iframe);
+                LOGGER.info("Element with selector [{}] and conditions [{}] was FOUND in iframe [{}].", by, conditions, iframe);
                 return element;
             }
 
@@ -328,7 +333,7 @@ class BrowserImpl implements Browser {
                     .parentFrame();
         }
 
-        LOGGER.debug("Element with selector [{}] and conditions [{}] was NOT FOUND in [{}] iframes.", by, conditions, iframes.size());
+        LOGGER.info("Element with selector [{}] and conditions [{}] was NOT FOUND in [{}] iframes.", by, conditions, iframes.size());
         return Optional.empty();
     }
 
@@ -359,10 +364,15 @@ class BrowserImpl implements Browser {
                                              .getValue();
             boolean zeroMatches = Integer.valueOf(0)
                                          .equals(matchedElements);
-            LOGGER.warn(
-                    "Found [{}] elements with selector [{}] and conditions [{}] but expected ONLY ONE. Consider using more precise selector and conditions.\nFound elements: {}.\nCause error message: {}",
-                    matchedElements, by, allConditions, describeCollection(by, foundElements, conditions), ex.getMessage());
+            if (!zeroMatches) {
+                LOGGER.warn(
+                        "Found [{}] elements with selector [{}] and conditions [{}] but expected ONLY ONE. Consider using more precise selector and conditions.\nFound elements: {}.\nCause error message: {}",
+                        matchedElements, by, allConditions, describeCollection(by, foundElements, conditions), ex.getMessage());
+            }
             if (zeroMatches) {
+                LOGGER.debug(
+                        "Found ZERO elements with selector [{}] and conditions [{}] but expected ONLY ONE. Consider using more precise selector and conditions.\nFound elements: {}.\nCause error message: {}",
+                        by, allConditions, describeCollection(by, foundElements, conditions), ex.getMessage());
                 FileUtil.deleteFile(ex.getScreenshot()
                                       .getImage());
                 FileUtil.deleteFile(ex.getScreenshot()

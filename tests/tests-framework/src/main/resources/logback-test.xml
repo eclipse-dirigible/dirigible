@@ -77,11 +77,16 @@
     <logger name="org.eclipse.dirigible.tests.DirigibleCleaner" level="INFO"/>
     <logger name="org.eclipse.dirigible.tests.framework.impl.BrowserImpl" level="INFO"/>
     <logger name="org.eclipse.dirigible.tests.util.FileUtil" level="INFO"/>
+    <logger name="org.eclipse.dirigible.tests.TestsSpringEventsListener" level="INFO"/>
 
     <logger name="org.eclipse.dirigible.components.tenants.tenant" level="INFO"/>
+    <logger name="org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory" level="INFO"/>
     <logger name="org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer" level="INFO"/>
     <logger name="org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor" level="INFO"/>
     <logger name="org.eclipse.dirigible.components.base.logging.TenantConverter" level="INFO"/>
     <logger name="org.eclipse.dirigible.components.base.spring.BeanProvider" level="INFO"/>
+
+    <!--    Reduce logging to remove the logging noise during tests execution -->
+    <logger name="org.flowable.job.service.impl.asyncexecutor" level="ERROR"/>
 
 </configuration>
