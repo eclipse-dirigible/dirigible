@@ -209,6 +209,9 @@ public class CmisFacade implements ApplicationContextAware, InitializingBean {
      * @throws ServletException the servlet exception
      */
     public static Set<Access> getAccessDefinitions(String path, String method) throws ServletException {
+        if (null == path) {
+            throw new IllegalStateException("Passed path is null");
+        }
         Set<Access> accessDefinitions = new HashSet<Access>();
         int indexOf = 0;
         do {

@@ -32,12 +32,12 @@ import java.util.List;
 /**
  * The Class BaseSynchronizer.
  */
-@Transactional
 public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchronizer<A, ID> {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(BaseSynchronizer.class);
 
+    @Transactional
     @Override
     public List<A> parse(String location, byte[] content) throws ParseException {
         Tracer tracer = OpenTelemetryProvider.get()
@@ -168,6 +168,7 @@ public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchr
      *
      * @param artefact the artefact
      */
+    @Transactional
     @Override
     public void cleanup(A artefact) {
         Tracer tracer = OpenTelemetryProvider.get()

@@ -90,7 +90,7 @@ class BrowserImpl implements Browser {
     @Override
     public void openPath(String path) {
         String url = createAppUrl(path);
-        LOGGER.info("Opening path [{}] using URL [{}]", path, url);
+        LOGGER.debug("Opening path [{}] using URL [{}]", path, url);
         Selenide.open(url);
         maximizeBrowser();
     }
@@ -133,7 +133,7 @@ class BrowserImpl implements Browser {
     private Consumer<SelenideElement> enterTextInElement(String text) {
         return element -> {
             element.click();
-            LOGGER.info("Entering [{}] in [{}]", text, element);
+            LOGGER.debug("Entering [{}] in [{}]", text, element);
             element.setValue(text);
         };
     }
@@ -320,7 +320,7 @@ class BrowserImpl implements Browser {
 
             Optional<SelenideElement> element = findSingleElement(by, conditions);
             if (element.isPresent()) {
-                LOGGER.info("Element with selector [{}] and conditions [{}] was FOUND in iframe [{}].", by, conditions, iframe);
+                LOGGER.debug("Element with selector [{}] and conditions [{}] was FOUND in iframe [{}].", by, conditions, iframe);
                 return element;
             }
 
@@ -333,7 +333,7 @@ class BrowserImpl implements Browser {
                     .parentFrame();
         }
 
-        LOGGER.info("Element with selector [{}] and conditions [{}] was NOT FOUND in [{}] iframes.", by, conditions, iframes.size());
+        LOGGER.debug("Element with selector [{}] and conditions [{}] was NOT FOUND in [{}] iframes.", by, conditions, iframes.size());
         return Optional.empty();
     }
 
@@ -365,7 +365,7 @@ class BrowserImpl implements Browser {
             boolean zeroMatches = Integer.valueOf(0)
                                          .equals(matchedElements);
             if (!zeroMatches) {
-                LOGGER.warn(
+                LOGGER.debug(
                         "Found [{}] elements with selector [{}] and conditions [{}] but expected ONLY ONE. Consider using more precise selector and conditions.\nFound elements: {}.\nCause error message: {}",
                         matchedElements, by, allConditions, describeCollection(by, foundElements, conditions), ex.getMessage());
             }

@@ -32,6 +32,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import static io.restassured.RestAssured.given;
 import static org.awaitility.Awaitility.await;
@@ -80,16 +81,14 @@ class MultitenancyITTestProject extends BaseMultitenantTestProject {
     @Override
     public void verify(DirigibleTestTenant tenant) {
         LOGGER.info("Verifying test project for tenant [{}]...", tenant);
-        try {
-            verifyHomePageAccessibleByTenant(tenant);
-            verifyView(tenant);
-            verifyEdmGeneratedResources(tenant);
-            verifyOData(tenant);
-            verifyDocumentsAPI(tenant);
-            LOGGER.info("Test project for tenant [{}] has been verified successfully!", tenant);
-        } catch (RuntimeException | Error ex) {
-            throw new AssertionError("Failed to verify test project for tenant " + tenant, ex);
-        }
+
+        wrapVerification(this::verifyHomePageAccessibleByTenant, tenant, "verifyHomePageAccessibleByTenant");
+        wrapVerification(this::verifyView, tenant, "verifyView");
+        wrapVerification(this::verifyEdmGeneratedResources, tenant, "verifyEdmGeneratedResources");
+        wrapVerification(this::verifyOData, tenant, "verifyOData");
+        wrapVerification(this::verifyDocumentsAPI, tenant, "verifyDocumentsAPI");
+
+        LOGGER.info("Test project for tenant [{}] has been verified successfully!", tenant);
     }
 
     void verifyHomePageAccessibleByTenant(DirigibleTestTenant tenant) {
@@ -273,6 +272,16 @@ class MultitenancyITTestProject extends BaseMultitenantTestProject {
                    .statusCode(200)
                    .body(equalTo(JsonHelper.toJson(documentContent)));
         });
+    }
+
+    private void wrapVerification(Consumer<DirigibleTestTenant> verification, DirigibleTestTenant tenant, String faildVerification) {
+
+        try {
+            verification.accept(tenant);
+        } catch (RuntimeException | Error ex) {
+            throw new AssertionError("Failed to verify test project for tenant [" + tenant + "]. Failed verification: " + faildVerification,
+                    ex);
+        }
     }
 
 }

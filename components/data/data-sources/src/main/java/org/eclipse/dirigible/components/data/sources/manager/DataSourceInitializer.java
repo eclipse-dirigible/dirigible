@@ -271,4 +271,10 @@ public class DataSourceInitializer {
         beanFactory.registerSingleton(name, dataSource);
     }
 
+    public void clear() {
+        DATASOURCES.keySet()
+                   .forEach(this::removeInitializedDataSource);
+        DATASOURCES.clear();
+    }
+
 }

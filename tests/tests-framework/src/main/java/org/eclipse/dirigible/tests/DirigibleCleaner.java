@@ -10,11 +10,11 @@
 package org.eclipse.dirigible.tests;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.data.sources.manager.DataSourceInitializer;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
-import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.tests.util.FileUtil;
 import org.flowable.engine.ProcessEngines;
 import org.slf4j.Logger;
@@ -34,13 +34,13 @@ import java.util.stream.Collectors;
 class DirigibleCleaner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleCleaner.class);
-
+    private static final String[] SKIPPED_TABLE_PREFIXES = {"QRTZ_", "ACT_", "FLW_", "ACTIVEMQ_"};
     private final DataSourcesManager dataSourcesManager;
-    private final IRepository dirigibleRepo;
+    private final DataSourceInitializer dataSourceInitializer;
 
-    DirigibleCleaner(DataSourcesManager dataSourcesManager, IRepository dirigibleRepo) {
+    DirigibleCleaner(DataSourcesManager dataSourcesManager, DataSourceInitializer dataSourceInitializer) {
         this.dataSourcesManager = dataSourcesManager;
-        this.dirigibleRepo = dirigibleRepo;
+        this.dataSourceInitializer = dataSourceInitializer;
     }
 
     public void clean() {
@@ -50,6 +50,8 @@ class DirigibleCleaner {
         try {
             // explicitly all delete and drop to clean the in-memory stuff which otherwise breaks the tests
             deleteDirigibleDBData();
+            dataSourceInitializer.clear();
+
             DirigibleCleaner.deleteDirigibleFolder();
             LOGGER.info("Dirigible resources have been cleaned up. It took [{}] ms", System.currentTimeMillis() - startTime);
         } catch (Throwable ex) {
@@ -74,8 +76,8 @@ class DirigibleCleaner {
         deleteSchemas(defaultDataSource);
 
         DirigibleDataSource systemDataSource = dataSourcesManager.getSystemDataSource();
-        deleteAllTablesDataInSchema(systemDataSource);
-        dropAllTablesInSchema(systemDataSource);
+        deleteAllTablesDataInSchema(systemDataSource, SKIPPED_TABLE_PREFIXES);
+        dropAllTablesInSchema(systemDataSource, SKIPPED_TABLE_PREFIXES);
 
         LOGGER.info("Dirigible db data have been deleted...");
     }
