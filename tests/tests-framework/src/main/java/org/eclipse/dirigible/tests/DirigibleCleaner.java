@@ -15,6 +15,7 @@ import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
+import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.tests.util.FileUtil;
 import org.flowable.engine.ProcessEngines;
 import org.slf4j.Logger;
@@ -37,10 +38,12 @@ class DirigibleCleaner {
     private static final String[] SKIPPED_TABLE_PREFIXES = {"QRTZ_", "ACT_", "FLW_", "ACTIVEMQ_"};
     private final DataSourcesManager dataSourcesManager;
     private final DataSourceInitializer dataSourceInitializer;
+    private final IRepository repository;
 
-    DirigibleCleaner(DataSourcesManager dataSourcesManager, DataSourceInitializer dataSourceInitializer) {
+    DirigibleCleaner(DataSourcesManager dataSourcesManager, DataSourceInitializer dataSourceInitializer, IRepository repository) {
         this.dataSourcesManager = dataSourcesManager;
         this.dataSourceInitializer = dataSourceInitializer;
+        this.repository = repository;
     }
 
     public void clean() {
@@ -53,6 +56,7 @@ class DirigibleCleaner {
             dataSourceInitializer.clear();
 
             DirigibleCleaner.deleteDirigibleFolder();
+            repository.searchRefresh();
             LOGGER.info("Dirigible resources have been cleaned up. It took [{}] ms", System.currentTimeMillis() - startTime);
         } catch (Throwable ex) {
             throw new IllegalStateException("Failed to cleanup resources", ex);
