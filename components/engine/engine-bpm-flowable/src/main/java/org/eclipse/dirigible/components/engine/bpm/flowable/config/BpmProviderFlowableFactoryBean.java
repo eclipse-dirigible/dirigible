@@ -44,7 +44,6 @@ class BpmProviderFlowableFactoryBean implements FactoryBean<BpmProviderFlowable>
     public void destroy() {
         LOGGER.info("Destroying bean...");
         if (bpmProviderFlowable != null) {
-            bpmProviderFlowable.cleanup();
             this.bpmProviderFlowable = null;
         }
     }
