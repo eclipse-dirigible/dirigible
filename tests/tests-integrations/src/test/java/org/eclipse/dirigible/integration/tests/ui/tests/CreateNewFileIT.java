@@ -13,30 +13,25 @@ import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.Workbench;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.api.Test;
 
 class CreateNewFileIT extends UserInterfaceIntegrationTest {
 
-    @BeforeEach
-    void setUp() {
+    @Test
+    void test() {
         Workbench workbench = ide.openWorkbench();
         workbench.createNewProject(this.getClass()
                                        .getSimpleName());
-    }
 
-    @ParameterizedTest
-    @EnumSource(NewFileOption.class)
-    void test(NewFileOption newFileOption) {
-        Workbench workbench = ide.openWorkbench();
-        workbench.createFileInProject(this.getClass()
-                                          .getSimpleName(),
-                newFileOption.getOptionName());
+        for (NewFileOption newFileOption : NewFileOption.values()) {
+            workbench.createFileInProject(this.getClass()
+                                              .getSimpleName(),
+                    newFileOption.getOptionName());
 
-        workbench.openFile(newFileOption.getNewFileName());
+            workbench.openFile(newFileOption.getNewFileName());
 
-        assertFileTabIsOpen(newFileOption);
+            assertFileTabIsOpen(newFileOption);
+        }
     }
 
     private void assertFileTabIsOpen(NewFileOption newFileOption) {
