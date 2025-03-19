@@ -75,10 +75,6 @@
             <artifactId>assertj-db</artifactId>
             <version>3.0.0</version>
         </dependency>
-        <dependency>
-            <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-engine-bpm-flowable</artifactId>
-        </dependency>
     </dependencies>
 
     <dependencyManagement>
