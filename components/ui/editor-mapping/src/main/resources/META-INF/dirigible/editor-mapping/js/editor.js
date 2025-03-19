@@ -170,18 +170,6 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 
 
-
-
-	$scope.tableObject = new Table('TABLENAME');
-	$scope.table = new mxCell($scope.tableObject, new mxGeometry(0, 0, 200, 28), 'table');
-	$scope.table.setVertex(true);
-	$scope.table.setConnectable(false);
-
-	$scope.columnObject = new Column('COLUMNNAME');
-	$scope.column = new mxCell($scope.columnObject, new mxGeometry(0, 0, 0, 26));
-	$scope.column.setVertex(true);
-	$scope.column.setConnectable(false);
-
 	$scope.sourceMapping = (graph) => {
 		// Gets the default parent for inserting new cells. This
 		// is normally the first child of the root (ie. layer 0).
@@ -191,41 +179,33 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 		let width = 260;
 		graph.getModel().beginUpdate();
 		try {
-			let sourceTable = $scope.table.clone();
-			let sourceTableObject = sourceTable.value;
-			sourceTableObject.columns = [];
+			$scope.sourceTableObject = new Table('MY_SOURCE_TABLE');
+			$scope.sourceTableObject.columns = [];
 
-			debugger
-			sourceTableObject.name = "MY_SOURCE_TABLE";
-			sourceTableObject.type = "SOURCE";
+			$scope.sourceTableObject.name = "MY_SOURCE_TABLE";
+			$scope.sourceTableObject.type = "SOURCE";
 
-			let column = $scope.column.clone();
-			column.value.name = 'TABLENAME_ID';
-			column.value.type = 'INTEGER';
-			column.value.columnLength = 0;
-			column.value.primaryKey = 'true';
-			column.value.autoIncrement = 'true';
-			sourceTable.insert(column);
-			sourceTableObject.columns.push(column.value);
+			let column = new Column('TABLENAME_ID');
+			column.name = 'TABLENAME_ID';
+			column.type = 'INTEGER';
+			column.columnLength = 0;
+			column.primaryKey = 'true';
+			column.autoIncrement = 'true';
+			$scope.sourceTableObject.columns.push(column);
 
-			column = $scope.column.clone();
-			column.value.name = 'TABLENAME_NAME';
-			column.value.type = 'VARCHAR';
-			column.value.columnLength = 0;
-			column.value.primaryKey = 'false';
-			column.value.unique = 'true';
-			sourceTable.insert(column);
-			sourceTableObject.columns.push(column.value);
+			column = new Column('TABLENAME_NAME');
+			column.name = 'TABLENAME_NAME';
+			column.type = 'VARCHAR';
+			column.columnLength = 0;
+			column.primaryKey = 'false';
+			column.unique = 'true';
+			$scope.sourceTableObject.columns.push(column);
 
-
-			var v1 = graph.insertVertex(parent, sourceTable, sourceTableObject, 20, 20,
-				width, (sourceTableObject.columns.length + 1) * 28);
+			let sourceTable = new mxCell($scope.sourceTableObject, new mxGeometry(0, 0, 200, 28), 'table');
+			var v1 = graph.insertVertex(parent, sourceTable, $scope.sourceTableObject, 20, 20,
+				width, ($scope.sourceTableObject.columns.length + 1) * 28);
 			v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
 
-			// var v2 = graph.insertVertex(parent, null, '', 400, 20, width, height);
-			// v2.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
-
-			//$scope.graph.insertEdge(parent, null, relation, v1, v2);
 		} finally {
 			// Updates the display
 			graph.getModel().endUpdate();
@@ -233,7 +213,6 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 	};
 
 	$scope.targetMapping = (graph) => {
-		debugger
 		// Gets the default parent for inserting new cells. This
 		// is normally the first child of the root (ie. layer 0).
 		var parent = graph.getDefaultParent();
@@ -242,35 +221,32 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 		var width = 260;
 		graph.getModel().beginUpdate();
 		try {
-			let sourceTable = $scope.table.clone();
-			let sourceTableObject = sourceTable.value;
-			sourceTableObject.columns = [];
+			$scope.targetTableObject = new Table('MY_TARGET_TABLE');
+			$scope.targetTableObject.columns = [];
 
-			debugger
-			sourceTableObject.name = "MY_TARGET_TABLE";
-			sourceTableObject.type = "TARGET";
+			$scope.targetTableObject.name = "MY_TARGET_TABLE";
+			$scope.targetTableObject.type = "TARGET";
 
-			let column = $scope.column.clone();
-			column.value.name = 'TABLENAME_ID';
-			column.value.type = 'INTEGER';
-			column.value.columnLength = 0;
-			column.value.primaryKey = 'true';
-			column.value.autoIncrement = 'true';
-			sourceTable.insert(column);
-			sourceTableObject.columns.push(column.value);
+			let column = new Column('TABLENAME_ID');
+			column.name = 'TABLENAME_ID';
+			column.type = 'INTEGER';
+			column.columnLength = 0;
+			column.primaryKey = 'true';
+			column.autoIncrement = 'true';
+			$scope.targetTableObject.columns.push(column);
 
-			column = $scope.column.clone();
-			column.value.name = 'TABLENAME_NAME';
-			column.value.type = 'VARCHAR';
-			column.value.columnLength = 0;
-			column.value.primaryKey = 'false';
-			column.value.unique = 'true';
-			sourceTable.insert(column);
-			sourceTableObject.columns.push(column.value);
+			column = new Column('TABLENAME_NAME');
+			column.name = 'TABLENAME_NAME';
+			column.type = 'VARCHAR';
+			column.columnLength = 0;
+			column.primaryKey = 'false';
+			column.unique = 'true';
+			$scope.targetTableObject.columns.push(column);
 
 
-			var v1 = graph.insertVertex(parent, sourceTable, sourceTableObject, 500, 20,
-				width, (sourceTableObject.columns.length + 1) * 28);
+			let targetTable = new mxCell($scope.targetTableObject, new mxGeometry(0, 0, 200, 28), 'table');
+			var v1 = graph.insertVertex(parent, targetTable, $scope.targetTableObject, 500, 20,
+				width, ($scope.targetTableObject.columns.length + 1) * 28);
 			v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
 		}
 		finally {
@@ -278,6 +254,47 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			graph.getModel().endUpdate();
 		}
 	};
+
+
+	openMappingConfig = (columnName) => {
+		const column = $scope.targetTableObject.columns.find((column) => column.name === columnName);
+		alert(JSON.stringify(column));
+		// // assume View's (the only) column
+		// dialogHub.showFormDialog({
+		// 	title: 'Column SQL properties',
+		// 	form: {
+		// 		[`dsmt-${cell.id}`]: {
+		// 			label: 'Name',
+		// 			controlType: 'input',
+		// 			placeholder: 'Enter name',
+		// 			type: 'text',
+		// 			value: cell.value.name,
+		// 			focus: true,
+		// 			required: true,
+		// 			submitOnEnter: true
+		// 		}
+		// 	},
+		// 	submitLabel: 'Update',
+		// 	cancelLabel: 'Cancel'
+		// }).then((form) => {
+		// 	if (form) {
+		// 		// Maybe we should do this with "cell.value.clone()'
+		// 		// let refCell = $scope.graph.model.getCell(cell.id);
+		// 		cell.value.name = form[`dsmt-${cell.id}`];
+		// 		$scope.$evalAsync(() => {
+		// 			$scope.graph.model.setValue(cell, cell.value);
+		// 		});
+		// 	}
+		// }, (error) => {
+		// 	console.error(error);
+		// 	dialogHub.showAlert({
+		// 		title: 'Column SQL properties error',
+		// 		message: 'There was an error while updating the column SQL propertie.',
+		// 		type: AlertTypes.Error,
+		// 		preformatted: false,
+		// 	});
+		// });
+	}
 
 
 
@@ -525,8 +542,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 					}
 
 					this.currentRow = rowNumber + 1;
-				}
-				else {
+				} else {
 					target = null;
 				}
 
@@ -541,7 +557,6 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 					target = this.updateRow(target);
 
 					if (target != null && this.currentRow != null) {
-						debugger
 						var div = target.parentNode.parentNode.parentNode;
 						var s = state.view.scale;
 
@@ -569,8 +584,9 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 					if (this.currentRow != null) {
 						this.edgeState.cell.value.setAttribute('targetRow', this.currentRow);
-					}
-					else {
+						this.edgeState.cell.value.setAttribute('targetColumn', $scope.targetTableObject.columns[this.currentRow - 1].name);
+						$scope.targetTableObject.columns[this.currentRow - 1].source = this.edgeState.cell.value.getAttribute('sourceColumn');
+					} else {
 						this.edgeState.cell.value.setAttribute('targetRow', '0');
 					}
 
@@ -586,6 +602,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 				var relation = doc.createElement('Relation');
 				relation.setAttribute('sourceRow', this.currentRow || '0');
 				relation.setAttribute('targetRow', '0');
+				relation.setAttribute('sourceColumn', $scope.sourceTableObject.columns[this.currentRow - 1].name);
 
 				var edge = this.createEdge(relation);
 				var style = this.graph.getCellStyle(edge);
@@ -600,7 +617,6 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			// Overrides getLabel to return empty labels for edges and
 			// short markup for collapsed cells.
 			$scope.graph.getLabel = function (cell) {
-				debugger
 				if (this.getModel().isVertex(cell)) {
 					if (this.isCellCollapsed(cell)) {
 						return '<table style="overflow:hidden;" width="100%" height="100%" border="1" cellpadding="4" class="title" style="height:100%;">' +
@@ -615,7 +631,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 						for (const c of cell.value.columns) {
 							label += '<tr>';
 							if (cell.value.type === 'TARGET') {
-								label += '<td><i class="dsm-table-icon sap-icon--circle-task" onclick="alert(\'' + c.name + '\')"></i></td>';
+								label += '<td><i class="dsm-table-icon sap-icon--circle-task" onclick="openMappingConfig(\'' + c.name + '\')"></i></td>';
 							}
 							label += '<td>';
 							if (c.primaryKey === 'true') {
