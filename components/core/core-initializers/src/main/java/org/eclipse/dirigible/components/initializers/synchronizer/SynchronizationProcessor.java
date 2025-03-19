@@ -847,7 +847,7 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                         artefact.getKey(), artefact.getLocation(), lifecycle, synchronizer, artefact.getError(), message, cause);
                 break;
             default: {
-                logger.info(
+                logger.debug(
                         "Registering artefact lifecycle status [{}] for artefact with key [{}], location [{}], message [{}], error [{}]",
                         lifecycle, artefact.getKey(), artefact.getLocation(), message, artefact.getError(), cause);
             }
