@@ -13,6 +13,8 @@ import org.awaitility.Awaitility;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -30,6 +32,8 @@ import java.util.concurrent.TimeUnit;
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 public abstract class IntegrationTest {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(IntegrationTest.class);
+
     // set config to false if you want to disable the headless mode
     private static boolean headlessExecution = true;
 
@@ -45,7 +49,7 @@ public abstract class IntegrationTest {
     }
 
     @AfterAll
-    public static final void reloadConfigurations() {
+    public static void reloadConfigurations() {
         Configuration.reloadConfigurations();
     }
 

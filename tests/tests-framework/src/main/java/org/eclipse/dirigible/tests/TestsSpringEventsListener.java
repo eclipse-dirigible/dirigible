@@ -14,7 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationStartingEvent;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationListener;
-import org.springframework.context.event.ContextStoppedEvent;
+import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -25,12 +25,17 @@ import org.springframework.stereotype.Component;
 class TestsSpringEventsListener implements ApplicationListener<ApplicationEvent> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TestsSpringEventsListener.class);
+    private final DirigibleCleaner dirigibleCleaner;
+
+    TestsSpringEventsListener(DirigibleCleaner dirigibleCleaner) {
+        this.dirigibleCleaner = dirigibleCleaner;
+    }
 
     @Override
     public void onApplicationEvent(ApplicationEvent event) {
-        if (event instanceof ApplicationStartingEvent || event instanceof ContextStoppedEvent) {
+        if (event instanceof ApplicationStartingEvent || event instanceof ContextClosedEvent) {
             LOGGER.info("Event [{}] will be handled.", event);
-            DirigibleCleaner.deleteDirigibleFolder();
+            dirigibleCleaner.clean();
             return;
         }
 
