@@ -367,16 +367,18 @@ class BrowserImpl implements Browser {
             }
             LOGGER.debug("Element by [{}] and conditions [{}] was NOT found. Will try again.", by, conditions);
 
-            if (System.currentTimeMillis() >= maxWaitTime) {
+            boolean timeoutReached = System.currentTimeMillis() >= maxWaitTime;
+            if (timeoutReached) {
                 if (finalExecution) {
+                    finalExecution = false;
                     break;
                 }
                 LOGGER.debug("Element by [{}] and conditions [{}] was NOT found. Will try to reload the page and find it.", by, conditions);
                 reload();
                 SleepUtil.sleepSeconds(3);
                 continueExecution = false;
-                // allow one more execution
-                finalExecution = true;
+
+                finalExecution = true;// allow one more execution
 
             }
         } while (continueExecution || finalExecution);
