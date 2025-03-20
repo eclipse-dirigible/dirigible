@@ -128,7 +128,7 @@ angular.module('platformView', ['platformExtensions', 'platformTheming'])
                 if (scope.type === types[1]) Views.getSubviews(scope.viewId).then(setView);
                 else Views.getViews(scope.viewId).then(setView);
             },
-            template: `<iframe title={{::view.label}} loading="{{::view.lazyLoad ? 'lazy' : 'eager'}}" ng-src="{{::view.path}}" data-parameters="{{::view.params}}"></iframe>`
+            template: `<iframe title="{{::view.label}}" loading="{{::view.lazyLoad ? 'lazy' : 'eager'}}" ng-src="{{::view.path}}" data-parameters="{{::view.params}}"></iframe>`
         }
     }).directive('configIcons', () => ({
         restrict: 'A',

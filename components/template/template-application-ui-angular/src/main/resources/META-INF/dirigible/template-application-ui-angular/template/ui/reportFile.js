@@ -31,12 +31,6 @@ function getReportPerspectiveSources() {
             collection: "generateReportModels"
         },
         {
-            location: "/template-application-ui-angular/ui/perspective/perspective-portal-report.extension.template",
-            action: "generate",
-            rename: "gen/{{genFolderName}}/ui/Reports/perspective-portal.extension",
-            collection: "generateReportModels"
-        },
-        {
             location: "/template-application-ui-angular/ui/perspective/perspective-navigation-report.extension.template",
             action: "generate",
             engine: "velocity",
@@ -185,13 +179,6 @@ function getTableReportUISource() {
             action: "generate",
             engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/tile.extension",
-            collection: "generateReportModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/report-file/tile-portal.extension.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/tile-portal.extension",
             collection: "generateReportModels"
         },
         {

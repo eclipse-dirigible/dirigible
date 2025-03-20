@@ -251,6 +251,10 @@ ng-transclude:empty {
 }
 
 /* General helper classes */
+.bk-pointer {
+  cursor: pointer;
+}
+
 .bk-padding--tiny {
   padding: 0.5rem;
 }
@@ -326,6 +330,14 @@ ng-transclude:empty {
 
 .bk-preformatted {
   white-space: pre;
+}
+
+.bk-text--subtitle {
+  color: var(--sapTile_TextColor);
+}
+
+.bk-text--ellipsis {
+  text-overflow: ellipsis;
 }
 
 [class*=sap-icon][rotate="90"]:not(.fd-list__icon) {
@@ -734,6 +746,10 @@ ng-transclude:empty {
   font-size: var(--sapFontSmallSize);
 }
 
+.bk-font--normal {
+  font-size: var(--sapFontSize);
+}
+
 .bk-font--large {
   font-size: var(--sapFontLargeSize);
 }
@@ -752,6 +768,58 @@ ng-transclude:empty {
 
 .bk-restrict-width--xl {
   max-width: 1600px;
+}
+
+.bk-color-fill--negative,
+.bk-color-fill--negative>svg {
+  fill: var(--sapNegativeColor)
+}
+
+.bk-color-fill--critical,
+.bk-color-fill--critical>svg {
+  fill: var(--sapCriticalColor)
+}
+
+.bk-color-fill--positive,
+.bk-color-fill--positive>svg {
+  fill: var(--sapPositiveColor)
+}
+
+.bk-color-fill--informative,
+.bk-color-fill--informative>svg {
+  fill: var(--sapInformativeColor)
+}
+
+.bk-color-bg--negative {
+  background-color: var(--sapNegativeColor)
+}
+
+.bk-color-bg--critical {
+  background-color: var(--sapCriticalColor)
+}
+
+.bk-color-bg--positive {
+  background-color: var(--sapPositiveColor)
+}
+
+.bk-color-bg--informative {
+  background-color: var(--sapInformativeColor)
+}
+
+.bk-color--negative {
+  color: var(--sapNegativeColor)
+}
+
+.bk-color--critical {
+  color: var(--sapCriticalColor)
+}
+
+.bk-color--positive {
+  color: var(--sapPositiveColor)
+}
+
+.bk-color--informative {
+  color: var(--sapInformativeColor)
 }
 
 /* fd-tile-container additions */
@@ -862,6 +930,23 @@ ng-transclude:empty {
 
 .bk-form-item--horizontal>.fd-popover {
   flex: 1;
+}
+
+/* Tile additions */
+.fd-tile.bk-tile--container {
+  padding: 0 !important;
+}
+
+.fd-tile.bk-tile--container>*:first-child {
+  padding: 0 !important;
+  border-top-left-radius: var(--sapElement_BorderCornerRadius);
+  border-top-right-radius: var(--sapElement_BorderCornerRadius);
+}
+
+.fd-tile.bk-tile--container>*:last-child {
+  padding: 0 !important;
+  border-bottom-left-radius: var(--sapElement_BorderCornerRadius);
+  border-bottom-right-radius: var(--sapElement_BorderCornerRadius);
 }
 
 /* Button additions and fixes */

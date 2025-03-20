@@ -173,7 +173,7 @@ if (window !== top) {
                 }
             };
 
-            scope.canScroll = (items) => {
+            scope.canMenuScroll = (items) => {
                 if (items) {
                     for (let i = 0; i < items.length; i++) {
                         if (items[i]['items']) return false;
@@ -188,7 +188,7 @@ if (window !== top) {
         },
         templateUrl: '/services/web/platform-core/ui/templates/header.html',
     })).directive('submenu', () => ({
-        restrict: "E",
+        restrict: 'E',
         replace: false,
         scope: {
             sublist: '<',
@@ -196,7 +196,7 @@ if (window !== top) {
         },
         link: (scope) => {
             scope.menuHandler = scope.menuHandler();
-            scope.canScroll = (sublistItems) => {
+            scope.canSubmenuScroll = (sublistItems) => {
                 for (let i = 0; i < sublistItems.length; i++) {
                     if (sublistItems[i]['items']) return false;
                 }
@@ -204,7 +204,7 @@ if (window !== top) {
             };
         },
         template: `<bk-menu-item ng-repeat-start="item in sublist track by $index" ng-if="!item.items" has-separator="::item.separator" title="{{ ::item.label }}" ng-click="::menuHandler(item)"></bk-menu-item>
-        <bk-menu-sublist ng-if="item.items" has-separator="::item.separator" title="{{ ::item.label }}" can-scroll="::canScroll(item.items)" ng-repeat-end><submenu sublist="::item.items" menu-handler="::menuHandler"></submenu></bk-menu-sublist>`,
+        <bk-menu-sublist ng-if="item.items" has-separator="::item.separator" title="{{ ::item.label }}" can-scroll="::canSubmenuScroll(item.items)" ng-repeat-end><submenu sublist="::item.items" menu-handler="::menuHandler"></submenu></bk-menu-sublist>`,
     })).directive('perspectiveContainer', (Extensions, shellState, Shell) => ({
         restrict: 'E',
         transclude: true,

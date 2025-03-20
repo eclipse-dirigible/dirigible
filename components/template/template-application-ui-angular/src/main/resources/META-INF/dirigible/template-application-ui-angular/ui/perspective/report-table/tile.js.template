@@ -12,6 +12,6 @@ exports.getTile = () => ({
     report: '${generateReport}',
     icon: '${icon}',
     location: '/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/index.html',
-    order: '${menuIndex}',
+    order: ${menuIndex},
     groupOrder: '${perspectiveOrder}'
 });

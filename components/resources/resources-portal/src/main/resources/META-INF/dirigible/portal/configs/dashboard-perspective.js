@@ -9,14 +9,14 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const viewData = {
-    id: "portal-dashboard",
-    label: "Dashboard",
+const perspectiveData = {
+    id: 'dashboard',
+    label: 'Dashboard',
+    path: '/services/web/portal/perspectives/dashboard.html',
+    order: -3,
     lazyLoad: true,
-    link: "/services/web/portal/subviews/dashboard.html"
+    icon: '/services/web/portal/images/dashboard.svg',
 };
 if (typeof exports !== 'undefined') {
-    exports.getView = function () {
-        return viewData;
-    }
+    exports.getPerspective = () => perspectiveData;
 }

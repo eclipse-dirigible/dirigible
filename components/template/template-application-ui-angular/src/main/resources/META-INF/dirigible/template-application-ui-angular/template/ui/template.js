@@ -16,7 +16,6 @@ import * as reportTableTemplate from "template-application-ui-angular/template/u
 
 export function getSources(parameters) {
     return [
-        ...launchpad.getSources(parameters),
         ...listTemplate.getSources(parameters),
         ...manageTemplate.getSources(parameters),
         ...masterDetailsListTemplate.getSources(parameters),
