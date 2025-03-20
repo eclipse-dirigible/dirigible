@@ -204,7 +204,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 						let parent = graph.getDefaultParent();
 
 						// Adds cells to the model in a single step
-						let width = 460;
+						let width = 500;
 						graph.getModel().beginUpdate();
 						try {
 
@@ -274,7 +274,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 						let parent = graph.getDefaultParent();
 
 						// Adds cells to the model in a single step
-						let width = 460;
+						let width = 500;
 						graph.getModel().beginUpdate();
 						try {
 
@@ -289,7 +289,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 							}
 
 							$scope.targetTable = new mxCell($scope.target, new mxGeometry(0, 0, 200, 28), 'table');
-							$scope.v1 = graph.insertVertex(parent, $scope.targetTable, $scope.target, 600, 20,
+							$scope.v1 = graph.insertVertex(parent, $scope.targetTable, $scope.target, 650, 20,
 								width, ($scope.target.columns.length + 1) * 28);
 							$scope.v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
 
@@ -357,6 +357,16 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 					focus: true,
 					required: false,
 					submitOnEnter: true
+				},
+				[`fit-${column.name}`]: {
+					label: 'Filter',
+					controlType: 'input',
+					placeholder: 'Enter filter',
+					type: 'text',
+					value: column.filter,
+					focus: true,
+					required: false,
+					submitOnEnter: true
 				}
 			},
 			submitLabel: 'Update',
@@ -367,6 +377,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 				column.constant = form[`ct-${column.name}`];
 				column.formula = form[`ft-${column.name}`];
 				column.module = form[`mt-${column.name}`];
+				column.filter = form[`fit-${column.name}`];
 				$scope.refresh();
 			}
 		}, (error) => {
@@ -533,7 +544,8 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 			// Override folding to allow for tables
 			$scope.graph.isCellFoldable = function (cell, collapse) {
-				return this.getModel().isVertex(cell);
+				// return this.getModel().isVertex(cell);
+				return false;
 			};
 
 			// Overrides connectable state
@@ -761,6 +773,8 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 								let config = 'circle-task';
 								if (c.constant) {
 									config = 'tri-state';
+								} else if (c.filter) {
+									config = 'filter';
 								} else if (c.formula) {
 									config = 'bo-strategy-management';
 								} else if (c.module) {
@@ -1030,7 +1044,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 									let schema = schemas[k];
 									for (let m = 0; m < schema.tables.length; m++) {
 										let tableKey = uuidv4();
-										let tableLabel = datasources[j] + ' -> ' + schemas[k].name + ' -> ' + schema.tables[m].name;
+										let tableLabel = datasources[j] + ' : ' + schemas[k].name + ' : ' + schema.tables[m].name;
 										$scope.tables.push({
 											value: tableKey,
 											label: tableLabel,
