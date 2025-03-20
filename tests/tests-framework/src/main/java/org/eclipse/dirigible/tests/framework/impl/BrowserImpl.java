@@ -589,7 +589,9 @@ class BrowserImpl implements Browser {
     public void assertElementDoesNotExistsByTypeAndContainsText(String elementType, String text) {
         By by = constructCssSelectorByType(elementType);
 
-        Optional<SelenideElement> element = findOptionalElementInAllFrames(by, ELEMENT_EXISTENCE_SEARCH_TIME_SECONDS);
+        Optional<SelenideElement> element = findOptionalElementInAllFrames(by, ELEMENT_EXISTENCE_SEARCH_TIME_SECONDS, Condition.exist,
+                Condition.matchText(Pattern.quote(text)));
+
         if (element.isPresent()) {
             failWithScreenshot("Element with selector [" + by + "] was not found");
         }
