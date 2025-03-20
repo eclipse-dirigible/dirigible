@@ -300,8 +300,7 @@ class BrowserImpl implements Browser {
                 .window(Selenide.webdriver()
                                 .object()
                                 .getWindowHandles()
-                                .size()
-                        - 1);
+                                .size() - 1);
     }
 
     @Override
@@ -369,8 +368,7 @@ class BrowserImpl implements Browser {
 
             if (System.currentTimeMillis() < maxWaitTime) {
                 if (finalExecution) {
-                    // break since this was the final execution
-                    break;
+                    finalExecution = false;
                 }
                 LOGGER.debug("Element by [{}] and conditions [{}] was NOT found. Will try to reload the page and find it.", by, conditions);
                 reload();
