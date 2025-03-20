@@ -367,7 +367,7 @@ class BrowserImpl implements Browser {
             }
             LOGGER.debug("Element by [{}] and conditions [{}] was NOT found. Will try again.", by, conditions);
 
-            if (System.currentTimeMillis() < maxWaitTime) {
+            if (System.currentTimeMillis() >= maxWaitTime) {
                 if (finalExecution) {
                     finalExecution = false;
                 }
