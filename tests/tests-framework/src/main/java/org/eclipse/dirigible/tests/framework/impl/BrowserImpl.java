@@ -179,7 +179,7 @@ class BrowserImpl implements Browser {
 
     private Set<SelenideElement> findElementsInChildrenIframes(By by, WebElementCondition[] conditions) {
         By iframeSelector = constructCssSelectorByType(HtmlElementType.IFRAME);
-        ElementsCollection iframes = Selenide.$$(iframeSelector);
+        Set<SelenideElement> iframes = findElementsInFramesRecursively(iframeSelector);
         LOGGER.debug("Found [{}] iframes.", iframes.size());
 
         if (iframes.isEmpty()) {
@@ -557,13 +557,11 @@ class BrowserImpl implements Browser {
         }
 
         StringBuilder cssSelector = new StringBuilder(elementType.getType());
-        attributes.forEach((attribute, value) -> {
-            cssSelector.append("[")
-                       .append(attribute.getAttribute())
-                       .append("='")
-                       .append(value)
-                       .append("']");
-        });
+        attributes.forEach((attribute, value) -> cssSelector.append("[")
+                                                            .append(attribute.getAttribute())
+                                                            .append("='")
+                                                            .append(value)
+                                                            .append("']"));
 
         By by = Selectors.byCssSelector(cssSelector.toString());
         handleElementInAllFrames(by, SelenideElement::click, Condition.visible);
