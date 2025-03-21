@@ -179,7 +179,7 @@ class BrowserImpl implements Browser {
 
     private Set<SelenideElement> findElementsInChildrenIframes(By by, WebElementCondition[] conditions) {
         By iframeSelector = constructCssSelectorByType(HtmlElementType.IFRAME);
-        ElementsCollection iframes = Selenide.$$(iframeSelector);
+        ElementsCollection iframes = Selenide.$$(iframeSelector);//
         LOGGER.debug("Found [{}] iframes.", iframes.size());
 
         if (iframes.isEmpty()) {
