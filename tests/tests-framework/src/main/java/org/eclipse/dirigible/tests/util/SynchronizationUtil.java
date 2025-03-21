@@ -29,6 +29,7 @@ public class SynchronizationUtil {
         LOGGER.debug("Waiting until the synchronization is not needed...");
 
         await().atMost(30, TimeUnit.SECONDS)
+               .pollDelay(1, TimeUnit.SECONDS)
                .pollInterval(500, TimeUnit.MILLISECONDS)
                .until(() -> {
                    boolean synchNotNeeded = !synchronizationProcessor.isSynchronizationNeeded();
