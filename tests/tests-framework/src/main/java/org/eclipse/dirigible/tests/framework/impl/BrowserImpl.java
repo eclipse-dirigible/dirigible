@@ -48,7 +48,7 @@ class BrowserImpl implements Browser {
 
     private static final int FRAME_SEARCH_TOTAL_SECONDS = 45;
     private static final int ELEMENT_EXISTENCE_SEARCH_TIME_SECONDS = 5;
-    private static final int ELEMENT_SEARCH_IN_FRAME_MILLIS = 50;
+    private static final int ELEMENT_SEARCH_IN_FRAME_MILLIS = 1;
 
     static {
         configureSelenide();
@@ -178,9 +178,8 @@ class BrowserImpl implements Browser {
     }
 
     private Set<SelenideElement> findElementsInChildrenIframes(By by, WebElementCondition[] conditions) {
-        Set<SelenideElement> elements;
         By iframeSelector = constructCssSelectorByType(HtmlElementType.IFRAME);
-        ElementsCollection iframes = Selenide.$$(iframeSelector);
+        ElementsCollection iframes = Selenide.$$(iframeSelector);//
         LOGGER.debug("Found [{}] iframes.", iframes.size());
 
         if (iframes.isEmpty()) {
@@ -193,7 +192,7 @@ class BrowserImpl implements Browser {
                     .frame(iframe);
             LOGGER.debug("Switched to iframe [{}]. Searching for element by [{}] and conditions [{}]...", iframe, by, conditions);
 
-            elements = findElementsInFramesRecursively(by, conditions);
+            Set<SelenideElement> elements = findElementsInFramesRecursively(by, conditions);
             if (!elements.isEmpty()) {
                 return elements;
             }
@@ -219,12 +218,11 @@ class BrowserImpl implements Browser {
         LOGGER.debug("Searching for element by [{}] and conditions [{}] in the current frame for [{}] millis", by, conditions,
                 ELEMENT_SEARCH_IN_FRAME_MILLIS);
 
-        ElementsCollection foundElements = Selenide.$$(by);
-
         List<WebElementCondition> allConditions = new ArrayList<>();
         allConditions.add(Condition.exist);
         allConditions.addAll(Arrays.asList(conditions));
 
+        ElementsCollection foundElements = Selenide.$$(by);
         for (WebElementCondition condition : allConditions) {
             foundElements = foundElements.filterBy(condition);
         }
@@ -242,7 +240,6 @@ class BrowserImpl implements Browser {
             FileUtil.deleteFile(ex.getScreenshot()
                                   .getSource());
             return Collections.emptySet();
-
         }
     }
 
@@ -345,15 +342,17 @@ class BrowserImpl implements Browser {
     @Override
     public Optional<SelenideElement> findOptionalElementInAllFrames(By by, long totalSearchTimeoutSeconds,
             WebElementCondition... conditions) {
-        // start from parent frame
-        Selenide.switchTo()
-                .defaultContent();
 
         long maxWaitTime = System.currentTimeMillis() + (totalSearchTimeoutSeconds * 1000);
 
         boolean continueExecution = true;
         boolean finalExecution = false;
-        do {
+        for (int idx = 1; (continueExecution || finalExecution); idx++) {
+            LOGGER.debug("Check #{}: Searching for element by selector [{}] and conditions [{}]", idx, by, conditions);
+            // start from parent frame
+            Selenide.switchTo()
+                    .defaultContent();
+
             Set<SelenideElement> elements = findElementsInFramesRecursively(by, conditions);
             if (elements.size() > 1) {
                 failWithScreenshot("Found [" + elements.size() + "] elements by [" + by + "] and conditions [" + conditions
@@ -381,7 +380,7 @@ class BrowserImpl implements Browser {
                 finalExecution = true;// allow one more execution
 
             }
-        } while (continueExecution || finalExecution);
+        }
 
         return Optional.empty();
     }
