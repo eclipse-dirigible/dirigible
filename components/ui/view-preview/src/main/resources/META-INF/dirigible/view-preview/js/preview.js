@@ -172,6 +172,7 @@ previewView.controller('PreviewController', ($scope, $document, ButtonStates) =>
                     break;
                 case 'edm':
                 case 'dsm':
+                case 'dmm':
                 case 'bpmn':
                 case 'job':
                 case 'xsjob':

@@ -181,6 +181,7 @@ previewView.controller('PreviewController', ['$scope', 'messageHub', 'ViewParame
                     break;
                 case 'edm':
                 case 'dsm':
+                case 'dmm':
                 case 'bpmn':
                 case 'job':
                 case 'xsjob':
