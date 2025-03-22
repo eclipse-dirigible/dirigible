@@ -556,6 +556,8 @@ class BrowserImpl implements Browser {
             throw new IllegalArgumentException("Attributes map cannot be empty");
         }
 
+
+
         StringBuilder cssSelector = new StringBuilder(elementType.getType());
         attributes.forEach((attribute, value) -> {
             cssSelector.append("[")
