@@ -9,13 +9,16 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceService']).controller('ModelerCtrl', ($scope, WorkspaceService, $window, ViewParameters) => {
+angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceService']).controller('ModelerCtrl', ($scope, WorkspaceService, $window, ViewParameters, $http) => {
 	const statusBarHub = new StatusBarHub();
 	const workspaceHub = new WorkspaceHub();
 	const layoutHub = new LayoutHub();
 	const dialogHub = new DialogHub();
 	let contents;
 	let mappingFile;
+	let databasesSvcUrl = "/services/data/";
+	$scope.tables = [];
+	$scope.tablesMetadata = {};
 	$scope.errorMessage = 'An unknown error was encountered. Please see console for more information.';
 	$scope.state = {
 		isBusy: true,
@@ -168,95 +171,144 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 		}
 	});
 
-
-
+	// Setting the SOURCE table
 	$scope.sourceMapping = (graph) => {
-		// Gets the default parent for inserting new cells. This
-		// is normally the first child of the root (ie. layer 0).
-		let parent = graph.getDefaultParent();
+		dialogHub.showFormDialog({
+			title: 'Set SOURCE from available tables',
+			form: {
+				'tedTable': {
+					label: "Table",
+					placeholder: 'Select table',
+					controlType: 'dropdown',
+					options: $scope.tables,
+					value: $scope.tables[0].value,
+					required: true,
+					focus: true
+				},
+			},
+			submitLabel: 'Add',
+			cancelLabel: 'Cancel'
+		}).then((form) => {
+			if (form) {
+				$scope.$evalAsync(() => {
+					const tableMetadataPointer = $scope.tablesMetadata[form['tedTable']];
+					$http.get(databasesSvcUrl + tableMetadataPointer.database + "/" + tableMetadataPointer.datasource + "/" + tableMetadataPointer.schema + "/" + tableMetadataPointer.name).then((data) => {
+						let tableMetadata = data.data;
+						$scope.source = new Table(tableMetadata.name);
+						$scope.source.columns = [];
+						$scope.source.name = tableMetadata.name;
+						$scope.source.type = "SOURCE";
 
-		// Adds cells to the model in a single step
-		let width = 360;
-		graph.getModel().beginUpdate();
-		try {
-			$scope.source = new Table('MY_SOURCE_TABLE');
-			$scope.source.columns = [];
+						// Gets the default parent for inserting new cells. This
+						// is normally the first child of the root (ie. layer 0).
+						let parent = graph.getDefaultParent();
 
-			$scope.source.name = "MY_SOURCE_TABLE";
-			$scope.source.type = "SOURCE";
+						// Adds cells to the model in a single step
+						let width = 500;
+						graph.getModel().beginUpdate();
+						try {
 
-			let column = new Column('TABLENAME_ID');
-			column.name = 'TABLENAME_ID';
-			column.type = 'INTEGER';
-			column.columnLength = 0;
-			column.primaryKey = 'true';
-			column.autoIncrement = 'true';
-			$scope.source.columns.push(column);
+							for (let i = 0; i < tableMetadata.columns.length; i++) {
+								column = new Column(tableMetadata.columns[i].name);
+								column.name = tableMetadata.columns[i].name;
+								column.type = tableMetadata.columns[i].type;
+								column.columnLength = tableMetadata.columns[i].size;
+								column.primaryKey = tableMetadata.columns[i].key;
+								column.nullable = tableMetadata.columns[i].nullable;
+								$scope.source.columns.push(column);
+							}
 
-			for (let i = 1; i < 11; i++) {
-				column = new Column('TABLENAME_NAME_' + i);
-				column.name = 'TABLENAME_NAME_' + i;
-				column.type = 'VARCHAR';
-				column.columnLength = 10;
-				column.primaryKey = 'false';
-				column.unique = 'true';
-				$scope.source.columns.push(column);
+							$scope.sourceTable = new mxCell($scope.source, new mxGeometry(0, 0, 200, 28), 'table');
+							$scope.v1 = graph.insertVertex(parent, $scope.sourceTable, $scope.source, 20, 20,
+								width, ($scope.source.columns.length + 1) * 28);
+							$scope.v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
+
+						} finally {
+							// Updates the display
+							graph.getModel().endUpdate();
+						}
+					});
+				});
 			}
+		}, (error) => {
+			console.error(error);
+			dialogHub.showAlert({
+				title: 'Table error',
+				message: 'There was an error while setting the table.',
+				type: AlertTypes.Error,
+				preformatted: false,
+			});
+		});
 
-			$scope.sourceTable = new mxCell($scope.source, new mxGeometry(0, 0, 200, 28), 'table');
-			$scope.v1 = graph.insertVertex(parent, $scope.sourceTable, $scope.source, 20, 20,
-				width, ($scope.source.columns.length + 1) * 28);
-			$scope.v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
-
-		} finally {
-			// Updates the display
-			graph.getModel().endUpdate();
-		}
 	};
 
 	$scope.targetMapping = (graph) => {
-		// Gets the default parent for inserting new cells. This
-		// is normally the first child of the root (ie. layer 0).
-		var parent = graph.getDefaultParent();
+		dialogHub.showFormDialog({
+			title: 'Set TARGET from available tables',
+			form: {
+				'tedTable': {
+					label: "Table",
+					placeholder: 'Select table',
+					controlType: 'dropdown',
+					options: $scope.tables,
+					value: $scope.tables[0].value,
+					required: true,
+					focus: true
+				},
+			},
+			submitLabel: 'Add',
+			cancelLabel: 'Cancel'
+		}).then((form) => {
+			if (form) {
+				$scope.$evalAsync(() => {
+					const tableMetadataPointer = $scope.tablesMetadata[form['tedTable']];
+					$http.get(databasesSvcUrl + tableMetadataPointer.database + "/" + tableMetadataPointer.datasource + "/" + tableMetadataPointer.schema + "/" + tableMetadataPointer.name).then((data) => {
+						let tableMetadata = data.data;
+						$scope.target = new Table(tableMetadata.name);
+						$scope.target.columns = [];
+						$scope.target.name = tableMetadata.name;
+						$scope.target.type = "TARGET";
 
-		// Adds cells to the model in a single step
-		var width = 360;
-		graph.getModel().beginUpdate();
-		try {
-			$scope.target = new Table('MY_TARGET_TABLE');
-			$scope.target.columns = [];
+						// Gets the default parent for inserting new cells. This
+						// is normally the first child of the root (ie. layer 0).
+						let parent = graph.getDefaultParent();
 
-			$scope.target.name = "MY_TARGET_TABLE";
-			$scope.target.type = "TARGET";
+						// Adds cells to the model in a single step
+						let width = 500;
+						graph.getModel().beginUpdate();
+						try {
 
-			let column = new Column('TABLENAME_ID');
-			column.name = 'TABLENAME_ID';
-			column.type = 'INTEGER';
-			column.columnLength = 0;
-			column.primaryKey = 'true';
-			column.autoIncrement = 'true';
-			$scope.target.columns.push(column);
+							for (let i = 0; i < tableMetadata.columns.length; i++) {
+								column = new Column(tableMetadata.columns[i].name);
+								column.name = tableMetadata.columns[i].name;
+								column.type = tableMetadata.columns[i].type;
+								column.columnLength = tableMetadata.columns[i].size;
+								column.primaryKey = tableMetadata.columns[i].key;
+								column.nullable = tableMetadata.columns[i].nullable;
+								$scope.target.columns.push(column);
+							}
 
-			for (let i = 1; i < 11; i++) {
-				column = new Column('TABLENAME_NAME_' + i);
-				column.name = 'TABLENAME_NAME_' + i;
-				column.type = 'VARCHAR';
-				column.columnLength = 10;
-				column.primaryKey = 'false';
-				column.unique = 'true';
-				$scope.target.columns.push(column);
+							$scope.targetTable = new mxCell($scope.target, new mxGeometry(0, 0, 200, 28), 'table');
+							$scope.v1 = graph.insertVertex(parent, $scope.targetTable, $scope.target, 650, 20,
+								width, ($scope.target.columns.length + 1) * 28);
+							$scope.v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
+
+						} finally {
+							// Updates the display
+							graph.getModel().endUpdate();
+						}
+					});
+				});
 			}
-
-
-			$scope.targetTable = new mxCell($scope.target, new mxGeometry(0, 0, 200, 28), 'table');
-			$scope.v2 = graph.insertVertex(parent, $scope.targetTable, $scope.target, 560, 20,
-				width, ($scope.target.columns.length + 1) * 28);
-			$scope.v2.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
-		}
-		finally {
-			// Updates the display
-			graph.getModel().endUpdate();
-		}
+		}, (error) => {
+			console.error(error);
+			dialogHub.showAlert({
+				title: 'Table error',
+				message: 'There was an error while setting the table.',
+				type: AlertTypes.Error,
+				preformatted: false,
+			});
+		});
 	};
 
 	openMappingConfiguration = (columnName) => {
@@ -305,6 +357,16 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 					focus: true,
 					required: false,
 					submitOnEnter: true
+				},
+				[`fit-${column.name}`]: {
+					label: 'Filter',
+					controlType: 'input',
+					placeholder: 'Enter filter',
+					type: 'text',
+					value: column.filter,
+					focus: true,
+					required: false,
+					submitOnEnter: true
 				}
 			},
 			submitLabel: 'Update',
@@ -315,6 +377,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 				column.constant = form[`ct-${column.name}`];
 				column.formula = form[`ft-${column.name}`];
 				column.module = form[`mt-${column.name}`];
+				column.filter = form[`fit-${column.name}`];
 				$scope.refresh();
 			}
 		}, (error) => {
@@ -481,7 +544,8 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 			// Override folding to allow for tables
 			$scope.graph.isCellFoldable = function (cell, collapse) {
-				return this.getModel().isVertex(cell);
+				// return this.getModel().isVertex(cell);
+				return false;
 			};
 
 			// Overrides connectable state
@@ -638,7 +702,6 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			var oldMouseUp = $scope.graph.connectionHandler.mouseUp;
 			$scope.graph.connectionHandler.mouseUp = function (sender, me) {
 				if (this.edgeState != null) {
-					debugger
 					this.currentRowNode = this.updateRow(me.getSource());
 
 					if (this.currentRow != null) {
@@ -676,6 +739,20 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 				return state;
 			};
 
+			// Returns the type as the tooltip for column cells
+			$scope.graph.getTooltip = function (state) {
+				// if (this.isHtmlLabel(state.cell)) {
+				// 	return 'Type: ' + state.cell.value.type;
+				// } else if ($scope.graph.model.isEdge(state.cell)) {
+				// 	let source = $scope.graph.model.getTerminal(state.cell, true);
+				// 	let parent = $scope.graph.model.getParent(source);
+
+				// 	return parent.value.name + '.' + source.value.name;
+				// }
+
+				// return mxGraph.prototype.getTooltip.apply(this, arguments); // "supercall"
+			};
+
 			// Overrides getLabel to return empty labels for edges and
 			// short markup for collapsed cells.
 			$scope.graph.getLabel = function (cell) {
@@ -696,6 +773,8 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 								let config = 'circle-task';
 								if (c.constant) {
 									config = 'tri-state';
+								} else if (c.filter) {
+									config = 'filter';
 								} else if (c.formula) {
 									config = 'bo-strategy-management';
 								} else if (c.module) {
@@ -706,15 +785,16 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 								label += '<td><i class="dsm-table-icon sap-icon--' + config + '" onclick="openMappingConfiguration(\'' + c.name + '\')"></i></td>';
 							}
 							label += '<td>';
-							if (c.primaryKey === 'true') {
+							if (c.primaryKey) {
 								label += '<i title="Primary Key" class="dsm-table-icon sap-icon--key"></i>';
 							} else {
 								label += '<i class="dsm-table-spacer"></i>';
 							}
-							if (c.autoIncrement === 'true') {
-								label += '<i title="Auto Increment" class="dsm-table-icon sap-icon--add"></i>';
-							} else if (c.unique === 'true') {
-								label += '<i title="Unique" class="dsm-table-icon sap-icon--accept"></i>';
+							// if (c.autoIncrement) {
+							// 	label += '<i title="Auto Increment" class="dsm-table-icon sap-icon--add"></i>';
+							// } else 
+							if (!c.nullable) {
+								label += '<i title="Required" class="dsm-table-icon sap-icon--favorite"></i>';
 							} else {
 								label += '<i class="dsm-table-spacer"></i>';
 							}
@@ -831,54 +911,13 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			new mxKeyHandler($scope.graph);
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-			// // Gets the default parent for inserting new cells. This
-			// // is normally the first child of the root (ie. layer 0).
-			// var parent = $scope.graph.getDefaultParent();
-
-			// // Adds cells to the model in a single step
-			// var width = 160;
-			// var height = 230;
-			// $scope.graph.getModel().beginUpdate();
-			// try {
-			// 	var v1 = $scope.graph.insertVertex(parent, null, '', 20, 20, width, height);
-			// 	v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
-
-			// 	var v2 = $scope.graph.insertVertex(parent, null, '', 400, 20, width, height);
-			// 	v2.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
-
-			// 	//$scope.graph.insertEdge(parent, null, relation, v1, v2);
-			// }
-			// finally {
-			// 	// Updates the display
-			// 	$scope.graph.getModel().endUpdate();
-			// }
-
-
+			loadDatabasesMetadata();
 
 		}
 
 
 
 	};
-
-
-
-
-
-
-	//------------------------------------------------------------------
 
 	// Implements a special perimeter for table rows inside the table markup
 	mxGraphView.prototype.updateFloatingTerminalPoint = function (edge, start, end, source) {
@@ -984,6 +1023,47 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 		return y;
 	};
+
+	function uuidv4() {
+		return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c =>
+			(+c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> +c / 4).toString(16)
+		);
+	}
+
+	function loadDatabasesMetadata() {
+		$http.get(databasesSvcUrl)
+			.then(function (data) {
+				let databases = data.data;
+				for (let i = 0; i < databases.length; i++) {
+					$http.get(databasesSvcUrl + databases[i] + "/").then(function (data) {
+						let datasources = data.data;
+						for (let j = 0; j < datasources.length; j++) {
+							$http.get(databasesSvcUrl + databases[i] + "/" + datasources[j]).then(function (data) {
+								let schemas = data.data.schemas;
+								for (let k = 0; k < schemas.length; k++) {
+									let schema = schemas[k];
+									for (let m = 0; m < schema.tables.length; m++) {
+										let tableKey = uuidv4();
+										let tableLabel = datasources[j] + ' : ' + schemas[k].name + ' : ' + schema.tables[m].name;
+										$scope.tables.push({
+											value: tableKey,
+											label: tableLabel,
+										});
+										let tableMetadata = {
+											'name': schema.tables[m].name,
+											'schema': schema.name,
+											'datasource': datasources[j],
+											'database': databases[i]
+										}
+										$scope.tablesMetadata[tableKey] = tableMetadata;
+									}
+								}
+							});
+						}
+					});
+				}
+			});
+	}
 
 	$scope.dataParameters = ViewParameters.get();
 	if (!$scope.dataParameters.hasOwnProperty('filePath')) {
