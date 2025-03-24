@@ -51,6 +51,8 @@ class DirigibleCleaner {
 
         if (defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
             deleteSchemas(defaultDataSource);
+
+            createSchema(defaultDataSource, "public");
         }
         deleteDirigibleFolder();
     }
@@ -74,24 +76,6 @@ class DirigibleCleaner {
 
         LOGGER.debug("Will drop schemas [{}] from data source [{}]", schemas, dataSource);
         schemas.forEach(schema -> deleteSchema(schema, dataSource));
-
-        String schemaName = dataSource.isOfType(DatabaseSystem.POSTGRESQL) ? "public" : "PUBLIC";
-        createSchema(dataSource, schemaName);
-    }
-
-    private void createSchema(DirigibleDataSource dataSource, String schemaName) {
-        LOGGER.debug("Will create schema [{}] in [{}]", schemaName, dataSource);
-        try (Connection connection = dataSource.getConnection()) {
-            ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
-            String sql = dialect.create()
-                                .schema(schemaName)
-                                .generate();
-            try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
-                preparedStatement.executeUpdate();
-            }
-        } catch (SQLException ex) {
-            throw new IllegalStateException("Failed to create schema [" + schemaName + "] in dataSource [" + dataSource + "] ", ex);
-        }
     }
 
     private Set<String> getSchemas(DirigibleDataSource dataSource) {
@@ -135,6 +119,21 @@ class DirigibleCleaner {
             }
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to drop schema [" + schema + "] from dataSource [" + dataSource + "] ", ex);
+        }
+    }
+
+    private void createSchema(DirigibleDataSource dataSource, String schemaName) {
+        LOGGER.debug("Will create schema [{}] in [{}]", schemaName, dataSource);
+        try (Connection connection = dataSource.getConnection()) {
+            ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
+            String sql = dialect.create()
+                                .schema(schemaName)
+                                .generate();
+            try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
+                preparedStatement.executeUpdate();
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to create schema [" + schemaName + "] in dataSource [" + dataSource + "] ", ex);
         }
     }
 }
