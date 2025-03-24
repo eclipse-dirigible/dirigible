@@ -47,9 +47,13 @@ public class SynchronizationWatcher implements DisposableBean {
      * @throws IOException Signals that an I/O exception has occurred.
      * @throws InterruptedException the interrupted exception
      */
-    public void initialize(String folder) throws IOException, InterruptedException {
+    public synchronized void initialize(String folder) throws IOException, InterruptedException {
         logger.debug("Initializing the Registry file watcher...");
 
+        if (watchService != null) {
+            logger.warn("[{}] has been initialized already. Existing watcher will be closes and a new one will be created.", this);
+            destroy();
+        }
         watchService = FileSystems.getDefault()
                                   .newWatchService();
 
@@ -76,6 +80,20 @@ public class SynchronizationWatcher implements DisposableBean {
         logger.debug("Done initializing the Registry file watcher.");
     }
 
+    @Override
+    public void destroy() throws IOException {
+        logger.info("Destroying [{}}", this);
+        reset();
+        watchService.close();
+    }
+
+    /**
+     * Reset.
+     */
+    public void reset() {
+        modified.set(false);
+    }
+
     /**
      * Checks if is modified.
      *
@@ -90,19 +108,5 @@ public class SynchronizationWatcher implements DisposableBean {
      */
     public void force() {
         modified.set(true);
-    }
-
-    @Override
-    public void destroy() throws IOException {
-        logger.info("Destroying [{}}", this);
-        reset();
-        watchService.close();
-    }
-
-    /**
-     * Reset.
-     */
-    public void reset() {
-        modified.set(false);
     }
 }
