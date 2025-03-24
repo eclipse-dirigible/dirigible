@@ -13,10 +13,14 @@ import org.eclipse.dirigible.tests.PredefinedProjectIT;
 import org.eclipse.dirigible.tests.projects.TestProject;
 import org.springframework.beans.factory.annotation.Autowired;
 
+/**
+ * This test replaces the packaged test project which was part of the Dirigible distribution. It
+ * just publishes the test project and asserts that the synchronization passes.
+ */
 class DirigibleTestProjectIT extends PredefinedProjectIT {
 
     @Autowired
-    private TestProject testProject;
+    private DirigibleTestProject testProject;
 
     @Override
     protected TestProject getTestProject() {
