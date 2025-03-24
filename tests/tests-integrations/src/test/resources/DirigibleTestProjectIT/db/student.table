@@ -1,0 +1,32 @@
+{
+    "name": "STUDENT",
+    "type": "TABLE",
+    "columns": [
+        {
+            "type": "INTEGER",
+            "length": 0,
+            "primaryKey": true,
+            "identity": true,
+            "precision": "NaN",
+            "scale": "NaN",
+            "nullable": true,
+            "name": "ID"
+        },
+        {
+            "name": "NAME",
+            "type": "VARCHAR",
+            "length": "50",
+            "nullable": "false",
+            "primaryKey": "false",
+            "defaultValue": ""
+        },
+        {
+            "name": "ADDRESS",
+            "type": "VARCHAR",
+            "length": "50",
+            "nullable": "false",
+            "primaryKey": "false",
+            "defaultValue": ""
+        }
+    ]
+}

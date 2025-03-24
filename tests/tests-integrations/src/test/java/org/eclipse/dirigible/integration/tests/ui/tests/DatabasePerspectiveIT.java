@@ -9,65 +9,17 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.eclipse.dirigible.tests.DatabasePerspective;
-import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
-import org.junit.jupiter.api.Test;
+import org.eclipse.dirigible.tests.PredefinedProjectIT;
+import org.eclipse.dirigible.tests.projects.TestProject;
+import org.springframework.beans.factory.annotation.Autowired;
 
-class DatabasePerspectiveIT extends UserInterfaceIntegrationTest {
-    private DatabasePerspective databasePerspective;
+class DatabasePerspectiveIT extends PredefinedProjectIT {
 
-    @Test
-    void testDatabaseFunctionality() {
-        this.databasePerspective = ide.openDatabasePerspective();
+    @Autowired
+    private DatabasePerspectiveTestProject testProject;
 
-        createTestTable(); // Creating test table first to show in the database view
-
-        expandSubviews();
-        assertAvailabilityOfSubitems();
-
-        databasePerspective.assertEmptyTable("STUDENT");
-        insertTestRecord();
-        assertInsertedRecord();
+    @Override
+    protected TestProject getTestProject() {
+        return testProject;
     }
-
-    private void expandSubviews() {
-        String url = System.getenv("DIRIGIBLE_DATASOURCE_DEFAULT_URL");
-
-        if (url != null && url.contains("postgresql"))
-            databasePerspective.expandSubmenu("public");
-        else
-            databasePerspective.expandSubmenu("PUBLIC");
-
-        databasePerspective.expandSubmenu("Tables");
-        databasePerspective.refreshTables();
-    }
-
-    private void assertAvailabilityOfSubitems() {
-        databasePerspective.assertSubmenu("Tables");
-        databasePerspective.assertSubmenu("Views");
-        databasePerspective.assertSubmenu("Procedures");
-        databasePerspective.assertSubmenu("Functions");
-        databasePerspective.assertSubmenu("Sequences");
-    }
-
-    private void assertInsertedRecord() {
-        databasePerspective.showTableContents("STUDENT");
-
-        // Assert if table id is 1 -> correct insertion
-        databasePerspective.assertCellContent("1");
-        databasePerspective.assertRowCount("STUDENT", 1);
-        databasePerspective.assertTableHasColumn("STUDENT", "NAME");
-        databasePerspective.assertRowHasColumnWithValue("STUDENT", 0, "NAME", "John Smith");
-    }
-
-    private void createTestTable() {
-        databasePerspective.executeSql("CREATE TABLE IF NOT EXISTS STUDENT (" + " id SERIAL PRIMARY KEY, " + " name TEXT NOT NULL, "
-                + " address TEXT NOT NULL" + ");");
-    }
-
-    private void insertTestRecord() {
-        databasePerspective.executeSql("INSERT INTO STUDENT VALUES (1, 'John Smith', 'Sofia, Bulgaria')");
-    }
-
-
 }
