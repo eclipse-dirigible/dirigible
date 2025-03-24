@@ -9,16 +9,15 @@
  */
 package org.eclipse.dirigible.components.initializers.definition;
 
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Example;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
 
 /**
  * Processing the Definitions Service incoming requests.
@@ -36,6 +35,7 @@ public class DefinitionService {
      *
      * @return the all
      */
+    @Transactional(readOnly = true)
     public List<Definition> getAll() {
         return definitionRepository.findAll();
     }
@@ -46,6 +46,7 @@ public class DefinitionService {
      * @param pageable the pageable
      * @return the pages
      */
+    @Transactional(readOnly = true)
     public Page<Definition> getPages(Pageable pageable) {
         return definitionRepository.findAll(pageable);
     }
@@ -56,6 +57,7 @@ public class DefinitionService {
      * @param id the id
      * @return the definition
      */
+    @Transactional(readOnly = true)
     public Definition findById(Long id) {
         Optional<Definition> definition = definitionRepository.findById(id);
         if (definition.isPresent()) {
@@ -70,6 +72,7 @@ public class DefinitionService {
      * @param key the key
      * @return the definition
      */
+    @Transactional(readOnly = true)
     public Definition findByKey(String key) {
         Definition filter = new Definition();
         filter.setKey(key);
@@ -87,6 +90,7 @@ public class DefinitionService {
      * @param location the location
      * @return the definition
      */
+    @Transactional(readOnly = true)
     public Definition findByLocation(String location) {
         Definition filter = new Definition();
         filter.setLocation(location);

@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.tests;
 
+import jakarta.persistence.EntityManagerFactory;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.database.DatabaseSystem;
@@ -35,12 +36,17 @@ class DirigibleCleaner {
     private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleCleaner.class);
 
     private final DataSourcesManager dataSourcesManager;
+    private final EntityManagerFactory entityManagerFactory;
 
-    DirigibleCleaner(DataSourcesManager dataSourcesManager) {
+    DirigibleCleaner(DataSourcesManager dataSourcesManager, EntityManagerFactory entityManagerFactory) {
         this.dataSourcesManager = dataSourcesManager;
+        this.entityManagerFactory = entityManagerFactory;
     }
 
     public void cleanup() {
+        entityManagerFactory.getCache()
+                            .evictAll();
+
         DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
 
         if (defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
