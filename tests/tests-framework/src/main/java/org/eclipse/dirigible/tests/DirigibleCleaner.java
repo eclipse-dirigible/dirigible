@@ -27,16 +27,12 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Component
 class DirigibleCleaner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleCleaner.class);
-
-    private static final String[] SKIP_TABLE_PREFIXES = {"QRTZ_", "ACT_", "FLW_", "ACTIVEMQ_"};
 
     private final DataSourcesManager dataSourcesManager;
 
@@ -45,9 +41,6 @@ class DirigibleCleaner {
     }
 
     public void cleanup() {
-        DirigibleDataSource systemDataSource = dataSourcesManager.getDefaultDataSource();
-        dropAllTablesInSchema(systemDataSource, SKIP_TABLE_PREFIXES);
-
         DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
 
         if (defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
@@ -76,7 +69,8 @@ class DirigibleCleaner {
         LOGGER.debug("Will drop schemas [{}] from data source [{}]", schemas, dataSource);
         schemas.forEach(schema -> deleteSchema(schema, dataSource));
 
-        createSchema(dataSource, "public");
+        String schemaName = dataSource.isOfType(DatabaseSystem.POSTGRESQL) ? "public" : "PUBLIC";
+        createSchema(dataSource, schemaName);
     }
 
     private void createSchema(DirigibleDataSource dataSource, String schemaName) {
@@ -135,54 +129,6 @@ class DirigibleCleaner {
             }
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to drop schema [" + schema + "] from dataSource [" + dataSource + "] ", ex);
-        }
-    }
-
-    private void dropAllTablesInSchema(DirigibleDataSource dataSource, String... skipTablePrefixes) {
-        Set<String> tables = getAllTables(dataSource);
-        for (String skipTablePrefix : skipTablePrefixes) {
-            tables = tables.stream()
-                           .filter(t -> !t.startsWith(skipTablePrefix))
-                           .collect(Collectors.toSet());
-        }
-
-        LOGGER.debug("Will drop [{}] tables from data source [{}]. Tables: {}", tables.size(), dataSource, tables);
-
-        for (int idx = 0; idx < 4; idx++) { // execute it a few times due to constraint violations
-            Iterator<String> iterator = tables.iterator();
-            while (iterator.hasNext()) {
-                String tableName = iterator.next();
-                try (Connection connection = dataSource.getConnection()) {
-                    String sql = SqlDialectFactory.getDialect(dataSource)
-                                                  .drop()
-                                                  .table(tableName)
-                                                  .cascade(true)
-                                                  .build();
-                    try (PreparedStatement prepareStatement = connection.prepareStatement(sql)) {
-                        prepareStatement.executeUpdate();
-                        LOGGER.debug("Dropped table [{}]", tableName);
-                        iterator.remove();
-                    }
-                } catch (SQLException ex) {
-                    LOGGER.debug("Failed to drop table [{}] in data source [{}]", tableName, dataSource, ex);
-                }
-            }
-        }
-
-    }
-
-    private Set<String> getAllTables(DataSource dataSource) {
-        Set<String> tables = new HashSet<>();
-        try (Connection connection = dataSource.getConnection();
-                PreparedStatement prepareStatement = connection.prepareStatement(
-                        "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='PUBLIC' OR TABLE_SCHEMA='public'")) {
-            ResultSet resultSet = prepareStatement.executeQuery();
-            while (resultSet.next()) {
-                tables.add(resultSet.getString(1));
-            }
-            return tables;
-        } catch (SQLException ex) {
-            throw new IllegalStateException("Failed to get all tables in data source:" + dataSource, ex);
         }
     }
 }

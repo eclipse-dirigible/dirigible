@@ -36,8 +36,8 @@ public class DatabasePerspective {
         this.dataSourcesManager = dataSourcesManager;
     }
 
-    public void expandSubmenu(String submenu) {
-        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, submenu);
+    public void expandSubmenu(String schemaName) {
+        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, schemaName);
     }
 
     public void assertSubmenu(String submenu) {

@@ -9,34 +9,36 @@
  */
 package org.eclipse.dirigible.components.initializers.synchronizer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.DisposableBean;
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
+
 import java.io.IOException;
-import java.nio.file.FileSystems;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardWatchEventKinds;
-import java.nio.file.WatchEvent;
-import java.nio.file.WatchKey;
-import java.nio.file.WatchService;
+import java.nio.file.*;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Scope;
-import org.springframework.stereotype.Component;
 
 /**
  * The Class SynchronizationWatcher.
  */
 @Component
 @Scope("singleton")
-public class SynchronizationWatcher {
+public class SynchronizationWatcher implements DisposableBean {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(SynchronizationWatcher.class);
 
     /** The modified. */
-    private final AtomicBoolean modified = new AtomicBoolean(false);
+    private final AtomicBoolean modified;
+
+    private WatchService watchService;
+
+    SynchronizationWatcher() {
+        modified = new AtomicBoolean(false);
+    }
 
     /**
      * Initialize.
@@ -48,8 +50,9 @@ public class SynchronizationWatcher {
     public void initialize(String folder) throws IOException, InterruptedException {
         logger.debug("Initializing the Registry file watcher...");
 
-        WatchService watchService = FileSystems.getDefault()
-                                               .newWatchService();
+        watchService = FileSystems.getDefault()
+                                  .newWatchService();
+
         Path path = Paths.get(folder);
         path.register(watchService, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_DELETE,
                 StandardWatchEventKinds.ENTRY_MODIFY);
@@ -83,17 +86,23 @@ public class SynchronizationWatcher {
     }
 
     /**
-     * Reset.
-     */
-    public void reset() {
-        modified.set(false);
-    }
-
-    /**
      * Force.
      */
     public void force() {
         modified.set(true);
     }
 
+    @Override
+    public void destroy() throws IOException {
+        logger.info("Destroying [{}}", this);
+        reset();
+        watchService.close();
+    }
+
+    /**
+     * Reset.
+     */
+    public void reset() {
+        modified.set(false);
+    }
 }
