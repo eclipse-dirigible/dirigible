@@ -73,14 +73,14 @@ class DirigibleCleaner {
         schemas.remove("information_schema");
         schemas.removeIf(s -> s.startsWith("pg_"));
 
-        LOGGER.info("Will drop schemas [{}] from data source [{}]", schemas, dataSource);
+        LOGGER.debug("Will drop schemas [{}] from data source [{}]", schemas, dataSource);
         schemas.forEach(schema -> deleteSchema(schema, dataSource));
 
         createSchema(dataSource, "public");
     }
 
     private void createSchema(DirigibleDataSource dataSource, String schemaName) {
-        LOGGER.info("Will create schema [{}] in [{}]", schemaName, dataSource);
+        LOGGER.debug("Will create schema [{}] in [{}]", schemaName, dataSource);
         try (Connection connection = dataSource.getConnection()) {
             ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
             String sql = dialect.create()
@@ -146,7 +146,7 @@ class DirigibleCleaner {
                            .collect(Collectors.toSet());
         }
 
-        LOGGER.info("Will drop [{}] tables from data source [{}]. Tables: {}", tables.size(), dataSource, tables);
+        LOGGER.debug("Will drop [{}] tables from data source [{}]. Tables: {}", tables.size(), dataSource, tables);
 
         for (int idx = 0; idx < 4; idx++) { // execute it a few times due to constraint violations
             Iterator<String> iterator = tables.iterator();
@@ -160,11 +160,11 @@ class DirigibleCleaner {
                                                   .build();
                     try (PreparedStatement prepareStatement = connection.prepareStatement(sql)) {
                         prepareStatement.executeUpdate();
-                        LOGGER.info("Dropped table [{}]", tableName);
+                        LOGGER.debug("Dropped table [{}]", tableName);
                         iterator.remove();
                     }
                 } catch (SQLException ex) {
-                    LOGGER.warn("Failed to drop table [{}] in data source [{}]", tableName, dataSource, ex);
+                    LOGGER.debug("Failed to drop table [{}] in data source [{}]", tableName, dataSource, ex);
                 }
             }
         }
