@@ -118,7 +118,7 @@
 
         <!-- Spring -->
         <spring.boot.version>3.4.4</spring.boot.version>
-        <spring.admin.version>3.4.4</spring.admin.version>
+        <spring.admin.version>3.4.5</spring.admin.version>
         <springdoc.version>2.8.5</springdoc.version>
 
         <!-- Webjars -->
@@ -133,7 +133,7 @@
         <commons.io>2.18.0</commons.io>
         <commons.lang3>3.17.0</commons.lang3>
         <commons.exec>1.4.0</commons.exec>
-        <commons-csv.version>1.13.0</commons-csv.version>
+        <commons-csv.version>1.14.0</commons-csv.version>
 
         <apache-httpcomponents-httpmime.version>4.5.14</apache-httpcomponents-httpmime.version>
         <apache-httpcomponents-httpclient.version>4.5.14</apache-httpcomponents-httpclient.version>
@@ -516,7 +516,7 @@
                             <dependency>
                                 <groupId>com.github.spotbugs</groupId>
                                 <artifactId>spotbugs</artifactId>
-                                <version>4.9.2</version>
+                                <version>4.9.3</version>
                             </dependency>
                         </dependencies>
                     </plugin>
@@ -786,7 +786,7 @@
             <dependency>
                 <groupId>io.opentelemetry.instrumentation</groupId>
                 <artifactId>opentelemetry-instrumentation-bom</artifactId>
-                <version>2.13.3</version>
+                <version>2.14.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
