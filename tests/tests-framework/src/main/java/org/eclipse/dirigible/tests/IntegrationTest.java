@@ -29,7 +29,8 @@ import java.util.concurrent.TimeUnit;
 public abstract class IntegrationTest {
 
     // set config to false if you want to disable the headless mode
-    private static final boolean headlessExecution = Boolean.parseBoolean(System.getProperty("selenide.headless", Boolean.TRUE.toString()));
+    private static final boolean headlessExecution =
+            Boolean.parseBoolean(System.getProperty("selenide.headless", Boolean.FALSE.toString()));
 
     @Autowired
     private TenantCreator tenantCreator;
