@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -35,6 +36,7 @@ public class SynchronizationWatcher implements DisposableBean {
     private final AtomicBoolean modified;
 
     private WatchService watchService;
+    private ExecutorService executorService;
 
     SynchronizationWatcher() {
         modified = new AtomicBoolean(false);
@@ -61,22 +63,21 @@ public class SynchronizationWatcher implements DisposableBean {
         path.register(watchService, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_DELETE,
                 StandardWatchEventKinds.ENTRY_MODIFY);
 
-        Executors.newFixedThreadPool(1)
-                 .submit(() -> {
-                     WatchKey watchKey;
-                     try {
-                         while ((watchKey = watchService.take()) != null) {
-                             List<WatchEvent<?>> events = watchKey.pollEvents();
-                             if (!events.isEmpty()) {
-                                 modified.set(true);
-                             }
-                             watchKey.reset();
-                         }
-                     } catch (InterruptedException e) {
-                         logger.error("Failed to take watch keys", e);
-                     }
-                 });
-
+        executorService = Executors.newFixedThreadPool(1);
+        executorService.submit(() -> {
+            WatchKey watchKey;
+            try {
+                while ((watchKey = watchService.take()) != null) {
+                    List<WatchEvent<?>> events = watchKey.pollEvents();
+                    if (!events.isEmpty()) {
+                        modified.set(true);
+                    }
+                    watchKey.reset();
+                }
+            } catch (InterruptedException e) {
+                logger.error("Failed to take watch keys", e);
+            }
+        });
         logger.debug("Done initializing the Registry file watcher.");
     }
 
@@ -84,7 +85,12 @@ public class SynchronizationWatcher implements DisposableBean {
     public void destroy() throws IOException {
         logger.info("Destroying [{}}", this);
         reset();
+
         watchService.close();
+        watchService = null;
+
+        executorService.shutdown();
+        executorService = null;
     }
 
     /**
