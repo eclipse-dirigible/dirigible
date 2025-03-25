@@ -218,6 +218,7 @@
 
         <!-- Tests -->
         <testcontainers.version>1.20.6</testcontainers.version>
+        <selenide.version>7.7.3</selenide.version>
 
         <profile.content.phase>none</profile.content.phase>
 

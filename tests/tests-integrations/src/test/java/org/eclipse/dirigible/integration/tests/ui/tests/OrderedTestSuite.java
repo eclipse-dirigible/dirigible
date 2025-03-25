@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import org.eclipse.dirigible.integration.tests.api.javascript.cms.CmsSuiteIT;
+import org.eclipse.dirigible.integration.tests.ui.tests.camel.CamelExtractTransformLoadJdbcIT;
 import org.junit.platform.suite.api.SelectClasses;
 import org.junit.platform.suite.api.Suite;
 import org.junit.platform.suite.api.SuiteDisplayName;
@@ -21,6 +22,7 @@ import org.junit.platform.suite.api.SuiteDisplayName;
         CmsSuiteIT.class, //
         ApproveLeaveRequestBpmIT.class, //
         DeclineLeaveRequestBpmIT.class, //
+        CamelExtractTransformLoadJdbcIT.class, //
         CreateNewFileIT.class//
 })
 public class OrderedTestSuite {
