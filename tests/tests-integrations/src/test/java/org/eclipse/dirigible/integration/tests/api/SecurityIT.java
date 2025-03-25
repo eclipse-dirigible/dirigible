@@ -23,7 +23,7 @@ import java.util.Set;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-class SecurityIT extends IntegrationTest {
+public class SecurityIT extends IntegrationTest {
 
     @Autowired
     private MockMvc mvc;
