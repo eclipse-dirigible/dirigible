@@ -69,8 +69,7 @@ public class BPMStarterTemplateIT extends UserInterfaceIntegrationTest {
         formView.regenerateForm();
         ide.assertStatusBarMessage("Generated from model '" + TRIGGER_PROCESS_FORM_FILENAME + "'");
 
-        workbench.clickPublishAll();
-        ide.assertPublishedAllProjectsMessage();
+        workbench.publishAll(true);
 
         waitUntilProcessIsDeployed();
 
