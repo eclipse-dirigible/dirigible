@@ -11,9 +11,9 @@
  */
 function createMapping(graph) {
 	debugger
-	let schema = [];
-	schema.push('<schema>\n');
-	schema.push(' <structures>\n');
+	let mapping = [];
+	mapping.push('<mapping>\n');
+	mapping.push(' <structures>\n');
 	let parent = graph.getDefaultParent();
 	let childCount = graph.model.getChildCount(parent);
 
@@ -21,76 +21,73 @@ function createMapping(graph) {
 		let child = graph.model.getChildAt(parent, i);
 
 		if (!graph.model.isEdge(child)) {
-			schema.push('  <structure name="' + child.value.name + '" type="' + child.value.type.toUpperCase() + '">\n');
+			let table = child.value;
+			mapping.push('  <structure name="' + table.name + '" type="' + table.type.toUpperCase() + '">\n');
 
-			let columnCount = graph.model.getChildCount(child);
+			let columnCount = table.columns.length;
 
 			if (columnCount > 0) {
 				for (let j = 0; j < columnCount; j++) {
-					let column = graph.model.getChildAt(child, j).value;
+					let column = table.columns[j];
 
-					if (column.isSQL) {
-						schema.push('    <query value="' + column.name + '"/>\n');
-					} else {
-						schema.push('    <column name="' + column.name + '" type="' + column.type + '"');
+					mapping.push('    <column name="' + column.name + '" type="' + column.type + '"');
 
-						if (column.type === 'VARCHAR' || column.type === 'CHAR') {
-							schema.push(' length="' + column.columnLength + '"');
-						}
-						if (column.notNull === 'true') {
-							schema.push(' nullable="false"');
-						}
-						if (column.primaryKey === 'true') {
-							schema.push(' primaryKey="true"');
-						}
-						if (column.autoIncrement === 'true') {
-							schema.push(' identity="true"');
-						}
-						if (column.unique === 'true') {
-							schema.push(' unique="true"');
-						}
-						if (column.defaultValue !== null) {
-							schema.push(' defaultValue="' + column.defaultValue + '"');
-						}
-						if (column.precision !== null) {
-							schema.push(' precision="' + column.precision + '"');
-						}
-						if (column.scale !== null) {
-							schema.push(' scale="' + column.scale + '"');
-						}
-						schema.push('></column>\n');
+					if (column.type === 'VARCHAR' || column.type === 'CHAR') {
+						mapping.push(' length="' + column.columnLength + '"');
 					}
+					if (column.notNull === 'true') {
+						mapping.push(' nullable="false"');
+					}
+					if (column.primaryKey === 'true') {
+						mapping.push(' primaryKey="true"');
+					}
+					if (column.autoIncrement === 'true') {
+						mapping.push(' identity="true"');
+					}
+					if (column.unique === 'true') {
+						mapping.push(' unique="true"');
+					}
+					if (column.defaultValue !== null) {
+						mapping.push(' defaultValue="' + column.defaultValue + '"');
+					}
+					if (column.precision !== null) {
+						mapping.push(' precision="' + column.precision + '"');
+					}
+					if (column.scale !== null) {
+						mapping.push(' scale="' + column.scale + '"');
+					}
+					mapping.push('></column>\n');
 				}
 			}
-			schema.push('  </structure>\n');
+			mapping.push('  </structure>\n');
 		} else {
-			schema.push('  <structure name="' + child.source.parent.value.name + '_'
-				+ child.target.parent.value.name + '" type="foreignKey" ');
-			schema.push('table="' + child.source.parent.value.name + '" ');
-			schema.push('constraintName="' + child.source.parent.value.name + '_'
-				+ child.target.parent.value.name + '" ');
-			schema.push('columns="' + child.source.value.name + '" ' +
-				'referencedTable="' + child.target.parent.value.name + '" ' +
-				'referencedColumns="' + child.target.value.name + '">\n');
-			schema.push('  </structure>\n');
+			debugger
+			mapping.push('  <structure name="' + child.source.value.name + '_' + child.value.attributes.getNamedItem('sourceColumn').value + '___'
+				+ child.target.value.name + '_' + child.value.attributes.getNamedItem('targetColumn').value
+				+ '" type="RELATION" ');
+			mapping.push('sourceTable="' + child.source.value.name + '" ');
+			mapping.push('sourceColumn="' + child.value.attributes.getNamedItem('sourceColumn').value + '" ');
+			mapping.push('targetTable="' + child.target.value.name + '" ');
+			mapping.push('targetColumn="' + + child.value.attributes.getNamedItem('targetColumn').value + '" ');
+			mapping.push('  </structure>\n');
 		}
 	}
-	schema.push(' </structures>\n');
+	mapping.push(' </structures>\n');
 
 	let enc = new mxCodec(mxUtils.createXmlDocument());
 	let node = enc.encode(graph.getModel());
 	let model = mxUtils.getXml(node);
-	schema.push(' ' + model);
-	schema.push('\n</schema>');
+	mapping.push(' ' + model);
+	mapping.push('\n</mapping>');
 
-	return schema.join('');
+	return mapping.join('');
 }
 
 function createMappingJson(graph) {
 	debugger
 	let root = {};
-	root.schema = {};
-	root.schema.structures = [];
+	root.mapping = {};
+	root.mapping.structures = [];
 	let parent = graph.getDefaultParent();
 	let childCount = graph.model.getChildCount(parent);
 
@@ -98,43 +95,42 @@ function createMappingJson(graph) {
 		let child = graph.model.getChildAt(parent, i);
 		let structure = {};
 		if (!graph.model.isEdge(child)) {
-			structure.name = child.value.name;
-			structure.type = child.value.type.toUpperCase();
+			let table = child.value;
+			structure.name = table.name;
+			structure.type = table.type.toUpperCase();
 			structure.columns = [];
 
-			let columnCount = graph.model.getChildCount(child);
+			let columnCount = table.columns.length;
 			if (columnCount > 0) {
 				for (let j = 0; j < columnCount; j++) {
-					let childColumn = graph.model.getChildAt(child, j).value;
+					let childColumn = table.columns[j];
 					let column = {};
-					if (childColumn.isSQL) {
-						column.query = childColumn.name;
-					} else {
-						column.name = childColumn.name;
-						column.type = childColumn.type;
-						column.length = childColumn.columnLength;
-						column.nullable = childColumn.notNull === 'true' ? !childColumn.notNull : true;
-						column.primaryKey = childColumn.primaryKey === 'true' ? childColumn.primaryKey : false;
-						column.identity = childColumn.autoIncrement === 'true' ? childColumn.autoIncrement : false;
-						column.unique = childColumn.unique === 'true' ? childColumn.unique : false;
-						column.defaultValue = childColumn.defaultValue !== null && childColumn.defaultValue !== '' ? childColumn.defaultValue : null;
-						column.precision = childColumn.precision === 'true' ? childColumn.precision : null;
-						column.scale = childColumn.scale === 'true' ? childColumn.scale : null;
-					}
+					column.name = childColumn.name;
+					column.type = childColumn.type;
+					column.length = childColumn.columnLength;
+					column.nullable = childColumn.notNull === 'true' ? !childColumn.notNull : true;
+					column.primaryKey = childColumn.primaryKey === 'true' ? childColumn.primaryKey : false;
+					column.identity = childColumn.autoIncrement === 'true' ? childColumn.autoIncrement : false;
+					column.unique = childColumn.unique === 'true' ? childColumn.unique : false;
+					column.defaultValue = childColumn.defaultValue !== null && childColumn.defaultValue !== '' ? childColumn.defaultValue : null;
+					column.precision = childColumn.precision === 'true' ? childColumn.precision : null;
+					column.scale = childColumn.scale === 'true' ? childColumn.scale : null;
 					structure.columns.push(column);
 				}
 			}
 		} else {
-			structure.name = child.source.parent.value.name + '_' + child.target.parent.value.name;
-			structure.type = 'foreignKey';
-			structure.table = child.source.parent.value.name;
-			structure.constraintName = child.source.parent.value.name + '_' + child.target.parent.value.name;
-			structure.columns = child.source.value.name;
-			structure.referencedTable = child.target.parent.value.name;
-			structure.referencedColumns = child.target.value.name;
+			debugger
+			structure.name = child.source.value.name + '_' + child.value.attributes.getNamedItem('sourceColumn').value
+				+ '___' + child.target.value.name + '_' + child.value.attributes.getNamedItem('targetColumn').value;
+			structure.type = 'RELATION';
+			structure.sourceTable = child.source.value.name;
+			structure.sourceColumn = child.value.attributes.getNamedItem('sourceColumn').value;
+			structure.targetTable = child.target.value.name;
+			structure.targetColumn = child.value.attributes.getNamedItem('targetColumn').value;
+
 		}
 
-		root.schema.structures.push(structure);
+		root.mapping.structures.push(structure);
 	}
 
 	let serialized = JSON.stringify(root, null, 4);

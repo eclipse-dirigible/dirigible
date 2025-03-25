@@ -131,7 +131,6 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 	};
 
 	$scope.saveMapping = () => {
-		debugger
 		saveContents(createMapping($scope.graph), $scope.dataParameters.filePath);
 		saveContents(createMappingJson($scope.graph), mappingFile);
 	};
