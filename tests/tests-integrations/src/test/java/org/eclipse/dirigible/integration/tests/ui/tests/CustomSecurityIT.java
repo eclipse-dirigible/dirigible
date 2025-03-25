@@ -13,7 +13,7 @@ import org.eclipse.dirigible.tests.PredefinedProjectIT;
 import org.eclipse.dirigible.tests.projects.TestProject;
 import org.springframework.beans.factory.annotation.Autowired;
 
-class CustomSecurityIT extends PredefinedProjectIT {
+public class CustomSecurityIT extends PredefinedProjectIT {
 
     @Autowired
     private CustomSecurityTestProject testProject;

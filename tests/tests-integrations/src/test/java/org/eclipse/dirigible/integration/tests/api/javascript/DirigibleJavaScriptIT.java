@@ -19,7 +19,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 
 import java.util.List;
 
-class DirigibleJavaScriptIT extends IntegrationTest {
+public class DirigibleJavaScriptIT extends IntegrationTest {
 
     @Autowired
     private DirigibleJavaScriptTestsFactory jsTestFactory;

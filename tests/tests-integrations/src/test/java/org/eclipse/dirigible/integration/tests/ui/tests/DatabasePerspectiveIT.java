@@ -16,7 +16,7 @@ import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
-class DatabasePerspectiveIT extends UserInterfaceIntegrationTest {
+public class DatabasePerspectiveIT extends UserInterfaceIntegrationTest {
 
     @Autowired
     private DataSourcesManager dataSourcesManager;

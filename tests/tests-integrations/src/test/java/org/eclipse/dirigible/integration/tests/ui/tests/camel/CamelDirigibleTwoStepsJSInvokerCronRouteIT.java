@@ -13,7 +13,7 @@ import org.eclipse.dirigible.tests.PredefinedProjectIT;
 import org.eclipse.dirigible.tests.projects.TestProject;
 import org.springframework.beans.factory.annotation.Autowired;
 
-class CamelDirigibleTwoStepsJSInvokerCronRouteIT extends PredefinedProjectIT {
+public class CamelDirigibleTwoStepsJSInvokerCronRouteIT extends PredefinedProjectIT {
 
     @Autowired
     private CamelDirigibleTwoStepsJSInvokerCronRouteTestProject testProject;

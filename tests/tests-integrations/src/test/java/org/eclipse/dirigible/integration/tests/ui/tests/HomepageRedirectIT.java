@@ -13,7 +13,7 @@ import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.junit.jupiter.api.Test;
 
-class HomepageRedirectIT extends UserInterfaceIntegrationTest {
+public class HomepageRedirectIT extends UserInterfaceIntegrationTest {
 
     @Test
     void testOpenHomepage() {

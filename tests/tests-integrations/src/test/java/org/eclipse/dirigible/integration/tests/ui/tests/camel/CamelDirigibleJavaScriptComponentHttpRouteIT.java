@@ -13,7 +13,7 @@ import org.eclipse.dirigible.tests.PredefinedProjectIT;
 import org.eclipse.dirigible.tests.projects.TestProject;
 import org.springframework.beans.factory.annotation.Autowired;
 
-class CamelDirigibleJavaScriptComponentHttpRouteIT extends PredefinedProjectIT {
+public class CamelDirigibleJavaScriptComponentHttpRouteIT extends PredefinedProjectIT {
 
     @Autowired
     private CamelDirigibleJavaScriptComponentHttpRouteTestProject testProject;

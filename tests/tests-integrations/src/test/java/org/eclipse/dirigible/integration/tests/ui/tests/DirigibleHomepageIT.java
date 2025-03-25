@@ -13,7 +13,7 @@ import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.junit.jupiter.api.Test;
 
-class DirigibleHomepageIT extends UserInterfaceIntegrationTest {
+public class DirigibleHomepageIT extends UserInterfaceIntegrationTest {
 
     private static final String ECLIPSE_DIRIGIBLE_HEADER = "Dirigible";
 

@@ -21,7 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
 
-class MultitenancyIT extends UserInterfaceIntegrationTest {
+public class MultitenancyIT extends UserInterfaceIntegrationTest {
 
     @Autowired
     private MultitenancyITTestProject testProject;

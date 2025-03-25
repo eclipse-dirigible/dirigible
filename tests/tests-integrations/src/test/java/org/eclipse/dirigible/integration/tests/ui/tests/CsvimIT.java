@@ -13,7 +13,7 @@ import org.eclipse.dirigible.tests.PredefinedProjectIT;
 import org.eclipse.dirigible.tests.projects.TestProject;
 import org.springframework.beans.factory.annotation.Autowired;
 
-class CsvimIT extends PredefinedProjectIT {
+public class CsvimIT extends PredefinedProjectIT {
 
     @Autowired
     private CsvimTestProject testProject;

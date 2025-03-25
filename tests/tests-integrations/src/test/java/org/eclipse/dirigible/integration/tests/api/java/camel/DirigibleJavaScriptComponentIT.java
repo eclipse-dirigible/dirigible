@@ -18,7 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @CamelSpringBootTest
-class DirigibleJavaScriptComponentIT extends IntegrationTest {
+public class DirigibleJavaScriptComponentIT extends IntegrationTest {
 
     @Autowired
     private ProducerTemplate producerTemplate;

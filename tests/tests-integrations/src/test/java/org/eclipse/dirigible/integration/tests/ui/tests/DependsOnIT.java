@@ -13,7 +13,7 @@ import org.eclipse.dirigible.tests.PredefinedProjectIT;
 import org.eclipse.dirigible.tests.projects.TestProject;
 import org.springframework.beans.factory.annotation.Autowired;
 
-class DependsOnIT extends PredefinedProjectIT {
+public class DependsOnIT extends PredefinedProjectIT {
 
     @Autowired
     private DependsOnTestProject testProject;

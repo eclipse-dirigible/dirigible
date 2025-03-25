@@ -14,7 +14,7 @@ import org.eclipse.dirigible.tests.mail.GreenMailConfig;
 import org.eclipse.dirigible.tests.projects.TestProject;
 import org.springframework.beans.factory.annotation.Autowired;
 
-class ApproveLeaveRequestBpmIT extends PredefinedProjectIT {
+public class ApproveLeaveRequestBpmIT extends PredefinedProjectIT {
 
     static {
         GreenMailConfig.configureDirigibleEmailService();

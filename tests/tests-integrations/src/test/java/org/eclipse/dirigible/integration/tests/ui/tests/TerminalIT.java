@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit;
 import static org.awaitility.Awaitility.await;
 
 @Import(TerminalTestRestConfig.class)
-class TerminalIT extends UserInterfaceIntegrationTest {
+public class TerminalIT extends UserInterfaceIntegrationTest {
 
     @LocalServerPort
     private int localServerPort;

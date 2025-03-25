@@ -15,7 +15,7 @@ import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.junit.jupiter.api.Test;
 
-class CreateNewFileIT extends UserInterfaceIntegrationTest {
+public class CreateNewFileIT extends UserInterfaceIntegrationTest {
 
     @Test
     void test() {

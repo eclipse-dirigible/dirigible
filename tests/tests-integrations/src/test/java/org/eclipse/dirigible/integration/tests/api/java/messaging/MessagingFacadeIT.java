@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 
-class MessagingFacadeIT extends IntegrationTest {
+public class MessagingFacadeIT extends IntegrationTest {
 
     private static final String TEST_MESSAGE = "Test message";
     private static final String TEST_MESSAGE_2 = "Test message 2";

@@ -12,7 +12,7 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
 import org.junit.jupiter.api.Test;
 
-class CreateNewProjectIT extends UserInterfaceIntegrationTest {
+public class CreateNewProjectIT extends UserInterfaceIntegrationTest {
 
     @Test
     void testCreateNewBlankProject() {

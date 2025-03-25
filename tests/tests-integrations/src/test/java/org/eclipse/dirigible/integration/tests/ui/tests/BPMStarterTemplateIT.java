@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.awaitility.Awaitility.await;
 
-class BPMStarterTemplateIT extends UserInterfaceIntegrationTest {
+public class BPMStarterTemplateIT extends UserInterfaceIntegrationTest {
 
     private static final String TEMPLATE_TITLE = "BPM Project Starter";
     private static final String TEST_PROJECT = "bpm-test-project";

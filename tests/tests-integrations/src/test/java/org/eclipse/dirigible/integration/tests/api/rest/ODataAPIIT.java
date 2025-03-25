@@ -17,7 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import static io.restassured.RestAssured.given;
 
-class ODataAPIIT extends IntegrationTest {
+public class ODataAPIIT extends IntegrationTest {
 
     @Autowired
     private RestAssuredExecutor restAssuredExecutor;

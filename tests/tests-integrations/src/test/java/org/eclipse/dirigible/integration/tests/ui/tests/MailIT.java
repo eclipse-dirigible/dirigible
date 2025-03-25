@@ -14,7 +14,7 @@ import org.eclipse.dirigible.tests.mail.GreenMailConfig;
 import org.eclipse.dirigible.tests.projects.TestProject;
 import org.springframework.beans.factory.annotation.Autowired;
 
-class MailIT extends PredefinedProjectIT {
+public class MailIT extends PredefinedProjectIT {
 
     static {
         GreenMailConfig.configureDirigibleEmailService();
