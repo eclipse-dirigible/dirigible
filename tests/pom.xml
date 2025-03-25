@@ -38,14 +38,13 @@
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-tests-framework</artifactId>
                 <version>${project.version}</version>
-                <scope>test</scope>
+                <scope>compile</scope>
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-tests-integrations</artifactId>
                 <version>${project.version}</version>
-                <scope>test</scope>
-                <classifier>tests</classifier>
+                <scope>compile</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>
