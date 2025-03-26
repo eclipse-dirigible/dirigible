@@ -1,0 +1,21 @@
+import { response } from "sdk/http";
+
+let MAPPING_MODEL = ${mapping};
+
+let SOURCE_METADATA = {};
+let TARGET_METADATA = {};
+MAPPING_MODEL.mapping.structures.forEach((structure) => {
+    if (structure.type == "SOURCE") {
+        SOURCE_METADATA = structure;
+    }
+    if (structure.type == "TARGET") {
+        TARGET_METADATA = structure;
+    }
+}
+);
+
+response.setContentType('text/plain');
+response.println("SOURCE NAME " + SOURCE_METADATA.name);
+response.println("TARGET NAME " + TARGET_METADATA.name);
+response.flush();
+response.close();
