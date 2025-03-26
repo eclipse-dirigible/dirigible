@@ -735,6 +735,22 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 				return state;
 			};
 
+			$scope.graph.model.addListener(mxEvent.EXECUTE, function (_sender, _evt) {
+				debugger
+				if (_evt.properties.change.child
+					&& _evt.properties.change.child.value
+					&& _evt.properties.change.child.value.nodeName === 'Relation') {
+					const targetColumn = _evt.properties.change.child.value.getAttribute("targetColumn");
+					const targetRow = _evt.properties.change.child.value.getAttribute("targetRow");
+					const targetTable = _evt.properties.change.child.target.value;
+					const column = targetTable.columns[targetRow - 1];
+					if (column && column.name === targetColumn) {
+						delete column.direct;
+					}
+					$scope.refresh();
+				}
+			});
+
 			// Returns the type as the tooltip for column cells
 			$scope.graph.getTooltip = function (state) {
 				// if (this.isHtmlLabel(state.cell)) {
