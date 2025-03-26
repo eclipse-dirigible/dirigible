@@ -883,7 +883,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 				setTimeout(() => {
 					$scope.refresh();
-				}, 300);
+				}, 100);
 
 			}
 

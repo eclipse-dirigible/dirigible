@@ -28,7 +28,6 @@ function createMapping(graph) {
 			if (columnCount > 0) {
 				for (let j = 0; j < columnCount; j++) {
 					let column = table.columns[j];
-
 					mapping.push('    <column name="' + column.name + '" type="' + column.type + '"');
 
 					if (column.type === 'VARCHAR' || column.type === 'CHAR') {
@@ -46,15 +45,31 @@ function createMapping(graph) {
 					if (column.unique === 'true') {
 						mapping.push(' unique="true"');
 					}
-					if (column.defaultValue !== null) {
-						mapping.push(' defaultValue="' + column.defaultValue + '"');
+					if (column.defaultValue) {
+						mapping.push(' defaultValue="' + _.escape(column.defaultValue) + '"');
 					}
-					if (column.precision !== null) {
-						mapping.push(' precision="' + column.precision + '"');
+					if (column.precision) {
+						mapping.push(' precision="' + _.escape(column.precision) + '"');
 					}
-					if (column.scale !== null) {
-						mapping.push(' scale="' + column.scale + '"');
+					if (column.scale) {
+						mapping.push(' scale="' + _.escape(column.scale) + '"');
 					}
+					if (column.direct) {
+						mapping.push(' direct="' + _.escape(column.direct) + '"');
+					}
+					if (column.constant) {
+						mapping.push(' constant="' + _.escape(column.constant) + '"');
+					}
+					if (column.formula) {
+						mapping.push(' formula="' + _.escape(column.formula) + '"');
+					}
+					if (column.module) {
+						mapping.push(' module="' + _.escape(column.module) + '"');
+					}
+					if (column.criteria) {
+						mapping.push(' criteria="' + _.escape(column.criteria) + '"');
+					}
+
 					mapping.push('></column>\n');
 				}
 			}
@@ -112,6 +127,21 @@ function createMappingJson(graph) {
 					column.defaultValue = childColumn.defaultValue !== null && childColumn.defaultValue !== '' ? childColumn.defaultValue : null;
 					column.precision = childColumn.precision === 'true' ? childColumn.precision : null;
 					column.scale = childColumn.scale === 'true' ? childColumn.scale : null;
+					if (childColumn.direct) {
+						column.direct = childColumn.direct;
+					}
+					if (childColumn.constant) {
+						column.constant = childColumn.constant;
+					}
+					if (childColumn.formula) {
+						column.formula = childColumn.formula;
+					}
+					if (childColumn.module) {
+						column.module = childColumn.module;
+					}
+					if (childColumn.criteria) {
+						column.criteria = childColumn.criteria;
+					}
 					structure.columns.push(column);
 				}
 			}
