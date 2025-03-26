@@ -216,11 +216,9 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 								column.nullable = tableMetadata.columns[i].nullable;
 								$scope.source.columns.push(column);
 							}
-
-							$scope.sourceTable = new mxCell($scope.source, new mxGeometry(0, 0, 200, 28), 'table');
-							$scope.v1 = graph.insertVertex(parent, $scope.sourceTable, $scope.source, 20, 20,
-								width, ($scope.source.columns.length + 1) * 28);
-							$scope.v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
+							$scope.sourceTable = graph.insertVertex(parent, null, $scope.source, 20, 20,
+								width, ($scope.source.columns.length + 1) * 28, 'table');
+							$scope.sourceTable.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
 
 						} finally {
 							// Updates the display
@@ -287,10 +285,9 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 								$scope.target.columns.push(column);
 							}
 
-							$scope.targetTable = new mxCell($scope.target, new mxGeometry(0, 0, 200, 28), 'table');
-							$scope.v1 = graph.insertVertex(parent, $scope.targetTable, $scope.target, 650, 20,
-								width, ($scope.target.columns.length + 1) * 28);
-							$scope.v1.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
+							$scope.targetTable = graph.insertVertex(parent, null, $scope.target, 650, 20,
+								width, ($scope.target.columns.length + 1) * 28, 'table');
+							$scope.targetTable.geometry.alternateBounds = new mxRectangle(0, 0, width, 26);
 
 						} finally {
 							// Updates the display
@@ -362,7 +359,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 					controlType: 'input',
 					placeholder: 'Enter filter',
 					type: 'text',
-					value: column.filter,
+					value: column.criteria,
 					focus: true,
 					required: false,
 					submitOnEnter: true
@@ -376,7 +373,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 				column.constant = form[`ct-${column.name}`];
 				column.formula = form[`ft-${column.name}`];
 				column.module = form[`mt-${column.name}`];
-				column.filter = form[`fit-${column.name}`];
+				column.criteria = form[`fit-${column.name}`];
 				$scope.refresh();
 			}
 		}, (error) => {
@@ -705,10 +702,10 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 
 					if (this.currentRow != null) {
 						this.edgeState.cell.value.setAttribute('targetRow', this.currentRow);
-						this.edgeState.cell.value.setAttribute('targetColumn', $scope.target.columns[this.currentRow - 1].name);
+						this.edgeState.cell.value.setAttribute('targetColumn', me.state.cell.value.columns[this.currentRow - 1].name);
 
 						// setting the configuration data
-						let column = $scope.target.columns[this.currentRow - 1];
+						let column = me.state.cell.value.columns[this.currentRow - 1];
 						let sourceColumnName = this.edgeState.cell.value.getAttribute('sourceColumn');
 						column.source = sourceColumnName;
 						column.direct = 'SOURCE["' + sourceColumnName + '"]';
@@ -726,7 +723,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 				var relation = doc.createElement('Relation');
 				relation.setAttribute('sourceRow', this.currentRow || '0');
 				relation.setAttribute('targetRow', '0');
-				relation.setAttribute('sourceColumn', $scope.source.columns[this.currentRow - 1].name);
+				relation.setAttribute('sourceColumn', me.state.cell.value.columns[this.currentRow - 1].name);
 
 				var edge = this.createEdge(relation);
 				var style = this.graph.getCellStyle(edge);
@@ -772,7 +769,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 								let config = 'circle-task';
 								if (c.constant) {
 									config = 'tri-state';
-								} else if (c.filter) {
+								} else if (c.criteria) {
 									config = 'filter';
 								} else if (c.formula) {
 									config = 'bo-strategy-management';
@@ -812,27 +809,16 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 				}
 			};
 
-			// Adds all required styles to the graph (see below)
-			// configureStylesheet($scope.graph);
-
-
-
-
 
 			editor.addAction('source', function (editor, cell) {
 				$scope.sourceMapping($scope.graph);
 			});
-
 			editor.addAction('target', function (editor, cell) {
 				$scope.targetMapping($scope.graph);
 			});
-
-
-
 			editor.addAction('save', function (editor, cell) {
 				$scope.saveMapping($scope.graph);
 			});
-
 
 			$scope.source = function () {
 				editor.execute('source');
@@ -840,9 +826,6 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			$scope.target = function () {
 				editor.execute('target');
 			};
-
-
-
 			$scope.save = function () {
 				editor.execute('save');
 			};
@@ -878,30 +861,33 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			};
 
 			// User objects (data) for the individual cells
-			var doc = mxUtils.createXmlDocument();
-
-			// Same should be used to create the XML node for the table
-			// description and the rows (most probably as child nodes)
-			// var relation = doc.createElement('Relation');
-			// relation.setAttribute('sourceRow', '4');
-			// relation.setAttribute('targetRow', '6');
+			// var doc = mxUtils.createXmlDocument();
 
 
+			// Load document
+			let doc = mxUtils.parseXml(contents);
+			let codec = new mxCodec(doc.mxGraphModel);
+			codec.decode(doc.documentElement.getElementsByTagName('mxGraphModel')[0], $scope.graph.getModel());
+			$scope.graph.model.addListener(mxEvent.START_EDIT, function (_sender, _evt) {
+				layoutHub.setEditorDirty({
+					path: $scope.dataParameters.filePath,
+					dirty: true,
+				});
+			});
 
+			if ($scope.graph.model.root
+				&& $scope.graph.model.root.children
+				&& $scope.graph.model.root.children[0]
+				&& $scope.graph.model.root.children[0].children
+				&& $scope.graph.model.root.children[0].children[0]) {
+				$scope.source = $scope.graph.model.root.children[0].children[0].value;
+				$scope.target = $scope.graph.model.root.children[0].children[1].value;
 
-			// // Load document
-			// let doc = mxUtils.parseXml(contents);
-			// let codec = new mxCodec(doc.mxGraphModel);
-			// codec.decode(doc.documentElement.getElementsByTagName('mxGraphModel')[0], $scope.graph.getModel());
-			// $scope.graph.model.addListener(mxEvent.START_EDIT, function (_sender, _evt) {
-			// 	layoutHub.setEditorDirty({
-			// 		path: $scope.dataParameters.filePath,
-			// 		dirty: true,
-			// 	});
-			// });
+				setTimeout(() => {
+					$scope.refresh();
+				}, 300);
 
-
-
+			}
 
 			// Enables rubberband selection
 			new mxRubberband($scope.graph);
@@ -909,13 +895,10 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			// Enables key handling (eg. escape)
 			new mxKeyHandler($scope.graph);
 
-
+			// Load database(s) metadata
 			loadDatabasesMetadata();
 
 		}
-
-
-
 	};
 
 	// Implements a special perimeter for table rows inside the table markup

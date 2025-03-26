@@ -10,7 +10,6 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 function createMapping(graph) {
-	debugger
 	let mapping = [];
 	mapping.push('<mapping>\n');
 	mapping.push(' <structures>\n');
@@ -61,14 +60,13 @@ function createMapping(graph) {
 			}
 			mapping.push('  </structure>\n');
 		} else {
-			debugger
 			mapping.push('  <structure name="' + child.source.value.name + '_' + child.value.attributes.getNamedItem('sourceColumn').value + '___'
 				+ child.target.value.name + '_' + child.value.attributes.getNamedItem('targetColumn').value
 				+ '" type="RELATION" ');
 			mapping.push('sourceTable="' + child.source.value.name + '" ');
 			mapping.push('sourceColumn="' + child.value.attributes.getNamedItem('sourceColumn').value + '" ');
 			mapping.push('targetTable="' + child.target.value.name + '" ');
-			mapping.push('targetColumn="' + + child.value.attributes.getNamedItem('targetColumn').value + '" ');
+			mapping.push('targetColumn="' + + child.value.attributes.getNamedItem('targetColumn').value + '">\n');
 			mapping.push('  </structure>\n');
 		}
 	}
@@ -84,7 +82,6 @@ function createMapping(graph) {
 }
 
 function createMappingJson(graph) {
-	debugger
 	let root = {};
 	root.mapping = {};
 	root.mapping.structures = [];
@@ -119,7 +116,6 @@ function createMappingJson(graph) {
 				}
 			}
 		} else {
-			debugger
 			structure.name = child.source.value.name + '_' + child.value.attributes.getNamedItem('sourceColumn').value
 				+ '___' + child.target.value.name + '_' + child.value.attributes.getNamedItem('targetColumn').value;
 			structure.type = 'RELATION';
