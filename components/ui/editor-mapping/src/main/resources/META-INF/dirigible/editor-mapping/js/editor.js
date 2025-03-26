@@ -25,23 +25,6 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 		error: false,
 		busyText: "Loading...",
 	};
-	$scope.dataTypes = [
-		{ value: "VARCHAR", label: "VARCHAR" },
-		{ value: "CHAR", label: "CHAR" },
-		{ value: "DATE", label: "DATE" },
-		{ value: "TIME", label: "TIME" },
-		{ value: "TIMESTAMP", label: "TIMESTAMP" },
-		{ value: "INTEGER", label: "INTEGER" },
-		{ value: "TINYINT", label: "TINYINT" },
-		{ value: "BIGINT", label: "BIGINT" },
-		{ value: "SMALLINT", label: "SMALLINT" },
-		{ value: "REAL", label: "REAL" },
-		{ value: "DOUBLE", label: "DOUBLE" },
-		{ value: "BOOLEAN", label: "BOOLEAN" },
-		{ value: "BLOB", label: "BLOB" },
-		{ value: "DECIMAL", label: "DECIMAL" },
-		{ value: "BIT", label: "BIT" },
-	];
 
 	angular.element($window).bind('focus', () => { statusBarHub.showLabel('') });
 
@@ -736,7 +719,6 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			};
 
 			$scope.graph.model.addListener(mxEvent.EXECUTE, function (_sender, _evt) {
-				debugger
 				if (_evt.properties.change.child
 					&& _evt.properties.change.child.value
 					&& _evt.properties.change.child.value.nodeName === 'Relation') {
@@ -784,11 +766,11 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 							if (cell.value.type === 'TARGET') {
 								let config = 'circle-task';
 								if (c.constant) {
-									config = 'tri-state';
+									config = 'number-sign';
 								} else if (c.criteria) {
 									config = 'filter';
 								} else if (c.formula) {
-									config = 'bo-strategy-management';
+									config = 'syntax';
 								} else if (c.module) {
 									config = 'attachment';
 								} else if (c.direct) {
@@ -845,9 +827,6 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			$scope.save = function () {
 				editor.execute('save');
 			};
-			$scope.properties = function () {
-				editor.execute('properties');
-			};
 			$scope.undo = function () {
 				editor.execute('undo');
 			};
@@ -855,10 +834,11 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 				editor.execute('redo');
 			};
 			$scope.delete = function () {
-				editor.execute('delete');
-			};
-			$scope.print = function () {
-				editor.execute('print');
+				if ($scope.graph.getSelectionCount() > 0
+					&& $scope.graph.getSelectionCells()[0].value
+					&& $scope.graph.getSelectionCells()[0].value.nodeName === 'Relation') {
+					editor.execute('delete');
+				}
 			};
 			$scope.zoomIn = function () {
 				editor.execute('zoomIn');

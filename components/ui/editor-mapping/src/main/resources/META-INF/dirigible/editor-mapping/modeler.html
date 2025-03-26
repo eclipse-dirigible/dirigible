@@ -46,14 +46,8 @@
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="transparent" glyph="sap-icon--save" aria-label="Save" title="Save" ng-click="save()"></bk-button>
             <bk-toolbar-spacer></bk-toolbar-spacer>
-            <bk-button state="transparent" glyph="sap-icon--list" aria-label="Properties" title="Properties" ng-click="properties()"></bk-button>
-            <!-- <bk-toolbar-separator></bk-toolbar-separator>
-            <bk-button state="transparent" glyph="sap-icon--tree" aria-label="Navigation" title="Navigation" ng-click="navigation()"></bk-button> -->
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="transparent" glyph="sap-icon--delete" aria-label="Delete" title="Delete" ng-click="delete()"></bk-button>
-            <bk-toolbar-separator></bk-toolbar-separator>
-            <bk-button state="transparent" glyph="sap-icon--show" aria-label="Show" title="Show" ng-click="show()"></bk-button>
-            <bk-button state="transparent" glyph="sap-icon--print" aria-label="Print" title="Print" ng-click="print()"></bk-button>
             <bk-toolbar-separator class="dsmBigScreen"></bk-toolbar-separator>
             <bk-button class="dsmBigScreen" state="transparent" glyph="sap-icon--zoom-in" aria-label="Zoom in" title="Zoom in" ng-click="zoomIn()"></bk-button>
             <bk-button class="dsmBigScreen" state="transparent" glyph="sap-icon--zoom-out" aria-label="Zoom out" title="Zoom out" ng-click="zoomOut()"></bk-button>
@@ -70,7 +64,7 @@
             </bk-toolbar-overflow>
         </bk-toolbar>
         <div class="bk-hbox editorContainer" ng-show="!state.error && !state.isBusy">
-            <div id="sidebarContainer" class="bk-vbox bk-border--right"></div>
+            <!-- <div id="sidebarContainer" class="bk-vbox bk-border--right"></div> -->
             <div id="graphContainer" bk-scrollbar class="bk-full-width"></div>
         </div>
         <div id="outlineContainer" class="outlineContainer" ng-show="!state.error && !state.isBusy"></div>
