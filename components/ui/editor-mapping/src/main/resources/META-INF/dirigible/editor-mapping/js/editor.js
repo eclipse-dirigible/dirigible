@@ -721,7 +721,9 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			$scope.graph.model.addListener(mxEvent.EXECUTE, function (_sender, _evt) {
 				if (_evt.properties.change.child
 					&& _evt.properties.change.child.value
-					&& _evt.properties.change.child.value.nodeName === 'Relation') {
+					&& _evt.properties.change.child.value.nodeName === 'Relation'
+					&& _evt.properties.change.child.source
+					&& _evt.properties.change.child.target) {
 					const targetColumn = _evt.properties.change.child.value.getAttribute("targetColumn");
 					const targetRow = _evt.properties.change.child.value.getAttribute("targetRow");
 					const targetTable = _evt.properties.change.child.target.value;
