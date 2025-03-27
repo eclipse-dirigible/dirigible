@@ -7,7 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 public class CountryCityDependsOnIT extends PredefinedProjectIT {
 
     @Autowired
-    private DependsOnTestProject testProject;
+    private DependsOnScenariosTestProject testProject;
 
     @Override
     protected TestProject getTestProject() {

@@ -1,0 +1,5 @@
+{
+    "module": "sales-order-app/gen/sales-order/ui/Customer/Customer/tile.js",
+    "extensionPoint": "portal-tile",
+    "description": "sales-order-app - Application Tile"
+}
