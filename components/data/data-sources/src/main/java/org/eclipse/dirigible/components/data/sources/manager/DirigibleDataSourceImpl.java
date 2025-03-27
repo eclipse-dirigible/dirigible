@@ -75,7 +75,7 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
         enhanceConnection(connection);
         LeakedConnectionsDoctor.registerConnection(connection);
 
-        return new DirigibleConnectionImpl(connection, databaseSystem);
+        return new DirigibleConnectionImpl(name, connection, databaseSystem);
     }
 
     private void enhanceConnection(Connection connection) throws SQLException {
@@ -99,7 +99,7 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
         enhanceConnection(connection);
         LeakedConnectionsDoctor.registerConnection(connection);
 
-        return new DirigibleConnectionImpl(connection, databaseSystem);
+        return new DirigibleConnectionImpl(name, connection, databaseSystem);
     }
 
     /**
