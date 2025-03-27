@@ -138,7 +138,7 @@ export class DAO {
     
     
             } catch (e) {
-                this.$log.error("Inserting {} {} failed", e, this.orm.table, (entities.length === 1 ? 'entity' : 'entities'));
+                this.$log.error("Inserting {} {} failed", this.orm.table, (entities.length === 1 ? 'entity' : 'entities'), e);
                 this.$log.info('Rolling back changes after failed {}[{}] insert. ', this.orm.table, dbEntity[this.orm.getPrimaryKey().name]);
                 if (dbEntity[this.orm.getPrimaryKey().name]) {
                     try {
