@@ -52,48 +52,38 @@ class DirigibleConnectionImpl implements DirigibleConnection {
         }
 
         boolean activeSpringTransaction = TransactionSynchronizationManager.isActualTransactionActive();
-        if (!activeSpringTransaction) {
-            LOGGER.debug("There IS NO active spring transaction for data source [{}]. Executing with enabled auto commit. ",
-                    dataSourceName);
-            return executeWithEnabledAutoCommit(execution);
-        }
-        if (isTransactionForCurrentDataSource()) {
-            LOGGER.debug(
-                    "There IS active spring transaction for data source [{}] but it IS not for current data source. Transaction name [{}]. Executing with enabled auto commit.",
-                    dataSourceName, TransactionSynchronizationManager.getCurrentTransactionName());
+        if (activeSpringTransaction) {
             return execution.execute(getConnection());
         } else {
-            LOGGER.debug("There IS NO active spring transaction for data source [{}]. Executing with enabled auto commit. ",
-                    dataSourceName);
             return executeWithEnabledAutoCommit(execution);
         }
+
+        // if (!activeSpringTransaction) {
+        // LOGGER.debug("There IS NO active spring transaction for data source [{}]. Executing with enabled
+        // auto commit. ",
+        // dataSourceName);
+        // return executeWithEnabledAutoCommit(execution);
+        // }
+        // if (isTransactionForCurrentDataSource()) {
+        // LOGGER.debug(
+        // "There IS active spring transaction for data source [{}] but it IS not for current data source.
+        // Transaction name [{}]. Executing with enabled auto commit.",
+        // dataSourceName, TransactionSynchronizationManager.getCurrentTransactionName());
+        // return execution.execute(getConnection());
+        // } else {
+        // LOGGER.debug(
+        // "There IS active spring transaction but IT IS NOT for data source [{}]. Transaction name [{}].
+        // Executing with enabled auto commit. ",
+        // dataSourceName, TransactionSynchronizationManager.getCurrentTransactionName());
+        // return executeWithEnabledAutoCommit(execution);
+        // }
     }
 
     private <R> R executeWithEnabledAutoCommit(ExecuteWithConnection<R> execution) throws SQLException {
-        boolean initialAutoCommit = getConnectionAutoCommit();
-        try {
-            setConnectionAutoCommit(true);
-            return execution.execute(getConnection());
-        } finally {
-            setConnectionAutoCommit(initialAutoCommit);
-        }
-    }
+        R result = execution.execute(connection);
+        connection.commit();
 
-    private boolean getConnectionAutoCommit() {
-        try {
-            return getConnection().getAutoCommit();
-        } catch (SQLException e) {
-            LOGGER.warn("Failed to get auto commit for connection [{}]. Returning false.", getConnection());
-            return false;
-        }
-    }
-
-    private void setConnectionAutoCommit(boolean autoCommit) {
-        try {
-            getConnection().setAutoCommit(autoCommit);
-        } catch (SQLException e) {
-            LOGGER.warn("Failed to set auto commit to [{}] for [{}]", autoCommit, getConnection(), e);
-        }
+        return result;
     }
 
     private Connection getConnection() {
@@ -116,6 +106,23 @@ class DirigibleConnectionImpl implements DirigibleConnection {
             }
         }
         return dataSources;
+    }
+
+    private boolean getConnectionAutoCommit() {
+        try {
+            return getConnection().getAutoCommit();
+        } catch (SQLException e) {
+            LOGGER.warn("Failed to get auto commit for connection [{}]. Returning false.", getConnection());
+            return false;
+        }
+    }
+
+    private void setConnectionAutoCommit(boolean autoCommit) {
+        try {
+            getConnection().setAutoCommit(autoCommit);
+        } catch (SQLException e) {
+            LOGGER.warn("Failed to set auto commit to [{}] for [{}]", autoCommit, getConnection(), e);
+        }
     }
 
     @Override
