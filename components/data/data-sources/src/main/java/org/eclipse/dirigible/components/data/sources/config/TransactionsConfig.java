@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.data.sources.config;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.PlatformTransactionManager;
 
@@ -21,13 +22,12 @@ import javax.sql.DataSource;
  * The Class DataSourceConfig.
  */
 @Configuration
-class DefaultDbTransactionsConfig {
+class TransactionsConfig {
 
-    @Bean(name = "defaultDbTransactionManagerDataSource")
+    @Lazy
+    @Bean(name = "defaultDbTransactionManager")
     PlatformTransactionManager defaultDbTransactionManagerDataSource(DataSourcesManager dataSourcesManager) {
         DataSource defaultDbDataSource = dataSourcesManager.getDefaultDataSource();
-        PlatformTransactionManager defaultDbTransactionManager = new DataSourceTransactionManager(defaultDbDataSource);
-
         return new DataSourceTransactionManager(defaultDbDataSource);
     }
 
