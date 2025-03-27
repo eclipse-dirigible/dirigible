@@ -44,17 +44,26 @@ class DirigibleCleaner {
     }
 
     public void cleanup() {
-        entityManagerFactory.getCache()
-                            .evictAll();
-
-        DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
-
-        if (defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
+        try {
+            DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
             deleteSchemas(defaultDataSource);
 
-            createSchema(defaultDataSource, "public");
+            String schema = defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL) ? "public" : "PUBLIC";
+            createSchema(defaultDataSource, schema);
+
+            clearEntityManagerCaches();
+        } finally {
+            deleteDirigibleFolder();
         }
-        deleteDirigibleFolder();
+    }
+
+    private void clearEntityManagerCaches() {
+        try {
+            entityManagerFactory.getCache()
+                                .evictAll();
+        } catch (Exception ex) {
+            LOGGER.warn("Failed to clear entity manager caches", ex);
+        }
     }
 
     public static void deleteDirigibleFolder() {
@@ -69,13 +78,17 @@ class DirigibleCleaner {
     }
 
     private void deleteSchemas(DirigibleDataSource dataSource) {
-        Set<String> schemas = getSchemas(dataSource);
-        schemas.remove("INFORMATION_SCHEMA");
-        schemas.remove("information_schema");
-        schemas.removeIf(s -> s.startsWith("pg_"));
+        try {
+            Set<String> schemas = getSchemas(dataSource);
+            schemas.remove("INFORMATION_SCHEMA");
+            schemas.remove("information_schema");
+            schemas.removeIf(s -> s.startsWith("pg_"));
 
-        LOGGER.debug("Will drop schemas [{}] from data source [{}]", schemas, dataSource);
-        schemas.forEach(schema -> deleteSchema(schema, dataSource));
+            LOGGER.debug("Will drop schemas [{}] from data source [{}]", schemas, dataSource);
+            schemas.forEach(schema -> deleteSchema(schema, dataSource));
+        } catch (RuntimeException ex) {
+            LOGGER.warn("Failed to delete schemas from [{}]", dataSource, ex);
+        }
     }
 
     private Set<String> getSchemas(DirigibleDataSource dataSource) {
@@ -123,7 +136,7 @@ class DirigibleCleaner {
     }
 
     private void createSchema(DirigibleDataSource dataSource, String schemaName) {
-        LOGGER.debug("Will create schema [{}] in [{}]", schemaName, dataSource);
+        LOGGER.info("Will create schema [{}] in [{}]", schemaName, dataSource);
         try (Connection connection = dataSource.getConnection()) {
             ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
             String sql = dialect.create()
@@ -132,8 +145,8 @@ class DirigibleCleaner {
             try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
                 preparedStatement.executeUpdate();
             }
-        } catch (SQLException ex) {
-            throw new IllegalStateException("Failed to create schema [" + schemaName + "] in dataSource [" + dataSource + "] ", ex);
+        } catch (Exception ex) {
+            LOGGER.warn("Failed to create schema [{}] in dataSource [{}] ", schemaName, dataSource, ex);
         }
     }
 }

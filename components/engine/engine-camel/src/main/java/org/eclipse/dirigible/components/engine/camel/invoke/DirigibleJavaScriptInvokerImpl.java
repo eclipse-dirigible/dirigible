@@ -17,14 +17,17 @@ import org.eclipse.dirigible.components.engine.camel.components.DirigibleJavaScr
 import org.eclipse.dirigible.graalium.core.DirigibleJavascriptCodeRunner;
 import org.graalvm.polyglot.Value;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 import java.nio.file.Path;
 
+@Transactional
 @Component
 class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
 
@@ -32,20 +35,23 @@ class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
     private final PlatformTransactionManager transactionManager;
 
     @Autowired
-    public DirigibleJavaScriptInvokerImpl(PlatformTransactionManager transactionManager) {
+    public DirigibleJavaScriptInvokerImpl(
+            @Qualifier("defaultDbTransactionManagerDataSource") PlatformTransactionManager transactionManager) {
         this.transactionManager = transactionManager;
         this.currentClassLoader = Thread.currentThread()
                                         .getContextClassLoader();
     }
 
+    @Transactional
     @Override
     public void invoke(Message camelMessage, String javaScriptPath) {
-        DefaultTransactionDefinition def = new DefaultTransactionDefinition();
-        def.setPropagationBehavior(TransactionDefinition.PROPAGATION_MANDATORY);
+        DefaultTransactionDefinition transactionDefinition = new DefaultTransactionDefinition();
+        transactionDefinition.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
 
-        TransactionStatus status = transactionManager.getTransaction(def);
+        TransactionStatus status = transactionManager.getTransaction(transactionDefinition);
         try {
             invokeInternal(camelMessage, javaScriptPath);
+            transactionManager.commit(status);
         } catch (Exception ex) {
             transactionManager.rollback(status);
             throw ex;
