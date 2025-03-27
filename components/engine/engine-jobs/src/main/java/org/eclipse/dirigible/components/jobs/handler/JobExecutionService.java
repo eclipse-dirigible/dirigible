@@ -41,15 +41,7 @@ public class JobExecutionService {
         def.setPropagationBehavior(TransactionDefinition.PROPAGATION_MANDATORY);
 
         TransactionStatus status = transactionManager.getTransaction(def);
-        try {
-            executeJobInternal(context);
-        } catch (Exception ex) {
-            transactionManager.rollback(status);
-            throw ex;
-        }
-    }
 
-    private void executeJobInternal(JobExecutionContext context) throws JobExecutionException {
         String tenantJobName = context.getJobDetail()
                                       .getKey()
                                       .getName();
@@ -62,18 +54,31 @@ public class JobExecutionService {
             .setAttribute("handler", handler);
 
         JobLog triggered = registerTriggered(name, handler);
+        try {
+            executeJob(context, name, handler, triggered, params);
+            registeredFinished(name, handler, triggered);
+        } catch (Exception ex) {
+            registeredFailed(name, handler, triggered, ex);
+            transactionManager.rollback(status);
+
+            String msg = "Failed to execute JS. Job name [" + name + "], handler [" + handler + "]";
+            LOGGER.error(msg, ex);
+            JobExecutionException jobExecutionException = new JobExecutionException(msg, ex);
+            throw jobExecutionException;
+        }
+    }
+
+    private void executeJob(JobExecutionContext context, String name, String handler, JobLog triggered, JobDataMap params)
+            throws JobExecutionException {
+        Span.current()
+            .setAttribute("handler", handler);
+
         if (triggered != null) {
             context.put("handler", handler);
             Path handlerPath = Path.of(handler);
 
             try (DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner()) {
                 runner.run(handlerPath);
-                registeredFinished(name, handler, triggered);
-            } catch (RuntimeException ex) {
-                registeredFailed(name, handler, triggered, ex);
-                String msg = "Failed to execute JS. Job name [" + name + "], handler [" + handler + "]";
-                LOGGER.error(msg, ex);
-                throw new JobExecutionException(msg, ex);
             }
         }
     }
