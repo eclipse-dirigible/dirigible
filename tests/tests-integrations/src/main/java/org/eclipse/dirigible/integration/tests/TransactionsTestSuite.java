@@ -9,10 +9,11 @@ import org.junit.platform.suite.api.Suite;
 
 @Suite
 @SelectClasses({//
+        RestTransactionsIT.class, //
         QuartzTransactionsIT.class, //
         GitPerspectiveIT.class, //
         CamelTransactionsIT.class, //
-        RestTransactionsIT.class, //
+
 })
 public class TransactionsTestSuite {
     // use this suite class to run all transaction related tests in the IDE
