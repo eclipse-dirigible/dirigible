@@ -8,7 +8,7 @@
   "dataSource": "DefaultDB",
   "tablePrefix": "",
   "roles": [],
-  "projectName": "sales-order-app",
+  "projectName": "DependsOnScenariosTestProject",
   "workspaceName": "workspace",
   "filePath": "sales-order.model",
   "templateId": "template-application-angular/template/template.js",
@@ -371,7 +371,7 @@
           "isRequiredProperty": false,
           "isCalculatedProperty": false,
           "widgetLabel": "Country",
-          "widgetDropdownUrl": "/services/ts/sales-order-app/gen/sales-order/api/Country/CountryService.ts",
+          "widgetDropdownUrl": "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts",
           "dataTypeJava": "int",
           "dataTypeTypescript": "number",
           "inputRule": ""
@@ -484,7 +484,7 @@
           "isRequiredProperty": false,
           "isCalculatedProperty": false,
           "widgetLabel": "Country",
-          "widgetDropdownUrl": "/services/ts/sales-order-app/gen/sales-order/api/Country/CountryService.ts",
+          "widgetDropdownUrl": "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts",
           "dataTypeJava": "int",
           "dataTypeTypescript": "number",
           "inputRule": ""
@@ -517,7 +517,7 @@
           "isRequiredProperty": false,
           "isCalculatedProperty": false,
           "widgetLabel": "City",
-          "widgetDropdownUrl": "/services/ts/sales-order-app/gen/sales-order/api/Country/CityService.ts",
+          "widgetDropdownUrl": "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts",
           "dataTypeJava": "int",
           "dataTypeTypescript": "number",
           "inputRule": ""
@@ -629,7 +629,7 @@
             "isRequiredProperty": false,
             "isCalculatedProperty": false,
             "widgetLabel": "Country",
-            "widgetDropdownUrl": "/services/ts/sales-order-app/gen/sales-order/api/Country/CountryService.ts",
+            "widgetDropdownUrl": "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts",
             "dataTypeJava": "int",
             "dataTypeTypescript": "number",
             "inputRule": ""
@@ -662,7 +662,7 @@
             "isRequiredProperty": false,
             "isCalculatedProperty": false,
             "widgetLabel": "City",
-            "widgetDropdownUrl": "/services/ts/sales-order-app/gen/sales-order/api/Country/CityService.ts",
+            "widgetDropdownUrl": "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts",
             "dataTypeJava": "int",
             "dataTypeTypescript": "number",
             "inputRule": ""
@@ -774,7 +774,7 @@
           "isRequiredProperty": false,
           "isCalculatedProperty": false,
           "widgetLabel": "Customer",
-          "widgetDropdownUrl": "/services/ts/sales-order-app/gen/sales-order/api/Customer/CustomerService.ts",
+          "widgetDropdownUrl": "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts",
           "dataTypeJava": "int",
           "dataTypeTypescript": "number",
           "inputRule": ""
@@ -910,7 +910,7 @@
           "isRequiredProperty": false,
           "isCalculatedProperty": false,
           "widgetLabel": "UoM",
-          "widgetDropdownUrl": "/services/ts/sales-order-app/gen/sales-order/api/UoM/UoMService.ts",
+          "widgetDropdownUrl": "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/UoM/UoMService.ts",
           "dataTypeJava": "int",
           "dataTypeTypescript": "number",
           "inputRule": ""
@@ -1019,7 +1019,7 @@
             "isRequiredProperty": false,
             "isCalculatedProperty": false,
             "widgetLabel": "UoM",
-            "widgetDropdownUrl": "/services/ts/sales-order-app/gen/sales-order/api/UoM/UoMService.ts",
+            "widgetDropdownUrl": "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/UoM/UoMService.ts",
             "dataTypeJava": "int",
             "dataTypeTypescript": "number",
             "inputRule": ""
@@ -1210,7 +1210,7 @@
           "isRequiredProperty": false,
           "isCalculatedProperty": false,
           "widgetLabel": "Customer",
-          "widgetDropdownUrl": "/services/ts/sales-order-app/gen/sales-order/api/Customer/CustomerService.ts",
+          "widgetDropdownUrl": "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts",
           "dataTypeJava": "int",
           "dataTypeTypescript": "number",
           "inputRule": ""
@@ -1293,7 +1293,7 @@
           "isRequiredProperty": false,
           "isCalculatedProperty": false,
           "widgetLabel": "Customer",
-          "widgetDropdownUrl": "/services/ts/sales-order-app/gen/sales-order/api/Customer/CustomerService.ts",
+          "widgetDropdownUrl": "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts",
           "dataTypeJava": "int",
           "dataTypeTypescript": "number",
           "inputRule": ""
@@ -1406,7 +1406,7 @@
           "isRequiredProperty": false,
           "isCalculatedProperty": false,
           "widgetLabel": "Product",
-          "widgetDropdownUrl": "/services/ts/sales-order-app/gen/sales-order/api/Product/ProductService.ts",
+          "widgetDropdownUrl": "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Product/ProductService.ts",
           "dataTypeJava": "int",
           "dataTypeTypescript": "number",
           "inputRule": ""
@@ -1439,7 +1439,7 @@
           "isRequiredProperty": false,
           "isCalculatedProperty": false,
           "widgetLabel": "UoM",
-          "widgetDropdownUrl": "/services/ts/sales-order-app/gen/sales-order/api/UoM/UoMService.ts",
+          "widgetDropdownUrl": "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/UoM/UoMService.ts",
           "dataTypeJava": "int",
           "dataTypeTypescript": "number",
           "inputRule": ""
@@ -1585,7 +1585,7 @@
           "isRequiredProperty": false,
           "isCalculatedProperty": false,
           "widgetLabel": "Customer",
-          "widgetDropdownUrl": "/services/ts/sales-order-app/gen/sales-order/api/Customer/CustomerService.ts",
+          "widgetDropdownUrl": "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts",
           "dataTypeJava": "int",
           "dataTypeTypescript": "number",
           "inputRule": ""
@@ -1618,7 +1618,7 @@
           "isRequiredProperty": false,
           "isCalculatedProperty": false,
           "widgetLabel": "CustomerPayment",
-          "widgetDropdownUrl": "/services/ts/sales-order-app/gen/sales-order/api/Customer/CustomerPaymentService.ts",
+          "widgetDropdownUrl": "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerPaymentService.ts",
           "dataTypeJava": "int",
           "dataTypeTypescript": "number",
           "inputRule": ""
