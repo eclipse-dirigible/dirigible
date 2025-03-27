@@ -9,10 +9,6 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.assertj.db.api.Assertions;
-import org.assertj.db.type.AssertDbConnection;
-import org.assertj.db.type.AssertDbConnectionFactory;
-import org.assertj.db.type.Table;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.components.tenants.domain.User;
@@ -79,15 +75,14 @@ public class RestTransactionsIT extends UserInterfaceIntegrationTest {
         }
     }
 
-    private void assertTestTableHasZeroEntries() {
+    private void assertTestTableHasZeroEntries() throws SQLException {
         DataSource dataSource = dataSourcesManager.getDefaultDataSource();
+        ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
 
-        AssertDbConnection connection = AssertDbConnectionFactory.of(dataSource)
-                                                                 .create();
+        try (Connection connection = dataSource.getConnection()) {
+            int count = dialect.count(connection, RestTransactionsITConfig.TestRest.TEST_TABLE);
+            assertThat(count).isZero();
 
-        Table testTable = connection.table(RestTransactionsITConfig.TestRest.TEST_TABLE)
-                                    .build();
-        Assertions.assertThat(testTable)
-                  .hasNumberOfRows(0);
+        }
     }
 }
