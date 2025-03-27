@@ -4,7 +4,7 @@
  * Do not modify the content as it may be re-generated again.
  */
 const perspectiveData = {
-	id: 'Reports',
+	id: '${projectName}-reports',
 	label: 'Reports',
 	path: '/services/web/${projectName}/gen/${genFolderName}/ui/Reports/index.html',
 	order: 999,

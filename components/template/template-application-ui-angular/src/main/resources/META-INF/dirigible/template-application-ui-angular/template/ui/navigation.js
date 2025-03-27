@@ -7,6 +7,7 @@ export const getSources = () => ([{
 	location: '/template-application-ui-angular/ui/navigation/perspective-group.extension.template',
 	action: 'generate',
 	rename: 'gen/{{genFolderName}}/navigation/{{navId}}/perspective-group.extension',
+	engine: 'velocity',
 	collection: 'uiNavigations'
 }, {
 	location: '/template-application-ui-angular/ui/navigation/perspective-group.js.template',

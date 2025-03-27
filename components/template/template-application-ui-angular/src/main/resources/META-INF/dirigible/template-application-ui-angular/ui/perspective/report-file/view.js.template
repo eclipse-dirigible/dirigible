@@ -10,7 +10,7 @@ const viewData = {
     lazyLoad: false,
 	autoFocusTab: true,
     path: '/services/web/${projectName}/gen/${genFolderName}/ui/Reports/${name}/index.html',
-    perspectiveName: 'Reports'
+    perspectiveName: '${projectName}-reports'
 };
 if (typeof exports !== 'undefined') {
 	exports.getView = () => viewData;

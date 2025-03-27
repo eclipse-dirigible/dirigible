@@ -1,5 +1,6 @@
 {
-    "module": "{{projectName}}/gen/{{genFolderName}}/navigation/{{navId}}/perspective-group.js",
+    "module": "${projectName}/gen/${genFolderName}/navigation/${navId}/perspective-group.js",
     "extensionPoint": "application-perspectives",
-    "description": "{{projectName}} - Perspective Group - {{navLabel}}"
+    "description": "${projectName} - Perspective Group - ${navLabel}"#if($perspectiveRole || $roleRead || $roleWrite),
+    "role": "#if($navRole)${navRole},#end#if($roleRead)${roleRead},#end#if($roleWrite)${roleWrite}#end"#end
 }

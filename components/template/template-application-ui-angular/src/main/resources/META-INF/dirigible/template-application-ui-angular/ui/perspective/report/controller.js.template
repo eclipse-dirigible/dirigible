@@ -11,8 +11,8 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 
 		//-----------------Custom Actions-------------------//
 		Extensions.getWindows(['${projectName}-custom-action']).then(function (response) {
-			$scope.pageActions = response.data.filter(e => e.perspective === "Reports" && e.view === "${name}" && (e.type === "page" || e.type === undefined));
-			$scope.entityActions = response.data.filter(e => e.perspective === "Reports" && e.view === "${name}" && e.type === "entity");
+			$scope.pageActions = response.data.filter(e => e.perspective === "${projectName}-reports" && e.view === "${name}" && (e.type === "page" || e.type === undefined));
+			$scope.entityActions = response.data.filter(e => e.perspective === "${projectName}-reports" && e.view === "${name}" && e.type === "entity");
 		});
 
 		$scope.triggerPageAction = (action) => {

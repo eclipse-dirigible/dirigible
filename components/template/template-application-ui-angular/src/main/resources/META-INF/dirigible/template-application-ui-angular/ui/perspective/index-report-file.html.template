@@ -35,10 +35,12 @@
                         busyText: 'Loading...',
                     };
                     Extensions.getViews().then((response) => {
-                        $scope.layoutModel = {
-                            views: response.data.filter(e => !e.isLaunchpad && e.perspectiveName === 'Reports').map(e => e.id)
-                        };
-                        $scope.state.isBusy = false;
+                        $scope.$evalAsync(() => {
+                            $scope.layoutConfig = {
+                                views: response.data.filter(e => !e.isLaunchpad && e.perspectiveName === '${projectName}-reports').map(e => e.id),
+                            };
+                            $scope.state.isBusy = false;
+                        });
                     }, (error) => {
                         console.error(error);
                         $scope.state.error = true;

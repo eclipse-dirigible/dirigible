@@ -37,7 +37,7 @@
                     Extensions.getViews().then((response) => {
                         $scope.$evalAsync(() => {
                             $scope.layoutConfig = {
-                                views: response.data.filter(e => !e.isLaunchpad && e.perspectiveName === 'Reports').map(e => e.id);
+                                views: response.data.filter(e => !e.isLaunchpad && e.perspectiveName === '${projectName}-reports').map(e => e.id),
                             };
                             $scope.state.isBusy = false;
                         });
