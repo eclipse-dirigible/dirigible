@@ -44,13 +44,18 @@ class DirigibleCleaner {
     }
 
     public void cleanup() {
-        DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
-        deleteSchemas(defaultDataSource);
+        try {
+            DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
+            if (defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
+                deleteSchemas(defaultDataSource);
+                String schema = defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL) ? "public" : "PUBLIC";
+                createSchema(defaultDataSource, schema);
+            }
 
-        String schema = defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL) ? "public" : "PUBLIC";
-        createSchema(defaultDataSource, schema);
-
-        clearEntityManagerCaches();
+            clearEntityManagerCaches();
+        } finally {
+            deleteDirigibleFolder();
+        }
     }
 
     private void clearEntityManagerCaches() {
@@ -115,8 +120,8 @@ class DirigibleCleaner {
             try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
                 preparedStatement.executeUpdate();
             }
-        } catch (SQLException ex) {
-            throw new IllegalStateException("Failed to drop schema [" + schema + "] from dataSource [" + dataSource + "] ", ex);
+        } catch (Exception ex) {
+            LOGGER.warn("Failed to drop schema [{}] from dataSource [{}] ", schema, dataSource, ex);
         }
     }
 
