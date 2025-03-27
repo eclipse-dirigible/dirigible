@@ -26,6 +26,8 @@ import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
 
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+
 @Lazy
 @Component
 class CamelTransactionsTestProject extends BaseTestProject {
@@ -49,8 +51,7 @@ class CamelTransactionsTestProject extends BaseTestProject {
     public void verify() throws Exception {
         SleepUtil.sleepSeconds(7); // ensure the job is executed = since it runs every 5 seconds
 
-        logsAsserter.containsMessage("camel-handler.ts: an entity is saved", Level.INFO);
-
+        assertThat(logsAsserter.containsMessage("camel-handler.ts: an entity is saved", Level.INFO)).isTrue();
         assertDaoSaveIsRollbacked();
     }
 
