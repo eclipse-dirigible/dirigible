@@ -34,7 +34,7 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
 
     /** The Constant LOGGER. */
     private static final Logger logger = LoggerFactory.getLogger(DirigibleDataSourceImpl.class);
-
+    private final String name;
     private final List<ConnectionEnhancer> connectionEnhancers;
     private final HikariDataSource originalDataSource;
     private final DatabaseSystem databaseSystem;
@@ -46,8 +46,9 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
      * @param originalDataSource the original data source
      * @param databaseSystem database type
      */
-    DirigibleDataSourceImpl(List<ConnectionEnhancer> allConnectionEnhancers, HikariDataSource originalDataSource,
+    DirigibleDataSourceImpl(String name, List<ConnectionEnhancer> allConnectionEnhancers, HikariDataSource originalDataSource,
             DatabaseSystem databaseSystem) {
+        this.name = name;
         this.connectionEnhancers = allConnectionEnhancers.stream()
                                                          .filter(e -> e.isApplicable(databaseSystem))
                                                          .collect(Collectors.toList());
@@ -55,6 +56,10 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
                 allConnectionEnhancers.size(), databaseSystem, connectionEnhancers);
         this.originalDataSource = originalDataSource;
         this.databaseSystem = databaseSystem;
+    }
+
+    public String getName() {
+        return name;
     }
 
     /**
@@ -194,7 +199,7 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
 
     @Override
     public String toString() {
-        return "DirigibleDataSourceImpl{" + "connectionEnhancers=" + connectionEnhancers + ", originalDataSource=" + originalDataSource
-                + ", databaseSystem=" + databaseSystem + '}';
+        return "DirigibleDataSourceImpl{" + "name='" + name + '\'' + ", connectionEnhancers=" + connectionEnhancers
+                + ", originalDataSource=" + originalDataSource + ", databaseSystem=" + databaseSystem + '}';
     }
 }

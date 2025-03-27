@@ -157,7 +157,7 @@ public class DataSourceInitializer implements DisposableBean {
         List<DataSourceProperty> additionalProperties = dataSource.getProperties();
         addAdditionalProperties(additionalProperties, config);
 
-        DirigibleDataSource managedDataSource = dataSourceFactory.create(config, dbType);
+        DirigibleDataSource managedDataSource = dataSourceFactory.create(name, config, dbType);
 
         registerDataSourceBean(name, managedDataSource);
         DATASOURCES.put(name, managedDataSource);
