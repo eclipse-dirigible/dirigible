@@ -1,0 +1,70 @@
+{
+  "files": [
+    {
+      "table": "CODBEX_CITY",
+      "schema": "PUBLIC",
+      "file": "/DependsOnScenariosTestProject/cities.csv",
+      "header": true,
+      "useHeaderNames": true,
+      "delimField": ",",
+      "delimEnclosing": "'",
+      "distinguishEmptyFromNull": true,
+      "version": ""
+    },
+    {
+      "table": "CODBEX_COUNTRY",
+      "schema": "PUBLIC",
+      "file": "/DependsOnScenariosTestProject/countries.csv",
+      "header": true,
+      "useHeaderNames": true,
+      "delimField": ",",
+      "delimEnclosing": "'",
+      "distinguishEmptyFromNull": true,
+      "version": ""
+    },
+    {
+      "table": "CODBEX_CUSTOMER",
+      "schema": "PUBLIC",
+      "file": "/DependsOnScenariosTestProject/customers.csv",
+      "header": true,
+      "useHeaderNames": true,
+      "delimField": ",",
+      "delimEnclosing": "'",
+      "distinguishEmptyFromNull": true,
+      "version": ""
+    },
+    {
+      "table": "CODBEX_CUSTOMERPAYMENT",
+      "schema": "PUBLIC",
+      "file": "/DependsOnScenariosTestProject/customer_payments.csv",
+      "header": true,
+      "useHeaderNames": true,
+      "delimField": ",",
+      "delimEnclosing": "'",
+      "distinguishEmptyFromNull": true,
+      "version": ""
+    },
+    {
+      "table": "CODBEX_PRODUCT",
+      "schema": "PUBLIC",
+      "file": "/DependsOnScenariosTestProject/products.csv",
+      "header": true,
+      "useHeaderNames": true,
+      "delimField": ",",
+      "delimEnclosing": "'",
+      "distinguishEmptyFromNull": true,
+      "version": ""
+    },
+    {
+      "table": "CODBEX_UOM",
+      "schema": "PUBLIC",
+      "file": "/DependsOnScenariosTestProject/uoms.csv",
+      "header": true,
+      "useHeaderNames": true,
+      "delimField": ",",
+      "delimEnclosing": "'",
+      "distinguishEmptyFromNull": true,
+      "version": ""
+    }
+  ]
+}
