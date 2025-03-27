@@ -64,19 +64,10 @@ public class RestTransactionsIT extends UserInterfaceIntegrationTest {
                .then()
                .statusCode(500);
 
-        DataSource dataSource = dataSourcesManager.getDefaultDataSource();
-
-        AssertDbConnection connection = AssertDbConnectionFactory.of(dataSource)
-                                                                 .create();
-
-        Table ordersTable = connection.table(RestTransactionsITConfig.TestRest.TEST_TABLE)
-                                      .build();
-
-        Assertions.assertThat(ordersTable)
-                  .hasNumberOfRows(0);
+        assertTestTableHasZeroEntries();
     }
 
-    private static void createTestTable(DirigibleDataSource dataSource) throws SQLException {
+    private void createTestTable(DirigibleDataSource dataSource) throws SQLException {
         ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
 
         String sql = dialect.create()
@@ -88,4 +79,15 @@ public class RestTransactionsIT extends UserInterfaceIntegrationTest {
         }
     }
 
+    private void assertTestTableHasZeroEntries() {
+        DataSource dataSource = dataSourcesManager.getDefaultDataSource();
+
+        AssertDbConnection connection = AssertDbConnectionFactory.of(dataSource)
+                                                                 .create();
+
+        Table testTable = connection.table(RestTransactionsITConfig.TestRest.TEST_TABLE)
+                                    .build();
+        Assertions.assertThat(testTable)
+                  .hasNumberOfRows(0);
+    }
 }
