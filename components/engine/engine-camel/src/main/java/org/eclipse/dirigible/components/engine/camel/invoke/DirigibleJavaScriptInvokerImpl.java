@@ -13,17 +13,13 @@ package org.eclipse.dirigible.components.engine.camel.invoke;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.spi.Synchronization;
-import org.eclipse.dirigible.components.data.sources.config.TransactionManagerProvider;
+import org.eclipse.dirigible.components.data.sources.config.TransactionManagerConfig;
 import org.eclipse.dirigible.components.engine.camel.components.DirigibleJavaScriptInvoker;
 import org.eclipse.dirigible.graalium.core.DirigibleJavascriptCodeRunner;
 import org.graalvm.polyglot.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 import java.nio.file.Path;
 
@@ -32,33 +28,16 @@ import java.nio.file.Path;
 class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
 
     private final ClassLoader currentClassLoader;
-    private final TransactionManagerProvider transactionManagerProvider;
 
     @Autowired
-    public DirigibleJavaScriptInvokerImpl(TransactionManagerProvider transactionManagerProvider) {
-        this.transactionManagerProvider = transactionManagerProvider;
+    public DirigibleJavaScriptInvokerImpl() {
         this.currentClassLoader = Thread.currentThread()
                                         .getContextClassLoader();
     }
 
-    @Transactional
+    @Transactional(transactionManager = TransactionManagerConfig.DEFAULT_DB_TRANSACTION_MANAGER)
     @Override
     public void invoke(Message camelMessage, String javaScriptPath) {
-        DefaultTransactionDefinition transactionDefinition = new DefaultTransactionDefinition();
-        transactionDefinition.setPropagationBehavior(TransactionDefinition.PROPAGATION_NESTED);
-
-        PlatformTransactionManager transactionManager = transactionManagerProvider.getDefaultDbTransactionManager();
-        TransactionStatus status = transactionManager.getTransaction(transactionDefinition);
-        try {
-            invokeInternal(camelMessage, javaScriptPath);
-            transactionManager.commit(status);
-        } catch (Exception ex) {
-            transactionManager.rollback(status);
-            throw ex;
-        }
-    }
-
-    private void invokeInternal(Message camelMessage, String javaScriptPath) {
         Thread.currentThread()
               .setContextClassLoader(currentClassLoader);
         DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner();

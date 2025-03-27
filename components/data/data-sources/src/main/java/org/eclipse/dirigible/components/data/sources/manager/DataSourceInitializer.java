@@ -111,7 +111,6 @@ public class DataSourceInitializer implements DisposableBean {
      * @param dataSource the data source
      * @return the managed data source
      */
-    @SuppressWarnings("resource")
     private DirigibleDataSource initDataSource(DataSource dataSource) {
 
         DatabaseSystem dbType = DatabaseSystemDeterminer.determine(dataSource.getUrl(), dataSource.getDriver());
@@ -130,6 +129,7 @@ public class DataSourceInitializer implements DisposableBean {
         Properties hikariProperties = getHikariProperties(name);
         HikariConfig config = new HikariConfig(hikariProperties);
 
+        config.setAutoCommit(false); // to enable transactions
         config.setDriverClassName(driver);
         config.setJdbcUrl(url);
         config.setUsername(username);
@@ -236,7 +236,8 @@ public class DataSourceInitializer implements DisposableBean {
      */
     private void prepareRootFolder(String name) {
         try {
-            String rootFolder = (Objects.equals(defaultDataSourceName, name)) ? DatabaseParameters.DIRIGIBLE_DATABASE_H2_ROOT_FOLDER_DEFAULT
+            String rootFolder = (Objects.equals(defaultDataSourceName, name))
+                    ? DatabaseParameters.DIRIGIBLE_DATABASE_H2_ROOT_FOLDER_DEFAULT
                     : DatabaseParameters.DIRIGIBLE_DATABASE_H2_ROOT_FOLDER + name;
             String h2Root = Configuration.get(rootFolder, name);
             File rootFile = new File(h2Root);

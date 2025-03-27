@@ -22,10 +22,12 @@ import javax.sql.DataSource;
  * The Class DataSourceConfig.
  */
 @Configuration
-class TransactionsConfig {
+public class TransactionManagerConfig {
+
+    public static final String DEFAULT_DB_TRANSACTION_MANAGER = "defaultDbTransactionManager";
 
     @Lazy
-    @Bean(name = "defaultDbTransactionManager")
+    @Bean(name = DEFAULT_DB_TRANSACTION_MANAGER)
     PlatformTransactionManager defaultDbTransactionManagerDataSource(DataSourcesManager dataSourcesManager) {
         DataSource defaultDbDataSource = dataSourcesManager.getDefaultDataSource();
         return new DataSourceTransactionManager(defaultDbDataSource);
