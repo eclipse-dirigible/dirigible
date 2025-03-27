@@ -6,7 +6,9 @@
 const perspectiveData = {
 	id: '${perspectiveName}',
 	label: '${perspectiveLabel}',
+	header: '${perspectiveHeader}',
 	path: '/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/index.html',
+	groupId: '${perspectiveNavId}',
 	order: ${perspectiveOrder},
 	icon: '${perspectiveIcon}'
 };

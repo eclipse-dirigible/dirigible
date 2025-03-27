@@ -29,7 +29,7 @@ angular.module('page', ['blimpKit', 'platformView'])
 #end
 		}
 
-		$scope.filter = function () {
+		$scope.filter = () => {
 			let entity = $scope.entity;
 			const filter = {
 				$filter: {

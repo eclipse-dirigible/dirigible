@@ -26,19 +26,10 @@ angular.module('EntityService', []).provider('EntityService', function EntitySer
                 url = `${this.baseUrl}/count/${idOrFilter}`;
             }
 
-            let request;
             if (bodyFilter) {
-                request = $http.post(url, JSON.stringify(bodyFilter), { headers: { 'describe': 'application/json' } });
-            } else {
-                request = $http.get(url, { headers: { 'describe': 'application/json' } });
+                return $http.post(url, JSON.stringify(bodyFilter), { headers: { 'describe': 'application/json' } });
             }
-
-            return request.then(function successCallback(response) {
-                return { status: response.status, data: response.data };
-            }, function errorCallback(response) {
-                console.error('Entity Service:', response);
-                return { status: response.status, message: response.data ? response.data.message : '' };
-            });
+            return $http.get(url, { headers: { 'describe': 'application/json' } });
         }.bind(this);
 
         const list = function (offsetOrFilter, limit) {
@@ -51,71 +42,35 @@ angular.module('EntityService', []).provider('EntityService', function EntitySer
             } else if (offsetOrFilter != null && limit != null) {
                 url = `${url}?$offset=${offsetOrFilter}&$limit=${limit}`;
             }
-            return $http.get(url, { headers: { 'describe': 'application/json' } })
-                .then(function successCallback(response) {
-                    return { status: response.status, data: response.data };
-                }, function errorCallback(response) {
-                    console.error('Entity service:', response);
-                    return { status: response.status, message: response.data ? response.data.message : '' };
-                });
+            return $http.get(url, { headers: { 'describe': 'application/json' } });
         }.bind(this);
 
         const filter = function (query, offset, limit) {
             const url = `${this.baseUrl}?${query}&$offset=${offset}&$limit=${limit}`;
-            return $http.get(url, { headers: { 'describe': 'application/json' } })
-                .then(function successCallback(response) {
-                    return { status: response.status, data: response.data };
-                }, function errorCallback(response) {
-                    console.error('Entity service:', response);
-                    return { status: response.status, message: response.data ? response.data.message : '' };
-                });
+            return $http.get(url, { headers: { 'describe': 'application/json' } });
         }.bind(this);
 
         const search = function (entity) {
             const url = `${this.baseUrl}/search`;
             const body = JSON.stringify(entity);
-            return $http.post(url, body)
-                .then(function (response) {
-                    return { status: response.status, data: response.data };
-                }, function (response) {
-                    console.error('Entity service:', response);
-                    return { status: response.status, message: response.data ? response.data.message : '' };
-                });
+            return $http.post(url, body);
         }.bind(this);
 
         const create = function (entity) {
             const url = this.baseUrl;
             const body = JSON.stringify(entity);
-            return $http.post(url, body)
-                .then(function (response) {
-                    return { status: response.status, data: response.data };
-                }, function (response) {
-                    console.error('Entity service:', response);
-                    return { status: response.status, message: response.data ? response.data.message : '' };
-                });
+            return $http.post(url, body);
         }.bind(this);
 
         const update = function (id, entity) {
             const url = `${this.baseUrl}/${id}`;
             const body = JSON.stringify(entity);
-            return $http.put(url, body)
-                .then(function (response) {
-                    return { status: response.status, data: response.data };
-                }, function (response) {
-                    console.error('Entity service:', response);
-                    return { status: response.status, message: response.data ? response.data.message : '' };
-                });
+            return $http.put(url, body);
         }.bind(this);
 
         const deleteEntity = function (id) {
             const url = `${this.baseUrl}/${id}`;
-            return $http.delete(url, { headers: { 'describe': 'application/json' } })
-                .then(function successCallback(response) {
-                    return { status: response.status, data: response.data };
-                }, function errorCallback(response) {
-                    console.error('Entity service:', response);
-                    return { status: response.status, message: response.data ? response.data.message : '' };
-                });
+            return $http.delete(url, { headers: { 'describe': 'application/json' } });
         }.bind(this);
 
         return {
@@ -126,7 +81,6 @@ angular.module('EntityService', []).provider('EntityService', function EntitySer
             create: create,
             update: update,
             'delete': deleteEntity,
-            $http: $http
         };
     }];
 });

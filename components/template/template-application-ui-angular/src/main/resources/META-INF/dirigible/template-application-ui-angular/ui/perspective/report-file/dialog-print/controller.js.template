@@ -24,7 +24,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
             $scope.filter = filter;
 		}
 
-        $scope.loadPage = function (filter) {
+        $scope.loadPage = (filter) => {
             if (!filter && $scope.filter) {
                 filter = $scope.filter;
             }
@@ -34,17 +34,8 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
             } else {
                 request = EntityService.list();
             }
-            request.then(function (response) {
-                if (response.status != 200) {
-                    Dialogs.showAlert({
-                        title: "${name}",
-                        message: `Unable to list/filter ${name}: '${response.message}'`,
-                        type: AlertTypes.Error
-                    });
-                    return;
-                }
+            request.then((response) => {
 #if($hasDates)
-
                 response.data.forEach(e => {
 #foreach ($column in $columns)
 #if($column.typeTypescript == 'Date')
@@ -59,8 +50,15 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
                 $scope.data = response.data;
                 setTimeout(() => {
                     window.print();
-
                 }, 250);
+            }, (error) => {
+                const message = error.data ? error.data.message : '';
+                Dialogs.showAlert({
+                    title: "${name}",
+                    message: `Unable to list/filter ${name}: '${message}'`,
+                    type: AlertTypes.Error
+                });
+                console.error('EntityService:', error);
             });
         };
         $scope.loadPage($scope.filter);

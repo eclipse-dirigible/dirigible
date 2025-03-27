@@ -84,7 +84,7 @@ angular.module('page', ['blimpKit', 'platformView'])
 		};
 
 		$scope.alert = (message) => {
-			Dialogs.showAlert({
+			if (message) Dialogs.showAlert({
 				title: 'Description',
 				message: message,
 				type: AlertTypes.Information,

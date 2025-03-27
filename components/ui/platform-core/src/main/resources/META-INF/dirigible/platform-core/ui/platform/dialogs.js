@@ -149,7 +149,7 @@ angular.module('platformDialogs', ['blimpKit', 'platformView']).directive('dialo
         scope.closeDialogWindow = (id, path) => {
             if (id) {
                 for (let w = 0; w < scope.dialogWindows.length; w++) {
-                    if (scope.dialogWindows.id === id) {
+                    if (scope.dialogWindows[w].id === id) {
                         dialogHub.triggerEvent(scope.dialogWindows[w].closeTopic);
                         scope.dialogWindows.splice(w, 1);
                         return;
@@ -157,7 +157,7 @@ angular.module('platformDialogs', ['blimpKit', 'platformView']).directive('dialo
                 }
             } else if (path) {
                 for (let w = 0; w < scope.dialogWindows.length; w++) {
-                    if (scope.dialogWindows.path === path) {
+                    if (scope.dialogWindows[w].path === path) {
                         dialogHub.triggerEvent(scope.dialogWindows[w].closeTopic);
                         scope.dialogWindows.splice(w, 1);
                         return;

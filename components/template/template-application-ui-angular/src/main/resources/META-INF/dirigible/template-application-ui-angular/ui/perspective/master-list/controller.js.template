@@ -53,7 +53,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		}});
 		//-----------------Events-------------------//
 
-		$scope.loadPage = function (pageNumber, filter) {
+		$scope.loadPage = (pageNumber, filter) => {
 			if (!filter && $scope.filter) {
 				filter = $scope.filter;
 			}
@@ -61,17 +61,9 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				filter = {};
 			}
 			$scope.selectedEntity = null;
-			EntityService.count(filter).then(function (response) {
-				if (response.status != 200) {
-					Dialogs.showAlert({
-						title: "${name}",
-						message: `Unable to count ${name}: '${response.message}'`,
-						type: AlertTypes.Error
-					});
-					return;
-				}
-				if (response.data) {
-					$scope.dataCount = response.data;
+			EntityService.count(filter).then((resp) => {
+				if (resp.data) {
+					$scope.dataCount = resp.data.count;
 				}
 				$scope.dataPages = Math.ceil($scope.dataCount / $scope.dataLimit);
 				filter.$offset = ($scope.dataPage - 1) * $scope.dataLimit;
@@ -80,21 +72,12 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 					filter.$offset = 0;
 					filter.$limit = $scope.dataPage * $scope.dataLimit;
 				}
-				EntityService.search(filter).then(function (response) {
-					if (response.status != 200) {
-						Dialogs.showAlert({
-						title: "${name}",
-						message: `Unable to list/filter ${name}: '${response.message}'`,
-						type: AlertTypes.Error
-					});
-						return;
-					}
+				EntityService.search(filter).then((response) => {
 					if ($scope.data == null || $scope.dataReset) {
 						$scope.data = [];
 						$scope.dataReset = false;
 					}
 #if($hasDates)
-
 					response.data.forEach(e => {
 #foreach ($property in $properties)
 #if($property.isDateType)
@@ -108,7 +91,23 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 #end
 					${dollar}scope.data = ${dollar}scope.data.concat(response.data);
 					$scope.dataPage++;
+				}, (error) => {
+					const message = error.data ? error.data.message : '';
+					Dialogs.showAlert({
+						title: "${name}",
+						message: `Unable to list/filter ${name}: '${message}'`,
+						type: AlertTypes.Error
+					});
+					console.error('EntityService:', error);
 				});
+			}, (error) => {
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: "${name}",
+					message: `Unable to count ${name}: '${message}'`,
+					type: AlertTypes.Error
+				});
+				console.error('EntityService:', error);
 			});
 		};
 		$scope.loadPage($scope.dataPage, $scope.filter);
@@ -176,5 +175,4 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 #end
 		//----------------Dropdowns-----------------//
 #end
-
 	});

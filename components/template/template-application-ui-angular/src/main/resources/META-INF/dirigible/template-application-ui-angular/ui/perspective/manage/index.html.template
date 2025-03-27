@@ -95,8 +95,7 @@
 						<td bk-table-cell fit-content="true">
 							<bk-popover>
 								<bk-popover-control>
-									<bk-button compact="true" glyph="sap-icon--overflow" state="transparent"
-										aria-label="Table Row Menu Button" ng-click="setTristate()">
+									<bk-button compact="true" glyph="sap-icon--overflow" state="transparent" aria-label="Table Row Menu Button" ng-click="setTristate()">
 									</bk-button>
 								</bk-popover-control>
 								<bk-popover-body align="bottom-right">

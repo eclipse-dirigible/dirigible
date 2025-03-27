@@ -3,7 +3,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 	.config(["EntityServiceProvider", function (EntityServiceProvider) {
 		EntityServiceProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
 	}])
-	.controller('PageController', function ($scope, #if($hasDropdowns) ${dollar}http,#end ViewParameters, EntityService) {
+	.controller('PageController', function ($scope, ${dollar}http, ViewParameters, EntityService) {
 		const Dialogs = new DialogHub();
 		$scope.entity = {};
 		$scope.forms = {
@@ -39,18 +39,20 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		$scope.create = () => {
 			let entity = $scope.entity;
 			entity[$scope.selectedMainEntityKey] = $scope.selectedMainEntityId;
-			EntityService.create(entity).then(function (response) {
-				if (response.status != 201) {
-					$scope.errorMessage = `Unable to create ${name}: '${response.message}'`;
-					return;
-				}
+			EntityService.create(entity).then((response) => {
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityCreated', data: response.data });
-				$scope.cancel();
 				Dialogs.showAlert({
 					title: "${name}",
 					message: '${name} successfully created',
 					type: AlertTypes.Success
 				});
+				$scope.cancel();
+			}, (error) => {
+				const message = error.data ? error.data.message : '';
+				$scope.$evalAsync(() => {
+					$scope.errorMessage = `Unable to create ${name}: '${message}'`;
+				});
+				console.error('EntityService:', error);
 			});
 		};
 
@@ -58,7 +60,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			let id = ${dollar}scope.entity.${primaryKeysString};
 			let entity = $scope.entity;
 			entity[$scope.selectedMainEntityKey] = $scope.selectedMainEntityId;
-			EntityService.update(id, entity).then(function (response) {
+			EntityService.update(id, entity).then((response) => {
 				if (response.status != 200) {
 					$scope.errorMessage = `Unable to update ${name}: '${response.message}'`;
 					return;
@@ -70,6 +72,12 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 					message: '${name} successfully updated',
 					type: AlertTypes.Success
 				});
+			}, (error) => {
+				const message = error.data ? error.data.message : '';
+				$scope.$evalAsync(() => {
+					$scope.errorMessage = `Unable to update ${name}: '${message}'`;
+				});
+				console.error('EntityService:', error);
 			});
 		};
 
@@ -94,19 +102,19 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 #if($property.widgetDependsOnProperty)
 		${dollar}scope.${dollar}watch('entity.${property.widgetDependsOnProperty}', function (newValue, oldValue) {
 			if (newValue !== undefined && newValue !== null) {
-				EntityService.${dollar}http.get(${dollar}scope.service${property.widgetDependsOnProperty} + '/' + newValue).then(function (response) {
+				${dollar}http.get(${dollar}scope.service${property.widgetDependsOnProperty} + '/' + newValue).then((response) => {
 					let valueFrom = response.data.${property.widgetDependsOnValueFrom};
 #if($property.widgetType != "DROPDOWN")
 					$scope.entity.${property.name} = valueFrom;
 #end
 #if($property.widgetType == "DROPDOWN")
-					EntityService.${dollar}http.post("${property.widgetDropdownUrl}/search", {
+					${dollar}http.post("${property.widgetDropdownUrl}/search", {
 						$filter: {
 							equals: {
 								${property.widgetDependsOnFilterBy}: valueFrom
 							}
 						}
-					}).then(function (response) {
+					}).then((response) => {
 						${dollar}scope.options${property.name} = response.data.map(e => {
 							return {
 								value: e.${property.widgetDropDownKey},
@@ -120,8 +128,12 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 								$scope.entity.${property.name} = undefined;
 							}
 						}
+					}, (error) => {
+						console.error(error);
 					});
 #end
+				}, (error) => {
+					console.error(error);
 				});
 			}
 		});
@@ -129,7 +141,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 #end
 #end
 		$scope.alert = (message) => {
-			Dialogs.showAlert({
+			if (message) Dialogs.showAlert({
 				title: 'Description',
 				message: message,
 				type: AlertTypes.Information,

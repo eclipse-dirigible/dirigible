@@ -31,19 +31,21 @@
             <bk-icon-tab-bar-tablist>
                 <bk-icon-tab-bar-tab label="Perspectives" tab-id="p" ng-click="switchTab('p')">
                 </bk-icon-tab-bar-tab>
-                <bk-icon-tab-bar-tab label="Navigations" tab-id="n" ng-click="switchTab('n')">
+                <bk-icon-tab-bar-tab label="Navigation" tab-id="n" ng-click="switchTab('n')">
                 </bk-icon-tab-bar-tab>
             </bk-icon-tab-bar-tablist>
             <bk-icon-tab-bar-panel tab-id="p" ng-show="selectedTab === 'p' && !showInnerDialog">
-                <div class="bk-hbox bk-padding--tiny bk-flex-end bk-box--gap">
+                <div class="bk-hbox bk-padding--tiny bk-border--bottom bk-flex-end bk-box--gap">
                     <bk-button compact="true" label="Add" ng-click="add()"></bk-button>
                 </div>
                 <bk-scrollbar class="bk-full-height">
-                    <table bk-table outer-borders="horizontal">
+                    <table bk-table outer-borders="bottom">
                         <thead bk-table-header sticky="true">
                             <tr bk-table-row>
                                 <th bk-table-header-cell>Name</th>
                                 <th bk-table-header-cell>Label</th>
+                                <th bk-table-header-cell>Header</th>
+                                <th bk-table-header-cell>Navigation</th>
                                 <th bk-table-header-cell>Icon</th>
                                 <th bk-table-header-cell>Order</th>
                                 <th bk-table-header-cell>Role</th>
@@ -57,6 +59,8 @@
                             <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in dataParameters.perspectives track by $index">
                                 <td bk-table-cell>{{ item.id }}</td>
                                 <td bk-table-cell>{{ item.label }}</td>
+                                <td bk-table-cell>{{ item.header }}</td>
+                                <td bk-table-cell>{{ item.navId }}</td>
                                 <td bk-table-cell>{{ item.icon }}</td>
                                 <td bk-table-cell>{{ item.order }}</td>
                                 <td bk-table-cell>{{ item.role }}</td>
@@ -70,30 +74,34 @@
                 </bk-scrollbar>
             </bk-icon-tab-bar-panel>
             <bk-icon-tab-bar-panel tab-id="n" ng-show="selectedTab === 'n' && !showInnerDialog">
-                <div class="bk-hbox bk-padding--tiny bk-flex-end bk-box--gap">
+                <div class="bk-hbox bk-padding--tiny bk-border--bottom bk-flex-end bk-box--gap">
                     <bk-button compact="true" label="Add" ng-click="add()"></bk-button>
                 </div>
                 <bk-scrollbar class="bk-full-height">
-                    <table bk-table outer-borders="horizontal">
+                    <table bk-table outer-borders="bottom">
                         <thead bk-table-header sticky="true">
                             <tr bk-table-row>
-                                <th bk-table-header-cell>Path</th>
+                                <th bk-table-header-cell>Name</th>
                                 <th bk-table-header-cell>Label</th>
+                                <th bk-table-header-cell>Header</th>
+                                <th bk-table-header-cell>Expanded</th>
                                 <th bk-table-header-cell>Icon</th>
-                                <th bk-table-header-cell>URL</th>
+                                <th bk-table-header-cell>Order</th>
                                 <th bk-table-header-cell>Role</th>
                                 <th bk-table-header-cell></th>
                             </tr>
                         </thead>
                         <tbody bk-table-body>
                             <tr ng-if="!dataParameters.navigations || dataParameters.navigations.length === 0" bk-table-row>
-                                <td bk-table-cell no-data="true">There are no navigations items</td>
+                                <td bk-table-cell no-data="true">There are no perspective navigation groups</td>
                             </tr>
                             <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in dataParameters.navigations track by $index">
-                                <td bk-table-cell>{{ item.path }}</td>
+                                <td bk-table-cell>{{ item.id }}</td>
                                 <td bk-table-cell>{{ item.label }}</td>
+                                <td bk-table-cell>{{ item.header }}</td>
+                                <td bk-table-cell>{{ item.expanded }}</td>
                                 <td bk-table-cell>{{ item.icon }}</td>
-                                <td bk-table-cell>{{ item.url }}</td>
+                                <td bk-table-cell>{{ item.order }}</td>
                                 <td bk-table-cell>{{ item.role }}</td>
                                 <td bk-table-cell fit-content="true">
                                     <bk-button compact="true" glyph="sap-icon--edit" state="transparent" aria-label="Edit" ng-click="edit($index)"></bk-button>
@@ -106,86 +114,117 @@
             </bk-icon-tab-bar-panel>
             <bk-icon-tab-bar-panel ng-show="showInnerDialog">
                 <bk-scrollbar class="bk-padding--sm bk-full-height">
-                    <bk-fieldset ng-form="forms.newForm">
+                    <bk-fieldset ng-if="showInnerDialog" ng-form="forms.newForm">
                         <bk-form-group ng-if="editElement.editType === 'Add'">
-                            <bk-form-item ng-if="selectedTab === 'p'">
+                            <bk-form-item>
                                 <bk-form-label for="navidn" required="true" colon="true">Name</bk-form-label>
-                                <bk-input id="navidn" name="pId" type="text" ng-required="true" dg-input-rules="inputRulesName" state="{{ forms.newForm['pId'].$valid ? '' : 'error' }}" ng-model="editElement.id"></bk-input>
+                                <bk-input id="navidn" name="pId" type="text" ng-required="true" input-rules="inputRulesName" ng-trim="false" state="{{ forms.newForm['pId'].$valid ? '' : 'error' }}" ng-model="editElement.id"></bk-input>
                             </bk-form-item>
-                            <bk-form-item ng-if="selectedTab === 'n'">
-                                <bk-form-label for="sidePath" required="true" colon="true">Path</bk-form-label>
-                                <bk-input id="sidePath" name="sPath" type="text" ng-required="true" dg-input-rules="inputRules" state="{{ forms.newForm['sPath'].$valid ? '' : 'error' }}" ng-model="editElement.path"></bk-input>
-                            </bk-form-item>
-                            <bk-form-item class="fd-margin-top--tiny">
+                            <bk-form-item>
                                 <bk-form-label for="navidl" required="true" colon="true">Label</bk-form-label>
                                 <bk-input id="navidl" type="text" ng-required="true" ng-model="editElement.label"></bk-input>
                             </bk-form-item>
-                            <bk-form-item class="fd-margin-top--tiny">
-                                <bk-form-label for="navidi" required="true" colon="true">Icon</bk-form-label>
-                                <bk-select placeholder="Select an icon" label-id="navidi" ng-required="true" ng-model="editElement.icon" dropdown-fixed="true">
-                                    <bk-option text="{{ ::icon.name }}" value="::icon.url" icon="{{::icon.url}}" ng-repeat="icon in icons  track by $index"></bk-option>
+                            <bk-form-item>
+                                <bk-form-label for="header" colon="true">Header</bk-form-label>
+                                <bk-input id="header" type="text" ng-model="editElement.header"></bk-input>
+                            </bk-form-item>
+                            <bk-form-item ng-if="selectedTab === 'p'">
+                                <bk-form-label for="groupId" colon="true">Navigation</bk-form-label>
+                                <bk-select placeholder="Select a group" label-id="groupId" ng-model="editElement.navId" dropdown-fixed="true">
+                                    <bk-option text="{{ group.label }}" value="group.id" icon="{{group.icon}}" ng-repeat="group in dataParameters.navigations track by group.id"></bk-option>
                                 </bk-select>
                             </bk-form-item>
-                            <bk-form-item ng-if="selectedTab === 'p'" class="fd-margin-top--tiny">
+                            <bk-form-item ng-if="selectedTab === 'n'">
+                                <bk-checkbox id="expanded" name="exp" ng-model="editElement.expanded"></bk-checkbox>
+                                <bk-checkbox-label for="expanded">Expanded</bk-checkbox-label>
+                            </bk-form-item>
+                            <bk-form-item>
+                                <bk-form-label for="navidi" required="true" colon="true">Icon</bk-form-label>
+                                <bk-select placeholder="Select an icon" label-id="navidi" ng-required="true" ng-model="editElement.icon" dropdown-fixed="true">
+                                    <bk-option text="{{ ::icon.name }}" value="::icon.url" icon="{{::icon.url}}" ng-repeat="icon in icons track by icon.name"></bk-option>
+                                </bk-select>
+                            </bk-form-item>
+                            <bk-form-item>
                                 <bk-form-label for="navido" required="true" colon="true">Order number</bk-form-label>
-                                <bk-step-input input-id="navido" name="orderNumber" ng-required="true" ng-model="editElement.order" style="max-width: 320px"></bk-step-input>
+                                <bk-step-input input-id="navido" name="orderNumber" ng-required="true" ng-model="editElement.order" style="max-width:20rem"></bk-step-input>
                             </bk-form-item>
-                            <bk-form-item ng-if="selectedTab === 'n'" class="fd-margin-top--tiny">
-                                <bk-form-label for="sideUrl" colon="true">URL</bk-form-label>
-                                <bk-input id="sideUrl" type="text" name="sideUrl" ng-model="editElement.url"></bk-input>
-                            </bk-form-item>
-                            <bk-form-item class="fd-margin-top--tiny">
+                            <bk-form-item>
                                 <bk-form-label for="navidr" colon="true">Role</bk-form-label>
                                 <bk-input id="navidr" type="text" ng-model="editElement.role"></bk-input>
                             </bk-form-item>
                         </bk-form-group>
+
                         <bk-form-group ng-if="editElement.editType === 'Update' && selectedTab === 'p'">
                             <bk-form-item>
                                 <bk-form-label for="navidn" required="true" colon="true">Name</bk-form-label>
-                                <bk-input id="navidn" name="pId" type="text" ng-required="true" input-rules="inputRulesName" state="{{ forms.newForm['pId'].$valid ? '' : 'error' }}"
+                                <bk-input id="navidn" name="pId" type="text" ng-required="true" input-rules="inputRulesName" ng-trim="false" state="{{ forms.newForm['pId'].$valid ? '' : 'error' }}"
                                     ng-model="dataParameters.perspectives[editElement.index].id" pattern="[a-zA-Z0-9]+"></bk-input>
                             </bk-form-item>
-                            <bk-form-item class="fd-margin-top--tiny">
+                            <bk-form-item>
                                 <bk-form-label for="navidl" required="true" colon="true">Label</bk-form-label>
                                 <bk-input id="navidl" type="text" ng-required="true" ng-model="dataParameters.perspectives[editElement.index].label"></bk-input>
                             </bk-form-item>
-                            <bk-form-item class="fd-margin-top--tiny">
+                            <bk-form-item>
+                                <bk-form-label for="header" colon="true">Header</bk-form-label>
+                                <bk-input id="header" type="text" ng-model="dataParameters.perspectives[editElement.index].header"></bk-input>
+                            </bk-form-item>
+                            <bk-form-item ng-init="setCustom = isCustomNav()">
+                                <bk-form-label for="groupId" colon="true">Navigation</bk-form-label>
+                                <div class="bk-full-width bk-hbox bk-center--vertical bk-box--gap">
+                                    <bk-select ng-if="!setCustom" label-id="groupId" ng-model="dataParameters.perspectives[editElement.index].navId" dropdown-fixed="true" style="flex:1">
+                                        <bk-option text="{{ group.label }}" value="group.id" icon="{{group.icon}}" ng-repeat="group in dataParameters.navigations track by group.id"></bk-option>
+                                    </bk-select>
+                                    <bk-input ng-if="setCustom" id="groupId" type="text" ng-model="dataParameters.perspectives[editElement.index].navId" style="flex:1"></bk-input>
+                                    <bk-button label="{{ setCustom ? 'Cancel' : 'Custom' }}" ng-click="setCustom = !setCustom"></bk-button>
+                                    <bk-button label="Clear" ng-click="dataParameters.perspectives[editElement.index].navId = ''"></bk-button>
+                                </div>
+                            </bk-form-item>
+                            <bk-form-item>
                                 <bk-form-label for="navidi" required="true" colon="true">Icon</bk-form-label>
                                 <bk-select placeholder="Select an icon" label-id="navidi" ng-required="true" ng-model="dataParameters.perspectives[editElement.index].icon" dropdown-fixed="true">
-                                    <bk-option text="{{ ::icon.name }}" value="::icon.url" icon="{{::icon.url}}" ng-repeat="icon in icons track by $index"></bk-option>
+                                    <bk-option text="{{ ::icon.name }}" value="::icon.url" icon="{{::icon.url}}" ng-repeat="icon in icons track by icon.name"></bk-option>
                                 </bk-select>
                             </bk-form-item>
-                            <bk-form-item class="fd-margin-top--tiny">
+                            <bk-form-item>
                                 <bk-form-label for="navido" required="true" colon="true">Order number</bk-form-label>
-                                <bk-step-input input-id="navido" name="orderNumber" string-to-number ng-required="true" ng-model="dataParameters.perspectives[editElement.index].order" style="max-width: 320px"></bk-step-input>
+                                <bk-step-input input-id="navido" name="orderNumber" string-to-number ng-required="true" ng-model="dataParameters.perspectives[editElement.index].order" style="max-width:20rem"></bk-step-input>
                             </bk-form-item>
-                            <bk-form-item class="fd-margin-top--tiny">
+                            <bk-form-item>
                                 <bk-form-label for="navidr" colon="true">Role</bk-form-label>
                                 <bk-input id="navidr" type="text" ng-model="dataParameters.perspectives[editElement.index].role"></bk-input>
                             </bk-form-item>
                         </bk-form-group>
+
                         <bk-form-group ng-if="editElement.editType === 'Update' && selectedTab === 'n'">
                             <bk-form-item>
-                                <bk-form-label for="sidePath" required="true" colon="true">Path</bk-form-label>
-                                <bk-input id="sidePath" name="pId" type="text" ng-required="true" input-rules="inputRules" state="{{ forms.newForm['pId'].$valid ? '' : 'error' }}"
-                                    ng-model="dataParameters.navigations[editElement.index].path">
+                                <bk-form-label for="navidn" required="true" colon="true">Name</bk-form-label>
+                                <bk-input id="navidn" name="nId" type="text" ng-required="true" input-rules="inputRulesName" ng-trim="false" state="{{ forms.newForm['nId'].$valid ? '' : 'error' }}"
+                                    ng-model="dataParameters.navigations[editElement.index].id">
                                 </bk-input>
                             </bk-form-item>
-                            <bk-form-item class="fd-margin-top--tiny">
+                            <bk-form-item>
                                 <bk-form-label for="sideLabel" required="true" colon="true">Label</bk-form-label>
                                 <bk-input id="sideLabel" type="text" ng-required="true" ng-model="dataParameters.navigations[editElement.index].label"></bk-input>
                             </bk-form-item>
-                            <bk-form-item class="fd-margin-top--tiny">
+                            <bk-form-item>
+                                <bk-form-label for="header" required="true" colon="true">Header</bk-form-label>
+                                <bk-input id="header" type="text" ng-required="true" ng-model="dataParameters.navigations[editElement.index].header"></bk-input>
+                            </bk-form-item>
+                            <bk-form-item>
+                                <bk-checkbox id="expanded" name="exp" ng-model="dataParameters.navigations[editElement.index].expanded"></bk-checkbox>
+                                <bk-checkbox-label for="expanded">Expanded</bk-checkbox-label>
+                            </bk-form-item>
+                            <bk-form-item>
                                 <bk-form-label for="sideIcon" required="true" colon="true">Icon</bk-form-label>
                                 <bk-select placeholder="Select an icon" label-id="sideIcon" ng-required="true" ng-model="dataParameters.navigations[editElement.index].icon" dropdown-fixed="true">
-                                    <bk-option text="{{ ::icon.name }}" value="::icon.url" icon="{{::icon.url}}" ng-repeat="icon in icons track by $index"></bk-option>
+                                    <bk-option text="{{ ::icon.name }}" value="::icon.url" icon="{{::icon.url}}" ng-repeat="icon in icons track by icon.name"></bk-option>
                                 </bk-select>
                             </bk-form-item>
-                            <bk-form-item class="fd-margin-top--tiny">
-                                <bk-form-label for="sideUrl" required="true" colon="true">URL</bk-form-label>
-                                <bk-input id="sideUrl" type="text" ng-required="true" ng-model="dataParameters.navigations[editElement.index].url"></bk-input>
+                            <bk-form-item>
+                                <bk-form-label for="navido" required="true" colon="true">Order number</bk-form-label>
+                                <bk-step-input input-id="navido" name="orderNumber" ng-required="true" ng-model="dataParameters.navigations[editElement.index].order" style="max-width:20rem"></bk-step-input>
                             </bk-form-item>
-                            <bk-form-item class="fd-margin-top--tiny">
+                            <bk-form-item>
                                 <bk-form-label for="sideRole" colon="true">Role</bk-form-label>
                                 <bk-input id="sideRole" type="text" ng-model="dataParameters.navigations[editElement.index].role"></bk-input>
                             </bk-form-item>

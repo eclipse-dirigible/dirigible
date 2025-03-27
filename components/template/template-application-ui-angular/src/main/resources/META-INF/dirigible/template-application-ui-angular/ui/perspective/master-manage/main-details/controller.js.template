@@ -3,7 +3,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 	.config(["EntityServiceProvider", function (EntityServiceProvider) {
 		EntityServiceProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
 	}])
-	.controller('PageController', function ($scope, #if($hasDropdowns) ${dollar}http,#end Extensions, EntityService) {
+	.controller('PageController', function ($scope, ${dollar}http, Extensions, EntityService) {
 		const Dialogs = new DialogHub();
 		$scope.entity = {};
 		$scope.forms = {
@@ -105,19 +105,19 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 
 		${dollar}scope.${dollar}watch('entity.${property.widgetDependsOnProperty}', function (newValue, oldValue) {
 			if (newValue !== undefined && newValue !== null) {
-				EntityService.${dollar}http.get(${dollar}scope.service${property.widgetDependsOnProperty} + '/' + newValue).then(function (response) {
+				${dollar}http.get(${dollar}scope.service${property.widgetDependsOnProperty} + '/' + newValue).then((response) => {
 					let valueFrom = response.data.${property.widgetDependsOnValueFrom};
 #if($property.widgetType != "DROPDOWN")
 					$scope.entity.${property.name} = valueFrom;
 #end
 #if($property.widgetType == "DROPDOWN")
-					EntityService.${dollar}http.post("${property.widgetDropdownUrl}/search", {
+					${dollar}http.post("${property.widgetDropdownUrl}/search", {
 						$filter: {
 							equals: {
 								${property.widgetDependsOnFilterBy}: valueFrom
 							}
 						}
-					}).then(function (response) {
+					}).then((response) => {
 						${dollar}scope.options${property.name} = response.data.map(e => {
 							return {
 								value: e.${property.widgetDropDownKey},
@@ -131,8 +131,12 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 								$scope.entity.${property.name} = undefined;
 							}
 						}
+					}, (error) => {
+						console.error(error);
 					});
 #end
+				}, (error) => {
+					console.error(error);
 				});
 			}
 		});
@@ -141,15 +145,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		//-----------------Events-------------------//
 
 		$scope.create = () => {
-			EntityService.create($scope.entity).then(function (response) {
-				if (response.status != 201) {
-					Dialogs.showAlert({
-						title: "${name}",
-						message: `Unable to create ${name}: '${response.message}'`,
-						type: AlertTypes.Error
-					});
-					return;
-				}
+			EntityService.create($scope.entity).then((response) => {
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityCreated', data: response.data });
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.clearDetails' , data: response.data });
 				Dialogs.showAlert({
@@ -157,19 +153,19 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 					message: '${name} successfully created',
 					type: AlertTypes.Success
 				});
+			}, (error) => {
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: "${name}",
+					message: `Unable to create ${name}: '${message}'`,
+					type: AlertTypes.Error
+				});
+				console.error('EntityService:', error);
 			});
 		};
 
 		$scope.update = () => {
-			EntityService.update($scope.entity.${primaryKeysString}, $scope.entity).then(function (response) {
-				if (response.status != 200) {
-					Dialogs.showAlert({
-						title: "${name}",
-						message: `Unable to create ${name}: '${response.message}'`,
-						type: AlertTypes.Error
-					});
-					return;
-				}
+			EntityService.update($scope.entity.${primaryKeysString}, $scope.entity).then((response) => {
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityUpdated', data: response.data });
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.clearDetails', data: response.data });
 				Dialogs.showAlert({
@@ -177,6 +173,14 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 					message: '${name} successfully updated',
 					type: AlertTypes.Success
 				});
+			}, (error) => {
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: "${name}",
+					message: `Unable to create ${name}: '${message}'`,
+					type: AlertTypes.Error
+				});
+				console.error('EntityService:', error);
 			});
 		};
 
@@ -186,7 +190,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		
 		//-----------------Dialogs-------------------//
 		$scope.alert = (message) => {
-			Dialogs.showAlert({
+			if (message) Dialogs.showAlert({
 				title: 'Description',
 				message: message,
 				type: AlertTypes.Information,
@@ -220,7 +224,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 #if($hasDropdowns)
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-		$scope.refresh${property.name} = function () {
+		$scope.refresh${property.name} = () => {
 			$scope.options${property.name} = [];
 			${dollar}http.get("${property.widgetDropdownUrl}").then(function (response) {
 				${dollar}scope.options${property.name} = response.data.map(e => {
@@ -236,5 +240,4 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 #end
 
 		//----------------Dropdowns-----------------//	
-
 	});

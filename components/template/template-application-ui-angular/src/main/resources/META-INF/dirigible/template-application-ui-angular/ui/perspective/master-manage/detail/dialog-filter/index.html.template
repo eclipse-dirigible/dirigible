@@ -16,8 +16,8 @@
         <bk-scrollbar class="bk-full-height">
 			<bk-message-strip class="fd-margin--md" ng-show="errorMessage" glyph="sap-icon--message-error" state="error" on-dismiss="clearErrorMessage()">{{ errorMessage }}</bk-message-strip>
 
-            <bk-fieldset ng-form="forms.details">
-                <bk-form-group label="${name} Filter" name="entityForm" class="fd-container fd-form-layout-grid-container">
+            <bk-fieldset class="fd-padding-begin-end--sm" ng-form="forms.details">
+                <bk-form-group label="${name} Filter" name="entityForm" transclude-classes="fd-container fd-form-layout-grid-container">
 #foreach ($property in $properties)
 #if(!$property.dataAutoIncrement && $property.name != $masterEntityId)
 #if($property.widgetType == "DROPDOWN")

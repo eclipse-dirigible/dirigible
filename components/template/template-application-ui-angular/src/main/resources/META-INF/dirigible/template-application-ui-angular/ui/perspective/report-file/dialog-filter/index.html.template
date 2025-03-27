@@ -14,8 +14,8 @@
 
     <body class="bk-vbox">
         <bk-scrollbar class="bk-full-height">
-            <bk-fieldset ng-form="forms.details">
-                <bk-form-group label="${name} Filter" name="entityForm" class="fd-container fd-form-layout-grid-container">
+            <bk-fieldset class="fd-padding-begin-end--sm" ng-form="forms.details">
+                <bk-form-group label="${name} Filter" name="entityForm" transclude-classes="fd-container fd-form-layout-grid-container">
 #foreach ($parameter in $parameters)
 #if($parameter.typeTypescript == 'boolean')
                     <bk-form-item class="fd-row">

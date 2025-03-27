@@ -10,6 +10,7 @@ import * as masterDetailsManageTemplate from "template-application-ui-angular/te
 import * as reportTemplate from "template-application-ui-angular/template/ui/report";
 import * as reportChartTemplate from "template-application-ui-angular/template/ui/reportChart";
 import * as reportTableTemplate from "template-application-ui-angular/template/ui/reportTable";
+import * as navigation from "template-application-ui-angular/template/ui/navigation";
 // import * as perspective from "template-application-ui-angular/template/ui/perspective";
 // import * as tiles from "template-application-ui-angular/template/ui/tiles";
 // import * as menu from "template-application-ui-angular/template/ui/menu";
@@ -23,6 +24,7 @@ export function getSources(parameters) {
         ...reportTemplate.getSources(parameters),
         ...reportChartTemplate.getSources(parameters),
         ...reportTableTemplate.getSources(parameters),
+        ...navigation.getSources(parameters),
         //...perspective.getSources(parameters),
         //...tiles.getSources(parameters),
         //...menu.getSources(parameters)

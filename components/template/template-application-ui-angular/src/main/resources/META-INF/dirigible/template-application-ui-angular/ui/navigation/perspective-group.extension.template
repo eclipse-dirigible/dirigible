@@ -1,0 +1,5 @@
+{
+    "module": "{{projectName}}/gen/{{genFolderName}}/navigation/{{navId}}/perspective-group.js",
+    "extensionPoint": "application-perspectives",
+    "description": "{{projectName}} - Perspective Group - {{navLabel}}"
+}
