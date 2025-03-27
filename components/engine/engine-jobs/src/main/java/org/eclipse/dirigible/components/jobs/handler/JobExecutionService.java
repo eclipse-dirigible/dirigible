@@ -38,14 +38,14 @@ public class JobExecutionService {
 
     public void executeJob(JobExecutionContext context) throws JobExecutionException {
         DefaultTransactionDefinition def = new DefaultTransactionDefinition();
-        def.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
+        def.setPropagationBehavior(TransactionDefinition.PROPAGATION_MANDATORY);
 
         TransactionStatus status = transactionManager.getTransaction(def);
         try {
             executeJobInternal(context);
-        } catch (Exception e) {
-            // Ensure rollback in case of any unexpected exception
+        } catch (Exception ex) {
             transactionManager.rollback(status);
+            throw ex;
         }
     }
 

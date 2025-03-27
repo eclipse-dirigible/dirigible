@@ -1,0 +1,30 @@
+- route:
+    id: route-c928
+    description: Test Camel Transactions
+    nodePrefixId: route-f34
+    from:
+      id: from-411d
+      description: Trigger execution
+      uri: cron
+      parameters:
+        schedule: 0/5 * * * * ?
+        name: TestCamelTransactionsCron
+      steps:
+        - log:
+            id: log-32ec
+            description: Log starting
+            message: Test Camel Transactions is starting...
+            loggingLevel: INFO
+            logName: CamelTransactions
+        - to:
+            id: to-cbba
+            description: Call camel-handler-ts
+            uri: dirigible-java-script
+            parameters:
+              javaScriptPath: CamelTransactionsIT/camel-handler.ts
+        - log:
+            id: log-83e2
+            description: Log completed
+            message: Camel Transactions is completed!
+            loggingLevel: INFO
+            logName: CamelTransactions
