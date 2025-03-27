@@ -30,10 +30,10 @@ class DirigibleDataSourceFactory {
         this.connectionEnhancers = connectionEnhancers;
     }
 
-    public DirigibleDataSource create(HikariConfig config, DatabaseSystem databaseSystem) {
+    public DirigibleDataSource create(String name, HikariConfig config, DatabaseSystem databaseSystem) {
         HikariDataSource hikariDataSource = new HikariDataSource(config);
 
-        DirigibleDataSource dataSource = new DirigibleDataSourceImpl(connectionEnhancers, hikariDataSource, databaseSystem);
+        DirigibleDataSource dataSource = new DirigibleDataSourceImpl(name, connectionEnhancers, hikariDataSource, databaseSystem);
         Runtime.getRuntime()
                .addShutdownHook(new Thread(dataSource::close));
 

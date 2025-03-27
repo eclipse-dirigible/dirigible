@@ -16,6 +16,8 @@ public interface DirigibleDataSource extends DataSource, DatabaseSystemAware {
 
     void close();
 
+    String getName();
+
     @Override
     DirigibleConnection getConnection() throws SQLException;
 
