@@ -129,13 +129,10 @@ public class DataSourceInitializer implements DisposableBean {
         Properties hikariProperties = getHikariProperties(name);
         HikariConfig config = new HikariConfig(hikariProperties);
 
-        if (Objects.equals(systemDataSourceName, name)) {
-            logger.info("Setting auto commit to TRUE for [{}]", name);
-            config.setAutoCommit(true);
-        } else {
-            logger.info("Setting auto commit to FALSE for [{}]", name);
-            config.setAutoCommit(false); // to enable transactions
-        }
+        boolean autoCommit = Objects.equals(systemDataSourceName, name);
+        logger.info("Setting auto commit to [{}] for [{}]", autoCommit, name);
+        config.setAutoCommit(autoCommit);
+
         config.setDriverClassName(driver);
         config.setJdbcUrl(url);
         config.setUsername(username);
