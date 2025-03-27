@@ -10,6 +10,7 @@ import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -30,17 +31,15 @@ public class JobExecutionService {
     private final JobNameCreator jobNameCreator;
     private final PlatformTransactionManager transactionManager;
 
-    JobExecutionService(JobLogService jobLogService, JobNameCreator jobNameCreator, PlatformTransactionManager transactionManager) {
+    JobExecutionService(JobLogService jobLogService, JobNameCreator jobNameCreator,
+            @Qualifier("defaultDbTransactionManagerDataSource") PlatformTransactionManager transactionManager) {
         this.jobLogService = jobLogService;
         this.jobNameCreator = jobNameCreator;
         this.transactionManager = transactionManager;
     }
 
     public void executeJob(JobExecutionContext context) throws JobExecutionException {
-        DefaultTransactionDefinition def = new DefaultTransactionDefinition();
-        def.setPropagationBehavior(TransactionDefinition.PROPAGATION_MANDATORY);
-
-        TransactionStatus status = transactionManager.getTransaction(def);
+        LOGGER.info("!!! transactionManager: {} {}", transactionManager, transactionManager.getClass());
 
         String tenantJobName = context.getJobDetail()
                                       .getKey()
@@ -59,7 +58,6 @@ public class JobExecutionService {
             registeredFinished(name, handler, triggered);
         } catch (Exception ex) {
             registeredFailed(name, handler, triggered, ex);
-            transactionManager.rollback(status);
 
             String msg = "Failed to execute JS. Job name [" + name + "], handler [" + handler + "]";
             LOGGER.error(msg, ex);
@@ -70,17 +68,28 @@ public class JobExecutionService {
 
     private void executeJob(JobExecutionContext context, String name, String handler, JobLog triggered, JobDataMap params)
             throws JobExecutionException {
-        Span.current()
-            .setAttribute("handler", handler);
+        DefaultTransactionDefinition transactionDefinition = new DefaultTransactionDefinition();
+        transactionDefinition.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
 
-        if (triggered != null) {
-            context.put("handler", handler);
-            Path handlerPath = Path.of(handler);
+        TransactionStatus status = transactionManager.getTransaction(transactionDefinition);
+        try {
 
-            try (DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner()) {
-                runner.run(handlerPath);
+            Span.current()
+                .setAttribute("handler", handler);
+
+            if (triggered != null) {
+                context.put("handler", handler);
+                Path handlerPath = Path.of(handler);
+
+                try (DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner()) {
+                    runner.run(handlerPath);
+                }
             }
+        } catch (RuntimeException ex) {
+            transactionManager.rollback(status);
+            throw ex;
         }
+        transactionManager.commit(status);
     }
 
     /**
@@ -127,8 +136,7 @@ public class JobExecutionService {
     private void registeredFailed(String name, String module, JobLog triggered, Exception ex) {
         try {
             jobLogService.jobFailed(name, module, triggered.getId(), new Date(triggered.getTriggeredAt()
-                                                                                       .getTime()),
-                    ex.getMessage());
+                                                                                       .getTime()), ex.getMessage());
         } catch (Exception se) {
             LOGGER.error(se.getMessage(), se);
         }
