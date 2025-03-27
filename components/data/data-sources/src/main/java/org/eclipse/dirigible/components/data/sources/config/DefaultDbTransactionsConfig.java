@@ -9,7 +9,7 @@
  */
 package org.eclipse.dirigible.components.data.sources.config;
 
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -21,15 +21,14 @@ import javax.sql.DataSource;
  * The Class DataSourceConfig.
  */
 @Configuration
-class TransactionsConfig {
+class DefaultDbTransactionsConfig {
 
-    @Bean
-    PlatformTransactionManager providePlatformTransactionManager(@Qualifier("SystemDB") DataSource dataSource) {
-        return provideDataSourceTransactionManager(dataSource);
+    @Bean(name = "defaultDbTransactionManagerDataSource")
+    PlatformTransactionManager defaultDbTransactionManagerDataSource(DataSourcesManager dataSourcesManager) {
+        DataSource defaultDbDataSource = dataSourcesManager.getDefaultDataSource();
+        PlatformTransactionManager defaultDbTransactionManager = new DataSourceTransactionManager(defaultDbDataSource);
+
+        return new DataSourceTransactionManager(defaultDbDataSource);
     }
 
-    @Bean
-    DataSourceTransactionManager provideDataSourceTransactionManager(@Qualifier("SystemDB") DataSource dataSource) {
-        return new DataSourceTransactionManager(dataSource);
-    }
 }
