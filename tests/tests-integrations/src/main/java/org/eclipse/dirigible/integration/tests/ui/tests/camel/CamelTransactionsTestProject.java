@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests.camel;
 
+import ch.qos.logback.classic.Level;
 import org.assertj.db.api.Assertions;
 import org.assertj.db.type.AssertDbConnection;
 import org.assertj.db.type.AssertDbConnectionFactory;
@@ -16,6 +17,7 @@ import org.assertj.db.type.Table;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.tests.EdmView;
 import org.eclipse.dirigible.tests.IDE;
+import org.eclipse.dirigible.tests.logging.LogsAsserter;
 import org.eclipse.dirigible.tests.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
 import org.eclipse.dirigible.tests.util.SleepUtil;
@@ -29,10 +31,12 @@ import javax.sql.DataSource;
 class CamelTransactionsTestProject extends BaseTestProject {
 
     private final DataSourcesManager dataSourcesManager;
+    private final LogsAsserter logsAsserter;
 
     protected CamelTransactionsTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, DataSourcesManager dataSourcesManager) {
         super("CamelTransactionsIT", ide, projectUtil, edmView);
         this.dataSourcesManager = dataSourcesManager;
+        this.logsAsserter = new LogsAsserter("app.out", Level.INFO);
     }
 
     public void configure() {
@@ -43,13 +47,15 @@ class CamelTransactionsTestProject extends BaseTestProject {
 
     @Override
     public void verify() throws Exception {
-        DataSource dataSource = dataSourcesManager.getDefaultDataSource();
-
         SleepUtil.sleepSeconds(7); // ensure the job is executed = since it runs every 5 seconds
-        assertDaoSaveIsRollbacked(dataSource);
+
+        logsAsserter.containsMessage("camel-handler.ts: an entity is saved", Level.INFO);
+
+        assertDaoSaveIsRollbacked();
     }
 
-    private static void assertDaoSaveIsRollbacked(DataSource dataSource) {
+    private void assertDaoSaveIsRollbacked() {
+        DataSource dataSource = dataSourcesManager.getDefaultDataSource();
 
         AssertDbConnection connection = AssertDbConnectionFactory.of(dataSource)
                                                                  .create();

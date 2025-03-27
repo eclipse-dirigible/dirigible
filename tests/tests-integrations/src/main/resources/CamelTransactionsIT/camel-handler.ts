@@ -8,6 +8,8 @@ export function onMessage(message: any) {
     }
     repo.create(entity);
 
+    console.log("camel-handler.ts: an entity is saved");
+
     throw new Error("Intentionally throw error to check the Camel transactions logic");
 }
 
