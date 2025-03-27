@@ -9,14 +9,27 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
+import org.assertj.db.api.Assertions;
+import org.assertj.db.type.AssertDbConnection;
+import org.assertj.db.type.AssertDbConnectionFactory;
+import org.assertj.db.type.Table;
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.components.tenants.domain.User;
 import org.eclipse.dirigible.components.tenants.service.UserService;
+import org.eclipse.dirigible.database.sql.DataType;
+import org.eclipse.dirigible.database.sql.ISqlDialect;
+import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.eclipse.dirigible.tests.DirigibleTestTenant;
 import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.util.Optional;
 
 import static io.restassured.RestAssured.given;
@@ -28,9 +41,12 @@ public class RestTransactionsIT extends UserInterfaceIntegrationTest {
     @Autowired
     private UserService userService;
 
+    @Autowired
+    private DataSourcesManager dataSourcesManager;
+
     @Test
-    void testTranactionalAnnotationWorksForRESTs() {
-        given().get(RestTransactionsITConfig.TestRest.TEST_PATH)
+    void testTransactionalAnnotationWorksForSystemDB() {
+        given().get(RestTransactionsITConfig.TestRest.SYSTEM_DB_TEST_PATH)
                .then()
                .statusCode(500);
 
@@ -38,6 +54,38 @@ public class RestTransactionsIT extends UserInterfaceIntegrationTest {
                 DirigibleTestTenant.createDefaultTenant()
                                    .getId());
         assertThat(createdUser).isEmpty();
+    }
+
+    @Test
+    void testTransactionalAnnotationWorksForDefaultDB() throws SQLException {
+        createTestTable(dataSourcesManager.getDefaultDataSource());
+
+        given().get(RestTransactionsITConfig.TestRest.DEFAULT_DB_TEST_PATH)
+               .then()
+               .statusCode(500);
+
+        DataSource dataSource = dataSourcesManager.getDefaultDataSource();
+
+        AssertDbConnection connection = AssertDbConnectionFactory.of(dataSource)
+                                                                 .create();
+
+        Table ordersTable = connection.table(RestTransactionsITConfig.TestRest.TEST_TABLE)
+                                      .build();
+
+        Assertions.assertThat(ordersTable)
+                  .hasNumberOfRows(0);
+    }
+
+    private static void createTestTable(DirigibleDataSource dataSource) throws SQLException {
+        ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
+
+        String sql = dialect.create()
+                            .table(RestTransactionsITConfig.TestRest.TEST_TABLE)
+                            .column(RestTransactionsITConfig.TestRest.ID_COLUMN, DataType.INTEGER, true)
+                            .build();
+        try (Connection connection = dataSource.getConnection(); PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
+            preparedStatement.executeUpdate();
+        }
     }
 
 }

@@ -1,7 +1,7 @@
 package org.eclipse.dirigible.components.jobs.handler;
 
 import io.opentelemetry.api.trace.Span;
-import org.eclipse.dirigible.components.data.sources.config.TransactionManagerProvider;
+import org.eclipse.dirigible.components.data.sources.config.TransactionManagerConfig;
 import org.eclipse.dirigible.components.jobs.domain.JobLog;
 import org.eclipse.dirigible.components.jobs.service.JobLogService;
 import org.eclipse.dirigible.components.jobs.tenant.JobNameCreator;
@@ -12,10 +12,7 @@ import org.quartz.JobExecutionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.TransactionStatus;
-import org.springframework.transaction.support.DefaultTransactionDefinition;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.Path;
 import java.util.Date;
@@ -29,14 +26,13 @@ public class JobExecutionService {
 
     private final JobLogService jobLogService;
     private final JobNameCreator jobNameCreator;
-    private final TransactionManagerProvider transactionManagerProvider;
 
-    JobExecutionService(JobLogService jobLogService, JobNameCreator jobNameCreator, TransactionManagerProvider transactionManagerProvider) {
+    JobExecutionService(JobLogService jobLogService, JobNameCreator jobNameCreator) {
         this.jobLogService = jobLogService;
         this.jobNameCreator = jobNameCreator;
-        this.transactionManagerProvider = transactionManagerProvider;
     }
 
+    @Transactional(transactionManager = TransactionManagerConfig.DEFAULT_DB_TRANSACTION_MANAGER)
     public void executeJob(JobExecutionContext context) throws JobExecutionException {
         String tenantJobName = context.getJobDetail()
                                       .getKey()
@@ -51,26 +47,6 @@ public class JobExecutionService {
 
         JobLog triggered = registerTriggered(name, handler);
         try {
-            executeJob(context, name, handler, triggered, params);
-            registeredFinished(name, handler, triggered);
-        } catch (Exception ex) {
-            registeredFailed(name, handler, triggered, ex);
-
-            String msg = "Failed to execute JS. Job name [" + name + "], handler [" + handler + "]";
-            LOGGER.error(msg, ex);
-            throw new JobExecutionException(msg, ex);
-        }
-    }
-
-    private void executeJob(JobExecutionContext context, String name, String handler, JobLog triggered, JobDataMap params) {
-        PlatformTransactionManager transactionManager = transactionManagerProvider.getDefaultDbTransactionManager();
-
-        DefaultTransactionDefinition transactionDefinition = new DefaultTransactionDefinition();
-        transactionDefinition.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
-
-        TransactionStatus status = transactionManager.getTransaction(transactionDefinition);
-        try {
-
             Span.current()
                 .setAttribute("handler", handler);
 
@@ -82,11 +58,14 @@ public class JobExecutionService {
                     runner.run(handlerPath);
                 }
             }
-        } catch (RuntimeException ex) {
-            transactionManager.rollback(status);
-            throw ex;
+
+            registeredFinished(name, handler, triggered);
+        } catch (Exception ex) {
+            registeredFailed(name, handler, triggered, ex);
+
+            String msg = "Failed to execute JS. Job name [" + name + "], handler [" + handler + "]";
+            throw new JobExecutionException(msg, ex);
         }
-        transactionManager.commit(status);
     }
 
     /**
@@ -101,7 +80,7 @@ public class JobExecutionService {
         try {
             triggered = jobLogService.jobTriggered(name, module);
         } catch (Exception e) {
-            LOGGER.error(e.getMessage(), e);
+            LOGGER.error("Failed to register job [{}] as TRIGGERED.", name, e);
         }
         return triggered;
     }
@@ -118,7 +97,7 @@ public class JobExecutionService {
             jobLogService.jobFinished(name, module, triggered.getId(), new Date(triggered.getTriggeredAt()
                                                                                          .getTime()));
         } catch (Exception e) {
-            LOGGER.error(e.getMessage(), e);
+            LOGGER.error("Failed to register job [{}] as FINISHED.", name, e);
         }
     }
 
@@ -133,9 +112,10 @@ public class JobExecutionService {
     private void registeredFailed(String name, String module, JobLog triggered, Exception ex) {
         try {
             jobLogService.jobFailed(name, module, triggered.getId(), new Date(triggered.getTriggeredAt()
-                                                                                       .getTime()), ex.getMessage());
+                                                                                       .getTime()),
+                    ex.getMessage());
         } catch (Exception se) {
-            LOGGER.error(se.getMessage(), se);
+            LOGGER.error("Failed to register job [{}] as FAILED. The job failed with [{}]", name, ex, se);
         }
     }
 }

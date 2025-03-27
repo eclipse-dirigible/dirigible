@@ -20,7 +20,6 @@ import org.eclipse.dirigible.tests.IDE;
 import org.eclipse.dirigible.tests.logging.LogsAsserter;
 import org.eclipse.dirigible.tests.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
-import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -49,8 +48,6 @@ class QuartzTransactionsTestProject extends BaseTestProject {
 
     @Override
     public void verify() throws Exception {
-        SleepUtil.sleepSeconds(7); // ensure the job is executed = since it runs every 5 seconds
-
         assertThat(logsAsserter.containsMessage("test-job-handler.ts: an entity is saved", Level.INFO)).isTrue();
 
         assertDaoSaveIsRollbacked();
