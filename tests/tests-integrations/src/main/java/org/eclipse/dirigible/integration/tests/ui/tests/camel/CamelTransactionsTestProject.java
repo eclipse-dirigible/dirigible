@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.ui.tests;
+package org.eclipse.dirigible.integration.tests.ui.tests.camel;
 
 import org.assertj.db.api.Assertions;
 import org.assertj.db.type.AssertDbConnection;
@@ -26,12 +26,12 @@ import javax.sql.DataSource;
 
 @Lazy
 @Component
-class QuartzTransactionsTestProject extends BaseTestProject {
+class CamelTransactionsTestProject extends BaseTestProject {
 
     private final DataSourcesManager dataSourcesManager;
 
-    protected QuartzTransactionsTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, DataSourcesManager dataSourcesManager) {
-        super("QuartzTransactionsIT", ide, projectUtil, edmView);
+    protected CamelTransactionsTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, DataSourcesManager dataSourcesManager) {
+        super("CamelTransactionsIT", ide, projectUtil, edmView);
         this.dataSourcesManager = dataSourcesManager;
     }
 

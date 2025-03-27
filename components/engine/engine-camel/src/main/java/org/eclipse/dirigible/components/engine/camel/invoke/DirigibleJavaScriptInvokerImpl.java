@@ -18,6 +18,10 @@ import org.eclipse.dirigible.graalium.core.DirigibleJavascriptCodeRunner;
 import org.graalvm.polyglot.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 import java.nio.file.Path;
 
@@ -25,15 +29,30 @@ import java.nio.file.Path;
 class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
 
     private final ClassLoader currentClassLoader;
+    private final PlatformTransactionManager transactionManager;
 
     @Autowired
-    public DirigibleJavaScriptInvokerImpl() {
+    public DirigibleJavaScriptInvokerImpl(PlatformTransactionManager transactionManager) {
+        this.transactionManager = transactionManager;
         this.currentClassLoader = Thread.currentThread()
                                         .getContextClassLoader();
     }
 
     @Override
     public void invoke(Message camelMessage, String javaScriptPath) {
+        DefaultTransactionDefinition def = new DefaultTransactionDefinition();
+        def.setPropagationBehavior(TransactionDefinition.PROPAGATION_MANDATORY);
+
+        TransactionStatus status = transactionManager.getTransaction(def);
+        try {
+            invokeInternal(camelMessage, javaScriptPath);
+        } catch (Exception ex) {
+            transactionManager.rollback(status);
+            throw ex;
+        }
+    }
+
+    private void invokeInternal(Message camelMessage, String javaScriptPath) {
         Thread.currentThread()
               .setContextClassLoader(currentClassLoader);
         DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner();
