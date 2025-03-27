@@ -11,14 +11,12 @@ package org.eclipse.dirigible.components.base.artefact;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 /**
  * The Interface ArtefactService.
  */
-@Transactional
 public interface ArtefactService<A extends Artefact, ID> {
 
     /**
