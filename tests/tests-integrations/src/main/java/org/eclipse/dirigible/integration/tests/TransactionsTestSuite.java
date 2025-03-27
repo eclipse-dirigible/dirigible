@@ -11,6 +11,8 @@ package org.eclipse.dirigible.integration.tests;
 
 import org.eclipse.dirigible.integration.tests.ui.tests.GitPerspectiveIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.QuartzTransactionsIT;
+import org.eclipse.dirigible.integration.tests.ui.tests.RestTransactionsIT;
+import org.eclipse.dirigible.integration.tests.ui.tests.camel.CamelTransactionsIT;
 import org.junit.platform.suite.api.SelectClasses;
 import org.junit.platform.suite.api.Suite;
 import org.junit.platform.suite.api.SuiteDisplayName;
@@ -20,8 +22,8 @@ import org.junit.platform.suite.api.SuiteDisplayName;
 @SelectClasses({//
         QuartzTransactionsIT.class, //
         GitPerspectiveIT.class, //
-// CamelTransactionsIT.class, //
-// RestTransactionsIT.class, //
+        CamelTransactionsIT.class, //
+        RestTransactionsIT.class, //
 })
 public class TransactionsTestSuite {
     // use this suite class to run tests in specific order if needed
