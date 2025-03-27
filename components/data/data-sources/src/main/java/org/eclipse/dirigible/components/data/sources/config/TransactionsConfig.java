@@ -24,7 +24,12 @@ import javax.sql.DataSource;
 class TransactionsConfig {
 
     @Bean
-    PlatformTransactionManager provideTransactionManager(@Qualifier("SystemDB") DataSource dataSource) {
+    PlatformTransactionManager providePlatformTransactionManager(@Qualifier("SystemDB") DataSource dataSource) {
+        return provideDataSourceTransactionManager(dataSource);
+    }
+
+    @Bean
+    DataSourceTransactionManager provideDataSourceTransactionManager(@Qualifier("SystemDB") DataSource dataSource) {
         return new DataSourceTransactionManager(dataSource);
     }
 }
