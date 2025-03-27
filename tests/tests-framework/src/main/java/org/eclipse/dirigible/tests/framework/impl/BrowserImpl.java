@@ -69,16 +69,6 @@ class BrowserImpl implements Browser {
         this.port = port;
     }
 
-    enum ProtocolType {
-        HTTP("http"), HTTPS("https");
-
-        private final String protocol;
-
-        ProtocolType(String protocol) {
-            this.protocol = protocol;
-        }
-    }
-
     private static void configureSelenide() {
         Configuration.headless = IntegrationTest.isHeadlessExecution();
         Configuration.browser = "chrome";
@@ -617,5 +607,15 @@ class BrowserImpl implements Browser {
     @Override
     public String getPageTitle() {
         return Selenide.title();
+    }
+
+    enum ProtocolType {
+        HTTP("http"), HTTPS("https");
+
+        private final String protocol;
+
+        ProtocolType(String protocol) {
+            this.protocol = protocol;
+        }
     }
 }
