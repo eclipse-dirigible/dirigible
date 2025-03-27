@@ -102,6 +102,7 @@ class DirigibleCleaner {
         try (Connection connection = dataSource.getConnection();
                 PreparedStatement preparedStatement = connection.prepareStatement(sql);
                 ResultSet resultSet = preparedStatement.executeQuery()) {
+            connection.setAutoCommit(true);
             while (resultSet.next()) {
                 schemas.add(resultSet.getString(1));
             }
@@ -112,6 +113,7 @@ class DirigibleCleaner {
     private void deleteSchema(String schema, DirigibleDataSource dataSource) {
         LOGGER.info("Will drop schema [{}] from data source [{}]", schema, dataSource);
         try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(true);
             ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
             String sql = dialect.drop()
                                 .schema(schema)
@@ -128,6 +130,7 @@ class DirigibleCleaner {
     private void createSchema(DirigibleDataSource dataSource, String schemaName) {
         LOGGER.info("Will create schema [{}] in [{}]", schemaName, dataSource);
         try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(true);
             ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
             String sql = dialect.create()
                                 .schema(schemaName)

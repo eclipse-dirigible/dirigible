@@ -73,6 +73,12 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
         return new DirigibleConnectionImpl(connection, databaseSystem);
     }
 
+    private void enhanceConnection(Connection connection) throws SQLException {
+        for (ConnectionEnhancer enhancer : connectionEnhancers) {
+            enhancer.apply(connection);
+        }
+    }
+
     /**
      * Gets the connection.
      *
@@ -89,12 +95,6 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
         LeakedConnectionsDoctor.registerConnection(connection);
 
         return new DirigibleConnectionImpl(connection, databaseSystem);
-    }
-
-    private void enhanceConnection(Connection connection) throws SQLException {
-        for (ConnectionEnhancer enhancer : connectionEnhancers) {
-            enhancer.apply(connection);
-        }
     }
 
     /**
@@ -190,5 +190,11 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
     @Override
     public void close() {
         originalDataSource.close();
+    }
+
+    @Override
+    public String toString() {
+        return "DirigibleDataSourceImpl{" + "connectionEnhancers=" + connectionEnhancers + ", originalDataSource=" + originalDataSource
+                + ", databaseSystem=" + databaseSystem + '}';
     }
 }
