@@ -44,17 +44,13 @@ class DirigibleCleaner {
     }
 
     public void cleanup() {
-        try {
-            DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
-            deleteSchemas(defaultDataSource);
+        DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
+        deleteSchemas(defaultDataSource);
 
-            String schema = defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL) ? "public" : "PUBLIC";
-            createSchema(defaultDataSource, schema);
+        String schema = defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL) ? "public" : "PUBLIC";
+        createSchema(defaultDataSource, schema);
 
-            clearEntityManagerCaches();
-        } finally {
-            deleteDirigibleFolder();
-        }
+        clearEntityManagerCaches();
     }
 
     private void clearEntityManagerCaches() {
@@ -63,17 +59,6 @@ class DirigibleCleaner {
                                 .evictAll();
         } catch (Exception ex) {
             LOGGER.warn("Failed to clear entity manager caches", ex);
-        }
-    }
-
-    public static void deleteDirigibleFolder() {
-        String dirigibleFolder = DirigibleConfig.REPOSITORY_LOCAL_ROOT_FOLDER.getStringValue() + File.separator + "dirigible";
-        String skippedDirPath = dirigibleFolder + File.separator + "repository" + File.separator + "index";
-        LOGGER.info("Deleting dirigible folder [{}] by skipping [{}]", dirigibleFolder, skippedDirPath);
-        try {
-            FileUtil.deleteFolder(dirigibleFolder, skippedDirPath);
-        } catch (RuntimeException ex) {
-            LOGGER.warn("Failed to delete dirigible folder [{}] by skipping [{}]", dirigibleFolder, skippedDirPath, ex);
         }
     }
 
@@ -147,6 +132,17 @@ class DirigibleCleaner {
             }
         } catch (Exception ex) {
             LOGGER.warn("Failed to create schema [{}] in dataSource [{}] ", schemaName, dataSource, ex);
+        }
+    }
+
+    public static void deleteDirigibleFolder() {
+        String dirigibleFolder = DirigibleConfig.REPOSITORY_LOCAL_ROOT_FOLDER.getStringValue() + File.separator + "dirigible";
+        String skippedDirPath = dirigibleFolder + File.separator + "repository" + File.separator + "index";
+        LOGGER.info("Deleting dirigible folder [{}] by skipping [{}]", dirigibleFolder, skippedDirPath);
+        try {
+            FileUtil.deleteFolder(dirigibleFolder, skippedDirPath);
+        } catch (RuntimeException ex) {
+            LOGGER.warn("Failed to delete dirigible folder [{}] by skipping [{}]", dirigibleFolder, skippedDirPath, ex);
         }
     }
 }

@@ -13,11 +13,11 @@ package org.eclipse.dirigible.components.engine.camel.invoke;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.spi.Synchronization;
+import org.eclipse.dirigible.components.data.sources.config.TransactionManagerProvider;
 import org.eclipse.dirigible.components.engine.camel.components.DirigibleJavaScriptInvoker;
 import org.eclipse.dirigible.graalium.core.DirigibleJavascriptCodeRunner;
 import org.graalvm.polyglot.Value;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -32,12 +32,11 @@ import java.nio.file.Path;
 class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
 
     private final ClassLoader currentClassLoader;
-    private final PlatformTransactionManager transactionManager;
+    private final TransactionManagerProvider transactionManagerProvider;
 
     @Autowired
-    public DirigibleJavaScriptInvokerImpl(
-            @Qualifier("defaultDbTransactionManagerDataSource") PlatformTransactionManager transactionManager) {
-        this.transactionManager = transactionManager;
+    public DirigibleJavaScriptInvokerImpl(TransactionManagerProvider transactionManagerProvider) {
+        this.transactionManagerProvider = transactionManagerProvider;
         this.currentClassLoader = Thread.currentThread()
                                         .getContextClassLoader();
     }
@@ -46,8 +45,9 @@ class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
     @Override
     public void invoke(Message camelMessage, String javaScriptPath) {
         DefaultTransactionDefinition transactionDefinition = new DefaultTransactionDefinition();
-        transactionDefinition.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
+        transactionDefinition.setPropagationBehavior(TransactionDefinition.PROPAGATION_NESTED);
 
+        PlatformTransactionManager transactionManager = transactionManagerProvider.getDefaultDbTransactionManager();
         TransactionStatus status = transactionManager.getTransaction(transactionDefinition);
         try {
             invokeInternal(camelMessage, javaScriptPath);

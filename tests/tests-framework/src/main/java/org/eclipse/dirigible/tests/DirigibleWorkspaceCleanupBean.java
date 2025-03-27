@@ -15,22 +15,22 @@ import org.springframework.beans.factory.DisposableBean;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
-@Order(Integer.MIN_VALUE) // This bean will be destroyed first
+@Order(Integer.MAX_VALUE) // This bean will be destroyed last
 @Component
-class DirigibleCleanupBean implements DisposableBean {
+class DirigibleWorkspaceCleanupBean implements DisposableBean {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleCleanupBean.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleWorkspaceCleanupBean.class);
 
     private final DirigibleCleaner dirigibleCleaner;
 
-    DirigibleCleanupBean(DirigibleCleaner dirigibleCleaner) {
+    DirigibleWorkspaceCleanupBean(DirigibleCleaner dirigibleCleaner) {
         this.dirigibleCleaner = dirigibleCleaner;
     }
 
     @Override
     public void destroy() {
-        LOGGER.info("Destroying [{}]. Calling cleaner...", this.getClass());
-        dirigibleCleaner.cleanup();
+        LOGGER.info("Destroying [{}]...", this.getClass());
+        DirigibleCleaner.deleteDirigibleFolder();
     }
 }
 

@@ -1,6 +1,7 @@
 package org.eclipse.dirigible.components.jobs.handler;
 
 import io.opentelemetry.api.trace.Span;
+import org.eclipse.dirigible.components.data.sources.config.TransactionManagerProvider;
 import org.eclipse.dirigible.components.jobs.domain.JobLog;
 import org.eclipse.dirigible.components.jobs.service.JobLogService;
 import org.eclipse.dirigible.components.jobs.tenant.JobNameCreator;
@@ -10,7 +11,6 @@ import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -29,18 +29,15 @@ public class JobExecutionService {
 
     private final JobLogService jobLogService;
     private final JobNameCreator jobNameCreator;
-    private final PlatformTransactionManager transactionManager;
+    private final TransactionManagerProvider transactionManagerProvider;
 
-    JobExecutionService(JobLogService jobLogService, JobNameCreator jobNameCreator,
-            @Qualifier("defaultDbTransactionManagerDataSource") PlatformTransactionManager transactionManager) {
+    JobExecutionService(JobLogService jobLogService, JobNameCreator jobNameCreator, TransactionManagerProvider transactionManagerProvider) {
         this.jobLogService = jobLogService;
         this.jobNameCreator = jobNameCreator;
-        this.transactionManager = transactionManager;
+        this.transactionManagerProvider = transactionManagerProvider;
     }
 
     public void executeJob(JobExecutionContext context) throws JobExecutionException {
-        LOGGER.info("!!! transactionManager: {} {}", transactionManager, transactionManager.getClass());
-
         String tenantJobName = context.getJobDetail()
                                       .getKey()
                                       .getName();
@@ -61,13 +58,13 @@ public class JobExecutionService {
 
             String msg = "Failed to execute JS. Job name [" + name + "], handler [" + handler + "]";
             LOGGER.error(msg, ex);
-            JobExecutionException jobExecutionException = new JobExecutionException(msg, ex);
-            throw jobExecutionException;
+            throw new JobExecutionException(msg, ex);
         }
     }
 
-    private void executeJob(JobExecutionContext context, String name, String handler, JobLog triggered, JobDataMap params)
-            throws JobExecutionException {
+    private void executeJob(JobExecutionContext context, String name, String handler, JobLog triggered, JobDataMap params) {
+        PlatformTransactionManager transactionManager = transactionManagerProvider.getDefaultDbTransactionManager();
+
         DefaultTransactionDefinition transactionDefinition = new DefaultTransactionDefinition();
         transactionDefinition.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
 
@@ -136,8 +133,7 @@ public class JobExecutionService {
     private void registeredFailed(String name, String module, JobLog triggered, Exception ex) {
         try {
             jobLogService.jobFailed(name, module, triggered.getId(), new Date(triggered.getTriggeredAt()
-                                                                                       .getTime()),
-                    ex.getMessage());
+                                                                                       .getTime()), ex.getMessage());
         } catch (Exception se) {
             LOGGER.error(se.getMessage(), se);
         }
