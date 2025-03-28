@@ -44,38 +44,41 @@ class DirigibleCleaner {
     }
 
     public void cleanup() {
-        entityManagerFactory.getCache()
-                            .evictAll();
+        try {
+            DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
+            if (defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
+                deleteSchemas(defaultDataSource);
+                String schema = defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL) ? "public" : "PUBLIC";
+                createSchema(defaultDataSource, schema);
+            }
 
-        DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
-
-        if (defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
-            deleteSchemas(defaultDataSource);
-
-            createSchema(defaultDataSource, "public");
+            clearEntityManagerCaches();
+        } finally {
+            deleteDirigibleFolder();
         }
-        deleteDirigibleFolder();
     }
 
-    public static void deleteDirigibleFolder() {
-        String dirigibleFolder = DirigibleConfig.REPOSITORY_LOCAL_ROOT_FOLDER.getStringValue() + File.separator + "dirigible";
-        String skippedDirPath = dirigibleFolder + File.separator + "repository" + File.separator + "index";
-        LOGGER.info("Deleting dirigible folder [{}] by skipping [{}]", dirigibleFolder, skippedDirPath);
+    private void clearEntityManagerCaches() {
         try {
-            FileUtil.deleteFolder(dirigibleFolder, skippedDirPath);
-        } catch (RuntimeException ex) {
-            LOGGER.warn("Failed to delete dirigible folder [{}] by skipping [{}]", dirigibleFolder, skippedDirPath, ex);
+            entityManagerFactory.getCache()
+                                .evictAll();
+        } catch (Exception ex) {
+            LOGGER.warn("Failed to clear entity manager caches", ex);
         }
     }
 
     private void deleteSchemas(DirigibleDataSource dataSource) {
-        Set<String> schemas = getSchemas(dataSource);
-        schemas.remove("INFORMATION_SCHEMA");
-        schemas.remove("information_schema");
-        schemas.removeIf(s -> s.startsWith("pg_"));
+        try {
+            Set<String> schemas = getSchemas(dataSource);
+            schemas.remove("INFORMATION_SCHEMA");
+            schemas.remove("information_schema");
+            schemas.removeIf(s -> s.startsWith("pg_"));
 
-        LOGGER.debug("Will drop schemas [{}] from data source [{}]", schemas, dataSource);
-        schemas.forEach(schema -> deleteSchema(schema, dataSource));
+            LOGGER.debug("Will drop schemas [{}] from data source [{}]", schemas, dataSource);
+            schemas.forEach(schema -> deleteSchema(schema, dataSource));
+        } catch (RuntimeException ex) {
+            LOGGER.warn("Failed to delete schemas from [{}]", dataSource, ex);
+        }
     }
 
     private Set<String> getSchemas(DirigibleDataSource dataSource) {
@@ -99,6 +102,7 @@ class DirigibleCleaner {
         try (Connection connection = dataSource.getConnection();
                 PreparedStatement preparedStatement = connection.prepareStatement(sql);
                 ResultSet resultSet = preparedStatement.executeQuery()) {
+            connection.setAutoCommit(true);
             while (resultSet.next()) {
                 schemas.add(resultSet.getString(1));
             }
@@ -109,6 +113,7 @@ class DirigibleCleaner {
     private void deleteSchema(String schema, DirigibleDataSource dataSource) {
         LOGGER.info("Will drop schema [{}] from data source [{}]", schema, dataSource);
         try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(true);
             ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
             String sql = dialect.drop()
                                 .schema(schema)
@@ -117,14 +122,15 @@ class DirigibleCleaner {
             try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
                 preparedStatement.executeUpdate();
             }
-        } catch (SQLException ex) {
-            throw new IllegalStateException("Failed to drop schema [" + schema + "] from dataSource [" + dataSource + "] ", ex);
+        } catch (Exception ex) {
+            LOGGER.warn("Failed to drop schema [{}] from dataSource [{}] ", schema, dataSource, ex);
         }
     }
 
     private void createSchema(DirigibleDataSource dataSource, String schemaName) {
-        LOGGER.debug("Will create schema [{}] in [{}]", schemaName, dataSource);
+        LOGGER.info("Will create schema [{}] in [{}]", schemaName, dataSource);
         try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(true);
             ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
             String sql = dialect.create()
                                 .schema(schemaName)
@@ -132,8 +138,19 @@ class DirigibleCleaner {
             try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
                 preparedStatement.executeUpdate();
             }
-        } catch (SQLException ex) {
-            throw new IllegalStateException("Failed to create schema [" + schemaName + "] in dataSource [" + dataSource + "] ", ex);
+        } catch (Exception ex) {
+            LOGGER.warn("Failed to create schema [{}] in dataSource [{}] ", schemaName, dataSource, ex);
+        }
+    }
+
+    public static void deleteDirigibleFolder() {
+        String dirigibleFolder = DirigibleConfig.REPOSITORY_LOCAL_ROOT_FOLDER.getStringValue() + File.separator + "dirigible";
+        String skippedDirPath = dirigibleFolder + File.separator + "repository" + File.separator + "index";
+        LOGGER.info("Deleting dirigible folder [{}] by skipping [{}]", dirigibleFolder, skippedDirPath);
+        try {
+            FileUtil.deleteFolder(dirigibleFolder, skippedDirPath);
+        } catch (RuntimeException ex) {
+            LOGGER.warn("Failed to delete dirigible folder [{}] by skipping [{}]", dirigibleFolder, skippedDirPath, ex);
         }
     }
 }
