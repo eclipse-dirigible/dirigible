@@ -16,5 +16,12 @@ import org.junit.platform.suite.api.Suite;
 
 })
 public class TransactionsTestSuite {
+    //    static {
+    //        Configuration.set("DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER", "org.postgresql.Driver");
+    //        Configuration.set("DIRIGIBLE_DATASOURCE_DEFAULT_URL", "jdbc:postgresql://localhost:5432/postgres");
+    //        Configuration.set("DIRIGIBLE_DATASOURCE_DEFAULT_USERNAME", "postgres");
+    //        Configuration.set("DIRIGIBLE_DATASOURCE_DEFAULT_PASSWORD", "postgres");
+    //
+    //    }
     // use this suite class to run all transaction related tests in the IDE
 }
