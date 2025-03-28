@@ -12,12 +12,14 @@ package org.eclipse.dirigible.components.data.sources.config;
 import org.eclipse.dirigible.components.base.callable.CallableNoResultAndException;
 import org.eclipse.dirigible.components.base.callable.CallableResultAndException;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
-import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 public class TransactionExecutor {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(TransactionExecutor.class);
 
     /**
      * Execute code in transaction for a data source
@@ -31,10 +33,8 @@ public class TransactionExecutor {
      */
     public static <R, E extends Throwable> R executeInTransaction(DirigibleDataSource dataSource, CallableResultAndException<R, E> callable)
             throws TransactionExecutionException {
-        PlatformTransactionManager transactionManager = new DataSourceTransactionManager(dataSource);
-        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-        // transactionTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
-        // transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
+        PlatformTransactionManager transactionManager = getTransactionManager(dataSource);
+        TransactionTemplate transactionTemplate = createTemplate(transactionManager);
 
         return transactionTemplate.execute(status -> {
             try {
@@ -44,6 +44,25 @@ public class TransactionExecutor {
                         ex);
             }
         });
+    }
+
+    private static PlatformTransactionManager getTransactionManager(DirigibleDataSource dataSource) {
+        return dataSource.getTransactionManager()
+                         .orElseThrow(() -> new TransactionExecutionException("Missing transaction manager for data source " + dataSource));
+    }
+
+    private static TransactionTemplate createTemplate(PlatformTransactionManager transactionManager) {
+        LOGGER.info("Using transaction manager [{}]", transactionManager);
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+        // transactionTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_DEFAULT);
+
+        // transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_MANDATORY); //
+        // quartz works
+        // transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        // transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED); // fail
+        // quartz
+
+        return transactionTemplate;
     }
 
     /**
@@ -56,10 +75,8 @@ public class TransactionExecutor {
      */
     public static <E extends Throwable> void executeInTransaction(DirigibleDataSource dataSource, CallableNoResultAndException<E> callable)
             throws TransactionExecutionException {
-        PlatformTransactionManager transactionManager = new DataSourceTransactionManager(dataSource);
-        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-        transactionTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_DEFAULT);
-        transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
+        PlatformTransactionManager transactionManager = getTransactionManager(dataSource);
+        TransactionTemplate transactionTemplate = createTemplate(transactionManager);
 
         transactionTemplate.executeWithoutResult(status -> {
             try {
