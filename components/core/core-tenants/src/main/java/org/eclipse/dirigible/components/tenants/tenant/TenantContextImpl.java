@@ -9,8 +9,12 @@
  */
 package org.eclipse.dirigible.components.tenants.tenant;
 
-import org.eclipse.dirigible.components.base.tenant.*;
+import org.eclipse.dirigible.components.base.callable.CallableResultAndException;
+import org.eclipse.dirigible.components.base.tenant.Tenant;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
+import org.eclipse.dirigible.components.base.tenant.TenantResult;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
+import org.eclipse.dirigible.components.tenants.exceptions.TenantNotFoundException;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

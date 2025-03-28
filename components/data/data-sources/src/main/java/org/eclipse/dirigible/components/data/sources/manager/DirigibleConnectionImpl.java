@@ -81,7 +81,7 @@ class DirigibleConnectionImpl implements DirigibleConnection {
 
     private <R> R executeWithEnabledAutoCommit(ExecuteWithConnection<R> execution) throws SQLException {
         R result = execution.execute(connection);
-        connection.commit();
+        // connection.commit();
 
         return result;
     }

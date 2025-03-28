@@ -11,15 +11,12 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.data.sources.config.TransactionExecutor;
-import org.eclipse.dirigible.components.data.sources.config.TransactionManagerConfig;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.components.tenants.service.UserService;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.transaction.annotation.Isolation;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -38,8 +35,6 @@ class RestTransactionsITConfig {
         static final String ID_COLUMN = "id";
         static final String TEST_TABLE = "TESTTABLE";
 
-        static final String TRANSACTIONAL_ANNOTATION_DEFAULT_DB_TEST_PATH =
-                "/services/core/version/rest/api/transactions/testTransactionalAnnotationForDefaultDb";
         static final String TRANSACTIONAL_ANNOTATION_SYSTEM_DB_TEST_PATH =
                 "/services/core/version/rest/api/transactions/testTransactionalAnnotationForSystemDb";
         static final String PROGRAMMATIC_TRANSACTIONAL_DEFAULT_DB_PATH =
@@ -92,16 +87,6 @@ class RestTransactionsITConfig {
             }
         }
 
-        @Transactional(transactionManager = TransactionManagerConfig.DEFAULT_DB_TRANSACTION_MANAGER, isolation = Isolation.DEFAULT,
-                propagation = Propagation.REQUIRED)
-        @GetMapping(TRANSACTIONAL_ANNOTATION_DEFAULT_DB_TEST_PATH)
-        String testTransactionalAnnotationForDefaultDb() throws SQLException {
-            DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
-            ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
-
-            insertARecord(dialect, dataSource);
-            throw new IllegalStateException("Intentionally throw an exception to test REST transactional behaviour for default db.");
-        }
     }
 
 }

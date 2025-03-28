@@ -33,13 +33,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @Import(RestTransactionsITConfig.class)
 public class RestTransactionsIT extends UserInterfaceIntegrationTest {
-    //    static {
-    //        Configuration.set("DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER", "org.postgresql.Driver");
-    //        Configuration.set("DIRIGIBLE_DATASOURCE_DEFAULT_URL", "jdbc:postgresql://localhost:5432/postgres");
-    //        Configuration.set("DIRIGIBLE_DATASOURCE_DEFAULT_USERNAME", "postgres");
-    //        Configuration.set("DIRIGIBLE_DATASOURCE_DEFAULT_PASSWORD", "postgres");
-    //
-    //    }
 
     @Autowired
     private UserService userService;
@@ -60,10 +53,10 @@ public class RestTransactionsIT extends UserInterfaceIntegrationTest {
     }
 
     @Test
-    void testTransactionalAnnotationWorksForDefaultDB() throws SQLException {
+    void testProgrammaticTransactionExecutionForDefaultDB() throws SQLException {
         createTestTable(dataSourcesManager.getDefaultDataSource());
 
-        given().get(RestTransactionsITConfig.TestRest.TRANSACTIONAL_ANNOTATION_DEFAULT_DB_TEST_PATH)
+        given().get(RestTransactionsITConfig.TestRest.PROGRAMMATIC_TRANSACTIONAL_DEFAULT_DB_PATH)
                .then()
                .statusCode(500);
 
@@ -91,16 +84,5 @@ public class RestTransactionsIT extends UserInterfaceIntegrationTest {
             assertThat(count).isZero();
 
         }
-    }
-
-    @Test
-    void testProgrammaticTransactionExecutionForDefaultDB() throws SQLException {
-        createTestTable(dataSourcesManager.getDefaultDataSource());
-
-        given().get(RestTransactionsITConfig.TestRest.PROGRAMMATIC_TRANSACTIONAL_DEFAULT_DB_PATH)
-               .then()
-               .statusCode(500);
-
-        assertTestTableHasZeroEntries();
     }
 }

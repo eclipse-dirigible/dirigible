@@ -7,21 +7,10 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.base.tenant;
+package org.eclipse.dirigible.components.base.callable;
 
-/**
- * The Interface CallableResultAndException.
- *
- * @param <Result> the generic type
- */
 @FunctionalInterface
-public interface CallableResultAndException<Result, Exc extends Throwable> {
+public interface CallableNoResultAndNoException {
 
-    /**
-     * Call.
-     *
-     * @return the result
-     * @throws Exc the exception
-     */
-    Result call() throws Exc;
+    void call();
 }
