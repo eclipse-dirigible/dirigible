@@ -1,7 +1,9 @@
 package org.eclipse.dirigible.components.jobs.handler;
 
 import io.opentelemetry.api.trace.Span;
-import org.eclipse.dirigible.components.data.sources.config.TransactionManagerConfig;
+import org.eclipse.dirigible.components.data.sources.config.TransactionExecutor;
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.components.jobs.domain.JobLog;
 import org.eclipse.dirigible.components.jobs.service.JobLogService;
 import org.eclipse.dirigible.components.jobs.tenant.JobNameCreator;
@@ -12,7 +14,6 @@ import org.quartz.JobExecutionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.Path;
 import java.util.Date;
@@ -26,14 +27,20 @@ public class JobExecutionService {
 
     private final JobLogService jobLogService;
     private final JobNameCreator jobNameCreator;
+    private final DataSourcesManager dataSourcesManager;
 
-    JobExecutionService(JobLogService jobLogService, JobNameCreator jobNameCreator) {
+    JobExecutionService(JobLogService jobLogService, JobNameCreator jobNameCreator, DataSourcesManager dataSourcesManager) {
         this.jobLogService = jobLogService;
         this.jobNameCreator = jobNameCreator;
+        this.dataSourcesManager = dataSourcesManager;
     }
 
-    @Transactional(transactionManager = TransactionManagerConfig.DEFAULT_DB_TRANSACTION_MANAGER)
-    public void executeJob(JobExecutionContext context) throws JobExecutionException {
+    public void executeJob(JobExecutionContext context) {
+        DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
+        TransactionExecutor.executeInTransaction(defaultDataSource, () -> executeJobInternal(context));
+    }
+
+    private void executeJobInternal(JobExecutionContext context) throws JobExecutionException {
         String tenantJobName = context.getJobDetail()
                                       .getKey()
                                       .getName();

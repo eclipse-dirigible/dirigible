@@ -13,31 +13,37 @@ package org.eclipse.dirigible.components.engine.camel.invoke;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.spi.Synchronization;
-import org.eclipse.dirigible.components.data.sources.config.TransactionManagerConfig;
+import org.eclipse.dirigible.components.data.sources.config.TransactionExecutor;
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.components.engine.camel.components.DirigibleJavaScriptInvoker;
 import org.eclipse.dirigible.graalium.core.DirigibleJavascriptCodeRunner;
 import org.graalvm.polyglot.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.Path;
 
-@Transactional
 @Component
 class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
 
     private final ClassLoader currentClassLoader;
+    private final DataSourcesManager dataSourcesManager;
 
     @Autowired
-    public DirigibleJavaScriptInvokerImpl() {
+    public DirigibleJavaScriptInvokerImpl(DataSourcesManager dataSourcesManager) {
+        this.dataSourcesManager = dataSourcesManager;
         this.currentClassLoader = Thread.currentThread()
                                         .getContextClassLoader();
     }
 
-    @Transactional(transactionManager = TransactionManagerConfig.DEFAULT_DB_TRANSACTION_MANAGER)
     @Override
     public void invoke(Message camelMessage, String javaScriptPath) {
+        DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
+        TransactionExecutor.executeInTransaction(defaultDataSource, () -> invokeInternal(camelMessage, javaScriptPath));
+    }
+
+    private void invokeInternal(Message camelMessage, String javaScriptPath) {
         Thread.currentThread()
               .setContextClassLoader(currentClassLoader);
         DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner();
