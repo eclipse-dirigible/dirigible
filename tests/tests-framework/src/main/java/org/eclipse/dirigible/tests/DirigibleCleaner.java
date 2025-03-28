@@ -45,14 +45,14 @@ class DirigibleCleaner {
 
     public void cleanup() {
         try {
+            clearEntityManagerCaches();
+
             DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
             if (defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
                 deleteSchemas(defaultDataSource);
                 String schema = defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL) ? "public" : "PUBLIC";
                 createSchema(defaultDataSource, schema);
             }
-
-            clearEntityManagerCaches();
         } finally {
             deleteDirigibleFolder();
         }
