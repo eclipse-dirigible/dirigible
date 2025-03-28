@@ -33,12 +33,19 @@ public class TransactionExecutor {
      */
     public static <R, E extends Throwable> R executeInTransaction(DirigibleDataSource dataSource, CallableResultAndException<R, E> callable)
             throws TransactionExecutionException {
+        // dataSource.setAutoCommit(false);
         PlatformTransactionManager transactionManager = getTransactionManager(dataSource);
         TransactionTemplate transactionTemplate = createTemplate(transactionManager);
 
         return transactionTemplate.execute(status -> {
             try {
-                return callable.call();
+                // try (DirigibleConnection connection = dataSource.getConnection()) {
+                // connection.setAutoCommit(false);
+                // }
+                R result = callable.call();
+                // connection.commit();
+                return result;
+
             } catch (Throwable ex) {
                 throw new TransactionExecutionException("Failed to execute code for data source [" + dataSource + "] using " + callable,
                         ex);
@@ -57,6 +64,7 @@ public class TransactionExecutor {
         // transactionTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_DEFAULT);
 
         // transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_MANDATORY); //
+        // transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
         // quartz works
         // transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         // transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED); // fail
