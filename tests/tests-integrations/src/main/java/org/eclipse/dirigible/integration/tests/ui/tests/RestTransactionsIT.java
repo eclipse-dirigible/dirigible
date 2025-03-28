@@ -30,6 +30,7 @@ import java.util.Optional;
 
 import static io.restassured.RestAssured.given;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 
 @Import(RestTransactionsITConfig.class)
 public class RestTransactionsIT extends UserInterfaceIntegrationTest {
@@ -39,6 +40,19 @@ public class RestTransactionsIT extends UserInterfaceIntegrationTest {
 
     @Autowired
     private DataSourcesManager dataSourcesManager;
+
+    @Test
+    void testCommitByDefaultForSystemDb() {
+        given().get(RestTransactionsITConfig.TestRest.COMMIT_BY_DEFAULT_FOR_SYSTEM_DB_PATH)
+               .then()
+               .statusCode(200)
+               .body(containsString("Done"));
+
+        Optional<User> createdUser = userService.findUserByUsernameAndTenantId(RestTransactionsITConfig.TestRest.TEST_USERNAME,
+                DirigibleTestTenant.createDefaultTenant()
+                                   .getId());
+        assertThat(createdUser).isNotEmpty();
+    }
 
     @Test
     void testTransactionalAnnotationWorksForSystemDB() {
@@ -53,14 +67,14 @@ public class RestTransactionsIT extends UserInterfaceIntegrationTest {
     }
 
     @Test
-    void testProgrammaticTransactionExecutionForDefaultDB() throws SQLException {
+    void testProgrammaticTransactionRollbackForDefaultDb() throws SQLException {
         createTestTable(dataSourcesManager.getDefaultDataSource());
 
-        given().get(RestTransactionsITConfig.TestRest.PROGRAMMATIC_TRANSACTIONAL_DEFAULT_DB_PATH)
+        given().get(RestTransactionsITConfig.TestRest.PROGRAMMATIC_TRANSACTION_ROLLBACK_DEFAULT_DB_PATH)
                .then()
                .statusCode(500);
 
-        assertTestTableHasZeroEntries();
+        assertTestTableSize(0);
     }
 
     private void createTestTable(DirigibleDataSource dataSource) throws SQLException {
@@ -75,14 +89,36 @@ public class RestTransactionsIT extends UserInterfaceIntegrationTest {
         }
     }
 
-    private void assertTestTableHasZeroEntries() throws SQLException {
+    private void assertTestTableSize(int expectedSize) throws SQLException {
         DataSource dataSource = dataSourcesManager.getDefaultDataSource();
         ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
 
         try (Connection connection = dataSource.getConnection()) {
             int count = dialect.count(connection, RestTransactionsITConfig.TestRest.TEST_TABLE);
-            assertThat(count).isZero();
+            assertThat(count).isEqualTo(expectedSize);
 
         }
     }
+
+    @Test
+    void testProgrammaticTransactionCommitForDefaultDb() throws SQLException {
+        testInsertedEntries(RestTransactionsITConfig.TestRest.PROGRAMMATIC_TRANSACTION_COMMIT_DEFAULT_DB_PATH);
+    }
+
+    private void testInsertedEntries(String path) throws SQLException {
+        createTestTable(dataSourcesManager.getDefaultDataSource());
+
+        given().get(path)
+               .then()
+               .statusCode(200)
+               .body(containsString("Done"));
+
+        assertTestTableSize(2);
+    }
+
+    @Test
+    void testCommitByDefaultForDefaultDb() throws SQLException {
+        testInsertedEntries(RestTransactionsITConfig.TestRest.COMMIT_BY_DEFAULT_FOR_DEFAULT_DB_PATH);
+    }
+
 }

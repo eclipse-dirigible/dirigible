@@ -37,8 +37,15 @@ class RestTransactionsITConfig {
 
         static final String TRANSACTIONAL_ANNOTATION_SYSTEM_DB_TEST_PATH =
                 "/services/core/version/rest/api/transactions/testTransactionalAnnotationForSystemDb";
-        static final String PROGRAMMATIC_TRANSACTIONAL_DEFAULT_DB_PATH =
-                "/services/core/version/rest/api/transactions/testProgrammaticTransactionDefaultDb";
+        static final String COMMIT_BY_DEFAULT_FOR_SYSTEM_DB_PATH =
+                "/services/core/version/rest/api/transactions/testCommitByDefaultForSystemDb";
+
+        static final String PROGRAMMATIC_TRANSACTION_ROLLBACK_DEFAULT_DB_PATH =
+                "/services/core/version/rest/api/transactions/testProgrammaticTransactionRollbackForDefaultDb";
+        static final String PROGRAMMATIC_TRANSACTION_COMMIT_DEFAULT_DB_PATH =
+                "/services/core/version/rest/api/transactions/testProgrammaticTransactionCommitForDefaultDb";
+        static final String COMMIT_BY_DEFAULT_FOR_DEFAULT_DB_PATH =
+                "/services/core/version/rest/api/transactions/testCommitByDefaultForDefaultDb";
 
         static final String TEST_USERNAME = "test-user";
         static final String TEST_PASSWORD = "test-password";
@@ -47,7 +54,7 @@ class RestTransactionsITConfig {
         private final TenantContext tenantContext;
         private final DataSourcesManager dataSourcesManager;
 
-        TestRest(UserService userService, TenantContext tenantContext, DataSourcesManager dataSourcesManager) throws SQLException {
+        TestRest(UserService userService, TenantContext tenantContext, DataSourcesManager dataSourcesManager) {
             this.userService = userService;
             this.tenantContext = tenantContext;
             this.dataSourcesManager = dataSourcesManager;
@@ -61,18 +68,25 @@ class RestTransactionsITConfig {
             throw new IllegalStateException("Intentionally throw an exception to test REST transactional behaviour for system db");
         }
 
-        @GetMapping(PROGRAMMATIC_TRANSACTIONAL_DEFAULT_DB_PATH)
-        String testProgrammaticTransactionDefaultDb() throws Throwable {
+        @GetMapping(COMMIT_BY_DEFAULT_FOR_SYSTEM_DB_PATH)
+        String testCommitByDefaultForSystemDb() {
+            userService.createNewUser(TEST_USERNAME, TEST_PASSWORD, tenantContext.getCurrentTenant()
+                                                                                 .getId());
+            return "Done";
+        }
+
+        @GetMapping(PROGRAMMATIC_TRANSACTION_ROLLBACK_DEFAULT_DB_PATH)
+        String testProgrammaticTransactionRollbackForDefaultDb() {
             DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
             return TransactionExecutor.executeInTransaction(dataSource, () -> {
                 ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
 
-                insertARecord(dialect, dataSource);
+                insertTestRecord(dialect, dataSource);
                 throw new IllegalStateException("Intentionally throw an exception to test REST transactional behaviour for default db.");
             });
         }
 
-        private void insertARecord(ISqlDialect dialect, DirigibleDataSource dataSource) throws SQLException {
+        private void insertTestRecord(ISqlDialect dialect, DirigibleDataSource dataSource) throws SQLException {
             Random random = new Random();
             int randomId = random.nextInt(10000) + 1;
             String sql = dialect.insert()
@@ -85,6 +99,27 @@ class RestTransactionsITConfig {
                     PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
                 preparedStatement.executeUpdate();
             }
+        }
+
+        @GetMapping(PROGRAMMATIC_TRANSACTION_COMMIT_DEFAULT_DB_PATH)
+        String testProgrammaticTransactionCommitForDefaultDb() {
+            DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
+            return TransactionExecutor.executeInTransaction(dataSource, () -> insertTwoEntries(dataSource));
+        }
+
+        private String insertTwoEntries(DirigibleDataSource dataSource) throws SQLException {
+            ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
+
+            insertTestRecord(dialect, dataSource);
+            insertTestRecord(dialect, dataSource);
+
+            return "Done";
+        }
+
+        @GetMapping(COMMIT_BY_DEFAULT_FOR_DEFAULT_DB_PATH)
+        String testCommitByDefaultForDefaultDb() throws Throwable {
+            DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
+            return insertTwoEntries(dataSource);
         }
 
     }

@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.data.sources.config;
 
+import org.eclipse.dirigible.components.base.callable.CallableNoResultAndException;
 import org.eclipse.dirigible.components.base.callable.CallableResultAndException;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -26,14 +27,14 @@ public class TransactionExecutor {
      * @param <R> result
      * @param <E>
      * @return
-     * @throws TransactionExecutionException
+     * @throws TransactionExecutionException if fail to execute the code
      */
     public static <R, E extends Throwable> R executeInTransaction(DirigibleDataSource dataSource, CallableResultAndException<R, E> callable)
             throws TransactionExecutionException {
         PlatformTransactionManager transactionManager = new DataSourceTransactionManager(dataSource);
         TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-        transactionTemplate.setIsolationLevel(TransactionDefinition.PROPAGATION_REQUIRED);
-        transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
+        // transactionTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        // transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
 
         return transactionTemplate.execute(status -> {
             try {
@@ -44,23 +45,30 @@ public class TransactionExecutor {
             }
         });
     }
-    // public static <R, E extends Throwable> R executeInTransaction(DirigibleDataSource dataSource,
-    // CallableResultAndException<R, E> callable)
-    // throws Throwable {
-    // PlatformTransactionManager transactionManager = new DataSourceTransactionManager(dataSource);
-    //
-    // DefaultTransactionDefinition transactionDefinition = new DefaultTransactionDefinition();
-    // transactionDefinition.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
-    //
-    // TransactionStatus status = transactionManager.getTransaction(transactionDefinition);
-    // try {
-    // R result = callable.call();
-    // transactionManager.commit(status);
-    // return result;
-    // } catch (Throwable ex) {
-    // transactionManager.rollback(status);
-    // throw ex;
-    // }
-    // }
+
+    /**
+     * Execute code in transaction for a data source
+     *
+     * @param dataSource data source
+     * @param callable code to be executed
+     * @param <E>
+     * @throws TransactionExecutionException if fail to execute the code
+     */
+    public static <E extends Throwable> void executeInTransaction(DirigibleDataSource dataSource, CallableNoResultAndException<E> callable)
+            throws TransactionExecutionException {
+        PlatformTransactionManager transactionManager = new DataSourceTransactionManager(dataSource);
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+        transactionTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_DEFAULT);
+        transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
+
+        transactionTemplate.executeWithoutResult(status -> {
+            try {
+                callable.call();
+            } catch (Throwable ex) {
+                throw new TransactionExecutionException("Failed to execute code for data source [" + dataSource + "] using " + callable,
+                        ex);
+            }
+        });
+    }
 
 }
