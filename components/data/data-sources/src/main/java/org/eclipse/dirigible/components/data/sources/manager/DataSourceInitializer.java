@@ -23,6 +23,7 @@ import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.GenericApplicationContext;
+import org.springframework.jdbc.support.JdbcTransactionManager;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
@@ -43,12 +44,11 @@ public class DataSourceInitializer implements DisposableBean {
     private static final Logger logger = LoggerFactory.getLogger(DataSourceInitializer.class);
     /** The Constant DATASOURCES. */
     private static final Map<String, DirigibleDataSource> DATASOURCES = Collections.synchronizedMap(new HashMap<>());
+    private static final String TRANSACTION_MANAGER_PREFIX = "transactionManager_";
     /** The application context. */
     private final ApplicationContext applicationContext;
-
     /** The contributors. */
     private final List<DatabaseConfigurator> databaseConfigurators;
-
     /** The tenant data source name manager. */
     private final TenantDataSourceNameManager tenantDataSourceNameManager;
     private final String systemDataSourceName;
@@ -162,6 +162,12 @@ public class DataSourceInitializer implements DisposableBean {
 
         DirigibleDataSource managedDataSource = dataSourceFactory.create(name, config, dbType);
 
+        JdbcTransactionManager transactionManager = new JdbcTransactionManager(managedDataSource);
+        String transactionManagerBeanName = getTransactionManagerBeanName(name);
+        registerSpringBean(transactionManagerBeanName, transactionManager);
+
+        managedDataSource.setTransactionManager(transactionManager);
+
         registerDataSourceBean(name, managedDataSource);
         DATASOURCES.put(name, managedDataSource);
 
@@ -196,11 +202,19 @@ public class DataSourceInitializer implements DisposableBean {
         if (null != removedDataSource) {
             removedDataSource.close();
 
-            GenericApplicationContext genericAppContext = (GenericApplicationContext) applicationContext;
-            ConfigurableListableBeanFactory beanFactory = genericAppContext.getBeanFactory();
-            beanFactory.destroyBean(name);
+            destroySpringBean(name);
+
+            String transactionManagerBeanName = getTransactionManagerBeanName(name);
+            destroySpringBean(transactionManagerBeanName);
             logger.info("DataSource [{}] with name [{}] was removed", removedDataSource, name);
         }
+    }
+
+    private void destroySpringBean(String beanName) {
+        GenericApplicationContext genericAppContext = (GenericApplicationContext) applicationContext;
+        ConfigurableListableBeanFactory beanFactory = genericAppContext.getBeanFactory();
+        beanFactory.destroyBean(beanName);
+        logger.info("Spring bean with name [{}] was destroyed", beanName);
     }
 
     /**
@@ -265,6 +279,14 @@ public class DataSourceInitializer implements DisposableBean {
         if (Objects.equals(systemDataSourceName, name)) {
             return; // bean already set by org.eclipse.dirigible.components.database.DataSourceSystemConfig
         }
+        registerSpringBean(name, dataSource);
+    }
+
+    private String getTransactionManagerBeanName(String dataSourceName) {
+        return TRANSACTION_MANAGER_PREFIX + dataSourceName;
+    }
+
+    private void registerSpringBean(String name, Object singletonObject) {
         GenericApplicationContext genericAppContext = (GenericApplicationContext) applicationContext;
         ConfigurableListableBeanFactory beanFactory = genericAppContext.getBeanFactory();
 
@@ -272,7 +294,7 @@ public class DataSourceInitializer implements DisposableBean {
             logger.debug("Bean with name [{}] is already registered. Skipping its registration.", name);
             return;
         }
-        beanFactory.registerSingleton(name, dataSource);
+        beanFactory.registerSingleton(name, singletonObject);
     }
 
     @Override

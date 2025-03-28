@@ -17,6 +17,7 @@ import org.eclipse.dirigible.components.database.DirigibleConnection;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import javax.sql.DataSource;
 import java.io.PrintWriter;
@@ -24,6 +25,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -38,6 +40,7 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
     private final List<ConnectionEnhancer> connectionEnhancers;
     private final HikariDataSource originalDataSource;
     private final DatabaseSystem databaseSystem;
+    private PlatformTransactionManager transactionManager;
 
     /**
      * Wrapper of the default datasource provided by the underlying platform It has some fault tolerance
@@ -100,6 +103,16 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
         LeakedConnectionsDoctor.registerConnection(connection);
 
         return new DirigibleConnectionImpl(name, connection, databaseSystem);
+    }
+
+    @Override
+    public Optional<PlatformTransactionManager> getTransactionManager() {
+        return Optional.ofNullable(transactionManager);
+    }
+
+    @Override
+    public void setTransactionManager(PlatformTransactionManager transactionManager) {
+        this.transactionManager = transactionManager;
     }
 
     /**
@@ -200,6 +213,7 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
     @Override
     public String toString() {
         return "DirigibleDataSourceImpl{" + "name='" + name + '\'' + ", connectionEnhancers=" + connectionEnhancers
-                + ", originalDataSource=" + originalDataSource + ", databaseSystem=" + databaseSystem + '}';
+                + ", originalDataSource=" + originalDataSource + ", databaseSystem=" + databaseSystem + ", transactionManager="
+                + transactionManager + '}';
     }
 }
