@@ -73,7 +73,7 @@ class BrowserImpl implements Browser {
         Configuration.headless = IntegrationTest.isHeadlessExecution();
         Configuration.browser = "chrome";
         Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
-        Configuration.headless = false;
+//        Configuration.headless = false;
     }
 
     @Override
