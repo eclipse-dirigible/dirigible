@@ -1,0 +1,4 @@
+{
+    "name": "application-shells",
+    "description": "Extension Point for the Application Shell Providers"
+}

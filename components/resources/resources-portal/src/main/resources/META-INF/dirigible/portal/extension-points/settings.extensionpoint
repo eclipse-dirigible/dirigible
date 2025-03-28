@@ -1,0 +1,4 @@
+{
+    "name": "application-settings",
+    "description": "Extension Point for the Application Setting Providers"
+}

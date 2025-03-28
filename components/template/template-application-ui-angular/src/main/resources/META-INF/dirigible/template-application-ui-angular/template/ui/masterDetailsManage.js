@@ -14,22 +14,16 @@ function getMaster(parameters) {
 	return [
 		// Location: "gen/{{genFolderName}}/ui/perspective"
 		{
-			location: "/template-application-ui-angular/ui/perspective/index.html",
+			location: "/template-application-ui-angular/ui/perspective/index.html.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/index.html",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/perspective.extension",
+			location: "/template-application-ui-angular/ui/perspective/perspective.extension.template",
 			action: "generate",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/perspective.extension",
-			collection: "uiManageMasterModels"
-		},
-		{
-			location: "/template-application-ui-angular/ui/perspective/perspective-portal.extension",
-			action: "generate",
-			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/perspective-portal.extension",
 			collection: "uiManageMasterModels"
 		},
 		{
@@ -58,13 +52,6 @@ function getMaster(parameters) {
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.extension",
-			collection: "uiManageMasterModels"
-		},
-		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/tile-portal.extension.template",
-			action: "generate",
-			engine: "velocity",
-			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile-portal.extension",
 			collection: "uiManageMasterModels"
 		},
 		{

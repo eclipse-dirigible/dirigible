@@ -139,6 +139,26 @@ export function generateFiles(model, parameters, templateSources) {
                 case "uiReportTableModels":
                     generatedFiles = generatedFiles.concat(generateCollection(location, content, template, uiReportTableModels, parameters));
                     break;
+                case "uiNavigations":
+                    for (let i = 0; i < model.navigations.length; i++) {
+                        const templateParameters = {
+                            ...parameters,
+                            navId: model.navigations[i].id,
+                            navLabel: model.navigations[i].label,
+                            navHeader: model.navigations[i].header,
+                            navExpanded: model.navigations[i].expanded,
+                            navOrder: model.navigations[i].order,
+                            navIcon: model.navigations[i].icon,
+                            navRole: model.navigations[i].role
+                        };
+                        const cleanParams = cleanData(templateParameters);
+                        generatedFiles.push({
+                            location: location,
+                            content: getGenerationEngine(template).generate(location, content, cleanParams),
+                            path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanParams)
+                        });
+                    }
+                    break;
                 default:
                     // No collection
                     parameters.models = model.entities;
@@ -195,8 +215,8 @@ function getGenerationEngine(template) {
     } else if (template.engine === "mustache") {
         generationEngine = templateEngines.getMustacheEngine();
     } else if (template.engine === undefined) {
-		console.debug("Template engine is not explicitly defined, so will be used the default Mustache engine.");
-		generationEngine = templateEngines.getMustacheEngine();
+        console.debug("Template engine is not explicitly defined, so will be used the default Mustache engine.");
+        generationEngine = templateEngines.getMustacheEngine();
     } else {
         console.error("Template engine: " + template.engine + " does not exist, so will be used the default Mustache engine.");
         generationEngine = templateEngines.getMustacheEngine();

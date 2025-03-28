@@ -1,3 +1,5 @@
 {
-    "guid": "theme-high-contrast"
+    "guid": "theme-high-contrast",
+    "dependencies": [],
+    "actions": []
 }

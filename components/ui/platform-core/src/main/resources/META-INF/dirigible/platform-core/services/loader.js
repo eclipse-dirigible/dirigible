@@ -132,6 +132,7 @@ function getScriptList(scriptId) {
         '/platform-core/ui/blimpkit/menu.js',
         '/platform-core/ui/blimpkit/message-box.js',
         '/platform-core/ui/blimpkit/message-page.js',
+        '/platform-core/ui/blimpkit/message-strip.js',
         '/platform-core/ui/blimpkit/notification.js',
         '/platform-core/ui/blimpkit/object-status.js',
         '/platform-core/ui/blimpkit/pagination.js',
@@ -217,6 +218,8 @@ function getScriptList(scriptId) {
             return ['/platform-core/ui/styles/jstree.css'];
         case 'editors-service':
             return [editorsService];
+        case 'sortable-js':
+            return ['/sortablejs/1.15.2/Sortable.min.js'];
     }
 }
 

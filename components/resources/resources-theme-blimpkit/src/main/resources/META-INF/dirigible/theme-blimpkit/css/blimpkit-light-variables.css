@@ -493,7 +493,7 @@
     --sapField_Background: #fff;
     --sapField_BackgroundStyle: none;
     --sapField_TextColor: #303030;
-    --sapField_PlaceholderTextColor: #303030;
+    --sapField_PlaceholderTextColor: #6e6e6e;
     --sapField_BorderColor: #bebebe;
     --sapField_HelpBackground: #fff;
     --sapField_BorderWidth: .0625rem;
@@ -582,10 +582,10 @@
     --sapList_TableFooterBorder: #c3c3c3;
     --sapList_TableFixedBorderColor: #8c8c8c;
 
-    --sapMessage_ErrorBorderColor: #ff8ec4;
-    --sapMessage_WarningBorderColor: #ffe770;
-    --sapMessage_SuccessBorderColor: #cee67e;
-    --sapMessage_InformationBorderColor: #7bcfff;
+    --sapMessage_ErrorBorderColor: #e01b24;
+    --sapMessage_WarningBorderColor: #e66000;
+    --sapMessage_SuccessBorderColor: #26a264;
+    --sapMessage_InformationBorderColor: #3478ca;
 
     --sapPopover_BorderCornerRadius: .5rem;
 

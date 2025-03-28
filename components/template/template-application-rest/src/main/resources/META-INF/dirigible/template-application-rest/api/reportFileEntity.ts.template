@@ -71,7 +71,7 @@ class ${name}Service {
 #end
 #end
             };
-            return this.repository.count(filter);
+            return { count: this.repository.count(filter) };
         } catch (error: any) {
             this.handleError(error);
         }
@@ -84,7 +84,7 @@ class ${name}Service {
             this.checkPermissions("read");
 
 #end
-            return this.repository.count(filter);
+            return { count: this.repository.count(filter) };
         } catch (error: any) {
             this.handleError(error);
         }

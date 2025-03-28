@@ -5,25 +5,25 @@
  */
 export function getSources(parameters) {
 	return [{
-		location: "/template-application-ui-angular/ui/perspectives/index.html.template",
+		location: "/template-application-ui-angular/ui/perspective/index.html.template",
 		action: "generate",
 		rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/index.html",
 		engine: "velocity",
 		collection: "uiPerspectives"
 	}, {
-		location: "/template-application-ui-angular/ui/perspectives/extensions/perspective/perspective.extension.template",
+		location: "/template-application-ui-angular/ui/perspective/extensions/perspective/perspective.extension.template",
 		action: "generate",
 		rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/extensions/perspective/perspective.extension",
 		engine: "velocity",
 		collection: "uiPerspectives"
 	}, {
-		location: "/template-application-ui-angular/ui/perspectives/extensions/perspective/perspective.js.template",
+		location: "/template-application-ui-angular/ui/perspective/extensions/perspective/perspective.js.template",
 		action: "generate",
 		rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/extensions/perspective/perspective.js",
 		engine: "velocity",
 		collection: "uiPerspectives"
 	}, {
-		location: "/template-application-ui-angular/ui/perspectives/extensions/view.extensionpoint.template",
+		location: "/template-application-ui-angular/ui/perspective/extensions/view.extensionpoint.template",
 		action: "generate",
 		rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/extensions/view.extensionpoint",
 		engine: "velocity",

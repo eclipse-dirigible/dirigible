@@ -2,7 +2,7 @@
     "constraints": [
         {
             "scope": "HTTP",
-            "path": "/ide-documents/manage",
+            "path": "/documents/manage",
             "method": "*",
             "roles": [
                 "Administrator",
@@ -11,7 +11,7 @@
         },
         {
             "scope": "HTTP",
-            "path": "/ide-documents/read/folder",
+            "path": "/documents/read/folder",
             "method": "*",
             "roles": [
                 "ReadOnly",
@@ -20,7 +20,7 @@
         },
         {
             "scope": "HTTP",
-            "path": "/ide-documents/read/document",
+            "path": "/documents/read/document",
             "method": "*",
             "roles": [
                 "ReadOnly",

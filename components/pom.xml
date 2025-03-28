@@ -313,7 +313,6 @@
         <module>template/template-hello-world</module>
         <module>template/template-react</module>
         <module>template/template-html</module>
-        <module>template/template-html-widgets</module>
         <module>template/template-http-client</module>
         <module>template/template-job</module>
         <module>template/template-listener</module>
@@ -1793,11 +1792,6 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-template-html</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-html-widgets</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

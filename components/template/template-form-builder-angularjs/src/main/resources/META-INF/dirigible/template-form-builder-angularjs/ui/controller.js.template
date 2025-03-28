@@ -1,5 +1,5 @@
 #set($dollar = '$')
-const formView = angular.module('forms', ['ideUI', 'ideView']);
+const formView = angular.module('forms', ['blimpKit', 'platformView']);
 
 formView.controller('FormController', ($scope, $http, messageHub, ViewParameters) => {
 
