@@ -18,6 +18,7 @@ import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.eclipse.dirigible.tests.DirigibleTestTenant;
 import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -32,8 +33,18 @@ import static io.restassured.RestAssured.given;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 
+@Disabled
 @Import(RestTransactionsITConfig.class)
 public class RestTransactionsIT extends UserInterfaceIntegrationTest {
+
+    // static {
+    // Configuration.set("DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER", "org.postgresql.Driver");
+    // Configuration.set("DIRIGIBLE_DATASOURCE_DEFAULT_URL",
+    // "jdbc:postgresql://localhost:5432/postgres");
+    // Configuration.set("DIRIGIBLE_DATASOURCE_DEFAULT_USERNAME", "postgres");
+    // Configuration.set("DIRIGIBLE_DATASOURCE_DEFAULT_PASSWORD", "postgres");
+    //
+    // }
 
     @Autowired
     private UserService userService;

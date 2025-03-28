@@ -61,6 +61,11 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
         this.databaseSystem = databaseSystem;
     }
 
+    @Override
+    public void setAutoCommit(boolean autoCommit) {
+        originalDataSource.setAutoCommit(autoCommit);
+    }
+
     public String getName() {
         return name;
     }
