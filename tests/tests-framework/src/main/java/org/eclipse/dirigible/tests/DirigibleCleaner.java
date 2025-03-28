@@ -45,20 +45,36 @@ class DirigibleCleaner {
 
     public void cleanup() {
         try {
-            clearEntityManagerCaches();
-
             DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
             if (defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
                 deleteSchemas(defaultDataSource);
                 String schema = defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL) ? "public" : "PUBLIC";
                 createSchema(defaultDataSource, schema);
             }
+
+            if (defaultDataSource.isOfType(DatabaseSystem.H2)) {
+                dropAllObjects(defaultDataSource);
+            }
+
+            clearEntityManagerCaches();
+
         } finally {
             deleteDirigibleFolder();
         }
     }
 
+    private void dropAllObjects(DirigibleDataSource dataSource) {
+        LOGGER.info("Will drop all objects from [{}]...", dataSource);
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement preparedStatement = connection.prepareStatement("DROP ALL OBJECTS;")) {
+            preparedStatement.executeUpdate();
+        } catch (Exception ex) {
+            LOGGER.warn("Failed to drop all objects from [{}]", dataSource, ex);
+        }
+    }
+
     private void clearEntityManagerCaches() {
+        LOGGER.info("Clearing entity manager caches...");
         try {
             entityManagerFactory.getCache()
                                 .evictAll();
@@ -110,7 +126,7 @@ class DirigibleCleaner {
     }
 
     private void deleteSchema(String schema, DirigibleDataSource dataSource) {
-        LOGGER.info("Will drop schema [{}] from data source [{}]", schema, dataSource);
+        LOGGER.info("Will drop schema [{}] from data source [{}]...", schema, dataSource);
         try (Connection connection = dataSource.getConnection()) {
             ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
             String sql = dialect.drop()
@@ -126,7 +142,7 @@ class DirigibleCleaner {
     }
 
     private void createSchema(DirigibleDataSource dataSource, String schemaName) {
-        LOGGER.info("Will create schema [{}] in [{}]", schemaName, dataSource);
+        LOGGER.info("Will create schema [{}] in [{}]...", schemaName, dataSource);
         try (Connection connection = dataSource.getConnection()) {
             ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
             String sql = dialect.create()
@@ -143,7 +159,7 @@ class DirigibleCleaner {
     public static void deleteDirigibleFolder() {
         String dirigibleFolder = DirigibleConfig.REPOSITORY_LOCAL_ROOT_FOLDER.getStringValue() + File.separator + "dirigible";
         String skippedDirPath = dirigibleFolder + File.separator + "repository" + File.separator + "index";
-        LOGGER.info("Deleting dirigible folder [{}] by skipping [{}]", dirigibleFolder, skippedDirPath);
+        LOGGER.info("Deleting dirigible folder [{}] by skipping [{}]...", dirigibleFolder, skippedDirPath);
         try {
             FileUtil.deleteFolder(dirigibleFolder, skippedDirPath);
         } catch (RuntimeException ex) {
