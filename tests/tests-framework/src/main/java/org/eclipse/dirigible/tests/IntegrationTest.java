@@ -23,8 +23,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-@AutoConfigureMockMvc
+// enforce spring application cleanup between trest method executions
 @DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_EACH_TEST_METHOD, methodMode = DirtiesContext.MethodMode.AFTER_METHOD)
+@AutoConfigureMockMvc
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 public abstract class IntegrationTest {
 
