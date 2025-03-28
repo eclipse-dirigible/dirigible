@@ -9,7 +9,7 @@
  */
 package org.eclipse.dirigible.tests.awaitility;
 
-import org.eclipse.dirigible.tests.restassured.CallableNoResultAndNoException;
+import org.eclipse.dirigible.components.base.callable.CallableNoResultAndNoException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

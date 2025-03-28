@@ -53,9 +53,7 @@ public class TableCreateProcessor {
     public static void execute(Connection connection, Table tableModel, boolean skipForeignKeys) throws SQLException {
         String tableName = "\"" + tableModel.getName() + "\"";
 
-        if (logger.isInfoEnabled()) {
-            logger.info("Processing Create Table: " + tableName);
-        }
+        logger.debug("Processing Create Table: [{}]", tableName);
         CreateTableBuilder createTableBuilder = SqlFactory.getNative(connection)
                                                           .create()
                                                           .table(tableName);
@@ -174,21 +172,15 @@ public class TableCreateProcessor {
         }
 
         final String sql = createTableBuilder.build();
-        if (logger.isInfoEnabled()) {
-            logger.info(sql);
-        }
+        logger.info("Create SQL: [{}]", sql);
+
         String[] parts = sql.split(CreateTableBuilder.STATEMENT_DELIMITER);
         for (String part : parts) {
             PreparedStatement statement = connection.prepareStatement(part);
             try {
                 statement.executeUpdate();
             } catch (SQLException e) {
-                if (logger.isErrorEnabled()) {
-                    logger.error(sql);
-                }
-                if (logger.isErrorEnabled()) {
-                    logger.error(e.getMessage(), e);
-                }
+                logger.error("Failed to execute [{}]", part, e);
                 throw new SQLException(e.getMessage(), e);
             } finally {
                 if (statement != null) {

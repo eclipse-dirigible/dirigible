@@ -9,7 +9,7 @@
  */
 package org.eclipse.dirigible.components.listeners.service;
 
-import org.eclipse.dirigible.components.base.tenant.CallableResultAndException;
+import org.eclipse.dirigible.components.base.callable.CallableResultAndException;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.base.tenant.TenantResult;

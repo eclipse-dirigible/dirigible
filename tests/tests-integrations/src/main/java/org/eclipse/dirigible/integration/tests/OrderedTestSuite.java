@@ -7,9 +7,13 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.ui.tests;
+package org.eclipse.dirigible.integration.tests;
 
 import org.eclipse.dirigible.integration.tests.api.javascript.cms.CmsSuiteIT;
+import org.eclipse.dirigible.integration.tests.ui.tests.ApproveLeaveRequestBpmIT;
+import org.eclipse.dirigible.integration.tests.ui.tests.CreateNewFileIT;
+import org.eclipse.dirigible.integration.tests.ui.tests.DeclineLeaveRequestBpmIT;
+import org.eclipse.dirigible.integration.tests.ui.tests.MultitenancyIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.camel.CamelExtractTransformLoadJdbcIT;
 import org.junit.platform.suite.api.SelectClasses;
 import org.junit.platform.suite.api.Suite;

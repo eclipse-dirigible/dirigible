@@ -22,7 +22,6 @@ import org.eclipse.dirigible.components.base.tenant.TenantResult;
 import org.eclipse.dirigible.components.open.telemetry.OpenTelemetryProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -37,7 +36,6 @@ public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchr
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(BaseSynchronizer.class);
 
-    @Transactional
     @Override
     public List<A> parse(String location, byte[] content) throws ParseException {
         Tracer tracer = OpenTelemetryProvider.get()
@@ -76,7 +74,6 @@ public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchr
      * @param flow the flow
      * @return true, if successful
      */
-    @Transactional
     @Override
     public boolean complete(TopologyWrapper<A> wrapper, ArtefactPhase flow) {
         Tracer tracer = OpenTelemetryProvider.get()
@@ -168,7 +165,6 @@ public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchr
      *
      * @param artefact the artefact
      */
-    @Transactional
     @Override
     public void cleanup(A artefact) {
         Tracer tracer = OpenTelemetryProvider.get()
