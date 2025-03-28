@@ -31,6 +31,7 @@ import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
@@ -51,7 +52,7 @@ import java.util.stream.Collectors;
  */
 @Component
 @Scope("singleton")
-public class SynchronizationProcessor implements SynchronizationWalkerCallback, SynchronizerCallback {
+public class SynchronizationProcessor implements SynchronizationWalkerCallback, SynchronizerCallback, DisposableBean {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(SynchronizationProcessor.class);
@@ -79,13 +80,13 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
     private final SynchronizationWatcher synchronizationWatcher;
 
     /** The initialized. */
-    private final AtomicBoolean initialized = new AtomicBoolean(false);
+    private final AtomicBoolean initialized;
 
     /** The prepared. */
-    private final AtomicBoolean prepared = new AtomicBoolean(false);
+    private final AtomicBoolean prepared;
 
     /** The processing. */
-    private final AtomicBoolean processing = new AtomicBoolean(false);
+    private final AtomicBoolean processing;
 
     /**
      * Instantiates a new synchronization processor.
@@ -101,9 +102,14 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
         this.repository = repository;
         this.synchronizers = Collections.synchronizedList(synchronizers);
         logger.info("Registered [{}] synchronizers: [{}]", synchronizers.size(), synchronizers);
+
         this.definitionService = definitionService;
         this.synchronizationWatcher = synchronizationWatcher;
         this.synchronizers.forEach(s -> s.setCallback(this));
+
+        this.initialized = new AtomicBoolean(false);
+        this.prepared = new AtomicBoolean(false);
+        this.processing = new AtomicBoolean(false);
     }
 
     /**
@@ -187,11 +193,11 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
             int countModified = 0;
             for (Artefact artefact : artefacts.values()) {
                 if (ArtefactLifecycle.NEW.equals(artefact.getLifecycle())) {
-                    logger.info("Processing a new artefact: {}", artefact.getKey());
+                    logger.debug("Processing a new artefact: {}", artefact.getKey());
                     countNew++;
                 }
                 if (ArtefactLifecycle.MODIFIED.equals(artefact.getLifecycle())) {
-                    logger.info("Processing a modified artefact: {}", artefact.getKey());
+                    logger.debug("Processing a modified artefact: {}", artefact.getKey());
                     countModified++;
                 }
             }
@@ -847,7 +853,7 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                         artefact.getKey(), artefact.getLocation(), lifecycle, synchronizer, artefact.getError(), message, cause);
                 break;
             default: {
-                logger.info(
+                logger.debug(
                         "Registering artefact lifecycle status [{}] for artefact with key [{}], location [{}], message [{}], error [{}]",
                         lifecycle, artefact.getKey(), artefact.getLocation(), message, artefact.getError(), cause);
             }
@@ -891,5 +897,18 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
         registerState(synchronizer, wrapper.getArtefact(), lifecycle, message, cause);
     }
 
+    @Override
+    public void destroy() {
+        logger.info("Destroying [{}}", this);
+
+        synchronizers.clear();
+        errors.clear();
+        artefacts.clear();
+        definitions.clear();
+
+        this.initialized.set(false);
+        this.prepared.set(false);
+        this.processing.set(false);
+    }
 }
 

@@ -10,8 +10,8 @@
 package org.eclipse.dirigible.components.terminal.endpoint;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.SystemUtils;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
-import org.eclipse.dirigible.components.terminal.endpoint.TerminalWebsocketHandler.ProcessRunnable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -22,8 +22,11 @@ import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 
-import java.io.*;
-import java.nio.charset.Charset;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 /**
  * The Class TerminalWebsocketConfig.
@@ -33,20 +36,10 @@ import java.nio.charset.Charset;
 @ConditionalOnProperty(name = "terminal.enabled", havingValue = "true")
 public class TerminalWebsocketConfig implements WebSocketConfigurer {
 
-    /** The Constant TERMINAL_PREFIX. */
-    private static final String TERMINAL_PREFIX = "[ws:terminal] ";
-
-    // /** The Constant FEATURE_TERMINAL_IS_DISABLED_IN_THIS_MODE. */
-    // private static final String FEATURE_TERMINAL_IS_DISABLED_IN_THIS_MODE = "Feature 'Terminal' is
-    // disabled in this mode.";
-
-    /** The Constant PERMISSIONS_FAILED. */
-    private static final String PERMISSIONS_FAILED = "Failed to set permissions on file";
-
-    /** The Constant logger. */
+    static final String TERMINAL_PREFIX = "[ws:terminal] {}";
     private static final Logger logger = LoggerFactory.getLogger(TerminalWebsocketConfig.class);
-    /** The started. */
-    static volatile boolean started = false;
+    private static final String UNIX_FILE = "ttyd.sh";
+    private static volatile boolean started = false;
 
     static {
         runTTYD();
@@ -72,96 +65,64 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
         return new TerminalWebsocketHandler();
     }
 
-    /**
-     * Run TTYD.
-     */
-    public synchronized static void runTTYD() {
-        if (!started) {
-            // if (Configuration.isAnonymousModeEnabled()) {
-            // if (logger.isWarnEnabled()) {logger.warn(TERMINAL_PREFIX +
-            // FEATURE_TERMINAL_IS_DISABLED_IN_THIS_MODE);}
-            // return;
-            // }
-            try {
-                String command = "";
-                String os = System.getProperty("os.name")
-                                  .toLowerCase();
-                if ((os.indexOf("nix") >= 0 || os.indexOf("nux") >= 0 || os.indexOf("aix") > 0)) {
-                    command = "sh -c ./ttyd.sh";
-                    File ttydShell = new File("./ttyd.sh");
-                    if (!ttydShell.exists()) {
-                        // ttyd binary should be placed in advance to $CATALINA_HOME/bin
-
-                        createShellScript(ttydShell, "./ttyd -p 9000 sh");
-                        if (ttydShell.setExecutable(true)) {
-                            File ttydExecutable = new File("./ttyd");
-                            createExecutable(TerminalWebsocketConfig.class.getResourceAsStream("/ttyd_linux.x86_64_1.6.0"), ttydExecutable);
-                            if (!ttydExecutable.setExecutable(true)) {
-                                if (logger.isWarnEnabled()) {
-                                    logger.warn(TERMINAL_PREFIX + PERMISSIONS_FAILED);
-                                }
-                            }
-                        } else {
-                            if (logger.isWarnEnabled()) {
-                                logger.warn(TERMINAL_PREFIX + PERMISSIONS_FAILED);
-                            }
-                        }
-                    }
-                } else if (os.indexOf("mac") >= 0) {
-                    command = "sh -c ./ttyd.sh";
-                    File ttydShell = new File("./ttyd.sh");
-                    if (!ttydShell.exists()) {
-                        // ttyd should be pre-installed with: brew install ttyd
-                        // ProcessRunnable processRunnable = new ProcessRunnable("brew install ttyd");
-                        // new Thread(processRunnable).start();
-                        // processRunnable.getProcess().waitFor();
-
-                        createShellScript(ttydShell, "ttyd -p 9000 sh");
-                        ttydShell.setExecutable(true);
-                    }
-                } else if (os.indexOf("win") >= 0) {
-                    logger.error("Windows is not yet supported");
-                } else {
-                    logger.error("Unknown OS: " + os);
-                }
-
-                logger.info("Starting ttyd using command [{}]", command);
-                ProcessRunnable processRunnable = new ProcessRunnable(command);
-                new Thread(processRunnable).start();
-
-            } catch (Exception e) {
-                logger.error(TERMINAL_PREFIX + e.getMessage(), e);
-            }
-            started = true;
+    private synchronized static void runTTYD() {
+        if (started) {
+            logger.warn("TTYD is already started and will not be started again.");
+            return;
         }
+        startTTYD();
+    }
+
+    private static void startTTYD() {
+        try {
+            if (!SystemUtils.IS_OS_UNIX) {
+                logger.warn("OS [{}] is not supported", System.getProperty("os.name"));
+            }
+
+            File unixFile = createUnixFile();
+
+            String command = "./" + unixFile.getName();
+
+            logger.info("Starting ttyd using command [{}] and file [{}]", command, unixFile);
+            ProcessRunnable processRunnable = new ProcessRunnable(command);
+            new Thread(processRunnable).start();
+
+            started = true;
+        } catch (Exception e) {
+            logger.error(TERMINAL_PREFIX, e.getMessage(), e);
+        }
+    }
+
+    private static File createUnixFile() throws IOException {
+        File ttydShellFile = new File("./" + UNIX_FILE);
+        if (ttydShellFile.exists()) {
+            boolean deleted = ttydShellFile.delete();
+            logger.info("File [{}] deleted [{}]", ttydShellFile, deleted);
+        }
+
+        createShellScriptFile(ttydShellFile);
+
+        return ttydShellFile;
     }
 
     /**
      * Creates the shell script.
      *
      * @param file the file
-     * @param command the command
      * @throws FileNotFoundException the file not found exception
      * @throws IOException Signals that an I/O exception has occurred.
      */
-    private static void createShellScript(File file, String command) throws FileNotFoundException, IOException {
+    private static void createShellScriptFile(File file) throws FileNotFoundException, IOException {
+        String command = """
+                #!/bin/sh
+                ttyd -p 9000 --writable sh
+                """;
+        logger.info("Creating file [{}] with content [{}]", file, command);
         try (FileOutputStream fos = new FileOutputStream(file)) {
-            IOUtils.write(command, fos, Charset.defaultCharset());
+            IOUtils.write(command, fos, StandardCharsets.UTF_8);
         }
-    }
-
-    /**
-     * Creates the executable.
-     *
-     * @param in the in
-     * @param file the file
-     * @throws FileNotFoundException the file not found exception
-     * @throws IOException Signals that an I/O exception has occurred.
-     */
-    private static void createExecutable(InputStream in, File file) throws FileNotFoundException, IOException {
-        try (FileOutputStream fos = new FileOutputStream(file)) {
-            IOUtils.copy(in, fos);
-        }
+        boolean completed = file.setExecutable(true);
+        logger.info("File [{}] set as executable [{}]", file, completed);
     }
 
 }

@@ -77,6 +77,7 @@ class QuartzConfig {
         factory.setJobFactory(jobFactory);
         factory.setQuartzProperties(quartzProperties(systemDataSourceName));
         factory.setTransactionManager(transactionManager);
+        factory.setWaitForJobsToCompleteOnShutdown(false);
 
         logger.info("Creating QUARTZ with transaction manager [{}] for data source [{}]", transactionManager, systemDataSourceName);
 

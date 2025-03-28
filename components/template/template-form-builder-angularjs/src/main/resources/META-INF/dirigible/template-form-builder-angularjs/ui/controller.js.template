@@ -1,7 +1,7 @@
 #set($dollar = '$')
 const formView = angular.module('forms', ['blimpKit', 'platformView']);
 
-formView.controller('FormController', ($scope, $http) => {
+formView.controller('FormController', ($scope, $http, messageHub, ViewParameters) => {
 
     $scope.forms = {
         form: {}

@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.tests;
 
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.tests.framework.Browser;
 import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
@@ -42,24 +43,33 @@ public class IDE {
     private final String password;
     private final ProjectUtil projectUtil;
     private final WorkbenchFactory workbenchFactory;
+    private final DatabasePerspectiveFactory databasePerspectiveFactory;
+    private final DataSourcesManager dataSourcesManager;
+    private final GitPerspectiveFactory gitPerspectiveFactory;
 
     @Autowired
-    IDE(Browser browser, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil, WorkbenchFactory workbenchFactory) {
+    IDE(Browser browser, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil, WorkbenchFactory workbenchFactory,
+            DatabasePerspectiveFactory databasePerspectiveFactory, DataSourcesManager dataSourcesManager,
+            GitPerspectiveFactory gitPerspectiveFactory) {
         this(browser, DirigibleTestTenant.createDefaultTenant()
                                          .getUsername(),
                 DirigibleTestTenant.createDefaultTenant()
                                    .getPassword(),
-                restAssuredExecutor, projectUtil, workbenchFactory);
+                restAssuredExecutor, projectUtil, workbenchFactory, databasePerspectiveFactory, dataSourcesManager, gitPerspectiveFactory);
     }
 
     IDE(Browser browser, String username, String password, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil,
-            WorkbenchFactory workbenchFactory) {
+            WorkbenchFactory workbenchFactory, DatabasePerspectiveFactory databasePerspectiveFactory, DataSourcesManager dataSourcesManager,
+            GitPerspectiveFactory gitPerspectiveFactory) {
         this.browser = browser;
         this.restAssuredExecutor = restAssuredExecutor;
         this.username = username;
         this.password = password;
         this.projectUtil = projectUtil;
         this.workbenchFactory = workbenchFactory;
+        this.databasePerspectiveFactory = databasePerspectiveFactory;
+        this.dataSourcesManager = dataSourcesManager;
+        this.gitPerspectiveFactory = gitPerspectiveFactory;
     }
 
     public Browser getBrowser() {
@@ -128,6 +138,22 @@ public class IDE {
         browser.clickOnElementById("perspective-workbench");
 
         return workbenchFactory.create(browser);
+    }
+
+    public DatabasePerspective openDatabasePerspective() {
+        openHomePage();
+
+        browser.clickOnElementById("perspective-database");
+
+        return databasePerspectiveFactory.create(browser, dataSourcesManager);
+    }
+
+    public GitPerspective openGitPerspective() {
+        openHomePage();
+
+        browser.clickOnElementById("perspective-git");
+
+        return gitPerspectiveFactory.create(browser);
     }
 
     public void openHomePage() {

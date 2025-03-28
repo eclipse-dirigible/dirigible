@@ -187,6 +187,12 @@ More info about **ttyd** can be found at: [ttyd](https://github.com/tsl0922/ttyd
         docker build -t dirigiblelabs/dirigible:latest -f Dockerfile .
    > prerequisite: build the project as described in step 4 [here](https://github.com/eclipse/dirigible/blob/master/README.md#steps)
 
+- Build it locally **without cache**
+
+        cd build/application
+        docker build --no-cache -t dirigiblelabs/dirigible:latest -f Dockerfile .
+  > prerequisite: build the project as described in step 4 [here](https://github.com/eclipse/dirigible/blob/master/README.md#steps)
+
 2. Start the container
 ```
 docker run --name dirigible --rm -p 8080:8080 -p 8081:8081 dirigiblelabs/dirigible:latest
@@ -342,4 +348,3 @@ Unicons by IconScout: [https://github.com/Iconscout/unicons](https://github.com/
 - Mailing List: [https://dev.eclipse.org/mailman/listinfo/dirigible-dev](https://dev.eclipse.org/mailman/listinfo/dirigible-dev)
 - Issues: [https://github.com/eclipse/dirigible/issues](https://github.com/eclipse/dirigible/issues)
 - Eclipse Foundation Help Desk: https://gitlab.eclipse.org/eclipsefdn/helpdesk
-

@@ -19,6 +19,7 @@ import org.eclipse.dirigible.components.data.sources.domain.DataSourceProperty;
 import org.eclipse.dirigible.components.database.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.GenericApplicationContext;
@@ -36,7 +37,7 @@ import static java.text.MessageFormat.format;
  * The Class DataSourceInitializer.
  */
 @Component
-public class DataSourceInitializer {
+public class DataSourceInitializer implements DisposableBean {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(DataSourceInitializer.class);
@@ -271,4 +272,14 @@ public class DataSourceInitializer {
         beanFactory.registerSingleton(name, dataSource);
     }
 
+    @Override
+    public void destroy() {
+        logger.info("Clearing datasources...");
+        clear();
+    }
+
+    public void clear() {
+        Set<String> keys = new HashSet<>(DATASOURCES.keySet());
+        keys.forEach(this::removeInitializedDataSource);
+    }
 }

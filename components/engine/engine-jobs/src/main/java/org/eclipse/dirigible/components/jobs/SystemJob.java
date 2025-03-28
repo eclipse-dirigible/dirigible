@@ -9,14 +9,11 @@
  */
 package org.eclipse.dirigible.components.jobs;
 
-import org.springframework.transaction.annotation.Transactional;
-
 import java.util.Optional;
 
 /**
  * The Class SystemJob.
  */
-@Transactional
 public abstract class SystemJob extends DirigibleJob {
 
     /**

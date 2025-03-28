@@ -16,6 +16,9 @@ import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.engine.cms.CmsProvider;
 import org.eclipse.dirigible.components.engine.cms.CmsProviderFactory;
 import org.eclipse.dirigible.components.engine.cms.internal.provider.CmsProviderInternal;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
@@ -28,19 +31,21 @@ import java.util.Map;
  * A factory for creating CmsProviderInternal objects.
  */
 @Component("cms-provider-internal")
-class CmsProviderInternalFactory implements CmsProviderFactory {
+class CmsProviderInternalFactory implements CmsProviderFactory, DisposableBean {
 
     /** The Constant DIRIGIBLE_CMS_INTERNAL_ROOT_FOLDER. */
     private static final String DIRIGIBLE_CMS_INTERNAL_ROOT_FOLDER = "DIRIGIBLE_CMS_INTERNAL_ROOT_FOLDER";
+
+    /** The Constant PROVIDERS. */
+    private static final Map<String, CmsProvider> PROVIDERS = new HashMap<String, CmsProvider>();
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(CmsProviderInternalFactory.class);
 
     /** The tenant context. */
     private final TenantContext tenantContext;
 
     /** The default tenant. */
     private final Tenant defaultTenant;
-
-    /** The Constant PROVIDERS. */
-    private static final Map<String, CmsProvider> PROVIDERS = new HashMap<String, CmsProvider>();
 
     /**
      * Instantiates a new cms provider internal factory.
@@ -81,5 +86,11 @@ class CmsProviderInternalFactory implements CmsProviderFactory {
                 : tenantContext.getCurrentTenant()
                                .getId();
         return File.separator + tenantId;
+    }
+
+    @Override
+    public void destroy() {
+        LOGGER.info("Deleting providers...");
+        PROVIDERS.clear();
     }
 }

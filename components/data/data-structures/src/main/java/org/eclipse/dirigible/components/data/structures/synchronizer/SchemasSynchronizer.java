@@ -194,13 +194,14 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
         Schema result = new Schema();
 
         JsonElement root = GsonHelper.parseJson(content);
-        JsonArray structures = root.getAsJsonObject()
-                                   .get("schema")
-                                   .getAsJsonObject()
-                                   .get("structures")
-                                   .getAsJsonArray();
-        JsonElement datasourceJsonElement = root.getAsJsonObject()
-                                                .get("datasource");
+        JsonObject rootJsonObject = root.getAsJsonObject();
+        JsonElement schemaElement = rootJsonObject.get("schema");
+        JsonObject schemaJsonObject = schemaElement.getAsJsonObject();
+        JsonElement strs = schemaJsonObject.get("structures");
+        JsonArray structures = strs.getAsJsonArray();
+
+        JsonElement datasourceJsonElement = rootJsonObject.get("datasource");
+
         String dataSource = datasourceJsonElement != null ? datasourceJsonElement.getAsString() : defaultDataSourceName;
         result.setDataSource(dataSource);
         for (int i = 0; i < structures.size(); i++) {

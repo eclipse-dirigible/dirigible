@@ -12,41 +12,30 @@ package org.eclipse.dirigible.tests;
 import org.awaitility.Awaitility;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.test.annotation.DirtiesContext;
-import org.springframework.test.annotation.DirtiesContext.ClassMode;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @AutoConfigureMockMvc
-@DirtiesContext(classMode = ClassMode.AFTER_EACH_TEST_METHOD)
+@DirtiesContext
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 public abstract class IntegrationTest {
 
     // set config to false if you want to disable the headless mode
-    static {
-        com.codeborne.selenide.Configuration.headless = true;
-    }
+    private static final boolean headlessExecution = Boolean.parseBoolean(System.getProperty("selenide.headless", Boolean.TRUE.toString()));
 
     @Autowired
     private TenantCreator tenantCreator;
 
-    @Autowired
-    private DirigibleCleaner dirigibleCleaner;
-
-    @AfterEach
-    final void cleanUp() {
-        dirigibleCleaner.clean();
-    }
-
     @AfterAll
-    public static final void reloadConfigurations() {
+    public static void reloadConfigurations() {
         Configuration.reloadConfigurations();
     }
 
@@ -67,6 +56,15 @@ public abstract class IntegrationTest {
                   .pollInterval(3, TimeUnit.SECONDS)
                   .atMost(35, TimeUnit.SECONDS)
                   .until(() -> tenantCreator.isTenantProvisioned(tenant));
+    }
+
+    @BeforeAll
+    static void cleanBeforeTestClassExecution() {
+        DirigibleCleaner.deleteDirigibleFolder();
+    }
+
+    public static boolean isHeadlessExecution() {
+        return headlessExecution;
     }
 
 }
