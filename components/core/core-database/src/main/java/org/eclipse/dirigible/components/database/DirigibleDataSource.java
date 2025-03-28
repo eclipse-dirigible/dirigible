@@ -9,8 +9,11 @@
  */
 package org.eclipse.dirigible.components.database;
 
+import org.springframework.transaction.PlatformTransactionManager;
+
 import javax.sql.DataSource;
 import java.sql.SQLException;
+import java.util.Optional;
 
 public interface DirigibleDataSource extends DataSource, DatabaseSystemAware {
 
@@ -24,4 +27,7 @@ public interface DirigibleDataSource extends DataSource, DatabaseSystemAware {
     @Override
     DirigibleConnection getConnection(String username, String password) throws SQLException;
 
+    Optional<PlatformTransactionManager> getTransactionManager();
+
+    void setTransactionManager(PlatformTransactionManager transactionManager);
 }
