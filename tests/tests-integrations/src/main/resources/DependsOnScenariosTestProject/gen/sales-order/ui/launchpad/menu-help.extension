@@ -1,0 +1,5 @@
+{
+    "module": "sales-order-app/gen/sales-order/ui/launchpad/menu-help.js",
+    "extensionPoint": "sales-order-app-menu",
+    "description": "sales-order-app - Application Menu"
+}

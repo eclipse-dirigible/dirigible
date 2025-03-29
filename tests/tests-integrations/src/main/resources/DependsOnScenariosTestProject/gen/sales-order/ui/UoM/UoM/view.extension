@@ -1,0 +1,5 @@
+{
+    "module": "sales-order-app/gen/sales-order/ui/UoM/UoM/view.js",
+    "extensionPoint": "sales-order-app-view",
+    "description": "sales-order-app - Application View"
+}

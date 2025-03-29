@@ -1,0 +1,5 @@
+{
+    "module": "sales-order-app/gen/sales-order/ui/Country/Country/City/dialog-window/view.js",
+    "extensionPoint": "dialog-window",
+    "description": "sales-order-app - Application Dialog Window"
+}

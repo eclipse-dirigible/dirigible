@@ -1,0 +1,5 @@
+{
+    "module": "sales-order-app/gen/sales-order/ui/SalesOrder/SalesOrder/SalesOrderItem/dialog-filter/view.js",
+    "extensionPoint": "dialog-window",
+    "description": "sales-order-app - Application Dialog Window"
+}

@@ -1,0 +1,4 @@
+{
+    "name": "sales-order-app-view",
+    "description": "sales-order-app - Extension Point for the Application View Providers"
+}

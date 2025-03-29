@@ -1,0 +1,5 @@
+{
+    "module": "sales-order-app/gen/sales-order/ui/Country/Country/tile.js",
+    "extensionPoint": "sales-order-app-tile",
+    "description": "sales-order-app - Application Tile"
+}
