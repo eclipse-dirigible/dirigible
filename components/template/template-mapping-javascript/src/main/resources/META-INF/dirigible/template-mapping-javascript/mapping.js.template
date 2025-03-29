@@ -1,4 +1,10 @@
-import { response } from "sdk/http";
+import { request, response } from "sdk/http";
+
+if (request.getMethod() !== 'POST') {
+    response.setContentType('text/plain');
+    response.println("Only POST request are allowed.");
+    throw new Error("Only POST request are allowed.");
+}
 
 let MAPPING_MODEL = ${mapping};
 
@@ -15,7 +21,51 @@ MAPPING_MODEL.mapping.structures.forEach((structure) => {
 );
 
 response.setContentType('text/plain');
-response.println("SOURCE NAME " + SOURCE_METADATA.name);
-response.println("TARGET NAME " + TARGET_METADATA.name);
+
+let SOURCE_DATA = [];
+try {
+    SOURCE_DATA = JSON.parse(request.getText());
+} catch (e) {
+    response.setContentType('text/plain');
+    response.println("Error on parsing the data from request: " + e);
+    throw e;
+}
+let TARGET_DATA = [];
+SOURCE_DATA.forEach((SOURCE_RECORD) => {
+    let TARGET_RECORD = {};
+    let skip = false;
+    for (let i = 0; i < TARGET_METADATA.columns.length; i++) {
+        try {
+            if (TARGET_METADATA.columns[i].direct) {
+                TARGET_RECORD[TARGET_METADATA.columns[i].name] = SOURCE_RECORD[TARGET_METADATA.columns[i].direct];
+            } else if (TARGET_METADATA.columns[i].constant) {
+                TARGET_RECORD[TARGET_METADATA.columns[i].name] = TARGET_METADATA.columns[i].constant;
+            } else if (TARGET_METADATA.columns[i].formula) {
+                TARGET_RECORD[TARGET_METADATA.columns[i].name] = eval(TARGET_METADATA.columns[i].formula);
+            } else if (TARGET_METADATA.columns[i].module) {
+                let module = import(TARGET_METADATA.columns[i].module);
+                if (module) {
+                    TARGET_RECORD[TARGET_METADATA.columns[i].name] = module.map(SOURCE_METADATA, TARGET_METADATA, SOURCE_RECORD, TARGET_RECORD, TARGET_METADATA.columns[i].name);
+                } else {
+                    console.error("Error occured when loading: " + TARGET_METADATA.columns[i].module);
+                }
+            }
+            if (TARGET_METADATA.columns[i].criteria) {
+                if (eval(TARGET_RECORD[TARGET_METADATA.columns[i].name] + TARGET_METADATA.columns[i].criteria)) {
+                    skip = true;
+                    break;
+                }
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+    if (!skip) {
+        TARGET_DATA.push(TARGET_RECORD);
+    }
+});
+
+response.println(JSON.stringify(TARGET_DATA));
+
 response.flush();
 response.close();

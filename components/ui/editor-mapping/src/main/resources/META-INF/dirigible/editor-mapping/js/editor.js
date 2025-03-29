@@ -691,7 +691,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 						let column = me.state.cell.value.columns[this.currentRow - 1];
 						let sourceColumnName = this.edgeState.cell.value.getAttribute('sourceColumn');
 						column.source = sourceColumnName;
-						column.direct = 'SOURCE["' + sourceColumnName + '"]';
+						column.direct = '"' + sourceColumnName + '"';
 						$scope.refresh();
 					} else {
 						this.edgeState.cell.value.setAttribute('targetRow', '0');
