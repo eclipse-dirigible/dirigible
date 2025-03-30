@@ -9,6 +9,10 @@
  */
 package org.eclipse.dirigible.components.listeners.config;
 
+import jakarta.annotation.PreDestroy;
+import jakarta.jms.Connection;
+import jakarta.jms.JMSException;
+import jakarta.jms.Session;
 import org.apache.activemq.broker.BrokerService;
 import org.eclipse.dirigible.components.base.ApplicationListenersOrder.ApplicationStoppedEventListeners;
 import org.eclipse.dirigible.components.listeners.service.ListenersManager;
@@ -22,16 +26,12 @@ import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.ContextStoppedEvent;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-import jakarta.jms.Connection;
-import jakarta.jms.JMSException;
-import jakarta.jms.Session;
 
 /**
  * The listener interface for receiving closeActiveMQResourcesApplication events. The class that is
  * interested in processing a closeActiveMQResourcesApplication event implements this interface, and
  * the object created with that class is registered with a component using the component's
  * closeActiveMQResourcesApplication event occurs, that object's appropriate method is invoked.
- *
  */
 @Order(ApplicationStoppedEventListeners.ACTIVE_MQ_CLEANUP)
 @Component
@@ -146,5 +146,19 @@ class CloseActiveMQResourcesApplicationListener implements ApplicationListener<A
         } catch (Exception ex) {
             LOGGER.warn("Failed to close broker {}", broker, ex);
         }
+    }
+
+    @PreDestroy
+    public void destroy() {
+        LOGGER.info("Destroying [{}].", this.getClass());
+        closeResources();
+    }
+
+    private void closeResources() {
+        LOGGER.info("Closing ActiveMQ resources...");
+        stopListeners();
+        closeSession();
+        closeConnection();
+        stopBroker();
     }
 }
