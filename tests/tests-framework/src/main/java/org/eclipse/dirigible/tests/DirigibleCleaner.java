@@ -70,7 +70,7 @@ class DirigibleCleaner {
     private void dropAllObjects(DirigibleDataSource dataSource) {
         LOGGER.info("Will drop all objects from [{}]...", dataSource);
         try (Connection connection = dataSource.getConnection();
-                PreparedStatement preparedStatement = connection.prepareStatement("DROP ALL OBJECTS;")) {
+                PreparedStatement preparedStatement = connection.prepareStatement("DROP ALL OBJECTS")) {
             preparedStatement.executeUpdate();
         } catch (Exception ex) {
             LOGGER.warn("Failed to drop all objects from [{}]", dataSource, ex);
