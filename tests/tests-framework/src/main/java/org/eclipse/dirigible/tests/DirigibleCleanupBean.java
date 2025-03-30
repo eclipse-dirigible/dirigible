@@ -9,13 +9,13 @@
  */
 package org.eclipse.dirigible.tests;
 
-import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.stereotype.Component;
 
 @Component
-class DirigibleCleanupBean {
+class DirigibleCleanupBean implements DisposableBean {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleCleanupBean.class);
 
@@ -25,8 +25,8 @@ class DirigibleCleanupBean {
         this.dirigibleCleaner = dirigibleCleaner;
     }
 
-    @PreDestroy
-    public void preDestroy() {
+    @Override
+    public void destroy() {
         LOGGER.info("Destroying [{}]. Calling cleaner...", this.getClass());
         dirigibleCleaner.cleanup();
     }
