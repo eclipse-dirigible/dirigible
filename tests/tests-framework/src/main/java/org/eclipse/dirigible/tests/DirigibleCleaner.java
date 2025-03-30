@@ -45,15 +45,20 @@ class DirigibleCleaner {
 
     public void cleanup() {
         try {
+            DirigibleDataSource systemDataSource = dataSourcesManager.getSystemDataSource();
+            if (systemDataSource.isOfType(DatabaseSystem.H2)) {
+                dropAllObjects(systemDataSource);
+            }
+
             DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
+            if (defaultDataSource.isOfType(DatabaseSystem.H2)) {
+                dropAllObjects(defaultDataSource);
+            }
+
             if (defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
                 deleteSchemas(defaultDataSource);
                 String schema = defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL) ? "public" : "PUBLIC";
                 createSchema(defaultDataSource, schema);
-            }
-
-            if (defaultDataSource.isOfType(DatabaseSystem.H2)) {
-                dropAllObjects(defaultDataSource);
             }
 
             clearEntityManagerCaches();
