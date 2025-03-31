@@ -246,7 +246,17 @@ function createModel(graph) {
 	if (graph.getModel().perspectives) {
 		model.push(' <perspectives>\n');
 		for (let i = 0; i < graph.getModel().perspectives.length; i++) {
-			model.push('  <perspective><name>' + _.escape(graph.getModel().perspectives[i].id) + '</name><label>' + _.escape(graph.getModel().perspectives[i].label) + '</label><header>' + _.escape(graph.getModel().perspectives[i].header) + '</header><navId>' + _.escape(graph.getModel().perspectives[i].navId) + '</navId><icon>' + _.escape(graph.getModel().perspectives[i].icon) + '</icon><order>' + _.escape(graph.getModel().perspectives[i].order) + '</order><role>' + _.escape(graph.getModel().perspectives[i].role) + '</role></perspective>\n');
+			let perspective = '  <perspective>';
+			perspective += `<name>${_.escape(graph.getModel().perspectives[i].id)}</name>`;
+			perspective += `<label>${_.escape(graph.getModel().perspectives[i].label)}</label>`;
+			if (graph.getModel().perspectives[i].header) perspective += `<header>${_.escape(graph.getModel().perspectives[i].header)}</header>`;
+			if (graph.getModel().perspectives[i].navId) perspective += `<navId>${_.escape(graph.getModel().perspectives[i].navId)}</navId>`;
+			if (graph.getModel().perspectives[i].icon) perspective += `<icon>${_.escape(graph.getModel().perspectives[i].icon)}</icon>`;
+			if (graph.getModel().perspectives[i].order) perspective += `<order>${_.escape(graph.getModel().perspectives[i].order)}</order>`;
+			if (graph.getModel().perspectives[i].role) perspective += `<role>${_.escape(graph.getModel().perspectives[i].role)}</role>`;
+			perspective += '</perspective>\n';
+
+			model.push(perspective);
 		}
 		model.push(' </perspectives>\n');
 	}
@@ -254,7 +264,16 @@ function createModel(graph) {
 	if (graph.getModel().navigations) {
 		model.push(' <navigations>\n');
 		for (let i = 0; i < graph.getModel().navigations.length; i++) {
-			model.push('  <item><id>' + _.escape(graph.getModel().navigations[i].id) + '</id><label>' + _.escape(graph.getModel().navigations[i].label) + '</label><header>' + _.escape(graph.getModel().navigations[i].header) + '</header><expanded>' + _.escape(graph.getModel().navigations[i].expanded) + '</expanded><icon>' + _.escape(graph.getModel().navigations[i].icon) + '</icon><order>' + _.escape(graph.getModel().navigations[i].order) + '</order><role>' + _.escape(graph.getModel().navigations[i].role) + '</role></item>\n');
+			let navigation = '  <item>';
+			navigation += `<id>${_.escape(graph.getModel().navigations[i].id)}</id>`;
+			navigation += `<label>${_.escape(graph.getModel().navigations[i].label)}</label>`;
+			if (graph.getModel().navigations[i].header) navigation += `<header>${_.escape(graph.getModel().navigations[i].header)}</header>`;
+			if (graph.getModel().navigations[i].expanded) navigation += `<expanded>${_.escape(graph.getModel().navigations[i].expanded)}</expanded>`;
+			if (graph.getModel().navigations[i].icon) navigation += `<icon>${_.escape(graph.getModel().navigations[i].icon)}</icon>`;
+			if (graph.getModel().navigations[i].order) navigation += `<order>${_.escape(graph.getModel().navigations[i].order)}</order>`;
+			if (graph.getModel().navigations[i].role) navigation += `<role>${_.escape(graph.getModel().navigations[i].role)}</role>`;
+			navigation += '</item>\n'
+			model.push(navigation);
 		}
 		model.push(' </navigations>\n');
 	}

@@ -82,7 +82,7 @@ blimpkit.directive('bkMenu', function ($window, $timeout, $injector, backdrop, c
                 scope.getMenuClasses = function () {
                     if (scope.canScroll) element[0].style.maxHeight = `${scope.maxHeight || scope.defaultHeight}px`;
                     else element[0].style.removeProperty('max-height');
-                    return classNames('fd-menu', { 'fd-menu--overflow': scope.canScroll === true, 'fd-menu--icons': scope.hasIcons === true });
+                    return classNames('fd-menu', { 'fd-menu--overflow fd-scrollbar': scope.canScroll === true, 'fd-menu--icons': scope.hasIcons === true });
                 };
                 scope.getListClasses = () => classNames('fd-menu__list', {
                     'fd-menu__list--no-shadow': scope.noShadow === true
