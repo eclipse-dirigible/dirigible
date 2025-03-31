@@ -36,14 +36,6 @@ import static org.hamcrest.Matchers.containsString;
 @Import(RestTransactionsITConfig.class)
 public class RestTransactionsIT extends UserInterfaceIntegrationTest {
 
-    // static {
-    // Configuration.set("DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER", "org.postgresql.Driver");
-    // Configuration.set("DIRIGIBLE_DATASOURCE_DEFAULT_URL",
-    // "jdbc:postgresql://localhost:5432/postgres");
-    // Configuration.set("DIRIGIBLE_DATASOURCE_DEFAULT_USERNAME", "postgres");
-    // Configuration.set("DIRIGIBLE_DATASOURCE_DEFAULT_PASSWORD", "postgres");
-    // }
-
     @Autowired
     private UserService userService;
 
