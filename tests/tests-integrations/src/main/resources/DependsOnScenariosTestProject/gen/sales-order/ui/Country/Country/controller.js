@@ -1,9 +1,9 @@
 angular.module('page', ["ideUI", "ideView", "entityApi"])
 	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = 'sales-order-app.Country.Country';
+		messageHubProvider.eventIdPrefix = 'DependsOnScenariosTestProject.Country.Country';
 	}])
 	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/sales-order-app/gen/sales-order/api/Country/CountryService.ts";
+		entityApiProvider.baseUrl = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts";
 	}])
 	.controller('PageController', ['$scope', 'messageHub', 'entityApi', 'Extensions', function ($scope, messageHub, entityApi, Extensions) {
 
@@ -14,7 +14,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		$scope.action = "select";
 
 		//-----------------Custom Actions-------------------//
-		Extensions.get('dialogWindow', 'sales-order-app-custom-action').then(function (response) {
+		Extensions.get('dialogWindow', 'DependsOnScenariosTestProject-custom-action').then(function (response) {
 			$scope.pageActions = response.filter(e => e.perspective === "Country" && e.view === "Country" && (e.type === "page" || e.type === undefined));
 		});
 

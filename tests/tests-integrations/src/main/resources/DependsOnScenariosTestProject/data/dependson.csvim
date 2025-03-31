@@ -3,7 +3,7 @@
     {
       "table": "CITY",
       "schema": "PUBLIC",
-      "file": "/DependsOnScenariosTestProject/cities.csv",
+      "file": "/DependsOnScenariosTestProject/data/cities.csv",
       "header": true,
       "useHeaderNames": true,
       "delimField": ",",
@@ -14,7 +14,7 @@
     {
       "table": "COUNTRY",
       "schema": "PUBLIC",
-      "file": "/DependsOnScenariosTestProject/countries.csv",
+      "file": "/DependsOnScenariosTestProject/data/countries.csv",
       "header": true,
       "useHeaderNames": true,
       "delimField": ",",
@@ -25,7 +25,7 @@
     {
       "table": "CUSTOMER",
       "schema": "PUBLIC",
-      "file": "/DependsOnScenariosTestProject/customers.csv",
+      "file": "/DependsOnScenariosTestProject/data/customers.csv",
       "header": true,
       "useHeaderNames": true,
       "delimField": ",",
@@ -36,7 +36,7 @@
     {
       "table": "CUSTOMERPAYMENT",
       "schema": "PUBLIC",
-      "file": "/DependsOnScenariosTestProject/customer_payments.csv",
+      "file": "/DependsOnScenariosTestProject/data/customer_payments.csv",
       "header": true,
       "useHeaderNames": true,
       "delimField": ",",
@@ -47,7 +47,7 @@
     {
       "table": "PRODUCT",
       "schema": "PUBLIC",
-      "file": "/DependsOnScenariosTestProject/products.csv",
+      "file": "/DependsOnScenariosTestProject/data/products.csv",
       "header": true,
       "useHeaderNames": true,
       "delimField": ",",
@@ -58,7 +58,7 @@
     {
       "table": "UOM",
       "schema": "PUBLIC",
-      "file": "/DependsOnScenariosTestProject/uoms.csv",
+      "file": "/DependsOnScenariosTestProject/data/uoms.csv",
       "header": true,
       "useHeaderNames": true,
       "delimField": ",",

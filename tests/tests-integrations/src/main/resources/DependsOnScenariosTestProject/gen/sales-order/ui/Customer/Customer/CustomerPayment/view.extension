@@ -1,5 +1,5 @@
 {
-    "module": "sales-order-app/gen/sales-order/ui/Customer/Customer/CustomerPayment/view.js",
-    "extensionPoint": "sales-order-app-view",
-    "description": "sales-order-app - Application View - Details"
+    "module": "DependsOnScenariosTestProject/gen/sales-order/ui/Customer/Customer/CustomerPayment/view.js",
+    "extensionPoint": "DependsOnScenariosTestProject-view",
+    "description": "DependsOnScenariosTestProject - Application View - Details"
 }

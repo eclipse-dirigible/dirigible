@@ -1,5 +1,5 @@
 {
-    "module": "sales-order-app/gen/sales-order/ui/Customer/Customer/tile.js",
-    "extensionPoint": "sales-order-app-tile",
-    "description": "sales-order-app - Application Tile"
+    "module": "DependsOnScenariosTestProject/gen/sales-order/ui/Customer/Customer/tile.js",
+    "extensionPoint": "DependsOnScenariosTestProject-tile",
+    "description": "DependsOnScenariosTestProject - Application Tile"
 }

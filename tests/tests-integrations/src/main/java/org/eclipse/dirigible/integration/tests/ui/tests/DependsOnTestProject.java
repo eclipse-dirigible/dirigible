@@ -16,6 +16,7 @@ import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
+import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -44,6 +45,7 @@ class DependsOnTestProject extends BaseTestProject {
     @Override
     public void verify() {
         browser.openPath(VERIFICATION_URI);
+
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
         browser.enterTextInElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Country ...", "Bulgaria");
 

@@ -1,9 +1,9 @@
 angular.module('page', ["ideUI", "ideView", "entityApi"])
 	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = 'sales-order-app.Product.Product';
+		messageHubProvider.eventIdPrefix = 'DependsOnScenariosTestProject.Product.Product';
 	}])
 	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/sales-order-app/gen/sales-order/api/Product/ProductService.ts";
+		entityApiProvider.baseUrl = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Product/ProductService.ts";
 	}])
 	.controller('PageController', ['$scope', '$http', 'messageHub', 'entityApi', 'Extensions', function ($scope, $http, messageHub, entityApi, Extensions) {
 
@@ -14,7 +14,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		$scope.action = "select";
 
 		//-----------------Custom Actions-------------------//
-		Extensions.get('dialogWindow', 'sales-order-app-custom-action').then(function (response) {
+		Extensions.get('dialogWindow', 'DependsOnScenariosTestProject-custom-action').then(function (response) {
 			$scope.pageActions = response.filter(e => e.perspective === "Product" && e.view === "Product" && (e.type === "page" || e.type === undefined));
 		});
 
@@ -175,7 +175,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		$scope.optionsUoM = [];
 
 
-		$http.get("/services/ts/sales-order-app/gen/sales-order/api/UoM/UoMService.ts").then(function (response) {
+		$http.get("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/UoM/UoMService.ts").then(function (response) {
 			$scope.optionsUoM = response.data.map(e => {
 				return {
 					value: e.Id,

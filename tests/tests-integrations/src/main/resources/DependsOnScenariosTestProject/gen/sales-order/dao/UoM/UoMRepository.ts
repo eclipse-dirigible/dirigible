@@ -182,7 +182,7 @@ export class UoMRepository {
     }
 
     private async triggerEvent(data: UoMEntityEvent | UoMUpdateEntityEvent) {
-        const triggerExtensions = await extensions.loadExtensionModules("sales-order-app-UoM-UoM", ["trigger"]);
+        const triggerExtensions = await extensions.loadExtensionModules("DependsOnScenariosTestProject-UoM-UoM", ["trigger"]);
         triggerExtensions.forEach(triggerExtension => {
             try {
                 triggerExtension.trigger(data);
@@ -190,6 +190,6 @@ export class UoMRepository {
                 console.error(error);
             }            
         });
-        producer.topic("sales-order-app-UoM-UoM").send(JSON.stringify(data));
+        producer.topic("DependsOnScenariosTestProject-UoM-UoM").send(JSON.stringify(data));
     }
 }

@@ -1,9 +1,9 @@
 angular.module('page', ["ideUI", "ideView", "entityApi"])
 	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = 'sales-order-app.Customer.Customer';
+		messageHubProvider.eventIdPrefix = 'DependsOnScenariosTestProject.Customer.Customer';
 	}])
 	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/sales-order-app/gen/sales-order/api/Customer/CustomerService.ts";
+		entityApiProvider.baseUrl = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts";
 	}])
 	.controller('PageController', ['$scope',  '$http', 'Extensions', 'messageHub', 'entityApi', function ($scope,  $http, Extensions, messageHub, entityApi) {
 
@@ -19,7 +19,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		$scope.action = 'select';
 
 		//-----------------Custom Actions-------------------//
-		Extensions.get('dialogWindow', 'sales-order-app-custom-action').then(function (response) {
+		Extensions.get('dialogWindow', 'DependsOnScenariosTestProject-custom-action').then(function (response) {
 			$scope.entityActions = response.filter(e => e.perspective === "Customer" && e.view === "Customer" && e.type === "entity");
 		});
 
@@ -73,15 +73,15 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 			});
 		});
 
-		$scope.serviceCountry = "/services/ts/sales-order-app/gen/sales-order/api/Country/CountryService.ts";
-		$scope.serviceCity = "/services/ts/sales-order-app/gen/sales-order/api/Country/CityService.ts";
+		$scope.serviceCountry = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts";
+		$scope.serviceCity = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts";
 
 
 		$scope.$watch('entity.Country', function (newValue, oldValue) {
 			if (newValue !== undefined && newValue !== null) {
 				entityApi.$http.get($scope.serviceCountry + '/' + newValue).then(function (response) {
 					let valueFrom = response.data.Id;
-					entityApi.$http.post("/services/ts/sales-order-app/gen/sales-order/api/Country/CityService.ts/search", {
+					entityApi.$http.post("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts/search", {
 						$filter: {
 							equals: {
 								Country: valueFrom
@@ -158,7 +158,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 
 		$scope.refreshCountry = function () {
 			$scope.optionsCountry = [];
-			$http.get("/services/ts/sales-order-app/gen/sales-order/api/Country/CountryService.ts").then(function (response) {
+			$http.get("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts").then(function (response) {
 				$scope.optionsCountry = response.data.map(e => {
 					return {
 						value: e.Id,
@@ -169,7 +169,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		};
 		$scope.refreshCity = function () {
 			$scope.optionsCity = [];
-			$http.get("/services/ts/sales-order-app/gen/sales-order/api/Country/CityService.ts").then(function (response) {
+			$http.get("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts").then(function (response) {
 				$scope.optionsCity = response.data.map(e => {
 					return {
 						value: e.Id,

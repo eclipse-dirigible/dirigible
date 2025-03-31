@@ -1,9 +1,9 @@
 angular.module('page', ["ideUI", "ideView", "entityApi"])
 	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = 'sales-order-app.Customer.Customer';
+		messageHubProvider.eventIdPrefix = 'DependsOnScenariosTestProject.Customer.Customer';
 	}])
 	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/sales-order-app/gen/sales-order/api/Customer/CustomerService.ts";
+		entityApiProvider.baseUrl = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts";
 	}])
 	.controller('PageController', ['$scope', '$http', 'messageHub', 'entityApi', 'Extensions', function ($scope, $http, messageHub, entityApi, Extensions) {
 
@@ -14,7 +14,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		$scope.action = "select";
 
 		//-----------------Custom Actions-------------------//
-		Extensions.get('dialogWindow', 'sales-order-app-custom-action').then(function (response) {
+		Extensions.get('dialogWindow', 'DependsOnScenariosTestProject-custom-action').then(function (response) {
 			$scope.pageActions = response.filter(e => e.perspective === "Customer" && e.view === "Customer" && (e.type === "page" || e.type === undefined));
 		});
 
@@ -180,7 +180,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		$scope.optionsCity = [];
 
 
-		$http.get("/services/ts/sales-order-app/gen/sales-order/api/Country/CountryService.ts").then(function (response) {
+		$http.get("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts").then(function (response) {
 			$scope.optionsCountry = response.data.map(e => {
 				return {
 					value: e.Id,
@@ -189,7 +189,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 			});
 		});
 
-		$http.get("/services/ts/sales-order-app/gen/sales-order/api/Country/CityService.ts").then(function (response) {
+		$http.get("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts").then(function (response) {
 			$scope.optionsCity = response.data.map(e => {
 				return {
 					value: e.Id,

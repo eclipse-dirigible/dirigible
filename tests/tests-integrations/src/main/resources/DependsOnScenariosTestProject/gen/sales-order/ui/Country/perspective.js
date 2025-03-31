@@ -6,7 +6,7 @@
 const perspectiveData = {
 	id: 'Country',
 	name: 'Country',
-	link: '/services/web/sales-order-app/gen/sales-order/ui/Country/index.html',
+	link: '/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Country/index.html',
 	order: '1',
 	icon: '/services/web/resources/unicons/globe.svg'
 };

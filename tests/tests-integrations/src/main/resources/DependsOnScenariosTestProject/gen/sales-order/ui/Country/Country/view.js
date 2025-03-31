@@ -8,7 +8,7 @@ const viewData = {
     label: "Country",
     factory: "frame",
     region: "left",
-    link: "/services/web/sales-order-app/gen/sales-order/ui/Country/Country/index.html",
+    link: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Country/Country/index.html",
     perspectiveName: "Country"
 };
 

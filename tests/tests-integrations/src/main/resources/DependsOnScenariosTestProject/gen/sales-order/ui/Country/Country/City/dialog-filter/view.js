@@ -6,7 +6,7 @@
 const viewData = {
     id: "City-filter",
     label: "City Filter",
-    link: "/services/web/sales-order-app/gen/sales-order/ui/Country/Country/City/dialog-filter/index.html",
+    link: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Country/Country/City/dialog-filter/index.html",
     perspectiveName: "Country"
 };
 

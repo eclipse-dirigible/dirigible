@@ -1,17 +1,16 @@
 {
-  "brand": "codbex",
-  "brandUrl": "https://www.codbex.com/",
-  "title": "Sales Order Application",
-  "description": "Managing sales orders",
-  "fileName": "sales-order",
-  "genFolderName": "sales-order",
-  "dataSource": "DefaultDB",
-  "tablePrefix": "",
-  "roles": [],
+  "brand": "Dirigible",
+  "brandUrl": "dirigible.io",
+  "title": "Eclipse - Dirigible",
+  "description": "Dirigible",
   "projectName": "DependsOnScenariosTestProject",
   "workspaceName": "workspace",
   "filePath": "sales-order.model",
   "templateId": "template-application-angular/template/template.js",
+  "fileName": "sales-order",
+  "genFolderName": "sales-order",
+  "dataSource": "DefaultDB",
+  "tablePrefix": "",
   "perspectives": {
     "Country": {
       "views": [
@@ -183,6 +182,7 @@
       "role": ""
     }
   },
+  "roles": [],
   "models": [
     {
       "properties": [

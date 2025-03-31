@@ -1,9 +1,9 @@
 angular.module('page', ["ideUI", "ideView", "entityApi"])
 	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = 'sales-order-app.SalesOrder.SalesOrderPayment';
+		messageHubProvider.eventIdPrefix = 'DependsOnScenariosTestProject.SalesOrder.SalesOrderPayment';
 	}])
 	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/sales-order-app/gen/sales-order/api/SalesOrder/SalesOrderPaymentService.ts";
+		entityApiProvider.baseUrl = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderPaymentService.ts";
 	}])
 	.controller('PageController', ['$scope', 'messageHub', 'ViewParameters', 'entityApi', function ($scope, messageHub, ViewParameters, entityApi) {
 
@@ -26,7 +26,6 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 			$scope.selectedMainEntityId = params.selectedMainEntityId;
 			$scope.optionsCustomer = params.optionsCustomer;
 			$scope.optionsCustomerPayment = params.optionsCustomerPayment;
-			$scope.entity[$scope.selectedMainEntityKey] = $scope.selectedMainEntityId;
 		}
 
 		$scope.create = function () {
@@ -58,15 +57,14 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 			});
 		};
 
-		$scope.serviceSalesOrder = "/services/ts/sales-order-app/gen/sales-order/api/SalesOrder/SalesOrderService.ts";
-		$scope.serviceCustomer = "/services/ts/sales-order-app/gen/sales-order/api/Customer/CustomerService.ts";
-		$scope.serviceCustomerPayment = "/services/ts/sales-order-app/gen/sales-order/api/Customer/CustomerPaymentService.ts";
+		$scope.serviceCustomer = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts";
+		$scope.serviceCustomerPayment = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerPaymentService.ts";
 
 		$scope.$watch('entity.SalesOrder', function (newValue, oldValue) {
 			if (newValue !== undefined && newValue !== null) {
 				entityApi.$http.get($scope.serviceSalesOrder + '/' + newValue).then(function (response) {
 					let valueFrom = response.data.Customer;
-					entityApi.$http.post("/services/ts/sales-order-app/gen/sales-order/api/Customer/CustomerService.ts/search", {
+					entityApi.$http.post("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts/search", {
 						$filter: {
 							equals: {
 								Id: valueFrom
@@ -95,7 +93,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 			if (newValue !== undefined && newValue !== null) {
 				entityApi.$http.get($scope.serviceCustomer + '/' + newValue).then(function (response) {
 					let valueFrom = response.data.Id;
-					entityApi.$http.post("/services/ts/sales-order-app/gen/sales-order/api/Customer/CustomerPaymentService.ts/search", {
+					entityApi.$http.post("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerPaymentService.ts/search", {
 						$filter: {
 							equals: {
 								Customer: valueFrom

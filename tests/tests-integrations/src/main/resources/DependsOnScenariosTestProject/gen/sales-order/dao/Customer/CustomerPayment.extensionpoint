@@ -1,4 +1,4 @@
 {
-    "name": "sales-order-app-Customer-CustomerPayment",
-    "description": "Extension Point for the sales-order-app-Customer-CustomerPayment entity"
+    "name": "DependsOnScenariosTestProject-Customer-CustomerPayment",
+    "description": "Extension Point for the DependsOnScenariosTestProject-Customer-CustomerPayment entity"
 }

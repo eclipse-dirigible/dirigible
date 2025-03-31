@@ -4,7 +4,7 @@ import { SalesOrderPaymentRepository, SalesOrderPaymentEntityOptions } from "../
 import { ValidationError } from "../utils/ValidationError";
 import { HttpUtils } from "../utils/HttpUtils";
 
-const validationModules = await Extensions.loadExtensionModules("sales-order-app-SalesOrder-SalesOrderPayment", ["validate"]);
+const validationModules = await Extensions.loadExtensionModules("DependsOnScenariosTestProject-SalesOrder-SalesOrderPayment", ["validate"]);
 
 @Controller
 class SalesOrderPaymentService {
@@ -41,7 +41,7 @@ class SalesOrderPaymentService {
         try {
             this.validateEntity(entity);
             entity.Id = this.repository.create(entity);
-            response.setHeader("Content-Location", "/services/ts/sales-order-app/gen/sales-order/api/SalesOrder/SalesOrderPaymentService.ts/" + entity.Id);
+            response.setHeader("Content-Location", "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderPaymentService.ts/" + entity.Id);
             response.setStatus(response.CREATED);
             return entity;
         } catch (error: any) {

@@ -1,9 +1,9 @@
 angular.module('page', ["ideUI", "ideView", "entityApi"])
 	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = 'sales-order-app.UoM.UoM';
+		messageHubProvider.eventIdPrefix = 'DependsOnScenariosTestProject.UoM.UoM';
 	}])
 	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/sales-order-app/gen/sales-order/api/UoM/UoMService.ts";
+		entityApiProvider.baseUrl = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/UoM/UoMService.ts";
 	}])
 	.controller('PageController', ['$scope',  'Extensions', 'messageHub', 'entityApi', function ($scope,  Extensions, messageHub, entityApi) {
 
@@ -19,7 +19,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		$scope.action = 'select';
 
 		//-----------------Custom Actions-------------------//
-		Extensions.get('dialogWindow', 'sales-order-app-custom-action').then(function (response) {
+		Extensions.get('dialogWindow', 'DependsOnScenariosTestProject-custom-action').then(function (response) {
 			$scope.entityActions = response.filter(e => e.perspective === "UoM" && e.view === "UoM" && e.type === "entity");
 		});
 

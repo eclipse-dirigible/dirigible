@@ -5,14 +5,14 @@
  */
 exports.getTile = function () {
     return {
-        group: "sales-order-app",
+        group: "DependsOnScenariosTestProject",
         name: "Customer",
         caption: "Manage entity Customer",
         tooltip: "Customer",
         type: "PRIMARY",
         report: "false",
         icon: "/services/web/resources/unicons/file.svg",
-        location: "/services/web/sales-order-app/gen/sales-order/ui/Customer/index.html",
+        location: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Customer/index.html",
         order: "100",
         groupOrder: "2"
     };

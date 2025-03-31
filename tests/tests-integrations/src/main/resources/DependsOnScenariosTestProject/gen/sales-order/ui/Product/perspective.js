@@ -6,7 +6,7 @@
 const perspectiveData = {
 	id: 'Product',
 	name: 'Product',
-	link: '/services/web/sales-order-app/gen/sales-order/ui/Product/index.html',
+	link: '/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Product/index.html',
 	order: '3',
 	icon: '/services/web/resources/unicons/cube.svg'
 };

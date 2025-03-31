@@ -210,7 +210,7 @@ export class CustomerPaymentRepository {
     }
 
     private async triggerEvent(data: CustomerPaymentEntityEvent | CustomerPaymentUpdateEntityEvent) {
-        const triggerExtensions = await extensions.loadExtensionModules("sales-order-app-Customer-CustomerPayment", ["trigger"]);
+        const triggerExtensions = await extensions.loadExtensionModules("DependsOnScenariosTestProject-Customer-CustomerPayment", ["trigger"]);
         triggerExtensions.forEach(triggerExtension => {
             try {
                 triggerExtension.trigger(data);
@@ -218,6 +218,6 @@ export class CustomerPaymentRepository {
                 console.error(error);
             }            
         });
-        producer.topic("sales-order-app-Customer-CustomerPayment").send(JSON.stringify(data));
+        producer.topic("DependsOnScenariosTestProject-Customer-CustomerPayment").send(JSON.stringify(data));
     }
 }

@@ -1,9 +1,9 @@
 angular.module('page', ["ideUI", "ideView", "entityApi"])
 	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = 'sales-order-app.Country.City';
+		messageHubProvider.eventIdPrefix = 'DependsOnScenariosTestProject.Country.City';
 	}])
 	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/sales-order-app/gen/sales-order/api/Country/CityService.ts";
+		entityApiProvider.baseUrl = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts";
 	}])
 	.controller('PageController', ['$scope', 'messageHub', 'ViewParameters', 'entityApi', function ($scope, messageHub, ViewParameters, entityApi) {
 
@@ -56,7 +56,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 			});
 		};
 
-		$scope.serviceCountry = "/services/ts/sales-order-app/gen/sales-order/api/Country/CountryService.ts";
+		$scope.serviceCountry = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts";
 
 		$scope.cancel = function () {
 			$scope.entity = {};

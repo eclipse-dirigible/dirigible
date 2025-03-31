@@ -203,7 +203,7 @@ export class SalesOrderRepository {
     }
 
     private async triggerEvent(data: SalesOrderEntityEvent | SalesOrderUpdateEntityEvent) {
-        const triggerExtensions = await extensions.loadExtensionModules("sales-order-app-SalesOrder-SalesOrder", ["trigger"]);
+        const triggerExtensions = await extensions.loadExtensionModules("DependsOnScenariosTestProject-SalesOrder-SalesOrder", ["trigger"]);
         triggerExtensions.forEach(triggerExtension => {
             try {
                 triggerExtension.trigger(data);
@@ -211,6 +211,6 @@ export class SalesOrderRepository {
                 console.error(error);
             }            
         });
-        producer.topic("sales-order-app-SalesOrder-SalesOrder").send(JSON.stringify(data));
+        producer.topic("DependsOnScenariosTestProject-SalesOrder-SalesOrder").send(JSON.stringify(data));
     }
 }

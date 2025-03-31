@@ -1,4 +1,4 @@
 {
-    "name": "sales-order-app-perspective",
-    "description": "sales-order-app - Extension Point for the Application Perspective Providers"
+    "name": "DependsOnScenariosTestProject-perspective",
+    "description": "DependsOnScenariosTestProject - Extension Point for the Application Perspective Providers"
 }

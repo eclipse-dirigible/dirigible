@@ -6,7 +6,7 @@
 const viewData = {
     id: "Country-details",
     label: "Country",
-    link: "/services/web/sales-order-app/gen/sales-order/ui/Country/Country/dialog-window/index.html",
+    link: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Country/Country/dialog-window/index.html",
     perspectiveName: "Country",
 };
 

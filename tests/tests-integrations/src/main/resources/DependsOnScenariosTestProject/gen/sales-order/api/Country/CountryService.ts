@@ -4,7 +4,7 @@ import { CountryRepository, CountryEntityOptions } from "../../dao/Country/Count
 import { ValidationError } from "../utils/ValidationError";
 import { HttpUtils } from "../utils/HttpUtils";
 
-const validationModules = await Extensions.loadExtensionModules("sales-order-app-Country-Country", ["validate"]);
+const validationModules = await Extensions.loadExtensionModules("DependsOnScenariosTestProject-Country-Country", ["validate"]);
 
 @Controller
 class CountryService {
@@ -30,7 +30,7 @@ class CountryService {
         try {
             this.validateEntity(entity);
             entity.Id = this.repository.create(entity);
-            response.setHeader("Content-Location", "/services/ts/sales-order-app/gen/sales-order/api/Country/CountryService.ts/" + entity.Id);
+            response.setHeader("Content-Location", "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts/" + entity.Id);
             response.setStatus(response.CREATED);
             return entity;
         } catch (error: any) {

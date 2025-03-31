@@ -1,9 +1,9 @@
 angular.module('page', ["ideUI", "ideView", "entityApi"])
 	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = 'sales-order-app.Product.Product';
+		messageHubProvider.eventIdPrefix = 'DependsOnScenariosTestProject.Product.Product';
 	}])
 	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/sales-order-app/gen/sales-order/api/Product/ProductService.ts";
+		entityApiProvider.baseUrl = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Product/ProductService.ts";
 	}])
 	.controller('PageController', ['$scope',  '$http', 'messageHub', 'ViewParameters', 'entityApi', function ($scope,  $http, messageHub, ViewParameters, entityApi) {
 
@@ -56,11 +56,11 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 			});
 		};
 
-		$scope.serviceUoM = "/services/ts/sales-order-app/gen/sales-order/api/UoM/UoMService.ts";
+		$scope.serviceUoM = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/UoM/UoMService.ts";
 		
 		$scope.optionsUoM = [];
 		
-		$http.get("/services/ts/sales-order-app/gen/sales-order/api/UoM/UoMService.ts").then(function (response) {
+		$http.get("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/UoM/UoMService.ts").then(function (response) {
 			$scope.optionsUoM = response.data.map(e => {
 				return {
 					value: e.Id,

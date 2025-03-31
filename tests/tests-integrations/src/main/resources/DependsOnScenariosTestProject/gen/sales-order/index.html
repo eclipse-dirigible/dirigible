@@ -24,10 +24,10 @@
     </head>
 
     <body>
-        <ide-header menu-ext-id="sales-order-app-menu"></ide-header>
+        <ide-header menu-ext-id="DependsOnScenariosTestProject-menu"></ide-header>
 
         <ide-container>
-            <view id="sales-order-app-home-launchpad"></view>
+            <view id="DependsOnScenariosTestProject-home-launchpad"></view>
         </ide-container>
 
         <ide-dialogs></ide-dialogs>
@@ -36,9 +36,9 @@
         <script type="text/javascript">
             angular.module('app', ['ngResource', 'ideLayout', 'ideUI'])
                 .constant('branding', {
-                    name: 'Sales Order Application',
-                    brand: 'codbex',
-                    brandUrl: 'https://www.codbex.com/',
+                    name: 'Eclipse - Dirigible',
+                    brand: 'Dirigible',
+                    brandUrl: 'dirigible.io',
                     icons: {
                         faviconIco: '/services/web/ide-branding/images/favicon.ico',
                         favicon32: '/services/web/ide-branding/images/favicon-32x32.png',
@@ -47,12 +47,12 @@
                     logo: '/services/web/ide-branding/images/logo.svg',
                 })
                 .constant('extensionPoint', {
-                    perspectives: "sales-order-app",
-                    views: "sales-order-app-view",
+                    perspectives: "DependsOnScenariosTestProject",
+                    views: "DependsOnScenariosTestProject-view",
                     dialogWindows: "dialog-window"
                 })
                 .config(["messageHubProvider", function (messageHubProvider) {
-                    messageHubProvider.eventIdPrefix = 'sales-order-app.launchpad.Home';
+                    messageHubProvider.eventIdPrefix = 'DependsOnScenariosTestProject.launchpad.Home';
                 }])
                 .controller('ApplicationController', ["$scope", "messageHub", function ($scope, messageHub) {
 

@@ -4,7 +4,7 @@ import { CustomerRepository, CustomerEntityOptions } from "../../dao/Customer/Cu
 import { ValidationError } from "../utils/ValidationError";
 import { HttpUtils } from "../utils/HttpUtils";
 
-const validationModules = await Extensions.loadExtensionModules("sales-order-app-Customer-Customer", ["validate"]);
+const validationModules = await Extensions.loadExtensionModules("DependsOnScenariosTestProject-Customer-Customer", ["validate"]);
 
 @Controller
 class CustomerService {
@@ -30,7 +30,7 @@ class CustomerService {
         try {
             this.validateEntity(entity);
             entity.Id = this.repository.create(entity);
-            response.setHeader("Content-Location", "/services/ts/sales-order-app/gen/sales-order/api/Customer/CustomerService.ts/" + entity.Id);
+            response.setHeader("Content-Location", "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts/" + entity.Id);
             response.setStatus(response.CREATED);
             return entity;
         } catch (error: any) {

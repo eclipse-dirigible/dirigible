@@ -1,5 +1,5 @@
 {
-    "module": "sales-order-app/gen/sales-order/ui/SalesOrder/perspective.js",
+    "module": "DependsOnScenariosTestProject/gen/sales-order/ui/SalesOrder/perspective.js",
     "extensionPoint": "portal",
-    "description": "sales-order-app - Perspective - SalesOrder"
+    "description": "DependsOnScenariosTestProject - Perspective - SalesOrder"
 }

@@ -182,7 +182,7 @@ export class CountryRepository {
     }
 
     private async triggerEvent(data: CountryEntityEvent | CountryUpdateEntityEvent) {
-        const triggerExtensions = await extensions.loadExtensionModules("sales-order-app-Country-Country", ["trigger"]);
+        const triggerExtensions = await extensions.loadExtensionModules("DependsOnScenariosTestProject-Country-Country", ["trigger"]);
         triggerExtensions.forEach(triggerExtension => {
             try {
                 triggerExtension.trigger(data);
@@ -190,6 +190,6 @@ export class CountryRepository {
                 console.error(error);
             }            
         });
-        producer.topic("sales-order-app-Country-Country").send(JSON.stringify(data));
+        producer.topic("DependsOnScenariosTestProject-Country-Country").send(JSON.stringify(data));
     }
 }

@@ -1,13 +1,13 @@
 angular.module('page', ["ideUI", "ideView", "entityApi"])
 	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = 'sales-order-app.SalesOrder.SalesOrderItem';
+		messageHubProvider.eventIdPrefix = 'DependsOnScenariosTestProject.SalesOrder.SalesOrderItem';
 	}])
 	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/sales-order-app/gen/sales-order/api/SalesOrder/SalesOrderItemService.ts";
+		entityApiProvider.baseUrl = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderItemService.ts";
 	}])
 	.controller('PageController', ['$scope', '$http', 'messageHub', 'entityApi', 'Extensions', function ($scope, $http, messageHub, entityApi, Extensions) {
 		//-----------------Custom Actions-------------------//
-		Extensions.get('dialogWindow', 'sales-order-app-custom-action').then(function (response) {
+		Extensions.get('dialogWindow', 'DependsOnScenariosTestProject-custom-action').then(function (response) {
 			$scope.pageActions = response.filter(e => e.perspective === "SalesOrder" && e.view === "SalesOrderItem" && (e.type === "page" || e.type === undefined));
 			$scope.entityActions = response.filter(e => e.perspective === "SalesOrder" && e.view === "SalesOrderItem" && e.type === "entity");
 		});
@@ -43,13 +43,13 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		resetPagination();
 
 		//-----------------Events-------------------//
-		messageHub.onDidReceiveMessage("sales-order-app.SalesOrder.SalesOrder.entitySelected", function (msg) {
+		messageHub.onDidReceiveMessage("DependsOnScenariosTestProject.SalesOrder.SalesOrder.entitySelected", function (msg) {
 			resetPagination();
 			$scope.selectedMainEntityId = msg.data.selectedMainEntityId;
 			$scope.loadPage($scope.dataPage);
 		}, true);
 
-		messageHub.onDidReceiveMessage("sales-order-app.SalesOrder.SalesOrder.clearDetails", function (msg) {
+		messageHub.onDidReceiveMessage("DependsOnScenariosTestProject.SalesOrder.SalesOrder.clearDetails", function (msg) {
 			$scope.$apply(function () {
 				resetPagination();
 				$scope.selectedMainEntityId = null;
@@ -195,7 +195,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		$scope.optionsUoM = [];
 
 
-		$http.get("/services/ts/sales-order-app/gen/sales-order/api/Product/ProductService.ts").then(function (response) {
+		$http.get("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Product/ProductService.ts").then(function (response) {
 			$scope.optionsProduct = response.data.map(e => {
 				return {
 					value: e.Id,
@@ -204,7 +204,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 			});
 		});
 
-		$http.get("/services/ts/sales-order-app/gen/sales-order/api/UoM/UoMService.ts").then(function (response) {
+		$http.get("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/UoM/UoMService.ts").then(function (response) {
 			$scope.optionsUoM = response.data.map(e => {
 				return {
 					value: e.Id,

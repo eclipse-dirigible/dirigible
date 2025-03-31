@@ -4,7 +4,7 @@ import { SalesOrderItemRepository, SalesOrderItemEntityOptions } from "../../dao
 import { ValidationError } from "../utils/ValidationError";
 import { HttpUtils } from "../utils/HttpUtils";
 
-const validationModules = await Extensions.loadExtensionModules("sales-order-app-SalesOrder-SalesOrderItem", ["validate"]);
+const validationModules = await Extensions.loadExtensionModules("DependsOnScenariosTestProject-SalesOrder-SalesOrderItem", ["validate"]);
 
 @Controller
 class SalesOrderItemService {
@@ -41,7 +41,7 @@ class SalesOrderItemService {
         try {
             this.validateEntity(entity);
             entity.Id = this.repository.create(entity);
-            response.setHeader("Content-Location", "/services/ts/sales-order-app/gen/sales-order/api/SalesOrder/SalesOrderItemService.ts/" + entity.Id);
+            response.setHeader("Content-Location", "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderItemService.ts/" + entity.Id);
             response.setStatus(response.CREATED);
             return entity;
         } catch (error: any) {

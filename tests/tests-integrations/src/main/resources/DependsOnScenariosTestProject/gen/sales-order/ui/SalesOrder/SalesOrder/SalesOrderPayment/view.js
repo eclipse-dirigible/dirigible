@@ -8,7 +8,7 @@ const viewData = {
     label: "SalesOrderPayment",
     factory: "frame",
     region: "bottom",
-    link: "/services/web/sales-order-app/gen/sales-order/ui/SalesOrder/SalesOrder/SalesOrderPayment/index.html",
+    link: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/SalesOrder/SalesOrder/SalesOrderPayment/index.html",
     perspectiveName: "SalesOrder"
 };
 

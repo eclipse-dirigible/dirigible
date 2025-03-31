@@ -1,5 +1,5 @@
 {
-    "module": "sales-order-app/gen/sales-order/ui/SalesOrder/SalesOrder/SalesOrderPayment/dialog-filter/view.js",
+    "module": "DependsOnScenariosTestProject/gen/sales-order/ui/SalesOrder/SalesOrder/SalesOrderPayment/dialog-filter/view.js",
     "extensionPoint": "dialog-window",
-    "description": "sales-order-app - Application Dialog Window"
+    "description": "DependsOnScenariosTestProject - Application Dialog Window"
 }

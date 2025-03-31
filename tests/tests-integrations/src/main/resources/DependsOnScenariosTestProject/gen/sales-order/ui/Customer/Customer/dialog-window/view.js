@@ -6,7 +6,7 @@
 const viewData = {
     id: "Customer-details",
     label: "Customer",
-    link: "/services/web/sales-order-app/gen/sales-order/ui/Customer/Customer/dialog-window/index.html",
+    link: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Customer/Customer/dialog-window/index.html",
     perspectiveName: "Customer",
 };
 

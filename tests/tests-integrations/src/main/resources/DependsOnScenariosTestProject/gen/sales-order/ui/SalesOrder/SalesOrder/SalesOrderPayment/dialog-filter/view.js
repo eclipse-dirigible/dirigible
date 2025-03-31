@@ -6,7 +6,7 @@
 const viewData = {
     id: "SalesOrderPayment-filter",
     label: "SalesOrderPayment Filter",
-    link: "/services/web/sales-order-app/gen/sales-order/ui/SalesOrder/SalesOrder/SalesOrderPayment/dialog-filter/index.html",
+    link: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/SalesOrder/SalesOrder/SalesOrderPayment/dialog-filter/index.html",
     perspectiveName: "SalesOrder"
 };
 

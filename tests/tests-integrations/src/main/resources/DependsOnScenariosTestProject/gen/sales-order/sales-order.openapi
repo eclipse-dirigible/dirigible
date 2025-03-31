@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Sales Order Application - OpenAPI 3.0
+  title: Eclipse - Dirigible - OpenAPI 3.0
   version: 1.0.0
-  description: Managing sales orders
+  description: Dirigible
 externalDocs:
   description: Find out more about Eclipse Dirigible
   url: https://dirigible.io
@@ -19,7 +19,7 @@ tags:
   - name: SalesOrder
   - name: SalesOrder
 paths:
-  /sales-order-app/gen/sales-order/api/Country/CountryService.ts:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts:
     get:
       summary: List Country
       parameters:
@@ -103,7 +103,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Country/CountryService.ts/{id}:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts/{id}:
     get:
       summary: Get Country by Id
       parameters:
@@ -222,7 +222,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Country/CountryService.ts/count:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts/count:
     get:
       summary: Count the number of Country
       tags:
@@ -332,7 +332,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Country/CountryService.ts/search:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts/search:
     post:
       summary: Search Country by CountryFilterOptions
       tags:
@@ -419,7 +419,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Country/CityService.ts:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts:
     get:
       summary: List City
       parameters:
@@ -503,7 +503,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Country/CityService.ts/{id}:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts/{id}:
     get:
       summary: Get City by Id
       parameters:
@@ -622,7 +622,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Country/CityService.ts/count:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts/count:
     get:
       summary: Count the number of City
       tags:
@@ -732,7 +732,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Country/CityService.ts/search:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts/search:
     post:
       summary: Search City by CityFilterOptions
       tags:
@@ -819,7 +819,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Customer/CustomerService.ts:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts:
     get:
       summary: List Customer
       parameters:
@@ -903,7 +903,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Customer/CustomerService.ts/{id}:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts/{id}:
     get:
       summary: Get Customer by Id
       parameters:
@@ -1022,7 +1022,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Customer/CustomerService.ts/count:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts/count:
     get:
       summary: Count the number of Customer
       tags:
@@ -1134,7 +1134,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Customer/CustomerService.ts/search:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts/search:
     post:
       summary: Search Customer by CustomerFilterOptions
       tags:
@@ -1223,7 +1223,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Customer/CustomerPaymentService.ts:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerPaymentService.ts:
     get:
       summary: List CustomerPayment
       parameters:
@@ -1307,7 +1307,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Customer/CustomerPaymentService.ts/{id}:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerPaymentService.ts/{id}:
     get:
       summary: Get CustomerPayment by Id
       parameters:
@@ -1426,7 +1426,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Customer/CustomerPaymentService.ts/count:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerPaymentService.ts/count:
     get:
       summary: Count the number of CustomerPayment
       tags:
@@ -1536,7 +1536,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Customer/CustomerPaymentService.ts/search:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerPaymentService.ts/search:
     post:
       summary: Search CustomerPayment by CustomerPaymentFilterOptions
       tags:
@@ -1623,7 +1623,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Product/ProductService.ts:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Product/ProductService.ts:
     get:
       summary: List Product
       parameters:
@@ -1707,7 +1707,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Product/ProductService.ts/{id}:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Product/ProductService.ts/{id}:
     get:
       summary: Get Product by Id
       parameters:
@@ -1826,7 +1826,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Product/ProductService.ts/count:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Product/ProductService.ts/count:
     get:
       summary: Count the number of Product
       tags:
@@ -1936,7 +1936,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/Product/ProductService.ts/search:
+  /DependsOnScenariosTestProject/gen/sales-order/api/Product/ProductService.ts/search:
     post:
       summary: Search Product by ProductFilterOptions
       tags:
@@ -2023,7 +2023,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/UoM/UoMService.ts:
+  /DependsOnScenariosTestProject/gen/sales-order/api/UoM/UoMService.ts:
     get:
       summary: List UoM
       parameters:
@@ -2107,7 +2107,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/UoM/UoMService.ts/{id}:
+  /DependsOnScenariosTestProject/gen/sales-order/api/UoM/UoMService.ts/{id}:
     get:
       summary: Get UoM by Id
       parameters:
@@ -2226,7 +2226,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/UoM/UoMService.ts/count:
+  /DependsOnScenariosTestProject/gen/sales-order/api/UoM/UoMService.ts/count:
     get:
       summary: Count the number of UoM
       tags:
@@ -2336,7 +2336,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/UoM/UoMService.ts/search:
+  /DependsOnScenariosTestProject/gen/sales-order/api/UoM/UoMService.ts/search:
     post:
       summary: Search UoM by UoMFilterOptions
       tags:
@@ -2423,7 +2423,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/SalesOrder/SalesOrderService.ts:
+  /DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderService.ts:
     get:
       summary: List SalesOrder
       parameters:
@@ -2507,7 +2507,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/SalesOrder/SalesOrderService.ts/{id}:
+  /DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderService.ts/{id}:
     get:
       summary: Get SalesOrder by Id
       parameters:
@@ -2626,7 +2626,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/SalesOrder/SalesOrderService.ts/count:
+  /DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderService.ts/count:
     get:
       summary: Count the number of SalesOrder
       tags:
@@ -2728,7 +2728,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/SalesOrder/SalesOrderService.ts/search:
+  /DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderService.ts/search:
     post:
       summary: Search SalesOrder by SalesOrderFilterOptions
       tags:
@@ -2807,7 +2807,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/SalesOrder/SalesOrderItemService.ts:
+  /DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderItemService.ts:
     get:
       summary: List SalesOrderItem
       parameters:
@@ -2891,7 +2891,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/SalesOrder/SalesOrderItemService.ts/{id}:
+  /DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderItemService.ts/{id}:
     get:
       summary: Get SalesOrderItem by Id
       parameters:
@@ -3010,7 +3010,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/SalesOrder/SalesOrderItemService.ts/count:
+  /DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderItemService.ts/count:
     get:
       summary: Count the number of SalesOrderItem
       tags:
@@ -3112,7 +3112,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/SalesOrder/SalesOrderItemService.ts/search:
+  /DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderItemService.ts/search:
     post:
       summary: Search SalesOrderItem by SalesOrderItemFilterOptions
       tags:
@@ -3191,7 +3191,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/SalesOrder/SalesOrderPaymentService.ts:
+  /DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderPaymentService.ts:
     get:
       summary: List SalesOrderPayment
       parameters:
@@ -3275,7 +3275,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/SalesOrder/SalesOrderPaymentService.ts/{id}:
+  /DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderPaymentService.ts/{id}:
     get:
       summary: Get SalesOrderPayment by Id
       parameters:
@@ -3394,7 +3394,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/SalesOrder/SalesOrderPaymentService.ts/count:
+  /DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderPaymentService.ts/count:
     get:
       summary: Count the number of SalesOrderPayment
       tags:
@@ -3496,7 +3496,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /sales-order-app/gen/sales-order/api/SalesOrder/SalesOrderPaymentService.ts/search:
+  /DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderPaymentService.ts/search:
     post:
       summary: Search SalesOrderPayment by SalesOrderPaymentFilterOptions
       tags:

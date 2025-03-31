@@ -6,7 +6,7 @@
 const perspectiveData = {
 	id: 'UoM',
 	name: 'UoM',
-	link: '/services/web/sales-order-app/gen/sales-order/ui/UoM/index.html',
+	link: '/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/UoM/index.html',
 	order: '4',
 	icon: '/services/web/resources/unicons/arrows-resize-v.svg'
 };

@@ -1,9 +1,9 @@
 angular.module('page', ["ideUI", "ideView", "entityApi"])
 	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = 'sales-order-app.SalesOrder.SalesOrderItem';
+		messageHubProvider.eventIdPrefix = 'DependsOnScenariosTestProject.SalesOrder.SalesOrderItem';
 	}])
 	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/sales-order-app/gen/sales-order/api/SalesOrder/SalesOrderItemService.ts";
+		entityApiProvider.baseUrl = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderItemService.ts";
 	}])
 	.controller('PageController', ['$scope', 'messageHub', 'ViewParameters', 'entityApi', function ($scope, messageHub, ViewParameters, entityApi) {
 
@@ -57,14 +57,14 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 			});
 		};
 
-		$scope.serviceProduct = "/services/ts/sales-order-app/gen/sales-order/api/Product/ProductService.ts";
-		$scope.serviceUoM = "/services/ts/sales-order-app/gen/sales-order/api/UoM/UoMService.ts";
+		$scope.serviceProduct = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Product/ProductService.ts";
+		$scope.serviceUoM = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/UoM/UoMService.ts";
 
 		$scope.$watch('entity.Product', function (newValue, oldValue) {
 			if (newValue !== undefined && newValue !== null) {
 				entityApi.$http.get($scope.serviceProduct + '/' + newValue).then(function (response) {
 					let valueFrom = response.data.UoM;
-					entityApi.$http.post("/services/ts/sales-order-app/gen/sales-order/api/UoM/UoMService.ts/search", {
+					entityApi.$http.post("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/UoM/UoMService.ts/search", {
 						$filter: {
 							equals: {
 								Id: valueFrom

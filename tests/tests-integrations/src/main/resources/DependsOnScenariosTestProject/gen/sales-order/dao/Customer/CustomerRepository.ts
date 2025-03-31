@@ -224,7 +224,7 @@ export class CustomerRepository {
     }
 
     private async triggerEvent(data: CustomerEntityEvent | CustomerUpdateEntityEvent) {
-        const triggerExtensions = await extensions.loadExtensionModules("sales-order-app-Customer-Customer", ["trigger"]);
+        const triggerExtensions = await extensions.loadExtensionModules("DependsOnScenariosTestProject-Customer-Customer", ["trigger"]);
         triggerExtensions.forEach(triggerExtension => {
             try {
                 triggerExtension.trigger(data);
@@ -232,6 +232,6 @@ export class CustomerRepository {
                 console.error(error);
             }            
         });
-        producer.topic("sales-order-app-Customer-Customer").send(JSON.stringify(data));
+        producer.topic("DependsOnScenariosTestProject-Customer-Customer").send(JSON.stringify(data));
     }
 }

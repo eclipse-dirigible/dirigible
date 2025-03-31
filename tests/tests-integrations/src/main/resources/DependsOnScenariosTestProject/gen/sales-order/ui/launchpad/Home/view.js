@@ -4,11 +4,11 @@
  * Do not modify the content as it may be re-generated again.
  */
 const viewData = {
-    id: "sales-order-app-home-launchpad",
+    id: "DependsOnScenariosTestProject-home-launchpad",
     label: "Home Launchpad",
     factory: "frame",
     region: "center",
-    link: "/services/web/sales-order-app/gen/sales-order/ui/launchpad/Home/index.html",
+    link: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/launchpad/Home/index.html",
     isLaunchpad: true,
 };
 

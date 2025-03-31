@@ -6,7 +6,7 @@
 const perspectiveData = {
 	id: 'SalesOrder',
 	name: 'SalesOrder',
-	link: '/services/web/sales-order-app/gen/sales-order/ui/SalesOrder/index.html',
+	link: '/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/SalesOrder/index.html',
 	order: '5',
 	icon: '/services/web/resources/unicons/receipt.svg'
 };

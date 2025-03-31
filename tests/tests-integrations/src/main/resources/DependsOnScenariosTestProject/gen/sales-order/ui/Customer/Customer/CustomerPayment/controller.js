@@ -1,13 +1,13 @@
 angular.module('page', ["ideUI", "ideView", "entityApi"])
 	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = 'sales-order-app.Customer.CustomerPayment';
+		messageHubProvider.eventIdPrefix = 'DependsOnScenariosTestProject.Customer.CustomerPayment';
 	}])
 	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/sales-order-app/gen/sales-order/api/Customer/CustomerPaymentService.ts";
+		entityApiProvider.baseUrl = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerPaymentService.ts";
 	}])
 	.controller('PageController', ['$scope', '$http', 'messageHub', 'entityApi', 'Extensions', function ($scope, $http, messageHub, entityApi, Extensions) {
 		//-----------------Custom Actions-------------------//
-		Extensions.get('dialogWindow', 'sales-order-app-custom-action').then(function (response) {
+		Extensions.get('dialogWindow', 'DependsOnScenariosTestProject-custom-action').then(function (response) {
 			$scope.pageActions = response.filter(e => e.perspective === "Customer" && e.view === "CustomerPayment" && (e.type === "page" || e.type === undefined));
 			$scope.entityActions = response.filter(e => e.perspective === "Customer" && e.view === "CustomerPayment" && e.type === "entity");
 		});
@@ -43,13 +43,13 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		resetPagination();
 
 		//-----------------Events-------------------//
-		messageHub.onDidReceiveMessage("sales-order-app.Customer.Customer.entitySelected", function (msg) {
+		messageHub.onDidReceiveMessage("DependsOnScenariosTestProject.Customer.Customer.entitySelected", function (msg) {
 			resetPagination();
 			$scope.selectedMainEntityId = msg.data.selectedMainEntityId;
 			$scope.loadPage($scope.dataPage);
 		}, true);
 
-		messageHub.onDidReceiveMessage("sales-order-app.Customer.Customer.clearDetails", function (msg) {
+		messageHub.onDidReceiveMessage("DependsOnScenariosTestProject.Customer.Customer.clearDetails", function (msg) {
 			$scope.$apply(function () {
 				resetPagination();
 				$scope.selectedMainEntityId = null;
@@ -190,7 +190,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		$scope.optionsCustomer = [];
 
 
-		$http.get("/services/ts/sales-order-app/gen/sales-order/api/Customer/CustomerService.ts").then(function (response) {
+		$http.get("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts").then(function (response) {
 			$scope.optionsCustomer = response.data.map(e => {
 				return {
 					value: e.Id,

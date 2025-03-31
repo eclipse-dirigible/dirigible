@@ -1,9 +1,9 @@
 angular.module('page', ["ideUI", "ideView", "entityApi"])
 	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = 'sales-order-app.Product.Product';
+		messageHubProvider.eventIdPrefix = 'DependsOnScenariosTestProject.Product.Product';
 	}])
 	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/sales-order-app/gen/sales-order/api/Product/ProductService.ts";
+		entityApiProvider.baseUrl = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Product/ProductService.ts";
 	}])
 	.controller('PageController', ['$scope',  '$http', 'Extensions', 'messageHub', 'entityApi', function ($scope,  $http, Extensions, messageHub, entityApi) {
 
@@ -19,7 +19,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		$scope.action = 'select';
 
 		//-----------------Custom Actions-------------------//
-		Extensions.get('dialogWindow', 'sales-order-app-custom-action').then(function (response) {
+		Extensions.get('dialogWindow', 'DependsOnScenariosTestProject-custom-action').then(function (response) {
 			$scope.entityActions = response.filter(e => e.perspective === "Product" && e.view === "Product" && e.type === "entity");
 		});
 
@@ -69,7 +69,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 			});
 		});
 
-		$scope.serviceUoM = "/services/ts/sales-order-app/gen/sales-order/api/UoM/UoMService.ts";
+		$scope.serviceUoM = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/UoM/UoMService.ts";
 
 		//-----------------Events-------------------//
 
@@ -118,7 +118,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 
 		$scope.refreshUoM = function () {
 			$scope.optionsUoM = [];
-			$http.get("/services/ts/sales-order-app/gen/sales-order/api/UoM/UoMService.ts").then(function (response) {
+			$http.get("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/UoM/UoMService.ts").then(function (response) {
 				$scope.optionsUoM = response.data.map(e => {
 					return {
 						value: e.Id,

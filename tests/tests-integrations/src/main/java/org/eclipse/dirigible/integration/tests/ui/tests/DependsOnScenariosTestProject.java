@@ -20,13 +20,14 @@ import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
+import java.util.Map;
+
 @Lazy
 @Component
 class DependsOnScenariosTestProject extends BaseTestProject {
 
     private static final String PROJECT_RESOURCES_PATH = "DependsOnScenariosTestProject";
     private static final String VERIFICATION_URI = "/services/web/" + PROJECT_RESOURCES_PATH + "/gen/sales-order/ui/Customer/index.html";
-    private static final String EDM_FILE_NAME = "sales-order.edm";
 
     private final Browser browser;
 
@@ -38,7 +39,6 @@ class DependsOnScenariosTestProject extends BaseTestProject {
     @Override
     public void configure() {
         copyToWorkspace();
-        generateEDM(EDM_FILE_NAME);
         publish();
 
     }
@@ -47,17 +47,27 @@ class DependsOnScenariosTestProject extends BaseTestProject {
     public void verify() {
         browser.openPath(VERIFICATION_URI);
 
-        // browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
-        // browser.enterTextInElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER,
-        // "Search Country ...", "Bulgaria");
-        //
-        // browser.clickOnElementContainingText(HtmlElementType.HEADER1, "Create Customer");
-        //
-        // browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER,
-        // "Search City ...");
-        //
-        // browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Sofia");
-        // browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Varna");
-        // browser.assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType.SPAN, "Milano");
+        browser.clickElementByAttributes(HtmlElementType.BUTTON,
+                Map.of(HtmlAttribute.GLYPH, "sap-icon--add", HtmlAttribute.CLASS, "fd-button fd-button--transparent fd-button--compact"));
+        browser.clickElementByAttributes(HtmlElementType.BUTTON,
+                Map.of(HtmlAttribute.CLASS, "fd-button", HtmlAttribute.NGCLICK, "refreshCountry()"));
+
+        // Bulgaria should only have Sofia
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Country ...");
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", "Bulgaria");
+        browser.clickElementByAttributes(HtmlElementType.BUTTON,
+                Map.of(HtmlAttribute.CLASS, "fd-button", HtmlAttribute.NGCLICK, "refreshCity()"));
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search City ...");
+
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Sofia");
+
+        // Italy should only have Rome
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Country ...");
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", "Italy");
+        browser.clickElementByAttributes(HtmlElementType.BUTTON,
+                Map.of(HtmlAttribute.CLASS, "fd-button", HtmlAttribute.NGCLICK, "refreshCity()"));
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search City ...");
+
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Rome");
     }
 }

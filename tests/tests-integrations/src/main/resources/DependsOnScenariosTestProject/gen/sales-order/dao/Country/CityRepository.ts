@@ -196,7 +196,7 @@ export class CityRepository {
     }
 
     private async triggerEvent(data: CityEntityEvent | CityUpdateEntityEvent) {
-        const triggerExtensions = await extensions.loadExtensionModules("sales-order-app-Country-City", ["trigger"]);
+        const triggerExtensions = await extensions.loadExtensionModules("DependsOnScenariosTestProject-Country-City", ["trigger"]);
         triggerExtensions.forEach(triggerExtension => {
             try {
                 triggerExtension.trigger(data);
@@ -204,6 +204,6 @@ export class CityRepository {
                 console.error(error);
             }            
         });
-        producer.topic("sales-order-app-Country-City").send(JSON.stringify(data));
+        producer.topic("DependsOnScenariosTestProject-Country-City").send(JSON.stringify(data));
     }
 }
