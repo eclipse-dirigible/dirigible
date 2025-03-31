@@ -75,14 +75,6 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
     @Override
     public DirigibleConnection getConnection() throws SQLException {
         Connection connection = originalDataSource.getConnection();
-        // if (TransactionExecutor.isExecutedInTransaction()) {
-        // logger.debug("Current thread is executing in transaction. Disabling auto commit...");
-        // connection.setAutoCommit(false);
-        // }
-        // if (!TransactionExecutor.isExecutedInTransaction()) {
-        // logger.debug("Current thread is executing in transaction. Disabling auto commit...");
-        // connection.setAutoCommit(true);
-        // }
 
         enhanceConnection(connection);
         LeakedConnectionsDoctor.registerConnection(connection);
@@ -107,14 +99,6 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
     @Override
     public DirigibleConnection getConnection(String username, String password) throws SQLException {
         Connection connection = originalDataSource.getConnection(username, password);
-        // if (TransactionExecutor.isExecutedInTransaction()) {
-        // logger.debug("Current thread is executing in transaction. Disabling auto commit...");
-        // connection.setAutoCommit(false);
-        // }
-        // if (!TransactionExecutor.isExecutedInTransaction()) {
-        // logger.debug("Current thread is executing in transaction. Enabling auto commit...");
-        // connection.setAutoCommit(true);
-        // }
 
         enhanceConnection(connection);
         LeakedConnectionsDoctor.registerConnection(connection);
