@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.data.sources.manager;
 
 import com.zaxxer.hikari.HikariDataSource;
 import com.zaxxer.hikari.pool.LeakedConnectionsDoctor;
+import org.eclipse.dirigible.components.data.sources.config.TransactionExecutor;
 import org.eclipse.dirigible.components.database.ConnectionEnhancer;
 import org.eclipse.dirigible.components.database.DatabaseSystem;
 import org.eclipse.dirigible.components.database.DirigibleConnection;
@@ -36,6 +37,7 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
 
     /** The Constant LOGGER. */
     private static final Logger logger = LoggerFactory.getLogger(DirigibleDataSourceImpl.class);
+
     private final String name;
     private final List<ConnectionEnhancer> connectionEnhancers;
     private final HikariDataSource originalDataSource;
@@ -79,6 +81,10 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
     @Override
     public DirigibleConnection getConnection() throws SQLException {
         Connection connection = originalDataSource.getConnection();
+        if (TransactionExecutor.isExecutedInTransaction()) {
+            logger.debug("Current thread is executing in transaction. Disabling auto commit...");
+            connection.setAutoCommit(false);
+        }
 
         enhanceConnection(connection);
         LeakedConnectionsDoctor.registerConnection(connection);
@@ -103,6 +109,10 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
     @Override
     public DirigibleConnection getConnection(String username, String password) throws SQLException {
         Connection connection = originalDataSource.getConnection(username, password);
+        if (TransactionExecutor.isExecutedInTransaction()) {
+            logger.debug("Current thread is executing in transaction. Disabling auto commit...");
+            connection.setAutoCommit(false);
+        }
 
         enhanceConnection(connection);
         LeakedConnectionsDoctor.registerConnection(connection);

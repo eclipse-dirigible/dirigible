@@ -15,11 +15,18 @@ import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 public class TransactionExecutor {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TransactionExecutor.class);
+
+    private static final ThreadLocal<Boolean> executedByTheExecutor = ThreadLocal.withInitial(() -> Boolean.FALSE);
+
+    public static boolean isExecutedInTransaction() {
+        return executedByTheExecutor.get();
+    }
 
     /**
      * Execute code in transaction for a data source
@@ -33,12 +40,13 @@ public class TransactionExecutor {
      */
     public static <R, E extends Throwable> R executeInTransaction(DirigibleDataSource dataSource, CallableResultAndException<R, E> callable)
             throws TransactionExecutionException {
-        // dataSource.setAutoCommit(false);
+
         PlatformTransactionManager transactionManager = getTransactionManager(dataSource);
         TransactionTemplate transactionTemplate = createTemplate(transactionManager);
 
         return transactionTemplate.execute(status -> {
             try {
+                executedByTheExecutor.set(true);
                 // try (DirigibleConnection connection = dataSource.getConnection()) {
                 // connection.setAutoCommit(false);
                 // }
@@ -49,6 +57,8 @@ public class TransactionExecutor {
             } catch (Throwable ex) {
                 throw new TransactionExecutionException("Failed to execute code for data source [" + dataSource + "] using " + callable,
                         ex);
+            } finally {
+                executedByTheExecutor.set(false);
             }
         });
     }
@@ -64,11 +74,10 @@ public class TransactionExecutor {
         // transactionTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_DEFAULT);
 
         // transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_MANDATORY); //
-        // transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
+        transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
         // quartz works
+
         // transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-        // transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED); // fail
-        // quartz
 
         return transactionTemplate;
     }
@@ -88,10 +97,13 @@ public class TransactionExecutor {
 
         transactionTemplate.executeWithoutResult(status -> {
             try {
+                executedByTheExecutor.set(true);
                 callable.call();
             } catch (Throwable ex) {
                 throw new TransactionExecutionException("Failed to execute code for data source [" + dataSource + "] using " + callable,
                         ex);
+            } finally {
+                executedByTheExecutor.set(false);
             }
         });
     }
