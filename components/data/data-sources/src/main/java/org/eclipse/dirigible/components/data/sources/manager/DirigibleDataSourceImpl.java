@@ -11,7 +11,6 @@ package org.eclipse.dirigible.components.data.sources.manager;
 
 import com.zaxxer.hikari.HikariDataSource;
 import com.zaxxer.hikari.pool.LeakedConnectionsDoctor;
-import org.eclipse.dirigible.components.data.sources.config.TransactionExecutor;
 import org.eclipse.dirigible.components.database.ConnectionEnhancer;
 import org.eclipse.dirigible.components.database.DatabaseSystem;
 import org.eclipse.dirigible.components.database.DirigibleConnection;
@@ -63,11 +62,6 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
         this.databaseSystem = databaseSystem;
     }
 
-    @Override
-    public void setAutoCommit(boolean autoCommit) {
-        originalDataSource.setAutoCommit(autoCommit);
-    }
-
     public String getName() {
         return name;
     }
@@ -81,10 +75,10 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
     @Override
     public DirigibleConnection getConnection() throws SQLException {
         Connection connection = originalDataSource.getConnection();
-        if (TransactionExecutor.isExecutedInTransaction()) {
-            logger.debug("Current thread is executing in transaction. Disabling auto commit...");
-            connection.setAutoCommit(false);
-        }
+        // if (TransactionExecutor.isExecutedInTransaction()) {
+        // logger.debug("Current thread is executing in transaction. Disabling auto commit...");
+        // connection.setAutoCommit(false);
+        // }
         // if (!TransactionExecutor.isExecutedInTransaction()) {
         // logger.debug("Current thread is executing in transaction. Disabling auto commit...");
         // connection.setAutoCommit(true);
@@ -113,10 +107,10 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
     @Override
     public DirigibleConnection getConnection(String username, String password) throws SQLException {
         Connection connection = originalDataSource.getConnection(username, password);
-        if (TransactionExecutor.isExecutedInTransaction()) {
-            logger.debug("Current thread is executing in transaction. Disabling auto commit...");
-            connection.setAutoCommit(false);
-        }
+        // if (TransactionExecutor.isExecutedInTransaction()) {
+        // logger.debug("Current thread is executing in transaction. Disabling auto commit...");
+        // connection.setAutoCommit(false);
+        // }
         // if (!TransactionExecutor.isExecutedInTransaction()) {
         // logger.debug("Current thread is executing in transaction. Enabling auto commit...");
         // connection.setAutoCommit(true);

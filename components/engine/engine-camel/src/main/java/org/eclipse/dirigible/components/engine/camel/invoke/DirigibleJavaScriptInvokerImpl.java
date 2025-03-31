@@ -13,9 +13,6 @@ package org.eclipse.dirigible.components.engine.camel.invoke;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.spi.Synchronization;
-import org.eclipse.dirigible.components.data.sources.config.TransactionExecutor;
-import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
-import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.components.engine.camel.components.DirigibleJavaScriptInvoker;
 import org.eclipse.dirigible.graalium.core.DirigibleJavascriptCodeRunner;
 import org.graalvm.polyglot.Value;
@@ -28,22 +25,15 @@ import java.nio.file.Path;
 class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
 
     private final ClassLoader currentClassLoader;
-    private final DataSourcesManager dataSourcesManager;
 
     @Autowired
-    public DirigibleJavaScriptInvokerImpl(DataSourcesManager dataSourcesManager) {
-        this.dataSourcesManager = dataSourcesManager;
+    public DirigibleJavaScriptInvokerImpl() {
         this.currentClassLoader = Thread.currentThread()
                                         .getContextClassLoader();
     }
 
     @Override
     public void invoke(Message camelMessage, String javaScriptPath) {
-        DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
-        TransactionExecutor.executeInTransaction(defaultDataSource, () -> invokeInternal(camelMessage, javaScriptPath));
-    }
-
-    private void invokeInternal(Message camelMessage, String javaScriptPath) {
         Thread.currentThread()
               .setContextClassLoader(currentClassLoader);
         DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner();
@@ -102,8 +92,7 @@ class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
     private void validateIntegrationMessage(Value value) {
         if (!value.isHostObject() || !(value.asHostObject() instanceof IntegrationMessage)) {
             throw new IllegalArgumentException(
-                    "Unexpected return received from sdk/integrations::onMessage(). Expected return type: IntegrationMessage. But was: "
-                            + value);
+                    "Unexpected return received from sdk/integrations::onMessage(). Expected return type: IntegrationMessage.");
         }
     }
 

@@ -18,6 +18,7 @@ import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.eclipse.dirigible.tests.DirigibleTestTenant;
 import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -74,6 +75,7 @@ public class RestTransactionsIT extends UserInterfaceIntegrationTest {
         assertThat(createdUser).isEmpty();
     }
 
+    @Disabled("Disabled until transaction logic is implemented")
     @Test
     void testProgrammaticTransactionRollbackForDefaultDb() throws SQLException {
         createTestTable(dataSourcesManager.getDefaultDataSource());

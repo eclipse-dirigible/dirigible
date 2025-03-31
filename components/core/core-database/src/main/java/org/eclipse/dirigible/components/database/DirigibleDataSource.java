@@ -19,8 +19,6 @@ public interface DirigibleDataSource extends DataSource, DatabaseSystemAware {
 
     void close();
 
-    void setAutoCommit(boolean autoCommit);
-
     String getName();
 
     @Override
