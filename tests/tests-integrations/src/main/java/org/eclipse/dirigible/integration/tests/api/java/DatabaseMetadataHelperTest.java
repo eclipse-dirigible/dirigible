@@ -7,33 +7,21 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.data.metadata.endpoint;
+package org.eclipse.dirigible.integration.tests.api.java;
 
-import static org.junit.jupiter.api.Assertions.fail;
+import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper;
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.tests.IntegrationTest;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.sql.Connection;
 import java.sql.SQLException;
 
-import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper;
-import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.domain.EntityScan;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.ComponentScan;
+import static org.junit.jupiter.api.Assertions.fail;
 
-/**
- * The Class DatabaseMetadataHelperTest.
- */
-@SpringBootTest
-@AutoConfigureMockMvc
-@ComponentScan(basePackages = {"org.eclipse.dirigible.components"})
-@EntityScan("org.eclipse.dirigible.components")
-public class DatabaseMetadataHelperTest {
+class DatabaseMetadataHelperTest extends IntegrationTest {
 
-    /** The datasources manager. */
     @Autowired
     private DataSourcesManager datasourcesManager;
 
@@ -50,13 +38,6 @@ public class DatabaseMetadataHelperTest {
         } catch (SQLException e) {
             fail(e);
         }
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 
 }
