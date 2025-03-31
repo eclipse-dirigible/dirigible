@@ -18,7 +18,6 @@ import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.eclipse.dirigible.tests.DirigibleTestTenant;
 import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -33,7 +32,6 @@ import static io.restassured.RestAssured.given;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 
-@Disabled
 @Import(RestTransactionsITConfig.class)
 public class RestTransactionsIT extends UserInterfaceIntegrationTest {
 
@@ -107,7 +105,6 @@ public class RestTransactionsIT extends UserInterfaceIntegrationTest {
         try (Connection connection = dataSource.getConnection()) {
             int count = dialect.count(connection, RestTransactionsITConfig.TestRest.TEST_TABLE);
             assertThat(count).isEqualTo(expectedSize);
-
         }
     }
 
