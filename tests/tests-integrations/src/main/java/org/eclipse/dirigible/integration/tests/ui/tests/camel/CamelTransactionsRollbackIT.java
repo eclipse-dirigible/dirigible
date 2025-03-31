@@ -13,10 +13,10 @@ import org.eclipse.dirigible.tests.PredefinedProjectIT;
 import org.eclipse.dirigible.tests.projects.TestProject;
 import org.springframework.beans.factory.annotation.Autowired;
 
-public class CamelTransactionsIT extends PredefinedProjectIT {
+public class CamelTransactionsRollbackIT extends PredefinedProjectIT {
 
     @Autowired
-    private CamelTransactionsTestProject testProject;
+    private CamelTransactionsRollbackTestProject testProject;
 
     @Override
     protected TestProject getTestProject() {

@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.ui.tests;
+package org.eclipse.dirigible.integration.tests.ui.tests.camel;
 
 import ch.qos.logback.classic.Level;
 import org.assertj.db.api.Assertions;
@@ -25,17 +25,18 @@ import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
 
-import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 @Lazy
 @Component
-class QuartzTransactionsTestProject extends BaseTestProject {
+class CamelTransactionsRollbackTestProject extends BaseTestProject {
 
     private final DataSourcesManager dataSourcesManager;
     private final LogsAsserter logsAsserter;
 
-    protected QuartzTransactionsTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, DataSourcesManager dataSourcesManager) {
-        super("QuartzTransactionsIT", ide, projectUtil, edmView);
+    protected CamelTransactionsRollbackTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView,
+            DataSourcesManager dataSourcesManager) {
+        super("CamelTransactionsRollbackIT", ide, projectUtil, edmView);
         this.dataSourcesManager = dataSourcesManager;
         this.logsAsserter = new LogsAsserter("app.out", Level.INFO);
     }
@@ -48,8 +49,7 @@ class QuartzTransactionsTestProject extends BaseTestProject {
 
     @Override
     public void verify() throws Exception {
-        assertThat(logsAsserter.containsMessage("test-job-handler.ts: an entity is saved", Level.INFO)).isTrue();
-
+        assertThat(logsAsserter.containsMessage("camel-handler.ts: an entity is saved", Level.INFO)).isTrue();
         assertDaoSaveIsRollbacked();
     }
 

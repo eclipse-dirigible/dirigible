@@ -13,10 +13,10 @@ import org.eclipse.dirigible.tests.PredefinedProjectIT;
 import org.eclipse.dirigible.tests.projects.TestProject;
 import org.springframework.beans.factory.annotation.Autowired;
 
-public class QuartzTransactionsIT extends PredefinedProjectIT {
+public class QuartzTransactionsRollbackIT extends PredefinedProjectIT {
 
     @Autowired
-    private QuartzTransactionsTestProject testProject;
+    private QuartzTransactionsRollbackTestProject testProject;
 
     @Override
     protected TestProject getTestProject() {
