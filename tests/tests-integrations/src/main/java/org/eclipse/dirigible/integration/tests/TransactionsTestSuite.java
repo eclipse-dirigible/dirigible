@@ -1,5 +1,7 @@
 package org.eclipse.dirigible.integration.tests;
 
+import org.eclipse.dirigible.integration.tests.ui.tests.GitPerspectiveIT;
+import org.eclipse.dirigible.integration.tests.ui.tests.MultitenancyIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.QuartzTransactionsIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.camel.CamelTransactionsIT;
 import org.junit.platform.suite.api.SelectClasses;
@@ -7,9 +9,10 @@ import org.junit.platform.suite.api.Suite;
 
 @Suite
 @SelectClasses({//
-        // GitPerspectiveIT.class, //
+        GitPerspectiveIT.class, //
         QuartzTransactionsIT.class, //
         CamelTransactionsIT.class, //
+        MultitenancyIT.class, //
 // RestTransactionsIT.class, //
 })
 public class TransactionsTestSuite {

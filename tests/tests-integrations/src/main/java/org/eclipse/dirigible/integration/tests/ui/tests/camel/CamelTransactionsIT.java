@@ -11,10 +11,8 @@ package org.eclipse.dirigible.integration.tests.ui.tests.camel;
 
 import org.eclipse.dirigible.tests.PredefinedProjectIT;
 import org.eclipse.dirigible.tests.projects.TestProject;
-import org.junit.jupiter.api.Disabled;
 import org.springframework.beans.factory.annotation.Autowired;
 
-@Disabled
 public class CamelTransactionsIT extends PredefinedProjectIT {
 
     @Autowired

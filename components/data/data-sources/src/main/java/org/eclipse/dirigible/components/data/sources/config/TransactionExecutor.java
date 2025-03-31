@@ -47,13 +47,7 @@ public class TransactionExecutor {
         return transactionTemplate.execute(status -> {
             try {
                 executedByTheExecutor.set(true);
-                // try (DirigibleConnection connection = dataSource.getConnection()) {
-                // connection.setAutoCommit(false);
-                // }
-                R result = callable.call();
-                // connection.commit();
-                return result;
-
+                return callable.call();
             } catch (Throwable ex) {
                 throw new TransactionExecutionException("Failed to execute code for data source [" + dataSource + "] using " + callable,
                         ex);
@@ -69,15 +63,8 @@ public class TransactionExecutor {
     }
 
     private static TransactionTemplate createTemplate(PlatformTransactionManager transactionManager) {
-        LOGGER.info("Using transaction manager [{}]", transactionManager);
         TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-        // transactionTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_DEFAULT);
-
-        // transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_MANDATORY); //
         transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
-        // quartz works
-
-        // transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
 
         return transactionTemplate;
     }
