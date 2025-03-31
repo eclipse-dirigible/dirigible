@@ -251,7 +251,7 @@
         <module>ui/editor-extensions</module>
         <module>ui/editor-jobs</module>
         <module>ui/editor-listeners</module>
-		<module>ui/editor-mapping</module>
+        <module>ui/editor-mapping</module>
         <module>ui/editor-schema</module>
         <module>ui/editor-security</module>
         <module>ui/editor-websockets</module>
@@ -270,7 +270,7 @@
         <module>ui/menu-form-builder</module>
         <module>ui/menu-jobs</module>
         <module>ui/menu-listeners</module>
-		<module>ui/menu-mapping</module>
+        <module>ui/menu-mapping</module>
         <module>ui/menu-projects</module>
         <module>ui/menu-schema</module>
         <module>ui/menu-security</module>
@@ -324,7 +324,7 @@
         <module>template/template-view</module>
         <module>template/template-editor</module>
         <module>template/template-perspective</module>
-		<module>template/template-mapping-javascript</module>
+        <module>template/template-mapping-javascript</module>
 
         <!-- Groups -->
         <module>group/group-api-core</module>
@@ -1395,102 +1395,204 @@
                 <artifactId>dirigible-components-ui-service-extensions</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-editor-monaco</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-editor-monaco-extensions</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-editor-bpm</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-editor-image</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-editor-data-structures</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-editor-extensions</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-editor-jobs</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-editor-listeners</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-editor-mapping</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-editor-schema</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-editor-security</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-editor-websockets</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-editor-integrations</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-editor-report</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-editor-entity</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-editor-csv</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-editor-csvim</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-editor-form-builder</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-ext-documents-content-type-ms</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-editor-monaco</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-editor-monaco-extensions</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-editor-bpm</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-editor-image</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-editor-data-structures</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-editor-extensions</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-editor-jobs</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-editor-listeners</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-editor-mapping</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-editor-schema</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-editor-security</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-editor-websockets</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-editor-integrations</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-editor-report</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-editor-entity</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-editor-csv</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-editor-csvim</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-editor-form-builder</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-ui-ext-documents-content-type-ms</artifactId>
-				<version>${project.version}</version>
-			</dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-menu-bpm</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-menu-database</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-menu-entity</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-menu-extensions</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-menu-form-builder</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-menu-jobs</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-menu-listeners</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-menu-mapping</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-menu-projects</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-menu-schema</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-menu-security</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-menu-websockets</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-menu-csv</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-group-resources-core</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-flowable-libs</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-mxgraph</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-portal</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-inbox</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-documents</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-karavan-libs</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
 			<dependency>
 				<groupId>org.eclipse.dirigible</groupId>
@@ -1853,11 +1955,11 @@
                 <artifactId>dirigible-components-template-perspective</artifactId>
                 <version>${project.version}</version>
             </dependency>
-			<dependency>
-				<groupId>org.eclipse.dirigible</groupId>
-				<artifactId>dirigible-components-template-mapping-javascript</artifactId>
-				<version>${project.version}</version>
-			</dependency>
+            <dependency>
+                 <groupId>org.eclipse.dirigible</groupId>
+                 <artifactId>dirigible-components-template-mapping-javascript</artifactId>
+                 <version>${project.version}</version>
+            </dependency>
 
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
