@@ -278,7 +278,7 @@ public class CsvimProcessor {
      *
      * @param strictMode the new strict mode
      */
-    void setStrictMode(boolean strictMode) {
+    public void setStrictMode(boolean strictMode) {
         this.strictMode = strictMode;
     }
 
