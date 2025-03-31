@@ -116,7 +116,8 @@ public class JobExecutionService {
     private void registeredFailed(String name, String module, JobLog triggered, Exception ex) {
         try {
             jobLogService.jobFailed(name, module, triggered.getId(), new Date(triggered.getTriggeredAt()
-                                                                                       .getTime()), ex.getMessage());
+                                                                                       .getTime()),
+                    ex.getMessage());
         } catch (Exception se) {
             LOGGER.error("Failed to register job [{}] as FAILED. The job failed with [{}]", name, ex, se);
         }
