@@ -1,5 +1,5 @@
 {
-  "guid": "CamelTransactionsIT",
+  "guid": "CamelTransactionsRollbackIT",
   "dependencies": [],
   "actions": [
     {

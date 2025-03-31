@@ -1,5 +1,5 @@
 {
-  "guid": "QuartzTransactionsIT",
+  "guid": "QuartzTransactionsRollbackIT",
   "actions": [
     {
       "name": "Build TypeScript",

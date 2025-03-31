@@ -8,7 +8,7 @@
   "genFolderName": "edm",
   "dataSource": "DefaultDB",
   "roles": [],
-  "projectName": "QuartzTransactionsIT",
+  "projectName": "QuartzTransactionsRollbackIT",
   "workspaceName": "workspace",
   "filePath": "edm.model",
   "templateId": "template-application-angular/template/template.js",

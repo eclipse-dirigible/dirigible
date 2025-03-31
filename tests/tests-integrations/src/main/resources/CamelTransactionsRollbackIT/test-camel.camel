@@ -21,7 +21,7 @@
             description: Call camel-handler-ts
             uri: dirigible-java-script
             parameters:
-              javaScriptPath: CamelTransactionsIT/camel-handler.ts
+              javaScriptPath: CamelTransactionsRollbackIT/camel-handler.ts
         - log:
             id: log-83e2
             description: Log completed

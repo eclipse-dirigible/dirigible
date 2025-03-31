@@ -8,7 +8,7 @@
   "genFolderName": "edm",
   "dataSource": "DefaultDB",
   "roles": [],
-  "projectName": "CamelTransactionsIT",
+  "projectName": "CamelTransactionsRollbackIT",
   "workspaceName": "workspace",
   "filePath": "edm.model",
   "templateId": "template-application-angular/template/template.js",
