@@ -7,11 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.data.metadata.endpoint;
-
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+package org.eclipse.dirigible.components.data.management.endpoint;
 
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
@@ -32,6 +28,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 /**
  * The Class DatabaseMetadataEndpointTest.
  */
@@ -43,6 +43,10 @@ import org.springframework.web.context.WebApplicationContext;
 @EntityScan("org.eclipse.dirigible.components")
 @Transactional
 public class DatabaseMetadataEndpointTest {
+
+    /** The wac. */
+    @Autowired
+    protected WebApplicationContext wac;
 
     /** The datasource repository. */
     @Autowired
@@ -56,13 +60,17 @@ public class DatabaseMetadataEndpointTest {
     @Autowired
     private MockMvc mockMvc;
 
-    /** The wac. */
-    @Autowired
-    protected WebApplicationContext wac;
-
     /** The spring security filter chain. */
     @Autowired
     private FilterChainProxy springSecurityFilterChain;
+
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Setup.
@@ -85,12 +93,5 @@ public class DatabaseMetadataEndpointTest {
         mockMvc.perform(get("/services/data/metadata/{name}/{schema}/{structure}", "TestDB", "INFORMATION_SCHEMA", "INDEXES"))
                .andDo(print())
                .andExpect(status().is2xxSuccessful());
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }
