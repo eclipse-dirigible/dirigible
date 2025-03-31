@@ -102,7 +102,8 @@ class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
     private void validateIntegrationMessage(Value value) {
         if (!value.isHostObject() || !(value.asHostObject() instanceof IntegrationMessage)) {
             throw new IllegalArgumentException(
-                    "Unexpected return received from sdk/integrations::onMessage(). Expected return type: IntegrationMessage.");
+                    "Unexpected return received from sdk/integrations::onMessage(). Expected return type: IntegrationMessage. But was: "
+                            + value);
         }
     }
 

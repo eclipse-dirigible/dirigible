@@ -1,6 +1,6 @@
 - route:
     id: route-c928
-    description: Test Camel Transactions Rollback
+    description: Test Camel Transactions commit
     nodePrefixId: route-f34
     from:
       id: from-411d
@@ -8,23 +8,23 @@
       uri: cron
       parameters:
         schedule: 0/5 * * * * ?
-        name: TestCamelTransactionsRollbackITCron
+        name: TestCamelTransactionsCommitITCron
       steps:
         - log:
             id: log-32ec
             description: Log starting
-            message: Test Camel Transactions rolback is starting...
+            message: Test Camel Transactions commit is starting...
             loggingLevel: INFO
-            logName: CamelTransactionsRollbackIT
+            logName: CamelTransactionsCommitIT
         - to:
             id: to-cbba
             description: Call camel-handler-ts
             uri: dirigible-java-script
             parameters:
-              javaScriptPath: CamelTransactionsRollbackIT/camel-handler.ts
+              javaScriptPath: CamelTransactionsCommitIT/camel-handler.ts
         - log:
             id: log-83e2
             description: Log completed
-            message: Camel Transactions rolback has completed!
+            message: Camel Transactions commit is completed!
             loggingLevel: INFO
-            logName: CamelTransactionsRollbackIT
+            logName: CamelTransactionsCommitIT
