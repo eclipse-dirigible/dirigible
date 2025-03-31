@@ -41,7 +41,6 @@ public class RestTransactionsIT extends UserInterfaceIntegrationTest {
     // "jdbc:postgresql://localhost:5432/postgres");
     // Configuration.set("DIRIGIBLE_DATASOURCE_DEFAULT_USERNAME", "postgres");
     // Configuration.set("DIRIGIBLE_DATASOURCE_DEFAULT_PASSWORD", "postgres");
-    //
     // }
 
     @Autowired

@@ -26,8 +26,8 @@ import org.springframework.web.client.RestTemplate;
 @EnableTransactionManagement
 @CamelOpenTelemetry
 @EnableAdminServer
-@SpringBootApplication(exclude = {DataSourceAutoConfiguration.class, HibernateJpaAutoConfiguration.class,
-        JdbcTemplateAutoConfiguration.class, DataSourceTransactionManagerAutoConfiguration.class})
+@SpringBootApplication(exclude = {DataSourceAutoConfiguration.class, DataSourceTransactionManagerAutoConfiguration.class,
+        HibernateJpaAutoConfiguration.class, JdbcTemplateAutoConfiguration.class})
 @EnableScheduling
 public class DirigibleApplication {
 

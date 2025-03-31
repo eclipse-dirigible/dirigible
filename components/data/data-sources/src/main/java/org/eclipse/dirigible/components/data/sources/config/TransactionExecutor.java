@@ -16,6 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.DefaultTransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 public class TransactionExecutor {
@@ -42,19 +44,39 @@ public class TransactionExecutor {
             throws TransactionExecutionException {
 
         PlatformTransactionManager transactionManager = getTransactionManager(dataSource);
-        TransactionTemplate transactionTemplate = createTemplate(transactionManager);
 
-        return transactionTemplate.execute(status -> {
-            try {
-                executedByTheExecutor.set(true);
-                return callable.call();
-            } catch (Throwable ex) {
-                throw new TransactionExecutionException("Failed to execute code for data source [" + dataSource + "] using " + callable,
-                        ex);
-            } finally {
-                executedByTheExecutor.set(false);
-            }
-        });
+        TransactionDefinition transactionDefinition = new DefaultTransactionDefinition();
+        TransactionStatus transactionStatus = transactionManager.getTransaction(transactionDefinition);
+
+        try {
+            executedByTheExecutor.set(true);
+
+            R result = callable.call();
+
+            transactionManager.commit(transactionStatus);
+
+            return result;
+        } catch (Throwable ex) {
+            transactionManager.rollback(transactionStatus);
+            throw new TransactionExecutionException("Failed to execute code for data source [" + dataSource + "] using " + callable, ex);
+        } finally {
+            executedByTheExecutor.set(false);
+        }
+
+        // TransactionTemplate transactionTemplate = createTemplate(transactionManager);
+        //
+        // return transactionTemplate.execute(status -> {
+        // try {
+        // executedByTheExecutor.set(true);
+        // return callable.call();
+        // } catch (Throwable ex) {
+        // throw new TransactionExecutionException("Failed to execute code for data source [" + dataSource +
+        // "] using " + callable,
+        // ex);
+        // } finally {
+        // executedByTheExecutor.set(false);
+        // }
+        // });
     }
 
     private static PlatformTransactionManager getTransactionManager(DirigibleDataSource dataSource) {
@@ -80,19 +102,34 @@ public class TransactionExecutor {
     public static <E extends Throwable> void executeInTransaction(DirigibleDataSource dataSource, CallableNoResultAndException<E> callable)
             throws TransactionExecutionException {
         PlatformTransactionManager transactionManager = getTransactionManager(dataSource);
-        TransactionTemplate transactionTemplate = createTemplate(transactionManager);
+        TransactionDefinition transactionDefinition = new DefaultTransactionDefinition();
+        TransactionStatus transactionStatus = transactionManager.getTransaction(transactionDefinition);
 
-        transactionTemplate.executeWithoutResult(status -> {
-            try {
-                executedByTheExecutor.set(true);
-                callable.call();
-            } catch (Throwable ex) {
-                throw new TransactionExecutionException("Failed to execute code for data source [" + dataSource + "] using " + callable,
-                        ex);
-            } finally {
-                executedByTheExecutor.set(false);
-            }
-        });
+        try {
+            executedByTheExecutor.set(true);
+
+            callable.call();
+
+            transactionManager.commit(transactionStatus);
+        } catch (Throwable ex) {
+            transactionManager.rollback(transactionStatus);
+            throw new TransactionExecutionException("Failed to execute code for data source [" + dataSource + "] using " + callable, ex);
+        } finally {
+            executedByTheExecutor.set(false);
+        }
+        // TransactionTemplate transactionTemplate = createTemplate(transactionManager);
+        // transactionTemplate.executeWithoutResult(status -> {
+        // try {
+        // executedByTheExecutor.set(true);
+        // callable.call();
+        // } catch (Throwable ex) {
+        // throw new TransactionExecutionException("Failed to execute code for data source [" + dataSource +
+        // "] using " + callable,
+        // ex);
+        // } finally {
+        // executedByTheExecutor.set(false);
+        // }
+        // });
     }
 
 }

@@ -85,6 +85,10 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
             logger.debug("Current thread is executing in transaction. Disabling auto commit...");
             connection.setAutoCommit(false);
         }
+        // if (!TransactionExecutor.isExecutedInTransaction()) {
+        // logger.debug("Current thread is executing in transaction. Disabling auto commit...");
+        // connection.setAutoCommit(true);
+        // }
 
         enhanceConnection(connection);
         LeakedConnectionsDoctor.registerConnection(connection);
@@ -113,6 +117,10 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
             logger.debug("Current thread is executing in transaction. Disabling auto commit...");
             connection.setAutoCommit(false);
         }
+        // if (!TransactionExecutor.isExecutedInTransaction()) {
+        // logger.debug("Current thread is executing in transaction. Enabling auto commit...");
+        // connection.setAutoCommit(true);
+        // }
 
         enhanceConnection(connection);
         LeakedConnectionsDoctor.registerConnection(connection);
