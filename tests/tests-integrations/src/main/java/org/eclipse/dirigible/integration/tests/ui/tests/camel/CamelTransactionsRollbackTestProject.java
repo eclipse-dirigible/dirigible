@@ -24,8 +24,9 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
+import java.util.concurrent.TimeUnit;
 
-import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.awaitility.Awaitility.await;
 
 @Lazy
 @Component
@@ -49,7 +50,10 @@ class CamelTransactionsRollbackTestProject extends BaseTestProject {
 
     @Override
     public void verify() throws Exception {
-        assertThat(logsAsserter.containsMessage("camel-handler.ts: an entity is saved", Level.INFO)).isTrue();
+        await().atMost(10, TimeUnit.SECONDS)
+               .pollDelay(1, TimeUnit.SECONDS)
+               .until(() -> logsAsserter.containsMessage("camel-handler.ts: an entity is saved", Level.INFO));
+
         assertDaoSaveIsRollbacked();
     }
 

@@ -24,8 +24,10 @@ import org.springframework.stereotype.Component;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
+import static org.awaitility.Awaitility.await;
 
 @Lazy
 @Component
@@ -49,7 +51,9 @@ class QuartzTransactionsCommitTestProject extends BaseTestProject {
 
     @Override
     public void verify() throws Exception {
-        assertThat(logsAsserter.containsMessage("test-job-handler.ts: test entities are saved", Level.INFO)).isTrue();
+        await().atMost(10, TimeUnit.SECONDS)
+               .pollDelay(1, TimeUnit.SECONDS)
+               .until(() -> logsAsserter.containsMessage("test-job-handler.ts: test entities are saved", Level.INFO));
 
         assertTestTableSize();
     }
