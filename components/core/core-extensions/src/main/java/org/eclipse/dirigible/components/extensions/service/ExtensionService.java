@@ -58,7 +58,7 @@ public class ExtensionService extends BaseArtefactService<Extension, Long> {
     }
 
     private boolean validateRoles(boolean validRequest, Extension extension) {
-        if(validRequest && (UserRequestVerifier.isUserInRole("ADMINISTRATOR") || UserRequestVerifier.isUserInRole("ADMINISTRATOR") || UserRequestVerifier.isUserInRole("ADMINISTRATOR"))){
+        if(validRequest && (UserRequestVerifier.isUserInRole("ADMINISTRATOR") || UserRequestVerifier.isUserInRole("DEVELOPER") || UserRequestVerifier.isUserInRole("OPERATOR"))){
             return true;
         }
         
