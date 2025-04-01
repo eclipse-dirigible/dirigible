@@ -1,0 +1,76 @@
+<!--
+
+    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" ng-app="ui.mapping.modeler" ng-controller="ModelerCtrl">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/editor-mapping/configs/mapping-editor.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=editor-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <link type="text/css" href="/services/web/editor-mapping/css/styles.css" rel="stylesheet">
+        <script type="text/javascript">
+            mxBasePath = '/services/web/resources/mxgraph/4.2.2/src';
+        </script>
+        <script type="text/javascript" type="text/javascript" src="/services/web/resources/mxgraph/4.2.2/src/js/mxClient.js"></script>
+        <script type="text/javascript" src="/services/web/editor-mapping/js/model.js"></script>
+        <script type="text/javascript" src="/services/web/editor-mapping/js/serializer.js"></script>
+        <script type="text/javascript" src="/services/web/editor-mapping/js/editor.js"></script>
+        <script type="text/javascript" src="/services/web/editor-mapping/js/underscore.js"></script>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
+        <bk-toolbar id="toolbarContainer" ng-show="!state.error && !state.isBusy">
+            <bk-button state="transparent" glyph="sap-icon--inbox" aria-label="Source" title="Source" ng-click="source()"></bk-button>
+            <bk-button state="transparent" glyph="sap-icon--outbox" aria-label="Target" title="Target" ng-click="target()"></bk-button>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button state="transparent" glyph="sap-icon--undo" aria-label="Undo" title="Undo" ng-click="undo()"></bk-button>
+            <bk-button state="transparent" glyph="sap-icon--redo" aria-label="Redo" title="Redo" ng-click="redo()"></bk-button>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button state="transparent" glyph="sap-icon--save" aria-label="Save" title="Save" ng-click="save()"></bk-button>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button state="transparent" glyph="sap-icon--delete" aria-label="Delete" title="Delete" ng-click="delete()"></bk-button>
+            <bk-toolbar-separator class="dsmBigScreen"></bk-toolbar-separator>
+            <bk-button class="dsmBigScreen" state="transparent" glyph="sap-icon--zoom-in" aria-label="Zoom in" title="Zoom in" ng-click="zoomIn()"></bk-button>
+            <bk-button class="dsmBigScreen" state="transparent" glyph="sap-icon--zoom-out" aria-label="Zoom out" title="Zoom out" ng-click="zoomOut()"></bk-button>
+            <bk-button class="dsmBigScreen" state="transparent" glyph="sap-icon--search" aria-label="Actual size" title="Actual size" ng-click="actualSize()"></bk-button>
+            <bk-button class="dsmBigScreen" state="transparent" glyph="sap-icon--exitfullscreen" aria-label="Fit to screen" title="Fit" ng-click="fit()"></bk-button>
+            <bk-toolbar-overflow class="dsmSmallScreen">
+                <bk-button state="transparent" label="Collapse all" glyph="sap-icon--collapse" is-overflow="true" ng-click="collapseAll()"></bk-button>
+                <bk-button state="transparent" label="Expand all" glyph="sap-icon--expand" is-overflow="true" ng-click="expandAll()"></bk-button>
+                <bk-toolbar-separator></bk-toolbar-separator>
+                <bk-button state="transparent" label="Zoom in" glyph="sap-icon--zoom-in" is-overflow="true" ng-click="zoomIn()"></bk-button>
+                <bk-button state="transparent" label="Zoom out" glyph="sap-icon--zoom-out" is-overflow="true" ng-click="zoomOut()"></bk-button>
+                <bk-button state="transparent" label="Actual size" glyph="sap-icon--search" is-overflow="true" ng-click="actualSize()"></bk-button>
+                <bk-button state="transparent" label="Fit to screen" glyph="sap-icon--exitfullscreen" is-overflow="true" ng-click="fit()"></bk-button>
+            </bk-toolbar-overflow>
+        </bk-toolbar>
+        <div class="bk-hbox editorContainer" ng-show="!state.error && !state.isBusy">
+            <!-- <div id="sidebarContainer" class="bk-vbox bk-border--right"></div> -->
+            <div id="graphContainer" bk-scrollbar class="bk-full-width"></div>
+        </div>
+        <div id="outlineContainer" class="outlineContainer" ng-show="!state.error && !state.isBusy"></div>
+        <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+            <bk-message-page-title>Editor encounterd an error!</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+        </bk-message-page>
+        <theme></theme>
+    </body>
+
+</html>

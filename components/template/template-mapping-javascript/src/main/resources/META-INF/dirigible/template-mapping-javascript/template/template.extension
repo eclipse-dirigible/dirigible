@@ -1,0 +1,5 @@
+{
+    "module": "template-mapping-javascript/template/template.js",
+    "extensionPoint": "platform-templates",
+    "description": "The generator template from Mapping format"
+}

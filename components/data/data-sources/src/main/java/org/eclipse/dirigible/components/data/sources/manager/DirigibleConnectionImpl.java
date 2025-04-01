@@ -19,10 +19,12 @@ import java.util.concurrent.Executor;
 
 class DirigibleConnectionImpl implements DirigibleConnection {
 
+    private final String dataSourceName;
     private final Connection connection;
     private final DatabaseSystem databaseSystem;
 
-    DirigibleConnectionImpl(Connection connection, DatabaseSystem databaseSystem) {
+    DirigibleConnectionImpl(String dataSourceName, Connection connection, DatabaseSystem databaseSystem) {
+        this.dataSourceName = dataSourceName;
         this.connection = connection;
         this.databaseSystem = databaseSystem;
     }
@@ -48,13 +50,13 @@ class DirigibleConnectionImpl implements DirigibleConnection {
     }
 
     @Override
-    public void setAutoCommit(boolean autoCommit) throws SQLException {
-        connection.setAutoCommit(autoCommit);
+    public boolean getAutoCommit() throws SQLException {
+        return connection.getAutoCommit();
     }
 
     @Override
-    public boolean getAutoCommit() throws SQLException {
-        return connection.getAutoCommit();
+    public void setAutoCommit(boolean autoCommit) throws SQLException {
+        connection.setAutoCommit(autoCommit);
     }
 
     @Override
@@ -83,18 +85,13 @@ class DirigibleConnectionImpl implements DirigibleConnection {
     }
 
     @Override
-    public void setReadOnly(boolean readOnly) throws SQLException {
-        connection.setReadOnly(readOnly);
-    }
-
-    @Override
     public boolean isReadOnly() throws SQLException {
         return connection.isReadOnly();
     }
 
     @Override
-    public void setCatalog(String catalog) throws SQLException {
-        connection.setCatalog(catalog);
+    public void setReadOnly(boolean readOnly) throws SQLException {
+        connection.setReadOnly(readOnly);
     }
 
     @Override
@@ -103,13 +100,18 @@ class DirigibleConnectionImpl implements DirigibleConnection {
     }
 
     @Override
-    public void setTransactionIsolation(int level) throws SQLException {
-        connection.setTransactionIsolation(level);
+    public void setCatalog(String catalog) throws SQLException {
+        connection.setCatalog(catalog);
     }
 
     @Override
     public int getTransactionIsolation() throws SQLException {
         return connection.getTransactionIsolation();
+    }
+
+    @Override
+    public void setTransactionIsolation(int level) throws SQLException {
+        connection.setTransactionIsolation(level);
     }
 
     @Override
@@ -148,13 +150,13 @@ class DirigibleConnectionImpl implements DirigibleConnection {
     }
 
     @Override
-    public void setHoldability(int holdability) throws SQLException {
-        connection.setHoldability(holdability);
+    public int getHoldability() throws SQLException {
+        return connection.getHoldability();
     }
 
     @Override
-    public int getHoldability() throws SQLException {
-        return connection.getHoldability();
+    public void setHoldability(int holdability) throws SQLException {
+        connection.setHoldability(holdability);
     }
 
     @Override
@@ -240,11 +242,6 @@ class DirigibleConnectionImpl implements DirigibleConnection {
     }
 
     @Override
-    public void setClientInfo(Properties properties) throws SQLClientInfoException {
-        connection.setClientInfo(properties);
-    }
-
-    @Override
     public String getClientInfo(String name) throws SQLException {
         return connection.getClientInfo(name);
     }
@@ -252,6 +249,11 @@ class DirigibleConnectionImpl implements DirigibleConnection {
     @Override
     public Properties getClientInfo() throws SQLException {
         return connection.getClientInfo();
+    }
+
+    @Override
+    public void setClientInfo(Properties properties) throws SQLClientInfoException {
+        connection.setClientInfo(properties);
     }
 
     @Override
@@ -265,13 +267,13 @@ class DirigibleConnectionImpl implements DirigibleConnection {
     }
 
     @Override
-    public void setSchema(String schema) throws SQLException {
-        connection.setSchema(schema);
+    public String getSchema() throws SQLException {
+        return connection.getSchema();
     }
 
     @Override
-    public String getSchema() throws SQLException {
-        return connection.getSchema();
+    public void setSchema(String schema) throws SQLException {
+        connection.setSchema(schema);
     }
 
     @Override
@@ -311,6 +313,7 @@ class DirigibleConnectionImpl implements DirigibleConnection {
 
     @Override
     public String toString() {
-        return "DirigibleConnectionImpl{" + "connection=" + connection + ", databaseSystem=" + databaseSystem + '}';
+        return "DirigibleConnectionImpl{" + "dataSourceName='" + dataSourceName + '\'' + ", connection=" + connection + ", databaseSystem="
+                + databaseSystem + '}';
     }
 }

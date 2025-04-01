@@ -9,13 +9,18 @@
  */
 package org.eclipse.dirigible.components.api.security;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.websocket.Session;
+import static java.text.MessageFormat.format;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Locale;
+
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.api.http.HttpRequestFacade;
 import org.eclipse.dirigible.components.api.http.HttpSessionFacade;
 import org.eclipse.dirigible.components.base.context.ContextException;
 import org.eclipse.dirigible.components.base.context.ThreadContextFacade;
+import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.components.base.util.AuthoritiesUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,11 +29,8 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.Locale;
-
-import static java.text.MessageFormat.format;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.websocket.Session;
 
 /**
  * The Class UserFacade.
@@ -77,6 +79,10 @@ public class UserFacade {
      */
     public static final boolean isInRole(String role) {
         if (Configuration.isAnonymousModeEnabled() || Configuration.isAnonymousUserEnabled()) {
+            return true;
+        }
+        if (HttpRequestFacade.isUserInRole(Roles.DEVELOPER.getRoleName())
+                || HttpRequestFacade.isUserInRole(Roles.ADMINISTRATOR.getRoleName())) {
             return true;
         }
         try {

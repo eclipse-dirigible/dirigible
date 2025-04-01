@@ -54,7 +54,7 @@ jobs:
       - name: Install TypeScript compiler
         run: npm i -g typescript
       - name: Maven Build
-        run: mvn -T 1C clean install -D maven.javadoc.skip=false -U
+        run: mvn clean install -D maven.javadoc.skip=false -U
 
   integration-tests-h2:
     runs-on: ubuntu-latest

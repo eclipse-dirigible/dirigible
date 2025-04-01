@@ -11,6 +11,7 @@ package org.eclipse.dirigible.tests;
 
 import org.awaitility.Awaitility;
 import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.tests.util.PortUtil;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,8 +24,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+// enforce spring application cleanup between test method executions
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 @AutoConfigureMockMvc
-@DirtiesContext
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 public abstract class IntegrationTest {
 
@@ -33,6 +35,20 @@ public abstract class IntegrationTest {
 
     @Autowired
     private TenantCreator tenantCreator;
+
+    public static boolean isHeadlessExecution() {
+        return headlessExecution;
+    }
+
+    @BeforeAll
+    static void useRandomPortForSftp() {
+        Configuration.set("DIRIGIBLE_SFTP_PORT", Integer.toString(PortUtil.getFreeRandomPort()));
+    }
+
+    @BeforeAll
+    static void cleanBeforeTestClassExecution() {
+        DirigibleCleaner.deleteDirigibleFolder();
+    }
 
     @AfterAll
     public static void reloadConfigurations() {
@@ -56,15 +72,6 @@ public abstract class IntegrationTest {
                   .pollInterval(3, TimeUnit.SECONDS)
                   .atMost(35, TimeUnit.SECONDS)
                   .until(() -> tenantCreator.isTenantProvisioned(tenant));
-    }
-
-    @BeforeAll
-    static void cleanBeforeTestClassExecution() {
-        DirigibleCleaner.deleteDirigibleFolder();
-    }
-
-    public static boolean isHeadlessExecution() {
-        return headlessExecution;
     }
 
 }

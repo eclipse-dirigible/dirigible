@@ -1,0 +1,91 @@
+{
+    "model": {
+        "entities": [
+            {
+                "properties": [
+                    {
+                        "dataAutoIncrement": "true",
+                        "dataName": "BOOK_ID",
+                        "dataNullable": "true",
+                        "dataPrimaryKey": "true",
+                        "dataType": "INTEGER",
+                        "description": "",
+                        "name": "Id",
+                        "tooltip": "",
+                        "widgetIsMajor": "true",
+                        "widgetLength": "20",
+                        "widgetSize": "",
+                        "widgetType": "TEXTBOX"
+                    },
+                    {
+                        "dataLength": "40",
+                        "dataName": "BOOK_TITLE",
+                        "dataNullable": "false",
+                        "dataType": "VARCHAR",
+                        "description": "",
+                        "isRequiredProperty": "true",
+                        "name": "Title",
+                        "tooltip": "",
+                        "widgetIsMajor": "true",
+                        "widgetLength": "40",
+                        "widgetSize": "",
+                        "widgetType": "TEXTBOX"
+                    },
+                    {
+                        "dataLength": "40",
+                        "dataName": "BOOK_AUTHOR",
+                        "dataNullable": "false",
+                        "dataType": "VARCHAR",
+                        "description": "",
+                        "isRequiredProperty": "true",
+                        "name": "Author",
+                        "tooltip": "",
+                        "widgetIsMajor": "true",
+                        "widgetLength": "40",
+                        "widgetSize": "",
+                        "widgetType": "TEXTBOX"
+                    }
+                ],
+                "caption": "Manage entity Book",
+                "dataCount": "SELECT COUNT(*) AS COUNT FROM \"${tablePrefix}BOOK\"",
+                "dataName": "BOOK",
+                "dataQuery": "",
+                "description": "Manage entity Book",
+                "generateDefaultRoles": "false",
+                "generateReport": "false",
+                "icon": "/services/web/resources/unicons/file.svg",
+                "layoutType": "MANAGE_MASTER",
+                "menuIndex": "100",
+                "menuKey": "book",
+                "menuLabel": "Book",
+                "name": "Book",
+                "navigationPath": "/Home",
+                "perspectiveIcon": "/services/web/resources/unicons/book-open.svg",
+                "perspectiveLabel": "Books",
+                "perspectiveName": "Books",
+                "perspectiveOrder": "100",
+                "perspectiveRole": "",
+                "title": "Book",
+                "tooltip": "Book",
+                "type": "PRIMARY"
+            }
+        ],
+        "perspectives": [
+            {
+                "name": "Books",
+                "label": "Books",
+                "icon": "/services/web/resources/unicons/book-open.svg",
+                "order": "100",
+                "role": {}
+            },
+            {
+                "name": "Settings",
+                "label": "Settings",
+                "icon": "/services/web/resources/unicons/setting.svg",
+                "order": "200",
+                "role": {}
+            }
+        ],
+        "navigations": []
+    }
+}

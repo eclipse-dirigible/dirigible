@@ -1,0 +1,5 @@
+{
+    "module": "menu-mapping/templates/menu-dmm.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "Data Mapping Model Workbench New Menu Extension"
+}

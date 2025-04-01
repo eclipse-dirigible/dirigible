@@ -16,6 +16,7 @@ enum NewFileOption {
     TYPESCRIPT_SERVICE("TypeScript Service", "typescript.ts"), //
     BUSINESS_PROCESS_MODEL("Business Process Model", "bpmn-new.bpmn"), //
     ACCESS_CONSTRAINTS("Access Constraints", "access.access"), //
+    DATA_MAPPING_MODEL("Data Mapping Model", "mapping.dmm"), //
     DATABASE_SCHEMA_MODEL("Database Schema Model", "schema.dsm"), //
     DATABASE_TABLE("Database Table", "database-table.table"), //
     DATABASE_VIEW("Database View", "database-view.view"), //

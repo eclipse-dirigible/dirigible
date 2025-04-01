@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
 
 import org.eclipse.dirigible.components.base.artefact.BaseArtefactService;
 import org.eclipse.dirigible.components.base.http.access.UserRequestVerifier;
+import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.components.extensions.domain.Extension;
 import org.eclipse.dirigible.components.extensions.repository.ExtensionRepository;
 import org.springframework.data.domain.Example;
@@ -58,6 +59,10 @@ public class ExtensionService extends BaseArtefactService<Extension, Long> {
     }
 
     private boolean validateRoles(boolean validRequest, Extension extension) {
+        if (validRequest && (UserRequestVerifier.isUserInRole(Roles.DEVELOPER.getRoleName())
+                || UserRequestVerifier.isUserInRole(Roles.ADMINISTRATOR.getRoleName()))) {
+            return true;
+        }
         if (validRequest && extension.getRole() != null && !extension.getRole()
                                                                      .trim()
                                                                      .equals("")) {
