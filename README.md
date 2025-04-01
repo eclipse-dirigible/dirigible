@@ -28,20 +28,38 @@ Dirigible promotes the In-System Programming development model, where you make d
 
 The project started as an internal SAP initiative to address the extension and adoption use-cases related to SOA and Enterprise Services.
 
-- [Instant Trial](#instant-trial)
-- [Contact Us](#contact-us)
-- [Get Started](#get-started)
-	- [Download](#download)
-	- [Build](#build)
-	- [Run](#run)
-		- [Standalone](#standalone)
-		- [Docker](#docker)
-                - [Native image](#native-image)
-- [Additional Information](#additional-information)
-	- [License](#license)
-	- [Contributors](#contributors)
-        - [Attribution links](#attribution-links)
-	- [References](#references)
+<!-- TOC -->
+* [Eclipse Dirigible™](#eclipse-dirigible)
+  * [Instant Trial](#instant-trial)
+  * [Contact Us](#contact-us)
+  * [Get Started](#get-started)
+    * [Download](#download)
+    * [Build](#build)
+        * [Prerequisites](#prerequisites)
+        * [Steps](#steps)
+    * [Run](#run)
+      * [Standalone](#standalone)
+        * [Prerequisites](#prerequisites-1)
+        * [Steps](#steps-1)
+      * [Docker](#docker)
+        * [Prerequisites](#prerequisites-2)
+        * [Steps](#steps-2)
+      * [Native image](#native-image)
+        * [Prerequisites](#prerequisites-3)
+        * [Steps](#steps-3)
+      * [PostgreSQL](#postgresql)
+        * [Steps](#steps-4)
+    * [CMS with AWS S3](#cms-with-aws-s3)
+      * [Setup:](#setup)
+      * [Usage:](#usage)
+      * [Test environment with LocalStack](#test-environment-with-localstack)
+      * [Setup:](#setup-1)
+  * [Additional Information](#additional-information)
+    * [License](#license)
+    * [Contributors](#contributors)
+    * [Attribution links](#attribution-links)
+    * [References](#references)
+<!-- TOC -->
 
 ## Instant Trial
 
@@ -88,7 +106,7 @@ git config --system core.longpaths true
 
  - Quick build **with tests**:
 
-        mvn -T 1C clean install -D maven.javadoc.skip=true -D license.skip=true
+        mvn -T 1C clean install -P quick-build
 
  - If you **don't want to trigger license updates**:
 
@@ -104,29 +122,24 @@ git config --system core.longpaths true
 
  - If you **don't need to compile and run tests**:
 
-        mvn clean install -D skipTests
+        mvn clean install -D skipTests -D maven.test.skip=true
 
  - If you want to do a fast build, with **no tests, javadocs and license updates**:
 
-        mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true
+        mvn -T 1C clean install -P quick-build -D license.skip=true
 
  - If you want to **run all integration tests only**:
 	```shell
-	DIRIGIBLE_GIT_REPO='<path-to-git-repo>'
-	cd $DIRIGIBLE_GIT_REPO
-	mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true -U
- 
-	mvn -f tests/pom.xml verify -P integration-tests -D selenide.headless=true
+    export HEADLESS='true'
+	mvn clean install -P integration-tests -D selenide.headless=$HEADLESS
  	```
 
  - If you want to **run specific integration test(s)**:
 	```shell
-	DIRIGIBLE_GIT_REPO='<path-to-git-repo>'
-	cd $DIRIGIBLE_GIT_REPO
-	mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true -U
-	
+	export HEADLESS='true'
 	export TEST='CsvimIT,CreateNewProjectIT'
-	mvn -f tests/pom.xml verify -P integration-tests -Dit.test="$TEST"
+	
+	mvn clean install -P integration-tests - Dit.test="$TEST" -D selenide.headless=$HEADLESS
  	```
 
 > The build should pass successfully.
