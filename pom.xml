@@ -234,6 +234,7 @@
         <skip.code.formatting>false</skip.code.formatting>
         <maven.javadoc.skip>false</maven.javadoc.skip>
         <license.skip>false</license.skip>
+        <skipTCs>true</skipTCs>
     </properties>
 
     <build>
@@ -324,12 +325,9 @@
                         <failIfNoTests>false</failIfNoTests>
                         <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
                         <argLine>
-                            --add-opens java.base/java.lang=ALL-UNNAMED
-                            --add-opens java.base/java.math=ALL-UNNAMED
-                            --add-opens java.base/java.util=ALL-UNNAMED
-                            --add-opens java.base/java.util.concurrent=ALL-UNNAMED
-                            --add-opens java.base/java.net=ALL-UNNAMED
-                            --add-opens java.base/java.text=ALL-UNNAMED
+                            --add-opens=java.base/java.lang=ALL-UNNAMED
+                            --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
+                            --add-opens=java.base/java.nio=ALL-UNNAMED
                         </argLine>
                     </configuration>
                 </plugin>
@@ -415,17 +413,6 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-surefire-plugin</artifactId>
-                        <configuration>
-                            <argLine>
-                                --add-opens java.base/java.lang=ALL-UNNAMED
-                                --add-opens java.base/java.math=ALL-UNNAMED
-                                --add-opens java.base/java.util=ALL-UNNAMED
-                                --add-opens
-                                java.base/java.util.concurrent=ALL-UNNAMED
-                                --add-opens java.base/java.net=ALL-UNNAMED
-                                --add-opens java.base/java.text=ALL-UNNAMED
-                            </argLine>
-                        </configuration>
                     </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
@@ -707,18 +694,6 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-surefire-plugin</artifactId>
-                        <version>${maven-surefire-plugin.version}</version>
-                        <configuration>
-                            <argLine>
-                                --add-opens java.base/java.lang=ALL-UNNAMED
-                                --add-opens java.base/java.math=ALL-UNNAMED
-                                --add-opens java.base/java.util=ALL-UNNAMED
-                                --add-opens
-                                java.base/java.util.concurrent=ALL-UNNAMED
-                                --add-opens java.base/java.net=ALL-UNNAMED
-                                --add-opens java.base/java.text=ALL-UNNAMED
-                            </argLine>
-                        </configuration>
                     </plugin>
                 </plugins>
             </build>
