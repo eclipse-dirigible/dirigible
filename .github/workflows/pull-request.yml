@@ -53,12 +53,6 @@ jobs:
         run: npm i -g esbuild
       - name: Install TypeScript compiler
         run: npm i -g typescript
-      - name: Install ttyd (prebuilt)
-        run: |
-          sudo apt update
-          sudo apt install -y ttyd
-      - name: Verify ttyd installation
-        run: ttyd --version
       - name: Maven Build
         run: mvn clean install -P unit-tests -U
 
