@@ -87,7 +87,7 @@ Nevertheless, we highly recommend building the binaries from source in order to 
 - [Maven 3.5.x](http://maven.apache.org/docs/3.5.3/release-notes.html)
 - [esbuild](https://esbuild.github.io/getting-started/#install-esbuild)  - `npm i -g esbuild`
 - [tsc](https://www.npmjs.com/package/typescript) - `npm i -g typescript`
-
+- [ttyd](https://github.com/tsl0922/ttyd) - `brew install ttyd`
 
 ##### Steps
 
