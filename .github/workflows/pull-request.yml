@@ -53,8 +53,14 @@ jobs:
         run: npm i -g esbuild
       - name: Install TypeScript compiler
         run: npm i -g typescript
+      - name: Install ttyd (prebuilt)
+        run: |
+          sudo apt update
+          sudo apt install -y ttyd
+      - name: Verify ttyd installation
+        run: ttyd --version
       - name: Maven Build
-        run: mvn clean install -D maven.javadoc.skip=false -U
+        run: mvn clean install -P unit-tests -U
 
   integration-tests-h2:
     runs-on: ubuntu-latest
@@ -87,10 +93,8 @@ jobs:
           sudo apt install -y ttyd
       - name: Verify ttyd installation
         run: ttyd --version
-      - name: Maven Build
-        run: mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true -U
       - name: Integration tests
-        run: mvn -f tests/pom.xml verify -P integration-tests -D selenide.headless=true
+        run: mvn clean install -P integration-tests -D selenide.headless=true
 
       - name: Generate a random artifact name
         if: always()
@@ -155,10 +159,8 @@ jobs:
           sudo apt install -y ttyd
       - name: Verify ttyd installation
         run: ttyd --version
-      - name: Maven Build
-        run: mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true -U
       - name: Integration tests
-        run: mvn -f tests/pom.xml verify -P integration-tests -D selenide.headless=true
+        run: mvn clean install -P integration-tests -D selenide.headless=true
         env:
           DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER: org.postgresql.Driver
           DIRIGIBLE_DATASOURCE_DEFAULT_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}

@@ -227,10 +227,21 @@
         <parent.pom.folder>./</parent.pom.folder>
         <formatter.location>${parent.pom.folder}/dirigible-formatter.xml</formatter.location>
         <formatter.java.version>${java.version}</formatter.java.version>
+
+        <!-- Default configurations -->
+        <skipTests>false</skipTests>
+        <skipITs>true</skipITs>
+        <skip.code.formatting>false</skip.code.formatting>
+        <maven.javadoc.skip>false</maven.javadoc.skip>
+        <license.skip>false</license.skip>
     </properties>
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>pl.project13.maven</groupId>
+                <artifactId>git-commit-id-plugin</artifactId>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -238,6 +249,31 @@
             <plugin>
                 <groupId>net.revelc.code.formatter</groupId>
                 <artifactId>formatter-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+            </plugin>
+
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>com.mycila</groupId>
+                <artifactId>license-maven-plugin</artifactId>
             </plugin>
         </plugins>
         <pluginManagement>
@@ -283,17 +319,40 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>${maven-surefire-plugin.version}</version>
+                    <configuration>
+                        <skipTests>${skipTests}</skipTests>
+                        <failIfNoTests>false</failIfNoTests>
+                        <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+                    </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-failsafe-plugin</artifactId>
                     <version>${maven-failsafe-plugin.version}</version>
+                    <configuration>
+                        <skipITs>${skipITs}</skipITs>
+                        <testClassesDirectory>${project.build.outputDirectory}</testClassesDirectory>
+                        <failIfNoTests>false</failIfNoTests>
+                        <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+                        <includes>
+                            <include>**/*IT.java</include>
+                        </includes>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>integration-test</goal>
+                                <goal>verify</goal>
+                            </goals>
+                        </execution>
+                    </executions>
                 </plugin>
                 <plugin>
                     <groupId>net.revelc.code.formatter</groupId>
                     <artifactId>formatter-maven-plugin</artifactId>
                     <version>${maven-formatter-plugin.version}</version>
                     <configuration>
+                        <skip>${skip.code.formatting}</skip>
                         <configFile>${formatter.location}</configFile>
                         <compilerSource>${formatter.java.version}</compilerSource>
                         <compilerCompliance>${formatter.java.version}</compilerCompliance>
@@ -515,7 +574,7 @@
                             <!-- overwrite dependency on spotbugs if you want to
                             specify the version of spotbugs -->
                             <dependency>
-                                <groupId>com.github.spotbugs</groupId>
+                                <groupId><![CDATA[com.github.spotbugs]]></groupId>
                                 <artifactId>spotbugs</artifactId>
                                 <version>4.9.3</version>
                             </dependency>
@@ -597,6 +656,7 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-gpg-plugin</artifactId>
+                        <version>${maven-gpg-plugin.version}</version>
                         <executions>
                             <execution>
                                 <id>sign-artifacts</id>
@@ -628,7 +688,7 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-compiler-plugin</artifactId>
-                        <version>${maven.compiler.plugin.version}</version>
+                        <version>${maven-compiler-plugin.version}</version>
                         <configuration>
                             <source>${maven.compiler.source}</source>
                             <target>${maven.compiler.target}</target>
@@ -654,6 +714,67 @@
                     </plugin>
                 </plugins>
             </build>
+        </profile>
+
+        <profile>
+            <id>tests</id>
+            <properties>
+                <skipTests>false</skipTests>
+                <skipITs>false</skipITs>
+                <maven.javadoc.skip>true</maven.javadoc.skip>
+                <license.skip>true</license.skip>
+                <skip.code.formatting>true</skip.code.formatting>
+            </properties>
+        </profile>
+        <profile>
+            <id>unit-tests</id>
+            <properties>
+                <skipTests>false</skipTests>
+                <skipITs>true</skipITs>
+                <maven.javadoc.skip>true</maven.javadoc.skip>
+                <license.skip>true</license.skip>
+                <skip.code.formatting>true</skip.code.formatting>
+            </properties>
+        </profile>
+        <profile>
+            <id>integration-tests</id>
+            <properties>
+                <skipITs>false</skipITs>
+                <maven.javadoc.skip>true</maven.javadoc.skip>
+                <license.skip>true</license.skip>
+                <skip.code.formatting>true</skip.code.formatting>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <skipTests>true</skipTests>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>quick-build</id>
+            <properties>
+                <skipTests>true</skipTests>
+                <skipITs>true</skipITs>
+                <maven.javadoc.skip>true</maven.javadoc.skip>
+                <license.skip>true</license.skip>
+                <skip.code.formatting>true</skip.code.formatting>
+            </properties>
+        </profile>
+        <profile>
+            <id>format</id>
+            <properties>
+                <skipTests>true</skipTests>
+                <skipITs>true</skipITs>
+                <maven.javadoc.skip>true</maven.javadoc.skip>
+                <license.skip>true</license.skip>
+                <skip.code.formatting>false</skip.code.formatting>
+            </properties>
         </profile>
     </profiles>
 
