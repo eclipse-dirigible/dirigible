@@ -126,7 +126,7 @@ git config --system core.longpaths true
 
  - If you want to do a fast build, with **no tests, javadocs and license updates**:
 
-        mvn -T 1C clean install -P quick-build -D license.skip=true
+        mvn -T 1C clean install -P quick-build
 
  - If you want to **run all integration tests only**:
 	```shell
