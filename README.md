@@ -104,9 +104,9 @@ git config --system core.longpaths true
 
    > If you are using Windows, make sure that you open the terminal as Administrator otherwise the tests will fail
 
- - Quick build **with tests**:
+ - Quick build **with unit tests**:
 
-        mvn -T 1C clean install -P quick-build
+        mvn -T 1C clean install -D maven.javadoc.skip=true -D license.skip=true
 
  - If you **don't want to trigger license updates**:
 
