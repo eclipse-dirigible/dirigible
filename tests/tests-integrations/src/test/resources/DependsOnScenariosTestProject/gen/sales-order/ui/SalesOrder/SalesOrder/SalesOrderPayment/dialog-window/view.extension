@@ -1,0 +1,5 @@
+{
+    "module": "DependsOnScenariosTestProject/gen/sales-order/ui/SalesOrder/SalesOrder/SalesOrderPayment/dialog-window/view.js",
+    "extensionPoint": "dialog-window",
+    "description": "DependsOnScenariosTestProject - Application Dialog Window"
+}

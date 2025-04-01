@@ -15,7 +15,9 @@ public enum HtmlAttribute {
     PLACEHOLDER("placeholder"), //
     ROLE("role"), //
     CLASS("class"), //
-    TITLE("title");
+    TITLE("title"), //
+    LABEL("label"), NGCLICK("ng-click"), //
+    GLYPH("glyph");
 
     private final String attribute;
 

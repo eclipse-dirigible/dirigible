@@ -1,0 +1,5 @@
+{
+    "module": "DependsOnScenariosTestProject/gen/sales-order/ui/Product/Product/dialog-filter/view.js",
+    "extensionPoint": "dialog-window",
+    "description": "DependsOnScenariosTestProject - Application Dialog Window"
+}

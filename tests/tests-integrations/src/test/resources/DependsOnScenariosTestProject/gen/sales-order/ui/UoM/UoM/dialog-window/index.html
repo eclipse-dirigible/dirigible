@@ -1,0 +1,70 @@
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
+
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" href="data:;base64,iVBORw0KGgo=" dg-brand-icon />
+        <title dg-brand-title></title>
+        <theme></theme>
+        <script type="text/javascript"
+            src="/services/js/resources-core/services/loader.js?id=application-view-js"></script>
+        <link type="text/css" rel="stylesheet"
+            href="/services/js/resources-core/services/loader.js?id=application-view-css" />
+
+        <script type="text/javascript" src="controller.js"></script>
+    </head>
+
+    <body class="dg-vbox">
+        <fd-scrollbar class="dg-full-height">
+            <div class="fd-margin--md fd-message-strip fd-message-strip--error fd-message-strip--dismissible"
+                role="alert" ng-show="errorMessage">
+                <p class="fd-message-strip__text">{{ errorMessage }}</p>
+                <fd-button glyph="sap-icon--decline" compact="true" dg-type="transparent" aria-label="Close" in-msg-strip="true" ng-click="clearErrorMessage()">
+		        </fd-button>
+            </div>
+
+            <fd-fieldset ng-form="forms.details">
+                <fd-form-group dg-header="{{formHeaders[action]}}" name="entityForm" class="fd-container fd-form-layout-grid-container">
+                    <fd-form-item class="fd-row">
+                    	<div class="fd-col fd-col-md--2">
+                        	<fd-form-label for="idName" dg-required="false" dg-colon="true">Name</fd-form-label>
+                        </div>
+                        <div class="fd-col  fd-col-md--8 ">
+	                        <fd-form-input-message-group dg-inactive="{{ forms.details['Name'].$valid }}">
+	                            <fd-input id="idName"
+	                                name="Name"
+	                                state="{{ forms.details['Name'].$valid ? '' : 'error' }}"
+									ng-required="false"
+	                                ng-model="entity.Name"
+	                                ng-readonly="action === 'select'"
+	                                ng-minlength="0.0 || 0"
+	                                ng-maxlength="50.0 || -1"
+	                                dg-input-rules="{ patterns: [''] }"
+	                                type="text"
+	                                placeholder="Enter Name">
+	                            </fd-input>
+	                            <fd-form-message dg-type="error">The value doesn't match the required pattern ''</fd-form-message>
+	                        </fd-form-input-message-group>
+	                        <i class="sap-icon--information" role="presentation" onclick="javascript:alert('')"></i>
+	                    </div>
+                    </fd-form-item>
+                </fd-form-group>
+            </fd-fieldset>
+        </fd-scrollbar>
+
+		<fd-bar bar-design="footer" compact="true" ng-show="action !== 'select'">
+			<fd-bar-right>
+				<fd-bar-element>
+					<fd-button dg-label="{{action === 'create' ? 'Create' : 'Update'}}" dg-type="emphasized" ng-click="action === 'create' ? create() : update()" state="{{ forms.details.$valid ? '' : 'disabled' }}"></fd-button>
+				</fd-bar-element>
+				<fd-bar-element>
+					<fd-button dg-label="Cancel" ng-click="cancel()"></fd-button>
+				</fd-bar-element>
+			</fd-bar-right>
+		</fd-bar>
+
+    </body>
+
+</html>
