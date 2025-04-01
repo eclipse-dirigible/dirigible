@@ -17,6 +17,7 @@ import org.eclipse.dirigible.components.database.DirigibleConnection;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import javax.sql.DataSource;
 import java.io.PrintWriter;
@@ -24,6 +25,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -35,9 +37,11 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
     /** The Constant LOGGER. */
     private static final Logger logger = LoggerFactory.getLogger(DirigibleDataSourceImpl.class);
 
+    private final String name;
     private final List<ConnectionEnhancer> connectionEnhancers;
     private final HikariDataSource originalDataSource;
     private final DatabaseSystem databaseSystem;
+    private PlatformTransactionManager transactionManager;
 
     /**
      * Wrapper of the default datasource provided by the underlying platform It has some fault tolerance
@@ -46,8 +50,9 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
      * @param originalDataSource the original data source
      * @param databaseSystem database type
      */
-    DirigibleDataSourceImpl(List<ConnectionEnhancer> allConnectionEnhancers, HikariDataSource originalDataSource,
+    DirigibleDataSourceImpl(String name, List<ConnectionEnhancer> allConnectionEnhancers, HikariDataSource originalDataSource,
             DatabaseSystem databaseSystem) {
+        this.name = name;
         this.connectionEnhancers = allConnectionEnhancers.stream()
                                                          .filter(e -> e.isApplicable(databaseSystem))
                                                          .collect(Collectors.toList());
@@ -55,6 +60,10 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
                 allConnectionEnhancers.size(), databaseSystem, connectionEnhancers);
         this.originalDataSource = originalDataSource;
         this.databaseSystem = databaseSystem;
+    }
+
+    public String getName() {
+        return name;
     }
 
     /**
@@ -70,7 +79,13 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
         enhanceConnection(connection);
         LeakedConnectionsDoctor.registerConnection(connection);
 
-        return new DirigibleConnectionImpl(connection, databaseSystem);
+        return new DirigibleConnectionImpl(name, connection, databaseSystem);
+    }
+
+    private void enhanceConnection(Connection connection) throws SQLException {
+        for (ConnectionEnhancer enhancer : connectionEnhancers) {
+            enhancer.apply(connection);
+        }
     }
 
     /**
@@ -88,13 +103,17 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
         enhanceConnection(connection);
         LeakedConnectionsDoctor.registerConnection(connection);
 
-        return new DirigibleConnectionImpl(connection, databaseSystem);
+        return new DirigibleConnectionImpl(name, connection, databaseSystem);
     }
 
-    private void enhanceConnection(Connection connection) throws SQLException {
-        for (ConnectionEnhancer enhancer : connectionEnhancers) {
-            enhancer.apply(connection);
-        }
+    @Override
+    public Optional<PlatformTransactionManager> getTransactionManager() {
+        return Optional.ofNullable(transactionManager);
+    }
+
+    @Override
+    public void setTransactionManager(PlatformTransactionManager transactionManager) {
+        this.transactionManager = transactionManager;
     }
 
     /**
@@ -190,5 +209,12 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
     @Override
     public void close() {
         originalDataSource.close();
+    }
+
+    @Override
+    public String toString() {
+        return "DirigibleDataSourceImpl{" + "name='" + name + '\'' + ", connectionEnhancers=" + connectionEnhancers
+                + ", originalDataSource=" + originalDataSource + ", databaseSystem=" + databaseSystem + ", transactionManager="
+                + transactionManager + '}';
     }
 }

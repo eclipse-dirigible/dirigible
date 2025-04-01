@@ -1,5 +1,5 @@
 {
     "module": "template-application-ui-angular/template/template-report-file.js",
-    "extensionPoint": "ide-template",
+    "extensionPoint": "platform-templates",
     "description": "Application Template - Report"
 }

@@ -18,6 +18,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import static org.eclipse.dirigible.components.jobs.handler.JobExecutionService.JOB_PARAMETER_ENGINE;
+import static org.eclipse.dirigible.components.jobs.handler.JobExecutionService.JOB_PARAMETER_HANDLER;
 import static org.quartz.CronScheduleBuilder.cronSchedule;
 
 /**
@@ -221,8 +223,8 @@ public class JobsManager {
         JobDetail job = JobBuilder.newJob(JobHandler.class)
                                   .withIdentity(jobKey)
                                   .withDescription(jobDefinition.getDescription())
-                                  .usingJobData(JobHandler.JOB_PARAMETER_HANDLER, jobDefinition.getHandler())
-                                  .usingJobData(JobHandler.JOB_PARAMETER_ENGINE, jobDefinition.getEngine())
+                                  .usingJobData(JOB_PARAMETER_HANDLER, jobDefinition.getHandler())
+                                  .usingJobData(JOB_PARAMETER_ENGINE, jobDefinition.getEngine())
                                   .build();
         job.getJobDataMap()
            .put(JobHandler.TENANT_PARAMETER, tenantContext.getCurrentTenant());

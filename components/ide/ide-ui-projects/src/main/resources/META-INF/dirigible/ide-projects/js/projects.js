@@ -47,7 +47,7 @@ projectsView.controller('ProjectsViewController', [
         $scope.renameNodeData;
         $scope.duplicateProjectData = {};
         $scope.imageFileExts = ['ico', 'bmp', 'png', 'jpg', 'jpeg', 'gif', 'svg'];
-        $scope.modelFileExts = ['extension', 'extensionpoint', 'edm', 'model', 'dsm', 'schema', 'bpmn', 'job', 'listener', 'websocket', 'roles', 'constraints', 'table', 'view'];
+        $scope.modelFileExts = ['extension', 'extensionpoint', 'edm', 'model', 'dsm', 'dmm', 'schema', 'bpmn', 'job', 'listener', 'websocket', 'roles', 'constraints', 'table', 'view'];
 
         $scope.selectedWorkspace = JSON.parse(localStorage.getItem('DIRIGIBLE.workspace') || '{}');
         if (!$scope.selectedWorkspace.name) {

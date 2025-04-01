@@ -44,15 +44,15 @@ public class DatabasePerspective {
         browser.assertElementExistsByTypeAndText(HtmlElementType.ANCHOR, submenu);
     }
 
-    public void showTableContents(String tableName) {
-        browser.rightClickOnElementByText(HtmlElementType.ANCHOR, tableName);
-        browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Show contents");
-    }
-
     public void assertEmptyTable(String tableName) {
         showTableContents(tableName);
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.CLASS, "fd-message-page__title",
                 "Empty result");
+    }
+
+    public void showTableContents(String tableName) {
+        browser.rightClickOnElementByText(HtmlElementType.ANCHOR, tableName);
+        browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Show contents");
     }
 
     public void assertHasColumn(String columnName) {
@@ -101,12 +101,10 @@ public class DatabasePerspective {
                   .column(columnName);
     }
 
-
     public void refreshTables() {
         browser.clickElementByAttributes(HtmlElementType.BUTTON,
                 Map.of(HtmlAttribute.CLASS, "fd-button fd-button--transparent", HtmlAttribute.TITLE, "Refresh"));
     }
-
 
     public void executeSql(String sql) {
         // Click in the editor to focus it. Does not work with browser.enterText...

@@ -58,7 +58,7 @@ jobs:
         run: mvn clean install -D maven.javadoc.skip=false  -D skipTests -D maven.test.skip=true
       - name: Docker Login
         run: docker login -u ${{secrets.DOCKER_USER}} -p ${{secrets.DOCKER_PASSWORD}}
-      - name: Push Dirigible (Spring)
+      - name: Push Dirigible image to Docker Hub
         run: |
           cd build/application
           docker buildx build --push --tag dirigiblelabs/dirigible -o type=image --platform=linux/arm64,linux/amd64 .

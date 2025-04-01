@@ -36,21 +36,15 @@ public class SynchronizationInitializer implements ApplicationListener<Applicati
     /** The classpath expander. */
     private final ClasspathExpander classpathExpander;
 
-    /** The initialization processor. */
-    private final InitializationProcessor initializationProcessor;
-
     /**
      * Instantiates a new synchronizers initializer.
      *
      * @param synchronizationProcessor the synchronization processor
      * @param classpathExpander the classpath expander
-     * @param initializationProcessor the initialization processor
      */
-    public SynchronizationInitializer(SynchronizationProcessor synchronizationProcessor, ClasspathExpander classpathExpander,
-            InitializationProcessor initializationProcessor) {
+    public SynchronizationInitializer(SynchronizationProcessor synchronizationProcessor, ClasspathExpander classpathExpander) {
         this.synchronizationProcessor = synchronizationProcessor;
         this.classpathExpander = classpathExpander;
-        this.initializationProcessor = initializationProcessor;
     }
 
     /**
@@ -65,7 +59,6 @@ public class SynchronizationInitializer implements ApplicationListener<Applicati
         synchronizationProcessor.prepareSynchronizers();
         classpathExpander.expandContent();
         synchronizationProcessor.processSynchronizers();
-        initializationProcessor.processInitializers();
 
         LOGGER.info("Completed.");
 

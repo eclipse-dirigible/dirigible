@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.api.db;
 
 import org.apache.commons.io.output.WriterOutputStream;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
+import org.eclipse.dirigible.components.base.logging.LoggingExecutor;
 import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper;
 import org.eclipse.dirigible.components.data.management.helpers.DatabaseResultSetHelper;
 import org.eclipse.dirigible.components.data.management.service.DatabaseDefinitionService;
@@ -27,12 +28,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
-
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.StringWriter;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.ArrayList;
@@ -72,11 +68,9 @@ public class DatabaseFacade implements InitializingBean {
 
     /**
      * After properties set.
-     *
-     * @throws Exception the exception
      */
     @Override
-    public void afterPropertiesSet() throws Exception {
+    public void afterPropertiesSet() {
         INSTANCE = this;
     }
 
@@ -85,7 +79,7 @@ public class DatabaseFacade implements InitializingBean {
      *
      * @return the data sources
      */
-    public static final String getDataSources() {
+    public static String getDataSources() {
         return GsonHelper.toJson(DatabaseFacade.get()
                                                .getDatabaseDefinitionService()
                                                .getDataSourcesNames());
@@ -114,7 +108,7 @@ public class DatabaseFacade implements InitializingBean {
      *
      * @return the default data source
      */
-    public static final DirigibleDataSource getDefaultDataSource() {
+    public static DirigibleDataSource getDefaultDataSource() {
         return DatabaseFacade.get()
                              .getDataSourcesManager()
                              .getDefaultDataSource();
@@ -136,13 +130,13 @@ public class DatabaseFacade implements InitializingBean {
      * @return the metadata
      * @throws SQLException the SQL exception
      */
-    public static final String getMetadata(String datasourceName) throws SQLException {
+    public static String getMetadata(String datasourceName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
         if (dataSource == null) {
             String error = format("DataSource {0} not known.", datasourceName);
             throw new IllegalArgumentException(error);
         }
-        return DatabaseMetadataHelper.getMetadataAsJson(dataSource);
+        return LoggingExecutor.executeWithException(dataSource, () -> DatabaseMetadataHelper.getMetadataAsJson(dataSource));
     }
 
     /**
@@ -152,12 +146,15 @@ public class DatabaseFacade implements InitializingBean {
      * @return the data source
      */
     private static DirigibleDataSource getDataSource(String datasourceName) {
-        return datasourceName == null || "".equals(datasourceName.trim()) || "DefaultDB".equals(datasourceName) ? DatabaseFacade.get()
-                                                                                                                                .getDataSourcesManager()
-                                                                                                                                .getDefaultDataSource()
-                : DatabaseFacade.get()
-                                .getDataSourcesManager()
-                                .getDataSource(datasourceName);
+        return datasourceName == null || datasourceName.trim()
+                                                       .isEmpty()
+                || "DefaultDB".equals(datasourceName)
+                        ? DatabaseFacade.get()
+                                        .getDataSourcesManager()
+                                        .getDefaultDataSource()
+                        : DatabaseFacade.get()
+                                        .getDataSourcesManager()
+                                        .getDataSource(datasourceName);
     }
 
     /**
@@ -166,13 +163,15 @@ public class DatabaseFacade implements InitializingBean {
      * @return the metadata
      * @throws SQLException the SQL exception
      */
-    public static final String getMetadata() throws SQLException {
+    public static String getMetadata() throws Throwable {
         DataSource dataSource = getDataSource(null);
-        if (dataSource == null) {
-            String error = format("No default DataSource has been configured.");
-            throw new IllegalArgumentException(error);
-        }
-        return DatabaseMetadataHelper.getMetadataAsJson(dataSource);
+        return LoggingExecutor.executeWithException(dataSource, () -> {
+            if (dataSource == null) {
+                String error = format("No default DataSource has been configured.");
+                throw new IllegalArgumentException(error);
+            }
+            return DatabaseMetadataHelper.getMetadataAsJson(dataSource);
+        });
     }
 
     /**
@@ -182,13 +181,13 @@ public class DatabaseFacade implements InitializingBean {
      * @return the product name
      * @throws SQLException the SQL exception
      */
-    public static final String getProductName(String datasourceName) throws SQLException {
+    public static String getProductName(String datasourceName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
         if (dataSource == null) {
             String error = format("DataSource {0} not known.", datasourceName);
             throw new IllegalArgumentException(error);
         }
-        return DatabaseMetadataHelper.getProductName(dataSource);
+        return LoggingExecutor.executeWithException(dataSource, () -> DatabaseMetadataHelper.getProductName(dataSource));
     }
 
     /**
@@ -197,13 +196,27 @@ public class DatabaseFacade implements InitializingBean {
      * @return the product name
      * @throws SQLException the SQL exception
      */
-    public static final String getProductName() throws SQLException {
+    public static String getProductName() throws Throwable {
         DataSource dataSource = getDataSource(null);
-        if (dataSource == null) {
-            String error = format("No default DataSource has been configured.");
-            throw new IllegalArgumentException(error);
-        }
-        return DatabaseMetadataHelper.getProductName(dataSource);
+        return LoggingExecutor.executeWithException(dataSource, () -> {
+            if (dataSource == null) {
+                String error = format("No default DataSource has been configured.");
+                throw new IllegalArgumentException(error);
+            }
+            return DatabaseMetadataHelper.getProductName(dataSource);
+        });
+    }
+
+    /**
+     * Executes SQL query.
+     *
+     * @param sql the sql
+     * @param parameters the parameters
+     * @return the result of the query as JSON
+     * @throws Exception the exception
+     */
+    public static String query(String sql, String parameters) throws Throwable {
+        return query(sql, parameters, null);
     }
 
     // ============ Query ===========
@@ -213,52 +226,42 @@ public class DatabaseFacade implements InitializingBean {
      *
      * @param sql the sql
      * @param parameters the parameters
-     * @return the result of the query as JSON
-     * @throws Exception the exception
-     */
-    public static final String query(String sql, String parameters) throws Exception {
-        return query(sql, parameters, null);
-    }
-
-    /**
-     * Executes SQL query.
-     *
-     * @param sql the sql
-     * @param parameters the parameters
      * @param datasourceName the datasource name
      * @return the result of the query as JSON
      * @throws Exception the exception
      */
-    public static final String query(String sql, String parameters, String datasourceName) throws Exception {
+    public static String query(String sql, String parameters, String datasourceName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
-        if (dataSource == null) {
-            String error = format("DataSource {0} not known.", datasourceName);
-            throw new IllegalArgumentException(error);
-        }
-        try (Connection connection = dataSource.getConnection()) {
-            try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
-                if (parameters != null) {
-                    IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                    ParametersSetter.setParameters(parameters, statement);
-                }
-                ResultSet resultSet = preparedStatement.executeQuery();
-                StringWriter sw = new StringWriter();
-                OutputStream output;
-                try {
-                    output = WriterOutputStream.builder()
-                                               .setWriter(sw)
-                                               .setCharset(StandardCharsets.UTF_8)
-                                               .get();
-                } catch (IOException e) {
-                    throw new Exception(e);
-                }
-                DatabaseResultSetHelper.toJson(resultSet, false, false, output);
-                return sw.toString();
+        return LoggingExecutor.executeWithException(dataSource, () -> {
+            if (dataSource == null) {
+                String error = format("DataSource {0} not known.", datasourceName);
+                throw new IllegalArgumentException(error);
             }
-        } catch (Exception ex) {
-            logger.error("Failed to execute query statement [{}] in data source [{}].", sql, datasourceName, ex);
-            throw ex;
-        }
+            try (Connection connection = dataSource.getConnection()) {
+                try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
+                    if (parameters != null) {
+                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
+                        ParametersSetter.setParameters(parameters, statement);
+                    }
+                    ResultSet resultSet = preparedStatement.executeQuery();
+                    StringWriter sw = new StringWriter();
+                    OutputStream output;
+                    try {
+                        output = WriterOutputStream.builder()
+                                                   .setWriter(sw)
+                                                   .setCharset(StandardCharsets.UTF_8)
+                                                   .get();
+                    } catch (IOException e) {
+                        throw new Exception(e);
+                    }
+                    DatabaseResultSetHelper.toJson(resultSet, false, false, output);
+                    return sw.toString();
+                }
+            } catch (Exception ex) {
+                logger.error("Failed to execute query statement [{}] in data source [{}].", sql, datasourceName, ex);
+                throw ex;
+            }
+        });
     }
 
     /**
@@ -268,7 +271,7 @@ public class DatabaseFacade implements InitializingBean {
      * @return the result of the query as JSON
      * @throws Exception the exception
      */
-    public static final String query(String sql) throws Exception {
+    public static String query(String sql) throws Throwable {
         return query(sql, null, null);
     }
 
@@ -280,7 +283,7 @@ public class DatabaseFacade implements InitializingBean {
      * @return the result of the query as JSON
      * @throws Exception the exception
      */
-    public static final String queryNamed(String sql, String parameters) throws Exception {
+    public static String queryNamed(String sql, String parameters) throws Throwable {
         return queryNamed(sql, parameters, null);
     }
 
@@ -293,36 +296,38 @@ public class DatabaseFacade implements InitializingBean {
      * @return the result of the query as JSON
      * @throws Exception the exception
      */
-    public static final String queryNamed(String sql, String parameters, String datasourceName) throws Exception {
+    public static String queryNamed(String sql, String parameters, String datasourceName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
         if (dataSource == null) {
             String error = format("DataSource {0} not known.", datasourceName);
             throw new IllegalArgumentException(error);
         }
-        try (Connection connection = dataSource.getConnection()) {
-            try (NamedParameterStatement preparedStatement = new NamedParameterStatement(connection, sql)) {
-                if (parameters != null) {
-                    IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                    ParametersSetter.setParameters(parameters, statement);
+        return LoggingExecutor.executeWithException(dataSource, () -> {
+            try (Connection connection = dataSource.getConnection()) {
+                try (NamedParameterStatement preparedStatement = new NamedParameterStatement(connection, sql)) {
+                    if (parameters != null) {
+                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
+                        ParametersSetter.setParameters(parameters, statement);
+                    }
+                    ResultSet resultSet = preparedStatement.executeQuery();
+                    StringWriter sw = new StringWriter();
+                    OutputStream output;
+                    try {
+                        output = WriterOutputStream.builder()
+                                                   .setWriter(sw)
+                                                   .setCharset(StandardCharsets.UTF_8)
+                                                   .get();
+                    } catch (IOException e) {
+                        throw new Exception(e);
+                    }
+                    DatabaseResultSetHelper.toJson(resultSet, false, false, output);
+                    return sw.toString();
                 }
-                ResultSet resultSet = preparedStatement.executeQuery();
-                StringWriter sw = new StringWriter();
-                OutputStream output;
-                try {
-                    output = WriterOutputStream.builder()
-                                               .setWriter(sw)
-                                               .setCharset(StandardCharsets.UTF_8)
-                                               .get();
-                } catch (IOException e) {
-                    throw new Exception(e);
-                }
-                DatabaseResultSetHelper.toJson(resultSet, false, false, output);
-                return sw.toString();
+            } catch (Exception ex) {
+                logger.error("Failed to execute query statement [{}] in data source [{}].", sql, datasourceName, ex);
+                throw ex;
             }
-        } catch (Exception ex) {
-            logger.error("Failed to execute query statement [{}] in data source [{}].", sql, datasourceName, ex);
-            throw ex;
-        }
+        });
     }
 
     /**
@@ -332,11 +337,9 @@ public class DatabaseFacade implements InitializingBean {
      * @return the result of the query as JSON
      * @throws Exception the exception
      */
-    public static final String queryNamed(String sql) throws Exception {
+    public static String queryNamed(String sql) throws Throwable {
         return queryNamed(sql, null, null);
     }
-
-    // =========== Insert ===========
 
     /**
      * Executes SQL insert.
@@ -349,32 +352,37 @@ public class DatabaseFacade implements InitializingBean {
      * @throws IllegalArgumentException if the provided datasouce is not found
      * @throws RuntimeException if an error occur
      */
-    public static final List<Long> insert(String sql, String parameters, String datasourceName)
-            throws SQLException, IllegalArgumentException, RuntimeException {
+    public static List<Long> insert(String sql, String parameters, String datasourceName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
         if (dataSource == null) {
             throw new IllegalArgumentException("DataSource [" + datasourceName + "] not known.");
         }
-        try (Connection connection = dataSource.getConnection();
-                PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
-            if (parameters != null) {
-                IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                ParametersSetter.setParameters(parameters, statement);
-            }
-            int updatedRows = preparedStatement.executeUpdate();
-            List<Long> generatedIds = new ArrayList<>(updatedRows);
-            try (ResultSet generatedKeys = preparedStatement.getGeneratedKeys()) {
-                while (generatedKeys.next()) {
-                    generatedIds.add(generatedKeys.getLong(1));
+        return LoggingExecutor.executeWithException(dataSource, () -> {
+
+            try (Connection connection = dataSource.getConnection();
+                    PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+
+                if (parameters != null) {
+                    IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
+                    ParametersSetter.setParameters(parameters, statement);
                 }
-                return generatedIds;
+                int updatedRows = preparedStatement.executeUpdate();
+                List<Long> generatedIds = new ArrayList<>(updatedRows);
+                try (ResultSet generatedKeys = preparedStatement.getGeneratedKeys()) {
+                    while (generatedKeys.next()) {
+                        generatedIds.add(generatedKeys.getLong(1));
+                    }
+                    return generatedIds;
+                }
+            } catch (SQLException | RuntimeException ex) {
+                logger.error("Failed to execute insert statement [{}] in data source [{}].", sql, datasourceName, ex);
+                throw ex;
             }
-        } catch (SQLException | RuntimeException ex) {
-            logger.error("Failed to execute insert statement [{}] in data source [{}].", sql, datasourceName, ex);
-            throw ex;
-        }
+        });
     }
+
+    // =========== Insert ===========
 
     /**
      * Executes named SQL insert.
@@ -387,31 +395,46 @@ public class DatabaseFacade implements InitializingBean {
      * @throws IllegalArgumentException if the provided datasouce is not found
      * @throws RuntimeException if an error occur
      */
-    public static final List<Long> insertNamed(String sql, String parameters, String datasourceName)
-            throws SQLException, IllegalArgumentException, RuntimeException {
+    public static List<Long> insertNamed(String sql, String parameters, String datasourceName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
         if (dataSource == null) {
             throw new IllegalArgumentException("DataSource [" + datasourceName + "] not known.");
         }
-        try (Connection connection = dataSource.getConnection();
-                NamedParameterStatement preparedStatement = new NamedParameterStatement(connection, sql, Statement.RETURN_GENERATED_KEYS)) {
+        return LoggingExecutor.executeWithException(dataSource, () -> {
+            try (Connection connection = dataSource.getConnection();
+                    NamedParameterStatement preparedStatement =
+                            new NamedParameterStatement(connection, sql, Statement.RETURN_GENERATED_KEYS)) {
 
-            if (parameters != null) {
-                IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                ParametersSetter.setParameters(parameters, statement);
-            }
-            int updatedRows = preparedStatement.executeUpdate();
-            List<Long> generatedIds = new ArrayList<>(updatedRows);
-            try (ResultSet generatedKeys = preparedStatement.getGeneratedKeys()) {
-                while (generatedKeys.next()) {
-                    generatedIds.add(generatedKeys.getLong(1));
+                if (parameters != null) {
+                    IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
+                    ParametersSetter.setParameters(parameters, statement);
                 }
-                return generatedIds;
+                int updatedRows = preparedStatement.executeUpdate();
+                List<Long> generatedIds = new ArrayList<>(updatedRows);
+                try (ResultSet generatedKeys = preparedStatement.getGeneratedKeys()) {
+                    while (generatedKeys.next()) {
+                        generatedIds.add(generatedKeys.getLong(1));
+                    }
+                    return generatedIds;
+                }
+            } catch (SQLException | RuntimeException ex) {
+                logger.error("Failed to execute insert statement [{}] in data source [{}].", sql, datasourceName, ex);
+                throw ex;
             }
-        } catch (SQLException | RuntimeException ex) {
-            logger.error("Failed to execute insert statement [{}] in data source [{}].", sql, datasourceName, ex);
-            throw ex;
-        }
+        });
+
+    }
+
+    /**
+     * Executes SQL update.
+     *
+     * @param sql the sql
+     * @param parameters the parameters
+     * @return the number of the rows that has been changed
+     * @throws Exception the exception
+     */
+    public static int update(String sql, String parameters) throws Throwable {
+        return update(sql, parameters, null);
     }
 
     // =========== Update ===========
@@ -421,40 +444,32 @@ public class DatabaseFacade implements InitializingBean {
      *
      * @param sql the sql
      * @param parameters the parameters
-     * @return the number of the rows that has been changed
-     * @throws Exception the exception
-     */
-    public static final int update(String sql, String parameters) throws Exception {
-        return update(sql, parameters, null);
-    }
-
-    /**
-     * Executes SQL update.
-     *
-     * @param sql the sql
-     * @param parameters the parameters
      * @param datasourceName the datasource name
      * @return the number of the rows that has been changed
      * @throws Exception the exception
      */
-    public static final int update(String sql, String parameters, String datasourceName) throws Exception {
+    public static int update(String sql, String parameters, String datasourceName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
         if (dataSource == null) {
             String error = format("DataSource {0} not known.", datasourceName);
             throw new IllegalArgumentException(error);
         }
-        try (Connection connection = dataSource.getConnection()) {
-            try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
-                if (parameters != null) {
-                    IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                    ParametersSetter.setParameters(parameters, statement);
+
+        return LoggingExecutor.executeWithException(dataSource, () -> {
+            try (Connection connection = dataSource.getConnection()) {
+                try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
+                    if (parameters != null) {
+                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
+                        ParametersSetter.setParameters(parameters, statement);
+                    }
+                    return preparedStatement.executeUpdate();
                 }
-                return preparedStatement.executeUpdate();
+            } catch (Exception ex) {
+                logger.error("Failed to execute update statement [{}] in data source [{}].", sql, datasourceName, ex);
+                throw ex;
             }
-        } catch (Exception ex) {
-            logger.error("Failed to execute update statement [{}] in data source [{}].", sql, datasourceName, ex);
-            throw ex;
-        }
+        });
+
     }
 
     /**
@@ -464,7 +479,7 @@ public class DatabaseFacade implements InitializingBean {
      * @return the number of the rows that has been changed
      * @throws Exception the exception
      */
-    public static final int update(String sql) throws Exception {
+    public static int update(String sql) throws Throwable {
         return update(sql, null, null);
     }
 
@@ -477,24 +492,28 @@ public class DatabaseFacade implements InitializingBean {
      * @return the number of the rows that has been changed
      * @throws Exception the exception
      */
-    public static final int updateNamed(String sql, String parameters, String datasourceName) throws Exception {
+    public static int updateNamed(String sql, String parameters, String datasourceName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
         if (dataSource == null) {
             String error = format("DataSource {0} not known.", datasourceName);
             throw new IllegalArgumentException(error);
         }
-        try (Connection connection = dataSource.getConnection()) {
-            try (NamedParameterStatement preparedStatement = new NamedParameterStatement(connection, sql)) {
-                if (parameters != null) {
-                    IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                    ParametersSetter.setParameters(parameters, statement);
+
+        return LoggingExecutor.executeWithException(dataSource, () -> {
+            try (Connection connection = dataSource.getConnection()) {
+                try (NamedParameterStatement preparedStatement = new NamedParameterStatement(connection, sql)) {
+                    if (parameters != null) {
+                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
+                        ParametersSetter.setParameters(parameters, statement);
+                    }
+                    return preparedStatement.executeUpdate();
                 }
-                return preparedStatement.executeUpdate();
+            } catch (Exception ex) {
+                logger.error("Failed to execute update statement [{}] in data source [{}].", sql, datasourceName, ex);
+                throw ex;
             }
-        } catch (Exception ex) {
-            logger.error("Failed to execute update statement [{}] in data source [{}].", sql, datasourceName, ex);
-            throw ex;
-        }
+        });
+
     }
 
     /**
@@ -505,7 +524,7 @@ public class DatabaseFacade implements InitializingBean {
      * @return the number of the rows that has been changed
      * @throws Exception the exception
      */
-    public static final int updateNamed(String sql, String parameters) throws Exception {
+    public static int updateNamed(String sql, String parameters) throws Throwable {
         return update(sql, parameters, null);
     }
 
@@ -516,7 +535,7 @@ public class DatabaseFacade implements InitializingBean {
      * @return the number of the rows that has been changed
      * @throws Exception the exception
      */
-    public static final int updateNamed(String sql) throws Exception {
+    public static int updateNamed(String sql) throws Throwable {
         return update(sql, null, null);
     }
 
@@ -526,7 +545,7 @@ public class DatabaseFacade implements InitializingBean {
      * @return the connection
      * @throws SQLException the SQL exception
      */
-    public static final DirigibleConnection getConnection() throws SQLException {
+    public static DirigibleConnection getConnection() throws Throwable {
         return getConnection(null);
     }
 
@@ -537,22 +556,22 @@ public class DatabaseFacade implements InitializingBean {
      * @return the connection
      * @throws SQLException the SQL exception
      */
-    public static final DirigibleConnection getConnection(String datasourceName) throws SQLException {
+    public static DirigibleConnection getConnection(String datasourceName) throws Throwable {
         DirigibleDataSource dataSource = getDataSource(datasourceName);
         if (dataSource == null) {
             String error = format("DataSource {0} not known.", datasourceName);
             throw new IllegalArgumentException(error);
         }
-        try {
-            return dataSource.getConnection();
-        } catch (RuntimeException | SQLException ex) {
-            String errorMessage = "Failed to get connection from datasource: " + datasourceName;
-            logger.error(errorMessage, ex); // log it here because the client may handle the exception and hide the details.
-            throw new SQLException(errorMessage, ex);
-        }
+        return LoggingExecutor.executeWithException(dataSource, () -> {
+            try {
+                return dataSource.getConnection();
+            } catch (RuntimeException | SQLException ex) {
+                String errorMessage = "Failed to get connection from datasource: " + datasourceName;
+                logger.error(errorMessage, ex); // log it here because the client may handle the exception and hide the details.
+                throw new SQLException(errorMessage, ex);
+            }
+        });
     }
-
-    // ========= Sequence ===========
 
     /**
      * Nextval.
@@ -561,9 +580,11 @@ public class DatabaseFacade implements InitializingBean {
      * @return the long
      * @throws SQLException the SQL exception
      */
-    public static long nextval(String sequence) throws SQLException {
+    public static long nextval(String sequence) throws Throwable {
         return nextval(sequence, null, null);
     }
+
+    // ========= Sequence ===========
 
     /**
      * Nextval.
@@ -574,29 +595,30 @@ public class DatabaseFacade implements InitializingBean {
      * @return the nextval
      * @throws SQLException the SQL exception
      */
-    public static final long nextval(String sequence, String datasourceName, String tableName) throws SQLException {
+    public static long nextval(String sequence, String datasourceName, String tableName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
         if (dataSource == null) {
             String error = format("DataSource {0} not known.", datasourceName);
             throw new IllegalArgumentException(error);
         }
-        try (Connection connection = dataSource.getConnection()) {
-            try {
-                return getNextVal(sequence, connection);
-            } catch (SQLException e) {
-                // assuming the sequence does not exists first time, hence create it implicitly
-                if (logger.isWarnEnabled()) {
-                    logger.warn(format("Implicitly creating a Sequence [{0}] due to: [{1}]", sequence, e.getMessage()));
+        return LoggingExecutor.executeWithException(dataSource, () -> {
+            try (Connection connection = dataSource.getConnection()) {
+                try {
+                    return getNextVal(sequence, connection);
+                } catch (SQLException e) {
+                    // assuming the sequence does not exists first time, hence create it implicitly
+                    logger.warn("Implicitly creating a Sequence [{}] due to: [{}]", sequence, e.getMessage());
+                    createSequenceInternal(sequence, null, connection, tableName);
+                    return getNextVal(sequence, connection);
+                } catch (IllegalStateException e) {
+                    // assuming the sequence objects are not supported by the underlying database
+                    PersistenceNextValueIdentityProcessor persistenceNextValueIdentityProcessor =
+                            new PersistenceNextValueIdentityProcessor(null);
+                    return persistenceNextValueIdentityProcessor.nextval(connection, tableName);
                 }
-                createSequenceInternal(sequence, null, connection, tableName);
-                return getNextVal(sequence, connection);
-            } catch (IllegalStateException e) {
-                // assuming the sequence objects are not supported by the underlying database
-                PersistenceNextValueIdentityProcessor persistenceNextValueIdentityProcessor =
-                        new PersistenceNextValueIdentityProcessor(null);
-                return persistenceNextValueIdentityProcessor.nextval(connection, tableName);
             }
-        }
+        });
+
     }
 
     /**
@@ -618,19 +640,21 @@ public class DatabaseFacade implements InitializingBean {
             }
             throw new SQLException("ResultSet is empty while getting next value of the Sequence: " + sequence);
         }
+
     }
 
     /**
      * Creates the sequence internal.
      *
      * @param sequence the sequence
-     * @param sequenceStart the sequence start
+     * @param seqStart the sequence start
      * @param connection the connection
      * @param tableName the table name
      * @throws SQLException the SQL exception
      */
-    private static void createSequenceInternal(String sequence, Integer sequenceStart, Connection connection, String tableName)
+    private static void createSequenceInternal(String sequence, final Integer seqStart, Connection connection, String tableName)
             throws SQLException {
+        Integer sequenceStart = seqStart;
         if (sequenceStart == null && tableName != null) {
             String countSql = SqlFactory.getNative(connection)
                                         .select()
@@ -653,14 +677,10 @@ public class DatabaseFacade implements InitializingBean {
                                .sequence(sequence)
                                .start(sequenceStart)
                                .build();
-        PreparedStatement preparedStatement = connection.prepareStatement(sql);
-        try {
+        try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
             preparedStatement.executeUpdate();
-        } finally {
-            if (preparedStatement != null) {
-                preparedStatement.close();
-            }
         }
+
     }
 
     /**
@@ -671,7 +691,7 @@ public class DatabaseFacade implements InitializingBean {
      * @return the long
      * @throws SQLException the SQL exception
      */
-    public static long nextval(String sequence, String datasourceName) throws SQLException {
+    public static long nextval(String sequence, String datasourceName) throws Throwable {
         return nextval(sequence, datasourceName, null);
     }
 
@@ -682,7 +702,7 @@ public class DatabaseFacade implements InitializingBean {
      * @param start the start
      * @throws SQLException the SQL exception
      */
-    public static void createSequence(String sequence, Integer start) throws SQLException {
+    public static void createSequence(String sequence, Integer start) throws Throwable {
         createSequence(sequence, null, null);
     }
 
@@ -694,19 +714,22 @@ public class DatabaseFacade implements InitializingBean {
      * @param datasourceName the datasource name
      * @throws SQLException the SQL exception
      */
-    public static final void createSequence(String sequence, Integer start, String datasourceName) throws SQLException {
+    public static void createSequence(String sequence, Integer start, String datasourceName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
         if (dataSource == null) {
             String error = format("DataSource {0} not known.", datasourceName);
             throw new IllegalArgumentException(error);
         }
-        try (Connection connection = dataSource.getConnection()) {
-            createSequenceInternal(sequence, start, connection, null);
 
-        } catch (Exception ex) {
-            logger.error("Failed to create sequence [{}] in data source [{}].", sequence, datasourceName, ex);
-            throw ex;
-        }
+        LoggingExecutor.executeNoResultWithException(dataSource, () -> {
+            try (Connection connection = dataSource.getConnection()) {
+                createSequenceInternal(sequence, start, connection, null);
+
+            } catch (Exception ex) {
+                logger.error("Failed to create sequence [{}] in data source [{}].", sequence, datasourceName, ex);
+                throw ex;
+            }
+        });
     }
 
     /**
@@ -715,7 +738,7 @@ public class DatabaseFacade implements InitializingBean {
      * @param sequence the sequence
      * @throws SQLException the SQL exception
      */
-    public static void createSequence(String sequence) throws SQLException {
+    public static void createSequence(String sequence) throws Throwable {
         createSequence(sequence, null, null);
     }
 
@@ -725,7 +748,7 @@ public class DatabaseFacade implements InitializingBean {
      * @param sequence the sequence
      * @throws SQLException the SQL exception
      */
-    public static void dropSequence(String sequence) throws SQLException {
+    public static void dropSequence(String sequence) throws Throwable {
         dropSequence(sequence, null);
     }
 
@@ -736,24 +759,27 @@ public class DatabaseFacade implements InitializingBean {
      * @param datasourceName the datasource name
      * @throws SQLException the SQL exception
      */
-    public static final void dropSequence(String sequence, String datasourceName) throws SQLException {
+    public static void dropSequence(String sequence, String datasourceName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
         if (dataSource == null) {
             String error = format("DataSource {0} not known.", datasourceName);
             throw new IllegalArgumentException(error);
         }
-        try (Connection connection = dataSource.getConnection()) {
-            String sql = SqlFactory.getNative(connection)
-                                   .drop()
-                                   .sequence(sequence)
-                                   .build();
-            try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
-                preparedStatement.executeUpdate();
+
+        LoggingExecutor.executeNoResultWithException(dataSource, () -> {
+            try (Connection connection = dataSource.getConnection()) {
+                String sql = SqlFactory.getNative(connection)
+                                       .drop()
+                                       .sequence(sequence)
+                                       .build();
+                try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
+                    preparedStatement.executeUpdate();
+                }
+            } catch (Exception ex) {
+                logger.error("Failed to drop sequence [{}] in data source [{}].", sequence, datasourceName, ex);
+                throw ex;
             }
-        } catch (Exception ex) {
-            logger.error("Failed to drop sequence [{}] in data source [{}].", sequence, datasourceName, ex);
-            throw ex;
-        }
+        });
     }
 
     // =========== SQL ===========
@@ -762,9 +788,8 @@ public class DatabaseFacade implements InitializingBean {
      * Gets the default SQL factory.
      *
      * @return the default SQL factory
-     * @throws SQLException the SQL exception
      */
-    public static SqlFactory getDefault() throws SQLException {
+    public static SqlFactory getDefault() {
         return SqlFactory.getDefault();
     }
 
@@ -773,9 +798,8 @@ public class DatabaseFacade implements InitializingBean {
      *
      * @param connection the connection
      * @return a native SQL factory
-     * @throws SQLException the SQL exception
      */
-    public static SqlFactory getNative(Connection connection) throws SQLException {
+    public static SqlFactory getNative(Connection connection) {
         return SqlFactory.getNative(connection);
     }
 
@@ -799,6 +823,21 @@ public class DatabaseFacade implements InitializingBean {
     }
 
     /**
+     * Read byte stream.
+     *
+     * @param baos the baos
+     * @param input the input
+     * @throws IOException Signals that an I/O exception has occurred.
+     */
+    public static void readByteStream(ByteArrayOutputStream baos, InputStream input) throws IOException {
+        byte[] buffer = new byte[1024];
+        int bytesRead;
+        while ((bytesRead = input.read(buffer)) > 0) {
+            baos.write(buffer, 0, bytesRead);
+        }
+    }
+
+    /**
      * Read blob value.
      *
      * @param resultSet the result set
@@ -815,21 +854,6 @@ public class DatabaseFacade implements InitializingBean {
             logger.error("Failed to retreive a BLOB value of [{}].", column, e);
         }
         return baos.toByteArray();
-    }
-
-    /**
-     * Read byte stream.
-     *
-     * @param baos the baos
-     * @param input the input
-     * @throws IOException Signals that an I/O exception has occurred.
-     */
-    public static void readByteStream(ByteArrayOutputStream baos, InputStream input) throws IOException {
-        byte[] buffer = new byte[1024];
-        int bytesRead;
-        while ((bytesRead = input.read(buffer)) > 0) {
-            baos.write(buffer, 0, bytesRead);
-        }
     }
 
 }

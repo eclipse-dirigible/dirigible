@@ -20,8 +20,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.util.Objects;
-
 /**
  * The Class DataSourcesManager.
  */
@@ -100,16 +98,7 @@ public class DataSourcesManager {
      */
     public DataSource getDataSourceDefinition(String name) {
         String dataSourceName = tenantDataSourceNameManager.getTenantDataSourceName(name);
-        try {
-            return datasourceService.findByName(dataSourceName);
-        } catch (Exception ex) {
-            if (Objects.equals(defaultDataSourceName, dataSourceName)) {
-                logger.error("DataSource cannot be initialized, hence fail over database is started as a backup - " + dataSourceName, ex);
-                return new DataSource(dataSourceName, dataSourceName, dataSourceName, "org.h2.Driver", "jdbc:h2:~/DefaultDBFailOver", "sa",
-                        "");
-            }
-            throw ex;
-        }
+        return datasourceService.findByName(dataSourceName);
     }
 
     /**

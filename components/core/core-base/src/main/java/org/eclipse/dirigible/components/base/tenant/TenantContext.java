@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.components.base.tenant;
 
+import org.eclipse.dirigible.components.base.callable.CallableResultAndException;
+
 import java.util.List;
 
 /**
