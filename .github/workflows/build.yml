@@ -126,7 +126,7 @@ jobs:
       - name: Verify ttyd installation
         run: ttyd --version
       - name: Integration tests
-        run: mvn clean install -P integration-tests -D selenide.headless=true
+        run: mvn clean install -P integration-tests
 
       - name: Generate a random artifact name
         if: always()
@@ -192,7 +192,7 @@ jobs:
       - name: Verify ttyd installation
         run: ttyd --version
       - name: Integration tests
-        run: mvn clean install -P integration-tests -D selenide.headless=true
+        run: mvn clean install -P integration-tests
         env:
           DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER: org.postgresql.Driver
           DIRIGIBLE_DATASOURCE_DEFAULT_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
