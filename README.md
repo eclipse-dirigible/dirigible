@@ -37,6 +37,7 @@ The project started as an internal SAP initiative to address the extension and a
     * [Build](#build)
         * [Prerequisites](#prerequisites)
         * [Steps](#steps)
+          * [Available Maven Profiles](#available-maven-profiles)
     * [Run](#run)
       * [Standalone](#standalone)
         * [Prerequisites](#prerequisites-1)
@@ -145,6 +146,22 @@ git config --system core.longpaths true
 > The build should pass successfully.
 
 The produced `dirigible-application-XXX-executable.jar` file is in `build/application/target/` and is ready to be deployed. It is Spring Boot application, so it can be executed locally right away.
+
+
+###### Available Maven Profiles
+
+| Profile Name      | Description                                                          |
+|-------------------|----------------------------------------------------------------------|
+| tests             | Run unit and integration tests                                       |
+| unit-tests        | Run unit tests                                                       |
+| integration-tests | Run integration tests                                                |
+| quick-build       | Build project skipping tests, javadoc, licensing and code formatting |
+| format            | Format the code                                                      |
+
+To activate a profile, add it to the maven command.<br>Example:
+```
+mvn clean install -P quick-build
+```
 
 ### Run
 
