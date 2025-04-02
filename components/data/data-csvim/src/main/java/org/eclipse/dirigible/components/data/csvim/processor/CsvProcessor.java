@@ -135,7 +135,7 @@ public class CsvProcessor {
     public void update(Connection connection, String schema, TableMetadata tableMetadata, List<CsvRecord> csvRecords,
             List<String> headerNames, String pkName, CsvFile csvFile) throws SQLException {
         if (csvRecords.isEmpty()) {
-            logger.info("Skipping update - CSV records are empty for csv file [{}].", csvFile);
+            logger.debug("Skipping update - CSV records are empty for csv file [{}].", csvFile);
             return;
         }
         if (tableMetadata == null) {
