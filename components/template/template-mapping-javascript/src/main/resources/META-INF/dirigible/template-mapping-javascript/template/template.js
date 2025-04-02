@@ -19,9 +19,9 @@ export function getTemplate(parameters) {
         extension: "mapping",
         sources: [
             {
-                location: "/template-mapping-javascript/mapping.js.template",
+                location: "/template-mapping-javascript/mapper.ts.template",
                 action: "generate",
-                rename: "gen/{{genFolderName}}/mappings/{{fileName}}/mapping.js",
+                rename: "gen/{{genFolderName}}/mappings/{{fileName}}.ts",
                 engine: "velocity",
             }
         ],

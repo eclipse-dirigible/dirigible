@@ -1,0 +1,84 @@
+import { logging } from "sdk/log";
+
+export class Mapper {
+
+    private static readonly MAPPING_MODEL = ${mapping};
+
+    private readonly logger;
+
+    constructor() {
+        const fileURL = import.meta.url;
+        const loggerName = fileURL.slice(fileURL.indexOf('/public/') + 8).replaceAll('/', '.');
+        this.logger = logging.getLogger(loggerName);
+    }
+
+    public map(sourceEntries: any[]): any[] {
+        this.logger.debug("Mapping source entries [{}]", sourceEntries);
+
+        let sourceMetadata = {};
+        let targetMetadata = {};
+
+        Mapper.MAPPING_MODEL.mapping.structures.forEach(structure => {
+            if (structure.type == "SOURCE") {
+                sourceMetadata = structure;
+            }
+            if (structure.type == "TARGET") {
+                targetMetadata = structure;
+            }
+        }
+        );
+
+        const mappedEntries: any[] = [];
+
+        sourceEntries.forEach((sourceRecord) => {
+            this.logger.debug("Processing record [{}]", sourceRecord);
+            const targetRecord = {};
+            let skip = false;
+            for (let i = 0; i < targetMetadata.columns.length; i++) {
+                const column = targetMetadata.columns[i];
+                this.logger.debug("Processing column [{}]", column);
+                try {
+                    if (column.direct) {
+                        this.logger.debug("Column has direct");
+                        targetRecord[column.name] = sourceRecord[column.direct];
+                    }
+                    if (column.constant) {
+                        this.logger.debug("Column has constant");
+                        targetRecord[column.name] = column.constant;
+                    }
+                    if (column.formula) {
+                        this.logger.debug("Column has formula");
+                        targetRecord[column.name] = eval(column.formula);
+                    }
+                    if (column.module) {
+                        this.logger.debug("Column has module");
+                        const module = import(column.module);
+                        if (module) {
+                            targetRecord[column.name] = module.map(sourceMetadata, targetMetadata, sourceRecord, targetRecord, column.name);
+                        } else {
+                            this.logger.error("Error occurred when loading: [{}]", column.module);
+                        }
+                    }
+                    if (column.criteria) {
+                        if (eval(targetRecord[column.name] + column.criteria)) {
+                            this.logger.debug("Skipping [{}]", column);
+                            skip = true;
+                            break;
+                        }
+                    }
+                } catch (e) {
+                    this.logger.error("Failed to process entry [{}]. Error: [{}]", sourceRecord, e);
+                }
+            }
+            if (!skip) {
+                this.logger.debug("Adding record [{}]", targetRecord);
+                mappedEntries.push(targetRecord);
+            }
+        });
+
+        this.logger.debug("Source entries {} have been mapped to {}", sourceEntries, mappedEntries);
+
+        return mappedEntries;
+    }
+
+}
