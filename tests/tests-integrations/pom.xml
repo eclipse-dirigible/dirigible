@@ -13,7 +13,6 @@
     <properties>
         <license.header.location>../../licensing-header.txt</license.header.location>
         <parent.pom.folder>../../</parent.pom.folder>
-        <skipITs>true</skipITs>
     </properties>
 
     <name>Tests - Integration Tests</name>
@@ -70,46 +69,16 @@
     <build>
         <plugins>
             <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-jar-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>test-jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <includes>
-                        <include>**/*</include>
-                    </includes>
-                </configuration>
+                <groupId>net.revelc.code.formatter</groupId>
+                <artifactId>formatter-maven-plugin</artifactId>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <configuration>
-                    <skipTests>true</skipTests>
-                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
-                <configuration>
-                    <skipITs>${skipITs}</skipITs>
-                    <testClassesDirectory>${project.build.outputDirectory}</testClassesDirectory>
-                    <includes>
-                        <include>**/*IT.java</include>
-                    </includes>
-                </configuration>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>integration-test</goal>
-                            <goal>verify</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -139,12 +108,6 @@
     </build>
 
     <profiles>
-        <profile>
-            <id>integration-tests</id>
-            <properties>
-                <skipITs>false</skipITs>
-            </properties>
-        </profile>
         <profile>
             <id>Windows 11</id>
             <activation>

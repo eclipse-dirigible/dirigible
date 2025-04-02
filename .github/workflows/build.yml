@@ -55,7 +55,7 @@ jobs:
           docker buildx create --name dirigible-builder
           docker buildx use dirigible-builder
       - name: Maven Build
-        run: mvn clean install -D maven.javadoc.skip=false  -D skipTests -D maven.test.skip=true
+        run: mvn clean install -P quick-build
       - name: Docker Login
         run: docker login -u ${{secrets.DOCKER_USER}} -p ${{secrets.DOCKER_PASSWORD}}
       - name: Push Dirigible image to Docker Hub
@@ -92,7 +92,7 @@ jobs:
       - name: Install TypeScript compiler
         run: npm i -g typescript
       - name: Maven Build
-        run: mvn clean install -D maven.javadoc.skip=true
+        run: mvn clean install -P unit-tests
 
   integration-tests-h2:
     runs-on: ubuntu-latest
@@ -125,10 +125,8 @@ jobs:
           sudo apt install -y ttyd
       - name: Verify ttyd installation
         run: ttyd --version
-      - name: Maven Build
-        run: mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true -U
       - name: Integration tests
-        run: mvn -f tests/pom.xml verify -P integration-tests -D selenide.headless=true
+        run: mvn clean install -P integration-tests
 
       - name: Generate a random artifact name
         if: always()
@@ -193,10 +191,8 @@ jobs:
           sudo apt install -y ttyd
       - name: Verify ttyd installation
         run: ttyd --version
-      - name: Maven Build
-        run: mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true -U
       - name: Integration tests
-        run: mvn -f tests/pom.xml verify -P integration-tests -D selenide.headless=true
+        run: mvn clean install -P integration-tests
         env:
           DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER: org.postgresql.Driver
           DIRIGIBLE_DATASOURCE_DEFAULT_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
