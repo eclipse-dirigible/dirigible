@@ -10,7 +10,7 @@
 	</parent>
 
 	<name>Components - Resources - Portal</name>
-	<artifactId>dirigible-components-resources-portal</artifactId>
+	<artifactId>dirigible-components-resources-dashboard</artifactId>
     <packaging>jar</packaging>
 
 	<properties>

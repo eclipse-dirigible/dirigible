@@ -18,7 +18,7 @@ navigation.controller("LaunchpadViewController", ["$scope", "messageHub", "$http
     $scope.groupItems = [];
 
     function loadNavigationGroups() {
-        return $http.get("/services/js/portal/api/NavigationGroupsExtension/NavigationGroupsService.js")
+        return $http.get("/services/js/dashboard/api/NavigationGroupsExtension/NavigationGroupsService.js")
             .then(function (response) {
                 for (itemData of response.data) {
                     if (!itemData || !itemData.icon || !itemData.order || !itemData.label) {
@@ -43,7 +43,7 @@ navigation.controller("LaunchpadViewController", ["$scope", "messageHub", "$http
     }
 
     function loadNavigationItems() {
-        return $http.get("/services/js/portal/api/NavigationExtension/NavigationService.js")
+        return $http.get("/services/js/dashboard/api/NavigationExtension/NavigationService.js")
             .then(function (response) {
                 $scope.navigationList = response.data;
 

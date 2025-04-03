@@ -1,5 +1,5 @@
 {
-    "module": "portal/configs/dashboard-perspective.js",
+    "module": "dashboard/configs/dashboard-perspective.js",
     "extensionPoint": "application-perspectives",
     "description": "Dashboard Perspective"
 }

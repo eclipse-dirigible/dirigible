@@ -9,11 +9,13 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const shellData = {
-    id: 'dashboardShell',
-    path: '/services/web/portal/index.html',
-    label: 'Dashboard'
+const perspectiveData = {
+	id: 'Reports',
+	label: 'Reports',
+	path: '/services/web/dashboard/perspectives/reports.html',
+	order: 10,
+	icon: '/services/web/dashboard/images/reports.svg',
 };
 if (typeof exports !== 'undefined') {
-    exports.getShell = () => shellData;
+	exports.getUtilityPerspective = () => perspectiveData;
 }

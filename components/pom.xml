@@ -289,7 +289,7 @@
         <module>resources/resources-theme-quartz-dark</module>
         <module>resources/resources-theme-quartz-light</module>
         <module>resources/resources-themes</module>
-        <module>resources/resources-portal</module>
+        <module>resources/resources-dashboard</module>
         <module>resources/resources-inbox</module>
         <module>resources/resources-documents</module>
         <module>resources/resources-karavan-libs</module>
@@ -1575,7 +1575,7 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-resources-portal</artifactId>
+                <artifactId>dirigible-components-resources-dashboard</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

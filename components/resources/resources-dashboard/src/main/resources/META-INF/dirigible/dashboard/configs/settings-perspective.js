@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ * Copyright (c) 2025 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -10,13 +10,12 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const perspectiveData = {
-    id: 'dashboard',
-    label: 'Dashboard',
-    path: '/services/web/portal/perspectives/dashboard.html',
-    order: -3,
-    lazyLoad: true,
-    icon: '/services/web/portal/images/dashboard.svg',
+	id: 'Settings',
+	label: 'Settings',
+	path: '/services/web/dashboard/perspectives/settings.html',
+	order: 20,
+	icon: '/services/web/dashboard/images/settings.svg',
 };
 if (typeof exports !== 'undefined') {
-    exports.getPerspective = () => perspectiveData;
+	exports.getUtilityPerspective = () => perspectiveData;
 }

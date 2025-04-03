@@ -9,13 +9,13 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const perspectiveData = {
-	id: 'Reports',
-	label: 'Reports',
-	path: '/services/web/portal/perspectives/reports.html',
-	order: 10,
-	icon: '/services/web/portal/images/reports.svg',
+const viewData = {
+    id: 'generalDashboardSettings',
+    label: 'General',
+    order: -1,
+    glyph: 'sap-icon--customize',
+    path: '/services/web/dashboard/settings/general.html',
 };
 if (typeof exports !== 'undefined') {
-	exports.getUtilityPerspective = () => perspectiveData;
+    exports.getView = () => viewData;
 }
