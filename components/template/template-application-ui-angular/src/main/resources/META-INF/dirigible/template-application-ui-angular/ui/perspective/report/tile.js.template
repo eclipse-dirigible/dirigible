@@ -11,7 +11,7 @@ exports.getTile = () => ({
     type: '${type}',
     report: '${generateReport}',
     icon: '${icon}',
-    location: '/services/web/${projectName}/gen/${genFolderName}/ui/Reports/index.html',
+    location: '/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/index.html',
     order: ${menuIndex},
     groupOrder: '999'
 });

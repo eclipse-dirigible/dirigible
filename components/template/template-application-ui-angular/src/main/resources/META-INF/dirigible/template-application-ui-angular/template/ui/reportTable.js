@@ -5,28 +5,7 @@
  */
 export function getSources(parameters) {
 	return [
-		// Location: "gen/{{genFolderName}}/ui/perspective"
-		{
-			location: "/template-application-ui-angular/ui/perspective/index.html.template",
-			action: "generate",
-			engine: "velocity",
-			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/index.html",
-			collection: "uiReportTableModels"
-		},
-		{
-			location: "/template-application-ui-angular/ui/perspective/perspective.extension.template",
-			action: "generate",
-			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/perspective.extension",
-			collection: "uiReportTableModels"
-		},
-		{
-			location: "/template-application-ui-angular/ui/perspective/perspective.js.template",
-			action: "generate",
-			engine: "velocity",
-			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/perspective.js",
-			collection: "uiReportTableModels"
-		},
-		// Location: "gen/{{genFolderName}}/ui/perspective/list"
+		// Location: "gen/{{genFolderName}}/ui/perspective/"
 		{
 			location: "/template-application-ui-angular/ui/perspective/report-table/dialog-window/controller.js.template",
 			action: "generate",

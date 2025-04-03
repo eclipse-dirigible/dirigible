@@ -124,5 +124,6 @@ export function getSources(parameters) {
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/view.js",
 			collection: "uiListModels"
-		}];
+		}
+	];
 };

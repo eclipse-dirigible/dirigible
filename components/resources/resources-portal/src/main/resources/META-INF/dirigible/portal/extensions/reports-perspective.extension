@@ -1,0 +1,5 @@
+{
+    "module": "portal/configs/reports-perspective.js",
+    "extensionPoint": "application-perspectives",
+    "description": "Application reports perspective"
+}

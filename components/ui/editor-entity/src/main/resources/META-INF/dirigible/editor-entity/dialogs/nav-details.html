@@ -42,7 +42,7 @@
                     <table bk-table outer-borders="bottom">
                         <thead bk-table-header sticky="true">
                             <tr bk-table-row>
-                                <th bk-table-header-cell>Name</th>
+                                <th bk-table-header-cell>ID</th>
                                 <th bk-table-header-cell>Label</th>
                                 <th bk-table-header-cell>Header</th>
                                 <th bk-table-header-cell>Navigation</th>
@@ -81,7 +81,7 @@
                     <table bk-table outer-borders="bottom">
                         <thead bk-table-header sticky="true">
                             <tr bk-table-row>
-                                <th bk-table-header-cell>Name</th>
+                                <th bk-table-header-cell>ID</th>
                                 <th bk-table-header-cell>Label</th>
                                 <th bk-table-header-cell>Header</th>
                                 <th bk-table-header-cell>Expanded</th>
@@ -117,7 +117,7 @@
                     <bk-fieldset ng-if="showInnerDialog" ng-form="forms.newForm">
                         <bk-form-group ng-if="editElement.editType === 'Add'">
                             <bk-form-item>
-                                <bk-form-label for="navidn" required="true" colon="true">Name</bk-form-label>
+                                <bk-form-label for="navidn" required="true" colon="true">ID</bk-form-label>
                                 <bk-input id="navidn" name="pId" type="text" ng-required="true" input-rules="inputRulesName" ng-trim="false" state="{{ forms.newForm['pId'].$valid ? '' : 'error' }}" ng-model="editElement.id"></bk-input>
                             </bk-form-item>
                             <bk-form-item>
@@ -156,7 +156,7 @@
 
                         <bk-form-group ng-if="editElement.editType === 'Update' && selectedTab === 'p'">
                             <bk-form-item>
-                                <bk-form-label for="navidn" required="true" colon="true">Name</bk-form-label>
+                                <bk-form-label for="navidn" required="true" colon="true">ID</bk-form-label>
                                 <bk-input id="navidn" name="pId" type="text" ng-required="true" input-rules="inputRulesName" ng-trim="false" state="{{ forms.newForm['pId'].$valid ? '' : 'error' }}"
                                     ng-model="dataParameters.perspectives[editElement.index].id" pattern="[a-zA-Z0-9]+"></bk-input>
                             </bk-form-item>
@@ -197,7 +197,7 @@
 
                         <bk-form-group ng-if="editElement.editType === 'Update' && selectedTab === 'n'">
                             <bk-form-item>
-                                <bk-form-label for="navidn" required="true" colon="true">Name</bk-form-label>
+                                <bk-form-label for="navidn" required="true" colon="true">ID</bk-form-label>
                                 <bk-input id="navidn" name="nId" type="text" ng-required="true" input-rules="inputRulesName" ng-trim="false" state="{{ forms.newForm['nId'].$valid ? '' : 'error' }}"
                                     ng-model="dataParameters.navigations[editElement.index].id">
                                 </bk-input>
@@ -207,8 +207,8 @@
                                 <bk-input id="sideLabel" type="text" ng-required="true" ng-model="dataParameters.navigations[editElement.index].label"></bk-input>
                             </bk-form-item>
                             <bk-form-item>
-                                <bk-form-label for="header" required="true" colon="true">Header</bk-form-label>
-                                <bk-input id="header" type="text" ng-required="true" ng-model="dataParameters.navigations[editElement.index].header"></bk-input>
+                                <bk-form-label for="header" colon="true">Header</bk-form-label>
+                                <bk-input id="header" type="text" ng-model="dataParameters.navigations[editElement.index].header"></bk-input>
                             </bk-form-item>
                             <bk-form-item>
                                 <bk-checkbox id="expanded" name="exp" ng-model="dataParameters.navigations[editElement.index].expanded"></bk-checkbox>

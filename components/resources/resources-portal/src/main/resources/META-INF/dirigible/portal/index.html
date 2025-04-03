@@ -41,17 +41,11 @@
                 subviews: ['application-subviews'],
                 editors: ['application-editors'],
                 menus: ['application-menus'],
-                windows: ['application-windows']
+                windows: ['application-windows'],
+                settings: ['application-settings'],
             });
-            addExtPoints({
-                theme: 'application-themes',
-            });
-            angular.module('shell', ['blimpKit', 'platformShell']).controller('ApplicationController', ($scope) => {
-                const MessageHub = new MessageHubApi();
-                MessageHub.addMessageListener({ topic: 'portal.launchpad.Home.openView', handler: (data) => {
-                    window.location = data.location;
-                }});
-            });
+            addExtPoints({ theme: 'application-themes' });
+            angular.module('shell', ['blimpKit', 'platformShell']).controller('ApplicationController', ($scope) => {});
         </script>
         <theme></theme>
     </body>

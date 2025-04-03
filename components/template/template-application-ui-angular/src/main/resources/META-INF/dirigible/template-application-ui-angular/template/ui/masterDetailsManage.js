@@ -4,10 +4,10 @@
  * Do not modify the content as it may be re-generated again.
  */
 export function getSources(parameters) {
-	var sources = [];
-	sources = sources.concat(getMaster(parameters));
-	sources = sources.concat(getDetails(parameters));
-	return sources;
+	return [
+		...getMaster(parameters),
+		...getDetails(parameters)
+	];
 };
 
 function getMaster(parameters) {

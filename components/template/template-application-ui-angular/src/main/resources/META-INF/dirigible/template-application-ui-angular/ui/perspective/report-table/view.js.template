@@ -7,8 +7,8 @@ const viewData = {
     id: '${name}',
     label: '${name}',
     region: 'center',
-    lazyLoad: false,
-	autoFocusTab: true,
+    lazyLoad: true,
+	autoFocusTab: false,
     path: '/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${name}/index.html',
     perspectiveName: '${perspectiveName}'
 };

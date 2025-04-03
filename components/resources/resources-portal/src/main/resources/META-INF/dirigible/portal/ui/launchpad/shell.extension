@@ -1,5 +1,0 @@
-{
-    "module": "portal/ui/launchpad/shell.js",
-    "extensionPoint": "platform-shells",
-    "description": "portal - Application Shell"
-}

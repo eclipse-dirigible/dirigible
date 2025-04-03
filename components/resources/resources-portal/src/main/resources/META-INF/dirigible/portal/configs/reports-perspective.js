@@ -9,14 +9,13 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const viewData = {
-    id: 'portal-home-launchpad',
-    label: 'Home Launchpad',
-    region: 'center',
-    path: '/services/web/portal/ui/launchpad/Home/index.html',
-    order: 1,
-    icon: '/services/web/resources/unicons/estate.svg',
+const perspectiveData = {
+	id: 'Reports',
+	label: 'Reports',
+	path: '/services/web/portal/perspectives/reports.html',
+	order: 10,
+	icon: '/services/web/portal/images/reports.svg',
 };
 if (typeof exports !== 'undefined') {
-    exports.getPerspective = () => viewData;
+	exports.getUtilityPerspective = () => perspectiveData;
 }

@@ -56,8 +56,8 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
             excluded: [],
         };
         $scope.inputRulesName = {
-            patterns: ['^[A-Za-z0-9_]+$'],
-            excluded: [],
+            patterns: ['^[A-Za-z0-9_-]+$'],
+            excluded: ['Reports', 'Settings'],
         };
         $scope.icons = [];
         $scope.loadIcons = () => {

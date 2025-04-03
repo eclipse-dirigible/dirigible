@@ -35,9 +35,7 @@ export function generate(model, parameters) {
     if (parameters.name === undefined) {
         parameters.name = model.name;
     }
-    if (parameters.perspectiveName === undefined) {
-        parameters.perspectiveName = model.name;
-    }
+    parameters.perspectiveName = 'Reports'; // ID of the Reports perspective
 
     parameters.roles = [];
 

@@ -16,7 +16,7 @@
 	<body class="bk-vbox">
 		<bk-toolbar has-title="true">
 			<bk-toolbar-title>Items <span bk-object-status text="{{dataCount}}" inverted="true"></bk-toolbar-title>
-#if($parameters.size() > 0)
+#if($parameters && $parameters.size() > 0)
 			<bk-button compact="true" state="transparent" label="Filter" ng-click="openFilter()"></bk-button>
 #end
 			<bk-button ng-repeat="action in pageActions track by $index" compact="true" state="transparent" label="{{action.label}}" ng-click="triggerPageAction(action)"></bk-button>

@@ -9,11 +9,13 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const shellData = {
-	id: 'home',
-	label: 'Home',
-	link: '/services/web/portal/gen/index.html',
+const viewData = {
+    id: 'generalDashboardSettings',
+    label: 'General',
+    order: -1,
+    glyph: 'sap-icon--customize',
+    path: '/services/web/portal/settings/general.html',
 };
 if (typeof exports !== 'undefined') {
-	exports.getShell = () => shellData;
+    exports.getView = () => viewData;
 }

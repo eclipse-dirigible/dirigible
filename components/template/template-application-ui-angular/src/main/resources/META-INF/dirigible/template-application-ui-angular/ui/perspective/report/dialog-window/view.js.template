@@ -6,8 +6,8 @@
 const viewData = {
     id: '${name}-Report-details',
     label: '${name} Report',
-    path: '/services/web/${projectName}/gen/${genFolderName}/ui/Reports/${name}/dialog-window/index.html',
-    perspectiveName: '${projectName}-reports'
+    path: '/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${name}/dialog-window/index.html',
+    perspectiveName: '${perspectiveName}'
 };
 if (typeof exports !== 'undefined') {
     exports.getView = () => viewData;

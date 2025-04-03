@@ -7,52 +7,11 @@
 export function getSources(parameters) {
     const sources = [];
 
-    sources.push(...getReportPerspectiveSources());
     sources.push(...getTableReportBackendSources());
     sources.push(...getTableReportUISource());
 
     return sources;
 };
-
-function getReportPerspectiveSources() {
-    return [
-        // Location: "gen/{{genFolderName}}/ui/perspective"
-        {
-            location: "/template-application-ui-angular/ui/perspective/index-report-file.html.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/index.html",
-            collection: "generateReportModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/perspective-report-file.extension.template",
-            action: "generate",
-            rename: "gen/{{genFolderName}}/ui/Reports/perspective.extension",
-            collection: "generateReportModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/perspective-navigation-report.extension.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/perspective-navigation.extension",
-            collection: "generateReportModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/perspective-navigation-report.js.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/perspective-navigation.js",
-            collection: "generateReportModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/perspective-report-file.js.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/perspective.js",
-            collection: "generateReportModels"
-        },
-    ];
-}
 
 function getTableReportBackendSources() {
     return [
@@ -108,125 +67,125 @@ function getTableReportUISource() {
             location: "/template-application-ui-angular/ui/perspective/report-file/dialog-window/controller.js.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window/controller.js",
+            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/controller.js",
             collection: "generateReportModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/dialog-window/index.html.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window/index.html",
+            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/index.html",
             collection: "generateReportModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/dialog-window/view.extension.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window/view.extension",
+            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/view.extension",
             collection: "generateReportModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/dialog-window/view.js.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window/view.js",
+            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/view.js",
             collection: "generateReportModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/dialog-filter/controller.js.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-filter/controller.js",
+            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-filter/controller.js",
             collection: "generateReportModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/dialog-filter/index.html.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-filter/index.html",
+            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-filter/index.html",
             collection: "generateReportModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/dialog-filter/view.extension.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-filter/view.extension",
+            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-filter/view.extension",
             collection: "generateReportModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/dialog-filter/view.js.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-filter/view.js",
+            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-filter/view.js",
             collection: "generateReportModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/controller.js.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/controller.js",
+            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/controller.js",
             collection: "generateReportModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/index.html.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/index.html",
+            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/index.html",
             collection: "generateReportModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/tile.extension.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/tile.extension",
+            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.extension",
             collection: "generateReportModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/tile.js.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/tile.js",
+            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.js",
             collection: "generateReportModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/view.extension.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/view.extension",
+            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/view.extension",
             collection: "generateReportModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/view.js.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/view.js",
+            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/view.js",
             collection: "generateReportModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/dialog-print/controller.js.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-print/controller.js",
+            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-print/controller.js",
             collection: "generateReportModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/dialog-print/index.html.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-print/index.html",
+            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-print/index.html",
             collection: "generateReportModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/dialog-print/print.extension.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-print/print.extension",
+            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-print/print.extension",
             collection: "generateReportModels"
         },
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/dialog-print/print.js.template",
             action: "generate",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-print/print.js",
+            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-print/print.js",
             collection: "generateReportModels"
         }];
 }

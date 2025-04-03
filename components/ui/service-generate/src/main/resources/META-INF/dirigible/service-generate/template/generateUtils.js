@@ -45,7 +45,7 @@ export function generateGeneric(model, parameters, templateSources) {
 }
 
 export function generateFiles(model, parameters, templateSources) {
-    let generatedFiles = [];
+    const generatedFiles = [];
 
     const models = model.entities.filter(e => e.type !== "REPORT" && e.type !== "FILTER");
     const apiModels = model.entities.filter(e => e.type !== "PROJECTION");
@@ -68,12 +68,13 @@ export function generateFiles(model, parameters, templateSources) {
     }
 
     // UI Basic
-    const uiManageModels = model.entities.filter(e => e.layoutType === "MANAGE" && (e.type === "PRIMARY" || e.type === "SETTING"));
-    const uiListModels = model.entities.filter(e => e.layoutType === "LIST" && (e.type === "PRIMARY" || e.type === "SETTING"));
+    const uiManageModels = model.entities.filter(e => e.layoutType === "MANAGE" && e.type === "PRIMARY");
+    const uiListModels = model.entities.filter(e => e.layoutType === "LIST" && e.type === "PRIMARY");
+    const uiSettingModels = model.entities.filter(e => e.type === "SETTING");
 
     // UI Master-Details
-    const uiManageMasterModels = model.entities.filter(e => e.layoutType === "MANAGE_MASTER" && (e.type === "PRIMARY" || e.type === "SETTING"));
-    const uiListMasterModels = model.entities.filter(e => e.layoutType === "LIST_MASTER" && (e.type === "PRIMARY" || e.type === "SETTING"));
+    const uiManageMasterModels = model.entities.filter(e => e.layoutType === "MANAGE_MASTER" && e.type === "PRIMARY");
+    const uiListMasterModels = model.entities.filter(e => e.layoutType === "LIST_MASTER" && e.type === "PRIMARY");
     const uiManageDetailsModels = model.entities.filter(e => e.layoutType === "MANAGE_DETAILS" && e.type === "DEPENDENT");
     const uiListDetailsModels = model.entities.filter(e => e.layoutType === "LIST_DETAILS" && e.type === "DEPENDENT");
 
@@ -98,46 +99,49 @@ export function generateFiles(model, parameters, templateSources) {
         } else if (template.action === "generate") {
             switch (template.collection) {
                 case "models":
-                    generatedFiles = generatedFiles.concat(generateCollection(location, content, template, models, parameters));
+                    generatedFiles.push(...generateCollection(location, content, template, models, parameters));
                     break;
                 case "apiModels":
-                    generatedFiles = generatedFiles.concat(generateCollection(location, content, template, apiModels, parameters));
+                    generatedFiles.push(...generateCollection(location, content, template, apiModels, parameters));
                     break;
                 case "daoModels":
-                    generatedFiles = generatedFiles.concat(generateCollection(location, content, template, daoModels, parameters));
+                    generatedFiles.push(...generateCollection(location, content, template, daoModels, parameters));
                     break;
                 case "generateReportModels":
-                    generatedFiles = generatedFiles.concat(generateCollection(location, content, template, generateReportModels, parameters));
+                    generatedFiles.push(...generateCollection(location, content, template, generateReportModels, parameters));
                     break;
                 case "reportModels":
-                    generatedFiles = generatedFiles.concat(generateCollection(location, content, template, reportModels, parameters));
+                    generatedFiles.push(...generateCollection(location, content, template, reportModels, parameters));
                     break;
                 case "feedModels":
-                    generatedFiles = generatedFiles.concat(generateCollection(location, content, template, feedModels, parameters));
+                    generatedFiles.push(...generateCollection(location, content, template, feedModels, parameters));
                     break;
                 case "uiManageModels":
-                    generatedFiles = generatedFiles.concat(generateCollection(location, content, template, uiManageModels, parameters));
+                    generatedFiles.push(...generateCollection(location, content, template, uiManageModels, parameters));
+                    break;
+                case "uiSettingModels":
+                    generatedFiles.push(...generateCollection(location, content, template, uiSettingModels, parameters));
                     break;
                 case "uiListModels":
-                    generatedFiles = generatedFiles.concat(generateCollection(location, content, template, uiListModels, parameters));
+                    generatedFiles.push(...generateCollection(location, content, template, uiListModels, parameters));
                     break;
                 case "uiManageMasterModels":
-                    generatedFiles = generatedFiles.concat(generateCollection(location, content, template, uiManageMasterModels, parameters));
+                    generatedFiles.push(...generateCollection(location, content, template, uiManageMasterModels, parameters));
                     break;
                 case "uiListMasterModels":
-                    generatedFiles = generatedFiles.concat(generateCollection(location, content, template, uiListMasterModels, parameters));
+                    generatedFiles.push(...generateCollection(location, content, template, uiListMasterModels, parameters));
                     break;
                 case "uiManageDetailsModels":
-                    generatedFiles = generatedFiles.concat(generateCollection(location, content, template, uiManageDetailsModels, parameters));
+                    generatedFiles.push(...generateCollection(location, content, template, uiManageDetailsModels, parameters));
                     break;
                 case "uiListDetailsModels":
-                    generatedFiles = generatedFiles.concat(generateCollection(location, content, template, uiListDetailsModels, parameters));
+                    generatedFiles.push(...generateCollection(location, content, template, uiListDetailsModels, parameters));
                     break;
                 case "uiReportChartModels":
-                    generatedFiles = generatedFiles.concat(generateCollection(location, content, template, uiReportChartModels, parameters));
+                    generatedFiles.push(...generateCollection(location, content, template, uiReportChartModels, parameters));
                     break;
                 case "uiReportTableModels":
-                    generatedFiles = generatedFiles.concat(generateCollection(location, content, template, uiReportTableModels, parameters));
+                    generatedFiles.push(...generateCollection(location, content, template, uiReportTableModels, parameters));
                     break;
                 case "uiNavigations":
                     for (let i = 0; i < model.navigations.length; i++) {
@@ -183,11 +187,24 @@ function generateCollection(location, content, template, collection, parameters)
         const generatedFiles = [];
         for (let i = 0; i < collection.length; i++) {
             const templateParameters = {};
+            if (collection[i].type === 'SETTING') {
+                collection[i].layoutType = undefined;
+                collection[i].perspectiveName = "Settings"; // ID of the Settings perspective
+                collection[i].perspectiveLabel = undefined;
+                collection[i].navigationPath = undefined;
+            } else if (collection[i].type === 'REPORT') {
+                collection[i].layoutType = undefined;
+                collection[i].perspectiveName = "Reports"; // ID of the Reports perspective
+                collection[i].perspectiveLabel = undefined;
+                collection[i].navigationPath = undefined;
+            }
             Object.assign(templateParameters, collection[i], parameters);
-            // TODO Move this to the more generic "generate()" function, with layoutType === "MANAGE_MASTER" check
-            templateParameters.perspectiveViews = templateParameters.perspectives[collection[i].perspectiveName].views;
-            if (template.collection === "uiManageMasterModels" || template.collection === "uiListMasterModels") {
-                collection.filter(e => e.perspectiveName === collection[i].perspectiveName).forEach(e => templateParameters.perspectiveViews.push(e.name + "-details"));
+            if (collection[i].type !== 'SETTING') {
+                // TODO Move this to the more generic "generate()" function, with layoutType === "MANAGE_MASTER" check
+                templateParameters.perspectiveViews = templateParameters.perspectives[collection[i].perspectiveName].views;
+                if (template.collection === "uiManageMasterModels" || template.collection === "uiListMasterModels") {
+                    collection.filter(e => e.perspectiveName === collection[i].perspectiveName).forEach(e => templateParameters.perspectiveViews.push(e.name + "-details"));
+                }
             }
 
             const cleanTemplateParameters = cleanData(templateParameters);
@@ -218,7 +235,7 @@ function getGenerationEngine(template) {
         console.debug("Template engine is not explicitly defined, so will be used the default Mustache engine.");
         generationEngine = templateEngines.getMustacheEngine();
     } else {
-        console.error("Template engine: " + template.engine + " does not exist, so will be used the default Mustache engine.");
+        console.error("Template engine: " + template.engine + " does not exist, so the default Mustache engine will be used.");
         generationEngine = templateEngines.getMustacheEngine();
     }
 

@@ -7,13 +7,12 @@ import * as listTemplate from "template-application-ui-angular/template/ui/list"
 import * as manageTemplate from "template-application-ui-angular/template/ui/manage";
 import * as masterDetailsListTemplate from "template-application-ui-angular/template/ui/masterDetailsList";
 import * as masterDetailsManageTemplate from "template-application-ui-angular/template/ui/masterDetailsManage";
+import * as settingTemplate from "template-application-ui-angular/template/ui/setting";
 import * as reportTemplate from "template-application-ui-angular/template/ui/report";
 import * as reportChartTemplate from "template-application-ui-angular/template/ui/reportChart";
 import * as reportTableTemplate from "template-application-ui-angular/template/ui/reportTable";
 import * as navigation from "template-application-ui-angular/template/ui/navigation";
 // import * as perspective from "template-application-ui-angular/template/ui/perspective";
-// import * as tiles from "template-application-ui-angular/template/ui/tiles";
-// import * as menu from "template-application-ui-angular/template/ui/menu";
 
 export function getSources(parameters) {
     return [
@@ -21,12 +20,11 @@ export function getSources(parameters) {
         ...manageTemplate.getSources(parameters),
         ...masterDetailsListTemplate.getSources(parameters),
         ...masterDetailsManageTemplate.getSources(parameters),
+        ...settingTemplate.getSources(parameters),
         ...reportTemplate.getSources(parameters),
         ...reportChartTemplate.getSources(parameters),
         ...reportTableTemplate.getSources(parameters),
         ...navigation.getSources(parameters),
         //...perspective.getSources(parameters),
-        //...tiles.getSources(parameters),
-        //...menu.getSources(parameters)
     ];
 };

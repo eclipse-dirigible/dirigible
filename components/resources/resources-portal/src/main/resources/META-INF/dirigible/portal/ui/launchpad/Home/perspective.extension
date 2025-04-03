@@ -1,5 +1,0 @@
-{
-    "module": "portal/ui/launchpad/Home/perspective-config.js",
-    "extensionPoint": "portal",
-    "description": "portal - Application Perspective"
-}

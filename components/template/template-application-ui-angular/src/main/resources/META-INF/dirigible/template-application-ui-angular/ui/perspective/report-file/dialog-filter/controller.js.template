@@ -35,7 +35,7 @@ angular.module('page', ['blimpKit', 'platformView'])
 #end
 			}
 #end
-			Dialogs.postMessage({ topic: '${projectName}.Reports.${name}.entitySearch', data: {
+			Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entitySearch', data: {
 				entity: entity,
 				filter: filter
 			} });

@@ -268,7 +268,8 @@ function createModel(graph) {
 			navigation += `<id>${_.escape(graph.getModel().navigations[i].id)}</id>`;
 			navigation += `<label>${_.escape(graph.getModel().navigations[i].label)}</label>`;
 			if (graph.getModel().navigations[i].header) navigation += `<header>${_.escape(graph.getModel().navigations[i].header)}</header>`;
-			if (graph.getModel().navigations[i].expanded) navigation += `<expanded>${_.escape(graph.getModel().navigations[i].expanded)}</expanded>`;
+			if (graph.getModel().navigations[i].expanded !== undefined) navigation += `<expanded>${_.escape(graph.getModel().navigations[i].expanded)}</expanded>`;
+			else navigation += `<expanded>true</expanded>`;
 			if (graph.getModel().navigations[i].icon) navigation += `<icon>${_.escape(graph.getModel().navigations[i].icon)}</icon>`;
 			if (graph.getModel().navigations[i].order) navigation += `<order>${_.escape(graph.getModel().navigations[i].order)}</order>`;
 			if (graph.getModel().navigations[i].role) navigation += `<role>${_.escape(graph.getModel().navigations[i].role)}</role>`;

@@ -124,9 +124,7 @@ angular.module('platformDialogs', ['blimpKit', 'platformView']).directive('dialo
         scope.dialogWindows = [];
         const dialogWindowListener = dialogHub.onWindow((data) => {
             if (data.close) {
-                scope.$apply(() => {
-                    scope.closeDialogWindow(data['id'], data['path']);
-                });
+                scope.closeDialogWindow(data['id'], data['path']);
             } else if (data.id) {
                 const viewConfig = cachedWindows.find(v => v.id === data.id);
                 scope.$apply(() => {
@@ -147,25 +145,27 @@ angular.module('platformDialogs', ['blimpKit', 'platformView']).directive('dialo
             } else scope.$apply(() => scope.dialogWindows.push(data));
         });
         scope.closeDialogWindow = (id, path) => {
-            if (id) {
-                for (let w = 0; w < scope.dialogWindows.length; w++) {
-                    if (scope.dialogWindows[w].id === id) {
-                        dialogHub.triggerEvent(scope.dialogWindows[w].closeTopic);
-                        scope.dialogWindows.splice(w, 1);
-                        return;
+            if (scope.dialogWindows.length) {
+                if (id) {
+                    for (let w = 0; w < scope.dialogWindows.length; w++) {
+                        if (scope.dialogWindows[w].id === id) {
+                            dialogHub.triggerEvent(scope.dialogWindows[w].closeTopic);
+                            scope.$apply(() => { scope.dialogWindows.splice(w, 1) });
+                            return;
+                        }
                     }
-                }
-            } else if (path) {
-                for (let w = 0; w < scope.dialogWindows.length; w++) {
-                    if (scope.dialogWindows[w].path === path) {
-                        dialogHub.triggerEvent(scope.dialogWindows[w].closeTopic);
-                        scope.dialogWindows.splice(w, 1);
-                        return;
+                } else if (path) {
+                    for (let w = 0; w < scope.dialogWindows.length; w++) {
+                        if (scope.dialogWindows[w].path === path) {
+                            dialogHub.triggerEvent(scope.dialogWindows[w].closeTopic);
+                            scope.$apply(() => { scope.dialogWindows.splice(w, 1) });
+                            return;
+                        }
                     }
+                } else {
+                    dialogHub.triggerEvent(scope.dialogWindows[0].closeTopic);
+                    scope.$apply(() => { scope.dialogWindows.shift() });
                 }
-            } else {
-                dialogHub.triggerEvent(scope.dialogWindows[0].closeTopic);
-                scope.dialogWindows.shift();
             }
         };
 

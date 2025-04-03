@@ -7,8 +7,13 @@ const viewData = {
     id: '${name}',
     label: '${name}',
     region: 'center',
+#if($type == 'SETTING')
+    lazyLoad: true,
+	autoFocusTab: false,
+#else
     lazyLoad: false,
 	autoFocusTab: true,
+#end
     path: '/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${name}/index.html',
     perspectiveName: '${perspectiveName}'
 };

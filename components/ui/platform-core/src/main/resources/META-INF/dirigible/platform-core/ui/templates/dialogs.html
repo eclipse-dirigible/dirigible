@@ -103,9 +103,8 @@
                         </bk-form-label>
                         <bk-select placeholder="{{item.placeholder}}" name="{{ 'n' + id }}" label-id="{{ item.id }}" state="{{ formDialog.form['n' + id].$valid ? '' : 'error' }}"
                             message="formDialog.form['n' + id].$valid ? undefined : item.errorMsg || 'Invalid choice'" ng-required="item.required" is-disabled="formItemDisabled(item.enabledOn, item.disabledOn)" dropdown-fixed="true"
-                            ng-model="item.value" dropdown-fixed="true">
-                            <bk-option text="{{ option.label }}" value="option.value" ng-repeat="option in item.options track by option.value">
-                            </bk-option>
+                            ng-model="item.value">
+                            <bk-option text="{{ option.label }}" value="option.value" ng-repeat="option in item.options track by option.value"></bk-option>
                         </bk-select>
                     </bk-form-item>
                 </bk-form-group>
@@ -113,12 +112,10 @@
         </bk-dialog-body>
         <bk-dialog-footer compact="true">
             <bk-bar-element>
-                <bk-button label="{{formDialogs[0].submitLabel || 'Submit'}}" decisive="true" ng-click="closeFormDialog(true)" state="emphasized" type="submit" ng-disabled="!formDialog.form.$valid">
-                </bk-button>
+                <bk-button label="{{formDialogs[0].submitLabel || 'Submit'}}" decisive="true" ng-click="closeFormDialog(true)" state="emphasized" type="submit" ng-disabled="!formDialog.form.$valid"></bk-button>
             </bk-bar-element>
             <bk-bar-element>
-                <bk-button label="{{formDialogs[0].cancelLabel || 'Cancel'}}" ng-click="closeFormDialog()" state="transparent">
-                </bk-button>
+                <bk-button label="{{formDialogs[0].cancelLabel || 'Cancel'}}" ng-click="closeFormDialog()" state="transparent"></bk-button>
             </bk-bar-element>
         </bk-dialog-footer>
     </bk-dialog>

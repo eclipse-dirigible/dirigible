@@ -1,5 +1,5 @@
 {
-    "module": "${projectName}/gen/${genFolderName}/ui/Reports/${name}/tile.js",
+    "module": "${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${name}/tile.js",
     "extensionPoint": "application-tile",
     "description": "${projectName} - Application Tile"#if($perspectiveRole || $security.roleRead),
     "role": "#if($perspectiveRole)${perspectiveRole},#end#if($security.roleRead)${security.roleRead}#end"#end
