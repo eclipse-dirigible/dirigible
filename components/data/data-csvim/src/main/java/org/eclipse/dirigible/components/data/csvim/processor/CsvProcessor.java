@@ -100,12 +100,12 @@ public class CsvProcessor {
                 populateInsertPreparedStatementValues(next, availableTableColumns, preparedStatement);
                 preparedStatement.addBatch();
             }
-            logger.info(String.format("CSV records with Ids [%s] were successfully added in BATCH INSERT for table [%s].",
-                    csvRecords.stream()
-                              .map(e -> e.getCsvRecord()
-                                         .get(0))
-                              .collect(Collectors.toList()),
-                    tableMetadata.getName()));
+            logger.debug("CSV records with Ids [{}] were successfully added in BATCH INSERT for table [{}].", csvRecords.stream()
+                                                                                                                        .map(e -> e.getCsvRecord()
+                                                                                                                                   .get(0))
+                                                                                                                        .collect(
+                                                                                                                                Collectors.toList()),
+                    tableMetadata.getName());
             preparedStatement.executeBatch();
         } catch (Throwable t) {
             String errorMessage = String.format(
@@ -135,7 +135,7 @@ public class CsvProcessor {
     public void update(Connection connection, String schema, TableMetadata tableMetadata, List<CsvRecord> csvRecords,
             List<String> headerNames, String pkName, CsvFile csvFile) throws SQLException {
         if (csvRecords.isEmpty()) {
-            logger.info("Skipping update - CSV records are empty for csv file [{}].", csvFile);
+            logger.debug("Skipping update - CSV records are empty for csv file [{}].", csvFile);
             return;
         }
         if (tableMetadata == null) {
@@ -171,14 +171,12 @@ public class CsvProcessor {
                 executeUpdatePreparedStatement(next, availableTableColumns, preparedStatement);
                 preparedStatement.addBatch();
             }
-            if (logger.isInfoEnabled()) {
-                logger.info(String.format("CSV records with Ids [%s] were successfully added in BATCH UPDATED for table [%s].",
-                        csvRecords.stream()
-                                  .map(e -> e.getCsvRecord()
-                                             .get(0))
-                                  .collect(Collectors.toList()),
-                        tableMetadata.getName()));
-            }
+            logger.debug("CSV records with Ids [{}] were successfully added in BATCH UPDATED for table [{}].", csvRecords.stream()
+                                                                                                                         .map(e -> e.getCsvRecord()
+                                                                                                                                    .get(0))
+                                                                                                                         .collect(
+                                                                                                                                 Collectors.toList()),
+                    tableMetadata.getName());
             preparedStatement.executeBatch();
         } catch (Throwable t) {
             String errorMessage = String.format(
@@ -189,9 +187,7 @@ public class CsvProcessor {
                                                                                                                        Collectors.toList()),
                     tableMetadata.getName());
             CsvimUtils.logProcessorErrors(errorMessage, ERROR_TYPE_PROCESSOR, csvFile.getFile(), CsvFile.ARTEFACT_TYPE, MODULE);
-            if (logger.isErrorEnabled()) {
-                logger.error(errorMessage, t);
-            }
+            logger.error(errorMessage, t);
         }
     }
 

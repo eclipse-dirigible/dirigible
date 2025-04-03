@@ -28,20 +28,39 @@ Dirigible promotes the In-System Programming development model, where you make d
 
 The project started as an internal SAP initiative to address the extension and adoption use-cases related to SOA and Enterprise Services.
 
-- [Instant Trial](#instant-trial)
-- [Contact Us](#contact-us)
-- [Get Started](#get-started)
-	- [Download](#download)
-	- [Build](#build)
-	- [Run](#run)
-		- [Standalone](#standalone)
-		- [Docker](#docker)
-                - [Native image](#native-image)
-- [Additional Information](#additional-information)
-	- [License](#license)
-	- [Contributors](#contributors)
-        - [Attribution links](#attribution-links)
-	- [References](#references)
+<!-- TOC -->
+* [Eclipse Dirigible™](#eclipse-dirigible)
+  * [Instant Trial](#instant-trial)
+  * [Contact Us](#contact-us)
+  * [Get Started](#get-started)
+    * [Download](#download)
+    * [Build](#build)
+        * [Prerequisites](#prerequisites)
+        * [Steps](#steps)
+        * [Maven Profiles](#maven-profiles)
+    * [Run](#run)
+      * [Standalone](#standalone)
+        * [Prerequisites](#prerequisites-1)
+        * [Steps](#steps-1)
+      * [Docker](#docker)
+        * [Prerequisites](#prerequisites-2)
+        * [Steps](#steps-2)
+      * [Native image](#native-image)
+        * [Prerequisites](#prerequisites-3)
+        * [Steps](#steps-3)
+      * [PostgreSQL](#postgresql)
+        * [Steps](#steps-4)
+    * [CMS with AWS S3](#cms-with-aws-s3)
+      * [Setup:](#setup)
+      * [Usage:](#usage)
+      * [Test environment with LocalStack](#test-environment-with-localstack)
+      * [Setup:](#setup-1)
+  * [Additional Information](#additional-information)
+    * [License](#license)
+    * [Contributors](#contributors)
+    * [Attribution links](#attribution-links)
+    * [References](#references)
+<!-- TOC -->
 
 ## Instant Trial
 
@@ -68,7 +87,7 @@ Nevertheless, we highly recommend building the binaries from source in order to 
 - [Maven 3.5.x](http://maven.apache.org/docs/3.5.3/release-notes.html)
 - [esbuild](https://esbuild.github.io/getting-started/#install-esbuild)  - `npm i -g esbuild`
 - [tsc](https://www.npmjs.com/package/typescript) - `npm i -g typescript`
-
+- [ttyd](https://github.com/tsl0922/ttyd) - `brew install ttyd`
 
 ##### Steps
 
@@ -86,7 +105,7 @@ git config --system core.longpaths true
 
    > If you are using Windows, make sure that you open the terminal as Administrator otherwise the tests will fail
 
- - Quick build **with tests**:
+ - Quick build **with unit tests**:
 
         mvn -T 1C clean install -D maven.javadoc.skip=true -D license.skip=true
 
@@ -104,34 +123,44 @@ git config --system core.longpaths true
 
  - If you **don't need to compile and run tests**:
 
-        mvn clean install -D skipTests
+        mvn clean install -D skipTests -D maven.test.skip=true
 
  - If you want to do a fast build, with **no tests, javadocs and license updates**:
 
-        mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true
+        mvn -T 1C clean install -P quick-build
 
  - If you want to **run all integration tests only**:
 	```shell
-	DIRIGIBLE_GIT_REPO='<path-to-git-repo>'
-	cd $DIRIGIBLE_GIT_REPO
-	mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true -U
- 
-	mvn -f tests/pom.xml verify -P integration-tests -D selenide.headless=true
+    export HEADLESS='true'
+	mvn clean install -P integration-tests -D selenide.headless=$HEADLESS
  	```
 
  - If you want to **run specific integration test(s)**:
 	```shell
-	DIRIGIBLE_GIT_REPO='<path-to-git-repo>'
-	cd $DIRIGIBLE_GIT_REPO
-	mvn -T 1C clean install -D skipTests -D maven.javadoc.skip=true -D license.skip=true -U
-	
+	export HEADLESS='true'
 	export TEST='CsvimIT,CreateNewProjectIT'
-	mvn -f tests/pom.xml verify -P integration-tests -Dit.test="$TEST"
+	
+	mvn clean install -P integration-tests - Dit.test="$TEST" -D selenide.headless=$HEADLESS
  	```
 
 > The build should pass successfully.
 
 The produced `dirigible-application-XXX-executable.jar` file is in `build/application/target/` and is ready to be deployed. It is Spring Boot application, so it can be executed locally right away.
+
+##### Maven Profiles
+
+| Profile Name      | Description                                                          |
+|-------------------|----------------------------------------------------------------------|
+| tests             | Run unit and integration tests                                       |
+| unit-tests        | Run unit tests                                                       |
+| integration-tests | Run integration tests                                                |
+| quick-build       | Build project skipping tests, javadoc, licensing and code formatting |
+| format            | Format the code                                                      |
+
+To activate a profile, add it to the maven command.<br>Example:
+```
+mvn clean install -P quick-build
+```
 
 ### Run
 

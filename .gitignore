@@ -11,6 +11,8 @@ node_modules
 **/build
 build/application/dirigible
 !/build
+**/build/reports
+**/logs
 
 # files
 .DS_Store
@@ -29,5 +31,5 @@ dependency-reduced-pom.xml
 host.ser
 package.json
 package-lock.json
-**/logs
+*.tgz
 **/ttyd.sh

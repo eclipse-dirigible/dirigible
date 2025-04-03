@@ -42,6 +42,7 @@ const editorData = {
 		'application/database-schema-model+xml',
 		'application/entity-data-model+xml',
 		'application/data-mapping-model+xml',
+		'application/data-mapping-model+xml',
 		'application/json+form',
 		'application/xml+calculationview',
 		'application/json+hdi'
