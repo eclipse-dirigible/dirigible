@@ -109,7 +109,7 @@
         <maven-failsafe-plugin.version>3.5.3</maven-failsafe-plugin.version>
         <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
         <maven-gpg-plugin.version>3.2.7</maven-gpg-plugin.version>
-        <maven-jacoco-plugin.version>0.8.12</maven-jacoco-plugin.version>
+        <maven-jacoco-plugin.version>0.8.13</maven-jacoco-plugin.version>
         <maven-spotbugs-plugin.version>4.9.3.0</maven-spotbugs-plugin.version>
         <maven-formatter-plugin.version>2.26.0</maven-formatter-plugin.version>
         <maven-exec-plugin.version>3.5.0</maven-exec-plugin.version>
