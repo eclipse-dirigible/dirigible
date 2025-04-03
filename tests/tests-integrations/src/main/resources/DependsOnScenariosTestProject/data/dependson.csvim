@@ -1,0 +1,70 @@
+{
+  "files": [
+    {
+      "table": "CITY",
+      "schema": "PUBLIC",
+      "file": "/DependsOnScenariosTestProject/data/cities.csv",
+      "header": true,
+      "useHeaderNames": true,
+      "delimField": ",",
+      "delimEnclosing": "'",
+      "distinguishEmptyFromNull": true,
+      "version": ""
+    },
+    {
+      "table": "COUNTRY",
+      "schema": "PUBLIC",
+      "file": "/DependsOnScenariosTestProject/data/countries.csv",
+      "header": true,
+      "useHeaderNames": true,
+      "delimField": ",",
+      "delimEnclosing": "'",
+      "distinguishEmptyFromNull": true,
+      "version": ""
+    },
+    {
+      "table": "CUSTOMER",
+      "schema": "PUBLIC",
+      "file": "/DependsOnScenariosTestProject/data/customers.csv",
+      "header": true,
+      "useHeaderNames": true,
+      "delimField": ",",
+      "delimEnclosing": "'",
+      "distinguishEmptyFromNull": true,
+      "version": ""
+    },
+    {
+      "table": "CUSTOMERPAYMENT",
+      "schema": "PUBLIC",
+      "file": "/DependsOnScenariosTestProject/data/customer_payments.csv",
+      "header": true,
+      "useHeaderNames": true,
+      "delimField": ",",
+      "delimEnclosing": "'",
+      "distinguishEmptyFromNull": true,
+      "version": ""
+    },
+    {
+      "table": "PRODUCT",
+      "schema": "PUBLIC",
+      "file": "/DependsOnScenariosTestProject/data/products.csv",
+      "header": true,
+      "useHeaderNames": true,
+      "delimField": ",",
+      "delimEnclosing": "'",
+      "distinguishEmptyFromNull": true,
+      "version": ""
+    },
+    {
+      "table": "UOM",
+      "schema": "PUBLIC",
+      "file": "/DependsOnScenariosTestProject/data/uoms.csv",
+      "header": true,
+      "useHeaderNames": true,
+      "delimField": ",",
+      "delimEnclosing": "'",
+      "distinguishEmptyFromNull": true,
+      "version": ""
+    }
+  ]
+}

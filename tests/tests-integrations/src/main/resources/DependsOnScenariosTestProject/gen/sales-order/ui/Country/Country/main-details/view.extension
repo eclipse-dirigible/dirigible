@@ -1,0 +1,5 @@
+{
+    "module": "DependsOnScenariosTestProject/gen/sales-order/ui/Country/Country/main-details/view.js",
+    "extensionPoint": "DependsOnScenariosTestProject-view",
+    "description": "DependsOnScenariosTestProject - Application View - Main Details"
+}
