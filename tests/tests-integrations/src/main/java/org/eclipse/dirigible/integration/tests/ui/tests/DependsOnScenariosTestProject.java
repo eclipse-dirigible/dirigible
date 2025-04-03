@@ -16,7 +16,6 @@ import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.util.ProjectUtil;
-import org.eclipse.dirigible.tests.util.SleepUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -40,7 +39,6 @@ class DependsOnScenariosTestProject extends BaseTestProject {
     public void configure() {
         copyToWorkspace();
         publish();
-
     }
 
     @Override
@@ -52,22 +50,16 @@ class DependsOnScenariosTestProject extends BaseTestProject {
         browser.clickElementByAttributes(HtmlElementType.BUTTON,
                 Map.of(HtmlAttribute.CLASS, "fd-button", HtmlAttribute.NGCLICK, "refreshCountry()"));
 
-        // Bulgaria should only have Sofia
+        asserCountryCity("Bulgaria", "Sofia");
+        asserCountryCity("Italy", "Rome");
+    }
+
+    private void asserCountryCity(String country, String city) {
         browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Country ...");
-        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", "Bulgaria");
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", country);
         browser.clickElementByAttributes(HtmlElementType.BUTTON,
                 Map.of(HtmlAttribute.CLASS, "fd-button", HtmlAttribute.NGCLICK, "refreshCity()"));
         browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search City ...");
-
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Sofia");
-
-        // Italy should only have Rome
-        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Country ...");
-        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", "Italy");
-        browser.clickElementByAttributes(HtmlElementType.BUTTON,
-                Map.of(HtmlAttribute.CLASS, "fd-button", HtmlAttribute.NGCLICK, "refreshCity()"));
-        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search City ...");
-
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Rome");
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, city);
     }
 }

@@ -13,4 +13,5 @@ public class CountryCityDependsOnIT extends PredefinedProjectIT {
     protected TestProject getTestProject() {
         return testProject;
     }
+
 }
