@@ -1,4 +1,0 @@
-{
-    "name": "${projectName}-tile",
-    "description": "${projectName} - Extension Point for the Application Tile Providers"
-}

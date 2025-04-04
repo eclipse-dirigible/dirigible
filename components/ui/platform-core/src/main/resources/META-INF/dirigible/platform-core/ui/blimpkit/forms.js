@@ -57,7 +57,7 @@ blimpkit.directive('bkFieldset', () => ({
     link: (scope) => {
         scope.getClasses = () => classNames({
             'fd-form-item--horizontal': scope.horizontal === true,
-            'bk-form-item--horizontal': scope.horizontal === true, // see widgets.css
+            'bk-form-item--horizontal': scope.horizontal === true, // see blimpkit.css
             'fd-list__form-item': scope.inList === true,
         });
     },

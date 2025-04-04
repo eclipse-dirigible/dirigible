@@ -1,4 +1,0 @@
-{
-    "name": "${projectName}-perspective",
-    "description": "${projectName} - Extension Point for the Application Perspective Providers"
-}
