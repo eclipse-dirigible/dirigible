@@ -12,9 +12,11 @@
 if (window !== top) {
     angular.module('platformShell', []).run(() => {
         document.body.innerHTML = '';
-        document.body.innerText = 'Shell cannot be loaded in an iframe!'
+        document.body.innerText = 'Shell cannot be loaded in an iframe!';
+        console.error('Shell cannot be loaded in an iframe!');
     });
 } else angular.module('platformShell', ['ngCookies', 'platformUser', 'platformExtensions', 'platformDialogs', 'platformContextMenu'])
+    .config(($locationProvider) => { $locationProvider.html5Mode({ enabled: true, requireBase: false }) })
     .value('shellState', {
         perspectiveInternal: {
             id: '',
@@ -205,7 +207,7 @@ if (window !== top) {
         },
         template: `<bk-menu-item ng-repeat-start="item in sublist track by $index" ng-if="!item.items" has-separator="::item.separator" title="{{ ::item.label }}" ng-click="::menuHandler(item)"></bk-menu-item>
         <bk-menu-sublist ng-if="item.items" has-separator="::item.separator" title="{{ ::item.label }}" can-scroll="::canSubmenuScroll(item.items)" ng-repeat-end><submenu sublist="::item.items" menu-handler="::menuHandler"></submenu></bk-menu-sublist>`,
-    })).directive('perspectiveContainer', (Extensions, shellState, Shell) => ({
+    })).directive('perspectiveContainer', (Extensions, shellState, Shell, $location) => ({
         restrict: 'E',
         transclude: true,
         replace: true,
@@ -226,8 +228,9 @@ if (window !== top) {
                 scope.noStatusbar = hasStatusBar();
             },
             post: (scope) => {
+                const URLParams = new URLSearchParams(window.location.search);
                 const selectedPerspectiveKey = `${getBrandingInfo().prefix}.shell.selected-perspective`;
-                scope.activeId = localStorage.getItem(selectedPerspectiveKey);
+                scope.activeId = URLParams.has('perspective') ? URLParams.get('perspective') : localStorage.getItem(selectedPerspectiveKey);
                 shellState.registerStateListener((data) => {
                     scope.activeId = data.id;
                     saveSelectedPerspective(data.id);
@@ -278,6 +281,12 @@ if (window !== top) {
                     return '/services/web/platform-core/ui/images/unknown.svg';
                 };
                 scope.switchPerspective = (id, label) => {
+                    if (URLParams.has('perspective')) {
+                        URLParams.delete('perspective');
+                        $location.search('continue', null);
+                        $location.search('perspective', null);
+                        $location.search('view', null);
+                    }
                     shellState.perspective = {
                         id: id,
                         label: label

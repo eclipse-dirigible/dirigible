@@ -9,7 +9,9 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-angular.module('platformView', ['platformExtensions', 'platformTheming'])
+if (typeof viewData === 'undefined' && typeof perspectiveData === 'undefined' && typeof editorData === 'undefined' && typeof shellData === 'undefined') {
+    console.error('You must provide one of the following: "viewData", "perspectiveData", "editorData", "shellData"');
+} else angular.module('platformView', ['platformExtensions', 'platformTheming'])
     .constant('clientOS', { isMac: () => navigator.userAgent.includes('Mac') })
     .factory('baseHttpInterceptor', () => {
         let csrfToken = null;

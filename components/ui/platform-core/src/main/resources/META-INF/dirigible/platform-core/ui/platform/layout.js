@@ -12,7 +12,7 @@
 if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspectiveData.label)) {
     console.error('Layout requires perspectiveData config');
 } else angular.module('platformLayout', ['platformEditors', 'platformView', 'platformSplit'])
-    .constant('layoutConstants', { version: 3.0, stateKey: 'platform.layout.state' })
+    .constant('layoutConstants', { version: 4.0, stateKey: 'platform.layout.state' })
     .constant('Layout', new LayoutHub(perspectiveData.id, true))
     .constant('Workspace', new WorkspaceHub())
     .constant('Dialog', new DialogHub())
@@ -347,8 +347,8 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                 }
             }
 
-            function findView(views, view) {
-                return views.find(v => v.id === view.id);
+            function findView(views, viewId) {
+                return views.find(v => v.id === viewId);
             }
 
             function mapViewToTab(view) {
@@ -356,6 +356,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                     id: view.id,
                     type: VIEW,
                     label: view.label,
+                    region: view.region,
                     path: view.path,
                     lazyLoad: view.lazyLoad,
                     params: view.params,
@@ -817,17 +818,29 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                 } else Layout.postMessage({ topic: data.topic, data: { isOpen: false } });
             });
 
-            const onFocusTab = (data) => {
-                if ($scope.focusedTabView.selectedTab !== data.id) {
-                    const result = findCenterSplittedTabViewById(data.id);
-                    if (result) $scope.$apply(() => {
-                        $scope.focusedTabView = result.tabsView;
-                    });
+            const onFocusView = (data) => {
+                if (!data['region'] || data['region'] === 'center') {
+                    if ($scope.focusedTabView.selectedTab !== data.id) {
+                        const result = findCenterSplittedTabViewById(data.id);
+                        if (result) $scope.$apply(() => {
+                            $scope.focusedTabView = result.tabsView;
+                            $scope.focusedTabView.selectedTab = data.id;
+                        });
+                    }
+                } else if (data['region'] === 'left') {
+                    let leftViewTab = findView($scope.leftTabs, data.id);
+                    if (leftViewTab) $scope.$apply(() => { leftViewTab.expanded = true });
+                } else if (data['region'] === 'right') {
+                    let rightViewTab = findView($scope.rightTabs, data.id);
+                    if (rightViewTab) $scope.$apply(() => { rightViewTab.expanded = true });
+                } else if (data['region'] === 'bottom' && $scope.selection.selectedBottomTab !== data.id) {
+                    let bottomViewTab = findView($scope.bottomTabs, data.id);
+                    if (bottomViewTab) $scope.$apply(() => { $scope.selection.selectedBottomTab = bottomViewTab.id });
                 }
             };
 
-            const onFocusViewListener = Layout.onFocusView(onFocusTab);
-            const onFocusEditorListener = Layout.onFocusEditor(onFocusTab);
+            const onFocusViewListener = Layout.onFocusView(onFocusView);
+            const onFocusEditorListener = Layout.onFocusEditor(onFocusView);
 
             function shortenCenterTabsLabels() {
 
@@ -1039,7 +1052,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                 if (view) {
                     view.params = params;
                     if (view.region === 'left') {
-                        let leftViewTab = findView($scope.leftTabs, view);
+                        let leftViewTab = findView($scope.leftTabs, view.id);
                         if (leftViewTab) {
                             leftViewTab.expanded = true;
                         } else {
@@ -1049,7 +1062,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                         }
 
                     } else if (view.region === 'right') {
-                        let rightViewTab = findView($scope.rightTabs, view);
+                        let rightViewTab = findView($scope.rightTabs, view.id);
                         if (rightViewTab) {
                             rightViewTab.expanded = true;
                         } else {
@@ -1069,7 +1082,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                             currentTabsView.tabs.push(centerViewTab);
                         }
                     } else {
-                        let bottomViewTab = findView($scope.bottomTabs, view);
+                        let bottomViewTab = findView($scope.bottomTabs, view.id);
                         if (bottomViewTab) {
                             $scope.selection.selectedBottomTab = bottomViewTab.id;
                         } else {
@@ -1083,6 +1096,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                     }
                 }
             };
+
             $scope.$on('$destroy', () => {
                 Layout.removeMessageListener(viewOpenListener);
                 Layout.removeMessageListener(viewSetDirtyListener);
@@ -1108,12 +1122,28 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
         replace: true,
         transclude: true,
         scope: { views: '=' },
-        link: (scope) => {
-            scope.getParams = (view) => JSON.stringify({
-                ...view.params,
-                container: 'layout',
-                perspectiveId: perspectiveData.id,
-            });
+        link: {
+            pre: (scope) => {
+                if (top.location.search) {
+                    const URLParams = new URLSearchParams(top.location.search);
+                    if (URLParams.has('view') && URLParams.get('perspective') === perspectiveData.id) {
+                        const viewId = URLParams.get('view');
+                        for (let i = 0; i < scope.views.length; i++) {
+                            if (viewId === scope.views[i].id) {
+                                scope.views[i].expanded = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            },
+            post: (scope) => {
+                scope.getParams = (view) => JSON.stringify({
+                    ...view.params,
+                    container: 'layout',
+                    perspectiveId: perspectiveData.id,
+                });
+            }
         },
         template: `<div class="bk-vbox bk-full-height pf-accordion">
             <bk-panel class="pf-accordion-panel" ng-attr-shrink="{{!view.expanded}}" compact="true" expanded="view.expanded" ng-repeat="view in views track by view.id">
@@ -1127,7 +1157,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
             </bk-panel>
         </div>`,
     }))
-    .directive('layoutTabContent', ($timeout) => ({
+    .directive('layoutTabContent', ($timeout, Layout) => ({
         restrict: 'E',
         replace: true,
         scope: { tab: '=' },
@@ -1140,6 +1170,12 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                 container: 'layout',
                 perspectiveId: perspectiveData.id,
             });
+            if (top.location.search) {
+                const URLParams = new URLSearchParams(top.location.search);
+                if (URLParams.get('view') === scope.tab.id && URLParams.get('perspective') === perspectiveData.id) {
+                    Layout.focusView({ id: scope.tab.id, region: scope.tab.region });
+                }
+            }
         },
         template: `<iframe title="{{tab.label}}" tab-id={{::tab.id}} loading="{{::tab.lazyLoad ? 'lazy' : 'eager'}}" ng-src="{{tab.path}}" data-parameters="{{getParams()}}"></iframe>`,
     }))

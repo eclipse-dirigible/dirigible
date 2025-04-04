@@ -134,20 +134,6 @@ function getTableReportUISource() {
             collection: "generateReportModels"
         },
         {
-            location: "/template-application-ui-angular/ui/perspective/report-file/tile.extension.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.extension",
-            collection: "generateReportModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/report-file/tile.js.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.js",
-            collection: "generateReportModels"
-        },
-        {
             location: "/template-application-ui-angular/ui/perspective/report-file/view.extension.template",
             action: "generate",
             engine: "velocity",

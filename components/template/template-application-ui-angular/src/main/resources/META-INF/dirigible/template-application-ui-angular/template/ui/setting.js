@@ -76,20 +76,6 @@ export function getSources(parameters) {
             collection: "uiSettingModels"
         },
         {
-            location: "/template-application-ui-angular/ui/perspective/manage/tile.extension.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.extension",
-            collection: "uiSettingModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/manage/tile.js.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.js",
-            collection: "uiSettingModels"
-        },
-        {
             location: "/template-application-ui-angular/ui/perspective/manage/view.extension.template",
             action: "generate",
             engine: "velocity",

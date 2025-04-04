@@ -48,20 +48,6 @@ function getMaster(parameters) {
             collection: "uiListMasterModels"
         },
         {
-            location: "/template-application-ui-angular/ui/perspective/master-list/tile.extension.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.extension",
-            collection: "uiListMasterModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/master-list/tile.js.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.js",
-            collection: "uiListMasterModels"
-        },
-        {
             location: "/template-application-ui-angular/ui/perspective/master-list/view.extension.template",
             action: "generate",
             engine: "velocity",

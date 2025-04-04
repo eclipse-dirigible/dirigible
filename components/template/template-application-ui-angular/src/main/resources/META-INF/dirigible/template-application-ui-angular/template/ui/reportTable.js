@@ -77,20 +77,6 @@ export function getSources(parameters) {
 			collection: "uiReportTableModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/tile.extension.template",
-			action: "generate",
-			engine: "velocity",
-			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.extension",
-			collection: "uiReportTableModels"
-		},
-		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/tile.js.template",
-			action: "generate",
-			engine: "velocity",
-			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.js",
-			collection: "uiReportTableModels"
-		},
-		{
 			location: "/template-application-ui-angular/ui/perspective/report-table/view.extension.template",
 			action: "generate",
 			engine: "velocity",
