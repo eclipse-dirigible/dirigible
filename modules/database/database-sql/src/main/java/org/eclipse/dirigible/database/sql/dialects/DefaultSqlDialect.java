@@ -639,7 +639,7 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
             connection = dataSource.getConnection();
 
             while ((ch = reader.read()) != -1) {
-                processedSize ++;
+                processedSize++;
                 if (escapeNextChar) {
                     escapeNextChar = false;
                 } else if (ch == '\\') {
@@ -657,7 +657,8 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
                         connection.close();
                         connection = dataSource.getConnection();
                         updatesCounter = 0;
-                        logger.info("SQL dump processed " + String.format("%.1f", ((double) processedSize / (double) fileSize) * 100) + "%");
+                        logger.info(
+                                "SQL dump processed " + String.format("%.2f", ((double) processedSize / (double) fileSize) * 100) + "%");
                     }
                     builder.setLength(0);
                 } else {
@@ -668,9 +669,10 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
                 executeUpdate(connection, builder.toString());
             }
         } catch (Exception e) {
-            logger.warn(
-                "SQL dump partially processed " + "[" + processedSize + " / " + fileSize + "] " + String.format("%.1f", ((double) processedSize / (double) fileSize) * 100) + " due to an exception for " + (System.currentTimeMillis() - startTime) / 1000 + " seconds");
-                logger.warn("Failed to process the following statement:\n" + builder.toString());
+            logger.warn("SQL dump partially processed " + "[" + processedSize + " / " + fileSize + "] "
+                    + String.format("%.1f", ((double) processedSize / (double) fileSize) * 100) + " due to an exception for "
+                    + (System.currentTimeMillis() - startTime) / 1000 + " seconds");
+            logger.warn("Failed to process the following statement:\n" + builder.toString());
             throw e;
         } finally {
             if (connection != null) {
