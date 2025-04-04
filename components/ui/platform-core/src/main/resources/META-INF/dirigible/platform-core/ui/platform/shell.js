@@ -281,8 +281,9 @@ if (window !== top) {
                     return '/services/web/platform-core/ui/images/unknown.svg';
                 };
                 scope.switchPerspective = (id, label) => {
-                    if (URLParams.has('perspective')) {
+                    if (URLParams.has('perspective') || URLParams.has('continue')) {
                         URLParams.delete('perspective');
+                        URLParams.delete('continue');
                         $location.search('continue', null);
                         $location.search('perspective', null);
                         $location.search('view', null);
