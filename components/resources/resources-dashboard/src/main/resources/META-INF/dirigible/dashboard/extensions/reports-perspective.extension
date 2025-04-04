@@ -1,0 +1,5 @@
+{
+    "module": "dashboard/configs/reports-perspective.js",
+    "extensionPoint": "application-perspectives",
+    "description": "Application reports perspective"
+}

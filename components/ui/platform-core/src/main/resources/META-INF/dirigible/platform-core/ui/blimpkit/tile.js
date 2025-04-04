@@ -36,6 +36,7 @@ blimpkit.directive('bkTileContainer', (classNames) => ({
         isSlide: '<?',
         isLine: '<?',
         isAction: '<?',
+        isContainer: '<?',
     },
     link: (scope) => {
         scope.getClasses = () => classNames('fd-tile', {
@@ -44,6 +45,7 @@ blimpkit.directive('bkTileContainer', (classNames) => ({
             'fd-tile--slide': scope.isSlide === true,
             'fd-tile--line': scope.isLine === true,
             'fd-tile--action': scope.isAction === true,
+            'bk-tile--container': scope.isContainer === true,
         });
     },
     template: `<div role="button" tabindex="0" ng-class="getClasses()" ng-transclude></div`

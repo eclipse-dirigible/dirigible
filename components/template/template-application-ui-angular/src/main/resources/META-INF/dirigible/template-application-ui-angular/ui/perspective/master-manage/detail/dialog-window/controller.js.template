@@ -1,13 +1,10 @@
 #set($dollar = '$')
-angular.module('page', ["ideUI", "ideView", "entityApi"])
-	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = '${projectName}.${perspectiveName}.${name}';
+angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+	.config(["EntityServiceProvider", function (EntityServiceProvider) {
+		EntityServiceProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
 	}])
-	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
-	}])
-	.controller('PageController', ['$scope', 'messageHub', 'ViewParameters', 'entityApi', function ($scope, messageHub, ViewParameters, entityApi) {
-
+	.controller('PageController', function ($scope, ${dollar}http, ViewParameters, EntityService) {
+		const Dialogs = new DialogHub();
 		$scope.entity = {};
 		$scope.forms = {
 			details: {},
@@ -44,32 +41,48 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 #end
 		}
 
-		$scope.create = function () {
+		$scope.create = () => {
 			let entity = $scope.entity;
 			entity[$scope.selectedMainEntityKey] = $scope.selectedMainEntityId;
-			entityApi.create(entity).then(function (response) {
-				if (response.status != 201) {
-					messageHub.showAlertError("${name}", `Unable to create ${name}: '${response.message}'`);
-					return;
-				}
-				messageHub.postMessage("entityCreated", response.data);
+			EntityService.create(entity).then((response) => {
+				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityCreated', data: response.data });
+				Dialogs.showAlert({
+					title: "${name}",
+					message: '${name} successfully created',
+					type: AlertTypes.Success
+				});
 				$scope.cancel();
-				messageHub.showAlertSuccess("${name}", "${name} successfully created");
+			}, (error) => {
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: "${name}",
+					message: `Unable to create ${name}: '${message}'`,
+					type: AlertTypes.Error
+				});
+				console.error('EntityService:', error);
 			});
 		};
 
-		$scope.update = function () {
+		$scope.update = () => {
 			let id = ${dollar}scope.entity.${primaryKeysString};
 			let entity = $scope.entity;
 			entity[$scope.selectedMainEntityKey] = $scope.selectedMainEntityId;
-			entityApi.update(id, entity).then(function (response) {
-				if (response.status != 200) {
-					messageHub.showAlertError("${name}", `Unable to update ${name}: '${response.message}'`);
-					return;
-				}
-				messageHub.postMessage("entityUpdated", response.data);
+			EntityService.update(id, entity).then((response) => {
+				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityUpdated', data: response.data });
+				Dialogs.showAlert({
+					title: "${name}",
+					message: '${name} successfully updated',
+					type: AlertTypes.Success
+				});
 				$scope.cancel();
-				messageHub.showAlertSuccess("${name}", "${name} successfully updated");
+			}, (error) => {
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: "${name}",
+					message: `Unable to update ${name}: '${message}'`,
+					type: AlertTypes.Error
+				});
+				console.error('EntityService:', error);
 			});
 		};
 
@@ -83,19 +96,19 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 #if($property.widgetDependsOnProperty)
 		${dollar}scope.${dollar}watch('entity.${property.widgetDependsOnProperty}', function (newValue, oldValue) {
 			if (newValue !== undefined && newValue !== null) {
-				entityApi.${dollar}http.get(${dollar}scope.service${property.widgetDependsOnProperty} + '/' + newValue).then(function (response) {
+				${dollar}http.get(${dollar}scope.service${property.widgetDependsOnProperty} + '/' + newValue).then((response) => {
 					let valueFrom = response.data.${property.widgetDependsOnValueFrom};
 #if($property.widgetType != "DROPDOWN")
 					$scope.entity.${property.name} = valueFrom;
 #end
 #if($property.widgetType == "DROPDOWN")
-					entityApi.${dollar}http.post("${property.widgetDropdownUrl}/search", {
+					${dollar}http.post("${property.widgetDropdownUrl}/search", {
 						$filter: {
 							equals: {
 								${property.widgetDependsOnFilterBy}: valueFrom
 							}
 						}
-					}).then(function (response) {
+					}).then((response) => {
 						${dollar}scope.options${property.name} = response.data.map(e => {
 							return {
 								value: e.${property.widgetDropDownKey},
@@ -109,18 +122,31 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 								$scope.entity.${property.name} = undefined;
 							}
 						}
+					}, (error) => {
+						console.error(error);
 					});
 #end
+				}, (error) => {
+					console.error(error);
 				});
 			}
 		});
 
 #end
 #end
-		$scope.cancel = function () {
-			$scope.entity = {};
-			$scope.action = 'select';
-			messageHub.closeDialogWindow("${name}-details");
+		$scope.alert = (message) => {
+			if (message) Dialogs.showAlert({
+				title: 'Description',
+				message: message,
+				type: AlertTypes.Information,
+				preformatted: true,
+			});
 		};
 
-	}]);
+		$scope.cancel = () => {
+			$scope.entity = {};
+			$scope.action = 'select';
+			Dialogs.closeWindow({ id: '${name}-details' });
+		};
+
+	});

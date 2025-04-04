@@ -1,33 +1,30 @@
 #set($dollar = '$')
-angular.module('page', ["ideUI", "ideView"])
-	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = '${projectName}.${perspectiveName}.${name}';
-	}])
-	.controller('PageController', ['$scope', 'Extensions', 'messageHub', function ($scope, Extensions, messageHub) {
-
+angular.module('page', ['blimpKit', 'platformView'])
+	.controller('PageController', function ($scope, Extensions) {
+		const Dialogs = new DialogHub();
 		$scope.entity = {};
 
 		//-----------------Custom Actions-------------------//
-		Extensions.get('dialogWindow', '${projectName}-custom-action').then(function (response) {
-			$scope.entityActions = response.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && e.type === "entity");
+		Extensions.getWindows(['${projectName}-custom-action']).then((response) => {
+			$scope.entityActions = response.data.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && e.type === "entity");
 		});
 
-		$scope.triggerEntityAction = function (action) {
-			messageHub.showDialogWindow(
-				action.id,
-				{
+		$scope.triggerEntityAction = (action) => {
+			Dialogs.showWindow({
+				hasHeader: true,
+        		title: action.label,
+				path: action.path,
+				params: {
 					id: $scope.entity.${primaryKeysString}
 				},
-				null,
-				true,
-				action
-			);
+				closeButton: true
+			});
 		};
 		//-----------------Custom Actions-------------------//
 
 		//-----------------Events-------------------//
-		messageHub.onDidReceiveMessage("clearDetails", function (msg) {
-			$scope.$apply(function () {
+		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.clearDetails', handler: () => {
+			$scope.$evalAsync(() => {
 				$scope.entity = {};
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
@@ -35,10 +32,9 @@ angular.module('page', ["ideUI", "ideView"])
 #end
 #end
 			});
-		});
-
-		messageHub.onDidReceiveMessage("entitySelected", function (msg) {
-			$scope.$apply(function () {
+		}});
+		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.entitySelected', handler: () => {
+			$scope.$evalAsync(() => {
 #foreach ($property in $properties)
 #if($property.isDateType)
 				if (msg.data.entity.${property.name}) {
@@ -53,12 +49,10 @@ angular.module('page', ["ideUI", "ideView"])
 #end
 #end
 			});
-		});
-
+		}});
 		//-----------------Events-------------------//
 
-		$scope.cancel = function () {
-			messageHub.postMessage("clearDetails");
+		$scope.cancel = () => {
+			Dialogs.triggerEvent('${projectName}.${perspectiveName}.${name}.clearDetails');
 		};
-
-	}]);
+	});

@@ -7,22 +7,16 @@ export function getSources(parameters) {
     return [
         // Location: "gen/{{genFolderName}}/ui/perspective"
         {
-            location: "/template-application-ui-angular/ui/perspective/index.html",
+            location: "/template-application-ui-angular/ui/perspective/index.html.template",
             action: "generate",
             engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/index.html",
             collection: "uiManageModels"
         },
         {
-            location: "/template-application-ui-angular/ui/perspective/perspective.extension",
+            location: "/template-application-ui-angular/ui/perspective/perspective.extension.template",
             action: "generate",
             rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/perspective.extension",
-            collection: "uiManageModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/perspective-portal.extension",
-            action: "generate",
-            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/perspective-portal.extension",
             collection: "uiManageModels"
         },
         {
@@ -104,27 +98,6 @@ export function getSources(parameters) {
             collection: "uiManageModels"
         },
         {
-            location: "/template-application-ui-angular/ui/perspective/manage/tile.extension.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.extension",
-            collection: "uiManageModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/manage/tile-portal.extension.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile-portal.extension",
-            collection: "uiManageModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/manage/tile.js.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/tile.js",
-            collection: "uiManageModels"
-        },
-        {
             location: "/template-application-ui-angular/ui/perspective/manage/view.extension.template",
             action: "generate",
             engine: "velocity",
@@ -137,5 +110,6 @@ export function getSources(parameters) {
             engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/view.js",
             collection: "uiManageModels"
-        }];
+        }
+    ];
 };

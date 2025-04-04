@@ -4,14 +4,11 @@
  * Do not modify the content as it may be re-generated again.
  */
 const viewData = {
-    id: "${name}-filter",
-    label: "${name} Filter",
-    link: "/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${masterEntity}/${name}/dialog-filter/index.html",
-    perspectiveName: "${perspectiveName}"
+    id: '${name}-filter',
+    label: '${name} Filter',
+    path: '/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${masterEntity}/${name}/dialog-filter/index.html',
+    perspectiveName: '${perspectiveName}'
 };
-
 if (typeof exports !== 'undefined') {
-    exports.getDialogWindow = function () {
-        return viewData;
-    }
+    exports.getView = () => viewData;
 }

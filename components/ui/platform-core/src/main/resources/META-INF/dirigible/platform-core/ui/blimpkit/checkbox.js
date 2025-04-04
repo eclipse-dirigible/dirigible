@@ -20,7 +20,18 @@ blimpkit.directive('bkCheckbox', (classNames) => ({
         displayMode: '<?',
     },
     link: (scope, elem, attrs) => {
+        let keyListener = false;
+        function preventChange(event) {
+            event.preventDefault();
+        }
         scope.getClasses = () => {
+            if (!keyListener && elem[0].readOnly) {
+                elem[0].addEventListener('keyup', preventChange);
+                keyListener = true;
+            } else if (keyListener && !elem[0].readOnly) {
+                elem[0].removeEventListener('keyup', preventChange);
+                keyListener = false;
+            }
             if (scope.indeterminate === true) elem[0].indeterminate = true;
             else elem[0].indeterminate = false;
             return classNames({
@@ -30,8 +41,11 @@ blimpkit.directive('bkCheckbox', (classNames) => ({
                 'is-display': attrs.displayMode,
             });
         };
+        scope.$on('$destroy', () => {
+            elem[0].removeEventListener('keyup', preventChange);
+        });
     },
-    template: '<input type="checkbox" class="fd-checkbox" ng-class="getClasses()">',
+    template: '<input type="checkbox" class="fd-checkbox" ng-class="getClasses()" ng-attr-tabindex="{{ displayMode === true ? -1 : undefined}}">',
 })).directive('bkCheckboxLabel', (classNames) => ({
     restrict: 'E',
     transclude: true,

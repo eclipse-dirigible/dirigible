@@ -251,6 +251,10 @@ ng-transclude:empty {
 }
 
 /* General helper classes */
+.bk-pointer {
+  cursor: pointer;
+}
+
 .bk-padding--tiny {
   padding: 0.5rem;
 }
@@ -326,6 +330,14 @@ ng-transclude:empty {
 
 .bk-preformatted {
   white-space: pre;
+}
+
+.bk-text--subtitle {
+  color: var(--sapTile_TextColor);
+}
+
+.bk-text--ellipsis {
+  text-overflow: ellipsis;
 }
 
 [class*=sap-icon][rotate="90"]:not(.fd-list__icon) {
@@ -734,6 +746,10 @@ ng-transclude:empty {
   font-size: var(--sapFontSmallSize);
 }
 
+.bk-font--normal {
+  font-size: var(--sapFontSize);
+}
+
 .bk-font--large {
   font-size: var(--sapFontLargeSize);
 }
@@ -752,6 +768,58 @@ ng-transclude:empty {
 
 .bk-restrict-width--xl {
   max-width: 1600px;
+}
+
+.bk-color-fill--negative,
+.bk-color-fill--negative>svg {
+  fill: var(--sapNegativeColor)
+}
+
+.bk-color-fill--critical,
+.bk-color-fill--critical>svg {
+  fill: var(--sapCriticalColor)
+}
+
+.bk-color-fill--positive,
+.bk-color-fill--positive>svg {
+  fill: var(--sapPositiveColor)
+}
+
+.bk-color-fill--informative,
+.bk-color-fill--informative>svg {
+  fill: var(--sapInformativeColor)
+}
+
+.bk-color-bg--negative {
+  background-color: var(--sapNegativeColor)
+}
+
+.bk-color-bg--critical {
+  background-color: var(--sapCriticalColor)
+}
+
+.bk-color-bg--positive {
+  background-color: var(--sapPositiveColor)
+}
+
+.bk-color-bg--informative {
+  background-color: var(--sapInformativeColor)
+}
+
+.bk-color--negative {
+  color: var(--sapNegativeColor)
+}
+
+.bk-color--critical {
+  color: var(--sapCriticalColor)
+}
+
+.bk-color--positive {
+  color: var(--sapPositiveColor)
+}
+
+.bk-color--informative {
+  color: var(--sapInformativeColor)
 }
 
 /* fd-tile-container additions */
@@ -829,7 +897,7 @@ ng-transclude:empty {
   padding-right: 2.188rem;
 }
 
-/* fd-input additions */
+/* input, step input and select additions */
 
 .fd-input[type="color"] {
   padding: 0;
@@ -848,8 +916,37 @@ ng-transclude:empty {
   border: none;
 }
 
+.fd-step-input.is-readonly,
+.fd-step-input[aria-readonly="true"],
+.fd-step-input[readonly],
+.fd-select__control.is-readonly,
+.fd-select__control[aria-readonly="true"],
+.fd-select__control[readonly],
+.fd-input.is-readonly,
+.fd-input[aria-readonly="true"],
+.fd-input[readonly] {
+  --sapField_BorderStyle: dashed;
+}
+
 .bk-form-item--horizontal>.fd-popover {
   flex: 1;
+}
+
+/* Tile additions */
+.fd-tile.bk-tile--container {
+  padding: 0 !important;
+}
+
+.fd-tile.bk-tile--container>*:first-child {
+  padding: 0 !important;
+  border-top-left-radius: var(--sapElement_BorderCornerRadius);
+  border-top-right-radius: var(--sapElement_BorderCornerRadius);
+}
+
+.fd-tile.bk-tile--container>*:last-child {
+  padding: 0 !important;
+  border-bottom-left-radius: var(--sapElement_BorderCornerRadius);
+  border-bottom-right-radius: var(--sapElement_BorderCornerRadius);
 }
 
 /* Button additions and fixes */
@@ -903,6 +1000,12 @@ ng-transclude:empty {
   padding-right: .75rem;
 }
 
+/* fd-container additions */
+.bk-col--fit {
+  max-width: fit-content;
+  min-width: fit-content;
+}
+
 /* fd-form-layout-grid-container fixes */
 .fd-container.fd-form-layout-grid-container .fd-row .fd-col {
   overflow: visible;
@@ -925,6 +1028,10 @@ ng-transclude:empty {
 }
 
 /* fd-form-item fixes */
+.fd-container.fd-form-layout-grid-container>.fd-form-item>.fd-col:has(.fd-input-group) {
+  margin-block: var(--fdInput_Field_Margin_Block, .25rem);
+}
+
 .fd-popover__control.is-expanded>*,
 .fd-popover__control[aria-expanded="true"]>* {
   margin: var(--fdInput_Field_Margin, .25rem 0);
@@ -941,6 +1048,13 @@ ng-transclude:empty {
 /* Combobox and Select (when in toolbar) margin fixes */
 .fd-toolbar .fd-popover .fd-input-group {
   margin: 0;
+}
+
+/* Checkbox readonly fix */
+
+.fd-checkbox.is-display+.fd-checkbox__label,
+.fd-checkbox[readonly]+.fd-checkbox__label {
+  pointer-events: none;
 }
 
 /* Table fixes and additions*/
@@ -990,8 +1104,14 @@ ng-transclude:empty {
   bottom: 0;
 }
 
-/* Message page fixes */
+/* Keep only until the base library is upgraded to 0.39.0 */
+.fd-table__header .fd-table__cell.fd-table__cell--non-interactive:active,
+.fd-table__header .fd-table__cell.fd-table__cell--non-interactive:hover {
+  background-color: var(--sapList_HeaderBackground);
+  color: var(--sapList_HeaderTextColor);
+}
 
+/* Message page fixes */
 .fd-message-page {
   height: auto;
   min-height: 100%;

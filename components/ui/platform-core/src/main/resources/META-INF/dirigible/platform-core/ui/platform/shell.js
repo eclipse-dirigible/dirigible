@@ -12,9 +12,11 @@
 if (window !== top) {
     angular.module('platformShell', []).run(() => {
         document.body.innerHTML = '';
-        document.body.innerText = 'Shell cannot be loaded in an iframe!'
+        document.body.innerText = 'Shell cannot be loaded in an iframe!';
+        console.error('Shell cannot be loaded in an iframe!');
     });
 } else angular.module('platformShell', ['ngCookies', 'platformUser', 'platformExtensions', 'platformDialogs', 'platformContextMenu'])
+    .config(($locationProvider) => { $locationProvider.html5Mode({ enabled: true, requireBase: false }) })
     .value('shellState', {
         perspectiveInternal: {
             id: '',
@@ -173,10 +175,11 @@ if (window !== top) {
                 }
             };
 
-            scope.isScrollable = (items) => {
+            scope.canMenuScroll = (items) => {
                 if (items) {
-                    for (let i = 0; i < items.length; i++)
-                        if (items[i].items) return false;
+                    for (let i = 0; i < items.length; i++) {
+                        if (items[i]['items']) return false;
+                    }
                 }
                 return true;
             };
@@ -187,7 +190,7 @@ if (window !== top) {
         },
         templateUrl: '/services/web/platform-core/ui/templates/header.html',
     })).directive('submenu', () => ({
-        restrict: "E",
+        restrict: 'E',
         replace: false,
         scope: {
             sublist: '<',
@@ -195,15 +198,16 @@ if (window !== top) {
         },
         link: (scope) => {
             scope.menuHandler = scope.menuHandler();
-            scope.isScrollable = (index) => {
-                for (let i = 0; i < scope.sublist[index].items.length; i++)
-                    if (scope.sublist[index].items[i].items) return false;
+            scope.canSubmenuScroll = (sublistItems) => {
+                for (let i = 0; i < sublistItems.length; i++) {
+                    if (sublistItems[i]['items']) return false;
+                }
                 return true;
             };
         },
-        template: `<bk-menu-item ng-repeat-start="item in sublist track by $index" ng-if="!item.items" has-separator="::item.divider" title="{{ ::item.label }}" ng-click="::menuHandler(item)"></bk-menu-item>
-        <bk-menu-sublist ng-if="item.items" has-separator="::item.divider" title="{{ ::item.label }}" can-scroll="::isScrollable($index)" ng-repeat-end><submenu sublist="::item.items" menu-handler="::menuHandler"></submenu></bk-menu-sublist>`,
-    })).directive('perspectiveContainer', (Extensions, shellState, Shell) => ({
+        template: `<bk-menu-item ng-repeat-start="item in sublist track by $index" ng-if="!item.items" has-separator="::item.separator" title="{{ ::item.label }}" ng-click="::menuHandler(item)"></bk-menu-item>
+        <bk-menu-sublist ng-if="item.items" has-separator="::item.separator" title="{{ ::item.label }}" can-scroll="::canSubmenuScroll(item.items)" ng-repeat-end><submenu sublist="::item.items" menu-handler="::menuHandler"></submenu></bk-menu-sublist>`,
+    })).directive('perspectiveContainer', (Extensions, shellState, Shell, $location) => ({
         restrict: 'E',
         transclude: true,
         replace: true,
@@ -213,17 +217,20 @@ if (window !== top) {
         },
         link: {
             pre: (scope, element) => {
-                scope.noStatusbar = true;
-                for (let i = 0; i < element[0].parentElement.children.length; i++) {
-                    if (element[0].parentElement.children[i].classList.contains('bk-statusbar')) {
-                        scope.noStatusbar = false;
-                        break;
+                function hasStatusBar() {
+                    for (let i = 0; i < element[0].parentElement.children.length; i++) {
+                        if (element[0].parentElement.children[i].classList.contains('statusbar') || element[0].parentElement.children[i].tagName === 'STATUS-BAR') {
+                            return false;
+                        }
                     }
+                    return true;
                 }
+                scope.noStatusbar = hasStatusBar();
             },
             post: (scope) => {
+                const URLParams = new URLSearchParams(window.location.search);
                 const selectedPerspectiveKey = `${getBrandingInfo().prefix}.shell.selected-perspective`;
-                scope.activeId = localStorage.getItem(selectedPerspectiveKey);
+                scope.activeId = URLParams.has('perspective') ? URLParams.get('perspective') : localStorage.getItem(selectedPerspectiveKey);
                 shellState.registerStateListener((data) => {
                     scope.activeId = data.id;
                     saveSelectedPerspective(data.id);
@@ -274,6 +281,12 @@ if (window !== top) {
                     return '/services/web/platform-core/ui/images/unknown.svg';
                 };
                 scope.switchPerspective = (id, label) => {
+                    if (URLParams.has('perspective')) {
+                        URLParams.delete('perspective');
+                        $location.search('continue', null);
+                        $location.search('perspective', null);
+                        $location.search('view', null);
+                    }
                     shellState.perspective = {
                         id: id,
                         label: label
@@ -378,7 +391,7 @@ if (window !== top) {
                 description: '',
             };
             const onNotificationListener = notificationHub.onShow((data) => {
-                scope.$applyAsync(() => {
+                scope.$evalAsync(() => {
                     scope.notification.type = data.type ?? 'information';
                     scope.notification.title = data.title;
                     scope.notification.description = data.description;
@@ -419,10 +432,12 @@ if (window !== top) {
             scope.message = '';
             scope.label = '';
             scope.error = '';
-            const busyListener = statusBarHub.onBusy((text) => scope.$apply(() => scope.busy = text));
-            const messageListener = statusBarHub.onMessage((message) => scope.$apply(() => scope.message = message));
-            const errorListener = statusBarHub.onError((message) => scope.$apply(() => scope.error = message));
-            const labelListener = statusBarHub.onLabel((label) => scope.$apply(() => scope.label = label));
+            scope.clearMessage = () => scope.message = '';
+            scope.clearError = () => scope.error = '';
+            const busyListener = statusBarHub.onBusy((text) => scope.$evalAsync(() => scope.busy = text));
+            const messageListener = statusBarHub.onMessage((message) => scope.$evalAsync(() => scope.message = message));
+            const errorListener = statusBarHub.onError((message) => scope.$evalAsync(() => scope.error = message));
+            const labelListener = statusBarHub.onLabel((label) => scope.$evalAsync(() => scope.label = label));
             scope.$on('$destroy', () => {
                 statusBarHub.removeMessageListener(busyListener);
                 statusBarHub.removeMessageListener(messageListener);
@@ -431,20 +446,17 @@ if (window !== top) {
             });
         },
         template: `<div class="statusbar">
-            <div class="statusbar-busy" ng-if="busy">
-                <bk-loader contrast="true"></bk-loader>
-                <span class="statusbar--text">{{ busy }}</span>
-            </div>
-            <div class="statusbar-message" ng-style="{'visibility': message ? 'visible':'hidden'}">
+            <div class="statusbar-busy" ng-if="busy" title="{{ busy }}"><bk-loader contrast="true"></bk-loader><span class="statusbar--text">{{ busy }}</span></div>
+            <div class="statusbar-message" ng-if="message">
                 <i class="statusbar--icon sap-icon--information"></i>
                 <span class="statusbar--text">{{ message }}</span>
-                <i class="statusbar--icon statusbar--link sap-icon--delete" ng-click="message = ''"></i>
+                <i class="statusbar--icon statusbar--link sap-icon--delete" ng-click="clearMessage()"></i>
             </div>
-            <div class="statusbar-error" ng-style="{'visibility': error ? 'visible':'hidden'}">
+            <div class="statusbar-error" ng-if="error">
                 <i class="statusbar--icon sap-icon--message-warning"></i>
                 <span class="statusbar--text">{{ error }}</span>
-                <i class="statusbar--icon statusbar--link sap-icon--delete" ng-click="error = ''"></i>
+                <i class="statusbar--icon statusbar--link sap-icon--delete" ng-click="clearError()"></i>
             </div>
-            <div class="statusbar-label" ng-if="label">{{ label }}</div>
+            <div class="statusbar-label" ng-if="label"><span class="statusbar--text">{{ label }}</span></div>
         </div>`,
     }));

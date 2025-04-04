@@ -24,7 +24,7 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
             });
         }
     }))
-    .controller('DetailsController', ($scope, $http, Dialogs, ViewParameters) => {
+    .controller('DetailsController', ($scope, $http, $document, Dialogs, ViewParameters) => {
         $scope.state = {
             isBusy: true,
             error: false,
@@ -136,6 +136,10 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
                 $scope.errorMessage = 'There was an error while loading the icons.';
             });
         };
+        function getPerspectiveName(type) {
+            if (type === 'SETTING') return 'Settings';
+            return 'Reports';
+        }
         $scope.save = () => {
             if (!$scope.state.error) {
                 $scope.state.busyText = 'Saving';
@@ -158,10 +162,10 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
                             menuKey: $scope.dataParameters.menuKey,
                             menuLabel: $scope.dataParameters.menuLabel,
                             menuIndex: $scope.dataParameters.menuIndex,
-                            layoutType: $scope.dataParameters.layoutType,
-                            perspectiveName: $scope.dataParameters.perspectiveName,
-                            perspectiveLabel: $scope.dataParameters.perspectiveLabel,
-                            navigationPath: $scope.dataParameters.navigationPath,
+                            layoutType: ['SETTING', 'REPORT'].includes($scope.dataParameters.entityType) ? undefined : $scope.dataParameters.layoutType,
+                            perspectiveName: ['SETTING', 'REPORT'].includes($scope.dataParameters.entityType) ? getPerspectiveName($scope.dataParameters.entityType) : $scope.dataParameters.perspectiveName,
+                            perspectiveLabel: ['SETTING', 'REPORT'].includes($scope.dataParameters.entityType) ? undefined : $scope.dataParameters.perspectiveLabel,
+                            navigationPath: ['SETTING', 'REPORT'].includes($scope.dataParameters.entityType) ? undefined : $scope.dataParameters.navigationPath,
                             feedUrl: $scope.dataParameters.feedUrl,
                             feedUsername: $scope.dataParameters.feedUsername,
                             feedPassword: $scope.dataParameters.feedPassword,
@@ -236,7 +240,9 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
         $scope.dataParameters = ViewParameters.get();
         if ($scope.dataParameters.dialogType === 'entity') {
             $scope.dialogType = 'entity';
-            $scope.loadIcons();
+            angular.element($document[0]).ready(() => {
+                $scope.loadIcons();
+            });
         } else {
             $scope.dialogType = 'property';
             $scope.state.isBusy = false;

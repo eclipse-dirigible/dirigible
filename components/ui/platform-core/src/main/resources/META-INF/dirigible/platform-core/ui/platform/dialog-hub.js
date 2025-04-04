@@ -287,10 +287,10 @@ class DialogHub extends MessageHubApi {
     }
 
     /**
-     * Closes the currently shown window. Usually used inside the window itself when the `closeButton` option is set to false.
+     * Closes the top shown window. Usually used inside the window itself when the `closeButton` option is set to false. Optionally, you can provide the id/path to close a specific window.
      */ // @ts-ignore
-    closeWindow() {
-        this.postMessage({ topic: 'platform.dialog.window', data: { close: true } });
+    closeWindow({ id, path } = {}) {
+        this.postMessage({ topic: 'platform.dialog.window', data: { close: true, id: id, path: path } });
     }
 
     /**

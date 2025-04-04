@@ -2,52 +2,43 @@
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
 
 	<head>
-		<meta charset="utf-8">
-		<meta http-equiv="X-UA-Compatible" content="IE=edge">
-		<meta name="viewport" content="width=device-width, initial-scale=1">
-		<link rel="icon" href="data:;base64,iVBORw0KGgo=" dg-brand-icon />
-		<title dg-brand-title></title>
-		<theme></theme>
-		<script type="text/javascript"
-			src="/services/js/resources-core/services/loader.js?id=application-view-js"></script>
-		<link type="text/css" rel="stylesheet"
-			href="/services/js/resources-core/services/loader.js?id=application-view-css" />
-		<script type="text/javascript" src="controller.js"></script>
+		<meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+		<script type="text/javascript" src="/services/web/dashboard/services/entity.js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="controller.js"></script>
 	</head>
 
-	<body class="dg-vbox">
-		<fd-toolbar has-title="true">
-			<fd-toolbar-title>Items <span fd-object-status text="{{dataCount}}" inverted="true"></fd-toolbar-title>
-			<fd-toolbar-spacer></fd-toolbar-spacer>
-			<fd-button compact="true" dg-type="transparent" glyph="sap-icon--add"
-				state="{{action == 'update'? 'disabled' : ''}}" ng-click="createEntity()"></fd-button>
-			<fd-button compact="true" dg-type="transparent" glyph="sap-icon--edit"
-				state="{{selectedEntity == null ? 'disabled' : ''}}" ng-click="updateEntity()"></fd-button>
-			<fd-button compact="true" dg-type="transparent" glyph="sap-icon--delete"
-				state="{{selectedEntity == null || action == 'update'? 'disabled' : ''}}" ng-click="deleteEntity()">
-			</fd-button>
-			<fd-popover>
-				<fd-popover-control>
-					<fd-button compact="true" glyph="sap-icon--overflow" dg-type="transparent"
-						aria-label="Header Menu Button">
-					</fd-button>
-				</fd-popover-control>
-				<fd-popover-body dg-align="bottom-right">
-					<fd-menu aria-label="Header Menu" no-backdrop="true" no-shadow="true">
-						<fd-menu-item title="Filter" ng-click="openFilter()"></fd-menu-item>
-						<fd-menu-item ng-repeat="action in pageActions" title="{{action.label}}"
-							ng-click="triggerPageAction(action)"></fd-menu-item>
-					</fd-menu>
-				</fd-popover-body>
-			</fd-popover>
-		</fd-toolbar>
-		<fd-scrollbar>
-			<fd-list list-type="navigation-indication" byline="true" state="disabled">
-				<fd-list-item ng-repeat="next in data">
-					<fd-list-link navigation-indicator="true" dg-selected="next.${primaryKeysString} === selectedEntity.${primaryKeysString}"
+	<body class="bk-vbox">
+		<bk-toolbar has-title="true">
+			<bk-toolbar-title>Items <span bk-object-status text="{{dataCount}}" inverted="true"></bk-toolbar-title>
+			<bk-toolbar-spacer></bk-toolbar-spacer>
+			<bk-button compact="true" state="transparent" glyph="sap-icon--add" aria-label="add entity" ng-disabled="action == 'update'" ng-click="createEntity()"></bk-button>
+			<bk-button compact="true" state="transparent" glyph="sap-icon--edit" aria-label="edit entity" ng-disabled="selectedEntity == null" ng-click="updateEntity()"></bk-button>
+			<bk-button compact="true" state="transparent" glyph="sap-icon--delete" aria-label="delete entity" ng-disabled="selectedEntity == null || action == 'update'" ng-click="deleteEntity()"></bk-button>
+			<bk-popover>
+				<bk-popover-control>
+					<bk-button compact="true" glyph="sap-icon--overflow" state="transparent" aria-label="toolbar menu button"></bk-button>
+				</bk-popover-control>
+				<bk-popover-body align="bottom-right">
+					<bk-menu aria-label="Header Menu" no-backdrop="true" no-shadow="true">
+						<bk-menu-item title="Filter" ng-click="openFilter()"></bk-menu-item>
+						<bk-menu-item ng-repeat="action in pageActions track by $index" title="{{action.label}}" ng-click="triggerPageAction(action)"></bk-menu-item>
+					</bk-menu>
+				</bk-popover-body>
+			</bk-popover>
+		</bk-toolbar>
+		<bk-scrollbar>
+			<bk-list list-type="navigation-indication" byline="true" state="disabled">
+				<bk-list-item ng-repeat="next in data track by $index">
+					<bk-list-link navigation-indicator="true" selected="next.${primaryKeysString} === selectedEntity.${primaryKeysString}"
 						navigated="next.${primaryKeysString} === selectedEntity.${primaryKeysString}"
 						ng-click="action == 'select' ? selectEntity(next) : ''">
-						<fd-list-content
+						<bk-list-content
 #if($masterProperties.title.widgetType == "DROPDOWN")
 							item-title="{{options${masterProperties.title.name}Value(next.${masterProperties.title.name})}}">
 #elseif($masterProperties.title.widgetType == "DATE")
@@ -61,7 +52,7 @@
 #else
 							item-title="{{next.${masterProperties.title.name}}}">
 #end
-							<fd-list-byline dg-align="left">
+							<bk-list-byline align="left">
 #foreach ($property in $masterProperties.properties)
 #if($property.widgetType == "DROPDOWN")
 								{{options${property.name}Value(next.${property.name})}}#if(!$foreach.isLast()) |#end
@@ -74,24 +65,25 @@
 #elseif($property.widgetType == "WEEK")
 								Week {{next.${property.name} | date: "ww"}}#if(!$foreach.isLast()) |#end
 #elseif($property.widgetType == "EMAIL")
-								<a href="mailto:{{next.${property.name}}}" class="fd-link">{{next.${property.name}}}</a>#if(!$foreach.isLast()) |#end
+								<bk-link href="mailto:{{next.${property.name}}}">{{next.${property.name}}}</bk-link>#if(!$foreach.isLast()) |#end
 #elseif($property.widgetType == "URL")
-								<a href="{{next.${property.name}}}" target="_blank" class="fd-link">{{next.${property.name}}}</a>#if(!$foreach.isLast()) |#end
+								<bk-link href="{{next.${property.name}}}" target="_blank">{{next.${property.name}}}</bk-link>#if(!$foreach.isLast()) |#end
 #elseif($property.widgetType == "TEL")
-								<a href="tel:{{next.${property.name}}}" class="fd-link">{{next.${property.name}}}</a>#if(!$foreach.isLast()) |#end
+								<bk-link href="tel:{{next.${property.name}}}">{{next.${property.name}}}</bk-link>#if(!$foreach.isLast()) |#end
 #else
 								{{next.${property.name}}}#if(!$foreach.isLast()) |#end
 #end
 #end
-							</fd-list-byline>
-						</fd-list-content>
-					</fd-list-link>
-				</fd-list-item>
-			</fd-list>
-			<fd-list-action-item ng-show="dataPage <= dataPages && dataCount > dataLimit" ng-click="loadPage()">
+							</bk-list-byline>
+						</bk-list-content>
+					</bk-list-link>
+				</bk-list-item>
+			</bk-list>
+			<bk-list-action-item ng-show="dataPage <= dataPages && dataCount > dataLimit" ng-click="loadPage()">
 				Load More ...
-			</fd-list-action-item>
-		</fd-scrollbar>
+			</bk-list-action-item>
+		</bk-scrollbar>
+		<theme></theme>
 	</body>
 
 </html>
