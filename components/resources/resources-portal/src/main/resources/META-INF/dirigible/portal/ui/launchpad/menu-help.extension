@@ -1,5 +1,0 @@
-{
-    "module": "portal/gen/ui/launchpad/menu-help.js",
-    "extensionPoint": "portal-menu",
-    "description": "portal - Application Menu"
-}

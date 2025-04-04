@@ -40,7 +40,7 @@ blimpkit.directive('bkList', (classNames) => ({
             'fd-list--navigation fd-list--navigation-indication': scope.listType === 'navigation-indication',
             'fd-list--navigation': scope.listType === 'navigation',
             'fd-list--selection': scope.listType === 'selection',
-            'fd-list__infinite-scroll': parseHeight(scope.fixedHeight),
+            'fd-list__infinite-scroll fd-scrollbar': parseHeight(scope.fixedHeight),
         });
 
         scope.getStyles = function () {

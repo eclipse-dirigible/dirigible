@@ -1,4 +1,4 @@
 {
-	"name": "ide-documents-content-type",
-	"description": "Extension Point for the IDE Documents Contet Type"
+	"name": "ui-documents-content-type",
+	"description": "Extension Point for the Documents Perspective Content Type"
 }

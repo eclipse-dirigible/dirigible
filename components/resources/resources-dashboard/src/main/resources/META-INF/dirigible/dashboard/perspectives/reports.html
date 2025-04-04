@@ -1,0 +1,55 @@
+<!--
+
+    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" ng-app="reports" ng-controller="ReportsController" xmlns="http://www.w3.org/1999/xhtml">
+
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title config-title></title>
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
+        <script type="text/javascript" src="/services/web/dashboard/configs/reports-perspective.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=perspective-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=perspective-css" />
+        <script type="text/javascript" src="/services/web/dashboard/js/reports-controller.js"></script>
+    </head>
+
+    <body>
+        <split direction="horizontal">
+            <split-pane size="20" min-size="120">
+                <bk-toolbar>
+                    <bk-input-group>
+                        <bk-input-group-addon>
+                            <span class="sap-icon sap-icon--search" role="presentation"></span>
+                        </bk-input-group-addon>
+                        <bk-input type="search" placeholder="Search..." ng-keyup="searchContent()" ng-model="search.text"></bk-input>
+                        <bk-input-group-addon ng-show="search.text">
+                            <bk-button glyph="sap-icon--decline" title="Clear" aria-label="Clear" ng-click="clearSearch()"></bk-button>
+                        </bk-input-group-addon>
+                    </bk-input-group>
+                </bk-toolbar>
+                <bk-list>
+                    <bk-list-item interactive="true" ng-repeat="report in reports track by report.id" ng-hide="report.hide" ng-click="switchReport(report.id)" selected="report.id === activeId">
+                        <bk-list-title>{{::report.label}}</bk-list-title>
+                    </bk-list-item>
+                </bk-list>
+            </split-pane>
+            <split-pane size="80" min-size="0">
+                <iframe ng-repeat="report in reports track by report.id" ng-show="report.id === activeId" title="{{::report.label}}" ng-src="{{::report.path}}" loading="lazy"></iframe>
+            </split-pane>
+        </split>
+        <theme></theme>
+    </body>
+
+</html>

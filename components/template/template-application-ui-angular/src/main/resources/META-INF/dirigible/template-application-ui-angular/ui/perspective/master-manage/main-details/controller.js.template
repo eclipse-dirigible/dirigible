@@ -1,13 +1,10 @@
 #set($dollar = '$')
-angular.module('page', ["ideUI", "ideView", "entityApi"])
-	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = '${projectName}.${perspectiveName}.${name}';
+angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+	.config(["EntityServiceProvider", function (EntityServiceProvider) {
+		EntityServiceProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
 	}])
-	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
-	}])
-	.controller('PageController', ['$scope', #if($hasDropdowns) '${dollar}http',#end 'Extensions', 'messageHub', 'entityApi', function ($scope, #if($hasDropdowns) ${dollar}http,#end Extensions, messageHub, entityApi) {
-
+	.controller('PageController', function ($scope, ${dollar}http, Extensions, EntityService) {
+		const Dialogs = new DialogHub();
 		$scope.entity = {};
 		$scope.forms = {
 			details: {},
@@ -20,26 +17,26 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		$scope.action = 'select';
 
 		//-----------------Custom Actions-------------------//
-		Extensions.get('dialogWindow', '${projectName}-custom-action').then(function (response) {
-			$scope.entityActions = response.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && e.type === "entity");
+		Extensions.getWindows(['${projectName}-custom-action']).then((response) => {
+			$scope.entityActions = response.data.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && e.type === "entity");
 		});
 
-		$scope.triggerEntityAction = function (action) {
-			messageHub.showDialogWindow(
-				action.id,
-				{
+		$scope.triggerEntityAction = (action) => {
+			Dialogs.showWindow({
+				hasHeader: true,
+        		title: action.label,
+				path: action.path,
+				params: {
 					id: $scope.entity.${primaryKeysString}
 				},
-				null,
-				true,
-				action
-			);
+				closeButton: true
+			});
 		};
 		//-----------------Custom Actions-------------------//
 
 		//-----------------Events-------------------//
-		messageHub.onDidReceiveMessage("clearDetails", function (msg) {
-			$scope.$apply(function () {
+		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.clearDetails', handler: () => {
+			$scope.$evalAsync(() => {
 				$scope.entity = {};
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
@@ -48,57 +45,54 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 #end
 				$scope.action = 'select';
 			});
-		});
-
-		messageHub.onDidReceiveMessage("entitySelected", function (msg) {
-			$scope.$apply(function () {
-#foreach ($property in $properties)
+		}});
+		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.entitySelected', handler: (data) => {
+			$scope.$evalAsync(() => {
+				#foreach ($property in $properties)
 #if($property.isDateType)
-				if (msg.data.entity.${property.name}) {
-					msg.data.entity.${property.name} = new Date(msg.data.entity.${property.name});
+				if (data.entity.${property.name}) {
+					data.entity.${property.name} = new Date(data.entity.${property.name});
 				}
 #end
 #end
-				$scope.entity = msg.data.entity;
+				$scope.entity = data.entity;
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-				$scope.options${property.name} = msg.data.options${property.name};
+				$scope.options${property.name} = data.options${property.name};
 #end
 #end
 				$scope.action = 'select';
 			});
-		});
-
-		messageHub.onDidReceiveMessage("createEntity", function (msg) {
-			$scope.$apply(function () {
+		}});
+		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.createEntity', handler: (data) => {
+			$scope.$evalAsync(() => {
 				$scope.entity = {};
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-				$scope.options${property.name} = msg.data.options${property.name};
+				$scope.options${property.name} = data.options${property.name};
 #end
 #end
 				$scope.action = 'create';
 			});
-		});
-
-		messageHub.onDidReceiveMessage("updateEntity", function (msg) {
-			$scope.$apply(function () {
+		}});
+		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.updateEntity', handler: (data) => {
+			$scope.$evalAsync(() => {
 #foreach ($property in $properties)
 #if($property.isDateType)
-				if (msg.data.entity.${property.name}) {
-					msg.data.entity.${property.name} = new Date(msg.data.entity.${property.name});
+				if (data.entity.${property.name}) {
+					data.entity.${property.name} = new Date(data.entity.${property.name});
 				}
 #end
 #end
-				$scope.entity = msg.data.entity;
+				$scope.entity = data.entity;
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-				$scope.options${property.name} = msg.data.options${property.name};
+				$scope.options${property.name} = data.options${property.name};
 #end
 #end
 				$scope.action = 'update';
 			});
-		});
+		}});
 
 #foreach ($property in $properties)
 #if ($property.widgetType == "DROPDOWN")
@@ -111,19 +105,19 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 
 		${dollar}scope.${dollar}watch('entity.${property.widgetDependsOnProperty}', function (newValue, oldValue) {
 			if (newValue !== undefined && newValue !== null) {
-				entityApi.${dollar}http.get(${dollar}scope.service${property.widgetDependsOnProperty} + '/' + newValue).then(function (response) {
+				${dollar}http.get(${dollar}scope.service${property.widgetDependsOnProperty} + '/' + newValue).then((response) => {
 					let valueFrom = response.data.${property.widgetDependsOnValueFrom};
 #if($property.widgetType != "DROPDOWN")
 					$scope.entity.${property.name} = valueFrom;
 #end
 #if($property.widgetType == "DROPDOWN")
-					entityApi.${dollar}http.post("${property.widgetDropdownUrl}/search", {
+					${dollar}http.post("${property.widgetDropdownUrl}/search", {
 						$filter: {
 							equals: {
 								${property.widgetDependsOnFilterBy}: valueFrom
 							}
 						}
-					}).then(function (response) {
+					}).then((response) => {
 						${dollar}scope.options${property.name} = response.data.map(e => {
 							return {
 								value: e.${property.widgetDropDownKey},
@@ -137,8 +131,12 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 								$scope.entity.${property.name} = undefined;
 							}
 						}
+					}, (error) => {
+						console.error(error);
 					});
 #end
+				}, (error) => {
+					console.error(error);
 				});
 			}
 		});
@@ -146,44 +144,72 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 #end
 		//-----------------Events-------------------//
 
-		$scope.create = function () {
-			entityApi.create($scope.entity).then(function (response) {
-				if (response.status != 201) {
-					messageHub.showAlertError("${name}", `Unable to create ${name}: '${response.message}'`);
-					return;
-				}
-				messageHub.postMessage("entityCreated", response.data);
-				messageHub.postMessage("clearDetails", response.data);
-				messageHub.showAlertSuccess("${name}", "${name} successfully created");
+		$scope.create = () => {
+			EntityService.create($scope.entity).then((response) => {
+				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityCreated', data: response.data });
+				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.clearDetails' , data: response.data });
+				Dialogs.showAlert({
+					title: "${name}",
+					message: '${name} successfully created',
+					type: AlertTypes.Success
+				});
+			}, (error) => {
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: "${name}",
+					message: `Unable to create ${name}: '${message}'`,
+					type: AlertTypes.Error
+				});
+				console.error('EntityService:', error);
 			});
 		};
 
-		$scope.update = function () {
-			entityApi.update($scope.entity.${primaryKeysString}, $scope.entity).then(function (response) {
-				if (response.status != 200) {
-					messageHub.showAlertError("${name}", `Unable to update ${name}: '${response.message}'`);
-					return;
-				}
-				messageHub.postMessage("entityUpdated", response.data);
-				messageHub.postMessage("clearDetails", response.data);
-				messageHub.showAlertSuccess("${name}", "${name} successfully updated");
+		$scope.update = () => {
+			EntityService.update($scope.entity.${primaryKeysString}, $scope.entity).then((response) => {
+				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityUpdated', data: response.data });
+				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.clearDetails', data: response.data });
+				Dialogs.showAlert({
+					title: "${name}",
+					message: '${name} successfully updated',
+					type: AlertTypes.Success
+				});
+			}, (error) => {
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: "${name}",
+					message: `Unable to create ${name}: '${message}'`,
+					type: AlertTypes.Error
+				});
+				console.error('EntityService:', error);
 			});
 		};
 
-		$scope.cancel = function () {
-			messageHub.postMessage("clearDetails");
+		$scope.cancel = () => {
+			Dialogs.triggerEvent('${projectName}.${perspectiveName}.${name}.clearDetails');
 		};
 		
 		//-----------------Dialogs-------------------//
+		$scope.alert = (message) => {
+			if (message) Dialogs.showAlert({
+				title: 'Description',
+				message: message,
+				type: AlertTypes.Information,
+				preformatted: true,
+			});
+		};
 		
 #if($hasDropdowns)
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-		$scope.create${property.name} = function () {
-			messageHub.showDialogWindow("${property.relationshipEntityName}-details", {
-				action: "create",
-				entity: {},
-			}, null, false);
+		$scope.create${property.name} = () => {
+			Dialogs.showWindow({
+				id: '${property.relationshipEntityName}-details',
+				params: {
+					action: "create",
+					entity: {},
+				},
+				closeButton: false
+			});
 		};
 #end
 #end
@@ -198,7 +224,7 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 #if($hasDropdowns)
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-		$scope.refresh${property.name} = function () {
+		$scope.refresh${property.name} = () => {
 			$scope.options${property.name} = [];
 			${dollar}http.get("${property.widgetDropdownUrl}").then(function (response) {
 				${dollar}scope.options${property.name} = response.data.map(e => {
@@ -214,6 +240,4 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 #end
 
 		//----------------Dropdowns-----------------//	
-		
-
-	}]);
+	});

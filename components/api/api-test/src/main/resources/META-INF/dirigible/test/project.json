@@ -1,3 +1,5 @@
 {
-	"guid": "test"
+	"guid": "test",
+    "dependencies": [],
+    "actions": []
 }

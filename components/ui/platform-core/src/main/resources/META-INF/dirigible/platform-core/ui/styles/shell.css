@@ -77,7 +77,8 @@ body {
 .statusbar {
     background-color: var(--sapInfobar_NonInteractive_Background, #fff);
     width: 100%;
-    height: 100%;
+    max-width: 100%;
+    min-height: var(--status-bar-height);
     max-height: var(--status-bar-height);
     box-sizing: border-box;
     font-size: var(--sapFontSmallSize, .75rem);
@@ -87,32 +88,41 @@ body {
     word-break: break-word;
     display: inline-flex;
     align-items: center;
+    justify-content: space-between;
     border-top: 0.0625rem solid var(--sapPageFooter_BorderColor);
     overflow: hidden;
 }
 
 .statusbar>* {
-    box-sizing: border-box;
-}
-
-.statusbar-busy {
-    padding-inline: 0.5rem;
-    gap: 0.5rem;
-}
-
-.statusbar-busy,
-.statusbar-message,
-.statusbar-error {
     display: flex;
     flex-direction: row;
     align-items: center;
     height: 100%;
     box-sizing: border-box;
+    flex: 1 1 auto;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
 }
 
-.statusbar-message,
-.statusbar-error {
-    flex: 2;
+.statusbar-label {
+    min-width: fit-content;
+    max-width: fit-content;
+    justify-content: end;
+}
+
+.statusbar-label:only-child {
+    max-width: 100%;
+}
+
+.statusbar-label>.statusbar--text {
+    padding-inline: 0.5rem;
+}
+
+.statusbar-busy {
+    max-width: fit-content;
+    padding-inline: 0.5rem;
+    gap: 0.5rem;
 }
 
 .statusbar-busy>*,
@@ -182,19 +192,8 @@ body {
 }
 
 .statusbar-busy {
-    flex: 1;
     color: var(--sapButton_Attention_TextColor, #fff);
     background-color: var(--sapButton_Attention_Background, #e97119);
-}
-
-.statusbar-label {
-    box-sizing: border-box;
-    padding: 0 6px 0 6px;
-    flex: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    text-align: end;
 }
 
 /* Notification overlay */

@@ -1137,6 +1137,7 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 							perspectives: $scope.graph.model.perspectives,
 							navigations: $scope.graph.model.navigations,
 						},
+						maxWidth: '1600px',
 						closeButton: false
 					});
 				};
@@ -1260,10 +1261,14 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 										copy.id = attribute.textContent;
 									} else if (attribute.localName === "label") {
 										copy.label = attribute.textContent;
+									} else if (attribute.localName === "header") {
+										copy.header = attribute.textContent;
 									} else if (attribute.localName === "icon") {
 										copy.icon = attribute.textContent;
-									} else if (attribute.localName === "order") {
-										copy.order = attribute.textContent;
+									} else if (attribute.localName === "navId") {
+										copy.navId = attribute.textContent;
+									} else if (attribute.localName === "order" && attribute.textContent !== '') {
+										copy.order = parseInt(attribute.textContent);
 									} else if (attribute.localName === "role") {
 										copy.role = attribute.textContent;
 									}
@@ -1293,14 +1298,20 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 								let copy = {};
 								for (let m = 0; m < item.children.length; m++) {
 									let attribute = item.children[m];
-									if (attribute.localName === "path") {
-										copy.path = attribute.textContent;
+									if (attribute.localName === "id") {
+										copy.id = attribute.textContent;
 									} else if (attribute.localName === "label") {
 										copy.label = attribute.textContent;
+									} else if (attribute.localName === "header") {
+										copy.header = attribute.textContent;
+									} else if (attribute.localName === "expanded") {
+										copy.expanded = attribute.textContent === 'true';
 									} else if (attribute.localName === "icon") {
 										copy.icon = attribute.textContent;
-									} else if (attribute.localName === "url") {
-										copy.url = attribute.textContent;
+									} else if (attribute.localName === "order" && attribute.textContent !== '') {
+										copy.order = parseInt(attribute.textContent);
+									} else if (attribute.localName === "role") {
+										copy.role = attribute.textContent;
 									}
 								}
 								graph.getModel().navigations.push(copy);

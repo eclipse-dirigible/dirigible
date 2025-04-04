@@ -2,84 +2,82 @@
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
 
     <head>
-        <meta charset="utf-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+		<meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link rel="icon" href="data:;base64,iVBORw0KGgo=" dg-brand-icon />
-        <title dg-brand-title></title>
-        <theme></theme>
-        <script type="text/javascript"
-            src="/services/js/resources-core/services/loader.js?id=application-view-js"></script>
-        <link type="text/css" rel="stylesheet"
-            href="/services/js/resources-core/services/loader.js?id=application-view-css" />
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+		<script type="text/javascript" src="/services/web/dashboard/services/entity.js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
         <script type="text/javascript" src="controller.js"></script>
     </head>
 
-    <body class="dg-vbox">
-        <fd-scrollbar class="dg-full-height">
-            <fd-fieldset ng-form="forms.details">
-                <fd-form-group dg-header="{{formHeaders[action]}}" name="entityForm" class="fd-container fd-form-layout-grid-container">
+    <body class="bk-vbox">
+        <bk-scrollbar class="bk-full-height">
+            <bk-fieldset class="fd-padding-begin-end--sm" ng-form="forms.details">
+                <bk-form-group label="{{formHeaders[action]}}" name="entityForm" transclude-classes="fd-container fd-form-layout-grid-container">
 #foreach ($property in $properties)
 #if(!$property.dataAutoIncrement)
 #if($property.widgetType == "DROPDOWN")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--7 #end">
-	                        <fd-combobox-input id="id${property.name}"
+	                        <bk-combobox-input input-id="id${property.name}"
 	                            name="${property.name}"
 	                            state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 	                            ng-required="${property.isRequiredProperty}"
 	                            ng-model="entity.${property.name}"
 	#if($property.isCalculatedProperty == "true")
-	                            dg-disabled="true"
+	                            is-readonly="true"
 	#else
-	                            dg-disabled="action === 'select'"
+	                            is-readonly="action === 'select'"
 	#end
 	                            dropdown-items="options${property.name}"
-	                            dg-placeholder="Search ${property.widgetLabel} ...">
-	                        </fd-combobox-input>
+	                            placeholder="Search ${property.widgetLabel} ..."
+								btn-aria-label="show/hide ${property.name} options" list-aria-label="${property.name} options">
+	                        </bk-combobox-input>
 	                    </div>
-	                    <div class="fd-col fd-col-md--1">
-							<button class="fd-button" ng-click="create${property.name}()" ng-hide="action === 'select'">
-								<i class="sap-icon--add" role="presentation"></i>
-							</button>
-							<button class="fd-button" ng-click="refresh${property.name}()" ng-hide="action === 'select'">
-								<i class="sap-icon--refresh" role="presentation"></i>
-							</button>
-							<i class="sap-icon--information" role="presentation" onclick="javascript:alert('${property.description}')"></i>
+	                    <div class="fd-col fd-col--full">
+							<bk-button glyph="sap-icon--add" aria-label="Add" ng-click="create${property.name}()" ng-hide="action === 'select'"></bk-button>
+							<bk-button glyph="sap-icon--refresh" aria-label="Refresh" ng-click="refresh${property.name}()" ng-hide="action === 'select'"></bk-button>
+	#if($property.description)
+							<span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
+	#end
 						</div>
-                    </fd-form-item>
+                    </bk-form-item>
 #elseif($property.widgetType == "CHECKBOX")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2"></div>
-	                    <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--7 #end">
-	                        <fd-checkbox id="id${property.name}"
+	                    <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else bk-col--fit #end">
+	                        <bk-checkbox id="id${property.name}"
 	                            compact="false"
 	                            ng-required="${property.isRequiredProperty}"
 	#if($property.isCalculatedProperty == "true")
-	                            ng-disabled="true"
+	                            ng-readonly="true"
 	#else
-	                            ng-disabled="action === 'select'"
+	                            ng-readonly="action === 'select'"
 	#end
 	                            ng-model="entity.${property.name}">
-	                        </fd-checkbox>
-                        	<fd-checkbox-label for="id${property.name}" dg-required="${property.isRequiredProperty}">${property.widgetLabel}</fd-checkbox-label>
+	                        </bk-checkbox>
+                        	<bk-checkbox-label for="id${property.name}" ng-required="${property.isRequiredProperty}">${property.widgetLabel}</bk-checkbox-label>
                         </div>
-                        <div class="fd-col fd-col-md--1">
-							<i class="sap-icon--information" role="presentation"
-								onclick="javascript:alert('${property.description}')"></i>
+	#if($property.description)
+                        <div class="fd-col fd-col--full">
+							<span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
 						</div>
-                    </fd-form-item>
+	#end
+                    </bk-form-item>
 #elseif($property.widgetType == "COLOR")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
-	                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-	                            <fd-input id="id${property.name}"
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 									ng-required="${property.isRequiredProperty}"
@@ -91,42 +89,44 @@
 	#end
 	                                type="color"
 	                                placeholder="Enter ${property.widgetLabel}">
-	                            </fd-input>
-	                            <fd-form-message dg-type="error">Incorrect Input</fd-form-message>
-	                        </fd-form-input-message-group>
-	                        <i class="sap-icon--information" role="presentation" onclick="javascript:alert('${property.description}')"></i>
+	                            </bk-input>
+							</bk-form-input-message>
+	#if($property.description)
+							<span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
+	#end
 	                    </div>
-                    </fd-form-item>
+                    </bk-form-item>
 #elseif($property.widgetType == "NUMBER")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
-							<fd-step-input dg-id="id${property.name}"
+							<bk-step-input input-id="id${property.name}"
 								name="${property.name}"
 								state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
-								dg-required="${property.isRequiredProperty}"
+								is-required="${property.isRequiredProperty}"
 								ng-model="entity.${property.name}"
 	#if($property.isCalculatedProperty == "true")
 								is-readonly="true"
 	#else
 								is-readonly="action === 'select'"
 	#end
-								placeholder="Enter ${property.widgetLabel}"
-								>
-							</fd-step-input>
-							<i class="sap-icon--information" role="presentation" onclick="javascript:alert('${property.description}')"></i>
+								placeholder="Enter ${property.widgetLabel}">
+							</bk-step-input>
+	#if($property.description)
+							<span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
+	#end
 	                    </div>
-                    </fd-form-item>
+                    </bk-form-item>
 #elseif($property.widgetType == "MONTH")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
-	                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-	                            <fd-input id="id${property.name}"
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 									ng-required="${property.isRequiredProperty}"
@@ -137,20 +137,21 @@
 	                                ng-readonly="action === 'select'"
 	#end
 	                                type="month">
-	                            </fd-input>
-	                            <fd-form-message dg-type="error">Incorrect Input</fd-form-message>
-	                        </fd-form-input-message-group>
-	                        <i class="sap-icon--information" role="presentation" onclick="javascript:alert('${property.description}')"></i>
+	                            </bk-input>
+							</bk-form-input-message>
+	#if($property.description)
+							<span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
+	#end
 	                    </div>
-                    </fd-form-item>
+                    </bk-form-item>
 #elseif($property.widgetType == "WEEK")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
-	                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-	                            <fd-input id="id${property.name}"
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 									ng-required="${property.isRequiredProperty}"
@@ -161,20 +162,21 @@
 	                                ng-readonly="action === 'select'"
 	#end
 	                                type="week">
-	                            </fd-input>
-	                            <fd-form-message dg-type="error">Incorrect Input</fd-form-message>
-	                        </fd-form-input-message-group>
-	                        <i class="sap-icon--information" role="presentation" onclick="javascript:alert('${property.description}')"></i>
+	                            </bk-input>
+							</bk-form-input-message>
+	#if($property.description)
+							<span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
+	#end
 	                    </div>
-                    </fd-form-item>
+                    </bk-form-item>
 #elseif($property.widgetType == "TIME")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
-	                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-	                            <fd-input id="id${property.name}"
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 									ng-required="${property.isRequiredProperty}"
@@ -185,20 +187,21 @@
 	                                ng-readonly="action === 'select'"
 	#end
 	                                type="time">
-	                            </fd-input>
-	                            <fd-form-message dg-type="error">Incorrect Input</fd-form-message>
-	                        </fd-form-input-message-group>
-	                        <i class="sap-icon--information" role="presentation" onclick="javascript:alert('${property.description}')"></i>
+	                            </bk-input>
+							</bk-form-input-message>
+	#if($property.description)
+							<span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
+	#end
 	                    </div>
-                    </fd-form-item>
+                    </bk-form-item>
 #elseif($property.widgetType == "DATETIME-LOCAL")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--3 #end">
-	                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-	                            <fd-input id="id${property.name}"
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 									ng-required="${property.isRequiredProperty}"
@@ -209,20 +212,21 @@
 	                                ng-readonly="action === 'select'"
 	#end
 	                                type="datetime-local">
-	                            </fd-input>
-	                            <fd-form-message dg-type="error">Incorrect Input</fd-form-message>
-	                        </fd-form-input-message-group>
-	                        <i class="sap-icon--information" role="presentation" onclick="javascript:alert('${property.description}')"></i>
+	                            </bk-input>
+							</bk-form-input-message>
+	#if($property.description)
+							<span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
+	#end
 	                    </div>
-                    </fd-form-item>
+                    </bk-form-item>
 #elseif($property.widgetType == "DATE")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
-	                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-	                            <fd-input id="id${property.name}"
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 									ng-required="${property.isRequiredProperty}"
@@ -233,51 +237,54 @@
 	                                ng-readonly="action === 'select'"
 	#end
 	                                type="date">
-	                            </fd-input>
-	                            <fd-form-message dg-type="error">Incorrect Input</fd-form-message>
-	                        </fd-form-input-message-group>
-	                        <i class="sap-icon--information" role="presentation" onclick="javascript:alert('${property.description}')"></i>
+	                            </bk-input>
+							</bk-form-input-message>
+	#if($property.description)
+							<span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
+	#end
 	                    </div>
-                    </fd-form-item>
+                    </bk-form-item>
 #elseif($property.widgetType == "TEXTAREA")
-					<fd-form-item class="fd-row">
+					<bk-form-item class="fd-row">
 						<div class="fd-col fd-col-md--2">
-							<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+							<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
 						</div>
 						<div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
-							<fd-textarea id="id${property.name}"
-								name="${property.name}"
-								state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
-								ng-required="${property.isRequiredProperty}"
-								ng-model="entity.${property.name}"
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn\'t match the required pattern: ${property.inputRule}'">
+								<bk-textarea id="id${property.name}"
+									name="${property.name}"
+									state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
+									ng-required="${property.isRequiredProperty}"
+									ng-model="entity.${property.name}"
 	#if($property.isCalculatedProperty == "true")
-	                            ng-readonly="true"
+	                            	ng-readonly="true"
 	#else
-	                            ng-readonly="action === 'select'"
+	                            	ng-readonly="action === 'select'"
 	#end
-								ng-minlength="${property.minLength} || 0"
-								ng-maxlength="${property.maxLength} || -1"
-								dg-input-rules="{ patterns: ['${property.inputRule}'] }"
-								placeholder="Enter ${property.widgetLabel}">
-							</fd-textarea>
-							<fd-form-message dg-type="error" ng-show="!forms.details['${property.name}'].$valid">The value doesn't match the required pattern '${property.inputRule}'</fd-form-message>
+									ng-minlength="${property.minLength} || 0"
+									ng-maxlength="${property.maxLength} || -1"
+									input-rules="{ patterns: ['${property.inputRule}'] }"
+									placeholder="Enter ${property.widgetLabel}">
+								</bk-textarea>
+							</bk-form-input-message>
 						</div>
-						<div class="fd-col fd-col-md--1">
-							<i class="sap-icon--information" role="presentation"
-								onclick="javascript:alert('${property.description}')"></i>
+	#if($property.description)
+						<div class="fd-col fd-col--full">
+							<span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
 						</div>
-					</fd-form-item>
+	#end
+					</bk-form-item>
 #elseif($property.widgetType == "TEL")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
 						<div ng-show="action === 'select'" style="margin: 4px 0px; padding: 0px 10px" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
-							<a href="tel:{{entity.${property.name}}}" class="fd-link">{{entity.${property.name}}}</a>
+							<bk-link href="tel:{{entity.${property.name}}}">{{entity.${property.name}}}</bk-link>
 						</div>
                         <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
-	                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-	                            <fd-input id="id${property.name}"
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn\'t match the required pattern: ${property.inputRule}'">
+								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 									ng-required="${property.isRequiredProperty}"
@@ -289,26 +296,27 @@
 	#end
 	                                ng-minlength="${property.minLength} || 0"
 	                                ng-maxlength="${property.maxLength} || -1"
-	                                dg-input-rules="{ patterns:#if($property.inputRule == "")['^[0-9]{0,14}$']#else ['${property.inputRule}']#end }"
+	                                input-rules="{ patterns:#if($property.inputRule == "")['^[0-9]{0,14}$']#else ['${property.inputRule}']#end }"
 	                                type="tel"
 	                                placeholder="Enter ${property.widgetLabel}">
-	                            </fd-input>
-	                            <fd-form-message dg-type="error">The value doesn't match the required pattern '${property.inputRule}'</fd-form-message>
-	                        </fd-form-input-message-group>
-	                        <i class="sap-icon--information" role="presentation" onclick="javascript:alert('${property.description}')"></i>
+	                            </bk-input>
+							</bk-form-input-message>
+	#if($property.description)
+							<span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
+	#end
 	                    </div>
-                    </fd-form-item>
+                    </bk-form-item>
 #elseif($property.widgetType == "URL")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
                         <div ng-show="action === 'select'" style="margin: 4px 0px; padding: 0px 10px" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
-							<a href="{{entity.${property.name}}}" target="_blank" class="fd-link">{{entity.${property.name}}}</a>
+							<bk-link href="{{entity.${property.name}}}" target="_blank">{{entity.${property.name}}}</bk-link>
 						</div>
                         <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
-	                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-	                            <fd-input id="id${property.name}"
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn\'t match the required pattern: ${property.inputRule}'">
+								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 									ng-required="${property.isRequiredProperty}"
@@ -320,26 +328,27 @@
 	#end
 	                                ng-minlength="${property.minLength} || 0"
 	                                ng-maxlength="${property.maxLength} || -1"
-	                                dg-input-rules="{ patterns: ['${property.inputRule}'] }"
+	                                input-rules="{ patterns: ['${property.inputRule}'] }"
 	                                type="url"
 	                                placeholder="Enter ${property.widgetLabel}">
-	                            </fd-input>
-	                            <fd-form-message dg-type="error">The value doesn't match the required pattern '${property.inputRule}'</fd-form-message>
-	                        </fd-form-input-message-group>
-	                        <i class="sap-icon--information" role="presentation" onclick="javascript:alert('${property.description}')"></i>
+	                            </bk-input>
+							</bk-form-input-message>
+	#if($property.description)
+							<span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
+	#end
 	                    </div>
-                    </fd-form-item>
+                    </bk-form-item>
 #elseif($property.widgetType == "EMAIL")
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
 						<div ng-show="action === 'select'" style="margin: 4px 0px; padding: 0px 10px" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
-							<a href="mailto:{{entity.${property.name}}}" class="fd-link">{{entity.${property.name}}}</a>
+							<bk-link href="mailto:{{entity.${property.name}}}">{{entity.${property.name}}}</bk-link>
 						</div>
                         <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
-	                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-	                            <fd-input id="id${property.name}"
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn\'t match the required pattern: ${property.inputRule}'">
+								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 									ng-required="${property.isRequiredProperty}"
@@ -351,23 +360,24 @@
 	#end
 	                                ng-minlength="${property.minLength} || 0"
 	                                ng-maxlength="${property.maxLength} || -1"
-	                                dg-input-rules="{ patterns: ['${property.inputRule}'] }"
+	                                input-rules="{ patterns: ['${property.inputRule}'] }"
 	                                type="email"
 	                                placeholder="Enter ${property.widgetLabel}">
-	                            </fd-input>
-	                            <fd-form-message dg-type="error">The value doesn't match the required pattern '${property.inputRule}'</fd-form-message>
-	                        </fd-form-input-message-group>
-	                        <i class="sap-icon--information" role="presentation" onclick="javascript:alert('${property.description}')"></i>
+	                            </bk-input>
+							</bk-form-input-message>
+	#if($property.description)
+							<span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
+	#end
 	                    </div>
-                    </fd-form-item>
+                    </bk-form-item>
 #else
-                    <fd-form-item class="fd-row">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="id${property.name}" dg-required="${property.isRequiredProperty}" dg-colon="true">${property.widgetLabel}</fd-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
-	                        <fd-form-input-message-group dg-inactive="{{ forms.details['${property.name}'].$valid }}">
-	                            <fd-input id="id${property.name}"
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn\'t match the required pattern: ${property.inputRule}'">
+								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 									ng-required="${property.isRequiredProperty}"
@@ -379,39 +389,41 @@
 	#end
 	                                ng-minlength="${property.minLength} || 0"
 	                                ng-maxlength="${property.maxLength} || -1"
-	                                dg-input-rules="{ patterns: ['${property.inputRule}'] }"
+	                                input-rules="{ patterns: ['${property.inputRule}'] }"
 	                                type="text"
 	                                placeholder="Enter ${property.widgetLabel}">
-	                            </fd-input>
-	                            <fd-form-message dg-type="error">The value doesn't match the required pattern '${property.inputRule}'</fd-form-message>
-	                        </fd-form-input-message-group>
-	                        <i class="sap-icon--information" role="presentation" onclick="javascript:alert('${property.description}')"></i>
+	                            </bk-input>
+							</bk-form-input-message>
+	#if($property.description)
+							<span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
+	#end
 	                    </div>
-                    </fd-form-item>
+                    </bk-form-item>
 #end
 #end
 #end
-                </fd-form-group>
-            </fd-fieldset>
-        </fd-scrollbar>
+                </bk-form-group>
+            </bk-fieldset>
+        </bk-scrollbar>
 
-		<fd-bar bar-design="footer" compact="true" ng-show="action !== 'select'">
-			<fd-bar-right>
-				<fd-bar-element>
-					<fd-button dg-label="{{action === 'create' ? 'Create' : 'Update'}}" dg-type="emphasized" ng-click="action === 'create' ? create() : update()" state="{{ forms.details.$valid ? '' : 'disabled' }}"></fd-button>
-				</fd-bar-element>
-				<fd-bar-element>
-					<fd-button dg-label="Cancel" ng-click="cancel()"></fd-button>
-				</fd-bar-element>
-			</fd-bar-right>
-		</fd-bar>
-		<fd-bar bar-design="footer" ng-show="action === 'select' && entityActions.length && entity.${primaryKeysString}">
-			<fd-bar-right>
-				<fd-bar-element ng-repeat="action in entityActions">
-					<fd-button dg-label="{{action.label}}" compact="true" ng-click="triggerEntityAction(action)"></fd-button>
-				</fd-bar-element>
-			</fd-bar-right>
-		</fd-bar>
+		<bk-bar bar-design="footer" compact="true" ng-show="action !== 'select'">
+			<bk-bar-right>
+				<bk-bar-element>
+					<bk-button label="{{action === 'create' ? 'Create' : 'Update'}}" state="emphasized" ng-click="action === 'create' ? create() : update()" ng-disabled="!forms.details.$valid"></bk-button>
+				</bk-bar-element>
+				<bk-bar-element>
+					<bk-button label="Cancel" ng-click="cancel()"></bk-button>
+				</bk-bar-element>
+			</bk-bar-right>
+		</bk-bar>
+		<bk-bar bar-design="footer" compact="true" ng-show="action === 'select' && entityActions.length && entity.${primaryKeysString}">
+			<bk-bar-right>
+				<bk-bar-element ng-repeat="action in entityActions track by $index">
+					<bk-button label="{{action.label}}" ng-click="triggerEntityAction(action)"></bk-button>
+				</bk-bar-element>
+			</bk-bar-right>
+		</bk-bar>
+		<theme></theme>
     </body>
 
 </html>

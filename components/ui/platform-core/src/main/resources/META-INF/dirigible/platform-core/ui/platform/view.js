@@ -9,7 +9,9 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-angular.module('platformView', ['platformExtensions', 'platformTheming'])
+if (typeof viewData === 'undefined' && typeof perspectiveData === 'undefined' && typeof editorData === 'undefined' && typeof shellData === 'undefined') {
+    console.error('You must provide one of the following: "viewData", "perspectiveData", "editorData", "shellData"');
+} else angular.module('platformView', ['platformExtensions', 'platformTheming'])
     .constant('clientOS', { isMac: () => navigator.userAgent.includes('Mac') })
     .factory('baseHttpInterceptor', () => {
         let csrfToken = null;
@@ -128,7 +130,7 @@ angular.module('platformView', ['platformExtensions', 'platformTheming'])
                 if (scope.type === types[1]) Views.getSubviews(scope.viewId).then(setView);
                 else Views.getViews(scope.viewId).then(setView);
             },
-            template: `<iframe title={{::view.label}} loading="{{::view.lazyLoad ? 'lazy' : 'eager'}}" ng-src="{{::view.path}}" data-parameters="{{::view.params}}"></iframe>`
+            template: `<iframe title="{{::view.label}}" loading="{{::view.lazyLoad ? 'lazy' : 'eager'}}" ng-src="{{::view.path}}" data-parameters="{{::view.params}}"></iframe>`
         }
     }).directive('configIcons', () => ({
         restrict: 'A',

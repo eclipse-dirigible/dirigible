@@ -13,7 +13,7 @@ import { extensions } from 'sdk/extensions';
 
 let contentTypeExtension = null;
 
-const contentTypeExtensions = await extensions.loadExtensionModules('ide-documents-content-type');
+const contentTypeExtensions = await extensions.loadExtensionModules('ui-documents-content-type');
 if (contentTypeExtensions !== null && contentTypeExtensions.length > 0) {
 	contentTypeExtension = contentTypeExtensions[0];
 }

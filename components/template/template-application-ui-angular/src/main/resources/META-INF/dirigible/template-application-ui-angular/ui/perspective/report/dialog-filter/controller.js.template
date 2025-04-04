@@ -1,10 +1,7 @@
 #set($dollar = '$')
-angular.module('page', ["ideUI", "ideView"])
-	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = '${projectName}.Reports.${name}';
-	}])
-	.controller('PageController', ['$scope', 'messageHub', 'ViewParameters', function ($scope, messageHub, ViewParameters) {
-
+angular.module('page', ['blimpKit', 'platformView'])
+	.controller('PageController', function ($scope, ViewParameters) {
+		const Dialogs = new DialogHub();
 		$scope.entity = {};
 		$scope.forms = {
 			details: {},
@@ -32,7 +29,7 @@ angular.module('page', ["ideUI", "ideView"])
 #end
 		}
 
-		$scope.filter = function () {
+		$scope.filter = () => {
 			let entity = $scope.entity;
 			const filter = {
 				$filter: {
@@ -70,24 +67,23 @@ angular.module('page', ["ideUI", "ideView"])
 			}
 #end
 #end
-			messageHub.postMessage("entitySearch", {
+			Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entitySearch', data: {
 				entity: entity,
 				filter: filter
-			});
+			} });
 			$scope.cancel();
 		};
 
-		$scope.resetFilter = function () {
+		$scope.resetFilter = () => {
 			$scope.entity = {};
 			$scope.filter();
 		};
 
-		$scope.cancel = function () {
-			messageHub.closeDialogWindow("${name}-Report-filter");
+		$scope.cancel = () => {
+			Dialogs.closeWindow({ id: '${name}-Report-filter' });
 		};
 
-		$scope.clearErrorMessage = function () {
+		$scope.clearErrorMessage = () => {
 			$scope.errorMessage = null;
 		};
-
-	}]);
+	});

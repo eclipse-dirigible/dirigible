@@ -4,16 +4,14 @@
  * Do not modify the content as it may be re-generated again.
  */
 const viewData = {
-    id: "${name}Report",
-    label: "${name} Report",
-    factory: "frame",
-    region: "center",
-    link: "/services/web/${projectName}/gen/${genFolderName}/ui/Reports/${name}/index.html",
-    perspectiveName: "Reports"
+    id: '${name}Report',
+    label: '${name} Report',
+    region: 'center',
+    lazyLoad: true,
+	autoFocusTab: false,
+    path: '/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${name}/index.html',
+    perspectiveName: '${perspectiveName}'
 };
-
 if (typeof exports !== 'undefined') {
-    exports.getView = function () {
-        return viewData;
-    }
+	exports.getView = () => viewData;
 }
