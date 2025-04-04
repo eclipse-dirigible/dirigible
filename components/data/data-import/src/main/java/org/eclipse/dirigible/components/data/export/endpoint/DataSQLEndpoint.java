@@ -10,10 +10,8 @@
 package org.eclipse.dirigible.components.data.export.endpoint;
 
 import static java.text.MessageFormat.format;
-
 import java.io.IOException;
 import java.io.InputStream;
-
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.data.export.service.DataImportService;
 import org.eclipse.dirigible.components.data.management.service.DatabaseMetadataService;
@@ -102,7 +100,8 @@ public class DataSQLEndpoint {
         }
 
         InputStream is = file.getInputStream();
-        dataImportService.processSQL(datasource, schema, is);
+        long fileSize = file.getSize();
+        dataImportService.processSQL(datasource, schema, is, fileSize);
         return ResponseEntity.ok()
                              .build();
     }
