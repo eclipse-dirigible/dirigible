@@ -9,6 +9,9 @@
  */
 package org.eclipse.dirigible.components.data.export.service;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.sql.Connection;
 import org.eclipse.dirigible.components.data.csvim.domain.CsvFile;
 import org.eclipse.dirigible.components.data.csvim.processor.CsvimProcessor;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
@@ -17,10 +20,6 @@ import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.sql.Connection;
 
 /**
  * The Class DataImportService.
@@ -92,11 +91,11 @@ public class DataImportService {
      * @param schema the schema
      * @param is the is
      */
-    public void processSQL(String datasource, String schema, InputStream is) throws Exception {
+    public void processSQL(String datasource, String schema, InputStream is, long fileSize) throws Exception {
         DirigibleDataSource dataSource = datasourceManager.getDataSource(datasource);
         try (Connection connection = dataSource.getConnection()) {
             ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
-            dialect.processSQL(connection, schema, is);
+            dialect.processSQL(dataSource, schema, is, fileSize);
         }
     }
 

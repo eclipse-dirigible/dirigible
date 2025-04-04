@@ -24,6 +24,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import javax.sql.DataSource;
 import org.eclipse.dirigible.database.sql.DataType;
 import org.eclipse.dirigible.database.sql.DatabaseArtifactTypes;
 import org.eclipse.dirigible.database.sql.DatabaseType;
@@ -610,14 +611,16 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
     /**
      * Process SQL.
      *
-     * @param connection the connection
+     * @param dataSource the data source
      * @param schema the schema
      * @param is the is
      * @throws Exception the exception
      */
     @Override
-    public void processSQL(Connection connection, String schema, InputStream is) throws Exception {
+    public void processSQL(DataSource dataSource, String schema, InputStream is, long fileSize) throws Exception {
+        long processedSize = 0;
         long startTime = System.currentTimeMillis();
+        logger.info("Import of SQL dump started");
 
         BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
         StringBuilder builder = new StringBuilder();
@@ -627,30 +630,58 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
         boolean escapeNextChar = false;
         int ch;
 
-        while ((ch = reader.read()) != -1) {
-            if (escapeNextChar) {
-                escapeNextChar = false;
-            } else if (ch == '\\') {
-                escapeNextChar = true;
-            } else if (ch == '\'' && !inDoubleQuote) {
-                inSingleQuote = !inSingleQuote;
-            } else if (ch == '"' && !inSingleQuote) {
-                inDoubleQuote = !inDoubleQuote;
-            }
+        Connection connection = null;
 
-            if (ch == ';' && !inSingleQuote && !inDoubleQuote && !escapeNextChar) {
-                executeUpdate(connection, builder.toString());
-                builder.setLength(0);
-            } else {
-                builder.append((char) ch);
+        int updatesCounter = 0;
+        int maxUpdatesPerConnection = 1000;
+
+        try {
+            connection = dataSource.getConnection();
+
+            while ((ch = reader.read()) != -1) {
+                processedSize++;
+                if (escapeNextChar) {
+                    escapeNextChar = false;
+                } else if (ch == '\\') {
+                    escapeNextChar = true;
+                } else if (ch == '\'' && !inDoubleQuote) {
+                    inSingleQuote = !inSingleQuote;
+                } else if (ch == '"' && !inSingleQuote) {
+                    inDoubleQuote = !inDoubleQuote;
+                }
+
+                if (ch == ';' && !inSingleQuote && !inDoubleQuote && !escapeNextChar) {
+                    executeUpdate(connection, builder.toString());
+                    updatesCounter++;
+                    if (updatesCounter >= maxUpdatesPerConnection) {
+                        connection.close();
+                        connection = dataSource.getConnection();
+                        updatesCounter = 0;
+                        logger.info(
+                                "SQL dump processed " + String.format("%.2f", ((double) processedSize / (double) fileSize) * 100) + "%");
+                    }
+                    builder.setLength(0);
+                } else {
+                    builder.append((char) ch);
+                }
             }
-        }
-        if (builder.length() > 0) {
-            executeUpdate(connection, builder.toString());
+            if (builder.length() > 0) {
+                executeUpdate(connection, builder.toString());
+            }
+        } catch (Exception e) {
+            logger.warn("SQL dump partially processed " + "[" + processedSize + " / " + fileSize + "] "
+                    + String.format("%.1f", ((double) processedSize / (double) fileSize) * 100) + " due to an exception for "
+                    + (System.currentTimeMillis() - startTime) / 1000 + " seconds");
+            logger.warn("Failed to process the following statement:\n" + builder.toString());
+            throw e;
+        } finally {
+            if (connection != null) {
+                connection.close();
+            }
         }
         reader.close();
 
-        logger.info("SQL dump processed for " + (System.currentTimeMillis() - startTime) / 1000 + " seconds");
+        logger.info("SQL dump successfully processed for " + (System.currentTimeMillis() - startTime) / 1000 + " seconds");
     }
 
     /**
