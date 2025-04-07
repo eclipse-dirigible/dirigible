@@ -73,6 +73,7 @@ class BrowserImpl implements Browser {
         Configuration.headless = IntegrationTest.isHeadlessExecution();
         Configuration.browser = "chrome";
         Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
+        Configuration.headless = false;
     }
 
     @Override
@@ -560,6 +561,28 @@ class BrowserImpl implements Browser {
     }
 
     @Override
+    public void assertElementValueByAttributes(HtmlElementType elementType, Map<HtmlAttribute, String> attributes, String expectedValue) {
+        if (attributes.isEmpty()) {
+            throw new IllegalArgumentException("Attributes map cannot be empty");
+        }
+
+        StringBuilder cssSelector = new StringBuilder(elementType.getType());
+        attributes.forEach((attribute, value) -> {
+            cssSelector.append("[")
+                       .append(attribute.getAttribute())
+                       .append("='")
+                       .append(value)
+                       .append("']");
+        });
+
+        By by = Selectors.byCssSelector(cssSelector.toString());
+        SelenideElement element = findElementInAllFrames(by, Condition.visible);
+        String actualValue = element.getValue();
+        assertThat(actualValue).isEqualTo(expectedValue);
+    }
+
+
+    @Override
     public void assertElementExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text) {
         assertElementExistsByTypeAndContainsText(htmlElementType.getType(), text);
     }
@@ -585,6 +608,7 @@ class BrowserImpl implements Browser {
             failWithScreenshot("Element with selector [" + by + "] was not found");
         }
     }
+
 
     @Override
     public void clickOnElementById(String id) {

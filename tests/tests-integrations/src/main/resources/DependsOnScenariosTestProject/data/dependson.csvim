@@ -65,6 +65,17 @@
       "delimEnclosing": "'",
       "distinguishEmptyFromNull": true,
       "version": ""
+    },
+    {
+      "table": "SALESORDER",
+      "schema": "PUBLIC",
+      "file": "/DependsOnScenariosTestProject/data/salesorder.csv",
+      "header": true,
+      "useHeaderNames": true,
+      "delimField": ",",
+      "delimEnclosing": "'",
+      "distinguishEmptyFromNull": true,
+      "version": ""
     }
   ]
 }
