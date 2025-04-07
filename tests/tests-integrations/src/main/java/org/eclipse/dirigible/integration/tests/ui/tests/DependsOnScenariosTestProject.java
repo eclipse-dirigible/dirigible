@@ -27,7 +27,8 @@ class DependsOnScenariosTestProject extends BaseTestProject {
 
     private static final String PROJECT_RESOURCES_PATH = "DependsOnScenariosTestProject";
     private static final String VERIFICATION_URI_CY = "/services/web/" + PROJECT_RESOURCES_PATH + "/gen/sales-order/ui/Customer/index.html";
-    private static final String VERIFICATION_URI_PM = "/services/web/" + PROJECT_RESOURCES_PATH + "gen/sales-order/ui/SalesOrder/index.html";
+    private static final String VERIFICATION_URI_PM =
+            "/services/web/" + PROJECT_RESOURCES_PATH + "gen/sales-order/ui/SalesOrder/index.html";
     private final Browser browser;
 
     DependsOnScenariosTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, Browser browser) {
