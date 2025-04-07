@@ -45,7 +45,7 @@
                         </bk-panel-header>
                         <bk-panel-content aria-label="General Content" class="bk-scroll-hidden">
                             <bk-form-item horizontal="false">
-                                <bk-form-label for="Name" required="true" colon="true">Name</bk-form-label>
+                                <bk-form-label for="Name" ng-required="true" colon="true">Name</bk-form-label>
                                 <bk-form-input-message state="{{ forms.editor['name'].$valid ? '' : 'error' }}" message="::nameErrorMessage">
                                     <bk-input id="idName" name="name" state="{{ forms.editor['name'].$valid ? '' : 'error' }}" ng-required="true" ng-model="report.name" ng-maxlength="255" input-rules="nameRegex" type="text"
                                         placeholder="Enter name">
@@ -66,7 +66,7 @@
                                 <bk-button compact="true" label="Set from Tables" ng-click="setBaseTable()"></bk-button>
                             </div>
                             <bk-form-item horizontal="false">
-                                <bk-form-label for="Alias" required="true" colon="true">Alias</bk-form-label>
+                                <bk-form-label for="Alias" ng-required="true" colon="true">Alias</bk-form-label>
                                 <bk-form-input-message state="{{ forms.editor['alias'].$valid ? '' : 'error' }}" message="::nameErrorMessage">
                                     <bk-input id="idAlias" name="alias" state="{{ forms.editor['alias'].$valid ? '' : 'error' }}" ng-required="true" ng-model="report.alias" ng-maxlength="255" input-rules="nameRegex" type="text"
                                         placeholder="Enter alias name">
@@ -74,7 +74,7 @@
                                 </bk-form-input-message>
                             </bk-form-item>
                             <bk-form-item horizontal="false">
-                                <bk-form-label for="Table" required="true" colon="true">Table</bk-form-label>
+                                <bk-form-label for="Table" ng-required="true" colon="true">Table</bk-form-label>
                                 <bk-form-input-message state="{{ forms.editor['table'].$valid ? '' : 'error' }}" message="::nameErrorMessage">
                                     <bk-input id="idTable" name="table" state="{{ forms.editor['table'].$valid ? '' : 'error' }}" ng-required="true" ng-model="report.table" ng-maxlength="255" input-rules="nameRegex" type="text"
                                         placeholder="Enter table name">
@@ -324,10 +324,8 @@
                         </bk-panel-header>
                         <bk-panel-content aria-label="Query Content">
                             <bk-form-item horizontal="false">
-                                <bk-form-label for="idQuery" colon="true">Generated Query
-                                </bk-form-label>
-                                <bk-textarea id="idQuery" name="query" ng-model="query" rows="10" ng-readonly="true">
-                                </bk-textarea>
+                                <bk-form-label for="idQuery" colon="true">Generated Query</bk-form-label>
+                                <bk-textarea id="idQuery" name="query" ng-model="query" rows="10" ng-readonly="true"></bk-textarea>
                             </bk-form-item>
                         </bk-panel-content>
                     </bk-panel>
@@ -352,7 +350,7 @@
                                 <bk-form-item class="fd-row fd-margin-top--tiny">
                                     <div class="fd-col fd-col-md--2">
                                     </div>
-                                    <bk-checkbox id="generalGenerateDefaultRoles" compact="false" ng-required="false" ng-model="report.security.generateDefaultRoles" data-ng-true-value="'true'" data-ng-false-value="'false'"
+                                    <bk-checkbox id="generalGenerateDefaultRoles" ng-model="report.security.generateDefaultRoles" data-ng-true-value="'true'" data-ng-false-value="'false'"
                                         ng-change="toggleDefaultRoles()"></bk-checkbox>
                                     <bk-checkbox-label for="generalGenerateDefaultRoles">Generate Default Roles
                                     </bk-checkbox-label>

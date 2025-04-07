@@ -35,7 +35,7 @@
         </bk-toolbar>
         <bk-scrollbar ng-show="!state.error && !state.isBusy">
             <table bk-table outer-borders="bottom">
-                <thead bk-table-header sticky="true">
+                <thead bk-table-header interactive="false" sticky="true">
                     <tr bk-table-row>
                         <th bk-table-header-cell>Path</th>
                         <th bk-table-header-cell>Method</th>
@@ -54,8 +54,8 @@
                         <td bk-table-cell>{{ item.scope }}</td>
                         <td bk-table-cell>{{ item.roles.join(', ') }}</td>
                         <td bk-table-cell fit-content="true">
-                            <bk-button compact="true" glyph="sap-icon--edit" state="transparent" aria-label="Edit" ng-click="editConstraint($index)"></bk-button>
-                            <bk-button compact="true" glyph="sap-icon--delete" state="transparent" aria-label="Delete" ng-click="deleteConstraint($index)"></bk-button>
+                            <bk-button glyph="sap-icon--edit" state="transparent" aria-label="Edit" ng-click="editConstraint($index)"></bk-button>
+                            <bk-button glyph="sap-icon--delete" state="transparent" aria-label="Delete" ng-click="deleteConstraint($index)"></bk-button>
                         </td>
                     </tr>
                 </tbody>
