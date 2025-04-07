@@ -142,7 +142,10 @@ angular.module('platformDialogs', ['blimpKit', 'platformView']).directive('dialo
                         });
                     }
                 });
-            } else scope.$apply(() => scope.dialogWindows.push(data));
+            } else scope.$apply(() => {
+                data.id = UUIDGenerate();
+                scope.dialogWindows.push(data);
+            });
         });
         scope.closeDialogWindow = (id, path) => {
             if (scope.dialogWindows.length) {
@@ -150,7 +153,7 @@ angular.module('platformDialogs', ['blimpKit', 'platformView']).directive('dialo
                     for (let w = 0; w < scope.dialogWindows.length; w++) {
                         if (scope.dialogWindows[w].id === id) {
                             dialogHub.triggerEvent(scope.dialogWindows[w].closeTopic);
-                            scope.$apply(() => { scope.dialogWindows.splice(w, 1) });
+                            scope.$evalAsync(() => { scope.dialogWindows.splice(w, 1) });
                             return;
                         }
                     }
@@ -158,13 +161,15 @@ angular.module('platformDialogs', ['blimpKit', 'platformView']).directive('dialo
                     for (let w = 0; w < scope.dialogWindows.length; w++) {
                         if (scope.dialogWindows[w].path === path) {
                             dialogHub.triggerEvent(scope.dialogWindows[w].closeTopic);
-                            scope.$apply(() => { scope.dialogWindows.splice(w, 1) });
+                            scope.$evalAsync(() => { scope.dialogWindows.splice(w, 1) });
                             return;
                         }
                     }
                 } else {
-                    dialogHub.triggerEvent(scope.dialogWindows[0].closeTopic);
-                    scope.$apply(() => { scope.dialogWindows.shift() });
+                    scope.$evalAsync(() => { 
+                        const window = scope.dialogWindows.pop();
+                        dialogHub.triggerEvent(window.closeTopic);
+                    });
                 }
             }
         };

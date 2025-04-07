@@ -19,6 +19,12 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link rel="icon" href="data:;base64,iVBORw0KGgo=" brand-icon />
         <title config-title></title>
+        <script>
+            const viewData = {
+                label: 'Logged out',
+                autoFocusTab: false
+            };
+        </script>
         <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
         <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
     </head>
@@ -34,10 +40,6 @@
         </form>
 
         <script>
-            const viewData = {
-                label: 'Logged out',
-                autoFocusTab: false
-            };
             angular.module('loginPage', ['blimpKit', 'platformView']).controller('LoginPageController', () => {});
         </script>
         <theme></theme>
