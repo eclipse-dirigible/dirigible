@@ -27,25 +27,24 @@
             <bk-message-page-title>Encounterd an error while loading</bk-message-page-title>
         </bk-message-page>
         <script type="text/javascript">
-            angular.module('app', ['platformView', 'platformLayout', 'blimpKit'])
-                .controller('ApplicationController', ($scope, Extensions) => {
-                    $scope.state = {
-                        isBusy: true,
-                        error: false,
-                        busyText: 'Loading...',
-                    };
-                    Extensions.getViews().then((response) => {
-                        $scope.$evalAsync(() => {
-                            $scope.layoutConfig = {
-                                views: response.data.filter(e => !e.isLaunchpad && e.perspectiveName === perspectiveData.id).map(e => e.id),
-                            };
-                            $scope.state.isBusy = false;
-                        });
-                    }, (error) => {
-                        console.error(error);
-                        $scope.state.error = true;
+            angular.module('app', ['platformView', 'platformLayout', 'blimpKit']).controller('ApplicationController', ($scope, Extensions) => {
+                $scope.state = {
+                    isBusy: true,
+                    error: false,
+                    busyText: 'Loading...',
+                };
+                Extensions.getViews().then((response) => {
+                    $scope.$evalAsync(() => {
+                        $scope.layoutConfig = {
+                            views: response.data.filter(e => !e.isLaunchpad && e.perspectiveName === perspectiveData.id).map(e => e.id),
+                        };
+                        $scope.state.isBusy = false;
                     });
+                }, (error) => {
+                    console.error(error);
+                    $scope.state.error = true;
                 });
+            });
         </script>
         <theme></theme>
     </body>

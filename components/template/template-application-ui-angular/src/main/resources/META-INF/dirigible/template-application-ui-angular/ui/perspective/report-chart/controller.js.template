@@ -11,10 +11,10 @@
 #end
 #end
 angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
-	.config(["EntityServiceProvider", function (EntityServiceProvider) {
-		EntityServiceProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
+	.config(['EntityServiceProvider', (EntityServiceProvider) => {
+		EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts';
 	}])
-	.controller('PageController', function (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end EntityService) {
+	.controller('PageController', (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end EntityService) => {
 		const Dialogs = new DialogHub();
 		$scope.filter = {};
 
@@ -87,7 +87,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				}, (error) => {
 					const message = error.data ? error.data.message : '';
 					Dialogs.showAlert({
-						title: "${name}",
+						title: '${name}',
 						message: `Unable to list ${name}: '${message}'`,
 						type: AlertTypes.Error
 					});
@@ -96,7 +96,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
 				Dialogs.showAlert({
-					title: "${name}",
+					title: '${name}',
 					message: `Unable to count ${name}: '${message}'`,
 					type: AlertTypes.Error
 				});
@@ -109,7 +109,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			Dialogs.showWindow({
 				id: '${name}-details-filter',
 				params: {
-					action: "filter",
+					action: 'filter',
 					filter: $scope.filter,
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
@@ -140,12 +140,18 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
 
-		${dollar}http.get("${property.widgetDropdownUrl}").then(function (response) {
-			${dollar}scope.options${property.name} = response.data.map(e => {
-				return {
-					value: e.${property.widgetDropDownKey},
-					text: e.${property.widgetDropDownValue}
-				}
+		${dollar}http.get('${property.widgetDropdownUrl}').then((response) => {
+			${dollar}scope.options${property.name} = response.data.map(e => ({
+				value: e.${property.widgetDropDownKey},
+				text: e.${property.widgetDropDownValue}
+			}));
+		}, (error) => {
+			console.error(error);
+			const message = error.data ? error.data.message : '';
+			Dialogs.showAlert({
+				title: '${property.name}',
+				message: `Unable to load data: '${message}'`,
+				type: AlertTypes.Error
 			});
 		});
 #end
@@ -153,19 +159,25 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 #foreach ($property in $filter.properties)
 #if($property.widgetType == "DROPDOWN")
 
-		${dollar}http.get("${property.widgetDropdownUrl}").then(function (response) {
-			${dollar}scope.options${property.name} = response.data.map(e => {
-				return {
-					value: e.${property.widgetDropDownKey},
-					text: e.${property.widgetDropDownValue}
-				}
+		${dollar}http.get('${property.widgetDropdownUrl}').then((response) => {
+			${dollar}scope.options${property.name} = response.data.map(e => ({
+				value: e.${property.widgetDropDownKey},
+				text: e.${property.widgetDropDownValue}
+			}));
+		}, (error) => {
+			console.error(error);
+			const message = error.data ? error.data.message : '';
+			Dialogs.showAlert({
+				title: '${property.name}',
+				message: `Unable to load data: '${message}'`,
+				type: AlertTypes.Error
 			});
 		});
 #end
 #end
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-		${dollar}scope.options${property.name}Value = function (optionKey) {
+		${dollar}scope.options${property.name}Value = (optionKey) => {
 			for (let i = 0; i < ${dollar}scope.options${property.name}.length; i++) {
 				if (${dollar}scope.options${property.name}[i].value === optionKey) {
 					return ${dollar}scope.options${property.name}[i].text;
@@ -177,7 +189,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 #end
 #foreach ($property in $filter.properties)
 #if($property.widgetType == "DROPDOWN")
-		${dollar}scope.options${property.name}Value = function (optionKey) {
+		${dollar}scope.options${property.name}Value = (optionKey) => {
 			for (let i = 0; i < ${dollar}scope.options${property.name}.length; i++) {
 				if (${dollar}scope.options${property.name}[i].value === optionKey) {
 					return ${dollar}scope.options${property.name}[i].text;
@@ -189,5 +201,4 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 #end
 		//----------------Dropdowns-----------------//
 #end
-
 	});

@@ -226,6 +226,8 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
             }
         };
         $scope.cancel = () => {
+            $scope.state.busyText = 'Closing...';
+            $scope.state.isBusy = true;
             Dialogs.closeWindow();
         };
         $scope.toggleDefaultRoles = () => {

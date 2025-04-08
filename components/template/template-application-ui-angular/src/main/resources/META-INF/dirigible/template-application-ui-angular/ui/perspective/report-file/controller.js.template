@@ -1,9 +1,9 @@
 #set($dollar = '$')
 angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
-	.config(["EntityServiceProvider", function (EntityServiceProvider) {
-		EntityServiceProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
+	.config(['EntityServiceProvider', (EntityServiceProvider) => {
+		EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts';
 	}])
-	.controller('PageController', function (${dollar}scope, EntityService, Extensions) {
+	.controller('PageController', (${dollar}scope, EntityService, Extensions) => {
 		const Dialogs = new DialogHub();
 		$scope.dataPage = 1;
 		$scope.dataCount = 0;
@@ -11,8 +11,8 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 
 		//-----------------Custom Actions-------------------//
 		Extensions.getWindows(['${projectName}-custom-action']).then((response) => {
-			$scope.pageActions = response.data.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && (e.type === "page" || e.type === undefined));
-			$scope.entityActions = response.data.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && e.type === "entity");
+			$scope.pageActions = response.data.filter(e => e.perspective === '${perspectiveName}' && e.view === '${name}' && (e.type === 'page' || e.type === undefined));
+			$scope.entityActions = response.data.filter(e => e.perspective === '${perspectiveName}' && e.view === '${name}' && e.type === 'entity');
 		});
 
 		$scope.triggerPageAction = (action) => {
@@ -80,7 +80,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				}, (error) => {
 					const message = error.data ? error.data.message : '';
 					Dialogs.showAlert({
-						title: "${name}",
+						title: '${name}',
 						message: `Unable to list/filter ${name}: '${message}'`,
 						type: AlertTypes.Error
 					});
@@ -89,7 +89,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
 				Dialogs.showAlert({
-					title: "${name}",
+					title: '${name}',
 					message: `Unable to count ${name}: '${message}'`,
 					type: AlertTypes.Error
 				});
@@ -105,9 +105,9 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		$scope.openDetails = (entity) => {
 			$scope.selectedEntity = entity;
 			Dialogs.showWindow({
-				id: "${name}-Report-details",
+				id: '${name}-Report-details',
 				params: {
-					action: "select",
+					action: 'select',
 					entity: entity,
 				},
 			});
@@ -115,7 +115,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 
 		$scope.openFilter = (entity) => {
 			Dialogs.showWindow({
-				id: "${name}-Report-filter",
+				id: '${name}-Report-filter',
 				params: {
 					entity: $scope.filterEntity,
 				},

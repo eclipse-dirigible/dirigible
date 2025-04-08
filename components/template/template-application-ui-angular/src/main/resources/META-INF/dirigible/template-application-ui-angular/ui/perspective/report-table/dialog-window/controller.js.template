@@ -1,25 +1,23 @@
 #set($dollar = '$')
-angular.module('page', ['blimpKit', 'platformView'])
-	.controller('PageController', function ($scope, ViewParameters) {
+angular.module('page', ['blimpKit', 'platformView']).controller('PageController', ($scope, ViewParameters) => {
+	$scope.entity = {};
 
-		$scope.entity = {};
-
-		let params = ViewParameters.get();
-		if (Object.keys(params).length) {
-			$scope.action = "select";
+	let params = ViewParameters.get();
+	if (Object.keys(params).length) {
+		$scope.action = 'select';
 
 #foreach ($property in $properties)
 #if($property.isDateType)
-			if (params.entity.${property.name}) {
-				params.entity.${property.name} = new Date(params.entity.${property.name});
-			}
+		if (params.entity.${property.name}) {
+			params.entity.${property.name} = new Date(params.entity.${property.name});
+		}
 #end
 #end
-			$scope.entity = params.entity;
+		$scope.entity = params.entity;
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-			$scope.options${property.name} = params.options${property.name};
+		$scope.options${property.name} = params.options${property.name};
 #end
 #end
-		}
-	});
+	}
+});

@@ -1,24 +1,24 @@
 #set($dollar = '$')
 angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
-	.config(["EntityServiceProvider", function (EntityServiceProvider) {
-		EntityServiceProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
+	.config(["EntityServiceProvider", (EntityServiceProvider) => {
+		EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts';
 	}])
-	.controller('PageController', function ($scope, ${dollar}http, Extensions, EntityService) {
+	.controller('PageController', ($scope, ${dollar}http, Extensions, EntityService) => {
 		const Dialogs = new DialogHub();
 		$scope.entity = {};
 		$scope.forms = {
 			details: {},
 		};
 		$scope.formHeaders = {
-			select: "${name} Details",
-			create: "Create ${name}",
-			update: "Update ${name}"
+			select: '${name} Details',
+			create: 'Create ${name}',
+			update: 'Update ${name}'
 		};
 		$scope.action = 'select';
 
 		//-----------------Custom Actions-------------------//
 		Extensions.getWindows(['${projectName}-custom-action']).then((response) => {
-			$scope.entityActions = response.data.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && e.type === "entity");
+			$scope.entityActions = response.data.filter(e => e.perspective === '${perspectiveName}' && e.view === '${name}' && e.type === 'entity');
 		});
 
 		$scope.triggerEntityAction = (action) => {
@@ -96,14 +96,14 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 
 #foreach ($property in $properties)
 #if ($property.widgetType == "DROPDOWN")
-		${dollar}scope.service${property.name} = "${property.widgetDropdownUrl}";
+		${dollar}scope.service${property.name} = '${property.widgetDropdownUrl}';
 #end
 #end
 
 #foreach ($property in $properties)
 #if($property.widgetDependsOnProperty)
 
-		${dollar}scope.${dollar}watch('entity.${property.widgetDependsOnProperty}', function (newValue, oldValue) {
+		${dollar}scope.${dollar}watch('entity.${property.widgetDependsOnProperty}', (newValue, oldValue) => {
 			if (newValue !== undefined && newValue !== null) {
 				${dollar}http.get(${dollar}scope.service${property.widgetDependsOnProperty} + '/' + newValue).then((response) => {
 					let valueFrom = response.data.${property.widgetDependsOnValueFrom};
@@ -111,19 +111,17 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 					$scope.entity.${property.name} = valueFrom;
 #end
 #if($property.widgetType == "DROPDOWN")
-					${dollar}http.post("${property.widgetDropdownUrl}/search", {
+					${dollar}http.post('${property.widgetDropdownUrl}/search', {
 						$filter: {
 							equals: {
 								${property.widgetDependsOnFilterBy}: valueFrom
 							}
 						}
 					}).then((response) => {
-						${dollar}scope.options${property.name} = response.data.map(e => {
-							return {
-								value: e.${property.widgetDropDownKey},
-								text: e.${property.widgetDropDownValue}
-							}
-						});
+						${dollar}scope.options${property.name} = response.data.map(e => ({
+							value: e.${property.widgetDropDownKey},
+							text: e.${property.widgetDropDownValue}
+						}));
 						if ($scope.action !== 'select' && newValue !== oldValue) {
 							if (${dollar}scope.options${property.name}.length == 1) {
 								$scope.entity.${property.name} = ${dollar}scope.options${property.name}[0].value;
@@ -149,14 +147,14 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityCreated', data: response.data });
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.clearDetails' , data: response.data });
 				Dialogs.showAlert({
-					title: "${name}",
+					title: '${name}',
 					message: '${name} successfully created',
 					type: AlertTypes.Success
 				});
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
 				Dialogs.showAlert({
-					title: "${name}",
+					title: '${name}',
 					message: `Unable to create ${name}: '${message}'`,
 					type: AlertTypes.Error
 				});
@@ -169,14 +167,14 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityUpdated', data: response.data });
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.clearDetails', data: response.data });
 				Dialogs.showAlert({
-					title: "${name}",
+					title: '${name}',
 					message: '${name} successfully updated',
 					type: AlertTypes.Success
 				});
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
 				Dialogs.showAlert({
-					title: "${name}",
+					title: '${name}',
 					message: `Unable to create ${name}: '${message}'`,
 					type: AlertTypes.Error
 				});
@@ -205,7 +203,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			Dialogs.showWindow({
 				id: '${property.relationshipEntityName}-details',
 				params: {
-					action: "create",
+					action: 'create',
 					entity: {},
 				},
 				closeButton: false
@@ -226,12 +224,18 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 #if($property.widgetType == "DROPDOWN")
 		$scope.refresh${property.name} = () => {
 			$scope.options${property.name} = [];
-			${dollar}http.get("${property.widgetDropdownUrl}").then(function (response) {
-				${dollar}scope.options${property.name} = response.data.map(e => {
-					return {
-						value: e.${property.widgetDropDownKey},
-						text: e.${property.widgetDropDownValue}
-					}
+			${dollar}http.get('${property.widgetDropdownUrl}').then((response) => {
+				${dollar}scope.options${property.name} = response.data.map(e => ({
+					value: e.${property.widgetDropDownKey},
+					text: e.${property.widgetDropDownValue}
+				}));
+			}, (error) => {
+				console.error(error);
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: '${property.name}',
+					message: `Unable to load data: '${message}'`,
+					type: AlertTypes.Error
 				});
 			});
 		};

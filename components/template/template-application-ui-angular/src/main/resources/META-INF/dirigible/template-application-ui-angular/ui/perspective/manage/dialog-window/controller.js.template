@@ -1,18 +1,18 @@
 #set($dollar = '$')
 angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
-	.config(["EntityServiceProvider", function (EntityServiceProvider) {
-		EntityServiceProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
+	.config(['EntityServiceProvider', (EntityServiceProvider) => {
+		EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts';
 	}])
-	.controller('PageController', function ($scope, ${dollar}http, ViewParameters, EntityService) {
+	.controller('PageController', ($scope, ${dollar}http, ViewParameters, EntityService) => {
 		const Dialogs = new DialogHub();
 		$scope.entity = {};
 		$scope.forms = {
 			details: {},
 		};
 		$scope.formHeaders = {
-			select: "${name} Details",
-			create: "Create ${name}",
-			update: "Update ${name}"
+			select: '${name} Details',
+			create: 'Create ${name}',
+			update: 'Update ${name}'
 		};
 		$scope.action = 'select';
 
@@ -42,7 +42,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			EntityService.create(entity).then((response) => {
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityCreated', data: response.data });
 				Dialogs.showAlert({
-					title: "${name}",
+					title: '${name}',
 					message: '${name} successfully created',
 					type: AlertTypes.Success
 				});
@@ -63,7 +63,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			EntityService.update(id, entity).then((response) => {
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityUpdated', data: response.data });
 				Dialogs.showAlert({
-					title: "${name}",
+					title: '${name}',
 					message: '${name} successfully updated',
 					type: AlertTypes.Success
 				});
@@ -79,16 +79,24 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 
 #foreach ($property in $properties)
 #if ($property.widgetType == "DROPDOWN")
-		${dollar}scope.service${property.name} = "${property.widgetDropdownUrl}";
+		${dollar}scope.service${property.name} = '${property.widgetDropdownUrl}';
 		
 		$scope.options${property.name} = [];
 		
-		${dollar}http.get("${property.widgetDropdownUrl}").then(function (response) {
+		${dollar}http.get('${property.widgetDropdownUrl}').then((response) => {
 			${dollar}scope.options${property.name} = response.data.map(e => {
 				return {
 					value: e.${property.widgetDropDownKey},
 					text: e.${property.widgetDropDownValue}
 				}
+			});
+		}, (error) => {
+			console.error(error);
+			const message = error.data ? error.data.message : '';
+			Dialogs.showAlert({
+				title: '${property.name}',
+				message: `Unable to load data: '${message}'`,
+				type: AlertTypes.Error
 			});
 		});
 #end
@@ -96,7 +104,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 
 #foreach ($property in $properties)
 #if($property.widgetDependsOnProperty)
-		${dollar}scope.${dollar}watch('entity.${property.widgetDependsOnProperty}', function (newValue, oldValue) {
+		${dollar}scope.${dollar}watch('entity.${property.widgetDependsOnProperty}', (newValue, oldValue) => {
 			if (newValue !== undefined && newValue !== null) {
 				${dollar}http.get(${dollar}scope.service${property.widgetDependsOnProperty} + '/' + newValue).then((response) => {
 					let valueFrom = response.data.${property.widgetDependsOnValueFrom};
@@ -104,19 +112,17 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 					$scope.entity.${property.name} = valueFrom;
 #end
 #if($property.widgetType == "DROPDOWN")
-					${dollar}http.post("${property.widgetDropdownUrl}/search", {
+					${dollar}http.post('${property.widgetDropdownUrl}/search', {
 						$filter: {
 							equals: {
 								${property.widgetDependsOnFilterBy}: valueFrom
 							}
 						}
 					}).then((response) => {
-						${dollar}scope.options${property.name} = response.data.map(e => {
-							return {
-								value: e.${property.widgetDropDownKey},
-								text: e.${property.widgetDropDownValue}
-							}
-						});
+						${dollar}scope.options${property.name} = response.data.map(e => ({
+							value: e.${property.widgetDropDownKey},
+							text: e.${property.widgetDropDownValue}
+						}));
 						if ($scope.action !== 'select' && newValue !== oldValue) {
 							if (${dollar}scope.options${property.name}.length == 1) {
 								$scope.entity.${property.name} = ${dollar}scope.options${property.name}[0].value;
@@ -154,5 +160,4 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		$scope.clearErrorMessage = () => {
 			$scope.errorMessage = null;
 		};
-
 	});

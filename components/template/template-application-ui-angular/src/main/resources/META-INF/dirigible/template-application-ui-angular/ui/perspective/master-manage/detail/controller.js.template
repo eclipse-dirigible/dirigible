@@ -1,14 +1,14 @@
 #set($dollar = '$')
 angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
-	.config(["EntityServiceProvider", function (EntityServiceProvider) {
-		EntityServiceProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
+	.config(['EntityServiceProvider', (EntityServiceProvider) => {
+		EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts';
 	}])
-	.controller('PageController', function ($scope,#if($hasDropdowns) ${dollar}http,#end EntityService, Extensions, ButtonStates) {
+	.controller('PageController', ($scope,#if($hasDropdowns) ${dollar}http,#end EntityService, Extensions, ButtonStates) => {
 		const Dialogs = new DialogHub();
 		//-----------------Custom Actions-------------------//
 		Extensions.getWindows(['${projectName}-custom-action']).then((response) => {
-			$scope.pageActions = response.data.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && (e.type === "page" || e.type === undefined));
-			$scope.entityActions = response.data.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && e.type === "entity");
+			$scope.pageActions = response.data.filter(e => e.perspective === '${perspectiveName}' && e.view === '${name}' && (e.type === 'page' || e.type === undefined));
+			$scope.entityActions = response.data.filter(e => e.perspective === '${perspectiveName}' && e.view === '${name}' && e.type === 'entity');
 		});
 
 		$scope.triggerPageAction = (action) => {
@@ -112,7 +112,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				}, (error) => {
 					const message = error.data ? error.data.message : '';
 					Dialogs.showAlert({
-						title: "${name}",
+						title: '${name}',
 						message: `Unable to list/filter ${name}: '${message}'`,
 						type: AlertTypes.Error
 					});
@@ -121,7 +121,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
 				Dialogs.showAlert({
-					title: "${name}",
+					title: '${name}',
 					message: `Unable to count ${name}: '${message}'`,
 					type: AlertTypes.Error
 				});
@@ -138,7 +138,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			Dialogs.showWindow({
 				id: '${name}-details',
 				params: {
-					action: "select",
+					action: 'select',
 					entity: entity,
 #if($hasDropdowns)
 #foreach ($property in $properties)
@@ -172,9 +172,9 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			Dialogs.showWindow({
 				id: '${name}-details',
 				params: {
-					action: "create",
+					action: 'create',
 					entity: {},
-					selectedMainEntityKey: "${masterEntityId}",
+					selectedMainEntityKey: '${masterEntityId}',
 					selectedMainEntityId: $scope.selectedMainEntityId,
 #if($hasDropdowns)
 #foreach ($property in $properties)
@@ -192,9 +192,9 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			Dialogs.showWindow({
 				id: '${name}-details',
 				params: {
-					action: "update",
+					action: 'update',
 					entity: entity,
-					selectedMainEntityKey: "${masterEntityId}",
+					selectedMainEntityKey: '${masterEntityId}',
 					selectedMainEntityId: $scope.selectedMainEntityId,
 #if($hasDropdowns)
 #foreach ($property in $properties)
@@ -213,23 +213,23 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				title: 'Delete ${name}?',
 				message: `Are you sure you want to delete ${name}? This action cannot be undone.`,
 				buttons: [{
-					id: "delete-btn-yes",
+					id: 'delete-btn-yes',
 					state: ButtonStates.Emphasized,
-					label: "Yes",
+					label: 'Yes',
 				}, {
-					id: "delete-btn-no",
-					label: "No",
+					id: 'delete-btn-no',
+					label: 'No',
 				}],
 				closeButton: false
 			}).then((buttonId) => {
-				if (buttonId === "delete-btn-yes") {
-					EntityService.delete(id).then((response) => {
+				if (buttonId === 'delete-btn-yes') {
+					EntityService.delete(id).then(() => {
 						$scope.loadPage($scope.dataPage, $scope.filter);
-						Dialogs.triggerEvent("${projectName}.${perspectiveName}.${name}.clearDetails");
+						Dialogs.triggerEvent('${projectName}.${perspectiveName}.${name}.clearDetails');
 					}, (error) => {
 						const message = error.data ? error.data.message : '';
 						Dialogs.showAlert({
-							title: "${name}",
+							title: '${name}',
 							message: `Unable to delete ${name}: '${message}'`,
 							type: AlertTypes.Error,
 						});
@@ -250,12 +250,18 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 #foreach ($property in $properties)
 #if ($property.widgetType == "DROPDOWN")
 
-		${dollar}http.get("${property.widgetDropdownUrl}").then(function (response) {
-			${dollar}scope.options${property.name} = response.data.map(e => {
-				return {
-					value: e.${property.widgetDropDownKey},
-					text: e.${property.widgetDropDownValue}
-				}
+		${dollar}http.get('${property.widgetDropdownUrl}').then((response) => {
+			${dollar}scope.options${property.name} = response.data.map(e => ({
+				value: e.${property.widgetDropDownKey},
+				text: e.${property.widgetDropDownValue}
+			}));
+		}, (error) => {
+			console.error(error);
+			const message = error.data ? error.data.message : '';
+			Dialogs.showAlert({
+				title: '${property.name}',
+				message: `Unable to load data: '${message}'`,
+				type: AlertTypes.Error
 			});
 		});
 #end
@@ -275,5 +281,4 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 #end
 		//----------------Dropdowns-----------------//
 #end
-
 	});

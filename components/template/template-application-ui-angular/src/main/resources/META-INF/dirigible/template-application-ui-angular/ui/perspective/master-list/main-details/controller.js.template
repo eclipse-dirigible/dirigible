@@ -1,58 +1,57 @@
 #set($dollar = '$')
-angular.module('page', ['blimpKit', 'platformView'])
-	.controller('PageController', function ($scope, Extensions) {
-		const Dialogs = new DialogHub();
-		$scope.entity = {};
+angular.module('page', ['blimpKit', 'platformView']).controller('PageController', ($scope, Extensions) => {
+	const Dialogs = new DialogHub();
+	$scope.entity = {};
 
-		//-----------------Custom Actions-------------------//
-		Extensions.getWindows(['${projectName}-custom-action']).then((response) => {
-			$scope.entityActions = response.data.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && e.type === "entity");
+	//-----------------Custom Actions-------------------//
+	Extensions.getWindows(['${projectName}-custom-action']).then((response) => {
+		$scope.entityActions = response.data.filter(e => e.perspective === '${perspectiveName}' && e.view === '${name}' && e.type === 'entity');
+	});
+
+	$scope.triggerEntityAction = (action) => {
+		Dialogs.showWindow({
+			hasHeader: true,
+			title: action.label,
+			path: action.path,
+			params: {
+				id: $scope.entity.${primaryKeysString}
+			},
+			closeButton: true,
 		});
+	};
+	//-----------------Custom Actions-------------------//
 
-		$scope.triggerEntityAction = (action) => {
-			Dialogs.showWindow({
-				hasHeader: true,
-        		title: action.label,
-				path: action.path,
-				params: {
-					id: $scope.entity.${primaryKeysString}
-				},
-				closeButton: true
-			});
-		};
-		//-----------------Custom Actions-------------------//
-
-		//-----------------Events-------------------//
-		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.clearDetails', handler: () => {
-			$scope.$evalAsync(() => {
-				$scope.entity = {};
+	//-----------------Events-------------------//
+	Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.clearDetails', handler: () => {
+		$scope.$evalAsync(() => {
+			$scope.entity = {};
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-				$scope.options${property.name} = [];
+			$scope.options${property.name} = [];
 #end
 #end
-			});
-		}});
-		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.entitySelected', handler: () => {
-			$scope.$evalAsync(() => {
+		});
+	}});
+	Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.entitySelected', handler: (data) => {
+		$scope.$evalAsync(() => {
 #foreach ($property in $properties)
 #if($property.isDateType)
-				if (msg.data.entity.${property.name}) {
-					msg.data.entity.${property.name} = new Date(msg.data.entity.${property.name});
-				}
+			if (data.entity.${property.name}) {
+				data.entity.${property.name} = new Date(data.entity.${property.name});
+			}
 #end
 #end
-				$scope.entity = msg.data.entity;
+			$scope.entity = data.entity;
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-				$scope.options${property.name} = msg.data.options${property.name};
+			$scope.options${property.name} = data.options${property.name};
 #end
 #end
-			});
-		}});
-		//-----------------Events-------------------//
+		});
+	}});
+	//-----------------Events-------------------//
 
-		$scope.cancel = () => {
-			Dialogs.triggerEvent('${projectName}.${perspectiveName}.${name}.clearDetails');
-		};
-	});
+	$scope.cancel = () => {
+		Dialogs.triggerEvent('${projectName}.${perspectiveName}.${name}.clearDetails');
+	};
+});
