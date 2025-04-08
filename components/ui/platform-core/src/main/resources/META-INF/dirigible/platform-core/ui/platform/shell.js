@@ -334,8 +334,8 @@ if (window !== top) {
             <bk-vertical-nav class="sidebar" condensed="condensed" can-scroll="true">
                 <bk-vertical-nav-main-section aria-label="perspective navigation">
                     <bk-list aria-label="Perspective list" ng-if="!condensed">
-                        <bk-list-navigation-group-header ng-repeat-start="navItem in config.perspectives track by navItem.id" ng-if="navItem.items && navItem.headerLabel">{{::navItem.headerLabel}}</bk-list-navigation-group-header>
-                        <bk-list-navigation-item ng-if="navItem.items" expandable="true" ng-click="navItem.expanded = !navItem.expanded" is-expanded="navItem.expanded">
+                        <bk-list-navigation-group-header ng-repeat-start="navItem in config.perspectives track by navItem.id" ng-if="navItem.items && navItem.items.length && navItem.headerLabel">{{::navItem.headerLabel}}</bk-list-navigation-group-header>
+                        <bk-list-navigation-item ng-if="navItem.items && navItem.items.length" expandable="true" ng-click="navItem.expanded = !navItem.expanded" is-expanded="navItem.expanded">
                             <bk-list-navigation-item-icon icon-size="lg" svg-path="{{getIcon(navItem.icon)}}"></bk-list-navigation-item-icon>
                             <span bk-list-navigation-item-text>{{::navItem.label}}</span>
                             <bk-list-navigation-item-arrow aria-label="expand perspective group" is-expanded="navItem.expanded"></bk-list-navigation-item-arrow>
