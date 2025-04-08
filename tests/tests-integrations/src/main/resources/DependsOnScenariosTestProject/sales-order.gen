@@ -3,14 +3,15 @@
   "brandUrl": "dirigible.io",
   "title": "Eclipse - Dirigible",
   "description": "Dirigible",
-  "projectName": "DependsOnScenariosTestProject",
-  "workspaceName": "workspace",
-  "filePath": "sales-order.model",
-  "templateId": "template-application-angular/template/template.js",
   "fileName": "sales-order",
   "genFolderName": "sales-order",
   "dataSource": "DefaultDB",
   "tablePrefix": "",
+  "roles": [],
+  "projectName": "DependsOnScenariosTestProject",
+  "workspaceName": "workspace",
+  "filePath": "sales-order.model",
+  "templateId": "template-application-angular/template/template.js",
   "perspectives": {
     "Country": {
       "views": [
@@ -182,7 +183,6 @@
       "role": ""
     }
   },
-  "roles": [],
   "models": [
     {
       "properties": [
@@ -916,8 +916,11 @@
           "inputRule": ""
         },
         {
+          "dataLength": "18",
           "dataName": "PRODUCT_PRICE",
           "dataNullable": true,
+          "dataPrecision": "2",
+          "dataScale": "16",
           "dataType": "DECIMAL",
           "description": "",
           "name": "Price",
@@ -1025,8 +1028,11 @@
             "inputRule": ""
           },
           {
+            "dataLength": "18",
             "dataName": "PRODUCT_PRICE",
             "dataNullable": true,
+            "dataPrecision": "2",
+            "dataScale": "16",
             "dataType": "DECIMAL",
             "description": "",
             "name": "Price",
@@ -1626,8 +1632,6 @@
         {
           "dataName": "SALESORDERPAYMENT_AMOUNT",
           "dataNullable": true,
-          "dataPrecision": "",
-          "dataScale": "",
           "dataType": "DECIMAL",
           "description": "",
           "name": "Amount",

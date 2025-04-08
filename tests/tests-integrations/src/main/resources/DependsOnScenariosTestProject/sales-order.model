@@ -366,8 +366,11 @@
                         "relationshipEntityPerspectiveLabel": "Entities"
                     },
                     {
+                        "dataLength": "18",
                         "dataName": "PRODUCT_PRICE",
                         "dataNullable": "true",
+                        "dataPrecision": "2",
+                        "dataScale": "16",
                         "dataType": "DECIMAL",
                         "description": "",
                         "name": "Price",
@@ -716,11 +719,8 @@
                         "relationshipEntityPerspectiveLabel": "Entities"
                     },
                     {
-                        "dataLength": "NaN",
                         "dataName": "SALESORDERPAYMENT_AMOUNT",
                         "dataNullable": "true",
-                        "dataPrecision": "",
-                        "dataScale": "",
                         "dataType": "DECIMAL",
                         "description": "",
                         "name": "Amount",
