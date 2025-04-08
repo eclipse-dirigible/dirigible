@@ -125,5 +125,4 @@ public interface Browser {
 
     By constructCssSelectorByTypeAndAttribute(String elementType, String attribute, String attributePattern);
 
-    By constructCssSelectorByTypeAndAttribute(HtmlElementType elementType, HtmlAttribute attribute, String attributePattern);
 }

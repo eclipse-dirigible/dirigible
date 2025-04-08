@@ -35,6 +35,7 @@ import java.util.*;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
+import static com.codeborne.selenide.Selenide.$;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
@@ -73,6 +74,7 @@ class BrowserImpl implements Browser {
         Configuration.headless = IntegrationTest.isHeadlessExecution();
         Configuration.browser = "chrome";
         Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
+        Configuration.headless = false;
     }
 
     @Override
@@ -250,11 +252,6 @@ class BrowserImpl implements Browser {
             return "Failed to describe elements by [" + by + "] and conditions [" + Arrays.toString(conditions) + "] due to error: "
                     + ex.getMessage();
         }
-    }
-
-    @Override
-    public By constructCssSelectorByTypeAndAttribute(HtmlElementType elementType, HtmlAttribute attribute, String attributePattern) {
-        return constructCssSelectorByTypeAndAttribute(elementType.getType(), attribute.getAttribute(), attributePattern);
     }
 
     @Override
@@ -550,7 +547,7 @@ class BrowserImpl implements Browser {
         attributes.forEach((attribute, value) -> {
             cssSelector.append("[")
                        .append(attribute.getAttribute())
-                       .append("='")
+                       .append("*='")
                        .append(value)
                        .append("']");
         });
