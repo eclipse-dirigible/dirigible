@@ -48,26 +48,26 @@
 				</bk-form-input-message>
 			</bk-form-item>
 	#elseif($element.controlId == "input-textfield")
-				<bk-form-item horizontal="$element.horizontal">
-					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">$element.label</bk-form-label>
-					<bk-form-input-message state="{{ forms.form['$element.id'].$valid ? '' : 'error' }}" message="'$element.errorState'">
-						<bk-input id="$element.id"
-							name="$element.id"
-							ng-model="model.$element.model"
-							ng-required="$element.required"
-							type="$element.type"
-							compact="$element.isCompact"
-							placeholder="$element.placeholder"
-							state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}"
+			<bk-form-item horizontal="$element.horizontal">
+				<bk-form-label colon="true" ng-required="$element.required" for="$element.id">$element.label</bk-form-label>
+				<bk-form-input-message state="{{ forms.form['$element.id'].$valid ? '' : 'error' }}" message="'$element.errorState'">
+					<bk-input id="$element.id"
+						name="$element.id"
+						ng-model="model.$element.model"
+						ng-required="$element.required"
+						type="$element.type"
+						compact="$element.isCompact"
+						placeholder="$element.placeholder"
+						state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}"
 		#if($element.validationRegex)
-							input-rules="{ patterns: ['$element.validationRegex'] }"
+						input-rules="{ patterns: ['$element.validationRegex'] }"
 		#end
-							ng-trim="false"
-							ng-minlength="$element.minLength"
-							ng-maxlength="$element.maxLength">
-						</bk-input>
-					</bk-form-input-message>
-				</bk-form-item>
+						ng-trim="false"
+						ng-minlength="$element.minLength"
+						ng-maxlength="$element.maxLength">
+					</bk-input>
+				</bk-form-input-message>
+			</bk-form-item>
 	#elseif($element.controlId == "input-number")
 			<bk-form-item horizontal="$element.horizontal">
 				<bk-form-label colon="true" ng-required="$element.required" for="$element.id">$element.label</bk-form-label>
@@ -129,7 +129,7 @@
 			</bk-form-group>
 	#elseif($element.controlId == "button")
 			<div>
-				<bk-button#if($element.sizeToText) class="bk-float-right"#else class="bk-full-width"#end #if($element.isSubmit)type="submit"#end label="$element.label" compact="$element.isCompact" state="$element.type"#if($element.callback) ng-click="$element.callback"#end></bk-button>
+				<bk-button#if($element.sizeToText) class="bk-float-right"#else class="bk-full-width"#end #if($element.isSubmit)type="submit" ng-disabled="!forms.form.$valid"#end label="$element.label" compact="$element.isCompact" state="$element.type"#if($element.callback) ng-click="$element.callback"#end></bk-button>
 			</div>
 	#elseif($element.controlId == "paragraph")
 			<p class="fd-text" ng-class="{'bk-pre-wrap' : $element.format}">#if($element.model){{ model.$element.model }}#else$element.text#end</p>
