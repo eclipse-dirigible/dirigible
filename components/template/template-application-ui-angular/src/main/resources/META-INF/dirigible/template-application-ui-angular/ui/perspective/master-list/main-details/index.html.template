@@ -161,8 +161,12 @@
 								ng-required="${property.isRequiredProperty}"
 								ng-model="entity.${property.name}"
 								ng-readonly="true"
-								ng-minlength="${property.minLength} || 0"
-								ng-maxlength="${property.maxLength} || -1"
+	#if($property.minLength)
+								ng-minlength="${property.minLength}"
+	#end
+	#if($property.maxLength)
+								ng-maxlength="${property.maxLength}"
+	#end
 								input-rules="{ patterns: ['${property.inputRule}'] }"
 								placeholder="Enter ${property.widgetLabel}">
 							</bk-textarea>
@@ -206,8 +210,12 @@
 	                            ng-required="${property.isRequiredProperty}"
 	                            ng-model="entity.${property.name}"
 	                            ng-readonly="true"
-	                            ng-minlength="${property.minLength} || 0"
-	                            ng-maxlength="${property.maxLength} || -1"
+	#if($property.minLength)
+								ng-minlength="${property.minLength}"
+	#end
+	#if($property.maxLength)
+								ng-maxlength="${property.maxLength}"
+	#end
 	                            input-rules="{ patterns: ['${property.inputRule}'] }"
 	                            type="text"
 	                            placeholder="Enter ${property.widgetLabel}">

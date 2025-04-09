@@ -30,6 +30,12 @@ blimpkit.directive('bkStepInput', (classNames) => ({
     link: (scope, element, attrs, ngModel) => {
         if (!scope.inputId)
             console.error('bk-step-input error: You must provide an ID using the "input-id" attribute');
+        const states = {
+            'error': 'error',
+            'success': 'success',
+            'warning': 'warning',
+            'information': 'information'
+        };
         const input = element[0].querySelector(`input`);
         scope.model = { value: undefined };
         let valueWatch;
@@ -53,7 +59,7 @@ blimpkit.directive('bkStepInput', (classNames) => ({
             'is-disabled': Object.prototype.hasOwnProperty.call(attrs, 'disabled') && attrs.disabled === true,
             'is-readonly': scope.isReadonly === true,
             'is-focus': scope.isFocus === true,
-            [`is-${scope.state}`]: scope.state,
+            [`is-${states[scope.state]}`]: scope.state && states[scope.state] && !scope.isReadonly,
         });
         scope.stepDown = () => {
             input.stepDown();

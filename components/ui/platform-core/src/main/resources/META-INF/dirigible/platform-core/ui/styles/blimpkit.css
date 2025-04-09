@@ -932,6 +932,13 @@ ng-transclude:empty {
   flex: 1;
 }
 
+div.fd-input-group.is-readonly,
+div.fd-input-group[aria-readonly="true"],
+div.fd-input-group[readonly] {
+  pointer-events: none;
+  --sapField_BorderStyle: dashed;
+}
+
 /* Tile additions */
 .fd-tile.bk-tile--container {
   padding: 0 !important;

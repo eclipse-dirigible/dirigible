@@ -257,8 +257,12 @@
 	#else
 	                            	ng-readonly="action === 'select'"
 	#end
-									ng-minlength="${property.minLength} || 0"
-									ng-maxlength="${property.maxLength} || -1"
+	#if($property.minLength)
+									ng-minlength="${property.minLength}"
+	#end
+	#if($property.maxLength)
+									ng-maxlength="${property.maxLength}"
+	#end
 									input-rules="{ patterns: ['${property.inputRule}'] }"
 									placeholder="Enter ${property.widgetLabel}">
 								</bk-textarea>
@@ -290,8 +294,12 @@
 	#else
 	                                ng-readonly="action === 'select'"
 	#end
-	                                ng-minlength="${property.minLength} || 0"
-	                                ng-maxlength="${property.maxLength} || -1"
+	#if($property.minLength)
+									ng-minlength="${property.minLength}"
+	#end
+	#if($property.maxLength)
+									ng-maxlength="${property.maxLength}"
+	#end
 	                                input-rules="{ patterns:#if($property.inputRule == "")['^[0-9]{0,14}$']#else ['${property.inputRule}']#end }"
 	                                type="tel"
 	                                placeholder="Enter ${property.widgetLabel}">
@@ -322,8 +330,12 @@
 	#else
 	                                ng-readonly="action === 'select'"
 	#end
-	                                ng-minlength="${property.minLength} || 0"
-	                                ng-maxlength="${property.maxLength} || -1"
+	#if($property.minLength)
+									ng-minlength="${property.minLength}"
+	#end
+	#if($property.maxLength)
+									ng-maxlength="${property.maxLength}"
+	#end
 	                                input-rules="{ patterns: ['${property.inputRule}'] }"
 	                                type="url"
 	                                placeholder="Enter ${property.widgetLabel}">
@@ -354,8 +366,12 @@
 	#else
 	                                ng-readonly="action === 'select'"
 	#end
-	                                ng-minlength="${property.minLength} || 0"
-	                                ng-maxlength="${property.maxLength} || -1"
+	#if($property.minLength)
+									ng-minlength="${property.minLength}"
+	#end
+	#if($property.maxLength)
+									ng-maxlength="${property.maxLength}"
+	#end
 	                                input-rules="{ patterns: ['${property.inputRule}'] }"
 	                                type="email"
 	                                placeholder="Enter ${property.widgetLabel}">
@@ -383,8 +399,12 @@
 	#else
 	                                ng-readonly="action === 'select'"
 	#end
-	                                ng-minlength="${property.minLength} || 0"
-	                                ng-maxlength="${property.maxLength} || -1"
+	#if($property.minLength)
+									ng-minlength="${property.minLength}"
+	#end
+	#if($property.maxLength)
+									ng-maxlength="${property.maxLength}"
+	#end
 	                                input-rules="{ patterns: ['${property.inputRule}'] }"
 	                                type="text"
 	                                placeholder="Enter ${property.widgetLabel}">

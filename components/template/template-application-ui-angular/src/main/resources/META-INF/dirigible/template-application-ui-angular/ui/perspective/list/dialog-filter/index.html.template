@@ -198,8 +198,12 @@
 									name="${property.name}"
 									state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 									ng-model="entity.${property.name}"
-									ng-minlength="${property.minLength} || 0"
-									ng-maxlength="${property.maxLength} || -1"
+	#if($property.minLength)
+									ng-minlength="${property.minLength}"
+	#end
+	#if($property.maxLength)
+									ng-maxlength="${property.maxLength}"
+	#end
 									placeholder="Enter ${property.widgetLabel}">
 								</bk-textarea>
 							</bk-form-input-message>
@@ -216,8 +220,12 @@
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 	                                ng-model="entity.${property.name}"
-	                                ng-minlength="${property.minLength} || 0"
-	                                ng-maxlength="${property.maxLength} || -1"
+	#if($property.minLength)
+									ng-minlength="${property.minLength}"
+	#end
+	#if($property.maxLength)
+									ng-maxlength="${property.maxLength}"
+	#end
 	                                type="tel"
 	                                placeholder="Enter ${property.widgetLabel}">
 	                            </bk-input>
@@ -235,8 +243,12 @@
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 	                                ng-model="entity.${property.name}"
-	                                ng-minlength="${property.minLength} || 0"
-	                                ng-maxlength="${property.maxLength} || -1"
+	#if($property.minLength)
+									ng-minlength="${property.minLength}"
+	#end
+	#if($property.maxLength)
+									ng-maxlength="${property.maxLength}"
+	#end
 	                                type="url"
 	                                placeholder="Enter ${property.widgetLabel}">
 	                            </bk-input>
@@ -254,8 +266,12 @@
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 	                                ng-model="entity.${property.name}"
-	                                ng-minlength="${property.minLength} || 0"
-	                                ng-maxlength="${property.maxLength} || -1"
+	#if($property.minLength)
+									ng-minlength="${property.minLength}"
+	#end
+	#if($property.maxLength)
+									ng-maxlength="${property.maxLength}"
+	#end
 	                                type="email"
 	                                placeholder="Enter ${property.widgetLabel}">
 	                            </bk-input>
@@ -273,8 +289,12 @@
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 	                                ng-model="entity.${property.name}"
-	                                ng-minlength="${property.minLength} || 0"
-	                                ng-maxlength="${property.maxLength} || -1"
+	#if($property.minLength)
+									ng-minlength="${property.minLength}"
+	#end
+	#if($property.maxLength)
+									ng-maxlength="${property.maxLength}"
+	#end
 	                                type="text"
 	                                placeholder="Enter ${property.widgetLabel}">
 	                            </bk-input>

@@ -64,10 +64,12 @@ blimpkit.directive('bkSelect', (uuid, $window, $timeout, ScreenEdgeMargin, class
         $scope.textId = `select-text-${uuid.generate()}`;
         $scope.bodyId = `select-body-${uuid.generate()}`;
 
-        const states = ['success', 'error', 'warning', 'information'];
-        if ($scope.state && !states.includes($scope.state)) {
-            console.error(`fd-select error: 'state' must be one of: ${states.join(', ')}`);
-        }
+        const states = {
+            'error': 'error',
+            'success': 'success',
+            'warning': 'warning',
+            'information': 'information'
+        };
 
         $scope.getClasses = () => classNames('fd-select', {
             'fd-select--compact': $scope.compact === true,
@@ -76,7 +78,7 @@ blimpkit.directive('bkSelect', (uuid, $window, $timeout, ScreenEdgeMargin, class
         $scope.getControlClasses = () => classNames('fd-select__control', {
             'is-readonly': $scope.isReadonly === true,
             'is-disabled': $scope.isDisabled === true,
-            [`is-${$scope.state}`]: $scope.state,
+            [`is-${states[$scope.state]}`]: $scope.state && states[$scope.state] && !$scope.isReadonly,
         });
 
         $scope.getPopoverBodyClasses = () => {

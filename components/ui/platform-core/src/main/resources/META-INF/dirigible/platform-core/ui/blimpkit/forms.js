@@ -82,21 +82,22 @@ blimpkit.directive('bkFieldset', () => ({
 })).directive('bkFormInputMessage', (uuid, classNames) => ({
     restrict: 'E',
     transclude: true,
+    replace: true,
     scope: {
         state: '@?',
         message: '<?',
         messageFixed: '<?',
     },
-    replace: true,
-    link: (scope, element) => {
-        scope.expanded = false;
-        scope.popoverId = `fim${uuid.generate()}`;
-        scope.getClasses = () => classNames({
-            [`fd-form-message--${scope.state}`]: scope.state,
+    controller: ['$scope', '$element', function ($scope, $element) {
+        let isReadonly = false;
+        $scope.expanded = false;
+        $scope.popoverId = `fim${uuid.generate()}`;
+        $scope.getClasses = () => classNames({
+            [`fd-form-message--${$scope.state}`]: $scope.state,
         });
-        scope.getStyle = () => {
-            if (scope.messageFixed === true) {
-                const pos = element[0].getBoundingClientRect();
+        $scope.getStyle = () => {
+            if ($scope.messageFixed === true) {
+                const pos = $element[0].getBoundingClientRect();
                 return {
                     transition: 'none',
                     transform: 'none',
@@ -107,25 +108,30 @@ blimpkit.directive('bkFieldset', () => ({
             } else return {};
         };
         function focusoutEvent() {
-            if (scope.state && scope.expanded) scope.$apply(() => scope.expanded = false);
+            if (!isReadonly && $scope.state && $scope.expanded) $scope.$apply(() => $scope.expanded = false);
         }
         function focusinEvent() {
-            if (scope.state && !scope.expanded) scope.$apply(() => scope.expanded = true);
+            if (!isReadonly && $scope.state && !$scope.expanded) $scope.$apply(() => $scope.expanded = true);
         }
         function inputChange() {
-            if (scope.state === 'error' && !scope.expanded) scope.$apply(() => scope.expanded = true);
-            else if (!scope.state && scope.expanded) scope.$apply(() => scope.expanded = false);
+            if (!isReadonly) {
+                if ($scope.state === 'error' && !$scope.expanded) $scope.$apply(() => $scope.expanded = true);
+                else if (!$scope.state && $scope.expanded) $scope.$apply(() => $scope.expanded = false);
+            }
         }
-        element.on('focusout', focusoutEvent);
-        element.on('focusin', focusinEvent);
-        element.on('input', inputChange);
+        this.setReadonly = function (readonly) {
+            isReadonly = readonly;
+        };
+        $element.on('focusout', focusoutEvent);
+        $element.on('focusin', focusinEvent);
+        $element.on('input', inputChange);
         function cleanUp() {
-            element.off('focusout', focusoutEvent);
-            element.off('focusin', focusinEvent);
-            element.off('input', inputChange);
+            $element.off('focusout', focusoutEvent);
+            $element.off('focusin', focusinEvent);
+            $element.off('input', inputChange);
         }
-        scope.$on('$destroy', cleanUp);
-    },
+        $scope.$on('$destroy', cleanUp);
+    }],
     template: `<div class="fd-popover fd-form-input-message-group" tabindex="-1">
         <div class="fd-popover__control" aria-controls="{{ popoverId }}" aria-expanded="{{expanded}}" aria-haspopup="true" tabindex="-1" ng-transclude></div>
         <div id="{{ popoverId }}" class="fd-popover__body fd-popover__body--no-arrow fd-popover__body--input-message-group" aria-hidden="{{!expanded}}" ng-style="getStyle()">

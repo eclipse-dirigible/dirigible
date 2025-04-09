@@ -12,17 +12,27 @@
 blimpkit.directive('bkTextarea', (classNames) => ({
     restrict: 'E',
     transclude: true,
+    require: '?^^bkFormInputMessage',
     replace: true,
     scope: {
         compact: '<?',
         state: '@?',
     },
-    link: (scope, _element, attrs) => {
-        scope.getClasses = () => classNames({
-            'fd-textarea--compact': scope.compact === true,
-            'is-disabled': Object.prototype.hasOwnProperty.call(attrs, 'disabled') && attrs.disabled === true,
-            [`is-${scope.state}`]: scope.state,
-        });
+    link: (scope, _element, attrs, ctrl) => {
+        const states = {
+            'error': 'error',
+            'success': 'success',
+            'warning': 'warning',
+            'information': 'information'
+        };
+        scope.getClasses = () => {
+            if (ctrl) ctrl.setReadonly(Object.prototype.hasOwnProperty.call(attrs, 'readonly'));
+            return classNames('fd-textarea', {
+                'fd-textarea--compact': scope.compact === true,
+                'is-disabled': Object.prototype.hasOwnProperty.call(attrs, 'disabled') && attrs.disabled === true,
+                [`is-${states[scope.state]}`]: scope.state && states[scope.state] && !Object.prototype.hasOwnProperty.call(attrs, 'readonly'),
+            });
+        };
     },
-    template: '<textarea class="fd-textarea" ng-class="getClasses()" ng-transclude></textarea>',
+    template: '<textarea ng-class="getClasses()" ng-transclude></textarea>',
 }));
