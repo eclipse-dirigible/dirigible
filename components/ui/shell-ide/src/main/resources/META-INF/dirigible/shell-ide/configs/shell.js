@@ -10,9 +10,9 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const shellData = {
-	id: 'dirigibleShell',
+	id: 'shellIde',
 	path: '/services/web/shell-ide/index.html',
-	label: 'Dirigible IDE'
+	label: 'Workbench'
 };
 if (typeof exports !== 'undefined') {
 	exports.getShell = () => shellData;
