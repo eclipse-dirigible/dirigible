@@ -1,8 +1,8 @@
 const viewData = {
     id: '{{projectName}}-Reports-{{name}}-print',
     label: 'Print',
-    path: '/services/web/{{projectName}}/gen/{{genFolderName}}/ui/${perspectiveName}/{{name}}/dialog-print/index.html',
-    perspective: '${perspectiveName}',
+    path: '/services/web/{{projectName}}/gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-print/index.html',
+    perspective: 'Reports',
     view: '{{name}}',
     type: 'page',
     order: 10
