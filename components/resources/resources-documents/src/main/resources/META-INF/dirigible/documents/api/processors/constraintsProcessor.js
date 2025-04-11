@@ -21,7 +21,7 @@ const ACCESS_CONSTRAINTS_FILE = "roles-access.json";
 const ACCESS_CONSTRAINTS_FILE_LOCATION = INTERNAL_FOLDER + "/" + ACCESS_CONSTRAINTS_FILE;
 
 function updateAccessDefinitionsInCMS(data) {
-	
+
     if (!folderUtils.existFolder(INTERNAL_FOLDER_LOCATION)) {
         let rootFolder = folderUtils.getFolderOrRoot("/");
         folderUtils.createFolder(rootFolder, INTERNAL_FOLDER);
@@ -43,29 +43,29 @@ function updateAccessDefinitionsInCMS(data) {
         }
     }
 
-		
-	if (objectUtils.existObject(ACCESS_CONSTRAINTS_FILE_LOCATION)) {
-		let object = objectUtils.getObject(ACCESS_CONSTRAINTS_FILE_LOCATION);
+
+    if (objectUtils.existObject(ACCESS_CONSTRAINTS_FILE_LOCATION)) {
+        let object = objectUtils.getObject(ACCESS_CONSTRAINTS_FILE_LOCATION);
         objectUtils.deleteObject(object);
     }
-    
+
     documentsUtils.uploadDocument(folder, document);
 }
 
 export const getAccessDefinitions = () => {
-	let content = {
+    let content = {
         constraints: []
     };
-	if (documentsUtils.existDocument(ACCESS_CONSTRAINTS_FILE_LOCATION)) {
-	    let document = documentsUtils.getDocument(ACCESS_CONSTRAINTS_FILE_LOCATION);
-	    
-	    try {
-	        let inputStream = documentsUtils.getDocumentStream(document);
-	        let data = inputStream.getStream().readBytes();
-	        content = JSON.parse(bytes.byteArrayToText(data));
-	    } catch (e) {
-	        // Do nothing
-	    }
+    if (documentsUtils.existDocument(ACCESS_CONSTRAINTS_FILE_LOCATION)) {
+        let document = documentsUtils.getDocument(ACCESS_CONSTRAINTS_FILE_LOCATION);
+
+        try {
+            let inputStream = documentsUtils.getDocumentStream(document);
+            let data = inputStream.getStream().readBytes();
+            content = JSON.parse(bytes.byteArrayToText(data));
+        } catch (e) {
+            // Do nothing
+        }
     }
     return content;
 };
@@ -75,13 +75,13 @@ export const updateAccessDefinitions = (accessDefinitions) => {
     let content = JSON.stringify(accessDefinitions);
     let resource = repositoryManager.getResource(path);
     if (resource.exists()) {
-		if (resource.getText() !== content) {
-			repositoryManager.deleteResource(path);
-        	repositoryManager.createResource(path, content);
-    		updateAccessDefinitionsInCMS(content);
-		}
+        if (resource.getText() !== content) {
+            repositoryManager.deleteResource(path);
+            repositoryManager.createResource(path, content);
+            updateAccessDefinitionsInCMS(content);
+        }
     } else {
-		repositoryManager.createResource(path, content);
-    	updateAccessDefinitionsInCMS(content);
-	}
+        repositoryManager.createResource(path, content);
+        updateAccessDefinitionsInCMS(content);
+    }
 };

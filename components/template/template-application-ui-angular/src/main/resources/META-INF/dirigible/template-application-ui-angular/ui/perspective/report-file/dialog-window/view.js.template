@@ -4,14 +4,11 @@
  * Do not modify the content as it may be re-generated again.
  */
 const viewData = {
-    id: "${name}-Report-details",
-    label: "${name} Report",
-    link: "/services/web/${projectName}/gen/${genFolderName}/ui/Reports/${name}/dialog-window/index.html",
-    perspectiveName: "Reports"
+    id: '${name}-Report-details',
+    label: '${name} Report',
+    path: '/services/web/${projectName}/gen/${genFolderName}/ui/Reports/${name}/dialog-window/index.html',
+    perspectiveName: 'Reports'
 };
-
 if (typeof exports !== 'undefined') {
-    exports.getDialogWindow = function () {
-        return viewData;
-    }
+    exports.getView = () => viewData;
 }

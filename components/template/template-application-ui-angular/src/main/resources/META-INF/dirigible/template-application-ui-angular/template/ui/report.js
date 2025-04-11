@@ -5,33 +5,6 @@
  */
 export function getSources(parameters) {
 	return [
-		// Location: "gen/{{genFolderName}}/ui/perspective"
-		{
-			location: "/template-application-ui-angular/ui/perspective/index-report.html",
-			action: "generate",
-			engine: "velocity",
-			rename: "gen/{{genFolderName}}/ui/Reports/index.html",
-			collection: "generateReportModels"
-		},
-		{
-			location: "/template-application-ui-angular/ui/perspective/perspective-report.extension",
-			action: "generate",
-			rename: "gen/{{genFolderName}}/ui/Reports/perspective.extension",
-			collection: "generateReportModels"
-		},
-		{
-			location: "/template-application-ui-angular/ui/perspective/perspective-portal-report.extension",
-			action: "generate",
-			rename: "gen/{{genFolderName}}/ui/Reports/perspective-portal.extension",
-			collection: "generateReportModels"
-		},
-		{
-			location: "/template-application-ui-angular/ui/perspective/perspective-report.js.template",
-			action: "generate",
-			engine: "velocity",
-			rename: "gen/{{genFolderName}}/ui/Reports/perspective.js",
-			collection: "generateReportModels"
-		},
 		// Location: "gen/{{genFolderName}}/ui/perspective/list"
 		{
 			location: "/template-application-ui-angular/ui/perspective/report/dialog-window/controller.js.template",
@@ -101,27 +74,6 @@ export function getSources(parameters) {
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/index.html",
-			collection: "generateReportModels"
-		},
-		{
-			location: "/template-application-ui-angular/ui/perspective/report/tile.extension.template",
-			action: "generate",
-			engine: "velocity",
-			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/tile.extension",
-			collection: "generateReportModels"
-		},
-		{
-			location: "/template-application-ui-angular/ui/perspective/report/tile-portal.extension.template",
-			action: "generate",
-			engine: "velocity",
-			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/tile-portal.extension",
-			collection: "generateReportModels"
-		},
-		{
-			location: "/template-application-ui-angular/ui/perspective/report/tile.js.template",
-			action: "generate",
-			engine: "velocity",
-			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/tile.js",
 			collection: "generateReportModels"
 		},
 		{

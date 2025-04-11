@@ -1,0 +1,6 @@
+{
+    "expression": "0 * * * * ?",
+    "group": "defined",
+    "handler": "documents/security/synchronize.js",
+    "description": "CMIS Security"
+}

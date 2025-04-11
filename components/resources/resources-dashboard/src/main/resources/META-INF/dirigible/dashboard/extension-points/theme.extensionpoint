@@ -1,0 +1,4 @@
+{
+	"name": "application-themes",
+	"description": "Extension Point for the Application Theme Providers"
+}

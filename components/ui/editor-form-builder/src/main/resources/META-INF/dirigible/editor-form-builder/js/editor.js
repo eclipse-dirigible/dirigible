@@ -22,6 +22,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
     $scope.selectedTab = 'designer';
     $scope.changed = false;
     $scope.state = {
+        initialized: false,
         isBusy: true,
         error: false,
         busyText: 'Loading...',
@@ -1557,6 +1558,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                         $scope.createDomFromJson(response.data.form);
                     }
                     $scope.state.isBusy = false;
+                    $scope.state.initialized = true;
                 });
             }, (response) => {
                 console.error(response);

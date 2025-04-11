@@ -44,15 +44,16 @@
                 "menuKey": "country",
                 "menuLabel": "Country",
                 "name": "Country",
-                "navigationPath": "/Home",
+                "perspectiveHeader": "",
                 "perspectiveIcon": "/services/web/resources/unicons/copy.svg",
                 "perspectiveLabel": "Entities",
-                "perspectiveName": "entities",
+                "perspectiveName": "Settings",
+                "perspectiveNavId": "",
                 "perspectiveOrder": "100",
                 "perspectiveRole": "",
                 "title": "Country",
                 "tooltip": "Country",
-                "type": "PRIMARY"
+                "type": "SETTING"
             },
             {
                 "properties": [
@@ -83,7 +84,7 @@
                         "widgetIsMajor": "true",
                         "widgetLength": "20",
                         "widgetSize": "",
-                        "widgetType": "DROPDOWN"
+                        "widgetType": "TEXTBOX"
                     },
                     {
                         "dataName": "CITY_COUNTRY",
@@ -104,7 +105,7 @@
                         "widgetType": "DROPDOWN",
                         "relationshipName": "City_Country",
                         "relationshipEntityName": "Country",
-                        "relationshipEntityPerspectiveName": "entities",
+                        "relationshipEntityPerspectiveName": "Settings",
                         "relationshipEntityPerspectiveLabel": "Entities"
                     }
                 ],
@@ -121,15 +122,16 @@
                 "menuKey": "city",
                 "menuLabel": "City",
                 "name": "City",
-                "navigationPath": "/Home",
+                "perspectiveHeader": "",
                 "perspectiveIcon": "/services/web/resources/unicons/copy.svg",
                 "perspectiveLabel": "Entities",
-                "perspectiveName": "entities",
+                "perspectiveName": "Settings",
+                "perspectiveNavId": "",
                 "perspectiveOrder": "100",
                 "perspectiveRole": "",
                 "title": "City",
                 "tooltip": "City",
-                "type": "PRIMARY"
+                "type": "SETTING"
             },
             {
                 "properties": [
@@ -162,7 +164,7 @@
                         "widgetType": "DROPDOWN",
                         "relationshipName": "Orders_Country",
                         "relationshipEntityName": "Country",
-                        "relationshipEntityPerspectiveName": "entities",
+                        "relationshipEntityPerspectiveName": "Settings",
                         "relationshipEntityPerspectiveLabel": "Entities"
                     },
                     {
@@ -184,7 +186,7 @@
                         "widgetType": "DROPDOWN",
                         "relationshipName": "Orders_City",
                         "relationshipEntityName": "City",
-                        "relationshipEntityPerspectiveName": "entities",
+                        "relationshipEntityPerspectiveName": "Settings",
                         "relationshipEntityPerspectiveLabel": "Entities"
                     }
                 ],
@@ -201,10 +203,11 @@
                 "menuKey": "orders",
                 "menuLabel": "Orders",
                 "name": "Orders",
-                "navigationPath": "/Home",
+                "perspectiveHeader": "",
                 "perspectiveIcon": "/services/web/resources/unicons/award.svg",
                 "perspectiveLabel": "Orders",
                 "perspectiveName": "Orders",
+                "perspectiveNavId": "",
                 "perspectiveOrder": "100",
                 "perspectiveRole": "",
                 "title": "Orders",
@@ -217,8 +220,7 @@
                 "name": "Orders",
                 "label": "Orders",
                 "icon": "/services/web/resources/unicons/award.svg",
-                "order": "100",
-                "role": {}
+                "order": "100"
             }
         ],
         "navigations": []

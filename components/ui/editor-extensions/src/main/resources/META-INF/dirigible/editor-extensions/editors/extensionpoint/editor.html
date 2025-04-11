@@ -28,7 +28,7 @@
     <body class="bk-vbox bk-center--vertical" bk-scrollbar shortcut="'ctrl+s'" shortcut-action="save">
         <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
         <div class="bk-restrict-width bk-full-width" ng-show="!state.error && !state.isBusy">
-            <bk-fieldset class="bk-margin--md" ng-form="forms.editor">
+            <bk-fieldset class="fd-margin-begin-end--sm" ng-form="forms.editor">
                 <bk-form-group label="Extension Point:" name="entityForm">
                     <bk-form-item horizontal="false">
                         <bk-form-label for="idName" required="true" colon="true">Name</bk-form-label>

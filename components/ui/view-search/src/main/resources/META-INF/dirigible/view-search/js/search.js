@@ -75,7 +75,7 @@ searchView.controller('SearchController', ($scope, WorkspaceService, StatusBar, 
             }, (response) => {
                 console.error(response);
                 $scope.$evalAsync(() => { $scope.search.searching = false; });
-                StatusBar.setError('There was an error while performing a search');
+                StatusBar.showError('There was an error while performing a search');
             });
         } else $scope.search.searching = false;
     };

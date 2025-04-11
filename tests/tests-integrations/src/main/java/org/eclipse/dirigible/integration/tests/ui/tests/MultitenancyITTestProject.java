@@ -46,7 +46,7 @@ class MultitenancyITTestProject extends BaseMultitenantTestProject {
     private static final Logger LOGGER = LoggerFactory.getLogger(MultitenancyITTestProject.class);
 
     private static final String PROJECT_RESOURCES_PATH = "MultitenancyIT";
-    private static final String UI_HOME_PATH = "/services/web/" + PROJECT_RESOURCES_PATH + "/gen/edm/index.html";
+    private static final String UI_HOME_PATH = "/services/web/dashboard/index.html";
     private static final String TS_BASE_PATH = "/services/ts/" + PROJECT_RESOURCES_PATH + "/";
     private static final String READERS_VIEW_SERVICE_PATH = TS_BASE_PATH + "views/ReaderViewService.ts";
     private static final String DOCUMENTS_SERVICE_PATH = TS_BASE_PATH + "cmis/DocumentService.ts/documents";
@@ -99,7 +99,7 @@ class MultitenancyITTestProject extends BaseMultitenantTestProject {
         boolean forceLogin = !tenant.isDefaultTenant();
         ide.login(forceLogin);
 
-        browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER3, "Dirigible Test Project");
+        browser.assertElementExistsByTypeAndText(HtmlElementType.SPAN, "Dashboard");
     }
 
     /**

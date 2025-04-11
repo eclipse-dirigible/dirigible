@@ -26,7 +26,7 @@
 
     <body bk-scrollbar>
         <table bk-table display-mode="compact" outer-borders="bottom">
-            <thead bk-table-header sticky="true">
+            <thead bk-table-header sticky="true" interactive="false">
                 <tr bk-table-row>
                     <th bk-table-header-cell>Name</th>
                     <th bk-table-header-cell>Location</th>
@@ -54,6 +54,8 @@
             angular.module('dataStructures', ['platformView', 'blimpKit']).controller('DataStructuresController', ($scope, $http) => {
                 $http.get('/services/data/views').then((response) => {
                     $scope.views = response.data;
+                }, (error) => {
+                    console.error(error);
                 });
             });
         </script>

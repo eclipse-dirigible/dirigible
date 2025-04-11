@@ -53,6 +53,11 @@ div.fb-main-container[data-preview=true] div[data-type="container"]>* {
     padding: 0;
 }
 
+.fb-panel {
+    /* Tabs height */
+    max-height: calc(100% - 2.75rem);
+}
+
 div.fb-control-wrapper {
     position: relative;
     background: var(--sapBackgroundColor, #f7f7f7);

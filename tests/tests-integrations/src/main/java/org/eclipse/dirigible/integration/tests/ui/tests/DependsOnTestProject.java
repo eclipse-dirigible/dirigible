@@ -25,7 +25,7 @@ class DependsOnTestProject extends BaseTestProject {
 
     private static final String EDM_FILE_NAME = "edm.edm";
     private static final String PROJECT_RESOURCES_PATH = "DependsOnIT";
-    private static final String VERIFICATION_URI = "/services/web/" + PROJECT_RESOURCES_PATH + "/gen/edm/ui/Orders/index.html";
+    private static final String VERIFICATION_URI = "/services/web/dashboard/index.html";
 
     private final Browser browser;
 
@@ -44,6 +44,7 @@ class DependsOnTestProject extends BaseTestProject {
     @Override
     public void verify() {
         browser.openPath(VERIFICATION_URI);
+        browser.clickOnElementWithText(HtmlElementType.SPAN, "Orders");
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
         browser.enterTextInElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Country ...", "Bulgaria");
 

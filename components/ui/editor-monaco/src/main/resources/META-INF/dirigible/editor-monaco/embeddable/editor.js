@@ -16,6 +16,7 @@ angular.module('codeEditor', ['platformTheming']).directive('codeEditor', (Theme
      * codeLang: String - The language of the code. Default is 'javascript'.
      * actions: Array<IActionDescriptor> - An array of Monaco actions.
      * onModelChange: Function - Callback function triggered when the model gets changed. Does not trigger when the model is changed from the outside.
+     * setFocus: Boolean - Use when you need to manually tell the editor to take focus.
      */
     return {
         restrict: 'E',
@@ -27,6 +28,7 @@ angular.module('codeEditor', ['platformTheming']).directive('codeEditor', (Theme
             codeLang: '@?',
             actions: '<?',
             onModelChange: '&?',
+            setFocus: '<?'
         },
         link: {
             pre: (scope) => {
@@ -123,6 +125,14 @@ angular.module('codeEditor', ['platformTheming']).directive('codeEditor', (Theme
                     for (let i = 0; i < scope.actions.length; i++) {
                         codeEditor.addAction(scope.actions[i]);
                     }
+                }
+                if (angular.isDefined(scope.setFocus)) {
+                    const focusWatch = scope.$watch('setFocus', (newValue, oldValue) => {
+                        if (newValue !== oldValue && newValue === true) {
+                            setTimeout(() => { codeEditor.focus() }, 0);
+                        }
+                    });
+                    scope.$on('$destroy', focusWatch);
                 }
 
                 themingHub.onThemeChange((theme) => {

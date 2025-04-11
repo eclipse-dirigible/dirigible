@@ -1,0 +1,5 @@
+{
+    "module": "documents/configs/documents.js",
+    "extensionPoint": "application-perspectives",
+    "description": "Dashboard documents perspective"
+}

@@ -19,6 +19,12 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link rel="icon" href="data:;base64,iVBORw0KGgo=" brand-icon />
         <title config-title></title>
+        <script>
+            const viewData = {
+                label: 'Loading...',
+                autoFocusTab: false
+            };
+        </script>
         <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
         <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
         <style>
@@ -50,10 +56,6 @@
             <bk-message-page-subtitle>Error retreiving the health status</bk-message-page-subtitle>
         </bk-message-page>
         <script>
-            const viewData = {
-                label: 'Loading...',
-                autoFocusTab: false
-            };
             const busyPage = angular.module('busyPage', ['blimpKit', 'platformView']);
             busyPage.controller('BusyController', ($scope, $http) => {
                 $scope.state = {

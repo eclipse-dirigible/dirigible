@@ -26,7 +26,7 @@
 
     <body bk-scrollbar>
         <table bk-table display-mode="compact" outer-borders="bottom">
-            <thead bk-table-header sticky="true">
+            <thead bk-table-header sticky="true" interactive="false">
                 <tr bk-table-row>
                     <th bk-table-header-cell>#</th>
                     <th bk-table-header-cell>Name</th>
@@ -51,6 +51,8 @@
             angular.module('configurations', ['platformView', 'blimpKit']).controller('ConfigurationsController', ($scope, $http) => {
                 $http.get('/services/core/configurations').then((response) => {
                     $scope.configurations = response.data;
+                }, (error) => {
+                    console.error(error);
                 });
             });
         </script>

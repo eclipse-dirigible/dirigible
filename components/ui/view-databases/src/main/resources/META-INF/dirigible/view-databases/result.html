@@ -36,7 +36,7 @@
                 <bk-message-page-title>{{result || "No results"}}</bk-message-page-title>
             </bk-message-page>
             <table bk-table display-mode="compact" ng-hide="hasMultipleProcedureResults || state.error" ng-show="columns" outer-borders="bottom">
-                <thead bk-table-header sticky="true">
+                <thead bk-table-header sticky="true" interactive="false">
                     <tr bk-table-row>
                         <th bk-table-header-cell ng-repeat="column in columns">{{column}}</th>
                         <th bk-table-header-cell style="text-align: center; width: 8em">Actions</th>
@@ -67,7 +67,7 @@
             <bk-icon-tab-bar-panel tab-id="pr{{$index}}" ng-show="selectedTab === '{{'pr' + $index}}'" ng-repeat="columns in procedureResults track by $index">
                 <bk-scrollbar class="bk-full-height">
                     <table bk-table display-mode="compact" outer-borders="bottom">
-                        <thead bk-table-header sticky="true">
+                        <thead bk-table-header sticky="true" interactive="false">
                             <tr bk-table-row>
                                 <th bk-table-header-cell ng-repeat="column in columns.columns track by $index">{{column}}</th>
                             </tr>
@@ -82,45 +82,6 @@
             </bk-icon-tab-bar-panel>
         </bk-icon-tab-bar>
         <theme></theme>
-        <!-- <div class="dialog-overlay" ng-show="state.isDialogOpen">
-            <div class="dialog">
-                <h3 ng-if="state.dialogType === 'edit'">Edit Row</h3>
-                <h3 ng-if="state.dialogType === 'delete'">Delete Row</h3>
-                <h3 ng-if="state.dialogType === 'create'">Add New Row</h3>
-
-                <form ng-if="state.dialogType === 'edit' || state.dialogType === 'create'">
-                    <div ng-repeat="(key, value) in (state.dialogType === 'edit' ? data.selectedRow : data.newRow)">
-                        <bk-form-group>
-                            <bk-form-item>
-                                <bk-form-label for="{{key}}" dg-colon="true" dg-required="true">{{key}}</bk-form-label>
-                                <bk-input id="{{key}}" name="{{key}}" type="text" placeholder="Enter a {{key}}"
-                                    ng-model="state.dialogType === 'edit' ? data.selectedRow[key] : data.newRow[key]"
-                                    ng-required="true" ng-trim="false"></bk-input>
-                            </bk-form-item>
-                        </bk-form-group>
-                    </div>
-                </form>
-
-                <div ng-if="state.dialogType === 'delete'">
-                    <p>Are you sure you want to delete this row?</p>
-                    <p><strong>{{data.selectedRow | json}}</strong></p>
-                </div>
-
-                <bk-bar bar-design="footer">
-                    <bk-bar-right>
-                        <bk-bar-element>
-                            <bk-button dg-label="{{state.dialogType | uppercase}}" ng-click="confirmAction()"
-                                dg-type="{{state.dialogType === 'delete' ? 'negative' : 'emphasized'}}" compact="true">
-                            </bk-button>
-                        </bk-bar-element>
-                        <bk-bar-element>
-                            <bk-button dg-label="Cancel" ng-click="closeDialog()" dg-type="transparent" compact="true">
-                            </bk-button>
-                        </bk-bar-element>
-                    </bk-bar-right>
-                </bk-bar>
-            </div>
-        </div> -->
     </body>
 
 </html>

@@ -1,4 +1,0 @@
-{
-    "name": "${projectName}-view",
-    "description": "${projectName} - Extension Point for the Application View Providers"
-}

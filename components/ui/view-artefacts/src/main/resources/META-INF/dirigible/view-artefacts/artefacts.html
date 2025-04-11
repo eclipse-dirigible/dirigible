@@ -26,7 +26,7 @@
 
     <body bk-scrollbar>
         <table bk-table display-mode="compact" outer-borders="bottom">
-            <thead bk-table-header sticky="true">
+            <thead bk-table-header sticky="true" interactive="false">
                 <tr bk-table-row>
                     <th bk-table-header-cell>#</th>
                     <th bk-table-header-cell>Type</th>
@@ -51,6 +51,8 @@
             angular.module('artefacts', ['platformView', 'blimpKit']).controller('ArtefactsController', ($scope, $http) => {
                 $http.get('/services/js/perspective-operations/api/artefacts/artefacts.mjs').then((response) => {
                     $scope.artefacts = response.data;
+                }, (error) => {
+                    console.error(error);
                 });
             });
         </script>

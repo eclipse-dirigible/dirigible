@@ -22,13 +22,13 @@
                 </bk-popover-control>
                 <bk-popover-body no-arrow="true" can-scroll="false">
                     <bk-menu aria-label="header menu">
-                        <bk-menu-sublist ng-repeat="menuItem in menus[perspectiveId].items track by $index" title="{{ menuItem.label }}" can-scroll="isScrollable(menuItem.items)">
+                        <bk-menu-sublist ng-repeat="menuItem in menus[perspectiveId].items track by $index" title="{{ menuItem.label }}" can-scroll="canMenuScroll(menuItem.items)">
                             <submenu sublist="menuItem.items" menu-handler="menuClick"></submenu>
                         </bk-menu-sublist>
-                        <bk-menu-sublist ng-if="menus[perspectiveId].include.window" title="{{ systemMenus.window.label }}" can-scroll="isScrollable(systemMenus.window.items)">
+                        <bk-menu-sublist ng-if="menus[perspectiveId].include.window" title="{{ systemMenus.window.label }}" can-scroll="canMenuScroll(systemMenus.window.items)">
                             <submenu sublist="systemMenus.window.items" menu-handler="menuClick"></submenu>
                         </bk-menu-sublist>
-                        <bk-menu-sublist ng-if="menus[perspectiveId].include.help" title="{{ systemMenus.help.label }}" can-scroll="isScrollable(systemMenus.help.items)">
+                        <bk-menu-sublist ng-if="menus[perspectiveId].include.help" title="{{ systemMenus.help.label }}" can-scroll="canMenuScroll(systemMenus.help.items)">
                             <submenu sublist="systemMenus.help.items" menu-handler="menuClick"></submenu>
                         </bk-menu-sublist>
                     </bk-menu>
@@ -41,11 +41,11 @@
                         <bk-button bk-shellbar-button label="{{ menuItem.label }}" is-menu="true" aria-label="menu button {{ menuItem.label }}">
                         </bk-button>
                     </bk-popover-control>
-                    <bk-popover-body no-arrow="true" can-scroll="isScrollable(menus[perspectiveId].items)">
+                    <bk-popover-body no-arrow="true" can-scroll="canMenuScroll(menus[perspectiveId].items)">
                         <bk-menu aria-label="header menu">
                             <bk-menu-item ng-repeat-start="item in menuItem.items track by $index" ng-if="!item.items" title="{{ item.label }}" ng-click="menuClick(item)" has-separator="item.separator">
                             </bk-menu-item>
-                            <bk-menu-sublist ng-if="item.items" has-separator="item.separator" title="{{ item.label }}" can-scroll="isScrollable(item.items)" ng-repeat-end>
+                            <bk-menu-sublist ng-if="item.items" has-separator="item.separator" title="{{ item.label }}" can-scroll="canMenuScroll(item.items)" ng-repeat-end>
                                 <submenu sublist="item.items" menu-handler="menuClick"></submenu>
                             </bk-menu-sublist>
                         </bk-menu>
@@ -56,11 +56,11 @@
                         <bk-button bk-shellbar-button label="{{ systemMenus.window.label }}" is-menu="true" aria-label="menu button {{ systemMenus.window.label }}">
                         </bk-button>
                     </bk-popover-control>
-                    <bk-popover-body no-arrow="true" can-scroll="isScrollable(systemMenus.window.items)">
+                    <bk-popover-body no-arrow="true" can-scroll="canMenuScroll(systemMenus.window.items)">
                         <bk-menu aria-label="header menu {{ systemMenus.window.label }}">
                             <bk-menu-item ng-repeat-start="item in systemMenus.window.items track by $index" ng-if="!item.items" title="{{ item.label }}" ng-click="menuClick(item)" has-separator="item.separator">
                             </bk-menu-item>
-                            <bk-menu-sublist ng-if="item.items" has-separator="item.separator" title="{{ item.label }}" can-scroll="isScrollable(item.items)" ng-repeat-end>
+                            <bk-menu-sublist ng-if="item.items" has-separator="item.separator" title="{{ item.label }}" can-scroll="canMenuScroll(item.items)" ng-repeat-end>
                                 <submenu sublist="item.items" menu-handler="menuClick"></submenu>
                             </bk-menu-sublist>
                         </bk-menu>
@@ -71,11 +71,11 @@
                         <bk-button bk-shellbar-button label="{{ ::systemMenus.help.label }}" is-menu="true" aria-label="menu button {{ ::systemMenus.help.label }}">
                         </bk-button>
                     </bk-popover-control>
-                    <bk-popover-body no-arrow="true" can-scroll="::isScrollable(systemMenus.help.items)">
+                    <bk-popover-body no-arrow="true" can-scroll="::canMenuScroll(systemMenus.help.items)">
                         <bk-menu aria-label="header menu {{ ::systemMenus.help.label }}">
                             <bk-menu-item ng-repeat-start="item in systemMenus.help.items track by $index" ng-if="!item.items" title="{{ ::item.label }}" ng-click="::menuClick(item)" has-separator="::item.separator">
                             </bk-menu-item>
-                            <bk-menu-sublist ng-if="item.items" has-separator="::item.separator" title="{{ ::item.label }}" can-scroll="::isScrollable(item.items)" ng-repeat-end>
+                            <bk-menu-sublist ng-if="item.items" has-separator="::item.separator" title="{{ ::item.label }}" can-scroll="::canMenuScroll(item.items)" ng-repeat-end>
                                 <submenu sublist="::item.items" menu-handler="::menuClick"></submenu>
                             </bk-menu-sublist>
                         </bk-menu>

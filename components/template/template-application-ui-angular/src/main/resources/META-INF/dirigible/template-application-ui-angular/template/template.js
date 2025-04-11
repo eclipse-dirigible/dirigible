@@ -18,9 +18,10 @@ export function generate(model, parameters) {
 export function getTemplate(parameters) {
     let restTemplate = restTemplateManager.getTemplate(parameters);
 
-    let templateSources = [];
-    templateSources = templateSources.concat(restTemplate.sources);
-    templateSources = templateSources.concat(uiTemplate.getSources(parameters));
+    let templateSources = [
+        ...restTemplate.sources,
+        ...uiTemplate.getSources(parameters)
+    ];
 
     let templateParameters = getTemplateParameters();
     templateParameters = templateParameters.concat(restTemplate.parameters);

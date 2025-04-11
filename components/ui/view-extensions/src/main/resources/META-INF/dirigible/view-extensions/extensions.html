@@ -26,7 +26,7 @@
 
     <body bk-scrollbar>
         <table bk-table bk-table-group outer-borders="bottom">
-            <thead bk-table-header sticky="true">
+            <thead bk-table-header sticky="true" interactive="false">
                 <tr bk-table-row>
                     <th bk-table-header-cell>#</th>
                     <th bk-table-header-cell>Location</th>
@@ -52,6 +52,8 @@
             angular.module('extensions', ['platformView', 'blimpKit']).controller('ExtensionsController', ($scope, $http) => {
                 $http.get('/services/core/extensionpoints/tree').then((response) => {
                     $scope.list = response.data;
+                }, (error) => {
+                    console.error(error);
                 });
             });
         </script>

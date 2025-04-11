@@ -1,21 +1,18 @@
 #set($dollar = '$')
-angular.module('page', ["ideUI", "ideView"])
-	.controller('PageController', ['$scope', 'ViewParameters', function ($scope, ViewParameters) {
+angular.module('page', ['blimpKit', 'platformView']).controller('PageController', ($scope, ViewParameters) => {
+	$scope.entity = {};
 
-		$scope.entity = {};
-
-		let params = ViewParameters.get();
-		if (Object.keys(params).length) {
-			$scope.action = "select";;
+	let params = ViewParameters.get();
+	if (Object.keys(params).length) {
+		$scope.action = 'select';
 
 #foreach ($column in $columns)
 #if($column.typeTypescript == 'Date')
-			if (params.entity['${column.alias}']) {
-				params.entity['${column.alias}'] = new Date(params.entity['${column.alias}']);
-			}
-#end
-#end
-			$scope.entity = params.entity;
+		if (params.entity['${column.alias}']) {
+			params.entity['${column.alias}'] = new Date(params.entity['${column.alias}']);
 		}
-
-	}]);
+#end
+#end
+		$scope.entity = params.entity;
+	}
+});

@@ -17,18 +17,18 @@ blimpkit.directive('bkRadio', (classNames) => ({
         compact: '<?',
         state: '@?',
     },
-    states: {
-        'error': 'error',
-        'success': 'success',
-        'warning': 'warning',
-        'information': 'information'
-    },
-    link: function (scope, _elem, attrs) {
+    link: (scope, _elem, attrs) => {
+        const states = {
+            'error': 'error',
+            'success': 'success',
+            'warning': 'warning',
+            'information': 'information'
+        };
         scope.getClasses = () => classNames({
             'fd-radio--compact': scope.compact === true,
             'is-disabled': Object.prototype.hasOwnProperty.call(attrs, 'disabled') && attrs.disabled === true,
             'is-readonly': Object.prototype.hasOwnProperty.call(attrs, 'readonly') && attrs.readonly === true,
-            [`is-${this.states[scope.state]}`]: scope.state && this.states[scope.state],
+            [`is-${states[scope.state]}`]: scope.state && states[scope.state] && !Object.prototype.hasOwnProperty.call(attrs, 'readonly'),
         });
     },
     template: '<input type="radio" class="fd-radio" ng-class="getClasses()">',

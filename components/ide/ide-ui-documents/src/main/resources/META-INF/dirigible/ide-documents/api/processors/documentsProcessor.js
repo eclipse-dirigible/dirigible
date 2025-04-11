@@ -75,7 +75,7 @@ export const remove = (objects, forceDelete) => {
 };
 
 function filterByAccessDefinitions(folder) {
-	let accessDefinitions = JSON.parse(registry.getText("ide-documents/security/roles.access"));
+	let accessDefinitions = JSON.parse(registry.getText("documents/security/roles.access"));
 	folder.children = folder.children.filter(e => {
 		let path = formatPath(folder.path + "/" + e.name);
 		if (path.startsWith("/__internal")) {

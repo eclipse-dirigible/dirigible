@@ -12,39 +12,40 @@
 blimpkit.directive('bkInput', (classNames) => ({
     restrict: 'E',
     transclude: false,
-    require: ['?^^bkInputGroup', '?^^bkTokenizer'],
+    require: ['?^^bkInputGroup', '?^^bkTokenizer', '?^^bkFormInputMessage'],
     replace: true,
     scope: {
         compact: '<?',
         isHover: '<?',
         state: '@?',
     },
-    states: {
-        'error': 'error',
-        'success': 'success',
-        'warning': 'warning',
-        'information': 'information'
-    },
-    forbiddenTypes: ['checkbox', 'radio', 'file', 'image', 'range'],
-    link: function (scope, _element, attrs, ctrl) {
+    link: (scope, _element, attrs, ctrl) => {
+        const states = {
+            'error': 'error',
+            'success': 'success',
+            'warning': 'warning',
+            'information': 'information'
+        };
         if (!Object.prototype.hasOwnProperty.call(attrs, 'type'))
             console.error('bk-input error: Inputs must have the "type" HTML attribute');
         else {
-            if (this.forbiddenTypes.includes(attrs.type))
+            if (['checkbox', 'radio', 'file', 'image', 'range'].includes(attrs.type))
                 console.error('bk-input error: Invalid input type. Possible options are "color", "date", "datetime-local", "email", "hidden", "month", "password", "search", "tel", "text", "time", "url" and "week".');
         }
         scope.getClasses = () => {
             if (ctrl[0]) {
                 if (Object.prototype.hasOwnProperty.call(attrs, 'disabled') && attrs.disabled === true) ctrl[0].setDisabled(true);
                 else ctrl[0].setDisabled(false);
+            } else if (ctrl[2]) {
+                ctrl[2].setReadonly(Object.prototype.hasOwnProperty.call(attrs, 'readonly'));
             }
             return classNames({
                 'fd-input--compact': scope.compact === true,
                 'fd-input-group__input': ctrl[0],
                 'fd-tokenizer__input': ctrl[1],
                 'is-hover': scope.isHover === true,
-                [`is-${this.states[scope.state]}`]: scope.state && this.states[scope.state],
-            })
+                [`is-${states[scope.state]}`]: scope.state && states[scope.state] && !Object.prototype.hasOwnProperty.call(attrs, 'readonly'),
+            });
         };
     },
     template: '<input class="fd-input" ng-class="getClasses()" />',
@@ -73,7 +74,7 @@ blimpkit.directive('bkInput', (classNames) => ({
             'is-focus': $scope.focus === true,
             'is-readonly': $scope.isReadonly === true,
             'is-disabled': $scope.isDisabled || (Object.prototype.hasOwnProperty.call($attrs, 'disabled') && $attrs.disabled === true),
-            [`is-${states[$scope.state]}`]: $scope.state && states[$scope.state]
+            [`is-${states[$scope.state]}`]: $scope.state && states[$scope.state] && !$scope.isReadonly,
         });
 
         this.setDisabled = function (disabled) {

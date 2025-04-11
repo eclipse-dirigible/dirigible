@@ -48,7 +48,8 @@
                         </tr>
                         <tr bk-table-row>
                             <td bk-table-cell><strong>Commit Id</strong></td>
-                            <td bk-table-cell><a style="color:inherit" href="{{::version.productRepository}}/commit/{{::version.productCommitId}}" target="_blank" rel="noopener noreferrer">{{::version.productCommitId}}</a>
+                            <td bk-table-cell>
+                                <a style="color:inherit" href="{{::version.productRepository}}/commit/{{::version.productCommitId}}" target="_blank" rel="noopener noreferrer">{{::version.productCommitId}}</a>
                             </td>
                         </tr>
                         <tr bk-table-row>
@@ -112,7 +113,7 @@
             </bk-panel-header>
             <bk-panel-content aria-label="Panel Content">
                 <table bk-table fixed="true" display-mode="compact">
-                    <thead bk-table-header>
+                    <thead bk-table-header interactive="false">
                         <tr bk-table-row>
                             <th bk-table-header-cell>Synchronizer</th>
                             <th bk-table-header-cell>Status</th>
