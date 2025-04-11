@@ -12,9 +12,9 @@
 const perspectiveData = {
 	id: 'perspectiveDocuments',
 	label: 'Documents',
-	path: '/services/web/perspective-documents/documents.html',
+	path: '/services/web/documents/index.html',
 	order: 150,
-	icon: '/services/web/perspective-documents/images/documents.svg',
+	icon: '/services/web/documents/images/documents.svg',
 };
 const viewData = {
 	lazyLoad: true,

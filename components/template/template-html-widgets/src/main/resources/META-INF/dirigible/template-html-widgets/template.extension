@@ -1,5 +1,0 @@
-{
-    "extensionPoint": "ide-template",
-    "module": "template-html-widgets/template.js",
-    "description": "HTML Widgets Template"
-}

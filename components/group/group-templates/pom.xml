@@ -100,10 +100,6 @@
 		</dependency>
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-template-html-widgets</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-template-http-client</artifactId>
 		</dependency>
 		<dependency>

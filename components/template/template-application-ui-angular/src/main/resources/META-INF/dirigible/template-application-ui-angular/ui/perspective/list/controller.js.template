@@ -1,43 +1,39 @@
 #set($dollar = '$')
-angular.module('page', ["ideUI", "ideView", "entityApi"])
-	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = '${projectName}.${perspectiveName}.${name}';
+angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+	.config(['EntityServiceProvider', (EntityServiceProvider) => {
+		EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts';
 	}])
-	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
-	}])
-	.controller('PageController', ['${dollar}scope',#if($hasDropdowns) '${dollar}http',#end 'messageHub', 'entityApi', 'Extensions', function (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end messageHub, entityApi, Extensions) {
-
+	.controller('PageController', (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end EntityService, Extensions) => {
+		const Dialogs = new DialogHub();
 		$scope.dataPage = 1;
 		$scope.dataCount = 0;
 		$scope.dataLimit = 20;
 
 		//-----------------Custom Actions-------------------//
-		Extensions.get('dialogWindow', '${projectName}-custom-action').then(function (response) {
-			$scope.pageActions = response.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && (e.type === "page" || e.type === undefined));
-			$scope.entityActions = response.filter(e => e.perspective === "${perspectiveName}" && e.view === "${name}" && e.type === "entity");
+		Extensions.getWindows(['${projectName}-custom-action']).then((response) => {
+			$scope.pageActions = response.data.filter(e => e.perspective === '${perspectiveName}' && e.view === '${name}' && (e.type === 'page' || e.type === undefined));
+			$scope.entityActions = response.data.filter(e => e.perspective === '${perspectiveName}' && e.view === '${name}' && e.type === 'entity');
 		});
 
-		$scope.triggerPageAction = function (action) {
-			messageHub.showDialogWindow(
-				action.id,
-				{},
-				null,
-				true,
-				action
-			);
+		$scope.triggerPageAction = (action) => {
+			Dialogs.showWindow({
+				hasHeader: true,
+        		title: action.label,
+				path: action.path,
+				closeButton: true
+			});
 		};
 
-		$scope.triggerEntityAction = function (action) {
-			messageHub.showDialogWindow(
-				action.id,
-				{
+		$scope.triggerEntityAction = (action) => {
+			Dialogs.showWindow({
+				hasHeader: true,
+        		title: action.label,
+				path: action.path,
+				params: {
 					id: $scope.entity.${primaryKeysString}
 				},
-				null,
-				true,
-				action
-			);
+				closeButton: true
+			});
 		};
 		//-----------------Custom Actions-------------------//
 
@@ -49,26 +45,22 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		resetPagination();
 
 		//-----------------Events-------------------//
-		messageHub.onDidReceiveMessage("entitySearch", function (msg) {
+		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.entitySearch', handler: (data) => {
 			resetPagination();
-			$scope.filter = msg.data.filter;
-			$scope.filterEntity = msg.data.entity;
+			$scope.filter = data.filter;
+			$scope.filterEntity = data.entity;
 			$scope.loadPage($scope.dataPage, $scope.filter);
-		});
+		}});
 		//-----------------Events-------------------//
 
-		$scope.loadPage = function (pageNumber, filter) {
+		$scope.loadPage = (pageNumber, filter) => {
 			if (!filter && $scope.filter) {
 				filter = $scope.filter;
 			}
 			$scope.dataPage = pageNumber;
-			entityApi.count(filter).then(function (response) {
-				if (response.status != 200) {
-					messageHub.showAlertError("${name}", `Unable to count ${name}: '${response.message}'`);
-					return;
-				}
-				if (response.data) {
-					$scope.dataCount = response.data;
+			EntityService.count(filter).then((resp) => {
+				if (resp.data) {
+					$scope.dataCount = resp.data.count;
 				}
 				let offset = (pageNumber - 1) * $scope.dataLimit;
 				let limit = $scope.dataLimit;
@@ -76,17 +68,12 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 				if (filter) {
 					filter.$offset = offset;
 					filter.$limit = limit;
-					request = entityApi.search(filter);
+					request = EntityService.search(filter);
 				} else {
-					request = entityApi.list(offset, limit);
+					request = EntityService.list(offset, limit);
 				}
-				request.then(function (response) {
-					if (response.status != 200) {
-						messageHub.showAlertError("${name}", `Unable to list/filter ${name}: '${response.message}'`);
-						return;
-					}
+				request.then((response) => {
 #if($hasDates)
-
 					response.data.forEach(e => {
 #foreach ($property in $properties)
 #if($property.isDateType)
@@ -99,40 +86,62 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 
 #end
 					$scope.data = response.data;
+				}, (error) => {
+					const message = error.data ? error.data.message : '';
+					Dialogs.showAlert({
+						title: '${name}',
+						message: `Unable to list/filter ${name}: '${message}'`,
+						type: AlertTypes.Error
+					});
+					console.error('EntityService:', error);
 				});
+			}, (error) => {
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: '${name}',
+					message: `Unable to count ${name}: '${message}'`,
+					type: AlertTypes.Error
+				});
+				console.error('EntityService:', error);
 			});
 		};
 		$scope.loadPage($scope.dataPage, $scope.filter);
 
-		$scope.selectEntity = function (entity) {
+		$scope.selectEntity = (entity) => {
 			$scope.selectedEntity = entity;
 		};
 
-		$scope.openDetails = function (entity) {
+		$scope.openDetails = (entity) => {
 			$scope.selectedEntity = entity;
-			messageHub.showDialogWindow("${name}-details", {
-				action: "select",
-				entity: entity,
+			Dialogs.showWindow({
+				id: '${name}-details',
+				params: {
+					action: 'select',
+					entity: entity,
 #if($hasDropdowns)
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-				options${property.name}: $scope.options${property.name},
+					options${property.name}: $scope.options${property.name},
 #end
 #end
 #end
+				},
 			});
 		};
 
-		$scope.openFilter = function (entity) {
-			messageHub.showDialogWindow("${name}-filter", {
-				entity: $scope.filterEntity,
+		$scope.openFilter = (entity) => {
+			Dialogs.showWindow({
+				id: '${name}-filter',
+				params: {
+					entity: $scope.filterEntity,
 #if($hasDropdowns)
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-				options${property.name}: $scope.options${property.name},
+					options${property.name}: $scope.options${property.name},
 #end
 #end
 #end
+				},
 			});
 		};
 #if($hasDropdowns)
@@ -146,19 +155,25 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
 
-		${dollar}http.get("${property.widgetDropdownUrl}").then(function (response) {
-			${dollar}scope.options${property.name} = response.data.map(e => {
-				return {
-					value: e.${property.widgetDropDownKey},
-					text: e.${property.widgetDropDownValue}
-				}
+		${dollar}http.get('${property.widgetDropdownUrl}').then((response) => {
+			${dollar}scope.options${property.name} = response.data.map(e => ({
+				value: e.${property.widgetDropDownKey},
+				text: e.${property.widgetDropDownValue}
+			}));
+		}, (error) => {
+			console.error(error);
+			const message = error.data ? error.data.message : '';
+			Dialogs.showAlert({
+				title: '${property.name}',
+				message: `Unable to load data: '${message}'`,
+				type: AlertTypes.Error
 			});
 		});
 #end
 #end
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-		${dollar}scope.options${property.name}Value = function (optionKey) {
+		${dollar}scope.options${property.name}Value = (optionKey) => {
 			for (let i = 0; i < ${dollar}scope.options${property.name}.length; i++) {
 				if (${dollar}scope.options${property.name}[i].value === optionKey) {
 					return ${dollar}scope.options${property.name}[i].text;
@@ -171,4 +186,4 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		//----------------Dropdowns-----------------//
 #end
 
-	}]);
+	});

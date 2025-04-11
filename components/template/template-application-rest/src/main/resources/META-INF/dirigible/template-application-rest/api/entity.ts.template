@@ -89,7 +89,7 @@ class ${name}Service {
 #if($perspectiveRole || $roleRead || $roleWrite)
             this.checkPermissions("read");
 #end
-            return this.repository.count();
+            return { count: this.repository.count() };
         } catch (error: any) {
             this.handleError(error);
         }
@@ -101,7 +101,7 @@ class ${name}Service {
 #if($perspectiveRole || $roleRead || $roleWrite)
             this.checkPermissions("read");
 #end
-            return this.repository.count(filter);
+            return { count: this.repository.count(filter) };
         } catch (error: any) {
             this.handleError(error);
         }

@@ -1,5 +1,0 @@
-{
-    "module": "inbox/ui/launchpad/Home/view.js",
-    "extensionPoint": "inbox-view",
-    "description": "inbox - Application View"
-}

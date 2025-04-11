@@ -6,12 +6,9 @@
 const viewData = {
     id: "${name}-details-filter",
     label: "${name}",
-    link: "/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${name}/dialog-window-filter/index.html",
-    perspectiveName: "${perspectiveName}"
+    path: "/services/web/${projectName}/gen/${genFolderName}/ui/Reports/${name}/dialog-window-filter/index.html",
+    perspectiveName: "Reports"
 };
-
 if (typeof exports !== 'undefined') {
-    exports.getDialogWindow = function () {
-        return viewData;
-    }
+    exports.getView = () => viewData;
 }

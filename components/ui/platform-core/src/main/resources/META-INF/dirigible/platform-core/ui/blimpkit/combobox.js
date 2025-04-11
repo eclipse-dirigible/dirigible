@@ -23,6 +23,7 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
             placeholder: '@?',
             compact: '<?',
             isDisabled: '<?',
+            isReadonly: '<?',
             state: '@?',
             message: '@?',
             inputId: '@',
@@ -245,6 +246,8 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
                 return scope.selectedValue.map(value => scope.dropdownItems.find(item => item.value === value));
             };
 
+            scope.getValue = () => ngModel.$viewValue;
+
             scope.onTokenClick = function (item) {
                 if (scope.bodyExpanded) {
                     element.find('input').focus();
@@ -290,20 +293,21 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
             });
         },
         template: `<div class="fd-popover" ng-keydown="onKeyDown($event)">
-            <div class="fd-popover__control" ng-attr-disabled="{{isDisabled === true}}" ng-attr-aria-disabled="{{isDisabled === true}}" aria-expanded="{{ isBodyExpanded() }}" aria-haspopup="true" aria-controls="{{ bodyId }}">
-                <bk-input-group compact="compact" class="fd-input-group--control" state="{{ state }}" is-disabled="isDisabled">
+            <div class="fd-popover__control" ng-attr-disabled="{{isDisabled === true}}" ng-attr-aria-disabled="{{isDisabled === true}}" aria-expanded="{{ isBodyExpanded() }}" aria-haspopup="{{isReadonly ? 'false' : 'true'}}" aria-controls="{{ bodyId }}" ng-readonly="isReadonly">
+                <bk-input-group ng-if="!isReadonly" compact="compact" class="fd-input-group--control" state="{{ state }}" is-disabled="isDisabled">
                     <bk-tokenizer ng-if="multiSelect">
                         <bk-token ng-repeat="item in getSelectedItems()" close-clicked="onTokenClick(item)" label="{{item.text}}" close-aria-label="unselect option: {{item.text}}" tabindex="0"></bk-token>
                         <bk-token-indicator></bk-token-indicator>
                         <bk-input ng-attr-id="{{ inputId }}" type="text" autocomplete="off" placeholder="{{ placeholder }}" ng-focus="openDropdown()" ng-change="onInputChange()" ng-model="search.term" ng-keydown="onSearchKeyDown($event)"></bk-input>
                     </bk-tokenizer>
-                    <bk-input ng-if="!multiSelect" ng-attr-id="{{ inputId }}" type="text" autocomplete="off" placeholder="{{ placeholder }}" ng-focus="openDropdown()" ng-change="onInputChange()" ng-model="search.term" tabindex="0"></bk-input>
+                    <bk-input ng-if="!multiSelect" ng-attr-id="{{ inputId }}" type="text" autocomplete="off" placeholder="{{ placeholder }}" ng-focus="openDropdown()" ng-change="onInputChange()" ng-model="search.term" tabindex="0" ng-readonly="isReadonly"></bk-input>
                     <bk-input-group-addon>
                         <bk-button class="fd-select__button" glyph="sap-icon--navigation-down-arrow" state="${ButtonStates.Transparent}" ng-disabled="isDisabled" ng-click="onControllClick()" aria-label="{{btnAriaLabel}}" aria-controls="{{ bodyId }}" aria-haspopup="true"></bk-button>
                     </bk-input-group-addon>
                 </bk-input-group>
+                <bk-input ng-if="isReadonly" ng-attr-id="{{ inputId }}" type="text" autocomplete="off" placeholder="{{ placeholder }}" value="{{getValue()}}" tabindex="0" aria-readonly="true" readonly></bk-input>
             </div>
-            <div ng-if="isDisabled !== true" id="{{ bodyId }}" class="fd-popover__body fd-popover__body--no-arrow fd-popover__body--dropdown fd-popover__body--dropdown-fill" aria-hidden="{{ !isBodyExpanded() }}">
+            <div ng-if="isDisabled !== true && isReadonly !== true" id="{{ bodyId }}" class="fd-popover__body fd-popover__body--no-arrow fd-popover__body--dropdown fd-popover__body--dropdown-fill" aria-hidden="{{ !isBodyExpanded() }}">
                 <div class="fd-popover__wrapper" bk-scrollbar style="max-height:{{ maxBodyHeight || defaultHeight }}px;">
                     <bk-list-message ng-if="message" type="{{ state }}">{{ message }}</bk-list-message>
                     <bk-list class="{{getListClasses()}}" dropdown-mode="true" compact="compact" has-message="!!message" aria-label="{{listAriaLabel}}">

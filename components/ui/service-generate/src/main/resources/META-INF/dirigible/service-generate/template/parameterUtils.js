@@ -156,7 +156,9 @@ export function process(model, parameters) {
             }
             parameters.perspectives[e.perspectiveName].name = e.perspectiveName;
             parameters.perspectives[e.perspectiveName].label = e.perspectiveName;
+            parameters.perspectives[e.perspectiveName].header = e.perspectiveHeader;
             parameters.perspectives[e.perspectiveName].order = e.perspectiveOrder;
+            parameters.perspectives[e.perspectiveName].navId = e.perspectiveNavId;
             parameters.perspectives[e.perspectiveName].icon = e.perspectiveIcon;
             parameters.perspectives[e.perspectiveName].role = e.perspectiveRole;
             parameters.perspectives[e.perspectiveName].views.push(e.name);

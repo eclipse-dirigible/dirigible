@@ -144,7 +144,6 @@ abstract class BPMLeaveRequestTestProject extends BaseTestProject {
         browser.clickOnElementContainingText(HtmlElementType.TR, "Process request");
 
         browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Claim");
-        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Close");
 
         browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Open Form");
         browser.switchToLatestTab();

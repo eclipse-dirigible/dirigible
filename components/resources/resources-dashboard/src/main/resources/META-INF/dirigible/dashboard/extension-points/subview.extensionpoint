@@ -1,0 +1,4 @@
+{
+    "name": "application-subviews",
+    "description": "Extension Point for the Application Subview Providers"
+}

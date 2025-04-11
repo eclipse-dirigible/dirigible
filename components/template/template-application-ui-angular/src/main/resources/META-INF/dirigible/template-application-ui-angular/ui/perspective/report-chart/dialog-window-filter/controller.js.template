@@ -1,51 +1,46 @@
 #set($dollar = '$')
-angular.module('page', ["ideUI", "ideView"])
-	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = '${projectName}.${perspectiveName}.${name}';
-	}])
-	.controller('PageController', ['$scope', 'messageHub', 'ViewParameters', function ($scope, messageHub, ViewParameters) {
+angular.module('page', ['blimpKit', 'platformView']).controller('PageController', ($scope, ViewParameters) => {
+	const Dialogs = new DialogHub();
+	$scope.forms = {
+		details: {},
+	};
 
-		$scope.forms = {
-			details: {},
-		};
-
-		let params = ViewParameters.get();
-		if (Object.keys(params).length) {
+	let params = ViewParameters.get();
+	if (Object.keys(params).length) {
 #foreach ($property in $filter.properties)
 #if($property.isDateType)
-				if (params?.filter?.${property.name}) {
-					params.filter.${property.name} = new Date(params.filter.${property.name});
-				}
+			if (params?.filter?.${property.name}) {
+				params.filter.${property.name} = new Date(params.filter.${property.name});
+			}
 #end
 #end
-				$scope.entity = params.filter ?? {};
+			$scope.entity = params.filter ?? {};
 #foreach ($property in $filter.properties)
 #if($property.widgetType == "DROPDOWN")
-				$scope.options${property.name} = params.options${property.name};
+			$scope.options${property.name} = params.options${property.name};
 #end
 #end
-		}
+	}
 
-		$scope.filter = function () {
-			const filter = {
-				...$scope.entity
-			};
+	$scope.filter = () => {
+		const filter = {
+			...$scope.entity
+		};
 #foreach ($property in $filter.properties)
 #if($property.isDateType)
-			filter.${property.name} = filter.${property.name}?.getTime();
+		filter.${property.name} = filter.${property.name}?.getTime();
 #end
 #end
-			messageHub.postMessage("filter", filter);
-			$scope.cancel();
-		};
+		Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.filter', data: filter });
+		$scope.cancel();
+	};
 
-		$scope.resetFilter = function () {
-			$scope.entity = {};
-			$scope.filter();
-		};
+	$scope.resetFilter = () => {
+		$scope.entity = {};
+		$scope.filter();
+	};
 
-		$scope.cancel = function () {
-			messageHub.closeDialogWindow("${name}-details-filter");
-		};
-
-	}]);
+	$scope.cancel = () => {
+		Dialogs.closeWindow({ id: '${name}-details-filter' });
+	};
+});

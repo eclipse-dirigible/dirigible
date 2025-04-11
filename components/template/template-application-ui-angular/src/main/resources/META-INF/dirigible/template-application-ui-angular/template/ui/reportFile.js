@@ -7,65 +7,18 @@
 export function getSources(parameters) {
     const sources = [];
 
-    sources.push(...getReportPerspectiveSources());
     sources.push(...getTableReportBackendSources());
     sources.push(...getTableReportUISource());
 
     return sources;
 };
 
-function getReportPerspectiveSources() {
-    return [
-        // Location: "gen/{{genFolderName}}/ui/perspective"
-        {
-            location: "/template-application-ui-angular/ui/perspective/index-report-file.html",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/index.html",
-            collection: "generateReportModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/perspective-report-file.extension",
-            action: "generate",
-            rename: "gen/{{genFolderName}}/ui/Reports/perspective.extension",
-            collection: "generateReportModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/perspective-portal-report.extension",
-            action: "generate",
-            rename: "gen/{{genFolderName}}/ui/Reports/perspective-portal.extension",
-            collection: "generateReportModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/perspective-navigation-report.extension.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/perspective-navigation.extension",
-            collection: "generateReportModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/perspective-navigation-report.js.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/perspective-navigation.js",
-            collection: "generateReportModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/perspective-report-file.js.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/perspective.js",
-            collection: "generateReportModels"
-        },
-    ];
-}
-
 function getTableReportBackendSources() {
     return [
         {
             location: "/template-application-dao/dao/reportFileEntity.ts.template",
             action: "generate",
-            rename: "gen/{{genFolderName}}/dao/{{perspectiveName}}/{{name}}Repository.ts",
+            rename: "gen/{{genFolderName}}/dao/Reports/{{name}}Repository.ts",
             engine: "velocity",
             collection: "reportModels"
         },
@@ -84,7 +37,7 @@ function getTableReportBackendSources() {
         }, {
             location: "/template-application-rest/api/reportFileEntity.ts.template",
             action: "generate",
-            rename: "gen/{{genFolderName}}/api/{{perspectiveName}}/{{name}}Service.ts",
+            rename: "gen/{{genFolderName}}/api/Reports/{{name}}Service.ts",
             engine: "velocity",
             collection: "reportModels"
         }, {
@@ -178,27 +131,6 @@ function getTableReportUISource() {
             action: "generate",
             engine: "velocity",
             rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/index.html",
-            collection: "generateReportModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/report-file/tile.extension.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/tile.extension",
-            collection: "generateReportModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/report-file/tile-portal.extension.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/tile-portal.extension",
-            collection: "generateReportModels"
-        },
-        {
-            location: "/template-application-ui-angular/ui/perspective/report-file/tile.js.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/tile.js",
             collection: "generateReportModels"
         },
         {
