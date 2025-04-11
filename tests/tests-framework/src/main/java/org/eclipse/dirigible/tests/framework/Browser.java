@@ -70,6 +70,8 @@ public interface Browser {
 
     void clickElementByAttributes(HtmlElementType elementType, Map<HtmlAttribute, String> attributes);
 
+    void assertElementValueByAttributes(HtmlElementType elementType, Map<HtmlAttribute, String> attributes, String expectedValue);
+
     void doubleClickOnElementContainingText(HtmlElementType htmlElementType, String text);
 
     void doubleClickOnElementContainingText(String htmlElementType, String text);
@@ -123,5 +125,4 @@ public interface Browser {
 
     By constructCssSelectorByTypeAndAttribute(String elementType, String attribute, String attributePattern);
 
-    By constructCssSelectorByTypeAndAttribute(HtmlElementType elementType, HtmlAttribute attribute, String attributePattern);
 }

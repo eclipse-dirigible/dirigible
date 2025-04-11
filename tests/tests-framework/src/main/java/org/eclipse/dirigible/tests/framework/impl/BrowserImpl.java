@@ -35,6 +35,7 @@ import java.util.*;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
+import static com.codeborne.selenide.Selenide.$;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
@@ -250,11 +251,6 @@ class BrowserImpl implements Browser {
             return "Failed to describe elements by [" + by + "] and conditions [" + Arrays.toString(conditions) + "] due to error: "
                     + ex.getMessage();
         }
-    }
-
-    @Override
-    public By constructCssSelectorByTypeAndAttribute(HtmlElementType elementType, HtmlAttribute attribute, String attributePattern) {
-        return constructCssSelectorByTypeAndAttribute(elementType.getType(), attribute.getAttribute(), attributePattern);
     }
 
     @Override
@@ -550,7 +546,7 @@ class BrowserImpl implements Browser {
         attributes.forEach((attribute, value) -> {
             cssSelector.append("[")
                        .append(attribute.getAttribute())
-                       .append("='")
+                       .append("*='")
                        .append(value)
                        .append("']");
         });
@@ -558,6 +554,28 @@ class BrowserImpl implements Browser {
         By by = Selectors.byCssSelector(cssSelector.toString());
         handleElementInAllFrames(by, SelenideElement::click, Condition.visible);
     }
+
+    @Override
+    public void assertElementValueByAttributes(HtmlElementType elementType, Map<HtmlAttribute, String> attributes, String expectedValue) {
+        if (attributes.isEmpty()) {
+            throw new IllegalArgumentException("Attributes map cannot be empty");
+        }
+
+        StringBuilder cssSelector = new StringBuilder(elementType.getType());
+        attributes.forEach((attribute, value) -> {
+            cssSelector.append("[")
+                       .append(attribute.getAttribute())
+                       .append("='")
+                       .append(value)
+                       .append("']");
+        });
+
+        By by = Selectors.byCssSelector(cssSelector.toString());
+        SelenideElement element = findElementInAllFrames(by, Condition.visible);
+        String actualValue = element.getValue();
+        assertThat(actualValue).isEqualTo(expectedValue);
+    }
+
 
     @Override
     public void assertElementExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text) {
@@ -585,6 +603,7 @@ class BrowserImpl implements Browser {
             failWithScreenshot("Element with selector [" + by + "] was not found");
         }
     }
+
 
     @Override
     public void clickOnElementById(String id) {

@@ -1,0 +1,362 @@
+{
+    "schema": {
+        "structures": [
+            {
+                "name": "COUNTRY",
+                "type": "TABLE",
+                "columns": [
+                    {
+                        "type": "INTEGER",
+                        "primaryKey": true,
+                        "identity": true,
+                        "nullable": true,
+                        "name": "COUNTRY_ID"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 100,
+                        "nullable": true,
+                        "name": "COUNTRY_NAME"
+                    }
+                ]
+            },
+            {
+                "name": "CITY",
+                "type": "TABLE",
+                "columns": [
+                    {
+                        "type": "INTEGER",
+                        "primaryKey": true,
+                        "identity": true,
+                        "nullable": true,
+                        "name": "CITY_ID"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 100,
+                        "nullable": true,
+                        "name": "CITY_NAME"
+                    },
+                    {
+                        "type": "INTEGER",
+                        "nullable": true,
+                        "name": "CITY_COUNTRY"
+                    }
+                ]
+            },
+            {
+                "name": "CUSTOMER",
+                "type": "TABLE",
+                "columns": [
+                    {
+                        "type": "INTEGER",
+                        "primaryKey": true,
+                        "identity": true,
+                        "nullable": true,
+                        "name": "CUSTOMER_ID"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 100,
+                        "nullable": true,
+                        "name": "CUSTOMER_NAME"
+                    },
+                    {
+                        "type": "INTEGER",
+                        "nullable": true,
+                        "name": "CUSTOMER_COUNTRY"
+                    },
+                    {
+                        "type": "INTEGER",
+                        "nullable": true,
+                        "name": "CUSTOMER_CITY"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 100,
+                        "nullable": true,
+                        "name": "CUSTOMER_ADDRESS"
+                    }
+                ]
+            },
+            {
+                "name": "CUSTOMERPAYMENT",
+                "type": "TABLE",
+                "columns": [
+                    {
+                        "type": "INTEGER",
+                        "primaryKey": true,
+                        "identity": true,
+                        "nullable": true,
+                        "name": "CUSTOMERPAYMENT_ID"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 100,
+                        "nullable": true,
+                        "name": "CUSTOMERPAYMENT_NAME"
+                    },
+                    {
+                        "type": "INTEGER",
+                        "nullable": true,
+                        "name": "CUSTOMERPAYMENT_CUSTOMER"
+                    },
+                    {
+                        "type": "DECIMAL",
+                        "nullable": true,
+                        "name": "CUSTOMERPAYMENT_AMOUNT"
+                    }
+                ]
+            },
+            {
+                "name": "PRODUCT",
+                "type": "TABLE",
+                "columns": [
+                    {
+                        "type": "INTEGER",
+                        "primaryKey": true,
+                        "identity": true,
+                        "nullable": true,
+                        "name": "PRODUCT_ID"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 100,
+                        "nullable": true,
+                        "name": "PRODUCT_NAME"
+                    },
+                    {
+                        "type": "INTEGER",
+                        "nullable": true,
+                        "name": "PRODUCT_UOM"
+                    },
+                    {
+                        "type": "DECIMAL",
+                        "length": 18,
+                        "precision": "2",
+                        "scale": "16",
+                        "nullable": true,
+                        "name": "PRODUCT_PRICE"
+                    }
+                ]
+            },
+            {
+                "name": "UOM",
+                "type": "TABLE",
+                "columns": [
+                    {
+                        "type": "INTEGER",
+                        "primaryKey": true,
+                        "identity": true,
+                        "nullable": true,
+                        "name": "UOM_ID"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 50,
+                        "nullable": true,
+                        "name": "UOM_NAME"
+                    }
+                ]
+            },
+            {
+                "name": "SALESORDER",
+                "type": "TABLE",
+                "columns": [
+                    {
+                        "type": "INTEGER",
+                        "primaryKey": true,
+                        "identity": true,
+                        "nullable": true,
+                        "name": "SALESORDER_ID"
+                    },
+                    {
+                        "type": "INTEGER",
+                        "nullable": true,
+                        "name": "SALESORDER_CUSTOMER"
+                    },
+                    {
+                        "type": "DATE",
+                        "nullable": true,
+                        "name": "SALESORDER_DATE"
+                    }
+                ]
+            },
+            {
+                "name": "SALESORDERITEM",
+                "type": "TABLE",
+                "columns": [
+                    {
+                        "type": "INTEGER",
+                        "primaryKey": true,
+                        "identity": true,
+                        "nullable": true,
+                        "name": "SALESORDERITEM_ID"
+                    },
+                    {
+                        "type": "INTEGER",
+                        "nullable": true,
+                        "name": "SALESORDERITEM_SALESORDER"
+                    },
+                    {
+                        "type": "INTEGER",
+                        "nullable": true,
+                        "name": "SALESORDERITEM_PRODUCT"
+                    },
+                    {
+                        "type": "INTEGER",
+                        "nullable": true,
+                        "name": "SALESORDERITEM_UOM"
+                    },
+                    {
+                        "type": "DECIMAL",
+                        "nullable": true,
+                        "name": "SALESORDERITEM_PRICE"
+                    }
+                ]
+            },
+            {
+                "name": "SALESORDERPAYMENT",
+                "type": "TABLE",
+                "columns": [
+                    {
+                        "type": "INTEGER",
+                        "primaryKey": true,
+                        "identity": true,
+                        "nullable": true,
+                        "name": "SALESORDERPAYMENT_ID"
+                    },
+                    {
+                        "type": "INTEGER",
+                        "nullable": true,
+                        "name": "SALESORDERPAYMENT_SALESORDER"
+                    },
+                    {
+                        "type": "INTEGER",
+                        "nullable": true,
+                        "name": "SALESORDERPAYMENT_CUSTOMER"
+                    },
+                    {
+                        "type": "INTEGER",
+                        "nullable": true,
+                        "name": "SALESORDERPAYMENT_CUSTOMERPAYMENT"
+                    },
+                    {
+                        "type": "DECIMAL",
+                        "nullable": true,
+                        "name": "SALESORDERPAYMENT_AMOUNT"
+                    }
+                ]
+            },
+            {
+                "name": "City_Country",
+                "type": "foreignKey",
+                "table": "CITY",
+                "constraintName": "City_Country",
+                "columns": "CITY_COUNTRY",
+                "referencedTable": "COUNTRY",
+                "referencedColumns": "COUNTRY_ID"
+            },
+            {
+                "name": "Customer_Country",
+                "type": "foreignKey",
+                "table": "CUSTOMER",
+                "constraintName": "Customer_Country",
+                "columns": "CUSTOMER_COUNTRY",
+                "referencedTable": "COUNTRY",
+                "referencedColumns": "COUNTRY_ID"
+            },
+            {
+                "name": "Customer_City",
+                "type": "foreignKey",
+                "table": "CUSTOMER",
+                "constraintName": "Customer_City",
+                "columns": "CUSTOMER_CITY",
+                "referencedTable": "CITY",
+                "referencedColumns": "CITY_ID"
+            },
+            {
+                "name": "CustomerPayment_Customer",
+                "type": "foreignKey",
+                "table": "CUSTOMERPAYMENT",
+                "constraintName": "CustomerPayment_Customer",
+                "columns": "CUSTOMERPAYMENT_CUSTOMER",
+                "referencedTable": "CUSTOMER",
+                "referencedColumns": "CUSTOMER_ID"
+            },
+            {
+                "name": "Product_UoM",
+                "type": "foreignKey",
+                "table": "PRODUCT",
+                "constraintName": "Product_UoM",
+                "columns": "PRODUCT_UOM",
+                "referencedTable": "UOM",
+                "referencedColumns": "UOM_ID"
+            },
+            {
+                "name": "SalesOrder_Customer",
+                "type": "foreignKey",
+                "table": "SALESORDER",
+                "constraintName": "SalesOrder_Customer",
+                "columns": "SALESORDER_CUSTOMER",
+                "referencedTable": "CUSTOMER",
+                "referencedColumns": "CUSTOMER_ID"
+            },
+            {
+                "name": "SalesOrderItem_SalesOrder",
+                "type": "foreignKey",
+                "table": "SALESORDERITEM",
+                "constraintName": "SalesOrderItem_SalesOrder",
+                "columns": "SALESORDERITEM_SALESORDER",
+                "referencedTable": "SALESORDER",
+                "referencedColumns": "SALESORDER_ID"
+            },
+            {
+                "name": "SalesOrderItem_Product",
+                "type": "foreignKey",
+                "table": "SALESORDERITEM",
+                "constraintName": "SalesOrderItem_Product",
+                "columns": "SALESORDERITEM_PRODUCT",
+                "referencedTable": "PRODUCT",
+                "referencedColumns": "PRODUCT_ID"
+            },
+            {
+                "name": "SalesOrderItem_UoM",
+                "type": "foreignKey",
+                "table": "SALESORDERITEM",
+                "constraintName": "SalesOrderItem_UoM",
+                "columns": "SALESORDERITEM_UOM",
+                "referencedTable": "UOM",
+                "referencedColumns": "UOM_ID"
+            },
+            {
+                "name": "SalesOrderPayment_SalesOrder",
+                "type": "foreignKey",
+                "table": "SALESORDERPAYMENT",
+                "constraintName": "SalesOrderPayment_SalesOrder",
+                "columns": "SALESORDERPAYMENT_SALESORDER",
+                "referencedTable": "SALESORDER",
+                "referencedColumns": "SALESORDER_ID"
+            },
+            {
+                "name": "SalesOrderPayment_Customer",
+                "type": "foreignKey",
+                "table": "SALESORDERPAYMENT",
+                "constraintName": "SalesOrderPayment_Customer",
+                "columns": "SALESORDERPAYMENT_CUSTOMER",
+                "referencedTable": "CUSTOMER",
+                "referencedColumns": "CUSTOMER_ID"
+            },
+            {
+                "name": "SalesOrderPayment_CustomerPayment",
+                "type": "foreignKey",
+                "table": "SALESORDERPAYMENT",
+                "constraintName": "SalesOrderPayment_CustomerPayment",
+                "columns": "SALESORDERPAYMENT_CUSTOMERPAYMENT",
+                "referencedTable": "CUSTOMERPAYMENT",
+                "referencedColumns": "CUSTOMERPAYMENT_ID"
+            }
+        ]
+    },
+    "datasource": "DefaultDB"
+}
