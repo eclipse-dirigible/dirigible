@@ -141,7 +141,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 
 		$scope.openFilter = () => {
 			Dialogs.showWindow({
-				path: '${name}-Report-filter',
+				id: '${name}-Report-filter',
 				params: {
 					entity: $scope.filterEntity,
 #if($hasDropdowns)
