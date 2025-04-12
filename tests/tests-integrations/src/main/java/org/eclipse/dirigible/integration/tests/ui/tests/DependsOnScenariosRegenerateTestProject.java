@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 
 @Lazy
 @Component
-public class DependsOnScenariosRegenerateTestProject extends DependsOnScenariosTestProject{
+public class DependsOnScenariosRegenerateTestProject extends DependsOnScenariosTestProject {
     DependsOnScenariosRegenerateTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, Browser browser) {
         super(ide, projectUtil, edmView, browser);
     }
