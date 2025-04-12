@@ -44,39 +44,37 @@ class DependsOnScenariosTestProject extends BaseTestProject {
 
     @Override
     public void verify() {
-        browser.openPath(VERIFICATION_URI_CY);
+        countryCityDependency();
+        productUom();
+        productPrice();
+        orderCustomer();
+        customerPayment();
+        paymentAmount();
+    }
 
-        browser.clickElementByAttributes(HtmlElementType.BUTTON,
-                Map.of(HtmlAttribute.GLYPH, "sap-icon--add", HtmlAttribute.CLASS, "fd-button fd-button--transparent fd-button--compact"));
-        browser.clickElementByAttributes(HtmlElementType.BUTTON,
-                Map.of(HtmlAttribute.CLASS, "fd-button", HtmlAttribute.NGCLICK, "refreshCountry()"));
-
-        asserCountryCity("Bulgaria", "Sofia");
-        asserCountryCity("Italy", "Rome");
-
-        // 2
+    private void paymentAmount() {
         browser.openPath(VERIFICATION_URI_PM);
         browser.clickOnElementByAttributePattern(HtmlElementType.ANCHOR, HtmlAttribute.CLASS,
                 "fd-list__link fd-list__link--navigation-indicator"); // customer A
 
-        browser.clickOnElementById("SalesOrderItem");
+        browser.clickOnElementById("SalesOrderPayment");
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
 
-        assertProductUom("Product A", "Kg");
-        assertProductUom("Product B", "Liter");
+        assertCustomerPaymentAmount();
+    }
 
-        // 3
+    private void customerPayment() {
         browser.openPath(VERIFICATION_URI_PM);
         browser.clickOnElementByAttributePattern(HtmlElementType.ANCHOR, HtmlAttribute.CLASS,
                 "fd-list__link fd-list__link--navigation-indicator"); // customer A
 
-        browser.clickOnElementById("SalesOrderItem");
+        browser.clickOnElementById("SalesOrderPayment");
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
 
-        assertProductPrice("Product A", "11");
-        assertProductPrice("Product B ", "20");
+        assertCustomerPayment();
+    }
 
-        // 4
+    private void orderCustomer() {
         browser.openPath(VERIFICATION_URI_PM);
         browser.clickOnElementByAttributePattern(HtmlElementType.ANCHOR, HtmlAttribute.CLASS,
                 "fd-list__link fd-list__link--navigation-indicator"); // customer A
@@ -88,26 +86,42 @@ class DependsOnScenariosTestProject extends BaseTestProject {
                 "fd-input ng-empty ng-valid fd-input-group__input", HtmlAttribute.PLACEHOLDER, "Search Customer ..."));
 
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Customer A");
+    }
 
-        // 5
+    private void productPrice() {
         browser.openPath(VERIFICATION_URI_PM);
         browser.clickOnElementByAttributePattern(HtmlElementType.ANCHOR, HtmlAttribute.CLASS,
                 "fd-list__link fd-list__link--navigation-indicator"); // customer A
 
-        browser.clickOnElementById("SalesOrderPayment");
+        browser.clickOnElementById("SalesOrderItem");
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
 
-        assertCustomerPayment();
+        assertProductPrice("Product A", "11");
+        assertProductPrice("Product B ", "20");
+    }
 
-        // 6
+    private void productUom() {
         browser.openPath(VERIFICATION_URI_PM);
         browser.clickOnElementByAttributePattern(HtmlElementType.ANCHOR, HtmlAttribute.CLASS,
                 "fd-list__link fd-list__link--navigation-indicator"); // customer A
 
-        browser.clickOnElementById("SalesOrderPayment");
+        browser.clickOnElementById("SalesOrderItem");
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
 
-        assertCustomerPaymentAmount();
+        assertProductUom("Product A", "Kg");
+        assertProductUom("Product B", "Liter");
+    }
+
+    private void countryCityDependency() {
+        browser.openPath(VERIFICATION_URI_CY);
+
+        browser.clickElementByAttributes(HtmlElementType.BUTTON,
+                Map.of(HtmlAttribute.GLYPH, "sap-icon--add", HtmlAttribute.CLASS, "fd-button fd-button--transparent fd-button--compact"));
+        browser.clickElementByAttributes(HtmlElementType.BUTTON,
+                Map.of(HtmlAttribute.CLASS, "fd-button", HtmlAttribute.NGCLICK, "refreshCountry()"));
+
+        asserCountryCity("Bulgaria", "Sofia");
+        asserCountryCity("Italy", "Rome");
     }
 
     private void clickEmptyCustomerField() {
