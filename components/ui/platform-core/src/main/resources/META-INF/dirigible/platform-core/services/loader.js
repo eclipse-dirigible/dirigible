@@ -14,7 +14,7 @@ import { registry } from 'sdk/platform';
 import { uuid } from 'sdk/utils';
 import { getBrandingJs, getKeyPrefix } from '/platform-branding/branding.mjs';
 
-const COOKIE_PREFIX = `${getKeyPrefix()}.platform-core.loader.`;
+const COOKIE_PREFIX = `${getKeyPrefix()}.ljs.`;
 
 const scriptIds = request.getParameter('ids') ?? request.getParameter('id');
 if (scriptIds) {
@@ -45,7 +45,7 @@ function setETag(scriptId) {
 }
 
 function getCacheKey(scriptId) {
-    return COOKIE_PREFIX + scriptId;
+    return COOKIE_PREFIX + scriptId.replaceAll(',', '.');
 }
 
 function isCached(scriptId) {
