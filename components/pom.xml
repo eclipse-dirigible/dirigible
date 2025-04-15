@@ -289,7 +289,7 @@
         <module>resources/resources-theme-quartz-dark</module>
         <module>resources/resources-theme-quartz-light</module>
         <module>resources/resources-themes</module>
-        <module>resources/resources-portal</module>
+        <module>resources/resources-dashboard</module>
         <module>resources/resources-inbox</module>
         <module>resources/resources-documents</module>
         <module>resources/resources-karavan-libs</module>
@@ -315,7 +315,6 @@
         <module>template/template-hello-world</module>
         <module>template/template-react</module>
         <module>template/template-html</module>
-        <module>template/template-html-widgets</module>
         <module>template/template-http-client</module>
         <module>template/template-job</module>
         <module>template/template-listener</module>
@@ -1576,7 +1575,7 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-resources-portal</artifactId>
+                <artifactId>dirigible-components-resources-dashboard</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -1806,11 +1805,6 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-template-html</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-html-widgets</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

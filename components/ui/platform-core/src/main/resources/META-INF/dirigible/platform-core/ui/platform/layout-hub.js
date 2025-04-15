@@ -124,14 +124,14 @@ class LayoutHub extends MessageHubApi {
     /**
      * Tells a view that it should gain focus from the inside.
      * @param {string} id - View id.
-     * @param {object} [params] - Custom parameters that will be set to the view's data-parameters attribute.
+     * @param {string} [region] - The region where the view is displayed. The options are 'left', 'right', 'center' and 'bottom'. Default is 'center'.
      */
-    focusView({ id, params } = {}) {
+    focusView({ id, region } = {}) {
         this.postMessage({
             topic: `platform.layout${this.layoutId}.view.focus`,
             data: {
                 id: id,
-                params: params,
+                region: region,
             }
         });
     }
@@ -319,8 +319,8 @@ class LayoutHub extends MessageHubApi {
     /**
      * Tells an editor that it has been focused.
      * @param {string} id - Editor tab id.
-     * @param {string} [path] - Full file path, including file name.
-     * @param {object} [params] - Custom parameters that will be set to the view's data-parameters attribute.
+     * @param {string} [path] - Full file path, including file name, of the file opened by the editor.
+     * @param {object} [params] - Extra parameters.
      */
     focusEditor({ id, path, params } = {}) {
         this.postMessage({

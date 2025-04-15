@@ -19,6 +19,12 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link rel="icon" href="data:;base64,iVBORw0KGgo=" brand-icon />
         <title config-title></title>
+        <script>
+            const viewData = {
+                label: 'Access Denied',
+                autoFocusTab: false
+            };
+        </script>
         <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
         <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
 
@@ -35,10 +41,6 @@
         </bk-message-page>
 
         <script>
-            const viewData = {
-                label: 'Access Denied',
-                autoFocusTab: false
-            };
             angular.module('errorPage', ['blimpKit', 'platformView']).controller('ErrorPageController', () => { });
         </script>
         <theme></theme>

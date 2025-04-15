@@ -5,14 +5,19 @@
  */
 const perspectiveData = {
 	id: '${perspectiveName}',
-	name: '${perspectiveLabel}',
-	link: '/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/index.html',
-	order: '${perspectiveOrder}',
+	label: '${perspectiveLabel}',
+#if($perspectiveHeader)
+	header: '${perspectiveHeader}',
+#end
+	path: '/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/index.html',
+#if($perspectiveNavId)
+	groupId: '${perspectiveNavId}',
+#end
+#if($perspectiveOrder)
+	order: ${perspectiveOrder},
+#end
 	icon: '${perspectiveIcon}'
 };
-
 if (typeof exports !== 'undefined') {
-	exports.getPerspective = function () {
-		return perspectiveData;
-	}
+	exports.getPerspective = () => perspectiveData;
 }

@@ -41,7 +41,7 @@
                     <bk-button state="transparent" glyph="sap-icon--save" label="Save" aria-label="save" ng-click="shortcuts()" ng-disabled="!(isFormValid() && changed)"></bk-button>
                 </bk-icon-tab-bar-buttons>
             </bk-icon-tab-bar-tablist>
-            <bk-icon-tab-bar-panel class="bk-hbox bk-fill-parent" tab-id="designer" ng-show="selectedTab === 'designer'">
+            <bk-icon-tab-bar-panel class="bk-hbox bk-fill-parent fb-panel" tab-id="designer" ng-show="selectedTab === 'designer'">
                 <bk-scrollbar class="bk-list-border--right">
                     <bk-panel class="fb-margin-block--none" expanded="true" ng-repeat="componentGroup in builderComponents track by $index">
                         <bk-panel-header>
@@ -162,64 +162,68 @@
                     </bk-panel>
                 </bk-scrollbar>
             </bk-icon-tab-bar-panel>
-            <bk-icon-tab-bar-panel tab-id="feeds" ng-show="selectedTab === 'feeds'">
+            <bk-icon-tab-bar-panel class="bk-vbox bk-fill-parent fb-panel" tab-id="feeds" ng-show="selectedTab === 'feeds'">
                 <bk-toolbar has-title="false">
                     <bk-toolbar-spacer></bk-toolbar-spacer>
                     <bk-button glyph="sap-icon--add" title="Add feed to list" state="transparent" label="Add" aria-label="Add feed to list" ng-click="addFeed()"></bk-button>
                 </bk-toolbar>
-                <table bk-table display-mode="compact" outer-borders="bottom">
-                    <thead bk-table-header>
-                        <tr bk-table-row>
-                            <th bk-table-header-cell>Name</th>
-                            <th bk-table-header-cell>URL</th>
-                            <th bk-table-header-cell></th>
-                        </tr>
-                    </thead>
-                    <tbody bk-table-body>
-                        <tr ng-if="formData.feeds.length === 0" bk-table-row>
-                            <td bk-table-cell no-data="true">No feeds.</td>
-                        </tr>
-                        <tr bk-table-row hoverable="false" ng-repeat="feed in formData.feeds track by $index">
-                            <td bk-table-cell>{{feed.name}}</td>
-                            <td bk-table-cell>{{feed.url}}</td>
-                            <td bk-table-cell fit-content="true">
-                                <bk-button glyph="sap-icon--edit" title="Edit feed" state="transparent" aria-label="Edit feed" ng-click="editFeed(feed)"></bk-button>
-                                <bk-button glyph="sap-icon--delete" title="Delete feed" state="transparent" aria-label="Delete feed" ng-click="deleteFeed($index)"></bk-button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                <bk-scrollbar class="bk-fill-parent">
+                    <table bk-table display-mode="compact" outer-borders="bottom">
+                        <thead bk-table-header sticky="true" interactive="false">
+                            <tr bk-table-row>
+                                <th bk-table-header-cell>Name</th>
+                                <th bk-table-header-cell>URL</th>
+                                <th bk-table-header-cell></th>
+                            </tr>
+                        </thead>
+                        <tbody bk-table-body>
+                            <tr ng-if="formData.feeds.length === 0" bk-table-row>
+                                <td bk-table-cell no-data="true">No feeds.</td>
+                            </tr>
+                            <tr bk-table-row hoverable="false" ng-repeat="feed in formData.feeds track by $index">
+                                <td bk-table-cell>{{feed.name}}</td>
+                                <td bk-table-cell>{{feed.url}}</td>
+                                <td bk-table-cell fit-content="true">
+                                    <bk-button glyph="sap-icon--edit" title="Edit feed" state="transparent" aria-label="Edit feed" ng-click="editFeed(feed)"></bk-button>
+                                    <bk-button glyph="sap-icon--delete" title="Delete feed" state="transparent" aria-label="Delete feed" ng-click="deleteFeed($index)"></bk-button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </bk-scrollbar>
             </bk-icon-tab-bar-panel>
-            <bk-icon-tab-bar-panel class="bk-hbox bk-fill-parent" tab-id="code" ng-show="selectedTab === 'code'">
-                <code-editor ng-if="!state.isBusy" name="formCode" code-lang="javascript" ng-model="formData.code" on-model-change="fileChanged"></code-editor>
+            <bk-icon-tab-bar-panel class="bk-hbox bk-fill-parent fb-panel" tab-id="code" ng-show="selectedTab === 'code'">
+                <code-editor ng-if="state.initialized" name="formCode" code-lang="javascript" ng-model="formData.code" on-model-change="fileChanged" set-focus="selectedTab === 'code' && !state.isBusy"></code-editor>
             </bk-icon-tab-bar-panel>
-            <bk-icon-tab-bar-panel tab-id="scripts" ng-show="selectedTab === 'scripts'">
+            <bk-icon-tab-bar-panel class="bk-vbox bk-fill-parent fb-panel" tab-id="scripts" ng-show="selectedTab === 'scripts'">
                 <bk-toolbar has-title="false">
                     <bk-toolbar-spacer></bk-toolbar-spacer>
                     <bk-button glyph="sap-icon--add" title="Add script URL to list" state="transparent" label="Add" aria-label="Add script URL to list" ng-click="addScript()"></bk-button>
                 </bk-toolbar>
-                <table bk-table display-mode="compact" outer-borders="bottom">
-                    <thead bk-table-header>
-                        <tr bk-table-row>
-                            <th bk-table-header-cell>Name</th>
-                            <th bk-table-header-cell>URL</th>
-                            <th bk-table-header-cell></th>
-                        </tr>
-                    </thead>
-                    <tbody bk-table-body>
-                        <tr ng-if="formData.scripts.length === 0" bk-table-row>
-                            <td bk-table-cell no-data="true">No scripts.</td>
-                        </tr>
-                        <tr bk-table-row hoverable="false" ng-repeat="script in formData.scripts track by $index">
-                            <td bk-table-cell>{{script.name}}</td>
-                            <td bk-table-cell>{{script.url}}</td>
-                            <td bk-table-cell fit-content="true">
-                                <bk-button glyph="sap-icon--edit" title="Edit script" state="transparent" aria-label="Edit script" ng-click="editScript(script)"></bk-button>
-                                <bk-button glyph="sap-icon--delete" title="Delete script" state="transparent" aria-label="Delete script" ng-click="deleteScript($index)"></bk-button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                <bk-scrollbar class="bk-fill-parent">
+                    <table bk-table display-mode="compact" outer-borders="bottom">
+                        <thead bk-table-header sticky="true" interactive="false">
+                            <tr bk-table-row>
+                                <th bk-table-header-cell>Name</th>
+                                <th bk-table-header-cell>URL</th>
+                                <th bk-table-header-cell></th>
+                            </tr>
+                        </thead>
+                        <tbody bk-table-body>
+                            <tr ng-if="formData.scripts.length === 0" bk-table-row>
+                                <td bk-table-cell no-data="true">No scripts.</td>
+                            </tr>
+                            <tr bk-table-row hoverable="false" ng-repeat="script in formData.scripts track by $index">
+                                <td bk-table-cell>{{script.name}}</td>
+                                <td bk-table-cell>{{script.url}}</td>
+                                <td bk-table-cell fit-content="true">
+                                    <bk-button glyph="sap-icon--edit" title="Edit script" state="transparent" aria-label="Edit script" ng-click="editScript(script)"></bk-button>
+                                    <bk-button glyph="sap-icon--delete" title="Delete script" state="transparent" aria-label="Delete script" ng-click="deleteScript($index)"></bk-button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </bk-scrollbar>
             </bk-icon-tab-bar-panel>
         </bk-icon-tab-bar>
         <bk-message-page glyph="sap-icon--error" ng-if="state.error">

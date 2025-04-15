@@ -31,15 +31,12 @@
         </bk-busy-indicator-extended>
         <bk-icon-tab-bar side-padding="sm" selected-tab-id="selectedTab" ng-show="!state.error && !state.isBusy">
             <bk-icon-tab-bar-tablist>
-                <bk-icon-tab-bar-tab label="General" tab-id="general" ng-click="switchTab('general')">
-                </bk-icon-tab-bar-tab>
+                <bk-icon-tab-bar-tab label="General" tab-id="general" ng-click="switchTab('general')"></bk-icon-tab-bar-tab>
                 <bk-icon-tab-bar-tab label="Data" tab-id="data" ng-click="switchTab('data')"></bk-icon-tab-bar-tab>
-                <bk-icon-tab-bar-tab label="User interface" tab-id="ui" ng-click="switchTab('ui')">
-                </bk-icon-tab-bar-tab>
+                <bk-icon-tab-bar-tab label="User interface" tab-id="ui" ng-click="switchTab('ui')"></bk-icon-tab-bar-tab>
                 <bk-icon-tab-bar-tab label="Feed" tab-id="feed" ng-click="switchTab('feed')"></bk-icon-tab-bar-tab>
                 <bk-icon-tab-bar-tab label="Security" tab-id="security" ng-click="switchTab('security')" ng-hide="dataParameters.entityType === 'PROJECTION'"></bk-icon-tab-bar-tab>
-                <bk-icon-tab-bar-tab label="Imports" tab-id="imports" ng-click="switchTab('imports')">
-                </bk-icon-tab-bar-tab>
+                <bk-icon-tab-bar-tab label="Imports" tab-id="imports" ng-click="switchTab('imports')"></bk-icon-tab-bar-tab>
             </bk-icon-tab-bar-tablist>
             <bk-icon-tab-bar-panel tab-id="general" ng-show="selectedTab === 'general'">
                 <bk-form-group class="fd-container fd-form-layout-grid-container" ng-if="dialogType === 'entity'">
@@ -112,9 +109,7 @@
                     </bk-form-item>
                     <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'" class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
-                        <bk-form-label for="generalCpeC" colon="true">Calculated property expression for
-                            <strong>Create</strong>
-                        </bk-form-label>
+                        <bk-form-label for="generalCpeC" colon="true">Calculated property expression for <strong>Create</strong></bk-form-label>
                     </bk-form-item>
                     <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'" class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
@@ -124,9 +119,7 @@
                     </bk-form-item>
                     <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'" class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
-                        <bk-form-label for="generalCpeU" colon="true">Calculated property expression for
-                            <strong>Update</strong>
-                        </bk-form-label>
+                        <bk-form-label for="generalCpeU" colon="true">Calculated property expression for <strong>Update</strong></bk-form-label>
                     </bk-form-item>
                     <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'" class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
@@ -197,8 +190,7 @@
                             <bk-form-label for="dblen" required="true" colon="true">Length</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.dataType === 'VARCHAR' || dataParameters.dataType === 'CHAR'">
-                            <bk-step-input input-id="dblen" name="dblen" string-to-number ng-required="true" ng-model="dataParameters.dataLength" placeholder="20" style="max-width: 320px">
-                            </bk-step-input>
+                            <bk-step-input input-id="dblen" name="dblen" string-to-number ng-required="true" ng-model="dataParameters.dataLength" placeholder="20" style="max-width: 320px"></bk-step-input>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.dataType === 'DECIMAL'">
                             <bk-form-label for="dbprecision" colon="true">Precision</bk-form-label>
@@ -292,7 +284,7 @@
                             <bk-step-input input-id="uimi" name="manuIndex" ng-model="dataParameters.menuIndex" style="max-width: 320px"></bk-step-input>
                         </div>
                     </bk-form-item>
-                    <bk-form-item class="fd-row fd-margin-top--tiny">
+                    <bk-form-item class="fd-row fd-margin-top--tiny" ng-if="dataParameters.entityType !== 'SETTING' && dataParameters.entityType !== 'REPORT'">
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="uilt" required="true" colon="true">Layout type</bk-form-label>
                         </div>
@@ -302,7 +294,7 @@
                             </bk-select>
                         </div>
                     </bk-form-item>
-                    <bk-form-item class="fd-row fd-margin-top--tiny">
+                    <bk-form-item class="fd-row fd-margin-top--tiny" ng-if="dataParameters.entityType !== 'SETTING' && dataParameters.entityType !== 'REPORT'">
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="uip" colon="true">Perspective</bk-form-label>
                         </div>
@@ -312,7 +304,7 @@
                             </bk-select>
                         </div>
                     </bk-form-item>
-                    <bk-form-item class="fd-row fd-margin-top--tiny">
+                    <bk-form-item class="fd-row fd-margin-top--tiny" ng-if="dataParameters.entityType !== 'SETTING' && dataParameters.entityType !== 'REPORT'">
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="uip" colon="true">Navigation</bk-form-label>
                         </div>

@@ -493,7 +493,7 @@
     --sapField_Background: #242424;
     --sapField_BackgroundStyle: none;
     --sapField_TextColor: #fff;
-    --sapField_PlaceholderTextColor: #afafaf;
+    --sapField_PlaceholderTextColor: #999999;
     --sapField_BorderColor: #4e4e4e;
     --sapField_HelpBackground: #242424;
     --sapField_BorderWidth: .0625rem;
@@ -515,7 +515,7 @@
     --sapField_Focus_HelpBackground: #1d1d1d;
     --sapField_ReadOnly_Background: #303030;
     --sapField_ReadOnly_BackgroundStyle: none;
-    --sapField_ReadOnly_BorderColor: #4d4d4d;
+    --sapField_ReadOnly_BorderColor: #6e6e6e;
     --sapField_ReadOnly_BorderStyle: none;
     --sapField_ReadOnly_HelpBackground: #303030;
     --sapField_RequiredColor: #d4626b;

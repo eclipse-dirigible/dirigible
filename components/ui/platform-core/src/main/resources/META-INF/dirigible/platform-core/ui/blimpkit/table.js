@@ -60,11 +60,13 @@ blimpkit.directive('bkTable', (classNames) => ({
     transclude: true,
     replace: true,
     scope: {
-        sticky: '<?'
+        sticky: '<?',
+        interactive: '<?',
     },
     link: (scope) => {
         scope.getClasses = () => classNames('fd-table__header', {
-            'bk-table__header-sticky': scope.sticky === true
+            'bk-table__header-sticky': scope.sticky === true,
+            'fd-table__header--non-interactive': scope.interactive === false,
         });
     },
     template: '<thead ng-class="getClasses()" ng-transclude></thead>'
@@ -125,6 +127,7 @@ blimpkit.directive('bkTable', (classNames) => ({
         fixed: '@?',
         activable: '<?',
         hoverable: '<?',
+        interactive: '<?',
     },
     link: (scope, element) => {
         scope.getClasses = () => classNames('fd-table__cell', {
@@ -134,6 +137,7 @@ blimpkit.directive('bkTable', (classNames) => ({
             'fd-table__cell--fixed fd-table__cell--fixed-last': scope.fixed === 'last',
             'fd-table__cell--activable': scope.activable === true,
             'fd-table__cell--hoverable': scope.hoverable === true,
+            'fd-table__cell--non-interactive': scope.interactive === false,
         });
 
         if (element.closest('tbody').length > 0) {
@@ -153,6 +157,7 @@ blimpkit.directive('bkTable', (classNames) => ({
         fitContent: '<?',
         activable: '<?',
         hoverable: '<?',
+        interactive: '<?',
         navigated: '<?',
         noData: '<?',
         statusIndicator: '@?',
@@ -167,7 +172,8 @@ blimpkit.directive('bkTable', (classNames) => ({
             'fd-table__cell--fit-content': scope.fitContent,
             'fd-table__cell--activable': scope.activable,
             'fd-table__cell--hoverable': scope.hoverable,
-            'fd-table__cell--navigated': scope.navigated
+            'fd-table__cell--navigated': scope.navigated,
+            'fd-table__cell--non-interactive': scope.interactive === false,
         });
 
         if (scope.nestingLevel) {

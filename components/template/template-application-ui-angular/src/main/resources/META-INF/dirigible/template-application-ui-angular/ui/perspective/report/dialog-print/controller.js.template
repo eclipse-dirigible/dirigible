@@ -1,13 +1,10 @@
 #set($dollar = '$')
-angular.module('page', ["ideUI", "ideView", "entityApi"])
-    .config(["messageHubProvider", function (messageHubProvider) {
-        messageHubProvider.eventIdPrefix = '${projectName}.Reports.${name}';
+angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+    .config(['EntityServiceProvider', (EntityServiceProvider) => {
+        EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts';
     }])
-    .config(["entityApiProvider", function (entityApiProvider) {
-        entityApiProvider.baseUrl = "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts";
-    }])
-    .controller('PageController', ['$scope', 'messageHub', 'entityApi', 'ViewParameters', function ($scope, messageHub, entityApi, ViewParameters) {
-
+    .controller('PageController', ($scope, EntityService, ViewParameters) => {
+        const Dialogs = new DialogHub();
 		let params = ViewParameters.get();
 		if (Object.keys(params).length) {         
             const filterEntity = params.filterEntity ?? {};
@@ -51,23 +48,18 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
     #end
 		}
 
-        $scope.loadPage = function (filter) {
+        $scope.loadPage = (filter) => {
             if (!filter && $scope.filter) {
                 filter = $scope.filter;
             }
             let request;
             if (filter) {
-                request = entityApi.search(filter);
+                request = EntityService.search(filter);
             } else {
-                request = entityApi.list();
+                request = EntityService.list();
             }
-            request.then(function (response) {
-                if (response.status != 200) {
-                    messageHub.showAlertError("${name}", `Unable to list/filter ${name}: '${response.message}'`);
-                    return;
-                }
+            request.then((response) => {
 #if($hasDates)
-
 					response.data.forEach(e => {
 #foreach ($property in $properties)
 #if($property.isDateType)
@@ -82,15 +74,22 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
                 $scope.data = response.data;
                 setTimeout(() => {
                     window.print();
-
                 }, 250);
-            });
+            }, (error) => {
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: '${name}',
+					message: `Unable to list/filter ${name}: '${message}'`,
+					type: AlertTypes.Error
+				});
+				console.error('EntityService:', error);
+			});
         };
         $scope.loadPage($scope.filter);
 
 #foreach ($property in $properties)
     #if($property.widgetType == "DROPDOWN")
-		${dollar}scope.options${property.name}Value = function (optionKey) {
+		${dollar}scope.options${property.name}Value = (optionKey) => {
 			for (let i = 0; i < ${dollar}scope.options${property.name}.length; i++) {
 				if (${dollar}scope.options${property.name}[i].value === optionKey) {
 					return ${dollar}scope.options${property.name}[i].text;
@@ -101,7 +100,6 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
     #end
 #end
         window.onafterprint = () => {
-            messageHub.closeDialogWindow("${projectName}-Reports-${name}-print");
+            Dialogs.closeWindow({ path: viewData.path });
         }
-
-    }]);
+    });

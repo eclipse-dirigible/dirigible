@@ -80,8 +80,8 @@ angular.module('platformExtensions', []).factory('Extensions', ($http) => ({
     getShells: (exPoints = top.PlatformExtPoints.shells) => {
         return $http.get('/services/js/platform-core/extension-services/shells.js', { params: { extensionPoints: exPoints } });
     },
-    getMenus: (exPoints = top.PlatformExtPoints.menus) => {
-        return $http.get('/services/js/platform-core/extension-services/menus.js', { params: { extensionPoints: exPoints } });
+    getMenus: (exPoints = top.PlatformExtPoints.menus, perspectiveExPoints = top.PlatformExtPoints.perspectives, viewExPoints = top.PlatformExtPoints.views, shellExPoints = top.PlatformExtPoints.shells) => {
+        return $http.get('/services/js/platform-core/extension-services/menus.js', { params: { extensionPoints: exPoints, perspectiveExtPoints: perspectiveExPoints, viewExtPoints: viewExPoints, shellExtPoints: shellExPoints } });
     },
     getThemes: (exPoints = top.PlatformExtPoints.themes) => {
         return $http.get('/services/js/platform-core/extension-services/themes.js', { params: { extensionPoints: exPoints } });

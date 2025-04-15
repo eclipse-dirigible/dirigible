@@ -4,14 +4,13 @@
  * Do not modify the content as it may be re-generated again.
  */
 const viewData = {
-	id: "$projectName-form",
-	label: "$projectName Form",
-	factory: "frame",
-	region: "bottom",
-	link: "$projectName/gen/$genFolderName/forms/$fileName/index.html",
+	id: '$projectName-form',
+	label: '$projectName Form',
+	region: 'bottom',
+	lazyLoad: false,
+	autoFocusTab: false,
+	path: '$projectName/gen/$genFolderName/forms/$fileName/index.html',
 };
 if (typeof exports !== 'undefined') {
-	exports.getView = function () {
-		return viewData;
-	}
+	exports.getView = () => viewData;
 }

@@ -106,7 +106,8 @@ consoleView.controller('ConsoleController', ($scope, uuid) => {
                     scrollToBottom();
 
                     if (record.level === 'ERROR' || record.level === 'WARN') {
-                        statusBarHub.showError(record.message);
+                        if (record.message.length > 100) statusBarHub.showError(`${record.message.slice(0, 97)}...`);
+                        else statusBarHub.showError(record.message);
                     }
                 }
             };

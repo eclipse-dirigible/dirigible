@@ -3,5 +3,7 @@
     "exposes": [
         "ui",
         "samples"
-    ]
+    ],
+    "dependencies": [],
+    "actions": []
 }

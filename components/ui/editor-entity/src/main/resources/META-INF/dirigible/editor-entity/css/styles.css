@@ -17,7 +17,7 @@ body {
 .mx-sidebar-icon {
   font-size: 1.25rem;
   padding: 0.625rem 0.875rem;
-  color: var(--sapButton_Lite_TextColor, #303030);
+  color: var(--sapContent_IconColor, #303030);
 }
 
 .mx-sidebar-icon:hover {
@@ -69,8 +69,8 @@ tr.mxPopupMenuItem>* {
 }
 
 tr.mxPopupMenuItemHover {
-  color: var(--sapTextColor, #303030) !important;
-  background-color: var(--sapList_Hover_Background, #f2f2f2);
+  color: var(--sapList_TextColor, #303030) !important;
+  background-color: var(--sapList_Hover_Background, #f2f2f2) !important;
 }
 
 td.mxPopupMenuItem {

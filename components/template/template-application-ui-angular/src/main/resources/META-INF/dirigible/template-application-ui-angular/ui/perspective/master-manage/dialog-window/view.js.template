@@ -6,7 +6,7 @@
 const viewData = {
     id: "${name}-details",
     label: "${name}",
-    link: "/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${name}/dialog-window/index.html",
+    path: "/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${name}/dialog-window/index.html",
     perspectiveName: "${perspectiveName}",
 #if($perspectiveRole || $roleRead)
     roles: [
@@ -19,9 +19,6 @@ const viewData = {
     ]
 #end
 };
-
 if (typeof exports !== 'undefined') {
-    exports.getDialogWindow = function () {
-        return viewData;
-    }
+    exports.getView = () => viewData;
 }

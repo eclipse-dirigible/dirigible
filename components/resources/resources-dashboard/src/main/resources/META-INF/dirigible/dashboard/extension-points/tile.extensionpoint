@@ -1,0 +1,4 @@
+{
+    "name": "application-tile",
+    "description": "Extension Point for the Application Tile Providers"
+}
