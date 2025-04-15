@@ -1,5 +1,0 @@
-{
-    "module": "DependsOnScenariosTestProject/gen/sales-order/ui/launchpad/menu-help.js",
-    "extensionPoint": "DependsOnScenariosTestProject-menu",
-    "description": "DependsOnScenariosTestProject - Application Menu"
-}

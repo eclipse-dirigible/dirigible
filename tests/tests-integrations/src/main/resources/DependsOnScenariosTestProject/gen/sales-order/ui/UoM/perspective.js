@@ -5,14 +5,11 @@
  */
 const perspectiveData = {
 	id: 'UoM',
-	name: 'UoM',
-	link: '/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/UoM/index.html',
-	order: '4',
+	label: 'UoM',
+	path: '/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/UoM/index.html',
+	order: 4,
 	icon: '/services/web/resources/unicons/arrows-resize-v.svg'
 };
-
 if (typeof exports !== 'undefined') {
-	exports.getPerspective = function () {
-		return perspectiveData;
-	}
+	exports.getPerspective = () => perspectiveData;
 }

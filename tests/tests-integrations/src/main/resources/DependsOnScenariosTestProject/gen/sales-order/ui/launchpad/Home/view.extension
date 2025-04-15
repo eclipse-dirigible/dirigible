@@ -1,5 +1,0 @@
-{
-    "module": "DependsOnScenariosTestProject/gen/sales-order/ui/launchpad/Home/view.js",
-    "extensionPoint": "DependsOnScenariosTestProject-view",
-    "description": "DependsOnScenariosTestProject - Application View"
-}

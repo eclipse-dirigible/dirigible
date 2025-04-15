@@ -26,9 +26,7 @@ import java.util.Map;
 class DependsOnScenariosTestProject extends BaseTestProject {
 
     private static final String PROJECT_RESOURCES_PATH = "DependsOnScenariosTestProject";
-    private static final String VERIFICATION_URI_CY = "/services/web/" + PROJECT_RESOURCES_PATH + "/gen/sales-order/ui/Customer/index.html";
-    private static final String VERIFICATION_URI_PM =
-            "/services/web/" + PROJECT_RESOURCES_PATH + "/gen/sales-order/ui/SalesOrder/index.html";
+    private static final String VERIFICATION_URI = "/services/web/dashboard/index.html";
     private final Browser browser;
 
     DependsOnScenariosTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, Browser browser) {
@@ -44,18 +42,19 @@ class DependsOnScenariosTestProject extends BaseTestProject {
 
     @Override
     public void verify() {
-        countryCityDependency();
-        productUom();
-        productPrice();
-        orderCustomer();
-        customerPayment();
-        paymentAmount();
+        verifyCountryCityDependency();
+        verifyProductUom();
+        verifyProductPrice();
+        verifyOrderCustomer();
+        verifyCustomerPayment();
+        verifyPaymentAmount();
     }
 
-    private void paymentAmount() {
-        browser.openPath(VERIFICATION_URI_PM);
-        browser.clickOnElementByAttributePattern(HtmlElementType.ANCHOR, HtmlAttribute.CLASS,
-                "fd-list__link fd-list__link--navigation-indicator"); // customer A
+    private void verifyPaymentAmount() {
+        browser.openPath(VERIFICATION_URI);
+        browser.clickOnElementWithText(HtmlElementType.SPAN, "SalesOrder");
+
+        browser.clickOnElementWithText(HtmlElementType.DIV, "Customer A");
 
         browser.clickOnElementById("SalesOrderPayment");
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
@@ -63,10 +62,11 @@ class DependsOnScenariosTestProject extends BaseTestProject {
         assertCustomerPaymentAmount();
     }
 
-    private void customerPayment() {
-        browser.openPath(VERIFICATION_URI_PM);
-        browser.clickOnElementByAttributePattern(HtmlElementType.ANCHOR, HtmlAttribute.CLASS,
-                "fd-list__link fd-list__link--navigation-indicator"); // customer A
+    private void verifyCustomerPayment() {
+        browser.openPath(VERIFICATION_URI);
+        browser.clickOnElementWithText(HtmlElementType.SPAN, "SalesOrder");
+
+        browser.clickOnElementWithText(HtmlElementType.DIV, "Customer A");
 
         browser.clickOnElementById("SalesOrderPayment");
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
@@ -74,10 +74,11 @@ class DependsOnScenariosTestProject extends BaseTestProject {
         assertCustomerPayment();
     }
 
-    private void orderCustomer() {
-        browser.openPath(VERIFICATION_URI_PM);
-        browser.clickOnElementByAttributePattern(HtmlElementType.ANCHOR, HtmlAttribute.CLASS,
-                "fd-list__link fd-list__link--navigation-indicator"); // customer A
+    private void verifyOrderCustomer() {
+        browser.openPath(VERIFICATION_URI);
+        browser.clickOnElementWithText(HtmlElementType.SPAN, "SalesOrder");
+
+        browser.clickOnElementWithText(HtmlElementType.DIV, "Customer A");
 
         browser.clickOnElementById("SalesOrderPayment");
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
@@ -88,10 +89,11 @@ class DependsOnScenariosTestProject extends BaseTestProject {
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Customer A");
     }
 
-    private void productPrice() {
-        browser.openPath(VERIFICATION_URI_PM);
-        browser.clickOnElementByAttributePattern(HtmlElementType.ANCHOR, HtmlAttribute.CLASS,
-                "fd-list__link fd-list__link--navigation-indicator"); // customer A
+    private void verifyProductPrice() {
+        browser.openPath(VERIFICATION_URI);
+        browser.clickOnElementWithText(HtmlElementType.SPAN, "SalesOrder");
+
+        browser.clickOnElementWithText(HtmlElementType.DIV, "Customer A");
 
         browser.clickOnElementById("SalesOrderItem");
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
@@ -100,10 +102,11 @@ class DependsOnScenariosTestProject extends BaseTestProject {
         assertProductPrice("Product B ", "20");
     }
 
-    private void productUom() {
-        browser.openPath(VERIFICATION_URI_PM);
-        browser.clickOnElementByAttributePattern(HtmlElementType.ANCHOR, HtmlAttribute.CLASS,
-                "fd-list__link fd-list__link--navigation-indicator"); // customer A
+    private void verifyProductUom() {
+        browser.openPath(VERIFICATION_URI);
+        browser.clickOnElementWithText(HtmlElementType.SPAN, "SalesOrder");
+
+        browser.clickOnElementWithText(HtmlElementType.DIV, "Customer A");
 
         browser.clickOnElementById("SalesOrderItem");
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
@@ -112,11 +115,13 @@ class DependsOnScenariosTestProject extends BaseTestProject {
         assertProductUom("Product B", "Liter");
     }
 
-    private void countryCityDependency() {
-        browser.openPath(VERIFICATION_URI_CY);
+    private void verifyCountryCityDependency() {
+        browser.openPath(VERIFICATION_URI);
+        browser.clickOnElementWithText(HtmlElementType.SPAN, "Customer");
+
 
         browser.clickElementByAttributes(HtmlElementType.BUTTON,
-                Map.of(HtmlAttribute.GLYPH, "sap-icon--add", HtmlAttribute.CLASS, "fd-button fd-button--transparent fd-button--compact"));
+                Map.of(HtmlAttribute.GLYPH, "sap-icon--add", HtmlAttribute.CLASS, "fd-button fd-button--compact fd-button--transparent"));
         browser.clickElementByAttributes(HtmlElementType.BUTTON,
                 Map.of(HtmlAttribute.CLASS, "fd-button", HtmlAttribute.NGCLICK, "refreshCountry()"));
 

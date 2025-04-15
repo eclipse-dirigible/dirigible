@@ -4,16 +4,14 @@
  * Do not modify the content as it may be re-generated again.
  */
 const viewData = {
-    id: "UoM",
-    label: "UoM",
-    factory: "frame",
-    region: "left",
-    link: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/UoM/UoM/index.html",
-    perspectiveName: "UoM"
+    id: 'UoM',
+    label: 'UoM',
+    region: 'left',
+    lazyLoad: false,
+	autoFocusTab: false,
+    path: '/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/UoM/UoM/index.html',
+    perspectiveName: 'UoM'
 };
-
 if (typeof exports !== 'undefined') {
-    exports.getView = function () {
-        return viewData;
-    }
+	exports.getView = () => viewData;
 }

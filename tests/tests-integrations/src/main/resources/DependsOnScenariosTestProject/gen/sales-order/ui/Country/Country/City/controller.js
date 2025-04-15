@@ -1,37 +1,34 @@
-angular.module('page', ["ideUI", "ideView", "entityApi"])
-	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = 'DependsOnScenariosTestProject.Country.City';
+angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+	.config(['EntityServiceProvider', (EntityServiceProvider) => {
+		EntityServiceProvider.baseUrl = '/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts';
 	}])
-	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts";
-	}])
-	.controller('PageController', ['$scope', '$http', 'messageHub', 'entityApi', 'Extensions', function ($scope, $http, messageHub, entityApi, Extensions) {
+	.controller('PageController', ($scope, $http, EntityService, Extensions, ButtonStates) => {
+		const Dialogs = new DialogHub();
 		//-----------------Custom Actions-------------------//
-		Extensions.get('dialogWindow', 'DependsOnScenariosTestProject-custom-action').then(function (response) {
-			$scope.pageActions = response.filter(e => e.perspective === "Country" && e.view === "City" && (e.type === "page" || e.type === undefined));
-			$scope.entityActions = response.filter(e => e.perspective === "Country" && e.view === "City" && e.type === "entity");
+		Extensions.getWindows(['DependsOnScenariosTestProject-custom-action']).then((response) => {
+			$scope.pageActions = response.data.filter(e => e.perspective === 'Country' && e.view === 'City' && (e.type === 'page' || e.type === undefined));
+			$scope.entityActions = response.data.filter(e => e.perspective === 'Country' && e.view === 'City' && e.type === 'entity');
 		});
 
-		$scope.triggerPageAction = function (action) {
-			messageHub.showDialogWindow(
-				action.id,
-				{},
-				null,
-				true,
-				action
-			);
+		$scope.triggerPageAction = (action) => {
+			Dialogs.showWindow({
+				hasHeader: true,
+        		title: action.label,
+				path: action.path,
+				closeButton: true
+			});
 		};
 
-		$scope.triggerEntityAction = function (action) {
-			messageHub.showDialogWindow(
-				action.id,
-				{
+		$scope.triggerEntityAction = (action) => {
+			Dialogs.showWindow({
+				hasHeader: true,
+        		title: action.label,
+				path: action.path,
+				params: {
 					id: $scope.entity.Id
 				},
-				null,
-				true,
-				action
-			);
+				closeButton: true
+			});
 		};
 		//-----------------Custom Actions-------------------//
 
@@ -43,44 +40,39 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		resetPagination();
 
 		//-----------------Events-------------------//
-		messageHub.onDidReceiveMessage("DependsOnScenariosTestProject.Country.Country.entitySelected", function (msg) {
+		Dialogs.addMessageListener({ topic: 'DependsOnScenariosTestProject.Country.Country.entitySelected', handler: (data) => {
 			resetPagination();
-			$scope.selectedMainEntityId = msg.data.selectedMainEntityId;
+			$scope.selectedMainEntityId = data.selectedMainEntityId;
 			$scope.loadPage($scope.dataPage);
-		}, true);
-
-		messageHub.onDidReceiveMessage("DependsOnScenariosTestProject.Country.Country.clearDetails", function (msg) {
-			$scope.$apply(function () {
+		}});
+		Dialogs.addMessageListener({ topic: 'DependsOnScenariosTestProject.Country.Country.clearDetails', handler: () => {
+			$scope.$evalAsync(() => {
 				resetPagination();
 				$scope.selectedMainEntityId = null;
 				$scope.data = null;
 			});
-		}, true);
-
-		messageHub.onDidReceiveMessage("clearDetails", function (msg) {
-			$scope.$apply(function () {
+		}});
+		Dialogs.addMessageListener({ topic: 'DependsOnScenariosTestProject.Country.City.clearDetails', handler: () => {
+			$scope.$evalAsync(() => {
 				$scope.entity = {};
 				$scope.action = 'select';
 			});
-		});
-
-		messageHub.onDidReceiveMessage("entityCreated", function (msg) {
+		}});
+		Dialogs.addMessageListener({ topic: 'DependsOnScenariosTestProject.Country.City.entityCreated', handler: () => {
 			$scope.loadPage($scope.dataPage, $scope.filter);
-		});
-
-		messageHub.onDidReceiveMessage("entityUpdated", function (msg) {
+		}});
+		Dialogs.addMessageListener({ topic: 'DependsOnScenariosTestProject.Country.City.entityUpdated', handler: () => {
 			$scope.loadPage($scope.dataPage, $scope.filter);
-		});
-
-		messageHub.onDidReceiveMessage("entitySearch", function (msg) {
+		}});
+		Dialogs.addMessageListener({ topic: 'DependsOnScenariosTestProject.Country.City.entitySearch', handler: (data) => {
 			resetPagination();
-			$scope.filter = msg.data.filter;
-			$scope.filterEntity = msg.data.entity;
+			$scope.filter = data.filter;
+			$scope.filterEntity = data.entity;
 			$scope.loadPage($scope.dataPage, $scope.filter);
-		});
+		}});
 		//-----------------Events-------------------//
 
-		$scope.loadPage = function (pageNumber, filter) {
+		$scope.loadPage = (pageNumber, filter) => {
 			let Country = $scope.selectedMainEntityId;
 			$scope.dataPage = pageNumber;
 			if (!filter && $scope.filter) {
@@ -96,91 +88,116 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 				filter.$filter.equals = {};
 			}
 			filter.$filter.equals.Country = Country;
-			entityApi.count(filter).then(function (response) {
-				if (response.status != 200) {
-					messageHub.showAlertError("City", `Unable to count City: '${response.message}'`);
-					return;
-				}
-				if (response.data) {
-					$scope.dataCount = response.data;
+			EntityService.count(filter).then((resp) => {
+				if (resp.data) {
+					$scope.dataCount = resp.data.count;
 				}
 				filter.$offset = (pageNumber - 1) * $scope.dataLimit;
 				filter.$limit = $scope.dataLimit;
-				entityApi.search(filter).then(function (response) {
-					if (response.status != 200) {
-						messageHub.showAlertError("City", `Unable to list/filter City: '${response.message}'`);
-						return;
-					}
+				EntityService.search(filter).then((response) => {
 					$scope.data = response.data;
+				}, (error) => {
+					const message = error.data ? error.data.message : '';
+					Dialogs.showAlert({
+						title: 'City',
+						message: `Unable to list/filter City: '${message}'`,
+						type: AlertTypes.Error
+					});
+					console.error('EntityService:', error);
 				});
+			}, (error) => {
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: 'City',
+					message: `Unable to count City: '${message}'`,
+					type: AlertTypes.Error
+				});
+				console.error('EntityService:', error);
 			});
 		};
 
-		$scope.selectEntity = function (entity) {
+		$scope.selectEntity = (entity) => {
 			$scope.selectedEntity = entity;
 		};
 
-		$scope.openDetails = function (entity) {
+		$scope.openDetails = (entity) => {
 			$scope.selectedEntity = entity;
-			messageHub.showDialogWindow("City-details", {
-				action: "select",
-				entity: entity,
-				optionsCountry: $scope.optionsCountry,
-			});
-		};
-
-		$scope.openFilter = function (entity) {
-			messageHub.showDialogWindow("City-filter", {
-				entity: $scope.filterEntity,
-				optionsCountry: $scope.optionsCountry,
-			});
-		};
-
-		$scope.createEntity = function () {
-			$scope.selectedEntity = null;
-			messageHub.showDialogWindow("City-details", {
-				action: "create",
-				entity: {},
-				selectedMainEntityKey: "Country",
-				selectedMainEntityId: $scope.selectedMainEntityId,
-				optionsCountry: $scope.optionsCountry,
-			}, null, false);
-		};
-
-		$scope.updateEntity = function (entity) {
-			messageHub.showDialogWindow("City-details", {
-				action: "update",
-				entity: entity,
-				selectedMainEntityKey: "Country",
-				selectedMainEntityId: $scope.selectedMainEntityId,
-				optionsCountry: $scope.optionsCountry,
-			}, null, false);
-		};
-
-		$scope.deleteEntity = function (entity) {
-			let id = entity.Id;
-			messageHub.showDialogAsync(
-				'Delete City?',
-				`Are you sure you want to delete City? This action cannot be undone.`,
-				[{
-					id: "delete-btn-yes",
-					type: "emphasized",
-					label: "Yes",
+			Dialogs.showWindow({
+				id: 'City-details',
+				params: {
+					action: 'select',
+					entity: entity,
+					optionsCountry: $scope.optionsCountry,
 				},
-				{
-					id: "delete-btn-no",
-					type: "normal",
-					label: "No",
+			});
+		};
+
+		$scope.openFilter = (entity) => {
+			Dialogs.showWindow({
+				id: 'City-filter',
+				params: {
+					entity: $scope.filterEntity,
+					optionsCountry: $scope.optionsCountry,
+				},
+			});
+		};
+
+		$scope.createEntity = () => {
+			$scope.selectedEntity = null;
+			Dialogs.showWindow({
+				id: 'City-details',
+				params: {
+					action: 'create',
+					entity: {},
+					selectedMainEntityKey: 'Country',
+					selectedMainEntityId: $scope.selectedMainEntityId,
+					optionsCountry: $scope.optionsCountry,
+				},
+				closeButton: false
+			});
+		};
+
+		$scope.updateEntity = (entity) => {
+			Dialogs.showWindow({
+				id: 'City-details',
+				params: {
+					action: 'update',
+					entity: entity,
+					selectedMainEntityKey: 'Country',
+					selectedMainEntityId: $scope.selectedMainEntityId,
+					optionsCountry: $scope.optionsCountry,
+			},
+				closeButton: false
+			});
+		};
+
+		$scope.deleteEntity = (entity) => {
+			let id = entity.Id;
+			Dialogs.showDialog({
+				title: 'Delete City?',
+				message: `Are you sure you want to delete City? This action cannot be undone.`,
+				buttons: [{
+					id: 'delete-btn-yes',
+					state: ButtonStates.Emphasized,
+					label: 'Yes',
+				}, {
+					id: 'delete-btn-no',
+					label: 'No',
 				}],
-			).then(function (msg) {
-				if (msg.data === "delete-btn-yes") {
-					entityApi.delete(id).then(function (response) {
-						if (response.status != 204) {
-							messageHub.showAlertError("City", `Unable to delete City: '${response.message}'`);
-							return;
-						}
+				closeButton: false
+			}).then((buttonId) => {
+				if (buttonId === 'delete-btn-yes') {
+					EntityService.delete(id).then(() => {
 						$scope.loadPage($scope.dataPage, $scope.filter);
-						messageHub.postMessage("clearDetails");
+						Dialogs.triggerEvent('DependsOnScenariosTestProject.Country.City.clearDetails');
+					}, (error) => {
+						const message = error.data ? error.data.message : '';
+						Dialogs.showAlert({
+							title: 'City',
+							message: `Unable to delete City: '${message}'`,
+							type: AlertTypes.Error,
+						});
+						console.error('EntityService:', error);
 					});
 				}
 			});
@@ -190,12 +207,18 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 		$scope.optionsCountry = [];
 
 
-		$http.get("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts").then(function (response) {
-			$scope.optionsCountry = response.data.map(e => {
-				return {
-					value: e.Id,
-					text: e.Name
-				}
+		$http.get('/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts').then((response) => {
+			$scope.optionsCountry = response.data.map(e => ({
+				value: e.Id,
+				text: e.Name
+			}));
+		}, (error) => {
+			console.error(error);
+			const message = error.data ? error.data.message : '';
+			Dialogs.showAlert({
+				title: 'Country',
+				message: `Unable to load data: '${message}'`,
+				type: AlertTypes.Error
 			});
 		});
 
@@ -208,5 +231,4 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 			return null;
 		};
 		//----------------Dropdowns-----------------//
-
-	}]);
+	});

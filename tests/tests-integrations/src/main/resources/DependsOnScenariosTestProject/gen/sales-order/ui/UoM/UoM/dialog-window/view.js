@@ -6,12 +6,9 @@
 const viewData = {
     id: "UoM-details",
     label: "UoM",
-    link: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/UoM/UoM/dialog-window/index.html",
+    path: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/UoM/UoM/dialog-window/index.html",
     perspectiveName: "UoM",
 };
-
 if (typeof exports !== 'undefined') {
-    exports.getDialogWindow = function () {
-        return viewData;
-    }
+    exports.getView = () => viewData;
 }

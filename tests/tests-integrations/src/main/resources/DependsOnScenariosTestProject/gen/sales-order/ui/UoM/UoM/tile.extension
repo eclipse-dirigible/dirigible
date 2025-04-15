@@ -1,5 +1,0 @@
-{
-    "module": "DependsOnScenariosTestProject/gen/sales-order/ui/UoM/UoM/tile.js",
-    "extensionPoint": "DependsOnScenariosTestProject-tile",
-    "description": "DependsOnScenariosTestProject - Application Tile"
-}

@@ -6,12 +6,9 @@
 const viewData = {
     id: "Country-details",
     label: "Country",
-    link: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Country/Country/dialog-window/index.html",
+    path: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Country/Country/dialog-window/index.html",
     perspectiveName: "Country",
 };
-
 if (typeof exports !== 'undefined') {
-    exports.getDialogWindow = function () {
-        return viewData;
-    }
+    exports.getView = () => viewData;
 }

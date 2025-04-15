@@ -1,5 +1,0 @@
-{
-    "module": "DependsOnScenariosTestProject/gen/sales-order/ui/Customer/Customer/tile.js",
-    "extensionPoint": "portal-tile",
-    "description": "DependsOnScenariosTestProject - Application Tile"
-}

@@ -41,7 +41,7 @@ class CountryService {
     @Get("/count")
     public count() {
         try {
-            return this.repository.count();
+            return { count: this.repository.count() };
         } catch (error: any) {
             this.handleError(error);
         }
@@ -50,7 +50,7 @@ class CountryService {
     @Post("/count")
     public countWithFilter(filter: any) {
         try {
-            return this.repository.count(filter);
+            return { count: this.repository.count(filter) };
         } catch (error: any) {
             this.handleError(error);
         }

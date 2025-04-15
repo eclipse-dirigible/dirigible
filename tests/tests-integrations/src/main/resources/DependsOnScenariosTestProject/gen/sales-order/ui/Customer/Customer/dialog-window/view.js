@@ -6,12 +6,9 @@
 const viewData = {
     id: "Customer-details",
     label: "Customer",
-    link: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Customer/Customer/dialog-window/index.html",
+    path: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Customer/Customer/dialog-window/index.html",
     perspectiveName: "Customer",
 };
-
 if (typeof exports !== 'undefined') {
-    exports.getDialogWindow = function () {
-        return viewData;
-    }
+    exports.getView = () => viewData;
 }

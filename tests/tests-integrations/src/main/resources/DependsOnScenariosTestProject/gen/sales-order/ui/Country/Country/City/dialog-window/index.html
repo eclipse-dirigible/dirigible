@@ -2,60 +2,56 @@
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
 
     <head>
-        <meta charset="utf-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+		<meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link rel="icon" href="data:;base64,iVBORw0KGgo=" dg-brand-icon />
-        <title dg-brand-title></title>
-        <theme></theme>
-        <script type="text/javascript"
-            src="/services/js/resources-core/services/loader.js?id=application-view-js"></script>
-        <link type="text/css" rel="stylesheet"
-            href="/services/js/resources-core/services/loader.js?id=application-view-css" />
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+		<script type="text/javascript" src="/services/web/dashboard/services/entity.js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
         <script type="text/javascript" src="controller.js"></script>
     </head>
 
-    <body class="dg-vbox">
-        <fd-scrollbar class="dg-full-height">
-            <fd-fieldset ng-form="forms.details">
-                <fd-form-group dg-header="{{formHeaders[action]}}" name="entityForm" class="fd-container fd-form-layout-grid-container">
-                    <fd-form-item class="fd-row">
+    <body class="bk-vbox">
+        <bk-scrollbar class="bk-full-height">
+            <bk-fieldset class="fd-padding-begin-end--sm" ng-form="forms.details">
+                <bk-form-group label="{{formHeaders[action]}}" name="entityForm" transclude-classes="fd-container fd-form-layout-grid-container">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="idName" dg-required="false" dg-colon="true">Name</fd-form-label>
+                        	<bk-form-label for="idName" ng-required="false" colon="true">Name</bk-form-label>
                         </div>
                         <div class="fd-col  fd-col-md--8 ">
-	                        <fd-form-input-message-group dg-inactive="{{ forms.details['Name'].$valid }}">
-	                            <fd-input id="idName"
+							<bk-form-input-message state="{{ forms.details['Name'].$valid ? '' : 'error' }}" message="'The value doesn\'t match the required pattern: '">
+								<bk-input id="idName"
 	                                name="Name"
 	                                state="{{ forms.details['Name'].$valid ? '' : 'error' }}"
 									ng-required="false"
 	                                ng-model="entity.Name"
 	                                ng-readonly="action === 'select'"
-	                                ng-minlength="0.0 || 0"
-	                                ng-maxlength="100.0 || -1"
-	                                dg-input-rules="{ patterns: [''] }"
+									ng-maxlength="100.0"
+	                                input-rules="{ patterns: [''] }"
 	                                type="text"
 	                                placeholder="Enter Name">
-	                            </fd-input>
-	                            <fd-form-message dg-type="error">The value doesn't match the required pattern ''</fd-form-message>
-	                        </fd-form-input-message-group>
-	                        <i class="sap-icon--information" role="presentation" onclick="javascript:alert('')"></i>
+	                            </bk-input>
+							</bk-form-input-message>
 	                    </div>
-                    </fd-form-item>
-                </fd-form-group>
-            </fd-fieldset>
-        </fd-scrollbar>
+                    </bk-form-item>
+                </bk-form-group>
+            </bk-fieldset>
+        </bk-scrollbar>
 
-		<fd-bar bar-design="footer" compact="true" ng-show="action !== 'select'">
-			<fd-bar-right>
-				<fd-bar-element>
-					<fd-button dg-label="{{action === 'create' ? 'Create' : 'Update'}}" dg-type="emphasized" ng-click="action === 'create' ? create() : update()" state="{{ forms.details.$valid ? '' : 'disabled' }}"></fd-button>
-				</fd-bar-element>
-				<fd-bar-element>
-					<fd-button dg-label="Cancel" ng-click="cancel()"></fd-button>
-				</fd-bar-element>
-			</fd-bar-right>
-		</fd-bar>
+		<bk-bar bar-design="footer" compact="true" ng-show="action !== 'select'">
+			<bk-bar-right>
+				<bk-bar-element>
+					<bk-button label="{{action === 'create' ? 'Create' : 'Update'}}" state="emphasized" ng-click="action === 'create' ? create() : update()" ng-disabled="!forms.details.$valid"></bk-button>
+				</bk-bar-element>
+				<bk-bar-element>
+					<bk-button label="Cancel" ng-click="cancel()"></bk-button>
+				</bk-bar-element>
+			</bk-bar-right>
+		</bk-bar>
+		<theme></theme>
     </body>
 
 </html>

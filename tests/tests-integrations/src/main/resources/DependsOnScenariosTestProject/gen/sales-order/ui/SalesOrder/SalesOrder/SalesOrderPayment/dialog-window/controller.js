@@ -1,20 +1,17 @@
-angular.module('page', ["ideUI", "ideView", "entityApi"])
-	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = 'DependsOnScenariosTestProject.SalesOrder.SalesOrderPayment';
+angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+	.config(['EntityServiceProvider', (EntityServiceProvider) => {
+		EntityServiceProvider.baseUrl = '/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderPaymentService.ts';
 	}])
-	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderPaymentService.ts";
-	}])
-	.controller('PageController', ['$scope', 'messageHub', 'ViewParameters', 'entityApi', function ($scope, messageHub, ViewParameters, entityApi) {
-
+	.controller('PageController', ($scope, $http, ViewParameters, EntityService) => {
+		const Dialogs = new DialogHub();
 		$scope.entity = {};
 		$scope.forms = {
 			details: {},
 		};
 		$scope.formHeaders = {
-			select: "SalesOrderPayment Details",
-			create: "Create SalesOrderPayment",
-			update: "Update SalesOrderPayment"
+			select: 'SalesOrderPayment Details',
+			create: 'Create SalesOrderPayment',
+			update: 'Update SalesOrderPayment'
 		};
 		$scope.action = 'select';
 
@@ -28,49 +25,65 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 			$scope.optionsCustomerPayment = params.optionsCustomerPayment;
 		}
 
-		$scope.create = function () {
+		$scope.create = () => {
 			let entity = $scope.entity;
 			entity[$scope.selectedMainEntityKey] = $scope.selectedMainEntityId;
-			entityApi.create(entity).then(function (response) {
-				if (response.status != 201) {
-					messageHub.showAlertError("SalesOrderPayment", `Unable to create SalesOrderPayment: '${response.message}'`);
-					return;
-				}
-				messageHub.postMessage("entityCreated", response.data);
+			EntityService.create(entity).then((response) => {
+				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.SalesOrder.SalesOrderPayment.entityCreated', data: response.data });
+				Dialogs.showAlert({
+					title: 'SalesOrderPayment',
+					message: 'SalesOrderPayment successfully created',
+					type: AlertTypes.Success
+				});
 				$scope.cancel();
-				messageHub.showAlertSuccess("SalesOrderPayment", "SalesOrderPayment successfully created");
+			}, (error) => {
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: 'SalesOrderPayment',
+					message: `Unable to create SalesOrderPayment: '${message}'`,
+					type: AlertTypes.Error
+				});
+				console.error('EntityService:', error);
 			});
 		};
 
-		$scope.update = function () {
+		$scope.update = () => {
 			let id = $scope.entity.Id;
 			let entity = $scope.entity;
 			entity[$scope.selectedMainEntityKey] = $scope.selectedMainEntityId;
-			entityApi.update(id, entity).then(function (response) {
-				if (response.status != 200) {
-					messageHub.showAlertError("SalesOrderPayment", `Unable to update SalesOrderPayment: '${response.message}'`);
-					return;
-				}
-				messageHub.postMessage("entityUpdated", response.data);
+			EntityService.update(id, entity).then((response) => {
+				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.SalesOrder.SalesOrderPayment.entityUpdated', data: response.data });
+				Dialogs.showAlert({
+					title: 'SalesOrderPayment',
+					message: 'SalesOrderPayment successfully updated',
+					type: AlertTypes.Success
+				});
 				$scope.cancel();
-				messageHub.showAlertSuccess("SalesOrderPayment", "SalesOrderPayment successfully updated");
+			}, (error) => {
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: 'SalesOrderPayment',
+					message: `Unable to update SalesOrderPayment: '${message}'`,
+					type: AlertTypes.Error
+				});
+				console.error('EntityService:', error);
 			});
 		};
 
-		$scope.serviceCustomer = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts";
-		$scope.serviceCustomerPayment = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerPaymentService.ts";
+		$scope.serviceCustomer = '/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts';
+		$scope.serviceCustomerPayment = '/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerPaymentService.ts';
 
 		$scope.$watch('entity.SalesOrder', function (newValue, oldValue) {
 			if (newValue !== undefined && newValue !== null) {
-				entityApi.$http.get($scope.serviceSalesOrder + '/' + newValue).then(function (response) {
+				$http.get($scope.serviceSalesOrder + '/' + newValue).then((response) => {
 					let valueFrom = response.data.Customer;
-					entityApi.$http.post("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts/search", {
+					$http.post('/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts/search', {
 						$filter: {
 							equals: {
 								Id: valueFrom
 							}
 						}
-					}).then(function (response) {
+					}).then((response) => {
 						$scope.optionsCustomer = response.data.map(e => {
 							return {
 								value: e.Id,
@@ -84,22 +97,26 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 								$scope.entity.Customer = undefined;
 							}
 						}
+					}, (error) => {
+						console.error(error);
 					});
+				}, (error) => {
+					console.error(error);
 				});
 			}
 		});
 
 		$scope.$watch('entity.Customer', function (newValue, oldValue) {
 			if (newValue !== undefined && newValue !== null) {
-				entityApi.$http.get($scope.serviceCustomer + '/' + newValue).then(function (response) {
+				$http.get($scope.serviceCustomer + '/' + newValue).then((response) => {
 					let valueFrom = response.data.Id;
-					entityApi.$http.post("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerPaymentService.ts/search", {
+					$http.post('/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerPaymentService.ts/search', {
 						$filter: {
 							equals: {
 								Customer: valueFrom
 							}
 						}
-					}).then(function (response) {
+					}).then((response) => {
 						$scope.optionsCustomerPayment = response.data.map(e => {
 							return {
 								value: e.Id,
@@ -113,24 +130,38 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 								$scope.entity.CustomerPayment = undefined;
 							}
 						}
+					}, (error) => {
+						console.error(error);
 					});
+				}, (error) => {
+					console.error(error);
 				});
 			}
 		});
 
 		$scope.$watch('entity.CustomerPayment', function (newValue, oldValue) {
 			if (newValue !== undefined && newValue !== null) {
-				entityApi.$http.get($scope.serviceCustomerPayment + '/' + newValue).then(function (response) {
+				$http.get($scope.serviceCustomerPayment + '/' + newValue).then((response) => {
 					let valueFrom = response.data.Amount;
 					$scope.entity.Amount = valueFrom;
+				}, (error) => {
+					console.error(error);
 				});
 			}
 		});
 
-		$scope.cancel = function () {
-			$scope.entity = {};
-			$scope.action = 'select';
-			messageHub.closeDialogWindow("SalesOrderPayment-details");
+		$scope.alert = (message) => {
+			if (message) Dialogs.showAlert({
+				title: 'Description',
+				message: message,
+				type: AlertTypes.Information,
+				preformatted: true,
+			});
 		};
 
-	}]);
+		$scope.cancel = () => {
+			$scope.entity = {};
+			$scope.action = 'select';
+			Dialogs.closeWindow({ id: 'SalesOrderPayment-details' });
+		};
+	});

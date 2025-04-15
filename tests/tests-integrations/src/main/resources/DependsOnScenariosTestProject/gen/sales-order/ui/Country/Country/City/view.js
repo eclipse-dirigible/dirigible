@@ -4,16 +4,14 @@
  * Do not modify the content as it may be re-generated again.
  */
 const viewData = {
-    id: "City",
-    label: "City",
-    factory: "frame",
-    region: "bottom",
-    link: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Country/Country/City/index.html",
-    perspectiveName: "Country"
+    id: 'City',
+    label: 'City',
+    region: 'bottom',
+    lazyLoad: false,
+	autoFocusTab: true,
+    path: '/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Country/Country/City/index.html',
+    perspectiveName: 'Country'
 };
-
 if (typeof exports !== 'undefined') {
-    exports.getView = function () {
-        return viewData;
-    }
+	exports.getView = () => viewData;
 }

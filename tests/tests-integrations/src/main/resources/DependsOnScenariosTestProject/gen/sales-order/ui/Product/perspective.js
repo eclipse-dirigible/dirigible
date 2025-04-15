@@ -5,14 +5,11 @@
  */
 const perspectiveData = {
 	id: 'Product',
-	name: 'Product',
-	link: '/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Product/index.html',
-	order: '3',
+	label: 'Product',
+	path: '/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Product/index.html',
+	order: 3,
 	icon: '/services/web/resources/unicons/cube.svg'
 };
-
 if (typeof exports !== 'undefined') {
-	exports.getPerspective = function () {
-		return perspectiveData;
-	}
+	exports.getPerspective = () => perspectiveData;
 }

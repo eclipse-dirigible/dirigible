@@ -1,99 +1,91 @@
-angular.module('page', ["ideUI", "ideView", "entityApi"])
-	.config(["messageHubProvider", function (messageHubProvider) {
-		messageHubProvider.eventIdPrefix = 'DependsOnScenariosTestProject.Customer.Customer';
+angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+	.config(["EntityServiceProvider", (EntityServiceProvider) => {
+		EntityServiceProvider.baseUrl = '/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts';
 	}])
-	.config(["entityApiProvider", function (entityApiProvider) {
-		entityApiProvider.baseUrl = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts";
-	}])
-	.controller('PageController', ['$scope',  '$http', 'Extensions', 'messageHub', 'entityApi', function ($scope,  $http, Extensions, messageHub, entityApi) {
-
+	.controller('PageController', ($scope, $http, Extensions, EntityService) => {
+		const Dialogs = new DialogHub();
 		$scope.entity = {};
 		$scope.forms = {
 			details: {},
 		};
 		$scope.formHeaders = {
-			select: "Customer Details",
-			create: "Create Customer",
-			update: "Update Customer"
+			select: 'Customer Details',
+			create: 'Create Customer',
+			update: 'Update Customer'
 		};
 		$scope.action = 'select';
 
 		//-----------------Custom Actions-------------------//
-		Extensions.get('dialogWindow', 'DependsOnScenariosTestProject-custom-action').then(function (response) {
-			$scope.entityActions = response.filter(e => e.perspective === "Customer" && e.view === "Customer" && e.type === "entity");
+		Extensions.getWindows(['DependsOnScenariosTestProject-custom-action']).then((response) => {
+			$scope.entityActions = response.data.filter(e => e.perspective === 'Customer' && e.view === 'Customer' && e.type === 'entity');
 		});
 
-		$scope.triggerEntityAction = function (action) {
-			messageHub.showDialogWindow(
-				action.id,
-				{
+		$scope.triggerEntityAction = (action) => {
+			Dialogs.showWindow({
+				hasHeader: true,
+        		title: action.label,
+				path: action.path,
+				params: {
 					id: $scope.entity.Id
 				},
-				null,
-				true,
-				action
-			);
+				closeButton: true
+			});
 		};
 		//-----------------Custom Actions-------------------//
 
 		//-----------------Events-------------------//
-		messageHub.onDidReceiveMessage("clearDetails", function (msg) {
-			$scope.$apply(function () {
+		Dialogs.addMessageListener({ topic: 'DependsOnScenariosTestProject.Customer.Customer.clearDetails', handler: () => {
+			$scope.$evalAsync(() => {
 				$scope.entity = {};
 				$scope.optionsCountry = [];
 				$scope.optionsCity = [];
 				$scope.action = 'select';
 			});
-		});
-
-		messageHub.onDidReceiveMessage("entitySelected", function (msg) {
-			$scope.$apply(function () {
-				$scope.entity = msg.data.entity;
-				$scope.optionsCountry = msg.data.optionsCountry;
-				$scope.optionsCity = msg.data.optionsCity;
+		}});
+		Dialogs.addMessageListener({ topic: 'DependsOnScenariosTestProject.Customer.Customer.entitySelected', handler: (data) => {
+			$scope.$evalAsync(() => {
+				$scope.entity = data.entity;
+				$scope.optionsCountry = data.optionsCountry;
+				$scope.optionsCity = data.optionsCity;
 				$scope.action = 'select';
 			});
-		});
-
-		messageHub.onDidReceiveMessage("createEntity", function (msg) {
-			$scope.$apply(function () {
+		}});
+		Dialogs.addMessageListener({ topic: 'DependsOnScenariosTestProject.Customer.Customer.createEntity', handler: (data) => {
+			$scope.$evalAsync(() => {
 				$scope.entity = {};
-				$scope.optionsCountry = msg.data.optionsCountry;
-				$scope.optionsCity = msg.data.optionsCity;
+				$scope.optionsCountry = data.optionsCountry;
+				$scope.optionsCity = data.optionsCity;
 				$scope.action = 'create';
 			});
-		});
-
-		messageHub.onDidReceiveMessage("updateEntity", function (msg) {
-			$scope.$apply(function () {
-				$scope.entity = msg.data.entity;
-				$scope.optionsCountry = msg.data.optionsCountry;
-				$scope.optionsCity = msg.data.optionsCity;
+		}});
+		Dialogs.addMessageListener({ topic: 'DependsOnScenariosTestProject.Customer.Customer.updateEntity', handler: (data) => {
+			$scope.$evalAsync(() => {
+				$scope.entity = data.entity;
+				$scope.optionsCountry = data.optionsCountry;
+				$scope.optionsCity = data.optionsCity;
 				$scope.action = 'update';
 			});
-		});
+		}});
 
-		$scope.serviceCountry = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts";
-		$scope.serviceCity = "/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts";
+		$scope.serviceCountry = '/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts';
+		$scope.serviceCity = '/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts';
 
 
-		$scope.$watch('entity.Country', function (newValue, oldValue) {
+		$scope.$watch('entity.Country', (newValue, oldValue) => {
 			if (newValue !== undefined && newValue !== null) {
-				entityApi.$http.get($scope.serviceCountry + '/' + newValue).then(function (response) {
+				$http.get($scope.serviceCountry + '/' + newValue).then((response) => {
 					let valueFrom = response.data.Id;
-					entityApi.$http.post("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts/search", {
+					$http.post('/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts/search', {
 						$filter: {
 							equals: {
 								Country: valueFrom
 							}
 						}
-					}).then(function (response) {
-						$scope.optionsCity = response.data.map(e => {
-							return {
-								value: e.Id,
-								text: e.Name
-							}
-						});
+					}).then((response) => {
+						$scope.optionsCity = response.data.map(e => ({
+							value: e.Id,
+							text: e.Name
+						}));
 						if ($scope.action !== 'select' && newValue !== oldValue) {
 							if ($scope.optionsCity.length == 1) {
 								$scope.entity.City = $scope.optionsCity[0].value;
@@ -101,53 +93,89 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 								$scope.entity.City = undefined;
 							}
 						}
+					}, (error) => {
+						console.error(error);
 					});
+				}, (error) => {
+					console.error(error);
 				});
 			}
 		});
 		//-----------------Events-------------------//
 
-		$scope.create = function () {
-			entityApi.create($scope.entity).then(function (response) {
-				if (response.status != 201) {
-					messageHub.showAlertError("Customer", `Unable to create Customer: '${response.message}'`);
-					return;
-				}
-				messageHub.postMessage("entityCreated", response.data);
-				messageHub.postMessage("clearDetails", response.data);
-				messageHub.showAlertSuccess("Customer", "Customer successfully created");
+		$scope.create = () => {
+			EntityService.create($scope.entity).then((response) => {
+				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.Customer.Customer.entityCreated', data: response.data });
+				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.Customer.Customer.clearDetails' , data: response.data });
+				Dialogs.showAlert({
+					title: 'Customer',
+					message: 'Customer successfully created',
+					type: AlertTypes.Success
+				});
+			}, (error) => {
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: 'Customer',
+					message: `Unable to create Customer: '${message}'`,
+					type: AlertTypes.Error
+				});
+				console.error('EntityService:', error);
 			});
 		};
 
-		$scope.update = function () {
-			entityApi.update($scope.entity.Id, $scope.entity).then(function (response) {
-				if (response.status != 200) {
-					messageHub.showAlertError("Customer", `Unable to update Customer: '${response.message}'`);
-					return;
-				}
-				messageHub.postMessage("entityUpdated", response.data);
-				messageHub.postMessage("clearDetails", response.data);
-				messageHub.showAlertSuccess("Customer", "Customer successfully updated");
+		$scope.update = () => {
+			EntityService.update($scope.entity.Id, $scope.entity).then((response) => {
+				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.Customer.Customer.entityUpdated', data: response.data });
+				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.Customer.Customer.clearDetails', data: response.data });
+				Dialogs.showAlert({
+					title: 'Customer',
+					message: 'Customer successfully updated',
+					type: AlertTypes.Success
+				});
+			}, (error) => {
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: 'Customer',
+					message: `Unable to create Customer: '${message}'`,
+					type: AlertTypes.Error
+				});
+				console.error('EntityService:', error);
 			});
 		};
 
-		$scope.cancel = function () {
-			messageHub.postMessage("clearDetails");
+		$scope.cancel = () => {
+			Dialogs.triggerEvent('DependsOnScenariosTestProject.Customer.Customer.clearDetails');
 		};
 		
 		//-----------------Dialogs-------------------//
-		
-		$scope.createCountry = function () {
-			messageHub.showDialogWindow("Country-details", {
-				action: "create",
-				entity: {},
-			}, null, false);
+		$scope.alert = (message) => {
+			if (message) Dialogs.showAlert({
+				title: 'Description',
+				message: message,
+				type: AlertTypes.Information,
+				preformatted: true,
+			});
 		};
-		$scope.createCity = function () {
-			messageHub.showDialogWindow("City-details", {
-				action: "create",
-				entity: {},
-			}, null, false);
+		
+		$scope.createCountry = () => {
+			Dialogs.showWindow({
+				id: 'Country-details',
+				params: {
+					action: 'create',
+					entity: {},
+				},
+				closeButton: false
+			});
+		};
+		$scope.createCity = () => {
+			Dialogs.showWindow({
+				id: 'City-details',
+				params: {
+					action: 'create',
+					entity: {},
+				},
+				closeButton: false
+			});
 		};
 
 		//-----------------Dialogs-------------------//
@@ -156,30 +184,40 @@ angular.module('page', ["ideUI", "ideView", "entityApi"])
 
 		//----------------Dropdowns-----------------//
 
-		$scope.refreshCountry = function () {
+		$scope.refreshCountry = () => {
 			$scope.optionsCountry = [];
-			$http.get("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts").then(function (response) {
-				$scope.optionsCountry = response.data.map(e => {
-					return {
-						value: e.Id,
-						text: e.Name
-					}
+			$http.get('/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CountryService.ts').then((response) => {
+				$scope.optionsCountry = response.data.map(e => ({
+					value: e.Id,
+					text: e.Name
+				}));
+			}, (error) => {
+				console.error(error);
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: 'Country',
+					message: `Unable to load data: '${message}'`,
+					type: AlertTypes.Error
 				});
 			});
 		};
-		$scope.refreshCity = function () {
+		$scope.refreshCity = () => {
 			$scope.optionsCity = [];
-			$http.get("/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts").then(function (response) {
-				$scope.optionsCity = response.data.map(e => {
-					return {
-						value: e.Id,
-						text: e.Name
-					}
+			$http.get('/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Country/CityService.ts').then((response) => {
+				$scope.optionsCity = response.data.map(e => ({
+					value: e.Id,
+					text: e.Name
+				}));
+			}, (error) => {
+				console.error(error);
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: 'City',
+					message: `Unable to load data: '${message}'`,
+					type: AlertTypes.Error
 				});
 			});
 		};
 
 		//----------------Dropdowns-----------------//	
-		
-
-	}]);
+	});

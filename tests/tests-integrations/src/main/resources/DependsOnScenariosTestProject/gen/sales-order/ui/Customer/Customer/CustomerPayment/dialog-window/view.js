@@ -4,14 +4,11 @@
  * Do not modify the content as it may be re-generated again.
  */
 const viewData = {
-    id: "CustomerPayment-details",
-    label: "CustomerPayment",
-    link: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Customer/Customer/CustomerPayment/dialog-window/index.html",
-    perspectiveName: "Customer"
+    id: 'CustomerPayment-details',
+    label: 'CustomerPayment',
+    path: '/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Customer/Customer/CustomerPayment/dialog-window/index.html',
+    perspectiveName: 'Customer'
 };
-
 if (typeof exports !== 'undefined') {
-    exports.getDialogWindow = function () {
-        return viewData;
-    }
+    exports.getView = () => viewData;
 }

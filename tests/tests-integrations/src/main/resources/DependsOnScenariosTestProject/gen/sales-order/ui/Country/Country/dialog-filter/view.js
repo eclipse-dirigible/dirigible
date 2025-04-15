@@ -4,14 +4,11 @@
  * Do not modify the content as it may be re-generated again.
  */
 const viewData = {
-    id: "Country-filter",
-    label: "Country Filter",
-    link: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Country/Country/dialog-filter/index.html",
-    perspectiveName: "Country"
+    id: 'Country-filter',
+    label: 'Country Filter',
+    path: '/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Country/Country/dialog-filter/index.html',
+    perspectiveName: 'Country'
 };
-
 if (typeof exports !== 'undefined') {
-    exports.getDialogWindow = function () {
-        return viewData;
-    }
+    exports.getView = () => viewData;
 }

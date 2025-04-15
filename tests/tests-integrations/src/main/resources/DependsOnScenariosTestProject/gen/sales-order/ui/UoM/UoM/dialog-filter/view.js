@@ -4,14 +4,11 @@
  * Do not modify the content as it may be re-generated again.
  */
 const viewData = {
-    id: "UoM-filter",
-    label: "UoM Filter",
-    link: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/UoM/UoM/dialog-filter/index.html",
-    perspectiveName: "UoM"
+    id: 'UoM-filter',
+    label: 'UoM Filter',
+    path: '/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/UoM/UoM/dialog-filter/index.html',
+    perspectiveName: 'UoM'
 };
-
 if (typeof exports !== 'undefined') {
-    exports.getDialogWindow = function () {
-        return viewData;
-    }
+    exports.getView = () => viewData;
 }

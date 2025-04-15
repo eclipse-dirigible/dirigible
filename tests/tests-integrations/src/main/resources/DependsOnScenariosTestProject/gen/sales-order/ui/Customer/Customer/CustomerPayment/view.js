@@ -4,16 +4,14 @@
  * Do not modify the content as it may be re-generated again.
  */
 const viewData = {
-    id: "CustomerPayment",
-    label: "CustomerPayment",
-    factory: "frame",
-    region: "bottom",
-    link: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Customer/Customer/CustomerPayment/index.html",
-    perspectiveName: "Customer"
+    id: 'CustomerPayment',
+    label: 'CustomerPayment',
+    region: 'bottom',
+    lazyLoad: false,
+	autoFocusTab: true,
+    path: '/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Customer/Customer/CustomerPayment/index.html',
+    perspectiveName: 'Customer'
 };
-
 if (typeof exports !== 'undefined') {
-    exports.getView = function () {
-        return viewData;
-    }
+	exports.getView = () => viewData;
 }

@@ -1,5 +1,5 @@
 {
     "module": "DependsOnScenariosTestProject/gen/sales-order/ui/Product/perspective.js",
-    "extensionPoint": "DependsOnScenariosTestProject",
+    "extensionPoint": "application-perspectives",
     "description": "DependsOnScenariosTestProject - Perspective - Product"
 }

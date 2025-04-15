@@ -6,12 +6,9 @@
 const viewData = {
     id: "SalesOrder-details",
     label: "SalesOrder",
-    link: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/SalesOrder/SalesOrder/dialog-window/index.html",
+    path: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/SalesOrder/SalesOrder/dialog-window/index.html",
     perspectiveName: "SalesOrder",
 };
-
 if (typeof exports !== 'undefined') {
-    exports.getDialogWindow = function () {
-        return viewData;
-    }
+    exports.getView = () => viewData;
 }

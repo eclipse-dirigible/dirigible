@@ -2,115 +2,104 @@
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
 
     <head>
-        <meta charset="utf-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+		<meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link rel="icon" href="data:;base64,iVBORw0KGgo=" dg-brand-icon />
-        <title dg-brand-title></title>
-        <theme></theme>
-        <script type="text/javascript"
-            src="/services/js/resources-core/services/loader.js?id=application-view-js"></script>
-        <link type="text/css" rel="stylesheet"
-            href="/services/js/resources-core/services/loader.js?id=application-view-css" />
-
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
         <script type="text/javascript" src="controller.js"></script>
     </head>
 
-    <body class="dg-vbox">
-        <fd-scrollbar class="dg-full-height">
-            <div class="fd-margin--md fd-message-strip fd-message-strip--error fd-message-strip--dismissible"
-                role="alert" ng-show="errorMessage">
-                <p class="fd-message-strip__text">{{ errorMessage }}</p>
-                <fd-button glyph="sap-icon--decline" compact="true" dg-type="transparent" aria-label="Close" in-msg-strip="true" ng-click="clearErrorMessage()">
-		        </fd-button>
-            </div>
+    <body class="bk-vbox">
+        <bk-scrollbar class="bk-full-height">
+			<bk-message-strip class="fd-margin--md" ng-show="errorMessage" glyph="sap-icon--message-error" state="error" on-dismiss="clearErrorMessage()">{{ errorMessage }}</bk-message-strip>
 
-            <fd-fieldset ng-form="forms.details">
-                <fd-form-group dg-header="Customer Filter" name="entityForm" class="fd-container fd-form-layout-grid-container">
-                    <fd-form-item class="fd-row">
+            <bk-fieldset class="fd-padding-begin-end--sm" ng-form="forms.details">
+                <bk-form-group label="Customer Filter" name="entityForm" transclude-classes="fd-container fd-form-layout-grid-container">
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="idName" dg-colon="true">Name</fd-form-label>
+                        	<bk-form-label for="idName" colon="true">Name</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--8">
-	                        <fd-form-input-message-group dg-inactive="{{ forms.details['Name'].$valid }}">
-	                            <fd-input id="idName"
+							<bk-form-input-message state="{{ forms.details['Name'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+								<bk-input id="idName"
 	                                name="Name"
 	                                state="{{ forms.details['Name'].$valid ? '' : 'error' }}"
 	                                ng-model="entity.Name"
-	                                ng-minlength="0.0 || 0"
-	                                ng-maxlength="100.0 || -1"
+									ng-maxlength="100.0"
 	                                type="text"
 	                                placeholder="Enter Name">
-	                            </fd-input>
-	                            <fd-form-message dg-type="error">Incorrect Input</fd-form-message>
-	                        </fd-form-input-message-group>
+	                            </bk-input>
+							</bk-form-input-message>
 	                    </div>
-                    </fd-form-item>
-                    <fd-form-item class="fd-row">
+                    </bk-form-item>
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="idCountry" dg-colon="true">Country</fd-form-label>
+                        	<bk-form-label for="idCountry" colon="true">Country</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--8">
-	                        <fd-combobox-input id="idCountry"
+	                        <bk-combobox-input input-id="idCountry"
 	                            name="Country"
 	                            state="{{ forms.details['Country'].$valid ? '' : 'error' }}"
 	                            ng-model="entity.Country"
 	                            dropdown-items="optionsCountry"
-	                            dg-placeholder="Search Country ...">
-	                        </fd-combobox-input>
+	                            placeholder="Search Country ..."
+								btn-aria-label="show/hide Country options" list-aria-label="Country options">
+	                        </bk-combobox-input>
 	                    </div>
-                    </fd-form-item>
-                    <fd-form-item class="fd-row">
+                    </bk-form-item>
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="idCity" dg-colon="true">City</fd-form-label>
+                        	<bk-form-label for="idCity" colon="true">City</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--8">
-	                        <fd-combobox-input id="idCity"
+	                        <bk-combobox-input input-id="idCity"
 	                            name="City"
 	                            state="{{ forms.details['City'].$valid ? '' : 'error' }}"
 	                            ng-model="entity.City"
 	                            dropdown-items="optionsCity"
-	                            dg-placeholder="Search City ...">
-	                        </fd-combobox-input>
+	                            placeholder="Search City ..."
+								btn-aria-label="show/hide City options" list-aria-label="City options">
+	                        </bk-combobox-input>
 	                    </div>
-                    </fd-form-item>
-                    <fd-form-item class="fd-row">
+                    </bk-form-item>
+                    <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<fd-form-label for="idAddress" dg-colon="true">Address</fd-form-label>
+                        	<bk-form-label for="idAddress" colon="true">Address</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--8">
-	                        <fd-form-input-message-group dg-inactive="{{ forms.details['Address'].$valid }}">
-	                            <fd-input id="idAddress"
+							<bk-form-input-message state="{{ forms.details['Address'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+								<bk-input id="idAddress"
 	                                name="Address"
 	                                state="{{ forms.details['Address'].$valid ? '' : 'error' }}"
 	                                ng-model="entity.Address"
-	                                ng-minlength="0.0 || 0"
-	                                ng-maxlength="100.0 || -1"
+									ng-maxlength="100.0"
 	                                type="text"
 	                                placeholder="Enter Address">
-	                            </fd-input>
-	                            <fd-form-message dg-type="error">Incorrect Input</fd-form-message>
-	                        </fd-form-input-message-group>
+	                            </bk-input>
+							</bk-form-input-message>
 	                    </div>
-                    </fd-form-item>
-                </fd-form-group>
-            </fd-fieldset>
-        </fd-scrollbar>
+                    </bk-form-item>
+                </bk-form-group>
+            </bk-fieldset>
+        </bk-scrollbar>
 
-        <fd-bar bar-design="footer" compact="true" ng-show="action !== 'select'">
-			<fd-bar-right>
-				<fd-bar-element>
-					<fd-button dg-label="Filter" dg-type="emphasized" ng-click="filter()"></fd-button>
-				</fd-bar-element>
-				<fd-bar-element>
-					<fd-button dg-label="Reset" ng-click="resetFilter()"></fd-button>
-				</fd-bar-element>
-				<fd-bar-element>
-					<fd-button dg-label="Cancel" ng-click="cancel()"></fd-button>
-				</fd-bar-element>
-			</fd-bar-right>
-		</fd-bar>
-
+        <bk-bar bar-design="footer" compact="true" ng-show="action !== 'select'">
+			<bk-bar-right>
+				<bk-bar-element>
+					<bk-button label="Filter" state="emphasized" ng-click="filter()"></bk-button>
+				</bk-bar-element>
+				<bk-bar-element>
+					<bk-button label="Reset" ng-click="resetFilter()"></bk-button>
+				</bk-bar-element>
+				<bk-bar-element>
+					<bk-button label="Cancel" ng-click="cancel()"></bk-button>
+				</bk-bar-element>
+			</bk-bar-right>
+		</bk-bar>
+		<theme></theme>
     </body>
 
 </html>

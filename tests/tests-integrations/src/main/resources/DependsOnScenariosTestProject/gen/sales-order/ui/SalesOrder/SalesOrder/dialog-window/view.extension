@@ -1,5 +1,5 @@
 {
-    "module": "{{projectName}}/gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/view.js",
-    "extensionPoint": "dialog-window",
-    "description": "{{projectName}} - Application Dialog Window"
+    "module": "DependsOnScenariosTestProject/gen/sales-order/ui/SalesOrder/SalesOrder/dialog-window/view.js",
+    "extensionPoint": "application-windows",
+    "description": "DependsOnScenariosTestProject - Application Dialog Window"
 }

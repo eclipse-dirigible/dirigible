@@ -1,5 +1,5 @@
 {
     "module": "DependsOnScenariosTestProject/gen/sales-order/ui/Customer/Customer/CustomerPayment/view.js",
-    "extensionPoint": "DependsOnScenariosTestProject-view",
+    "extensionPoint": "application-views",
     "description": "DependsOnScenariosTestProject - Application View - Details"
 }

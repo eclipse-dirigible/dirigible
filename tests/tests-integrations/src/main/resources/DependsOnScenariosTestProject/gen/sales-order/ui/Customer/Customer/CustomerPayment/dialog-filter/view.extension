@@ -1,5 +1,5 @@
 {
     "module": "DependsOnScenariosTestProject/gen/sales-order/ui/Customer/Customer/CustomerPayment/dialog-filter/view.js",
-    "extensionPoint": "dialog-window",
+    "extensionPoint": "application-windows",
     "description": "DependsOnScenariosTestProject - Application Dialog Window"
 }

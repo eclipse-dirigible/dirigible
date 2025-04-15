@@ -4,14 +4,11 @@
  * Do not modify the content as it may be re-generated again.
  */
 const viewData = {
-    id: "Product-filter",
-    label: "Product Filter",
-    link: "/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Product/Product/dialog-filter/index.html",
-    perspectiveName: "Product"
+    id: 'Product-filter',
+    label: 'Product Filter',
+    path: '/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Product/Product/dialog-filter/index.html',
+    perspectiveName: 'Product'
 };
-
 if (typeof exports !== 'undefined') {
-    exports.getDialogWindow = function () {
-        return viewData;
-    }
+    exports.getView = () => viewData;
 }

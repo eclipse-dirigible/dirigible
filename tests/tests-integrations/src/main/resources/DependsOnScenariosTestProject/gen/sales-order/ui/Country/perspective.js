@@ -5,14 +5,11 @@
  */
 const perspectiveData = {
 	id: 'Country',
-	name: 'Country',
-	link: '/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Country/index.html',
-	order: '1',
+	label: 'Country',
+	path: '/services/web/DependsOnScenariosTestProject/gen/sales-order/ui/Country/index.html',
+	order: 1,
 	icon: '/services/web/resources/unicons/globe.svg'
 };
-
 if (typeof exports !== 'undefined') {
-	exports.getPerspective = function () {
-		return perspectiveData;
-	}
+	exports.getPerspective = () => perspectiveData;
 }
