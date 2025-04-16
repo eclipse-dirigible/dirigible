@@ -371,7 +371,7 @@ Unicons by IconScout: [https://github.com/Iconscout/unicons](https://github.com/
 
 - Project Home: [https://www.dirigible.io](https://www.dirigible.io)
 - Help Portal: [https://help.dirigible.io](https://www.dirigible.io/help)
-- Samples: [https://samples.dirigible.io](https://samples.dirigible.io)
+- Samples: [https://github.com/eclipse-dirigible/dirigible-samples](https://github.com/eclipse-dirigible/dirigible-samples)
 - Trial Instance: [https://trial.dirigible.io](https://trial.dirigible.io)
 - Slack: [https://slack.dirigible.io](https://slack.dirigible.io)
 - Mailing List: [https://dev.eclipse.org/mailman/listinfo/dirigible-dev](https://dev.eclipse.org/mailman/listinfo/dirigible-dev)
