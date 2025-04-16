@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.commons.api.helpers;
 
+import org.apache.commons.lang3.StringUtils;
+
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
@@ -16,9 +18,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
 import java.util.Locale;
-
-import org.apache.commons.lang3.StringUtils;
 
 /**
  * The Class DateTimeUtils.
@@ -26,17 +27,22 @@ import org.apache.commons.lang3.StringUtils;
 public class DateTimeUtils {
 
     /** The Constant dateFormatter. */
-    private static final DateTimeFormatter dateFormatter =
-            DateTimeFormatter.ofPattern("" + "[yyyy/MM/dd]" + "[yyyy-MM-dd]" + "[dd[ ]MMM[ ]yyyy", Locale.ENGLISH);
-
+    public static final DateTimeFormatter dateFormatter =
+            new DateTimeFormatterBuilder().appendOptional(DateTimeFormatter.ofPattern("M/d/yyyy"))
+                                          .appendOptional(DateTimeFormatter.ofPattern("MM/dd/yyyy"))
+                                          .appendOptional(DateTimeFormatter.ofPattern("yyyy/MM/dd"))
+                                          .appendOptional(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+                                          .appendOptional(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH))
+                                          .appendOptional(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                                          .toFormatter(Locale.ENGLISH);
     /** The Constant timeFormatter. */
     private static final DateTimeFormatter timeFormatter =
-            DateTimeFormatter.ofPattern("" + "[HH:mm:ss.SSSSSS]" + "[yyyy-MM-dd]" + "[HH:mm:ss[.SSS][ Z]]", Locale.ENGLISH);
+            DateTimeFormatter.ofPattern("[HH:mm:ss.SSSSSS]" + "[yyyy-MM-dd]" + "[HH:mm:ss[.SSS][ Z]]", Locale.ENGLISH);
 
     /** The Constant datetimeFormatter. */
     private static final DateTimeFormatter datetimeFormatter = DateTimeFormatter.ofPattern(
-            "" + "[yyyy/MM/dd HH:mm:ss.SSSSSS]" + "[yyyy-MM-dd HH:mm:ss.SSSSSS]" + "[yyyy-MM-dd HH:mm:ss.SSSSS]"
-                    + "[yyyy-MM-dd HH:mm:ss.SSSS]" + "[yyyy-MM-dd HH:mm:ss.SSS]" + "[yyyy-MM-dd HH:mm:ss.SS]" + "[yyyy-MM-dd HH:mm:ss.S]"
+            "[yyyy/MM/dd HH:mm:ss.SSSSSS]" + "[yyyy-MM-dd HH:mm:ss.SSSSSS]" + "[yyyy-MM-dd HH:mm:ss.SSSSS]" + "[yyyy-MM-dd HH:mm:ss.SSSS]"
+                    + "[yyyy-MM-dd HH:mm:ss.SSS]" + "[yyyy-MM-dd HH:mm:ss.SS]" + "[yyyy-MM-dd HH:mm:ss.S]"
                     + "[yyyy/MM/dd HH:mm:ss[.SSS][ Z]]" + "[yyyy-MM-dd HH:mm:ss[.SSS][ Z]]" + "[dd[ ]MMM[ ]yyyy:HH:mm:ss.SSS[ Z]]",
             Locale.ENGLISH);
 
@@ -49,30 +55,6 @@ public class DateTimeUtils {
     public static Date parseDate(String value) {
         value = sanitize(value);
         return Date.valueOf(LocalDate.parse(value, dateFormatter));
-    }
-
-    /**
-     * Parses the time.
-     *
-     * @param value the value
-     * @return the time
-     */
-    public static Time parseTime(String value) {
-        value = sanitize(value);
-        value = timezonize(value);
-        return Time.valueOf(LocalTime.parse(value, timeFormatter));
-    }
-
-    /**
-     * Parses the date time.
-     *
-     * @param value the value
-     * @return the timestamp
-     */
-    public static Timestamp parseDateTime(String value) {
-        value = sanitize(value);
-        value = timezonize(value);
-        return Timestamp.valueOf(LocalDateTime.parse(value, datetimeFormatter));
     }
 
     /**
@@ -92,6 +74,18 @@ public class DateTimeUtils {
     }
 
     /**
+     * Parses the time.
+     *
+     * @param value the value
+     * @return the time
+     */
+    public static Time parseTime(String value) {
+        value = sanitize(value);
+        value = timezonize(value);
+        return Time.valueOf(LocalTime.parse(value, timeFormatter));
+    }
+
+    /**
      * Timezonize.
      *
      * @param value the value
@@ -102,6 +96,18 @@ public class DateTimeUtils {
             value = value.substring(0, value.indexOf('.') + 4) + " +" + value.substring(value.indexOf('.') + 4);
         }
         return value;
+    }
+
+    /**
+     * Parses the date time.
+     *
+     * @param value the value
+     * @return the timestamp
+     */
+    public static Timestamp parseDateTime(String value) {
+        value = sanitize(value);
+        value = timezonize(value);
+        return Timestamp.valueOf(LocalDateTime.parse(value, datetimeFormatter));
     }
 
     /**
