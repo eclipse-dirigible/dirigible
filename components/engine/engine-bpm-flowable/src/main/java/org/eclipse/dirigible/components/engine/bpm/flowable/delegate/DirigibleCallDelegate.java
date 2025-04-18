@@ -9,11 +9,19 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.delegate;
 
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.Tracer;
-import io.opentelemetry.context.Scope;
-import jakarta.annotation.Nullable;
+import static org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActionData.Action.SKIP;
+import static org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService.DIRIGIBLE_BPM_INTERNAL_SKIP_STEP;
+
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Pattern;
+
 import org.eclipse.dirigible.components.open.telemetry.OpenTelemetryProvider;
+import org.eclipse.dirigible.components.tracing.TaskState;
+import org.eclipse.dirigible.components.tracing.TaskStateUtil;
+import org.eclipse.dirigible.components.tracing.TaskType;
+import org.eclipse.dirigible.components.tracing.TracingFacade;
 import org.eclipse.dirigible.graalium.core.DirigibleJavascriptCodeRunner;
 import org.eclipse.dirigible.repository.api.RepositoryPath;
 import org.flowable.engine.delegate.BpmnError;
@@ -25,13 +33,10 @@ import org.graalvm.polyglot.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.regex.Pattern;
-
-import static org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActionData.Action.SKIP;
-import static org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService.DIRIGIBLE_BPM_INTERNAL_SKIP_STEP;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Scope;
+import jakarta.annotation.Nullable;
 
 /**
  * The Class DirigibleCallDelegate.
@@ -208,6 +213,19 @@ public class DirigibleCallDelegate implements JavaDelegate {
     @Transactional
     @Override
     public void execute(DelegateExecution execution) {
+        TaskState taskState = null;
+        if (TracingFacade.isTracingEnabled()) {
+            Map<String, String> input = TaskStateUtil.getVariables(execution.getVariables());
+            taskState = TracingFacade.taskStarted(TaskType.BPM,
+                    execution.getProcessInstanceBusinessKey() != null ? execution.getProcessInstanceBusinessKey()
+                            : execution.getProcessInstanceId(),
+                    execution.getCurrentFlowElement()
+                             .getName(),
+                    input);
+            taskState.setDefinition(execution.getProcessDefinitionId());
+            taskState.setInstance(execution.getProcessInstanceId());
+            taskState.setTenant(execution.getTenantId());
+        }
         Tracer tracer = OpenTelemetryProvider.get()
                                              .getTracer("eclipse-dirigible");
         Span span = tracer.spanBuilder("flowable_task_execution")
@@ -216,7 +234,16 @@ public class DirigibleCallDelegate implements JavaDelegate {
             addSpanAttributes(execution, span);
 
             executeInternal(execution);
+
+            if (TracingFacade.isTracingEnabled()) {
+                Map<String, String> output = TaskStateUtil.getVariables(execution.getVariables());
+                TracingFacade.taskSuccessful(taskState, output);
+            }
         } catch (RuntimeException e) {
+            if (TracingFacade.isTracingEnabled()) {
+                Map<String, String> output = TaskStateUtil.getVariables(execution.getVariables());
+                TracingFacade.taskFailed(taskState, output, e.getMessage());
+            }
             span.recordException(e);
             span.setStatus(io.opentelemetry.api.trace.StatusCode.ERROR, "Exception occurred during task execution");
 

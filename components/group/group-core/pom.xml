@@ -63,6 +63,10 @@
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-core-tenants</artifactId>
 		</dependency>
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-core-tracing</artifactId>
+		</dependency>
 		
 		<!-- Swagger -->
 		<dependency>

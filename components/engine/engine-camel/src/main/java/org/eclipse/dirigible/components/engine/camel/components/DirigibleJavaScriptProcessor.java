@@ -9,11 +9,17 @@
  */
 package org.eclipse.dirigible.components.engine.camel.components;
 
+import java.util.Map;
+
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.Processor;
 import org.apache.camel.support.CamelContextHelper;
+import org.eclipse.dirigible.components.tracing.TaskState;
+import org.eclipse.dirigible.components.tracing.TaskStateUtil;
+import org.eclipse.dirigible.components.tracing.TaskType;
+import org.eclipse.dirigible.components.tracing.TracingFacade;
 
 class DirigibleJavaScriptProcessor implements Processor {
 
@@ -25,10 +31,33 @@ class DirigibleJavaScriptProcessor implements Processor {
 
     @Override
     public void process(Exchange exchange) {
-        DirigibleJavaScriptInvoker invoker = getInvoker(exchange.getContext());
-        Message message = exchange.getMessage();
+        TaskState taskState = null;
+        if (TracingFacade.isTracingEnabled()) {
+            Map<String, String> input = TaskStateUtil.getVariables(exchange.getVariables());
+            taskState = TracingFacade.taskStarted(TaskType.ETL, exchange.getExchangeId(), javaScriptPath, input);
+            taskState.setDefinition(exchange.getContext()
+                                            .getName());
+            taskState.setInstance(exchange.getContext()
+                                          .getVersion());
+        }
+        try {
+            DirigibleJavaScriptInvoker invoker = getInvoker(exchange.getContext());
+            Message message = exchange.getMessage();
 
-        invoker.invoke(message, javaScriptPath);
+            invoker.invoke(message, javaScriptPath);
+
+            if (TracingFacade.isTracingEnabled() && exchange.getException() != null) {
+                Map<String, String> output = TaskStateUtil.getVariables(exchange.getVariables());
+                TracingFacade.taskFailed(taskState, output, exchange.getException()
+                                                                    .getMessage());
+            }
+        } catch (Exception e) {
+            if (TracingFacade.isTracingEnabled()) {
+                Map<String, String> output = TaskStateUtil.getVariables(exchange.getVariables());
+                TracingFacade.taskFailed(taskState, output, e.getMessage());
+            }
+            throw new DirigibleJavaScriptException("Exception during invokation of: " + DirigibleJavaScriptInvoker.class, e);
+        }
     }
 
     private DirigibleJavaScriptInvoker getInvoker(CamelContext camelContext) {

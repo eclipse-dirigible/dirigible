@@ -28,6 +28,7 @@
         <module>core/core-spring</module>
         <module>core/core-project</module>
         <module>core/core-tenants</module>
+        <module>core/core-tracing</module>
 
         <!-- Security -->
         <module>security/security-basic</module>
@@ -207,6 +208,7 @@
         <module>ui/perspective-jobs</module>
         <module>ui/perspective-security</module>
         <module>ui/perspective-processes</module>
+        <module>ui/perspective-tracing</module>
         <module>ui/view-welcome</module>
         <module>ui/view-search</module>
         <module>ui/view-projects</module>
@@ -1184,6 +1186,11 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-perspective-tracing</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-perspective-documents</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -1852,10 +1859,14 @@
                  <artifactId>dirigible-components-template-mapping-javascript</artifactId>
                  <version>${project.version}</version>
             </dependency>
-
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-core-tenants</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-core-tracing</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

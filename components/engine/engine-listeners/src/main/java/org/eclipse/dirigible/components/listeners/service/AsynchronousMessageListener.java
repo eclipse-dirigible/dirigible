@@ -9,15 +9,22 @@
  */
 package org.eclipse.dirigible.components.listeners.service;
 
-import jakarta.jms.JMSException;
-import jakarta.jms.Message;
-import jakarta.jms.MessageListener;
-import jakarta.jms.TextMessage;
+import java.util.Map;
+import java.util.TreeMap;
+
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
+import org.eclipse.dirigible.components.tracing.TaskState;
+import org.eclipse.dirigible.components.tracing.TaskType;
+import org.eclipse.dirigible.components.tracing.TracingFacade;
 import org.eclipse.dirigible.graalium.core.DirigibleJavascriptCodeRunner;
 import org.eclipse.dirigible.graalium.core.javascript.modules.Module;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import jakarta.jms.JMSException;
+import jakarta.jms.Message;
+import jakarta.jms.MessageListener;
+import jakarta.jms.TextMessage;
 
 /**
  * The listener interface for receiving asynchronousMessage events. The class that is interested in
@@ -68,17 +75,40 @@ class AsynchronousMessageListener implements MessageListener {
                     listenerDescriptor.getDestination());
             throw new IllegalStateException(msg);
         }
+        String tenantId = null;
         try {
-            String tenantId = tenantPropertyManager.getCurrentTenantId(message);
+            tenantId = tenantPropertyManager.getCurrentTenantId(message);
             LOGGER.debug("Processing message WITH context for tenant [{}].", tenantId);
-
+        } catch (JMSException e) {
+            throw new IllegalStateException("Failed to handle message: " + message, e);
+        }
+        // TaskState taskState = null;
+        // if (TracingFacade.isTracingEnabled()) {
+        // try {
+        // Map<String, String> input = new TreeMap<String, String>();
+        // String extractedMsg = extractMessage(textMsg);
+        // input.put("message", extractedMsg);
+        // String execution = textMsg.getJMSMessageID();
+        // taskState = TracingFacade.taskStarted(TaskType.MQ, execution,
+        // listenerDescriptor.getHandlerPath(), input);
+        // taskState.setDefinition(listenerDescriptor.getDestination());
+        // taskState.setTenant(tenantId);
+        // } catch (JMSException e) {
+        // LOGGER.error("Error tracing the received message in [{}] by [{}]",
+        // listenerDescriptor.getDestination(),
+        // listenerDescriptor.getHandlerPath(), e);
+        // }
+        // }
+        try {
             tenantContext.execute(tenantId, () -> {
                 executeOnMessageHandler(textMsg);
                 return null;
             });
             LOGGER.trace("Done processing the received message in [{}] by [{}]", listenerDescriptor.getDestination(),
                     listenerDescriptor.getHandlerPath());
+            // TracingFacade.taskSuccessful(taskState, null);
         } catch (Exception e) {
+            // TracingFacade.taskFailed(taskState, null, e.getMessage());
             throw new IllegalStateException("Failed to handle message: " + message, e);
         }
     }

@@ -28,6 +28,11 @@
             <artifactId>dirigible-components-core-base</artifactId>
             <scope>compile</scope>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-core-tracing</artifactId>
+            <scope>compile</scope>
+        </dependency>
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-engine-template</artifactId>

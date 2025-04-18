@@ -1,0 +1,5 @@
+{
+    "module": "perspective-tracing/configs/tracing-tasks-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Tasks States"
+}

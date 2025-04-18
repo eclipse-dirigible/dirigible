@@ -1,0 +1,50 @@
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>org.eclipse.dirigible</groupId>
+		<artifactId>dirigible-components-parent</artifactId>
+		<version>12.0.0-SNAPSHOT</version>
+		<relativePath>../../pom.xml</relativePath>
+	</parent>
+
+	<name>Components - Core - Base</name>
+	<artifactId>dirigible-components-core-tracing</artifactId>
+    <packaging>jar</packaging>
+    
+    <dependencies>
+    
+    	<!-- Configurations -->
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-commons-config</artifactId>
+    	</dependency>
+    	
+    	<!-- Helpers -->
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-commons-helpers</artifactId>
+    	</dependency>
+    	
+    	<!-- Core Base -->
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-core-base</artifactId>
+    	</dependency>
+    	
+    	<!-- JaVers -->
+    	<dependency>
+		    <groupId>org.javers</groupId>
+		    <artifactId>javers-core</artifactId>
+		    <version>7.8.0</version>
+		</dependency>
+		
+    </dependencies>
+    
+	<properties>
+		<license.header.location>../../../licensing-header.txt</license.header.location>
+		<parent.pom.folder>../../../</parent.pom.folder>
+	</properties>
+
+</project>
