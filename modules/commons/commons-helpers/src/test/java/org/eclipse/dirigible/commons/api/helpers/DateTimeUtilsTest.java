@@ -11,14 +11,19 @@ class DateTimeUtilsTest {
 
     @Test
     void testParseDate() {
-        Date date = DateTimeUtils.parseDate("1/14/2025");
+        testParseDate("1/14/2025");
+        testParseDate("14.01.2025");
+    }
+
+    private void testParseDate(String dateString) {
+        Date date = DateTimeUtils.parseDate(dateString);
 
         Calendar calendar = Calendar.getInstance();
         calendar.setTime(date);
 
         assertThat(date).isNotNull();
         assertThat(calendar.get(Calendar.YEAR)).isEqualTo(2025);
-        assertThat(calendar.get(Calendar.MONTH)).isEqualTo(Calendar.JANUARY); // 0-based!
+        assertThat(calendar.get(Calendar.MONTH)).isEqualTo(Calendar.JANUARY);
         assertThat(calendar.get(Calendar.DAY_OF_MONTH)).isEqualTo(14);
     }
 }
