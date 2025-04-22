@@ -32,6 +32,7 @@ public class DateTimeUtils {
     public static final DateTimeFormatter dateFormatter =
             new DateTimeFormatterBuilder().appendOptional(DateTimeFormatter.ofPattern("M/d/yyyy"))
                                           .appendOptional(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                                          .appendOptional(DateTimeFormatter.ofPattern("yyyyMMdd"))
                                           .appendOptional(DateTimeFormatter.ofPattern("MM/dd/yyyy"))
                                           .appendOptional(DateTimeFormatter.ofPattern("yyyy/MM/dd"))
                                           .appendOptional(DateTimeFormatter.ofPattern("yyyy-MM-dd"))

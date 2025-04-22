@@ -13,6 +13,7 @@ class DateTimeUtilsTest {
     void testParseDate() {
         testParseDate("1/14/2025");
         testParseDate("14.01.2025");
+        testParseDate("20250114");
     }
 
     private void testParseDate(String dateString) {
