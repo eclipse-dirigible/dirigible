@@ -52,7 +52,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			refreshData();
 			$scope.loadPage($scope.dataPage, $scope.filter);
 		}});
-		Dialogs.addMessageListener({ topic: 'DependsOnScenariosTestProject.Product.Product.entitySearch', handler: () => {
+		Dialogs.addMessageListener({ topic: 'DependsOnScenariosTestProject.Product.Product.entitySearch', handler: (data) => {
 			resetPagination();
 			$scope.filter = data.filter;
 			$scope.filterEntity = data.entity;
