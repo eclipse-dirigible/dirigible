@@ -48,202 +48,6 @@ class ParametersSetter {
             new BlobParamSetter());
 
     /**
-     * Sets the parameters.
-     *
-     * @param parameters the parameters
-     * @param preparedStatement the prepared statement
-     * @throws SQLException the SQL exception
-     */
-    static void setParameters(String parameters, IndexedOrNamedStatement preparedStatement) throws SQLException {
-        JsonElement parametersElement = GsonHelper.parseJson(parameters);
-        if (!(parametersElement instanceof JsonArray parametersArray)) {
-            throw new IllegalArgumentException("Parameters must be provided as a JSON array, e.g. [1, 'John', 9876]");
-        }
-
-        int paramIndex = 1;
-        for (JsonElement parameterElement : parametersArray) {
-            setParameter(preparedStatement, paramIndex, parameterElement);
-            paramIndex++;
-        }
-    }
-
-    /**
-     * Sets the parameter.
-     *
-     * @param preparedStatement the prepared statement
-     * @param paramIndex the param index
-     * @param parameterElement the parameter element
-     * @throws SQLException the SQL exception
-     */
-    private static void setParameter(IndexedOrNamedStatement preparedStatement, int paramIndex, JsonElement parameterElement)
-            throws SQLException {
-        if (parameterElement.isJsonPrimitive()) {
-            if (preparedStatement.isNamed()) {
-                throw new IllegalArgumentException("Primitive types can be set only to index based prepared statement.");
-            }
-            setJsonPrimitiveParam(preparedStatement.getIndexed(), paramIndex, parameterElement);
-            return;
-        }
-
-        if (parameterElement.isJsonObject()) {
-            setJsonObjectParam(preparedStatement, paramIndex, parameterElement);
-            return;
-        }
-
-        throw new IllegalArgumentException("Parameters must contain primitives and objects only");
-    }
-
-    /**
-     * Sets the json primitive param.
-     *
-     * @param preparedStatement the prepared statement
-     * @param paramIndex the param index
-     * @param parameterElement the parameter element
-     * @throws SQLException the SQL exception
-     */
-    private static void setJsonPrimitiveParam(PreparedStatement preparedStatement, int paramIndex, JsonElement parameterElement)
-            throws SQLException {
-        if (parameterElement.getAsJsonPrimitive()
-                            .isBoolean()) {
-            preparedStatement.setBoolean(paramIndex, parameterElement.getAsBoolean());
-            return;
-        }
-
-        if (parameterElement.getAsJsonPrimitive()
-                            .isString()) {
-            preparedStatement.setString(paramIndex, parameterElement.getAsString());
-            return;
-        }
-
-        if (parameterElement.getAsJsonPrimitive()
-                            .isNumber()) {
-            setNumber(preparedStatement, paramIndex, parameterElement);
-            return;
-        }
-
-        throw new IllegalArgumentException("Parameter type unkown");
-    }
-
-    /**
-     * Sets the number.
-     *
-     * @param preparedStatement the prepared statement
-     * @param paramIndex the param index
-     * @param parameterElement the parameter element
-     * @throws SQLException the SQL exception
-     */
-    private static void setNumber(PreparedStatement preparedStatement, int paramIndex, JsonElement parameterElement) throws SQLException {
-        boolean isNumberParameterSet = false;
-        int numberIndex = paramIndex;
-
-        double doubleValue = parameterElement.getAsDouble();
-        boolean floatingPointValue = doubleValue % 1 != 0;
-        if (floatingPointValue) {
-            try {
-                preparedStatement.setDouble(numberIndex, doubleValue);
-                return;
-            } catch (SQLException | ClassCastException e) {
-                // Do nothing
-            }
-        }
-
-        if (!isNumberParameterSet) {
-            try {
-                preparedStatement.setInt(numberIndex, parameterElement.getAsInt());
-                isNumberParameterSet = true;
-            } catch (SQLException | ClassCastException e) {
-                // Do nothing
-            }
-        }
-
-        if (!isNumberParameterSet) {
-            try {
-                preparedStatement.setShort(numberIndex, parameterElement.getAsShort());
-                isNumberParameterSet = true;
-            } catch (SQLException | ClassCastException e) {
-                // Do nothing
-            }
-        }
-
-        if (!isNumberParameterSet) {
-            try {
-                preparedStatement.setLong(numberIndex, parameterElement.getAsLong());
-                isNumberParameterSet = true;
-            } catch (SQLException | ClassCastException e) {
-                // Do nothing
-            }
-        }
-
-        if (!isNumberParameterSet) {
-            try {
-                preparedStatement.setBigDecimal(numberIndex, parameterElement.getAsBigDecimal());
-                isNumberParameterSet = true;
-            } catch (SQLException | ClassCastException e) {
-                // Do nothing
-            }
-        }
-
-        if (!isNumberParameterSet) {
-            preparedStatement.setObject(numberIndex, parameterElement.getAsNumber()
-                                                                     .toString());
-        }
-    }
-
-    /**
-     * Sets the json object param.
-     *
-     * @param preparedStatement the prepared statement
-     * @param paramIndex the param index
-     * @param parameterElement the parameter element
-     * @throws SQLException the SQL exception
-     */
-    private static void setJsonObjectParam(IndexedOrNamedStatement preparedStatement, int paramIndex, JsonElement parameterElement)
-            throws SQLException {
-        JsonObject jsonObject = parameterElement.getAsJsonObject();
-        JsonElement nameElement = jsonObject.get("name");
-        JsonElement typeElement = jsonObject.get("type");
-
-        if (!typeElement.isJsonPrimitive() || !typeElement.getAsJsonPrimitive()
-                                                          .isString()) {
-            throw new IllegalArgumentException("Parameter 'type' must be a string representing the database type name");
-        }
-
-        String dataType = typeElement.getAsJsonPrimitive()
-                                     .getAsString();
-        JsonElement valueElement = jsonObject.get("value");
-        if (null == valueElement || valueElement.isJsonNull()) {
-            Integer sqlType = DataTypeUtils.getSqlTypeByDataType(dataType);
-            if (preparedStatement.isIndexed()) {
-                preparedStatement.getIndexed()
-                                 .setNull(paramIndex, sqlType);
-            } else if (preparedStatement.isNamed()) {
-                preparedStatement.getNamed()
-                                 .setNull(nameElement.getAsJsonPrimitive()
-                                                     .getAsString(),
-                                         sqlType);
-            } else {
-                throw new IllegalArgumentException("Unknown type of the prepared statement while setting parameter.");
-            }
-            return;
-        }
-
-        ParamSetter paramSetter = paramSetters.stream()
-                                              .filter(ps -> ps.isApplicable(dataType))
-                                              .findFirst()
-                                              .orElseThrow(() -> new IllegalArgumentException("Parameter 'type'[" + dataType
-                                                      + "] must be a string representing a valid database type name"));
-        if (preparedStatement.isIndexed()) {
-            paramSetter.setParam(valueElement, paramIndex, preparedStatement.getIndexed(), dataType);
-        } else if (preparedStatement.isNamed()) {
-            paramSetter.setParam(valueElement, nameElement.getAsJsonPrimitive()
-                                                          .getAsString(),
-                    preparedStatement.getNamed(), dataType);
-        } else {
-            throw new IllegalArgumentException("Unknown type of the prepared statement while setting parameter.");
-        }
-    }
-
-    /**
      * The Interface ParamSetter.
      */
     private interface ParamSetter {
@@ -515,6 +319,30 @@ class ParametersSetter {
         }
 
         /**
+         * Gets the time.
+         *
+         * @param timestampString the timestamp string
+         * @return the time
+         */
+        private long getTime(String timestampString) {
+            try {
+                // assume date string in ISO format e.g. 2018-05-22T21:00:00.000Z
+                Calendar calendar = jakarta.xml.bind.DatatypeConverter.parseDateTime(timestampString);
+                return calendar.getTime()
+                               .getTime();
+            } catch (IllegalArgumentException ex) {
+                logger.debug("Failed to parse timestamp string [{}]", timestampString, ex);
+
+                try {
+                    java.util.Date date = SIMPLE_DATE_FORMAT_WITHOUT_ZONE.parse(timestampString);
+                    return date.getTime();
+                } catch (ParseException e) {
+                    throw new IllegalArgumentException("Cannot get time from timestamp string " + timestampString, e);
+                }
+            }
+        }
+
+        /**
          * Sets the param.
          *
          * @param sourceParam the source param
@@ -548,30 +376,6 @@ class ParametersSetter {
                 return;
             }
             throwWrongValue(sourceParam, dataType);
-        }
-
-        /**
-         * Gets the time.
-         *
-         * @param timestampString the timestamp string
-         * @return the time
-         */
-        private long getTime(String timestampString) {
-            try {
-                // assume date string in ISO format e.g. 2018-05-22T21:00:00.000Z
-                Calendar calendar = jakarta.xml.bind.DatatypeConverter.parseDateTime(timestampString);
-                return calendar.getTime()
-                               .getTime();
-            } catch (IllegalArgumentException ex) {
-                logger.debug("Failed to parse timestamp string [{}]", timestampString, ex);
-
-                try {
-                    java.util.Date date = SIMPLE_DATE_FORMAT_WITHOUT_ZONE.parse(timestampString);
-                    return date.getTime();
-                } catch (ParseException e) {
-                    throw new IllegalArgumentException("Cannot get time from timestamp string " + timestampString, e);
-                }
-            }
         }
     }
 
@@ -1270,6 +1074,202 @@ class ParametersSetter {
             }
 
             throwWrongValue(sourceParam, dataType);
+        }
+    }
+
+    /**
+     * Sets the parameters.
+     *
+     * @param parameters the parameters
+     * @param preparedStatement the prepared statement
+     * @throws SQLException the SQL exception
+     */
+    static void setParameters(String parameters, IndexedOrNamedStatement preparedStatement) throws SQLException {
+        JsonElement parametersElement = GsonHelper.parseJson(parameters);
+        if (!(parametersElement instanceof JsonArray parametersArray)) {
+            throw new IllegalArgumentException("Parameters must be provided as a JSON array, e.g. [1, 'John', 9876]");
+        }
+
+        int paramIndex = 1;
+        for (JsonElement parameterElement : parametersArray) {
+            setParameter(preparedStatement, paramIndex, parameterElement);
+            paramIndex++;
+        }
+    }
+
+    /**
+     * Sets the parameter.
+     *
+     * @param preparedStatement the prepared statement
+     * @param paramIndex the param index
+     * @param parameterElement the parameter element
+     * @throws SQLException the SQL exception
+     */
+    private static void setParameter(IndexedOrNamedStatement preparedStatement, int paramIndex, JsonElement parameterElement)
+            throws SQLException {
+        if (parameterElement.isJsonPrimitive()) {
+            if (preparedStatement.isNamed()) {
+                throw new IllegalArgumentException("Primitive types can be set only to index based prepared statement.");
+            }
+            setJsonPrimitiveParam(preparedStatement.getIndexed(), paramIndex, parameterElement);
+            return;
+        }
+
+        if (parameterElement.isJsonObject()) {
+            setJsonObjectParam(preparedStatement, paramIndex, parameterElement);
+            return;
+        }
+
+        throw new IllegalArgumentException("Parameters must contain primitives and objects only. Parameter element: " + parameterElement);
+    }
+
+    /**
+     * Sets the json primitive param.
+     *
+     * @param preparedStatement the prepared statement
+     * @param paramIndex the param index
+     * @param parameterElement the parameter element
+     * @throws SQLException the SQL exception
+     */
+    private static void setJsonPrimitiveParam(PreparedStatement preparedStatement, int paramIndex, JsonElement parameterElement)
+            throws SQLException {
+        if (parameterElement.getAsJsonPrimitive()
+                            .isBoolean()) {
+            preparedStatement.setBoolean(paramIndex, parameterElement.getAsBoolean());
+            return;
+        }
+
+        if (parameterElement.getAsJsonPrimitive()
+                            .isString()) {
+            preparedStatement.setString(paramIndex, parameterElement.getAsString());
+            return;
+        }
+
+        if (parameterElement.getAsJsonPrimitive()
+                            .isNumber()) {
+            setNumber(preparedStatement, paramIndex, parameterElement);
+            return;
+        }
+
+        throw new IllegalArgumentException("Parameter type unkown");
+    }
+
+    /**
+     * Sets the number.
+     *
+     * @param preparedStatement the prepared statement
+     * @param paramIndex the param index
+     * @param parameterElement the parameter element
+     * @throws SQLException the SQL exception
+     */
+    private static void setNumber(PreparedStatement preparedStatement, int paramIndex, JsonElement parameterElement) throws SQLException {
+        boolean isNumberParameterSet = false;
+        int numberIndex = paramIndex;
+
+        double doubleValue = parameterElement.getAsDouble();
+        boolean floatingPointValue = doubleValue % 1 != 0;
+        if (floatingPointValue) {
+            try {
+                preparedStatement.setDouble(numberIndex, doubleValue);
+                return;
+            } catch (SQLException | ClassCastException e) {
+                // Do nothing
+            }
+        }
+
+        if (!isNumberParameterSet) {
+            try {
+                preparedStatement.setInt(numberIndex, parameterElement.getAsInt());
+                isNumberParameterSet = true;
+            } catch (SQLException | ClassCastException e) {
+                // Do nothing
+            }
+        }
+
+        if (!isNumberParameterSet) {
+            try {
+                preparedStatement.setShort(numberIndex, parameterElement.getAsShort());
+                isNumberParameterSet = true;
+            } catch (SQLException | ClassCastException e) {
+                // Do nothing
+            }
+        }
+
+        if (!isNumberParameterSet) {
+            try {
+                preparedStatement.setLong(numberIndex, parameterElement.getAsLong());
+                isNumberParameterSet = true;
+            } catch (SQLException | ClassCastException e) {
+                // Do nothing
+            }
+        }
+
+        if (!isNumberParameterSet) {
+            try {
+                preparedStatement.setBigDecimal(numberIndex, parameterElement.getAsBigDecimal());
+                isNumberParameterSet = true;
+            } catch (SQLException | ClassCastException e) {
+                // Do nothing
+            }
+        }
+
+        if (!isNumberParameterSet) {
+            preparedStatement.setObject(numberIndex, parameterElement.getAsNumber()
+                                                                     .toString());
+        }
+    }
+
+    /**
+     * Sets the json object param.
+     *
+     * @param preparedStatement the prepared statement
+     * @param paramIndex the param index
+     * @param parameterElement the parameter element
+     * @throws SQLException the SQL exception
+     */
+    private static void setJsonObjectParam(IndexedOrNamedStatement preparedStatement, int paramIndex, JsonElement parameterElement)
+            throws SQLException {
+        JsonObject jsonObject = parameterElement.getAsJsonObject();
+        JsonElement nameElement = jsonObject.get("name");
+        JsonElement typeElement = jsonObject.get("type");
+
+        if (!typeElement.isJsonPrimitive() || !typeElement.getAsJsonPrimitive()
+                                                          .isString()) {
+            throw new IllegalArgumentException("Parameter 'type' must be a string representing the database type name");
+        }
+
+        String dataType = typeElement.getAsJsonPrimitive()
+                                     .getAsString();
+        JsonElement valueElement = jsonObject.get("value");
+        if (null == valueElement || valueElement.isJsonNull()) {
+            Integer sqlType = DataTypeUtils.getSqlTypeByDataType(dataType);
+            if (preparedStatement.isIndexed()) {
+                preparedStatement.getIndexed()
+                                 .setNull(paramIndex, sqlType);
+            } else if (preparedStatement.isNamed()) {
+                preparedStatement.getNamed()
+                                 .setNull(nameElement.getAsJsonPrimitive()
+                                                     .getAsString(),
+                                         sqlType);
+            } else {
+                throw new IllegalArgumentException("Unknown type of the prepared statement while setting parameter.");
+            }
+            return;
+        }
+
+        ParamSetter paramSetter = paramSetters.stream()
+                                              .filter(ps -> ps.isApplicable(dataType))
+                                              .findFirst()
+                                              .orElseThrow(() -> new IllegalArgumentException("Parameter 'type'[" + dataType
+                                                      + "] must be a string representing a valid database type name"));
+        if (preparedStatement.isIndexed()) {
+            paramSetter.setParam(valueElement, paramIndex, preparedStatement.getIndexed(), dataType);
+        } else if (preparedStatement.isNamed()) {
+            paramSetter.setParam(valueElement, nameElement.getAsJsonPrimitive()
+                                                          .getAsString(),
+                    preparedStatement.getNamed(), dataType);
+        } else {
+            throw new IllegalArgumentException("Unknown type of the prepared statement while setting parameter.");
         }
     }
 
