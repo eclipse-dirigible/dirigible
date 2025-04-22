@@ -14,11 +14,13 @@ import org.apache.commons.lang3.StringUtils;
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.DateTimeParseException;
 import java.util.Locale;
 
 /**
@@ -54,7 +56,11 @@ public class DateTimeUtils {
      */
     public static Date parseDate(String value) {
         value = sanitize(value);
-        return Date.valueOf(LocalDate.parse(value, dateFormatter));
+        try {
+            return Date.valueOf(LocalDate.parse(value, dateFormatter));
+        } catch (DateTimeParseException ex) {
+            throw new DateTimeException("Failed to parse [" + value + "] using date formatter " + dateFormatter, ex);
+        }
     }
 
     /**
@@ -82,7 +88,11 @@ public class DateTimeUtils {
     public static Time parseTime(String value) {
         value = sanitize(value);
         value = timezonize(value);
-        return Time.valueOf(LocalTime.parse(value, timeFormatter));
+        try {
+            return Time.valueOf(LocalTime.parse(value, timeFormatter));
+        } catch (DateTimeParseException ex) {
+            throw new DateTimeException("Failed to parse [" + value + "] using time formatter " + timeFormatter, ex);
+        }
     }
 
     /**

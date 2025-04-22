@@ -383,29 +383,29 @@ public class CsvProcessor {
             }
         } else if (Types.INTEGER == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             value = numberize(value);
-            preparedStatement.setInt(i, Integer.parseInt(value));
+            preparedStatement.setInt(i, parseInt(value));
         } else if (Types.TINYINT == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             value = numberize(value);
-            preparedStatement.setByte(i, Byte.parseByte(value));
+            preparedStatement.setByte(i, parseByte(value));
         } else if (Types.SMALLINT == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             value = numberize(value);
-            preparedStatement.setShort(i, Short.parseShort(value));
+            preparedStatement.setShort(i, parseShort(value));
         } else if (Types.BIGINT == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             value = numberize(value);
-            preparedStatement.setLong(i, new BigInteger(value).longValueExact());
+            preparedStatement.setLong(i, createBigInteger(value).longValueExact());
         } else if (Types.REAL == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             value = numberize(value);
-            preparedStatement.setFloat(i, Float.parseFloat(value));
+            preparedStatement.setFloat(i, parseFloat(value));
         } else if (Types.DOUBLE == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             value = numberize(value);
-            preparedStatement.setDouble(i, Double.parseDouble(value));
+            preparedStatement.setDouble(i, parseDouble(value));
         } else if (Types.BOOLEAN == DataTypeUtils.getSqlTypeByDataType(dataType)
                 || Types.BIT == DataTypeUtils.getSqlTypeByDataType(dataType)) {
-            preparedStatement.setBoolean(i, Boolean.parseBoolean(value));
+            preparedStatement.setBoolean(i, parseBoolean(value));
         } else if (Types.DECIMAL == DataTypeUtils.getSqlTypeByDataType(dataType)
                 || Types.NUMERIC == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             value = numberize(value);
-            preparedStatement.setBigDecimal(i, new BigDecimal(value));
+            preparedStatement.setBigDecimal(i, createBigDecimal(value));
         } else if (Types.NCLOB == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             preparedStatement.setString(i, sanitize(value));
         } else if (Types.BLOB == DataTypeUtils.getSqlTypeByDataType(dataType)
@@ -433,6 +433,66 @@ public class CsvProcessor {
             }
         } else {
             throw new PersistenceException(String.format("Database type [%s] not supported", dataType));
+        }
+    }
+
+    private static double parseDouble(String value) {
+        try {
+            return Double.parseDouble(value);
+        } catch (NumberFormatException | NullPointerException ex) {
+            throw new IllegalArgumentException("Failed to parse [" + value + "] to double", ex);
+        }
+    }
+
+    private static float parseFloat(String value) {
+        try {
+            return Float.parseFloat(value);
+        } catch (NumberFormatException | NullPointerException ex) {
+            throw new IllegalArgumentException("Failed to parse [" + value + "] to float", ex);
+        }
+    }
+
+    private static int parseInt(String value) {
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Failed to parse [" + value + "] to integer", ex);
+        }
+    }
+
+    private static byte parseByte(String value) {
+        try {
+            return Byte.parseByte(value);
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Failed to parse [" + value + "] to byte", ex);
+        }
+    }
+
+    private static short parseShort(String value) {
+        try {
+            return Short.parseShort(value);
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Failed to parse [" + value + "] to short", ex);
+        }
+    }
+
+    private static BigInteger createBigInteger(String value) {
+        try {
+            return new BigInteger(value);
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Failed to create big integer from  [" + value + "]", ex);
+        }
+    }
+
+    private static boolean parseBoolean(String value) {
+        return Boolean.parseBoolean(value);
+    }
+
+    private static BigDecimal createBigDecimal(String value) {
+        try {
+            return new BigDecimal(value);
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Failed to create big decimal from  [" + value + "]", ex);
         }
     }
 
