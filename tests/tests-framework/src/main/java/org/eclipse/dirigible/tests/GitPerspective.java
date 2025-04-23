@@ -14,6 +14,8 @@ import org.eclipse.dirigible.tests.framework.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.HtmlElementType;
 import org.eclipse.dirigible.tests.util.SleepUtil;
 
+import java.util.Optional;
+
 public class GitPerspective {
     private final Browser browser;
 
@@ -22,9 +24,17 @@ public class GitPerspective {
     }
 
     public void cloneRepository(String repositoryUrl) {
+        cloneRepository(repositoryUrl, Optional.empty(), Optional.empty(), Optional.empty());
+    }
+
+    public void cloneRepository(String repositoryUrl, Optional<String> user, Optional<String> pass, Optional<String> branch) {
         browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.TITLE, "Clone");
 
-        browser.enterTextInElementById("curli", repositoryUrl); // Git repository URL input field
+        browser.enterTextInElementById("curli", repositoryUrl);
+
+        user.ifPresent(u -> browser.enterTextInElementById("cuni", u));
+        pass.ifPresent(p -> browser.enterTextInElementById("cpwi", p));
+        branch.ifPresent(b -> browser.enterTextInElementById("cbi", b));
 
         browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.LABEL, "Clone");
 
