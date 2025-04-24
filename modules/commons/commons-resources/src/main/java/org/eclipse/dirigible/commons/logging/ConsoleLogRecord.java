@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.ide.console.service;
+package org.eclipse.dirigible.commons.logging;
 
 /**
  * The Console Log Record transport object.
@@ -15,13 +15,13 @@ package org.eclipse.dirigible.components.ide.console.service;
 public class ConsoleLogRecord {
 
     /** The level. */
-    private String level;
+    private final String level;
 
     /** The message. */
-    private String message;
+    private final String message;
 
     /** The timestamp. */
-    private long timestamp;
+    private final long timestamp;
 
     /**
      * Instantiates a new console log record.

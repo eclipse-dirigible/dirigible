@@ -80,7 +80,6 @@
         <!-- IDE -->
         <module>ide/ide-workspace</module>
         <module>ide/ide-git</module>
-        <module>ide/ide-console</module>
         <module>ide/ide-template</module>
         <module>ide/ide-terminal</module>
         <module>ide/ide-problems</module>
@@ -366,10 +365,6 @@
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-commons-config</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-commons-resources</artifactId>
         </dependency>
 
         <!-- Spring Boot -->
@@ -776,11 +771,6 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-data-source-snowpark</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-ide-console</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

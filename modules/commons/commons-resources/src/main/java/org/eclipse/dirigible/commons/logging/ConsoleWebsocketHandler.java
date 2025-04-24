@@ -7,11 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.ide.console.service;
-
-import java.io.IOException;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+package org.eclipse.dirigible.commons.logging;
 
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.slf4j.Logger;
@@ -20,6 +16,10 @@ import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
+
+import java.io.IOException;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The Console Websocket Handler.
@@ -30,8 +30,7 @@ public class ConsoleWebsocketHandler extends TextWebSocketHandler {
     private static final Logger logger = LoggerFactory.getLogger(ConsoleWebsocketHandler.class);
 
     /** The open sessions. */
-    private static Map<String, WebSocketSession> OPEN_SESSIONS = new ConcurrentHashMap<String, WebSocketSession>();
-
+    private static final Map<String, WebSocketSession> OPEN_SESSIONS = new ConcurrentHashMap<String, WebSocketSession>();
 
     /**
      * After connection established.

@@ -22,4 +22,12 @@
         <parent.pom.folder>../../../</parent.pom.folder>
     </properties>
 
+    <dependencies>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-core-base</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
+
 </project>
