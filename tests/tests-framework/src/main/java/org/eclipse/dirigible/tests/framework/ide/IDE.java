@@ -51,9 +51,10 @@ public class IDE {
     IDE(Browser browser, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil, WorkbenchFactory workbenchFactory,
             DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory) {
         this(browser, DirigibleTestTenant.createDefaultTenant()
-                                         .getUsername(), DirigibleTestTenant.createDefaultTenant()
-                                                                            .getPassword(), restAssuredExecutor, projectUtil,
-                workbenchFactory, databasePerspectiveFactory, gitPerspectiveFactory);
+                                         .getUsername(),
+                DirigibleTestTenant.createDefaultTenant()
+                                   .getPassword(),
+                restAssuredExecutor, projectUtil, workbenchFactory, databasePerspectiveFactory, gitPerspectiveFactory);
     }
 
     IDE(Browser browser, String username, String password, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil,
@@ -81,7 +82,8 @@ public class IDE {
                              .get(path)
                              .then()
                              .statusCode(expectedStatusCode)
-                             .body(containsString(expectedBody)), username, password);
+                             .body(containsString(expectedBody)),
+                username, password);
     }
 
     public void assertPublishedAllProjectsMessage() {

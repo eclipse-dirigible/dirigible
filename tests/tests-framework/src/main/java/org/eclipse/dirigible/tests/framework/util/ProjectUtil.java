@@ -47,7 +47,8 @@ public class ProjectUtil {
 
     public void copyResourceProjectToDefaultUserWorkspace(String resourcesFolder, Map<String, String> placeholders) {
         copyResourceProjectToUserWorkspace(DirigibleTestTenant.createDefaultTenant()
-                                                              .getUsername(), resourcesFolder, placeholders);
+                                                              .getUsername(),
+                resourcesFolder, placeholders);
     }
 
     public void copyResourceProjectToUserWorkspace(String user, String resourcesFolder, Map<String, String> placeholders) {
