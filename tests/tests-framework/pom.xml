@@ -21,11 +21,6 @@
 
     <dependencies>
         <dependency>
-            <groupId>com.icegreen</groupId>
-            <artifactId>greenmail</artifactId>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-commons-config</artifactId>
         </dependency>
@@ -44,6 +39,10 @@
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-core-base</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ide-console</artifactId>
         </dependency>
 
         <dependency>
@@ -76,6 +75,11 @@
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-db</artifactId>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.icegreen</groupId>
+            <artifactId>greenmail</artifactId>
             <scope>compile</scope>
         </dependency>
     </dependencies>
