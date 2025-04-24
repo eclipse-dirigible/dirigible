@@ -292,7 +292,8 @@ class BrowserImpl implements Browser {
                 .window(Selenide.webdriver()
                                 .object()
                                 .getWindowHandles()
-                                .size() - 1);
+                                .size()
+                        - 1);
     }
 
     @Override
