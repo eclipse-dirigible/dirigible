@@ -9,18 +9,18 @@
  */
 package org.eclipse.dirigible.components.version.service;
 
-import java.io.IOException;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Properties;
-import java.util.stream.Collectors;
-
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.artefact.Engine;
 import org.eclipse.dirigible.components.version.domain.Version;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.springframework.stereotype.Service;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Collections;
+import java.util.List;
+import java.util.Properties;
+import java.util.stream.Collectors;
 
 /**
  * The Class VersionService.
@@ -30,6 +30,7 @@ public class VersionService {
 
     /** The Constant DIRIGIBLE_PROPERTIES_PATH. */
     private static final String DIRIGIBLE_PROPERTIES_PATH = "/dirigible.properties";
+    private static final String DIRIGIBLE_PROPERTIES_OVERRIDES_PATH = "/dirigible-overrides.properties";
 
     /** The Constant DIRIGIBLE_PRODUCT_NAME. */
     private static final String DIRIGIBLE_PRODUCT_NAME = "DIRIGIBLE_PRODUCT_NAME";
@@ -50,7 +51,7 @@ public class VersionService {
     private static final String DIRIGIBLE_INSTANCE_NAME = "DIRIGIBLE_INSTANCE_NAME";
 
     /** The engines. */
-    private List<Engine> engines;
+    private final List<Engine> engines;
 
     /**
      * Instantiates a new version service.
@@ -71,6 +72,11 @@ public class VersionService {
         Version version = new Version();
         final Properties properties = new Properties();
         properties.load(VersionService.class.getResourceAsStream(DIRIGIBLE_PROPERTIES_PATH));
+        try (InputStream is = VersionService.class.getResourceAsStream(DIRIGIBLE_PROPERTIES_OVERRIDES_PATH)) {
+            if (is != null) {
+                properties.load(is);
+            }
+        }
         version.setProductName(properties.getProperty(DIRIGIBLE_PRODUCT_NAME));
         version.setProductVersion(properties.getProperty(DIRIGIBLE_PRODUCT_VERSION));
         version.setProductRepository(properties.getProperty(DIRIGIBLE_PRODUCT_REPOSITORY));
