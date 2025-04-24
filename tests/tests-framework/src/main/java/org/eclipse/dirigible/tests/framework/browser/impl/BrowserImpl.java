@@ -46,7 +46,7 @@ class BrowserImpl implements Browser {
 
     private static final String PATH_SEPARATOR = "/";
 
-    private static final int FRAME_SEARCH_TOTAL_SECONDS = 45;
+    private static final int FRAME_SEARCH_TOTAL_SECONDS = 60;
     private static final int ELEMENT_EXISTENCE_SEARCH_TIME_SECONDS = 5;
     private static final int ELEMENT_SEARCH_IN_FRAME_MILLIS = 1;
 
@@ -292,8 +292,7 @@ class BrowserImpl implements Browser {
                 .window(Selenide.webdriver()
                                 .object()
                                 .getWindowHandles()
-                                .size()
-                        - 1);
+                                .size() - 1);
     }
 
     @Override
