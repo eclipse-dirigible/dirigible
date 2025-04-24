@@ -103,11 +103,10 @@ public class Configuration {
         try (InputStream inputStream = Configuration.class.getResourceAsStream(overridePath)) {
             if (null == inputStream) {
                 LOGGER.info("Override file with path [{}] was not found.", overridePath);
+            } else {
+                LOGGER.info("Found override file with path [{}]. Will use it to override the configs.", overridePath);
+                load(overridePath, ConfigType.DEPLOYMENT);
             }
-
-            LOGGER.info("Found override file with path [{}]. Will use it to override the configs.", overridePath);
-            load(overridePath, ConfigType.DEPLOYMENT);
-
         } catch (IOException e) {
             throw new IllegalStateException("Failed to load file with path " + overridePath, e);
         }
