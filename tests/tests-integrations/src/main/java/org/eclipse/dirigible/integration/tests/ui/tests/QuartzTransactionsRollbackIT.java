@@ -10,7 +10,7 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import org.eclipse.dirigible.tests.base.PredefinedProjectIT;
-import org.eclipse.dirigible.tests.framework.projects.TestProject;
+import org.eclipse.dirigible.tests.base.TestProject;
 import org.junit.jupiter.api.Disabled;
 import org.springframework.beans.factory.annotation.Autowired;
 

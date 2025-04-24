@@ -10,8 +10,8 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import org.eclipse.dirigible.tests.base.PredefinedProjectIT;
+import org.eclipse.dirigible.tests.base.TestProject;
 import org.eclipse.dirigible.tests.framework.mail.GreenMailConfig;
-import org.eclipse.dirigible.tests.framework.projects.TestProject;
 import org.springframework.beans.factory.annotation.Autowired;
 
 public class ApproveLeaveRequestBpmIT extends PredefinedProjectIT {

@@ -12,6 +12,8 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 import com.icegreen.greenmail.util.GreenMail;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
+import org.eclipse.dirigible.tests.base.BaseTestProject;
+import org.eclipse.dirigible.tests.base.ProjectUtil;
 import org.eclipse.dirigible.tests.framework.browser.Browser;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.ide.EdmView;
@@ -20,9 +22,7 @@ import org.eclipse.dirigible.tests.framework.ide.IDEFactory;
 import org.eclipse.dirigible.tests.framework.mail.EmailAsserter;
 import org.eclipse.dirigible.tests.framework.mail.EmailAssertion;
 import org.eclipse.dirigible.tests.framework.mail.EmailAssertionBuilder;
-import org.eclipse.dirigible.tests.framework.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.framework.security.SecurityUtil;
-import org.eclipse.dirigible.tests.framework.util.ProjectUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 

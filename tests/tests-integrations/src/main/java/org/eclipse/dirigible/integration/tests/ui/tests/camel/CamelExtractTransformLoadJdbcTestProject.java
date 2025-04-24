@@ -10,9 +10,9 @@
 package org.eclipse.dirigible.integration.tests.ui.tests.camel;
 
 import ch.qos.logback.classic.Level;
+import org.eclipse.dirigible.tests.base.ProjectUtil;
 import org.eclipse.dirigible.tests.framework.ide.EdmView;
 import org.eclipse.dirigible.tests.framework.ide.IDE;
-import org.eclipse.dirigible.tests.framework.util.ProjectUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 

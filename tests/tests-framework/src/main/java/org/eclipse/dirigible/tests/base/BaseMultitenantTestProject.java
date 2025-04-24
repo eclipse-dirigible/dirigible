@@ -7,12 +7,11 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.tests.framework.projects;
+package org.eclipse.dirigible.tests.base;
 
 import org.eclipse.dirigible.tests.framework.ide.EdmView;
 import org.eclipse.dirigible.tests.framework.ide.IDE;
 import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
-import org.eclipse.dirigible.tests.framework.util.ProjectUtil;
 
 import java.util.List;
 

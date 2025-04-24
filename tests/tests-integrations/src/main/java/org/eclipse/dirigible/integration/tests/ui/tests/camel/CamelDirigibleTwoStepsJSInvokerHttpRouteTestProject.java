@@ -9,11 +9,11 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests.camel;
 
+import org.eclipse.dirigible.tests.base.BaseTestProject;
+import org.eclipse.dirigible.tests.base.ProjectUtil;
 import org.eclipse.dirigible.tests.framework.ide.EdmView;
 import org.eclipse.dirigible.tests.framework.ide.IDE;
-import org.eclipse.dirigible.tests.framework.projects.BaseTestProject;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
-import org.eclipse.dirigible.tests.framework.util.ProjectUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 

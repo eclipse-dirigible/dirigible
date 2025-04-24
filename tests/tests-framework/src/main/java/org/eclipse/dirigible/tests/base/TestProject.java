@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.tests.framework.projects;
+package org.eclipse.dirigible.tests.base;
 
 public interface TestProject {
 

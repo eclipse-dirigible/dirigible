@@ -11,7 +11,6 @@ package org.eclipse.dirigible.tests.base;
 
 import org.eclipse.dirigible.tests.framework.browser.Browser;
 import org.eclipse.dirigible.tests.framework.ide.IDE;
-import org.eclipse.dirigible.tests.framework.projects.TestProject;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
