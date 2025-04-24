@@ -14,7 +14,7 @@ import io.restassured.authentication.AuthenticationScheme;
 import io.restassured.filter.log.RequestLoggingFilter;
 import io.restassured.filter.log.ResponseLoggingFilter;
 import org.eclipse.dirigible.components.base.callable.CallableNoResultAndNoException;
-import org.eclipse.dirigible.tests.framework.ide.DirigibleTestTenant;
+import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.web.server.LocalServerPort;

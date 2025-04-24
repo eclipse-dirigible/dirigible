@@ -14,7 +14,7 @@ import org.apache.commons.io.filefilter.TrueFileFilter;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
-import org.eclipse.dirigible.tests.framework.ide.DirigibleTestTenant;
+import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -47,8 +47,7 @@ public class ProjectUtil {
 
     public void copyResourceProjectToDefaultUserWorkspace(String resourcesFolder, Map<String, String> placeholders) {
         copyResourceProjectToUserWorkspace(DirigibleTestTenant.createDefaultTenant()
-                                                              .getUsername(),
-                resourcesFolder, placeholders);
+                                                              .getUsername(), resourcesFolder, placeholders);
     }
 
     public void copyResourceProjectToUserWorkspace(String user, String resourcesFolder, Map<String, String> placeholders) {

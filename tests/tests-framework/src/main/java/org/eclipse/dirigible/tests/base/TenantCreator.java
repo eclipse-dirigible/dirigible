@@ -13,7 +13,7 @@ import org.eclipse.dirigible.components.tenants.domain.Tenant;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
 import org.eclipse.dirigible.components.tenants.service.UserService;
-import org.eclipse.dirigible.tests.framework.ide.DirigibleTestTenant;
+import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;

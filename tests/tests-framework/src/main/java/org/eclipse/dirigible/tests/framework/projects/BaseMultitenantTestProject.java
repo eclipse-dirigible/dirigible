@@ -9,9 +9,9 @@
  */
 package org.eclipse.dirigible.tests.framework.projects;
 
-import org.eclipse.dirigible.tests.framework.ide.DirigibleTestTenant;
 import org.eclipse.dirigible.tests.framework.ide.EdmView;
 import org.eclipse.dirigible.tests.framework.ide.IDE;
+import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.eclipse.dirigible.tests.framework.util.ProjectUtil;
 
 import java.util.List;

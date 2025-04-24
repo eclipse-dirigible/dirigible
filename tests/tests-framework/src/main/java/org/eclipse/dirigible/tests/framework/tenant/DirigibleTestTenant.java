@@ -7,19 +7,20 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.tests.framework.ide;
+package org.eclipse.dirigible.tests.framework.tenant;
 
 import org.apache.commons.lang3.RandomStringUtils;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
-import org.eclipse.dirigible.components.base.spring.BeanProvider;
-import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
-import org.eclipse.dirigible.components.base.tenant.Tenant;
 
 import java.util.UUID;
 
 public class DirigibleTestTenant {
 
     private static final String LOCALHOST = "localhost";
+
+    private static final String DEFAULT_TENANT_ID = "default-tenant";
+    private static final String DEFAULT_TENANT_NAME = "default-tenant";
+    private static final String DEFAULT_TENANT_SUBDOMAIN = "default";
 
     private final String name;
     private final boolean defaultTenant;
@@ -85,12 +86,10 @@ public class DirigibleTestTenant {
     }
 
     public static DirigibleTestTenant createDefaultTenant() {
-        Tenant defaultTenant = BeanProvider.getBeanByAnnotation(Tenant.class, DefaultTenant.class);
-
         return new DirigibleTestTenant(true, //
-                defaultTenant.getName(), //
-                defaultTenant.getId(), //
-                defaultTenant.getSubdomain(), //
+                DEFAULT_TENANT_NAME, //
+                DEFAULT_TENANT_ID, //
+                DEFAULT_TENANT_SUBDOMAIN, //
                 DirigibleConfig.BASIC_ADMIN_USERNAME.getFromBase64Value(), //
                 DirigibleConfig.BASIC_ADMIN_PASS.getFromBase64Value());
     }

@@ -11,7 +11,7 @@ package org.eclipse.dirigible.tests.base;
 
 import org.awaitility.Awaitility;
 import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.tests.framework.ide.DirigibleTestTenant;
+import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.eclipse.dirigible.tests.framework.util.PortUtil;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;

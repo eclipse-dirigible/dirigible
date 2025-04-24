@@ -9,15 +9,14 @@
  */
 package org.eclipse.dirigible.tests.framework.projects;
 
-import org.eclipse.dirigible.tests.framework.ide.DirigibleTestTenant;
+import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 
 import java.util.List;
 
 public interface MultitenantTestProject {
 
     /**
-     * Execute all the needed steps to configure and verify the project to assert that it works properly
-     * for the provided tenants.
+     * Execute all the needed steps to configure and verify the project to assert that it works properly for the provided tenants.
      *
      * @param tenants
      */

@@ -12,6 +12,7 @@ package org.eclipse.dirigible.tests.framework.ide;
 import org.eclipse.dirigible.tests.framework.browser.Browser;
 import org.eclipse.dirigible.tests.framework.browser.BrowserFactory;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
+import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.eclipse.dirigible.tests.framework.util.ProjectUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;

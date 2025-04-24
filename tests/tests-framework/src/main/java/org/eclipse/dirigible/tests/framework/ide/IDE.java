@@ -13,6 +13,7 @@ import org.eclipse.dirigible.tests.framework.browser.Browser;
 import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
+import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.eclipse.dirigible.tests.framework.util.ProjectUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,10 +51,9 @@ public class IDE {
     IDE(Browser browser, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil, WorkbenchFactory workbenchFactory,
             DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory) {
         this(browser, DirigibleTestTenant.createDefaultTenant()
-                                         .getUsername(),
-                DirigibleTestTenant.createDefaultTenant()
-                                   .getPassword(),
-                restAssuredExecutor, projectUtil, workbenchFactory, databasePerspectiveFactory, gitPerspectiveFactory);
+                                         .getUsername(), DirigibleTestTenant.createDefaultTenant()
+                                                                            .getPassword(), restAssuredExecutor, projectUtil,
+                workbenchFactory, databasePerspectiveFactory, gitPerspectiveFactory);
     }
 
     IDE(Browser browser, String username, String password, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil,
@@ -81,8 +81,7 @@ public class IDE {
                              .get(path)
                              .then()
                              .statusCode(expectedStatusCode)
-                             .body(containsString(expectedBody)),
-                username, password);
+                             .body(containsString(expectedBody)), username, password);
     }
 
     public void assertPublishedAllProjectsMessage() {
