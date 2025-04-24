@@ -9,13 +9,12 @@
  */
 package org.eclipse.dirigible.tests.framework.security;
 
-import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
-import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.security.domain.Role;
 import org.eclipse.dirigible.components.security.service.RoleService;
 import org.eclipse.dirigible.components.tenants.domain.User;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
 import org.eclipse.dirigible.components.tenants.service.UserService;
+import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -23,17 +22,17 @@ public class SecurityUtil {
 
     private final UserService userService;
     private final TenantService tenantService;
-    private final Tenant defaultTenant;
     private final RoleService roleService;
 
-    SecurityUtil(UserService userService, TenantService tenantService, @DefaultTenant Tenant defaultTenant, RoleService roleService) {
+    SecurityUtil(UserService userService, TenantService tenantService, RoleService roleService) {
         this.userService = userService;
         this.tenantService = tenantService;
-        this.defaultTenant = defaultTenant;
         this.roleService = roleService;
     }
 
     public void createUser(String username, String password, String roleName) {
+        DirigibleTestTenant defaultTenant = DirigibleTestTenant.createDefaultTenant();
+
         String defaultTenantId = tenantService.findBySubdomain(defaultTenant.getSubdomain())
                                               .get()
                                               .getId();
