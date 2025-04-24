@@ -2,5 +2,5 @@
     "module": "${projectName}/gen/${genFolderName}/ui/${perspectiveName}/perspective.js",
     "extensionPoint": "application-perspectives",
     "description": "${projectName} - Perspective - ${perspectiveName}"#if($perspectiveRole || $roleRead || $roleWrite),
-    "role": "#if($navRole)${navRole},#end#if($roleRead)${roleRead},#end#if($roleWrite)${roleWrite}#end"#end
+    "role": "#if($perspectiveRole)${perspectiveRole},#end#if($roleRead)${roleRead},#end#if($roleWrite)${roleWrite}#end"#end
 }
