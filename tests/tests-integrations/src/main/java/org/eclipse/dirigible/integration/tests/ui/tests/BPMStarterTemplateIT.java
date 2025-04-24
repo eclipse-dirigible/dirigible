@@ -11,12 +11,12 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import ch.qos.logback.classic.Level;
 import org.eclipse.dirigible.components.api.bpm.BpmFacade;
-import org.eclipse.dirigible.tests.FormView;
-import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
-import org.eclipse.dirigible.tests.WelcomeView;
-import org.eclipse.dirigible.tests.Workbench;
-import org.eclipse.dirigible.tests.framework.HtmlElementType;
-import org.eclipse.dirigible.tests.logging.LogsAsserter;
+import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
+import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
+import org.eclipse.dirigible.tests.framework.ide.FormView;
+import org.eclipse.dirigible.tests.framework.ide.WelcomeView;
+import org.eclipse.dirigible.tests.framework.ide.Workbench;
+import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

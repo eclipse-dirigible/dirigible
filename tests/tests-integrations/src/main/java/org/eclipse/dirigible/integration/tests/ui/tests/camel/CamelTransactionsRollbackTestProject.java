@@ -15,11 +15,11 @@ import org.assertj.db.type.AssertDbConnection;
 import org.assertj.db.type.AssertDbConnectionFactory;
 import org.assertj.db.type.Table;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
-import org.eclipse.dirigible.tests.EdmView;
-import org.eclipse.dirigible.tests.IDE;
-import org.eclipse.dirigible.tests.logging.LogsAsserter;
-import org.eclipse.dirigible.tests.projects.BaseTestProject;
-import org.eclipse.dirigible.tests.util.ProjectUtil;
+import org.eclipse.dirigible.tests.framework.ide.EdmView;
+import org.eclipse.dirigible.tests.framework.ide.IDE;
+import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
+import org.eclipse.dirigible.tests.framework.projects.BaseTestProject;
+import org.eclipse.dirigible.tests.framework.util.ProjectUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 

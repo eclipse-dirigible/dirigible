@@ -9,13 +9,13 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.eclipse.dirigible.tests.EdmView;
-import org.eclipse.dirigible.tests.IDE;
-import org.eclipse.dirigible.tests.IDEFactory;
-import org.eclipse.dirigible.tests.framework.HtmlElementType;
-import org.eclipse.dirigible.tests.projects.BaseTestProject;
-import org.eclipse.dirigible.tests.util.ProjectUtil;
-import org.eclipse.dirigible.tests.util.SecurityUtil;
+import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
+import org.eclipse.dirigible.tests.framework.ide.EdmView;
+import org.eclipse.dirigible.tests.framework.ide.IDE;
+import org.eclipse.dirigible.tests.framework.ide.IDEFactory;
+import org.eclipse.dirigible.tests.framework.projects.BaseTestProject;
+import org.eclipse.dirigible.tests.framework.security.SecurityUtil;
+import org.eclipse.dirigible.tests.framework.util.ProjectUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 

@@ -12,8 +12,8 @@ package org.eclipse.dirigible.integration.tests.api.java.messaging;
 import org.awaitility.Awaitility;
 import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
 import org.eclipse.dirigible.components.api.messaging.TimeoutException;
-import org.eclipse.dirigible.tests.IntegrationTest;
-import org.eclipse.dirigible.tests.util.SleepUtil;
+import org.eclipse.dirigible.tests.base.IntegrationTest;
+import org.eclipse.dirigible.tests.framework.util.SleepUtil;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 

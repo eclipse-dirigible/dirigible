@@ -9,9 +9,9 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.eclipse.dirigible.tests.Terminal;
-import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
-import org.eclipse.dirigible.tests.Workbench;
+import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
+import org.eclipse.dirigible.tests.framework.ide.Terminal;
+import org.eclipse.dirigible.tests.framework.ide.Workbench;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
