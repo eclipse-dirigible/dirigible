@@ -17,11 +17,11 @@ import org.springframework.stereotype.Component;
 
 @Lazy
 @Component
-class BrowserFactoryImpl implements BrowserFactory {
+public class BrowserFactoryImpl implements BrowserFactory {
 
     private final int localServerPort;
 
-    BrowserFactoryImpl(@LocalServerPort int localServerPort) {
+    public BrowserFactoryImpl(@LocalServerPort int localServerPort) {
         this.localServerPort = localServerPort;
     }
 
