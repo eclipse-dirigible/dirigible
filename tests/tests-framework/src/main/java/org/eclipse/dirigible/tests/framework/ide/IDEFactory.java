@@ -13,7 +13,6 @@ import org.eclipse.dirigible.tests.framework.browser.Browser;
 import org.eclipse.dirigible.tests.framework.browser.BrowserFactory;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
-import org.eclipse.dirigible.tests.framework.util.ProjectUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -23,17 +22,14 @@ public class IDEFactory {
 
     private final BrowserFactory browserFactory;
     private final RestAssuredExecutor restAssuredExecutor;
-    private final ProjectUtil projectUtil;
     private final WorkbenchFactory workbenchFactory;
     private final DatabasePerspectiveFactory databasePerspectiveFactory;
     private final GitPerspectiveFactory gitPerspectiveFactory;
 
-    protected IDEFactory(BrowserFactory browserFactory, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil,
-            WorkbenchFactory workbenchFactory, DatabasePerspectiveFactory databasePerspectiveFactory,
-            GitPerspectiveFactory gitPerspectiveFactory) {
+    protected IDEFactory(BrowserFactory browserFactory, RestAssuredExecutor restAssuredExecutor, WorkbenchFactory workbenchFactory,
+            DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory) {
         this.browserFactory = browserFactory;
         this.restAssuredExecutor = restAssuredExecutor;
-        this.projectUtil = projectUtil;
         this.workbenchFactory = workbenchFactory;
         this.databasePerspectiveFactory = databasePerspectiveFactory;
         this.gitPerspectiveFactory = gitPerspectiveFactory;
@@ -49,7 +45,7 @@ public class IDEFactory {
     }
 
     public IDE create(Browser browser, String username, String password) {
-        return new IDE(browser, username, password, restAssuredExecutor, projectUtil, workbenchFactory, databasePerspectiveFactory,
+        return new IDE(browser, username, password, restAssuredExecutor, workbenchFactory, databasePerspectiveFactory,
                 gitPerspectiveFactory);
     }
 }

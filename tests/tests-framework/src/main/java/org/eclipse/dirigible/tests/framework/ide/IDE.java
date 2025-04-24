@@ -14,14 +14,11 @@ import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
-import org.eclipse.dirigible.tests.framework.util.ProjectUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
-
-import java.util.Collections;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.containsString;
@@ -39,32 +36,29 @@ public class IDE {
     private static final String SIGN_IN_BUTTON_TEXT = "Sign in";
 
     private final Browser browser;
-    private final RestAssuredExecutor restAssuredExecutor;
     private final String username;
     private final String password;
-    private final ProjectUtil projectUtil;
+    private final RestAssuredExecutor restAssuredExecutor;
     private final WorkbenchFactory workbenchFactory;
     private final DatabasePerspectiveFactory databasePerspectiveFactory;
     private final GitPerspectiveFactory gitPerspectiveFactory;
 
     @Autowired
-    IDE(Browser browser, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil, WorkbenchFactory workbenchFactory,
+    IDE(Browser browser, RestAssuredExecutor restAssuredExecutor, WorkbenchFactory workbenchFactory,
             DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory) {
         this(browser, DirigibleTestTenant.createDefaultTenant()
                                          .getUsername(),
                 DirigibleTestTenant.createDefaultTenant()
                                    .getPassword(),
-                restAssuredExecutor, projectUtil, workbenchFactory, databasePerspectiveFactory, gitPerspectiveFactory);
+                restAssuredExecutor, workbenchFactory, databasePerspectiveFactory, gitPerspectiveFactory);
     }
 
-    IDE(Browser browser, String username, String password, RestAssuredExecutor restAssuredExecutor, ProjectUtil projectUtil,
-            WorkbenchFactory workbenchFactory, DatabasePerspectiveFactory databasePerspectiveFactory,
-            GitPerspectiveFactory gitPerspectiveFactory) {
+    IDE(Browser browser, String username, String password, RestAssuredExecutor restAssuredExecutor, WorkbenchFactory workbenchFactory,
+            DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory) {
         this.browser = browser;
         this.restAssuredExecutor = restAssuredExecutor;
         this.username = username;
         this.password = password;
-        this.projectUtil = projectUtil;
         this.workbenchFactory = workbenchFactory;
         this.databasePerspectiveFactory = databasePerspectiveFactory;
         this.gitPerspectiveFactory = gitPerspectiveFactory;
@@ -119,36 +113,17 @@ public class IDE {
         return LOGIN_PAGE_TITLE.equals(pageTitle);
     }
 
-    public void createAndPublishProjectFromResources(String resourcesFolderPath) {
-        createAndPublishProjectFromResources(resourcesFolderPath, true);
-    }
-
-    public void createAndPublishProjectFromResources(String resourcesFolderPath, boolean waitForSynchronizationExecution) {
-        projectUtil.copyResourceProjectToUserWorkspace(username, resourcesFolderPath, Collections.emptyMap());
-
-        Workbench workbench = openWorkbench();
-        workbench.publishAll(waitForSynchronizationExecution);
-    }
-
-    public Workbench openWorkbench() {
-        openHomePage();
-
-        browser.clickOnElementById("perspective-workbench");
-
-        return workbenchFactory.create(browser);
-    }
-
-    public void openHomePage() {
-        browser.openPath(ROOT_PATH);
-        login(false);
-    }
-
     public DatabasePerspective openDatabasePerspective() {
         openHomePage();
 
         browser.clickOnElementById("perspective-database");
 
         return databasePerspectiveFactory.create(browser);
+    }
+
+    public void openHomePage() {
+        browser.openPath(ROOT_PATH);
+        login(false);
     }
 
     public GitPerspective openGitPerspective() {
@@ -165,6 +140,14 @@ public class IDE {
         workbench.createNewProject(projectName);
 
         assertPublishedProjectMessage(projectName);
+    }
+
+    public Workbench openWorkbench() {
+        openHomePage();
+
+        browser.clickOnElementById("perspective-workbench");
+
+        return workbenchFactory.create(browser);
     }
 
     public void assertPublishedProjectMessage(String projectName) {

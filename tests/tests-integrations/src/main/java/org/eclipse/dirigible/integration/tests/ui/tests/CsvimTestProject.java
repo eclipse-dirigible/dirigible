@@ -74,7 +74,7 @@ class CsvimTestProject extends BaseTestProject {
      */
     @Override
     public void verify() throws SQLException {
-        getIde().createAndPublishProjectFromResources("CsvimIT", false);
+        copyToWorkspace();
 
         verifyDataInTable("TEST_TABLE_READERS", CSV_READERS);
         assertThat(isTableExists(UNDEFINED_TABLE_NAME)).isFalse();
