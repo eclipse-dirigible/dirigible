@@ -28,9 +28,9 @@ import java.util.stream.Collectors;
 @Service
 public class VersionService {
 
-    /** The Constant DIRIGIBLE_PROPERTIES_PATH. */
-    private static final String DIRIGIBLE_PROPERTIES_PATH = "/dirigible.properties";
-    private static final String DIRIGIBLE_PROPERTIES_OVERRIDES_PATH = "/dirigible-overrides.properties";
+    /** The Constant DIRIGIBLE_COMMON_PROPERTIES_PATH. */
+    private static final String DIRIGIBLE_COMMON_PROPERTIES_PATH = "/dirigible-commons.properties";
+    private static final String DIRIGIBLE_PROPERTIES_OVERRIDES_PATH = "/dirigible.properties";
 
     /** The Constant DIRIGIBLE_PRODUCT_NAME. */
     private static final String DIRIGIBLE_PRODUCT_NAME = "DIRIGIBLE_PRODUCT_NAME";
@@ -71,7 +71,7 @@ public class VersionService {
     public Version getVersion() throws IOException {
         Version version = new Version();
         final Properties properties = new Properties();
-        properties.load(VersionService.class.getResourceAsStream(DIRIGIBLE_PROPERTIES_PATH));
+        properties.load(VersionService.class.getResourceAsStream(DIRIGIBLE_COMMON_PROPERTIES_PATH));
         try (InputStream is = VersionService.class.getResourceAsStream(DIRIGIBLE_PROPERTIES_OVERRIDES_PATH)) {
             if (is != null) {
                 properties.load(is);

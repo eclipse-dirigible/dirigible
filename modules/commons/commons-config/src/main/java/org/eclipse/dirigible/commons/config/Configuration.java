@@ -47,9 +47,9 @@ public class Configuration {
     private static final Map<String, String> DEPLOYMENT_VARIABLES = Collections.synchronizedMap(new HashMap<>());
     /** The Constant MODULE_VARIABLES. */
     private static final Map<String, String> MODULE_VARIABLES = Collections.synchronizedMap(new HashMap<>());
-    /** The Constant CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES. */
-    private static final String CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES = "/dirigible.properties";
-    private static final String CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES_OVERRIDES = "/dirigible-overrides.properties";
+    /** The Constant CONFIG_FILE_PATH_DIRIGIBLE_COMMON_PROPERTIES. */
+    private static final String CONFIG_FILE_PATH_DIRIGIBLE_COMMON_PROPERTIES = "/dirigible-commons.properties";
+    private static final String CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES_OVERRIDES = "/dirigible.properties";
     /** The Constant ERROR_MESSAGE_CONFIGURATION_DOES_NOT_EXIST. */
     private static final String ERROR_MESSAGE_CONFIGURATION_DOES_NOT_EXIST = "Configuration file {0} does not exist";
     /** The Constant CONFIGURATION_PARAMETERS. */
@@ -84,7 +84,7 @@ public class Configuration {
         DEPLOYMENT_VARIABLES.clear();
         MODULE_VARIABLES.clear();
 
-        loadDeploymentConfig(CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES, CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES_OVERRIDES);
+        loadDeploymentConfig(CONFIG_FILE_PATH_DIRIGIBLE_COMMON_PROPERTIES, CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES_OVERRIDES);
         loadEnvironmentConfig();
         LOADED = true;
     }
@@ -141,7 +141,7 @@ public class Configuration {
                             break;
                     }
                     logger.debug("Configuration loaded from: [{}]", path);
-                } else if (!path.equals(CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES)) {
+                } else if (!path.equals(CONFIG_FILE_PATH_DIRIGIBLE_COMMON_PROPERTIES)) {
                     throw new IOException(format(ERROR_MESSAGE_CONFIGURATION_DOES_NOT_EXIST, path));
                 } else {
                     logger.debug("Configuration file [{}] does not exist", path);
