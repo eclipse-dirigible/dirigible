@@ -70,13 +70,11 @@ public class VersionService {
      */
     public Version getVersion() throws IOException {
         Version version = new Version();
+
         final Properties properties = new Properties();
-        properties.load(VersionService.class.getResourceAsStream(DIRIGIBLE_COMMON_PROPERTIES_PATH));
-        try (InputStream is = VersionService.class.getResourceAsStream(DIRIGIBLE_PROPERTIES_OVERRIDES_PATH)) {
-            if (is != null) {
-                properties.load(is);
-            }
-        }
+        optionallyLoadProps(DIRIGIBLE_COMMON_PROPERTIES_PATH, properties);
+        optionallyLoadProps(DIRIGIBLE_PROPERTIES_OVERRIDES_PATH, properties);
+
         version.setProductName(properties.getProperty(DIRIGIBLE_PRODUCT_NAME));
         version.setProductVersion(properties.getProperty(DIRIGIBLE_PRODUCT_VERSION));
         version.setProductRepository(properties.getProperty(DIRIGIBLE_PRODUCT_REPOSITORY));
@@ -94,5 +92,15 @@ public class VersionService {
                .addAll(enginesNames);
 
         return version;
+    }
+
+    private void optionallyLoadProps(String path, Properties properties) {
+        try (InputStream is = VersionService.class.getResourceAsStream(DIRIGIBLE_PROPERTIES_OVERRIDES_PATH)) {
+            if (is != null) {
+                properties.load(is);
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to load file with path " + path, e);
+        }
     }
 }
