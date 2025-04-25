@@ -93,13 +93,18 @@ public class GraalJSFileSystem implements FileSystem {
             return currentWorkingDirectoryPath;
         }
 
-        for (ModuleResolver moduleResolver : moduleResolvers) {
-            if (moduleResolver.isResolvable(path)) {
-                return moduleResolver.resolve(path);
+        try {
+            for (ModuleResolver moduleResolver : moduleResolvers) {
+                if (moduleResolver.isResolvable(path)) {
+                    Path modulePath = moduleResolver.resolve(path);
+                    return ensurePathExists(modulePath);
+                }
             }
-        }
 
-        return Path.of(path);
+            return ensurePathExists(Path.of(path));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -123,6 +128,10 @@ public class GraalJSFileSystem implements FileSystem {
      */
     @Override
     public Path toRealPath(Path path, LinkOption... linkOptions) throws IOException {
+        return ensurePathExists(path, linkOptions);
+    }
+
+    private Path ensurePathExists(Path path, LinkOption... linkOptions) throws IOException {
         if (path.isAbsolute() && !path.startsWith(currentWorkingDirectoryPath)) {
             path = currentWorkingDirectoryPath.resolve(path.toString()
                                                            .substring(1));
@@ -169,7 +178,7 @@ public class GraalJSFileSystem implements FileSystem {
      */
     @Override
     public SeekableByteChannel newByteChannel(Path path, Set<? extends OpenOption> options, FileAttribute<?>... attrs) throws IOException {
-        return delegateFileSystemProvider.newByteChannel(path, options, attrs);
+        return delegateFileSystemProvider.newByteChannel(ensurePathExists(path), options, attrs);
     }
 
     /**

@@ -76,7 +76,8 @@ public class ContextCreator {
                                                 .option("js.operator-overloading", "true")
                                                 .option("js.intl-402", "true")
                                                 .option("js.ecmascript-version", "staging")
-                                                .option("js.esm-eval-returns-exports", "true");
+                                                .option("js.esm-eval-returns-exports", "true")
+                                                .option("js.text-encoding", "true");
 
         if (PYTHON_ENABLED) {
             contextBuilder.option("python.PythonPath", createPythonPath())
