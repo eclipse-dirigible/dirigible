@@ -1,0 +1,5 @@
+{
+    "module": "perspective-tracing/configs/tracing-perspective.js",
+    "extensionPoint": "platform-perspectives",
+    "description": "Tracing Perspective"
+}

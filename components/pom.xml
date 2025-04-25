@@ -28,6 +28,7 @@
         <module>core/core-spring</module>
         <module>core/core-project</module>
         <module>core/core-tenants</module>
+        <module>core/core-tracing</module>
 
         <!-- Security -->
         <module>security/security-basic</module>
@@ -79,7 +80,6 @@
         <!-- IDE -->
         <module>ide/ide-workspace</module>
         <module>ide/ide-git</module>
-        <module>ide/ide-console</module>
         <module>ide/ide-template</module>
         <module>ide/ide-terminal</module>
         <module>ide/ide-problems</module>
@@ -207,6 +207,7 @@
         <module>ui/perspective-jobs</module>
         <module>ui/perspective-security</module>
         <module>ui/perspective-processes</module>
+        <module>ui/perspective-tracing</module>
         <module>ui/view-welcome</module>
         <module>ui/view-search</module>
         <module>ui/view-projects</module>
@@ -774,11 +775,6 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-ide-console</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ide-template</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -1180,6 +1176,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-perspective-git</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-perspective-tracing</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -1848,14 +1849,18 @@
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                 <groupId>org.eclipse.dirigible</groupId>
-                 <artifactId>dirigible-components-template-mapping-javascript</artifactId>
-                 <version>${project.version}</version>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-template-mapping-javascript</artifactId>
+                <version>${project.version}</version>
             </dependency>
-
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-core-tenants</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-core-tracing</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

@@ -49,7 +49,7 @@
 
     <!-- Send messages to ConsoleLoggingAppender -->
     <appender name="ConsoleLoggingAppender"
-              class="org.eclipse.dirigible.components.ide.console.service.ConsoleLoggingAppender">
+              class="org.eclipse.dirigible.commons.logging.ConsoleLoggingAppender">
         <!-- <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%-5level] [%thread{8}] %logger{36} - %msg%n</pattern>
         </encoder> -->
@@ -74,8 +74,8 @@
     </root>
 
     <logger name="org.eclipse.dirigible.tests" level="DEBUG"/>
-    <logger name="org.eclipse.dirigible.tests.util.FileUtil" level="INFO"/>
-    <logger name="org.eclipse.dirigible.tests.framework.impl.BrowserImpl" level="INFO"/>
+    <logger name="org.eclipse.dirigible.tests.framework.util.FileUtil" level="INFO"/>
+    <logger name="org.eclipse.dirigible.tests.framework.browser.impl.BrowserImpl" level="INFO"/>
 
     <logger name="org.eclipse.dirigible.components.tenants.tenant" level="INFO"/>
     <logger name="org.eclipse.dirigible.commons.api.helpers.GsonHelper" level="INFO"/>

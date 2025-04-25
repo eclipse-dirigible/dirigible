@@ -316,8 +316,9 @@ angular.module('ui.schema.modeler', ['blimpKit', 'platformView', 'WorkspaceServi
 					} else {
 						label += '<i class="dsm-table-spacer"></i>';
 					}
-					let suffix = ': ' + mxUtils.htmlEntities(cell.value.type, false) + (cell.value.columnLength ?
-						'(' + cell.value.columnLength + ')' : '');
+					let suffix = ': ' + mxUtils.htmlEntities(cell.value.type, false) + (cell.value.columnLength && (cell.value.type === 'CHAR' || cell.value.type === 'VARCHAR') ?
+						'(' + cell.value.columnLength + ')' : '') + (cell.value.type === 'DECIMAL' && cell.value.precision && cell.value.scale ?
+							'(' + cell.value.precision + ',' + cell.value.scale + ')' : '');
 					suffix = cell.value.isSQL ? '' : suffix;
 					return label + mxUtils.htmlEntities(cell.value.name, false) + suffix;
 				}
@@ -514,6 +515,8 @@ angular.module('ui.schema.modeler', ['blimpKit', 'platformView', 'WorkspaceServi
 										},
 										type: 'text',
 										value: cell.value.columnLength,
+										hiddenOn: { key: 'dsmdType', value: 'DECIMAL' }
+										//visibleOn: { key: 'dsmdType', value: ['VARCHAR', 'CHAR'] }
 									},
 									'dsmcpPrimaryKey': {
 										label: 'Primary Key',
@@ -544,6 +547,7 @@ angular.module('ui.schema.modeler', ['blimpKit', 'platformView', 'WorkspaceServi
 										},
 										type: 'text',
 										value: cell.value.precision,
+										visibleOn: { key: 'dsmdType', value: 'DECIMAL' }
 									},
 									'dsmcpScale': {
 										label: 'Scale',
@@ -554,6 +558,7 @@ angular.module('ui.schema.modeler', ['blimpKit', 'platformView', 'WorkspaceServi
 										},
 										type: 'text',
 										value: cell.value.scale,
+										visibleOn: { key: 'dsmdType', value: 'DECIMAL' }
 									},
 									'dsmcpDefaultValue': {
 										label: 'Default Value',

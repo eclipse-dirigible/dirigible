@@ -116,8 +116,8 @@ function createSchemaJson(graph) {
 						column.identity = childColumn.autoIncrement === 'true' ? childColumn.autoIncrement : false;
 						column.unique = childColumn.unique === 'true' ? childColumn.unique : false;
 						column.defaultValue = childColumn.defaultValue !== null && childColumn.defaultValue !== '' ? childColumn.defaultValue : null;
-						column.precision = childColumn.precision === 'true' ? childColumn.precision : null;
-						column.scale = childColumn.scale === 'true' ? childColumn.scale : null;
+						column.precision = childColumn.precision ? childColumn.precision : null;
+						column.scale = childColumn.scale ? childColumn.scale : null;
 					}
 					structure.columns.push(column);
 				}

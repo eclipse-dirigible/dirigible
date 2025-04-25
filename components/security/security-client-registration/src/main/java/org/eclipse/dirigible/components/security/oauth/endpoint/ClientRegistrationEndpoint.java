@@ -27,6 +27,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import jakarta.annotation.security.RolesAllowed;
 import jakarta.validation.Valid;
 
 /**
@@ -34,6 +36,7 @@ import jakarta.validation.Valid;
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_SECURITY + "client-registrations")
+@RolesAllowed({"ADMINISTRATOR", "DEVELOPER", "OPERATOR"})
 public class ClientRegistrationEndpoint {
 
 

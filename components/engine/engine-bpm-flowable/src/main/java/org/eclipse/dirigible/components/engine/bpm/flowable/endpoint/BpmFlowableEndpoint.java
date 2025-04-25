@@ -12,6 +12,9 @@ package org.eclipse.dirigible.components.engine.bpm.flowable.endpoint;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import jakarta.annotation.security.RolesAllowed;
+
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
@@ -63,6 +66,7 @@ import static org.eclipse.dirigible.components.engine.bpm.flowable.service.task.
 @CrossOrigin
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_BPM)
+@RolesAllowed({"ADMINISTRATOR", "DEVELOPER", "OPERATOR"})
 public class BpmFlowableEndpoint extends BaseEndpoint {
 
     /**
@@ -196,8 +200,8 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
      * @return the process definitions
      */
     @GetMapping(value = "/bpm-processes/definitions")
-    public ResponseEntity<List<ProcessDefinitionData>> getProcessDefinitions() {
-        return ResponseEntity.ok(getBpmService().getProcessDefinitions());
+    public ResponseEntity<List<ProcessDefinitionData>> getProcessDefinitions(@Nullable @RequestParam("key") Optional<String> key) {
+        return ResponseEntity.ok(getBpmService().getProcessDefinitions(key));
     }
 
     /**
@@ -226,8 +230,8 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
      * @return the processes keys
      */
     @GetMapping(value = "/bpm-processes/instances")
-    public ResponseEntity<List<ProcessInstanceData>> getProcessesInstances(@Nullable @RequestParam("id") Optional<String> businessKey,
-            @Nullable @RequestParam("key") Optional<String> key) {
+    public ResponseEntity<List<ProcessInstanceData>> getProcessesInstances(
+            @Nullable @RequestParam("businessKey") Optional<String> businessKey, @Nullable @RequestParam("key") Optional<String> key) {
         return ResponseEntity.ok(getBpmService().getProcessInstances(key, businessKey));
     }
 

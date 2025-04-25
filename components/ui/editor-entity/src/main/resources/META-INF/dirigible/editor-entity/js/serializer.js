@@ -132,7 +132,7 @@ function createModel(graph) {
 						model.push(' dataScale="' + _.escape(property.dataScale) + '"');
 					}
 					if (property.dataPrecision !== null && property.dataScale !== null && property.dataType === 'DECIMAL') {
-						const dataLength = parseInt(property.dataPrecision) + parseInt(property.dataScale);
+						const dataLength = parseInt(property.dataPrecision);
 						model.push(' dataLength="' + dataLength + '"');
 					}
 					if (property.isRequiredProperty == "true") {

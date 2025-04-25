@@ -33,7 +33,7 @@
             <bk-button state="transparent" toggled="displaySearch" glyph="sap-icon--search" title="Toggle search" aria-label="Toggle search" ng-click="toggleSearch()"></bk-button>
         </bk-toolbar>
         <bk-toolbar ng-if="displaySearch">
-            <bk-input type="search" placeholder="Search" ng-keyup="inputSearchKeyUp($event)" ng-model="searchText" bk-focus="true"></bk-input>
+            <bk-input type="search" placeholder="Search" ng-keyup="inputSearchKeyUp($event)" ng-model="searchField.text" bk-focus="true"></bk-input>
         </bk-toolbar>
         <bk-scrollbar class="bk-fill-parent">
             <table bk-table outer-borders="bottom" display-mode="compact">

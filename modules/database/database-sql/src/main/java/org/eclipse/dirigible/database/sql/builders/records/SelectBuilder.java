@@ -9,13 +9,12 @@
  */
 package org.eclipse.dirigible.database.sql.builders.records;
 
+import java.util.ArrayList;
+import java.util.List;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.builders.AbstractQuerySqlBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * The Select Builder.
@@ -735,10 +734,9 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
         StringBuilder snippet = new StringBuilder();
         for (String join : this.joins) {
             snippet.append(join)
-                   .append(COMMA)
                    .append(SPACE);
         }
-        return snippet.substring(0, snippet.length() - 2);
+        return snippet.substring(0, snippet.length() - 1);
     }
 
     /**

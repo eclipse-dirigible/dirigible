@@ -11,22 +11,42 @@
  */
 const bpmImageView = angular.module('bpm-image-app', ['platformView', 'blimpKit']);
 bpmImageView.constant('MessageHub', new MessageHubApi());
-bpmImageView.controller('BpmImageViewController', ($scope, MessageHub) => {
-    $scope.imageLink = '';
+bpmImageView.constant('ThemingHub', new ThemingHub());
+bpmImageView.controller('BpmImageViewController', ($scope, MessageHub, ThemingHub) => {
+    $scope.imageLink = '/services/web/perspective-processes/images/process.svg';
     $scope.state = {
         isBusy: false,
         error: false,
         busyText: 'Loading...',
     };
 
+    function invertImage() {
+        document.getElementById("bpmn-diagram").style.filter = '';
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.getElementById("bpmn-diagram").style.filter = 'invert(1)';
+        }
+    }
+
+    ThemingHub.onThemeChange((theme) => {
+        document.getElementById("bpmn-diagram").style.filter = '';
+        if (theme.type === 'dark') {
+            document.getElementById("bpmn-diagram").style.filter = 'invert(1)';
+        }
+        if (theme.type === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.getElementById("bpmn-diagram").style.filter = 'invert(1)';
+        }
+    });
+
     $scope.loadDefinitionImageLink = (definition) => {
         $scope.imageLink = `/services/bpm/bpm-processes/diagram/definition/${definition}`;
         $scope.state.isBusy = false;
+        invertImage();
     };
 
     $scope.loadInstanceImageLink = (instance) => {
         $scope.imageLink = `/services/bpm/bpm-processes/diagram/instance/${instance}`;
         $scope.state.isBusy = false;
+        invertImage();
     };
 
     MessageHub.addMessageListener({

@@ -9,10 +9,10 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
-import org.eclipse.dirigible.tests.Workbench;
-import org.eclipse.dirigible.tests.framework.HtmlAttribute;
-import org.eclipse.dirigible.tests.framework.HtmlElementType;
+import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
+import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
+import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
+import org.eclipse.dirigible.tests.framework.ide.Workbench;
 import org.junit.jupiter.api.Test;
 
 public class CreateNewFileIT extends UserInterfaceIntegrationTest {

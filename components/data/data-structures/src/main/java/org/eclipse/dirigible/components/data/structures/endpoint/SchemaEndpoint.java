@@ -26,12 +26,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import io.swagger.v3.oas.annotations.Parameter;
+import jakarta.annotation.security.RolesAllowed;
 
 /**
  * The Class SchemaEndpoint.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_DATA + "schemas")
+@RolesAllowed({"ADMINISTRATOR", "DEVELOPER", "OPERATOR"})
 public class SchemaEndpoint extends BaseEndpoint {
 
     /** The schema service. */

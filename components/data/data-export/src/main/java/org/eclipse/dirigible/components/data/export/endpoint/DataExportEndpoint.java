@@ -33,11 +33,14 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import jakarta.annotation.security.RolesAllowed;
+
 /**
  * Front facing REST service serving export data.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_DATA + "project")
+@RolesAllowed({"ADMINISTRATOR", "OPERATOR"})
 public class DataExportEndpoint {
 
     /**

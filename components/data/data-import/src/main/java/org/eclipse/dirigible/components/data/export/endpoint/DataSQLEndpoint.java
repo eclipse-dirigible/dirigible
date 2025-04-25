@@ -28,11 +28,14 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import jakarta.annotation.security.RolesAllowed;
+
 /**
  * Front facing REST service serving sql processing.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_DATA + "sql")
+@RolesAllowed({"ADMINISTRATOR", "OPERATOR"})
 public class DataSQLEndpoint {
 
     /** The constant logger. */

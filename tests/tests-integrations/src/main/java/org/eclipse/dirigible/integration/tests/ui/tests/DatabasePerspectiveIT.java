@@ -11,8 +11,9 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.database.DatabaseSystem;
-import org.eclipse.dirigible.tests.DatabasePerspective;
-import org.eclipse.dirigible.tests.UserInterfaceIntegrationTest;
+import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
+import org.eclipse.dirigible.tests.framework.db.DBAsserter;
+import org.eclipse.dirigible.tests.framework.ide.DatabasePerspective;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -20,6 +21,9 @@ public class DatabasePerspectiveIT extends UserInterfaceIntegrationTest {
 
     @Autowired
     private DataSourcesManager dataSourcesManager;
+
+    @Autowired
+    private DBAsserter dbAsserter;
 
     @Test
     void testDatabaseFunctionality() {
@@ -60,9 +64,9 @@ public class DatabasePerspectiveIT extends UserInterfaceIntegrationTest {
 
         // Assert if table id is 1 -> correct insertion
         databasePerspective.assertCellContent("1");
-        databasePerspective.assertRowCount("STUDENT", 1);
-        databasePerspective.assertTableHasColumn("STUDENT", "NAME");
-        databasePerspective.assertRowHasColumnWithValue("STUDENT", 0, "NAME", "John Smith");
+        dbAsserter.assertRowCount("STUDENT", 1);
+        dbAsserter.assertTableHasColumn("STUDENT", "NAME");
+        dbAsserter.assertRowHasColumnWithValue("STUDENT", 0, "NAME", "John Smith");
     }
 
     private void createTestTable(DatabasePerspective databasePerspective) {

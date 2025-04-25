@@ -15,7 +15,7 @@ ideBpmProcessInstancesView.constant('Dialogs', new DialogHub());
 ideBpmProcessInstancesView.controller('IDEBpmProcessInstancesViewController', ($scope, $http, Notifications, Dialogs) => {
 
     $scope.selectAll = false;
-    $scope.searchText = "";
+    $scope.searchField = { text: '' };
     $scope.displaySearch = false;
     $scope.instancesList = [];
     $scope.pageSize = 10;
@@ -39,7 +39,7 @@ ideBpmProcessInstancesView.controller('IDEBpmProcessInstancesViewController', ($
                 return;
             }
 
-            $http.get('/services/bpm/bpm-processes/instances', { params: { 'id': $scope.searchText, 'key': $scope.selectedProcessDefinitionKey, 'limit': 100 } })
+            $http.get('/services/bpm/bpm-processes/instances', { params: { 'businessKey': $scope.searchField.text, 'key': $scope.selectedProcessDefinitionKey, 'limit': 100 } })
                 .then((response) => {
                     if ($scope.instancesList.length < response.data.length) {
                         Notifications.show({
@@ -88,7 +88,6 @@ ideBpmProcessInstancesView.controller('IDEBpmProcessInstancesViewController', ($
                 type: AlertTypes.Success,
                 preformatted: false,
             });
-            // console.log('Successfully executed ' + actionName + ' process instance with id [' + $scope.processInstanceId + ']');
             $scope.reload();
         }).catch((error) => {
             console.error('Error making POST request:', error);
@@ -120,8 +119,8 @@ ideBpmProcessInstancesView.controller('IDEBpmProcessInstancesViewController', ($
         handler: (data) => {
             $scope.$evalAsync(() => {
                 if (data.hasOwnProperty('definition')) {
-                    $scope.instances.selectedProcessDefinitionKey = data.definition;
-                    $scope.instances.applyFilter();
+                    $scope.selectedProcessDefinitionKey = data.definition;
+                    $scope.applyFilter();
                 } else {
                     Dialogs.showAlert({
                         title: 'Missing data',
@@ -144,20 +143,21 @@ ideBpmProcessInstancesView.controller('IDEBpmProcessInstancesViewController', ($
     $scope.hasSelected = () => $scope.instancesList.some(x => x.selected);
 
     $scope.applyFilter = () => {
-        $http.get('/services/bpm/bpm-processes/instances', { params: { 'id': $scope.searchText, 'key': $scope.selectedProcessDefinitionKey, 'limit': 100 } })
+        $http.get('/services/bpm/bpm-processes/instances', { params: { 'businessKey': $scope.searchField.text, 'key': $scope.selectedProcessDefinitionKey, 'limit': 100 } })
             .then((response) => {
                 $scope.instancesList = response.data;
             });
     };
 
     $scope.getNoDataMessage = () => {
-        return $scope.searchText ? 'No instances found.' : 'No instances have been detected.';
+        return $scope.searchField.text ? 'No instances found.' : 'No instances have been detected.';
     };
 
     $scope.inputSearchKeyUp = (e) => {
         switch (e.key) {
             case 'Escape':
-                $scope.searchText = '';
+                $scope.searchField.text = '';
+                $scope.applyFilter();
                 break;
             case 'Enter':
                 $scope.applyFilter();

@@ -11,8 +11,6 @@ package org.eclipse.dirigible.components.engine.web.endpoint;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.engine.web.service.WebService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,10 +24,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping({BaseEndpoint.PREFIX_ENDPOINT_SECURED + "web", BaseEndpoint.PREFIX_ENDPOINT_PUBLIC + "web"})
 public class WebEndpoint extends BaseEndpoint {
-
-    /** The Constant logger. */
-    private static final Logger logger = LoggerFactory.getLogger(WebEndpoint.class.getCanonicalName());
-
 
     /** The javascript service. */
     private final WebService webService;

@@ -13,6 +13,7 @@ import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.engine.bpm.BpmProvider;
+import org.eclipse.dirigible.components.engine.bpm.flowable.diagram.DirigibleProcessDiagramGenerator;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskData;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -171,6 +172,8 @@ public class BpmProviderFlowable implements BpmProvider {
 
         config.setAsyncExecutorActivate(true);
         config.setApplicationContext(applicationContext);
+
+        config.setProcessDiagramGenerator(new DirigibleProcessDiagramGenerator());
 
         return config;
     }

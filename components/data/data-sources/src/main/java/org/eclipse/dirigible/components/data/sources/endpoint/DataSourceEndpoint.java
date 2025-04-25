@@ -14,6 +14,7 @@ import java.net.URISyntaxException;
 import java.util.List;
 import java.util.StringTokenizer;
 
+import jakarta.annotation.security.RolesAllowed;
 import jakarta.validation.Valid;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
@@ -41,6 +42,7 @@ import io.swagger.v3.oas.annotations.Parameter;
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_DATA + "sources")
+@RolesAllowed({"ADMINISTRATOR", "OPERATOR"})
 public class DataSourceEndpoint extends BaseEndpoint {
 
     /** The data source service. */

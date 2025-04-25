@@ -28,12 +28,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import io.swagger.v3.oas.annotations.Parameter;
+import jakarta.annotation.security.RolesAllowed;
 
 /**
  * The Class EntityEndpoint.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_DATA + "entities")
+@RolesAllowed({"ADMINISTRATOR", "DEVELOPER", "OPERATOR"})
 public class EntityEndpoint extends BaseEndpoint {
 
     /** The entity service. */

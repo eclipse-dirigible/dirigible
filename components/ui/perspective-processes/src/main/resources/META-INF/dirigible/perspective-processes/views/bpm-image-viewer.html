@@ -27,7 +27,7 @@
 
 	<body class="bk-center" bk-scrollbar>
 		<bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
-		<img ng-if="imageLink !== ''" class="bk-contain-image" style="height:auto;background-color: #f2f2f2" ng-src="{{ imageLink }}" alt="Image" ng-show="!state.error && !state.isBusy" />
+		<img id="bpmn-diagram" class="bk-contain-image" style="height:auto" ng-src="{{ imageLink }}" alt="Image" ng-show="!state.error && !state.isBusy" />
 		<bk-message-page glyph="sap-icon--error" ng-if="state.error">
 			<bk-message-page-title>View encounterd an error!</bk-message-page-title>
 			<bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>

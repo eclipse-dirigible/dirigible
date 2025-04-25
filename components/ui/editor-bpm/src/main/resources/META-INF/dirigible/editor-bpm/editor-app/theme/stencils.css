@@ -7,7 +7,7 @@
 }
 
 .stencil-stroke {
-    stroke: var(--sapLinkColor, #0a6ed1);
+    stroke: var(--sapTextColor, #32363a);
 }
 
 .stencil-stroke-text {
@@ -19,23 +19,23 @@
 }
 
 .stencil-fill {
-    fill: var(--sapLinkColor, #0a6ed1);
+    fill: var(--sapTextColor, #0a6ed1);
 }
 
 text tspan {
-    fill: var(--sapLinkColor, #0a6ed1);
+    fill: var(--sapTextColor, #0a6ed1);
 }
 
 .stencil-color1 {
-    fill: var(--sapLegendColor1, #d08014);
+    fill: var(--sapTextColor, #d08014);
 }
 
 .stencil-color16 {
-    fill: var(--sapLegendColor16, #597da1);
+    fill: var(--sapTextColor, #597da1);
 }
 
 .stencil-color18 {
-    fill: var(--sapLegendColor18, #687a33);
+    fill: var(--sapTextColor, #687a33);
 }
 
 .svgcontainer>g>rect {

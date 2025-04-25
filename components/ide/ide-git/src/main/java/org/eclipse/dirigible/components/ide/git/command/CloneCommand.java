@@ -44,9 +44,6 @@ public class CloneCommand {
     /** The Constant PACKAGE_JSON. */
     private static final String PACKAGE_JSON = "package.json";
 
-    /** The Constant PACKAGE_LOCK_JSON. */
-    private static final String PACKAGE_LOCK_JSON = "package-lock.json";
-
     /** The Constant NODE_MODULES. */
     private static final String NODE_MODULES = "node_modules";
 
@@ -270,10 +267,6 @@ public class CloneCommand {
                     }
                 }
                 nodeModules.delete();
-                org.eclipse.dirigible.components.ide.workspace.domain.File packageLockJson = selectedProject.getFile(PACKAGE_LOCK_JSON);
-                if (packageLockJson.exists()) {
-                    packageLockJson.delete();
-                }
             } catch (Exception e) {
                 logger.error("Retrieving the NPM dependencies of the project [{}] failed", projectName, e);
             }

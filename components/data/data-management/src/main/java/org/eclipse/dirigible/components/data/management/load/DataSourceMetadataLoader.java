@@ -138,7 +138,8 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
         do {
             new TableColumn(columns.getString(JDBC_COLUMN_NAME_PROPERTY), columns.getString(JDBC_COLUMN_TYPE_PROPERTY),
                     columns.getInt(JDBC_COLUMN_SIZE_PROPERTY) + "", columns.getBoolean(JDBC_COLUMN_NULLABLE_PROPERTY), false, null,
-                    columns.getInt(JDBC_COLUMN_DECIMAL_DIGITS_PROPERTY) + "", false, tableMetadata);
+                    columns.getInt(JDBC_COLUMN_SIZE_PROPERTY) + "", columns.getInt(JDBC_COLUMN_DECIMAL_DIGITS_PROPERTY) + "", false,
+                    tableMetadata);
         } while (columns.next());
     }
 

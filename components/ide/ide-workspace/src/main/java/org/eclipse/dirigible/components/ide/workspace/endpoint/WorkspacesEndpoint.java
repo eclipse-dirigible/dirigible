@@ -43,6 +43,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import jakarta.annotation.Nullable;
+import jakarta.annotation.security.RolesAllowed;
 import jakarta.validation.Valid;
 
 /**
@@ -50,6 +51,7 @@ import jakarta.validation.Valid;
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_IDE + "workspaces")
+@RolesAllowed({"ADMINISTRATOR", "DEVELOPER"})
 public class WorkspacesEndpoint {
 
     /** The Constant FAILED_TO_CREATE_PROJECT_0_IN_WORKSPACE_1. */

@@ -16,6 +16,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
 
+import jakarta.annotation.security.RolesAllowed;
 import jakarta.validation.Valid;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
@@ -40,6 +41,7 @@ import org.springframework.web.server.ResponseStatusException;
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_IDE + "generate")
+@RolesAllowed({"ADMINISTRATOR", "DEVELOPER"})
 public class GenerationEndpoint {
 
     /** The Constant logger. */

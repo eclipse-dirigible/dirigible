@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.ide.logs.endpoint;
 import java.io.IOException;
 import java.net.URISyntaxException;
 
+import jakarta.annotation.security.RolesAllowed;
 import jakarta.validation.Valid;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_IDE + "loggers")
+@RolesAllowed({"ADMINISTRATOR", "DEVELOPER", "OPERATOR"})
 public class LogsConfigurationsEndpoint {
 
     /** The logs service. */

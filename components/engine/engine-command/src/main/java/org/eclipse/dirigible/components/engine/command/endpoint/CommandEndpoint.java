@@ -26,11 +26,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import jakarta.annotation.security.RolesAllowed;
+
 /**
  * The Class WikiEndpoint.
  */
 @RestController
 @RequestMapping({BaseEndpoint.PREFIX_ENDPOINT_SECURED + "command"})
+@RolesAllowed({"ADMINISTRATOR", "DEVELOPER", "OPERATOR"})
 public class CommandEndpoint extends BaseEndpoint {
 
     /** The Constant logger. */

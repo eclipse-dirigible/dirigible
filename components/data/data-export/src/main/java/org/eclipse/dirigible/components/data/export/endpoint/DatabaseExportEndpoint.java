@@ -18,8 +18,6 @@ import java.util.Date;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.data.export.service.DatabaseExportService;
 import org.eclipse.dirigible.components.data.management.service.DatabaseMetadataService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -32,15 +30,15 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import jakarta.annotation.security.RolesAllowed;
+
 /**
  * Front facing REST service serving the raw data.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_DATA + "export")
+@RolesAllowed({"ADMINISTRATOR", "OPERATOR"})
 public class DatabaseExportEndpoint {
-
-    /** The Constant logger. */
-    private static final Logger logger = LoggerFactory.getLogger(DatabaseExportEndpoint.class);
 
     /** The database export service. */
     private DatabaseExportService databaseExportService;

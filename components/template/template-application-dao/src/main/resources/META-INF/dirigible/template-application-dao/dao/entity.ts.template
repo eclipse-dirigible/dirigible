@@ -87,7 +87,7 @@ export interface ${name}EntityOptions {
     },
     $select?: (keyof ${name}Entity)[],
     $sort?: string | (keyof ${name}Entity)[],
-    $order?: 'asc' | 'desc',
+    $order?: 'ASC' | 'DESC',
     $offset?: number,
     $limit?: number,
 }
@@ -146,22 +146,15 @@ export class ${name}Repository {
     private readonly dao;
 
     constructor(dataSource#if($dataSource) = "${dataSource}"#else?: string#end) {
-        this.dao = daoApi.create(${name}Repository.DEFINITION, null, dataSource);
+        this.dao = daoApi.create(${name}Repository.DEFINITION, undefined, dataSource);
     }
 
-    public findAll(options?: ${name}EntityOptions): ${name}Entity[] {
-#foreach ($property in $properties)
-#if ($property.dataOrderBy)
-        // @ts-ignore
-        if (options.$sort === undefined) {
-            // @ts-ignore
-            options.$sort = "";
+    public findAll(options: ${name}EntityOptions = {}): ${name}Entity[] {
+#if ($dataOrderBy)
+        if (options.$sort === undefined && options.$order === undefined) {
+            options.$sort = "${dataOrderBySort}";
+            options.$order = "${dataOrderBy}";
         }
-        // @ts-ignore
-        options.$sort += "${property.name},";
-        // @ts-ignore
-        options.$order = "${property.dataOrderBy}";
-#end
 #end
 #if($isEntityUtilsEnabled == "true")
         return this.dao.list(options).map((e: ${name}Entity) => {

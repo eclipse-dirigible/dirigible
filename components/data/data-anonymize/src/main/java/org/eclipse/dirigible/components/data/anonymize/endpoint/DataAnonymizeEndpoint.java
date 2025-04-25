@@ -13,14 +13,10 @@ import static java.text.MessageFormat.format;
 
 import java.sql.SQLException;
 
-import jakarta.validation.Valid;
-
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.data.anonymize.domain.DataAnonymizeParameters;
 import org.eclipse.dirigible.components.data.anonymize.service.DataAnonymizeService;
 import org.eclipse.dirigible.components.data.management.service.DatabaseMetadataService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -30,15 +26,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import jakarta.annotation.security.RolesAllowed;
+import jakarta.validation.Valid;
+
 /**
  * Front facing REST service serving anymization functions.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_DATA + "anonymize")
+@RolesAllowed({"ADMINISTRATOR", "OPERATOR"})
 public class DataAnonymizeEndpoint {
-
-    /** The Constant logger. */
-    private static final Logger logger = LoggerFactory.getLogger(DataAnonymizeEndpoint.class);
 
     /** The data anonymize service. */
     private DataAnonymizeService dataAnonymizeService;

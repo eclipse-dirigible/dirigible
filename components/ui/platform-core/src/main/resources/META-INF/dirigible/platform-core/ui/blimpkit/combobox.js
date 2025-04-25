@@ -39,7 +39,7 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
             }
             let collectionWatch;
             if (ngModel) {
-                const onSelectedValueChanged = function (value) {
+                const onSelectedValueChanged = (value) => {
                     if (!angular.equals(value, ngModel.$viewValue)) {
                         ngModel.$setViewValue(scope.multiSelect ? [...value] : value);
                     }
@@ -52,11 +52,11 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
                     scope.$watch('selectedValue', onSelectedValueChanged);
                 }
 
-                ngModel.$isEmpty = function (value) {
+                ngModel.$isEmpty = (value) => {
                     return (value === null || value === undefined || value === '') || (scope.multiSelect && value.length === 0);
                 };
 
-                ngModel.$render = function () {
+                ngModel.$render = () => {
                     let selectedValue = ngModel.$viewValue;
 
                     if (!scope.multiSelect) {
@@ -101,26 +101,26 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
             scope.checkboxIds = {};
             scope.bodyExpanded = false;
 
-            scope.onControllClick = function () {
+            scope.onControllClick = () => {
                 scope.bodyExpanded = !scope.bodyExpanded;
                 if (scope.bodyExpanded) {
                     element.find('input').focus();
                 }
             };
 
-            scope.closeDropdown = function () {
+            scope.closeDropdown = () => {
                 scope.bodyExpanded = false;
             };
 
-            scope.openDropdown = function () {
+            scope.openDropdown = () => {
                 scope.bodyExpanded = true;
             };
 
-            scope.isBodyExpanded = function () {
+            scope.isBodyExpanded = () => {
                 return scope.bodyExpanded && scope.filteredDropdownItems.length > 0;
             };
 
-            scope.onInputChange = function () {
+            scope.onInputChange = () => {
                 if (scope.search.term === undefined) scope.search.term = '';
                 scope.filterValues();
 
@@ -130,7 +130,7 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
                 }
             };
 
-            scope.filterValues = function () {
+            scope.filterValues = () => {
                 if (scope.search.term) {
                     scope.filteredDropdownItems = scope.dropdownItems.filter(x => x.text.toLowerCase().startsWith(scope.search.term.toLowerCase()));
                 } else {
@@ -138,11 +138,11 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
                 }
             };
 
-            scope.clearFilter = function () {
+            scope.clearFilter = () => {
                 scope.filteredDropdownItems = scope.dropdownItems;
             };
 
-            scope.onKeyDown = function (event) {
+            scope.onKeyDown = (event) => {
                 const ARROW_UP = 38;
                 const ARROW_DOWN = 40;
                 if (event.keyCode === ARROW_UP || event.keyCode === ARROW_DOWN) {
@@ -165,7 +165,7 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
                 }
             };
 
-            scope.onSearchKeyDown = function (event) {
+            scope.onSearchKeyDown = (event) => {
                 switch (event.key) {
                     case 'Backspace':
                         if (scope.search.term.length === 0 && scope.selectedValue.length)
@@ -181,19 +181,19 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
                 }
             };
 
-            scope.removeItemFromSelection = function (item) {
+            scope.removeItemFromSelection = (item) => {
                 const itemIndex = scope.selectedValue.indexOf(item.value);
                 if (itemIndex >= 0)
                     scope.selectedValue.splice(itemIndex, 1);
             };
 
-            scope.addItemToSelection = function (item) {
+            scope.addItemToSelection = (item) => {
                 const itemIndex = scope.selectedValue.indexOf(item.value);
                 if (itemIndex === -1)
                     scope.selectedValue.push(item.value);
             };
 
-            scope.onItemClick = function (item) {
+            scope.onItemClick = (item) => {
                 if (scope.multiSelect) {
                     const itemIndex = scope.selectedValue.indexOf(item.value);
                     if (itemIndex >= 0)
@@ -210,7 +210,7 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
                     scope.closeDropdown();
             };
 
-            scope.isSelected = function (item) {
+            scope.isSelected = (item) => {
                 if (scope.multiSelect) {
                     return scope.selectedValue.includes(item.value);
                 } else {
@@ -218,40 +218,34 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
                 }
             };
 
-            scope.getHighlightedText = function (value) {
+            scope.getHighlightedText = (value) => {
                 return scope.shouldRenderHighlightedText(value) ? value.substring(0, scope.search.term.length) : null;
             };
 
-            scope.shouldRenderHighlightedText = function (value) {
+            scope.shouldRenderHighlightedText = (value) => {
                 return value.toLowerCase().startsWith(scope.search.term.toLowerCase()) && value.length > scope.search.term.length;
             };
 
-            scope.getLabel = function (value) {
+            scope.getLabel = (value) => {
                 return scope.shouldRenderHighlightedText(value) ? value.substring(scope.search.term.length) : value;
             };
 
-            scope.getListClasses = function () {
-                return classNames({
-                    'fd-list--multi-input': scope.multiSelect
-                });
-            };
+            scope.getListClasses = () => classNames({
+                'fd-list--multi-input': scope.multiSelect
+            });
 
-            scope.getCheckboxId = function (value) {
+            scope.getCheckboxId = (value) => {
                 let id = scope.checkboxIds[value];
                 if (!id) scope.checkboxIds[value] = id = `cb-checkbox-${uuid.generate()}`;
                 return id;
             };
 
-            scope.getSelectedItems = function () {
+            scope.getSelectedItems = () => {
                 return scope.selectedValue.map(value => scope.dropdownItems.find(item => item.value === value));
             };
 
-            scope.getValue = () => ngModel.$viewValue;
-
-            scope.onTokenClick = function (item) {
-                if (scope.bodyExpanded) {
-                    element.find('input').focus();
-                }
+            scope.onTokenClick = (item) => {
+                if (scope.bodyExpanded) element.find('input').focus();
                 scope.removeItemFromSelection(item);
             };
             function focusoutEvent(e) {
@@ -263,14 +257,14 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
             }
             element.on('focusout', focusoutEvent);
 
-            const dropdownWatch = scope.$watchCollection('dropdownItems', function (items) {
+            const dropdownWatch = scope.$watchCollection('dropdownItems', (items) => {
                 if (items === undefined || items === null)
                     scope.dropdownItems = [];
 
                 scope.filteredDropdownItems = items || [];
             });
 
-            scope.setDefault = function () {
+            scope.setDefault = () => {
                 const rect = element[0].getBoundingClientRect();
                 scope.defaultHeight = $window.innerHeight - rect.bottom;
             };
@@ -285,7 +279,7 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
                 if (ngModel && scope.multiSelect) collectionWatch();
             }
             scope.$on('$destroy', cleanUp);
-            const contentLoaded = scope.$watch('$viewContentLoaded', function () {
+            const contentLoaded = scope.$watch('$viewContentLoaded', () => {
                 $timeout(() => {
                     scope.setDefault();
                     contentLoaded();
@@ -305,7 +299,7 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
                         <bk-button class="fd-select__button" glyph="sap-icon--navigation-down-arrow" state="${ButtonStates.Transparent}" ng-disabled="isDisabled" ng-click="onControllClick()" aria-label="{{btnAriaLabel}}" aria-controls="{{ bodyId }}" aria-haspopup="true"></bk-button>
                     </bk-input-group-addon>
                 </bk-input-group>
-                <bk-input ng-if="isReadonly" ng-attr-id="{{ inputId }}" type="text" autocomplete="off" placeholder="{{ placeholder }}" value="{{getValue()}}" tabindex="0" aria-readonly="true" readonly></bk-input>
+                <bk-input ng-if="isReadonly" ng-attr-id="{{ inputId }}" type="text" autocomplete="off" placeholder="{{ placeholder }}" ng-model="search.term" tabindex="0" aria-readonly="true" readonly></bk-input>
             </div>
             <div ng-if="isDisabled !== true && isReadonly !== true" id="{{ bodyId }}" class="fd-popover__body fd-popover__body--no-arrow fd-popover__body--dropdown fd-popover__body--dropdown-fill" aria-hidden="{{ !isBodyExpanded() }}">
                 <div class="fd-popover__wrapper" bk-scrollbar style="max-height:{{ maxBodyHeight || defaultHeight }}px;">

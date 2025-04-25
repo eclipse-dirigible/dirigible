@@ -27,13 +27,13 @@ angular.module('app', ['platformView', 'blimpKit']).controller('ApplicationContr
     };
 
     $scope.fetchData = () => {
-        $http.get('/services/bpm/bpm-processes/tasks?type=groups', { params: { 'limit': 100 } }).then((response) => {
+        $http.get('/services/inbox/tasks?type=groups', { params: { 'limit': 100 } }).then((response) => {
             $scope.tasksList = response.data;
         }, (error) => {
             console.error(error);
         });
 
-        $http.get('/services/bpm/bpm-processes/tasks?type=assignee', { params: { 'limit': 100 } }).then((response) => {
+        $http.get('/services/inbox/tasks?type=assignee', { params: { 'limit': 100 } }).then((response) => {
             $scope.tasksListAssignee = response.data;
         }, (error) => {
             console.error(error);
@@ -61,7 +61,7 @@ angular.module('app', ['platformView', 'blimpKit']).controller('ApplicationContr
     };
 
     $scope.executeAction = (taskId, requestBody, actionName, clearCallback) => {
-        const apiUrl = '/services/bpm/bpm-processes/tasks/' + taskId;
+        const apiUrl = '/services/inbox/tasks/' + taskId;
 
         $http({
             method: 'POST',

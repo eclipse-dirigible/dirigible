@@ -9,24 +9,19 @@
  */
 package org.eclipse.dirigible.commons.config;
 
-import static java.text.MessageFormat.format;
-import java.io.IOException;
-import java.io.InputStream;
-import java.lang.reflect.Field;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import org.apache.commons.lang3.reflect.FieldUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.reflect.Field;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import static java.text.MessageFormat.format;
 
 /**
  * Configuration Facade class keeps all the configurations in the Dirigible instance It has the
@@ -52,12 +47,14 @@ public class Configuration {
     private static final Map<String, String> DEPLOYMENT_VARIABLES = Collections.synchronizedMap(new HashMap<>());
     /** The Constant MODULE_VARIABLES. */
     private static final Map<String, String> MODULE_VARIABLES = Collections.synchronizedMap(new HashMap<>());
-    /** The Constant CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES. */
-    private static final String CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES = "/dirigible.properties";
+    /** The Constant CONFIG_FILE_PATH_DIRIGIBLE_COMMON_PROPERTIES. */
+    private static final String CONFIG_FILE_PATH_DIRIGIBLE_COMMON_PROPERTIES = "/dirigible-commons.properties";
+    private static final String CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES_OVERRIDES = "/dirigible.properties";
     /** The Constant ERROR_MESSAGE_CONFIGURATION_DOES_NOT_EXIST. */
     private static final String ERROR_MESSAGE_CONFIGURATION_DOES_NOT_EXIST = "Configuration file {0} does not exist";
     /** The Constant CONFIGURATION_PARAMETERS. */
     private static final String[] CONFIGURATION_PARAMETERS = getConfigParams();
+    private static final Logger LOGGER = LoggerFactory.getLogger(Configuration.class);
     /** The loaded. */
     public static boolean LOADED = false;
 
@@ -87,7 +84,7 @@ public class Configuration {
         DEPLOYMENT_VARIABLES.clear();
         MODULE_VARIABLES.clear();
 
-        loadDeploymentConfig(CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES);
+        loadDeploymentConfig(CONFIG_FILE_PATH_DIRIGIBLE_COMMON_PROPERTIES, CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES_OVERRIDES);
         loadEnvironmentConfig();
         LOADED = true;
     }
@@ -97,8 +94,22 @@ public class Configuration {
      *
      * @param path the path
      */
-    private static void loadDeploymentConfig(String path) {
+    private static void loadDeploymentConfig(String path, String overridePath) {
         load(path, ConfigType.DEPLOYMENT);
+        overrideConfig(overridePath);
+    }
+
+    private static void overrideConfig(String overridePath) {
+        try (InputStream inputStream = Configuration.class.getResourceAsStream(overridePath)) {
+            if (null == inputStream) {
+                LOGGER.info("Override file with path [{}] was not found.", overridePath);
+            } else {
+                LOGGER.info("Found override file with path [{}]. Will use it to override the configs.", overridePath);
+                load(overridePath, ConfigType.DEPLOYMENT);
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to load file with path " + overridePath, e);
+        }
     }
 
     /**
@@ -110,9 +121,8 @@ public class Configuration {
     private static void load(String path, ConfigType type) {
         try {
             Properties custom = new Properties();
-            InputStream in = Configuration.class.getResourceAsStream(path);
-            if (in != null) {
-                try {
+            try (InputStream in = Configuration.class.getResourceAsStream(path)) {
+                if (in != null) {
                     custom.load(in);
                     switch (type) {
                         case RUNTIME:
@@ -130,23 +140,15 @@ public class Configuration {
                         default:
                             break;
                     }
-                } finally {
-                    in.close();
-                }
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Configuration loaded: " + path);
-                }
-            } else if (!path.equals(CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES)) {
-                throw new IOException(format(ERROR_MESSAGE_CONFIGURATION_DOES_NOT_EXIST, path));
-            } else {
-                if (logger.isDebugEnabled()) {
-                    logger.debug(format(ERROR_MESSAGE_CONFIGURATION_DOES_NOT_EXIST, path));
+                    logger.debug("Configuration loaded from: [{}]", path);
+                } else if (!path.equals(CONFIG_FILE_PATH_DIRIGIBLE_COMMON_PROPERTIES)) {
+                    throw new IOException(format(ERROR_MESSAGE_CONFIGURATION_DOES_NOT_EXIST, path));
+                } else {
+                    logger.debug("Configuration file [{}] does not exist", path);
                 }
             }
         } catch (IOException e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
+            logger.error("Failed to load from file with path [{}]", path, e);
         }
     }
 
@@ -222,64 +224,170 @@ public class Configuration {
     }
 
     private static String[] getConfigParams() {
-        List<String> staticParams = List.of("DIRIGIBLE_ANONYMOUS_USER_NAME_PROPERTY_NAME", "DIRIGIBLE_BRANDING_NAME",
-                "DIRIGIBLE_BRANDING_BRAND", "DIRIGIBLE_BRANDING_FAVICON", "DIRIGIBLE_BRANDING_THEME", "DIRIGIBLE_BRANDING_PREFIX",
-                "DIRIGIBLE_GIT_ROOT_FOLDER", "DIRIGIBLE_REGISTRY_EXTERNAL_FOLDER", "DIRIGIBLE_REGISTRY_IMPORT_WORKSPACE",
-                "DIRIGIBLE_REPOSITORY_PROVIDER", "DIRIGIBLE_REPOSITORY_DATABASE_DATASOURCE_NAME", "DIRIGIBLE_MASTER_REPOSITORY_PROVIDER",
-                "DIRIGIBLE_MASTER_REPOSITORY_ZIP_LOCATION", "DIRIGIBLE_MASTER_REPOSITORY_JAR_PATH",
-                "DIRIGIBLE_REPOSITORY_SEARCH_ROOT_FOLDER", "DIRIGIBLE_REPOSITORY_SEARCH_ROOT_FOLDER_IS_ABSOLUTE",
-                "DIRIGIBLE_REPOSITORY_SEARCH_INDEX_LOCATION", "DIRIGIBLE_REPOSITORY_VERSIONING_ENABLED", "DIRIGIBLE_DATABASE_PROVIDER",
-                "DIRIGIBLE_DATABASE_DEFAULT_SET_AUTO_COMMIT", "DIRIGIBLE_DATABASE_DEFAULT_MAX_CONNECTIONS_COUNT",
-                "DIRIGIBLE_DATABASE_DEFAULT_WAIT_TIMEOUT", "DIRIGIBLE_DATABASE_DEFAULT_WAIT_COUNT", "DIRIGIBLE_DATABASE_CUSTOM_DATASOURCES",
-                "DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT", "DIRIGIBLE_DATABASE_DERBY_ROOT_FOLDER_DEFAULT",
-                "DIRIGIBLE_DATABASE_H2_ROOT_FOLDER_DEFAULT", "DIRIGIBLE_DATABASE_H2_DRIVER", "DIRIGIBLE_DATABASE_H2_URL",
-                "DIRIGIBLE_DATABASE_H2_USERNAME", "DIRIGIBLE_DATABASE_H2_PASSWORD", "DIRIGIBLE_DATABASE_TRANSFER_BATCH_SIZE",
-                "DIRIGIBLE_PERSISTENCE_CREATE_TABLE_ON_USE", "DIRIGIBLE_MONGODB_CLIENT_URI", "DIRIGIBLE_MONGODB_DATABASE_DEFAULT",
-                "DIRIGIBLE_SCHEDULER_MEMORY_STORE", "DIRIGIBLE_SCHEDULER_DATASOURCE_TYPE", "DIRIGIBLE_SCHEDULER_DATASOURCE_NAME",
-                "DIRIGIBLE_SCHEDULER_DATABASE_DELEGATE", "DIRIGIBLE_SCHEDULER_LOGS_RETANTION_PERIOD", "DIRIGIBLE_SCHEDULER_EMAIL_SENDER",
-                "DIRIGIBLE_SCHEDULER_EMAIL_RECIPIENTS", "DIRIGIBLE_SCHEDULER_EMAIL_SUBJECT_ERROR",
-                "DIRIGIBLE_SCHEDULER_EMAIL_SUBJECT_NORMAL", "DIRIGIBLE_SCHEDULER_EMAIL_TEMPLATE_ERROR",
-                "DIRIGIBLE_SCHEDULER_EMAIL_TEMPLATE_NORMAL", "DIRIGIBLE_SCHEDULER_EMAIL_URL_SCHEME", "DIRIGIBLE_SCHEDULER_EMAIL_URL_HOST",
-                "DIRIGIBLE_SCHEDULER_EMAIL_URL_PORT", "DIRIGIBLE_SYNCHRONIZER_IGNORE_DEPENDENCIES", "DIRIGIBLE_SYNCHRONIZER_EXCLUDE_PATHS",
-                "DIRIGIBLE_HOME_URL", "DIRIGIBLE_JOB_EXPRESSION_BPM", "DIRIGIBLE_JOB_EXPRESSION_DATA_STRUCTURES",
-                "DIRIGIBLE_JOB_EXPRESSION_EXTENSIONS", "DIRIGIBLE_JOB_EXPRESSION_JOBS", "DIRIGIBLE_JOB_EXPRESSION_MESSAGING",
-                "DIRIGIBLE_JOB_EXPRESSION_MIGRATIONS", "DIRIGIBLE_JOB_EXPRESSION_ODATA", "DIRIGIBLE_JOB_EXPRESSION_PUBLISHER",
-                "DIRIGIBLE_JOB_EXPRESSION_SECURITY", "DIRIGIBLE_JOB_EXPRESSION_REGISTRY", "DIRIGIBLE_JOB_DEFAULT_TIMEOUT",
-                "DIRIGIBLE_CMS_PROVIDER", "DIRIGIBLE_CMS_ROLES_ENABLED", "DIRIGIBLE_CMS_INTERNAL_ROOT_FOLDER",
-                "DIRIGIBLE_CMS_INTERNAL_ROOT_FOLDER_IS_ABSOLUTE", "DIRIGIBLE_CMS_INTERNAL_VERSIONING_ENABLED",
-                "DIRIGIBLE_CMS_MANAGED_CONFIGURATION_JNDI_NAME", "DIRIGIBLE_CMS_MANAGED_CONFIGURATION_AUTH_METHOD",
-                "DIRIGIBLE_CMS_MANAGED_CONFIGURATION_NAME", "DIRIGIBLE_CMS_MANAGED_CONFIGURATION_KEY",
-                "DIRIGIBLE_CMS_MANAGED_CONFIGURATION_DESTINATION", "DIRIGIBLE_CONNECTIVITY_CONFIGURATION_JNDI_NAME",
-                "DIRIGIBLE_CMS_DATABASE_DATASOURCE_TYPE", "DIRIGIBLE_CMS_DATABASE_DATASOURCE_NAME", "DIRIGIBLE_BPM_PROVIDER",
-                "DIRIGIBLE_FLOWABLE_DATABASE_DRIVER", "DIRIGIBLE_FLOWABLE_DATABASE_URL", "DIRIGIBLE_FLOWABLE_DATABASE_USER",
-                "DIRIGIBLE_FLOWABLE_DATABASE_PASSWORD", "DIRIGIBLE_FLOWABLE_DATABASE_DATASOURCE_NAME",
-                "DIRIGIBLE_FLOWABLE_DATABASE_SCHEMA_UPDATE", "DIRIGIBLE_FLOWABLE_USE_SYSTEM_DATASOURCE",
-                "DIRIGIBLE_MESSAGING_USE_DEFAULT_DATABASE", "DIRIGIBLE_KAFKA_BOOTSTRAP_SERVER", "DIRIGIBLE_KAFKA_ACKS",
-                "DIRIGIBLE_KAFKA_KEY_SERIALIZER", "DIRIGIBLE_KAFKA_VALUE_SERIALIZER", "DIRIGIBLE_KAFKA_AUTOCOMMIT_ENABLED",
-                "DIRIGIBLE_KAFKA_AUTOCOMMIT_INTERVAL", "DIRIGIBLE_JAVASCRIPT_ENGINE_TYPE_DEFAULT",
-                "DIRIGIBLE_JAVASCRIPT_GRAALVM_DEBUGGER_PORT", "DIRIGIBLE_JAVASCRIPT_GRAALVM_ALLOW_HOST_ACCESS",
-                "DIRIGIBLE_JAVASCRIPT_GRAALVM_ALLOW_CREATE_THREAD", "DIRIGIBLE_JAVASCRIPT_GRAALVM_ALLOW_CREATE_PROCESS",
-                "DIRIGIBLE_JAVASCRIPT_GRAALVM_ALLOW_IO", "DIRIGIBLE_JAVASCRIPT_GRAALVM_COMPATIBILITY_MODE_NASHORN",
-                "DIRIGIBLE_JAVASCRIPT_GRAALVM_COMPATIBILITY_MODE_MOZILLA", "DIRIGIBLE_OPERATIONS_LOGS_ROOT_FOLDER_DEFAULT",
-                "DIRIGIBLE_THEME_DEFAULT", "DIRIGIBLE_GENERATE_PRETTY_NAMES", "DIRIGIBLE_OAUTH_ENABLED", "DIRIGIBLE_OAUTH_AUTHORIZE_UR",
-                "DIRIGIBLE_OAUTH_TOKEN_URL", "DIRIGIBLE_OAUTH_CLIENT_ID", "DIRIGIBLE_OAUTH_CLIENT_SECRET",
-                "DIRIGIBLE_OAUTH_VERIFICATION_KEY", "DIRIGIBLE_OAUTH_APPLICATION_NAME", "DIRIGIBLE_OAUTH_APPLICATION_HOST",
-                "DIRIGIBLE_OAUTH_ISSUER", "DIRIGIBLE_OAUTH_AUTHORIZE_URL", "DIRIGIBLE_OAUTH_TOKEN_REQUEST_METHOD",
-                "DIRIGIBLE_OAUTH_VERIFICATION_KEY", "DIRIGIBLE_OAUTH_VERIFICATION_KEY_EXPONENT", "DIRIGIBLE_OAUTH_CHECK_ISSUER_ENABLED",
-                "DIRIGIBLE_OAUTH_CHECK_AUDIENCE_ENABLED", "DIRIGIBLE_OAUTH_APPLICATION_NAME", "DIRIGIBLE_PRODUCT_NAME",
-                "DIRIGIBLE_PRODUCT_VERSION", "DIRIGIBLE_PRODUCT_REPOSITORY", "DIRIGIBLE_PRODUCT_COMMIT_ID", "DIRIGIBLE_PRODUCT_TYPE",
-                "DIRIGIBLE_INSTANCE_NAME", "DIRIGIBLE_SPARK_CLIENT_URI", "DIRIGIBLE_EXEC_COMMAND_LOGGING_ENABLED",
-                "DIRIGIBLE_TERMINAL_ENABLED", "DIRIGIBLE_MAIL_CONFIG_PROVIDER", "DIRIGIBLE_MAIL_SMTPS_HOST", "DIRIGIBLE_MAIL_SMTPS_PORT",
-                "DIRIGIBLE_MAIL_SMTPS_AUTH", "DIRIGIBLE_MAIL_SMTP_AUTH", "DIRIGIBLE_KEYCLOAK_AUTH_SERVER_URL",
-                "DIRIGIBLE_KEYCLOAK_CLIENT_ID", "DIRIGIBLE_CSV_DATA_MAX_COMPARE_SIZE", "DIRIGIBLE_CSV_DATA_BATCH_SIZE",
-                "DIRIGIBLE_DESTINATION_CLIENT_ID", "DIRIGIBLE_DESTINATION_CLIENT_SECRET", "DIRIGIBLE_DESTINATION_URL",
-                "DIRIGIBLE_DESTINATION_URI", "DIRIGIBLE_BASIC_ENABLED", "DIRIGIBLE_FTP_USERNAME", "DIRIGIBLE_FTP_PASSWORD",
-                "DIRIGIBLE_FTP_PORT", "DIRIGIBLE_SFTP_USERNAME", "DIRIGIBLE_SFTP_PASSWORD", "DIRIGIBLE_SFTP_PORT",
-                "SERVER_MAXHTTPHEADERSIZE", "DIRIGIBLE_PUBLISH_DISABLED", "AWS_DEFAULT_REGION", "AWS_ACCESS_KEY_ID",
-                "AWS_SECRET_ACCESS_KEY", "DIRIGIBLE_S3_PROVIDER", "DIRIGIBLE_S3_BUCKET", "DIRIGIBLE_DATABASE_SYSTEM_DRIVER",
-                "DIRIGIBLE_DATABASE_SYSTEM_URL", "DIRIGIBLE_DATABASE_SYSTEM_USERNAME", "DIRIGIBLE_DATABASE_SYSTEM_PASSWORD",
-                "SNOWFLAKE_DEFAULT_TABLE_TYPE", "DIRIGIBLE_PROJECT_TYPESCRIPT", "DIRIGIBLE_MULTI_TENANT_MODE",
-                "DIRIGIBLE_MULTI_TENANT_MODE_SINGLE_USER_POOL", "DIRIGIBLE_TENANT_SUBDOMAIN_REGEX");
+        List<String> staticParams = List.of( //
+                "DIRIGIBLE_ANONYMOUS_USER_NAME_PROPERTY_NAME", //
+                "DIRIGIBLE_BRANDING_NAME", //
+                "DIRIGIBLE_BRANDING_BRAND", //
+                "DIRIGIBLE_BRANDING_FAVICON", //
+                "DIRIGIBLE_BRANDING_THEME", //
+                "DIRIGIBLE_BRANDING_PREFIX", "DIRIGIBLE_GIT_ROOT_FOLDER", //
+                "DIRIGIBLE_REGISTRY_EXTERNAL_FOLDER", //
+                "DIRIGIBLE_REGISTRY_IMPORT_WORKSPACE", //
+                "DIRIGIBLE_REPOSITORY_PROVIDER", //
+                "DIRIGIBLE_REPOSITORY_DATABASE_DATASOURCE_NAME", //
+                "DIRIGIBLE_MASTER_REPOSITORY_PROVIDER", //
+                "DIRIGIBLE_MASTER_REPOSITORY_ZIP_LOCATION", //
+                "DIRIGIBLE_MASTER_REPOSITORY_JAR_PATH", //
+                "DIRIGIBLE_REPOSITORY_SEARCH_ROOT_FOLDER", //
+                "DIRIGIBLE_REPOSITORY_SEARCH_ROOT_FOLDER_IS_ABSOLUTE", //
+                "DIRIGIBLE_REPOSITORY_SEARCH_INDEX_LOCATION", //
+                "DIRIGIBLE_REPOSITORY_VERSIONING_ENABLED", //
+                "DIRIGIBLE_DATABASE_PROVIDER", //
+                "DIRIGIBLE_DATABASE_DEFAULT_SET_AUTO_COMMIT", //
+                "DIRIGIBLE_DATABASE_DEFAULT_MAX_CONNECTIONS_COUNT", //
+                "DIRIGIBLE_DATABASE_DEFAULT_WAIT_TIMEOUT", //
+                "DIRIGIBLE_DATABASE_DEFAULT_WAIT_COUNT", //
+                "DIRIGIBLE_DATABASE_CUSTOM_DATASOURCES", //
+                "DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT", //
+                "DIRIGIBLE_DATABASE_DERBY_ROOT_FOLDER_DEFAULT", //
+                "DIRIGIBLE_DATABASE_H2_ROOT_FOLDER_DEFAULT", //
+                "DIRIGIBLE_DATABASE_H2_DRIVER", //
+                "DIRIGIBLE_DATABASE_H2_URL", //
+                "DIRIGIBLE_DATABASE_H2_USERNAME", //
+                "DIRIGIBLE_DATABASE_H2_PASSWORD", //
+                "DIRIGIBLE_DATABASE_TRANSFER_BATCH_SIZE", //
+                "DIRIGIBLE_PERSISTENCE_CREATE_TABLE_ON_USE", //
+                "DIRIGIBLE_MONGODB_CLIENT_URI", //
+                "DIRIGIBLE_MONGODB_DATABASE_DEFAULT", //
+                "DIRIGIBLE_SCHEDULER_MEMORY_STORE", //
+                "DIRIGIBLE_SCHEDULER_DATASOURCE_TYPE", //
+                "DIRIGIBLE_SCHEDULER_DATASOURCE_NAME", //
+                "DIRIGIBLE_SCHEDULER_DATABASE_DELEGATE", //
+                "DIRIGIBLE_SCHEDULER_LOGS_RETANTION_PERIOD", //
+                "DIRIGIBLE_SCHEDULER_EMAIL_SENDER", //
+                "DIRIGIBLE_SCHEDULER_EMAIL_RECIPIENTS", //
+                "DIRIGIBLE_SCHEDULER_EMAIL_SUBJECT_ERROR", //
+                "DIRIGIBLE_SCHEDULER_EMAIL_SUBJECT_NORMAL", //
+                "DIRIGIBLE_SCHEDULER_EMAIL_TEMPLATE_ERROR", //
+                "DIRIGIBLE_SCHEDULER_EMAIL_TEMPLATE_NORMAL", //
+                "DIRIGIBLE_SCHEDULER_EMAIL_URL_SCHEME", //
+                "DIRIGIBLE_SCHEDULER_EMAIL_URL_HOST", //
+                "DIRIGIBLE_SCHEDULER_EMAIL_URL_PORT", //
+                "DIRIGIBLE_SYNCHRONIZER_IGNORE_DEPENDENCIES", //
+                "DIRIGIBLE_SYNCHRONIZER_EXCLUDE_PATHS", //
+                "DIRIGIBLE_HOME_URL", //
+                "DIRIGIBLE_JOB_EXPRESSION_BPM", //
+                "DIRIGIBLE_JOB_EXPRESSION_DATA_STRUCTURES", //
+                "DIRIGIBLE_JOB_EXPRESSION_EXTENSIONS", //
+                "DIRIGIBLE_JOB_EXPRESSION_JOBS", //
+                "DIRIGIBLE_JOB_EXPRESSION_MESSAGING", //
+                "DIRIGIBLE_JOB_EXPRESSION_MIGRATIONS", //
+                "DIRIGIBLE_JOB_EXPRESSION_ODATA", //
+                "DIRIGIBLE_JOB_EXPRESSION_PUBLISHER", //
+                "DIRIGIBLE_JOB_EXPRESSION_SECURITY", //
+                "DIRIGIBLE_JOB_EXPRESSION_REGISTRY", //
+                "DIRIGIBLE_JOB_DEFAULT_TIMEOUT", //
+                "DIRIGIBLE_CMS_PROVIDER", //
+                "DIRIGIBLE_CMS_ROLES_ENABLED", //
+                "DIRIGIBLE_CMS_INTERNAL_ROOT_FOLDER", //
+                "DIRIGIBLE_CMS_INTERNAL_ROOT_FOLDER_IS_ABSOLUTE", //
+                "DIRIGIBLE_CMS_INTERNAL_VERSIONING_ENABLED", //
+                "DIRIGIBLE_CMS_MANAGED_CONFIGURATION_JNDI_NAME", //
+                "DIRIGIBLE_CMS_MANAGED_CONFIGURATION_AUTH_METHOD", //
+                "DIRIGIBLE_CMS_MANAGED_CONFIGURATION_NAME", //
+                "DIRIGIBLE_CMS_MANAGED_CONFIGURATION_KEY", //
+                "DIRIGIBLE_CMS_MANAGED_CONFIGURATION_DESTINATION", //
+                "DIRIGIBLE_CONNECTIVITY_CONFIGURATION_JNDI_NAME", //
+                "DIRIGIBLE_CMS_DATABASE_DATASOURCE_TYPE", //
+                "DIRIGIBLE_CMS_DATABASE_DATASOURCE_NAME", //
+                "DIRIGIBLE_BPM_PROVIDER", //
+                "DIRIGIBLE_FLOWABLE_DATABASE_DRIVER", //
+                "DIRIGIBLE_FLOWABLE_DATABASE_URL", //
+                "DIRIGIBLE_FLOWABLE_DATABASE_USER", //
+                "DIRIGIBLE_FLOWABLE_DATABASE_PASSWORD", //
+                "DIRIGIBLE_FLOWABLE_DATABASE_DATASOURCE_NAME", //
+                "DIRIGIBLE_FLOWABLE_DATABASE_SCHEMA_UPDATE", //
+                "DIRIGIBLE_FLOWABLE_USE_SYSTEM_DATASOURCE", //
+                "DIRIGIBLE_MESSAGING_USE_DEFAULT_DATABASE", //
+                "DIRIGIBLE_KAFKA_BOOTSTRAP_SERVER", //
+                "DIRIGIBLE_KAFKA_ACKS", //
+                "DIRIGIBLE_KAFKA_KEY_SERIALIZER", //
+                "DIRIGIBLE_KAFKA_VALUE_SERIALIZER", //
+                "DIRIGIBLE_KAFKA_AUTOCOMMIT_ENABLED", //
+                "DIRIGIBLE_KAFKA_AUTOCOMMIT_INTERVAL", //
+                "DIRIGIBLE_JAVASCRIPT_ENGINE_TYPE_DEFAULT", //
+                "DIRIGIBLE_JAVASCRIPT_GRAALVM_DEBUGGER_PORT", //
+                "DIRIGIBLE_JAVASCRIPT_GRAALVM_ALLOW_HOST_ACCESS", //
+                "DIRIGIBLE_JAVASCRIPT_GRAALVM_ALLOW_CREATE_THREAD", //
+                "DIRIGIBLE_JAVASCRIPT_GRAALVM_ALLOW_CREATE_PROCESS", //
+                "DIRIGIBLE_JAVASCRIPT_GRAALVM_ALLOW_IO", //
+                "DIRIGIBLE_JAVASCRIPT_GRAALVM_COMPATIBILITY_MODE_NASHORN", //
+                "DIRIGIBLE_JAVASCRIPT_GRAALVM_COMPATIBILITY_MODE_MOZILLA", //
+                "DIRIGIBLE_OPERATIONS_LOGS_ROOT_FOLDER_DEFAULT", //
+                "DIRIGIBLE_THEME_DEFAULT", //
+                "DIRIGIBLE_GENERATE_PRETTY_NAMES", //
+                "DIRIGIBLE_OAUTH_ENABLED", //
+                "DIRIGIBLE_OAUTH_AUTHORIZE_UR", //
+                "DIRIGIBLE_OAUTH_TOKEN_URL", //
+                "DIRIGIBLE_OAUTH_CLIENT_ID", //
+                "DIRIGIBLE_OAUTH_CLIENT_SECRET", //
+                "DIRIGIBLE_OAUTH_VERIFICATION_KEY", //
+                "DIRIGIBLE_OAUTH_APPLICATION_NAME", //
+                "DIRIGIBLE_OAUTH_APPLICATION_HOST", //
+                "DIRIGIBLE_OAUTH_ISSUER", //
+                "DIRIGIBLE_OAUTH_AUTHORIZE_URL", //
+                "DIRIGIBLE_OAUTH_TOKEN_REQUEST_METHOD", //
+                "DIRIGIBLE_OAUTH_VERIFICATION_KEY", //
+                "DIRIGIBLE_OAUTH_VERIFICATION_KEY_EXPONENT", //
+                "DIRIGIBLE_OAUTH_CHECK_ISSUER_ENABLED", //
+                "DIRIGIBLE_OAUTH_CHECK_AUDIENCE_ENABLED", //
+                "DIRIGIBLE_OAUTH_APPLICATION_NAME", //
+                "DIRIGIBLE_PRODUCT_NAME", //
+                "DIRIGIBLE_PRODUCT_VERSION", //
+                "DIRIGIBLE_PRODUCT_REPOSITORY", //
+                "DIRIGIBLE_PRODUCT_COMMIT_ID", //
+                "DIRIGIBLE_PRODUCT_TYPE", //
+                "DIRIGIBLE_INSTANCE_NAME", //
+                "DIRIGIBLE_SPARK_CLIENT_URI", //
+                "DIRIGIBLE_EXEC_COMMAND_LOGGING_ENABLED", //
+                "DIRIGIBLE_TERMINAL_ENABLED", //
+                "DIRIGIBLE_MAIL_CONFIG_PROVIDER", //
+                "DIRIGIBLE_MAIL_SMTPS_HOST", //
+                "DIRIGIBLE_MAIL_SMTPS_PORT", //
+                "DIRIGIBLE_MAIL_SMTPS_AUTH", //
+                "DIRIGIBLE_MAIL_SMTP_AUTH", //
+                "DIRIGIBLE_KEYCLOAK_AUTH_SERVER_URL", //
+                "DIRIGIBLE_KEYCLOAK_CLIENT_ID", //
+                "DIRIGIBLE_CSV_DATA_MAX_COMPARE_SIZE", //
+                "DIRIGIBLE_CSV_DATA_BATCH_SIZE", //
+                "DIRIGIBLE_DESTINATION_CLIENT_ID", //
+                "DIRIGIBLE_DESTINATION_CLIENT_SECRET", //
+                "DIRIGIBLE_DESTINATION_URL", //
+                "DIRIGIBLE_DESTINATION_URI", //
+                "DIRIGIBLE_BASIC_ENABLED", //
+                "DIRIGIBLE_FTP_USERNAME", //
+                "DIRIGIBLE_FTP_PASSWORD", //
+                "DIRIGIBLE_FTP_PORT", //
+                "DIRIGIBLE_SFTP_USERNAME", //
+                "DIRIGIBLE_SFTP_PASSWORD", //
+                "DIRIGIBLE_SFTP_PORT", //
+                "SERVER_MAXHTTPHEADERSIZE", //
+                "DIRIGIBLE_PUBLISH_DISABLED", //
+                "AWS_DEFAULT_REGION", //
+                "AWS_ACCESS_KEY_ID", //
+                "AWS_SECRET_ACCESS_KEY", //
+                "DIRIGIBLE_S3_PROVIDER", //
+                "DIRIGIBLE_S3_BUCKET", //
+                "DIRIGIBLE_DATABASE_SYSTEM_DRIVER", //
+                "DIRIGIBLE_DATABASE_SYSTEM_URL", //
+                "DIRIGIBLE_DATABASE_SYSTEM_USERNAME", //
+                "DIRIGIBLE_DATABASE_SYSTEM_PASSWORD", //
+                "SNOWFLAKE_DEFAULT_TABLE_TYPE", //
+                "DIRIGIBLE_PROJECT_TYPESCRIPT", //
+                "DIRIGIBLE_MULTI_TENANT_MODE", //
+                "DIRIGIBLE_MULTI_TENANT_MODE_SINGLE_USER_POOL", //
+                "DIRIGIBLE_TENANT_SUBDOMAIN_REGEX", //
+                "DIRIGIBLE_TRACING_TASK_ENABLED");
         Set<String> configs = Arrays.stream(DirigibleConfig.values())
                                     .map(DirigibleConfig::getKey)
                                     .collect(Collectors.toSet());

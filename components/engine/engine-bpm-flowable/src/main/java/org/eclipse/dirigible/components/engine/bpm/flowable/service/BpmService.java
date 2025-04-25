@@ -34,6 +34,7 @@ import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.engine.history.HistoricProcessInstanceQuery;
 import org.flowable.engine.repository.ProcessDefinition;
+import org.flowable.engine.repository.ProcessDefinitionQuery;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.engine.runtime.ProcessInstanceQuery;
 import org.flowable.job.api.Job;
@@ -194,12 +195,17 @@ public class BpmService {
      *
      * @return the process definitions
      */
-    public List<ProcessDefinitionData> getProcessDefinitions() {
+    public List<ProcessDefinitionData> getProcessDefinitions(Optional<String> key) {
         ProcessEngine processEngine = ((ProcessEngine) getBpmProviderFlowable().getProcessEngine());
 
-        List<ProcessDefinition> processDefinitions = processEngine.getRepositoryService()
-                                                                  .createProcessDefinitionQuery()
-                                                                  .list();
+        ProcessDefinitionQuery processDefinitionsQuery = processEngine.getRepositoryService()
+                                                                      .createProcessDefinitionQuery();
+        if (key.isPresent() && !key.get()
+                                   .isEmpty()) {
+            processDefinitionsQuery.processDefinitionKey(key.get());
+        }
+
+        List<ProcessDefinition> processDefinitions = processDefinitionsQuery.list();
 
         List<ProcessDefinitionData> results = new ArrayList<ProcessDefinitionData>();
         for (ProcessDefinition processDefinition : processDefinitions) {

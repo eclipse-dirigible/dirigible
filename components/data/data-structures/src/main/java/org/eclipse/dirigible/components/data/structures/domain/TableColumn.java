@@ -69,6 +69,11 @@ public class TableColumn {
     private String defaultValue;
 
     /** The scale. */
+    @Column(name = "COLUMN_PRECISION", columnDefinition = "VARCHAR", nullable = true, length = 255)
+    @Expose
+    private String precision;
+
+    /** The scale. */
     @Column(name = "COLUMN_SCALE", columnDefinition = "VARCHAR", nullable = true, length = 255)
     @Expose
     private String scale;
@@ -94,12 +99,13 @@ public class TableColumn {
      * @param nullable the nullable
      * @param primaryKey the primary key
      * @param defaultValue the default value
+     * @param precision the precision
      * @param scale the scale
      * @param unique the unique
      * @param table the table
      */
-    public TableColumn(String name, String type, String length, boolean nullable, boolean primaryKey, String defaultValue, String scale,
-            boolean unique, Table table) {
+    public TableColumn(String name, String type, String length, boolean nullable, boolean primaryKey, String defaultValue, String precision,
+            String scale, boolean unique, Table table) {
         super();
         this.name = name;
         this.type = type;
@@ -107,6 +113,7 @@ public class TableColumn {
         this.nullable = nullable;
         this.primaryKey = primaryKey;
         this.defaultValue = defaultValue;
+        this.precision = precision;
         this.scale = scale;
         this.unique = unique;
         this.table = table;
@@ -123,7 +130,7 @@ public class TableColumn {
      * @param table the table
      */
     public TableColumn(String name, String type, String length, Table table) {
-        this(name, type, length, true, false, null, "0", false, table);
+        this(name, type, length, true, false, null, "0", "0", false, table);
     }
 
     /**
@@ -137,7 +144,7 @@ public class TableColumn {
      * @param table the table
      */
     public TableColumn(String name, String type, String length, boolean nullable, boolean primaryKey, Table table) {
-        this(name, type, length, nullable, primaryKey, null, "0", false, table);
+        this(name, type, length, nullable, primaryKey, null, "0", "0", false, table);
     }
 
     /**
@@ -274,6 +281,24 @@ public class TableColumn {
     }
 
     /**
+     * Gets the precision.
+     *
+     * @return the precision
+     */
+    public String getPrecision() {
+        return precision;
+    }
+
+    /**
+     * Sets the precision.
+     *
+     * @param precision the new precision
+     */
+    public void setPrecision(String precision) {
+        this.precision = precision;
+    }
+
+    /**
      * Gets the scale.
      *
      * @return the scale
@@ -335,8 +360,8 @@ public class TableColumn {
     @Override
     public String toString() {
         return "TableColumn [id=" + id + ", name=" + name + ", type=" + type + ", length=" + length + ", nullable=" + nullable
-                + ", primaryKey=" + primaryKey + ", defaultValue=" + defaultValue + ", scale=" + scale + ", unique=" + unique + ", table="
-                + table.getName() + "]";
+                + ", primaryKey=" + primaryKey + ", defaultValue=" + defaultValue + ", precision=" + precision + ", scale=" + scale
+                + ", unique=" + unique + ", table=" + table.getName() + "]";
     }
 
 

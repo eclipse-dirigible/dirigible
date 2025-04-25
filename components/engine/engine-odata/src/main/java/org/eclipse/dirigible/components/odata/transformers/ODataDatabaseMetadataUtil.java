@@ -260,7 +260,8 @@ public class ODataDatabaseMetadataUtil {
                 String columnType = convertSqlTypeToOdataEdmType(columns.getString(JDBC_COLUMN_TYPE_PROPERTY));
                 new TableColumn(columnName, columnType, columns.getInt(JDBC_COLUMN_SIZE_PROPERTY) + "",
                         columns.getBoolean(JDBC_COLUMN_NULLABLE_PROPERTY), primaryKeys.contains(columnName), null,
-                        columns.getInt(JDBC_COLUMN_DECIMAL_DIGITS_PROPERTY) + "", false, tableMetadata);
+                        columns.getInt(JDBC_COLUMN_SIZE_PROPERTY) + "", columns.getInt(JDBC_COLUMN_DECIMAL_DIGITS_PROPERTY) + "", false,
+                        tableMetadata);
             }
         }
     }

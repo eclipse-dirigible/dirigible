@@ -29,6 +29,11 @@
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-core-spring</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-core-tracing</artifactId>
+            <scope>compile</scope>
+        </dependency>
 
         <!-- Engines -->
         <dependency>

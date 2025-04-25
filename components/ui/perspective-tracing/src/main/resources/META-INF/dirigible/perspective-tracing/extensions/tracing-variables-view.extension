@@ -1,0 +1,5 @@
+{
+    "module": "perspective-tracing/configs/tracing-variables-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Task Variables"
+}

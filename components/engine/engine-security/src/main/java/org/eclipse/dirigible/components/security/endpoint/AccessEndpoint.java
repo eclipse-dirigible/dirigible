@@ -9,20 +9,18 @@
  */
 package org.eclipse.dirigible.components.security.endpoint;
 
+import java.util.List;
+
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.security.domain.Access;
 import org.eclipse.dirigible.components.security.service.AccessService;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
+import jakarta.annotation.security.RolesAllowed;
 
 /**
  * The Class SecurityAccessEndpoint.
@@ -30,12 +28,8 @@ import java.util.List;
 
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_SECURITY)
+@RolesAllowed({"ADMINISTRATOR", "OPERATOR"})
 public class AccessEndpoint extends BaseEndpoint {
-
-    /**
-     * The Constant logger.
-     */
-    private static final Logger logger = LoggerFactory.getLogger(AccessEndpoint.class);
 
     /**
      * The security access service.

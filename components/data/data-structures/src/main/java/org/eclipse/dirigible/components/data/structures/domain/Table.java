@@ -304,13 +304,14 @@ public class Table extends Artefact {
      * @param nullable the nullable
      * @param primaryKey the primary key
      * @param defaultValue the default value
+     * @param precision the precision
      * @param scale the scale
      * @param unique the unique
      * @return the table column
      */
     public TableColumn addColumn(String name, String type, String length, boolean nullable, boolean primaryKey, String defaultValue,
-            String scale, boolean unique) {
-        TableColumn tableColumn = new TableColumn(name, type, length, nullable, primaryKey, defaultValue, scale, unique, this);
+            String precision, String scale, boolean unique) {
+        TableColumn tableColumn = new TableColumn(name, type, length, nullable, primaryKey, defaultValue, precision, scale, unique, this);
         columns.add(tableColumn);
         return tableColumn;
     }

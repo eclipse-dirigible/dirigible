@@ -50,6 +50,13 @@ export function process(model, parameters) {
         }
 
         e.referencedProjections = [];
+
+        const dataOrderByProperties = e.properties.filter(p => p.dataOrderBy !== undefined);
+        if (dataOrderByProperties.length > 0) {
+            e.dataOrderBy = dataOrderByProperties[0].dataOrderBy;
+            e.dataOrderBySort = dataOrderByProperties.map(p => p.name).join(",");
+        }
+
         e.properties.forEach(p => {
             p.dataNotNull = p.dataNullable === "false";
             p.dataAutoIncrement = p.dataAutoIncrement === "true";

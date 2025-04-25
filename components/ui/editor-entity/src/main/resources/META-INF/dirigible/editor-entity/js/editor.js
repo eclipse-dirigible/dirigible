@@ -634,7 +634,9 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 							label += '<i class="dsm-table-spacer"></i>';
 						}
 
-						let suffix = mxUtils.htmlEntities(cell.value.dataType, false) + (cell.value.dataLength ? '(' + cell.value.dataLength + ')' : '');
+						let suffix = mxUtils.htmlEntities(cell.value.dataType, false) + (cell.value.dataLength && (cell.value.dataType === 'CHAR' || cell.value.dataType === 'VARCHAR') ? 
+						'(' + cell.value.dataLength + ')' : '') + (cell.value.dataType === 'DECIMAL' && cell.value.dataPrecision && cell.value.dataScale ?
+							'(' + cell.value.dataPrecision + ',' + cell.value.dataScale + ')' : '');
 						return label + mxUtils.htmlEntities(cell.value.name, false) + ":" + suffix;
 					}
 

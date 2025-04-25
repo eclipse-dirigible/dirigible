@@ -33,11 +33,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import jakarta.annotation.security.RolesAllowed;
+
 /**
  * The Class RepositoryEndpoint.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_CORE + "repository")
+@RolesAllowed({"ADMINISTRATOR", "OPERATOR"})
 public class RepositoryEndpoint {
 
     /** The repository service. */

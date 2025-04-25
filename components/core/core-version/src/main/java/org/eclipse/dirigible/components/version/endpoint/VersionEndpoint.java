@@ -13,10 +13,6 @@ package org.eclipse.dirigible.components.version.endpoint;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.version.domain.Version;
 import org.eclipse.dirigible.components.version.service.VersionService;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,11 +26,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_CORE + "version")
 public class VersionEndpoint extends BaseEndpoint {
-
-    /**
-     * The Constant logger.
-     */
-    private static final Logger logger = LoggerFactory.getLogger(VersionEndpoint.class);
 
     /**
      * The version service.

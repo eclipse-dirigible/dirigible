@@ -9,27 +9,22 @@
  */
 package org.eclipse.dirigible.components.version.service;
 
-import java.io.IOException;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Properties;
-import java.util.stream.Collectors;
-
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.artefact.Engine;
 import org.eclipse.dirigible.components.version.domain.Version;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
+
 /**
  * The Class VersionService.
  */
 @Service
 public class VersionService {
-
-    /** The Constant DIRIGIBLE_PROPERTIES_PATH. */
-    private static final String DIRIGIBLE_PROPERTIES_PATH = "/dirigible.properties";
 
     /** The Constant DIRIGIBLE_PRODUCT_NAME. */
     private static final String DIRIGIBLE_PRODUCT_NAME = "DIRIGIBLE_PRODUCT_NAME";
@@ -50,7 +45,7 @@ public class VersionService {
     private static final String DIRIGIBLE_INSTANCE_NAME = "DIRIGIBLE_INSTANCE_NAME";
 
     /** The engines. */
-    private List<Engine> engines;
+    private final List<Engine> engines;
 
     /**
      * Instantiates a new version service.
@@ -69,15 +64,27 @@ public class VersionService {
      */
     public Version getVersion() throws IOException {
         Version version = new Version();
-        final Properties properties = new Properties();
-        properties.load(VersionService.class.getResourceAsStream(DIRIGIBLE_PROPERTIES_PATH));
-        version.setProductName(properties.getProperty(DIRIGIBLE_PRODUCT_NAME));
-        version.setProductVersion(properties.getProperty(DIRIGIBLE_PRODUCT_VERSION));
-        version.setProductRepository(properties.getProperty(DIRIGIBLE_PRODUCT_REPOSITORY));
-        version.setProductCommitId(properties.getProperty(DIRIGIBLE_PRODUCT_COMMIT_ID));
-        version.setProductType(properties.getProperty(DIRIGIBLE_PRODUCT_TYPE));
-        version.setInstanceName(properties.getProperty(DIRIGIBLE_INSTANCE_NAME));
-        version.setRepositoryProvider(Configuration.get(IRepository.DIRIGIBLE_REPOSITORY_PROVIDER, "local"));
+
+        String productName = Configuration.get(DIRIGIBLE_PRODUCT_NAME);
+        version.setProductName(productName);
+
+        String productVersion = Configuration.get(DIRIGIBLE_PRODUCT_VERSION);
+        version.setProductVersion(productVersion);
+
+        String productRepository = Configuration.get(DIRIGIBLE_PRODUCT_REPOSITORY);
+        version.setProductRepository(productRepository);
+
+        String productCommitId = Configuration.get(DIRIGIBLE_PRODUCT_COMMIT_ID);
+        version.setProductCommitId(productCommitId);
+
+        String productType = Configuration.get(DIRIGIBLE_PRODUCT_TYPE);
+        version.setProductType(productType);
+
+        String instanceName = Configuration.get(DIRIGIBLE_INSTANCE_NAME);
+        version.setInstanceName(instanceName);
+
+        String local = Configuration.get(IRepository.DIRIGIBLE_REPOSITORY_PROVIDER, "local");
+        version.setRepositoryProvider(local);
         // version.setDatabaseProvider(Configuration.get(IDatabase.DIRIGIBLE_DATABASE_PROVIDER));
 
         List<String> enginesNames = engines.stream()
@@ -89,4 +96,5 @@ public class VersionService {
 
         return version;
     }
+
 }

@@ -19,11 +19,14 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.annotation.security.RolesAllowed;
+
 /**
  * The Class ConfigurationsEndpoint.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_CORE + "configurations")
+@RolesAllowed({"ADMINISTRATOR", "OPERATOR"})
 public class ConfigurationsEndpoint extends BaseEndpoint {
 
 

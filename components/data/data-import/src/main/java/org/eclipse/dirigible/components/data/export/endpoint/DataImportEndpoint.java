@@ -30,11 +30,14 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import jakarta.annotation.security.RolesAllowed;
+
 /**
  * Front facing REST service serving import data.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_DATA + "import")
+@RolesAllowed({"ADMINISTRATOR", "OPERATOR"})
 public class DataImportEndpoint {
 
     /** The constant logger. */

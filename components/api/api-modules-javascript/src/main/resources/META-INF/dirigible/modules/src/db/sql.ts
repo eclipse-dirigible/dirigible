@@ -218,7 +218,7 @@ export class SelectBuilder extends AbstractSQLBuilder {
 		return this;
 	}
 
-	public order(column: string, asc?: string): SelectBuilder {
+	public order(column: string, asc: boolean = true): SelectBuilder {
 		this.native.order(column, asc);
 		return this;
 	}

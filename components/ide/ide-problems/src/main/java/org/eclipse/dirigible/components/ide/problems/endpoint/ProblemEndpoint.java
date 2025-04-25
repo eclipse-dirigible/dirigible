@@ -29,11 +29,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.annotation.security.RolesAllowed;
+
 /**
  * The Class ProblemEndpoint.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_IDE + "problems")
+@RolesAllowed({"ADMINISTRATOR", "DEVELOPER"})
 public class ProblemEndpoint extends BaseEndpoint {
 
     /** The problem service. */

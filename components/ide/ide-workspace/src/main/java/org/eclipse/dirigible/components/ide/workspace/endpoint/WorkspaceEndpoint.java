@@ -37,6 +37,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+
+import jakarta.annotation.security.RolesAllowed;
 import jakarta.validation.Valid;
 
 /**
@@ -44,6 +46,7 @@ import jakarta.validation.Valid;
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_IDE + "workspace")
+@RolesAllowed({"ADMINISTRATOR", "DEVELOPER"})
 public class WorkspaceEndpoint {
 
     /** The workspace service. */

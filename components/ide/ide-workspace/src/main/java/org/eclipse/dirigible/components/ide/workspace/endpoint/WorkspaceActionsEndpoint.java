@@ -31,11 +31,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import jakarta.annotation.security.RolesAllowed;
+
 /**
  * The Class WorkspaceActionsEndpoint.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_IDE + "workspace-actions")
+@RolesAllowed({"ADMINISTRATOR", "DEVELOPER"})
 public class WorkspaceActionsEndpoint {
 
     /** The Constant LOGGER. */

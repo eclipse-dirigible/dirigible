@@ -13,6 +13,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.util.List;
 
+import jakarta.annotation.security.RolesAllowed;
 import jakarta.validation.Valid;
 
 import org.apache.commons.codec.DecoderException;
@@ -35,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_IDE + "workspace-find")
+@RolesAllowed({"ADMINISTRATOR", "DEVELOPER"})
 public class WorkspaceFindEndpoint {
 
     /** The workspace service. */

@@ -27,12 +27,15 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import jakarta.annotation.security.RolesAllowed;
+
 
 /**
  * The Class RegistryEndpoint.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_CORE + "registry")
+@RolesAllowed({"ADMINISTRATOR", "OPERATOR"})
 public class RegistryEndpoint extends BaseEndpoint {
 
     /** The registry service. */

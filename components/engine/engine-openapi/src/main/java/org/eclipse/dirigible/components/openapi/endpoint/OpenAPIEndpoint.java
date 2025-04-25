@@ -40,12 +40,14 @@ import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
 import io.swagger.v3.parser.OpenAPIV3Parser;
 import io.swagger.v3.parser.core.models.SwaggerParseResult;
+import jakarta.annotation.security.RolesAllowed;
 
 /**
  * The Class OpenAPIEndpoint.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_SECURED + "openapi")
+@RolesAllowed({"ADMINISTRATOR", "DEVELOPER"})
 public class OpenAPIEndpoint extends BaseEndpoint {
 
     /**
