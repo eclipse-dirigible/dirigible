@@ -49,7 +49,7 @@
 
     <!-- Send messages to ConsoleLoggingAppender -->
     <appender name="ConsoleLoggingAppender"
-              class="org.eclipse.dirigible.components.ide.console.service.ConsoleLoggingAppender">
+              class="org.eclipse.dirigible.commons.logging.ConsoleLoggingAppender">
         <!-- <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%-5level] [%thread{8}] %logger{36} - %msg%n</pattern>
         </encoder> -->

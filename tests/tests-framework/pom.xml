@@ -42,7 +42,7 @@
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-ide-console</artifactId>
+            <artifactId>dirigible-commons-resources</artifactId>
         </dependency>
 
         <dependency>

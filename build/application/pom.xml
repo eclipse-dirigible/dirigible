@@ -43,6 +43,10 @@
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-commons-config</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-commons-resources</artifactId>
+        </dependency>
 
         <!-- Spring Boot -->
         <dependency>

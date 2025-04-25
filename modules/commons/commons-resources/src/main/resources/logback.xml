@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration packagingData="true">
+    <conversionRule conversionWord="tenant"
+                    converterClass="org.eclipse.dirigible.components.base.logging.TenantConverter"/>
+
+    <!--
+        Try to set LOGS_DIR for the file appenders to the environment variables
+        "DIRIGIBLE_OPERATIONS_LOGS_ROOT_FOLDER_DEFAULT -> CATALINA_BASE ->  CATALINA_HOME" in this order
+        or use ".." if none of the environment variables exist
+    -->
+    <property name="LOGS_DIR"
+              value="${DIRIGIBLE_OPERATIONS_LOGS_ROOT_FOLDER_DEFAULT:-${CATALINA_BASE:-${CATALINA_HOME:-..}}/logs}"/>
+
+    <contextListener class="ch.qos.logback.classic.jul.LevelChangePropagator">
+        <resetJUL>true</resetJUL>
+    </contextListener>
+
+    <statusListener class="ch.qos.logback.core.status.OnConsoleStatusListener"/>
+
+    <timestamp key="date" datePattern="yyyy-MM-dd"/>
+
+    <!-- Send messages to System.out -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%-5level] [%thread{8}] [%tenant] %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="FILE_CORE" class="ch.qos.logback.core.FileAppender">
+        <file>${LOGS_DIR}/dirigible-core-${date}.log</file>
+        <encoder>
+            <pattern>%date %level [%thread] [%tenant] %logger{10} [%file:%line] %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="FILE_APPS" class="ch.qos.logback.core.FileAppender">
+        <file>${LOGS_DIR}/dirigible-apps-${date}.log</file>
+        <encoder>
+            <pattern>%date %level [%thread] [%tenant] %logger{10} [%file:%line] %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="FILE_BASE" class="ch.qos.logback.core.FileAppender">
+        <file>${LOGS_DIR}/dirigible-base-${date}.log</file>
+        <encoder>
+            <pattern>%date %level [%thread] [%tenant] %logger{10} [%file:%line] %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Send messages to ConsoleLoggingAppender -->
+    <appender name="ConsoleLoggingAppender"
+              class="org.eclipse.dirigible.commons.logging.ConsoleLoggingAppender">
+        <!-- <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%-5level] [%thread{8}] %logger{36} - %msg%n</pattern>
+        </encoder> -->
+    </appender>
+
+    <logger name="org.eclipse.dirigible" level="INFO" additivity="false">
+        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="FILE_CORE"/>
+        <appender-ref ref="ConsoleLoggingAppender"/>
+    </logger>
+
+    <logger name="app" level="INFO" additivity="false">
+        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="FILE_APPS"/>
+        <appender-ref ref="ConsoleLoggingAppender"/>
+    </logger>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="FILE_BASE"/>
+        <appender-ref ref="ConsoleLoggingAppender"/>
+    </root>
+
+    <logger name="org.eclipse.dirigible.components.initializers.synchronizer" level="INFO"/>
+    <logger name="org.eclipse.dirigible.components.tenants.provisioning.TenantProvisioningJob" level="DEBUG"/>
+    <logger name="org.eclipse.dirigible.components.base.synchronizer" level="INFO"/>
+    <logger name="org.eclipse.dirigible.components.tenants.tenant" level="INFO"/>
+    <logger name="org.springframework.context.support" level="INFO"/>
+
+    <logger name="net.snowflake.client" level="ERROR"/>
+
+    <!-- Configuration for the 'open-telemetry' Spring profile -->
+    <springProfile name="open-telemetry">
+        <appender name="OpenTelemetry"
+                  class="io.opentelemetry.instrumentation.logback.appender.v1_0.OpenTelemetryAppender">
+            <captureExperimentalAttributes>false</captureExperimentalAttributes>
+            <captureCodeAttributes>true</captureCodeAttributes>
+            <captureMarkerAttribute>true</captureMarkerAttribute>
+            <captureKeyValuePairAttributes>true</captureKeyValuePairAttributes>
+            <captureLoggerContext>true</captureLoggerContext>
+            <captureMdcAttributes>*</captureMdcAttributes>
+        </appender>
+
+        <logger name="org.eclipse.dirigible" level="INFO" additivity="false">
+            <appender-ref ref="STDOUT"/>
+            <appender-ref ref="FILE_CORE"/>
+            <appender-ref ref="ConsoleLoggingAppender"/>
+            <appender-ref ref="OpenTelemetry"/>
+        </logger>
+
+        <logger name="app" level="INFO" additivity="false">
+            <appender-ref ref="STDOUT"/>
+            <appender-ref ref="FILE_APPS"/>
+            <appender-ref ref="ConsoleLoggingAppender"/>
+            <appender-ref ref="OpenTelemetry"/>
+        </logger>
+
+        <root level="INFO">
+            <appender-ref ref="STDOUT"/>
+            <appender-ref ref="FILE_BASE"/>
+            <appender-ref ref="ConsoleLoggingAppender"/>
+            <appender-ref ref="OpenTelemetry"/>
+        </root>
+    </springProfile>
+</configuration>
