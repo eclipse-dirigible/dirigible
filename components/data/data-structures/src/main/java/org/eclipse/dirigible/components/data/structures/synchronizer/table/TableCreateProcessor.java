@@ -69,16 +69,20 @@ public class TableCreateProcessor {
             boolean isUnique = columnModel.isUnique();
             String defaultValue = columnModel.getDefaultValue();
             String scale = columnModel.getScale();
+            String precision = columnModel.getPrecision();
             String args = "";
+            if (type.equals(DataType.DECIMAL)) {
+                if (precision != null && scale != null) {
+                    args = ISqlKeywords.OPEN + precision + "," + scale + ISqlKeywords.CLOSE;
+                } else {
+                    throw new IllegalArgumentException(
+                            "Missing scale and/or precision for decimal column in table " + tableModel.getName());
+                }
+            }
             if (length != null) {
                 if (type.equals(DataType.VARCHAR) || type.equals(DataType.CHAR) || type.equals(DataType.NVARCHAR)
                         || type.equals(DataType.CHARACTER_VARYING)) {
                     args = ISqlKeywords.OPEN + length + ISqlKeywords.CLOSE;
-                }
-                if (scale != null) {
-                    if (type.equals(DataType.DECIMAL)) {
-                        args = ISqlKeywords.OPEN + length + "," + scale + ISqlKeywords.CLOSE;
-                    }
                 }
             }
             if (defaultValue != null) {
