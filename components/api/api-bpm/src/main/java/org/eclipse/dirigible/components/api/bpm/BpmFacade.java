@@ -9,12 +9,11 @@
  */
 package org.eclipse.dirigible.components.api.bpm;
 
+import java.util.Map;
 import org.eclipse.dirigible.components.engine.bpm.flowable.provider.BpmProviderFlowable;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-
-import java.util.Map;
 
 /**
  * The Class BpmFacade.
@@ -175,15 +174,41 @@ public class BpmFacade implements InitializingBean {
     }
 
     /**
+     * Get task's variable.
+     *
+     * @param taskId the task id
+     * @param variableName the variable name
+     * @return the task's variables
+     */
+    public static Object getTaskVariable(String taskId, String variableName) {
+        return BpmFacade.get()
+                        .getBpmProviderFlowable()
+                        .getTaskVariable(taskId, variableName);
+    }
+
+    /**
      * Get all the task's variables.
      *
      * @param taskId the task id
      * @return the task's variables
      */
-    public static String getTaskVariables(String taskId) {
+    public static Map<String, Object> getTaskVariables(String taskId) {
         return BpmFacade.get()
                         .getBpmProviderFlowable()
                         .getTaskVariables(taskId);
+    }
+
+    /**
+     * Set task's variable.
+     *
+     * @param taskId the task id
+     * @param variableName the variable name
+     * @param variables serialized as JSON string
+     */
+    public static void setTaskVariable(String taskId, String variableName, Object variable) {
+        BpmFacade.get()
+                 .getBpmProviderFlowable()
+                 .setTaskVariable(taskId, variableName, variable);
     }
 
     /**
@@ -192,7 +217,7 @@ public class BpmFacade implements InitializingBean {
      * @param taskId the task id
      * @param variables serialized as JSON string
      */
-    public static void setTaskVariables(String taskId, String variables) {
+    public static void setTaskVariables(String taskId, Map<String, Object> variables) {
         BpmFacade.get()
                  .getBpmProviderFlowable()
                  .setTaskVariables(taskId, variables);

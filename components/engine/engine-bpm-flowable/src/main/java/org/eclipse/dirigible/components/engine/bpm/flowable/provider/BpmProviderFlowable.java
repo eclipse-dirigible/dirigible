@@ -9,6 +9,13 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.provider;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import javax.sql.DataSource;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.commons.config.Configuration;
@@ -18,7 +25,11 @@ import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskData;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
-import org.flowable.engine.*;
+import org.flowable.engine.ProcessEngine;
+import org.flowable.engine.ProcessEngineConfiguration;
+import org.flowable.engine.RepositoryService;
+import org.flowable.engine.RuntimeService;
+import org.flowable.engine.TaskService;
 import org.flowable.engine.repository.Deployment;
 import org.flowable.engine.repository.ProcessDefinition;
 import org.flowable.engine.runtime.ProcessInstance;
@@ -29,14 +40,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
 import org.springframework.context.ApplicationContext;
 import org.springframework.transaction.PlatformTransactionManager;
-
-import javax.sql.DataSource;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * The Class BpmProviderFlowable.
@@ -281,16 +284,40 @@ public class BpmProviderFlowable implements BpmProvider {
     }
 
     /**
+     * Gets the task variable.
+     *
+     * @param taskId the task id
+     * @param variableName the variable name
+     * @return the task variables
+     */
+    public Object getTaskVariable(String taskId, String variableName) {
+        TaskService taskService = getProcessEngine().getTaskService();
+        return taskService.getVariable(taskId, variableName);
+    }
+
+    /**
      * Gets the task variables.
      *
      * @param taskId the task id
      * @return the task variables
      */
-    public String getTaskVariables(String taskId) {
+    public Map<String, Object> getTaskVariables(String taskId) {
         TaskService taskService = getProcessEngine().getTaskService();
-        Map<String, Object> processVariables = taskService.getVariables(taskId);
-        return GsonHelper.toJson(processVariables);
+        return taskService.getVariables(taskId);
     }
+
+    /**
+     * Sets task variable.
+     *
+     * @param taskId the task id
+     * @param variableName the variable name
+     * @param variable the variable
+     */
+    public void setTaskVariable(String taskId, String variableName, Object variable) {
+        TaskService taskService = getProcessEngine().getTaskService();
+        taskService.setVariable(taskId, variableName, variable);
+    }
+
 
     /**
      * Sets the task variables.
@@ -298,11 +325,9 @@ public class BpmProviderFlowable implements BpmProvider {
      * @param taskId the task id
      * @param variables the variables
      */
-    public void setTaskVariables(String taskId, String variables) {
+    public void setTaskVariables(String taskId, Map<String, Object> variables) {
         TaskService taskService = getProcessEngine().getTaskService();
-        @SuppressWarnings("unchecked")
-        Map<String, Object> processVariables = GsonHelper.fromJson(variables, HashMap.class);
-        taskService.setVariables(taskId, processVariables);
+        taskService.setVariables(taskId, variables);
     }
 
     /**
