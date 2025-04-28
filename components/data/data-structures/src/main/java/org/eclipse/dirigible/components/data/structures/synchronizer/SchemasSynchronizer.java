@@ -345,10 +345,14 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
                                                                                  .isJsonNull() ? column.get("defaultValue")
                                                                                                        .getAsString()
                                                                                          : null);
-        columnModel.setScale(column.get("scale") != null && !column.get("scale")
-                                                                   .isJsonNull() ? column.get("scale")
-                                                                                         .getAsString()
-                                                                           : null);
+        JsonElement scaleJsonElement = column.get("scale");
+        String scaleValue = scaleJsonElement != null && !scaleJsonElement.isJsonNull() ? scaleJsonElement.getAsString() : null;
+        columnModel.setScale(scaleValue);
+
+        JsonElement precisionJsonElement = column.get("precision");
+        String precisionValues =
+                precisionJsonElement != null && !precisionJsonElement.isJsonNull() ? precisionJsonElement.getAsString() : null;
+        columnModel.setPrecision(precisionValues);
     }
 
     /**
