@@ -76,7 +76,7 @@ export interface SalesOrderPaymentEntityOptions {
     },
     $select?: (keyof SalesOrderPaymentEntity)[],
     $sort?: string | (keyof SalesOrderPaymentEntity)[],
-    $order?: 'asc' | 'desc',
+    $order?: 'ASC' | 'DESC',
     $offset?: number,
     $limit?: number,
 }
@@ -134,10 +134,10 @@ export class SalesOrderPaymentRepository {
     private readonly dao;
 
     constructor(dataSource = "DefaultDB") {
-        this.dao = daoApi.create(SalesOrderPaymentRepository.DEFINITION, null, dataSource);
+        this.dao = daoApi.create(SalesOrderPaymentRepository.DEFINITION, undefined, dataSource);
     }
 
-    public findAll(options?: SalesOrderPaymentEntityOptions): SalesOrderPaymentEntity[] {
+    public findAll(options: SalesOrderPaymentEntityOptions = {}): SalesOrderPaymentEntity[] {
         return this.dao.list(options);
     }
 

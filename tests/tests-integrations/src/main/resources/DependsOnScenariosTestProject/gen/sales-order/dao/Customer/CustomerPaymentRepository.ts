@@ -67,7 +67,7 @@ export interface CustomerPaymentEntityOptions {
     },
     $select?: (keyof CustomerPaymentEntity)[],
     $sort?: string | (keyof CustomerPaymentEntity)[],
-    $order?: 'asc' | 'desc',
+    $order?: 'ASC' | 'DESC',
     $offset?: number,
     $limit?: number,
 }
@@ -120,10 +120,10 @@ export class CustomerPaymentRepository {
     private readonly dao;
 
     constructor(dataSource = "DefaultDB") {
-        this.dao = daoApi.create(CustomerPaymentRepository.DEFINITION, null, dataSource);
+        this.dao = daoApi.create(CustomerPaymentRepository.DEFINITION, undefined, dataSource);
     }
 
-    public findAll(options?: CustomerPaymentEntityOptions): CustomerPaymentEntity[] {
+    public findAll(options: CustomerPaymentEntityOptions = {}): CustomerPaymentEntity[] {
         return this.dao.list(options);
     }
 

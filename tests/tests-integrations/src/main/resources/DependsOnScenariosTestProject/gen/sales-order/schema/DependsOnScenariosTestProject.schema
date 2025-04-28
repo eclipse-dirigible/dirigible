@@ -132,9 +132,9 @@
                     },
                     {
                         "type": "DECIMAL",
-                        "length": 18,
-                        "precision": "2",
-                        "scale": "16",
+                        "length": 16,
+                        "precision": "16",
+                        "scale": "2",
                         "nullable": true,
                         "name": "PRODUCT_PRICE"
                     }
