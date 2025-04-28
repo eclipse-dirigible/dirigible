@@ -9,38 +9,29 @@
  */
 package org.eclipse.dirigible.components.api.cms;
 
-import jakarta.servlet.ServletException;
+import java.util.HashSet;
+import java.util.Set;
+
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.api.http.HttpRequestFacade;
-import org.eclipse.dirigible.components.engine.cms.CmsProvider;
-import org.eclipse.dirigible.components.engine.cms.CmsProviderFactory;
+import org.eclipse.dirigible.components.engine.cms.CmisSessionFactory;
 import org.eclipse.dirigible.components.security.domain.Access;
 import org.eclipse.dirigible.components.security.verifier.AccessVerifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationContext;
-import org.springframework.context.ApplicationContextAware;
 import org.springframework.stereotype.Component;
 
-import java.util.HashSet;
-import java.util.Set;
+import jakarta.servlet.ServletException;
 
 /**
  * The Class CmisFacade.
  */
 @Component
-public class CmisFacade implements ApplicationContextAware, InitializingBean {
+public class CmisFacade implements InitializingBean {
 
-    /** The Constant VERSIONING_STATE_NONE. */
-    public static final String VERSIONING_STATE_NONE = "none";
-    /** The Constant VERSIONING_STATE_MAJOR. */
-    public static final String VERSIONING_STATE_MAJOR = "major";
-    /** The Constant VERSIONING_STATE_MINOR. */
-    public static final String VERSIONING_STATE_MINOR = "minor";
-    /** The Constant VERSIONING_STATE_CHECKEDOUT. */
-    public static final String VERSIONING_STATE_CHECKEDOUT = "checkedout";
+    private static final String SECURITY_TYPE_CMIS = "CMIS";
     /** The Constant CMIS_METHOD_READ. */
     public static final String CMIS_METHOD_READ = "READ";
     /** The Constant CMIS_METHOD_WRITE. */
@@ -49,8 +40,6 @@ public class CmisFacade implements ApplicationContextAware, InitializingBean {
     public static final String DIRIGIBLE_CMS_ROLES_ENABLED = "DIRIGIBLE_CMS_ROLES_ENABLED";
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(CmisFacade.class);
-    /** The application context. */
-    private static ApplicationContext applicationContext;
     /** The instance. */
     private static CmisFacade INSTANCE;
     /** The security access verifier. */
@@ -77,25 +66,12 @@ public class CmisFacade implements ApplicationContextAware, InitializingBean {
     }
 
     /**
-     * Sets the application context.
-     *
-     * @param ac the new application context
-     */
-    @Override
-    public void setApplicationContext(ApplicationContext ac) {
-        CmisFacade.applicationContext = ac;
-    }
-
-    /**
      * CMIS Session.
      *
      * @return the CMIS session object
      */
     public static final Object getSession() {
-        String type = Configuration.get("DIRIGIBLE_CMS_PROVIDER", "cms-provider-internal");
-        CmsProviderFactory cmsProviderFactory = applicationContext.getBean(type, CmsProviderFactory.class);
-        CmsProvider cmsProvider = cmsProviderFactory.create();
-        return cmsProvider.getSession();
+        return CmisSessionFactory.getSession();
     }
 
     /**
@@ -106,16 +82,7 @@ public class CmisFacade implements ApplicationContextAware, InitializingBean {
      * @return the CMIS state
      */
     public static final Object getVersioningState(String state) {
-        if (VERSIONING_STATE_NONE.equals(state)) {
-            return org.apache.chemistry.opencmis.commons.enums.VersioningState.NONE;
-        } else if (VERSIONING_STATE_MAJOR.equals(state)) {
-            return org.apache.chemistry.opencmis.commons.enums.VersioningState.MAJOR;
-        } else if (VERSIONING_STATE_MINOR.equals(state)) {
-            return org.apache.chemistry.opencmis.commons.enums.VersioningState.MINOR;
-        } else if (VERSIONING_STATE_CHECKEDOUT.equals(state)) {
-            return org.apache.chemistry.opencmis.commons.enums.VersioningState.CHECKEDOUT;
-        }
-        return org.apache.chemistry.opencmis.commons.enums.VersioningState.MAJOR;
+        return CmisSessionFactory.getVersioningState(state);
     }
 
     /**
@@ -219,7 +186,7 @@ public class CmisFacade implements ApplicationContextAware, InitializingBean {
             }
             accessDefinitions.addAll(CmisFacade.get()
                                                .getSecurityAccessVerifier()
-                                               .getMatchingSecurityAccesses("CMIS", accessPath, method));
+                                               .getMatchingSecurityAccesses(SECURITY_TYPE_CMIS, accessPath, method));
         } while (indexOf > 0);
         return accessDefinitions;
     }

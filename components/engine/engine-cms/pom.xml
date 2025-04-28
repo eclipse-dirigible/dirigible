@@ -22,6 +22,20 @@
 			<artifactId>dirigible-components-core-base</artifactId>
     	</dependency>
     	
+    	<!-- Engines -->
+    	<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-engine-security</artifactId>
+		</dependency>
+    	
+    	<!-- Libraries -->
+		<dependency>
+			<groupId>org.apache.chemistry.opencmis</groupId>
+			<artifactId>chemistry-opencmis-commons-api</artifactId>
+			<version>${chemistry.version}</version>
+			<scope>provided</scope>
+		</dependency>
+    	
     </dependencies>
 
 	<properties>

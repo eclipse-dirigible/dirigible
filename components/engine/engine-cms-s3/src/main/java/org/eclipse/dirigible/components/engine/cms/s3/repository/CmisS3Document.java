@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.engine.cms.s3.repository;
 
 import org.eclipse.dirigible.components.api.s3.S3Facade;
+import org.eclipse.dirigible.components.engine.cms.CmisContentStream;
 import org.eclipse.dirigible.components.engine.cms.CmisDocument;
 
 import java.io.ByteArrayInputStream;
@@ -46,7 +47,8 @@ public class CmisS3Document extends CmisS3Object implements CmisDocument {
      * @return Content Stream
      * @throws IOException IO Exception
      */
-    public CmisS3ContentStream getContentStream() throws IOException {
+    @Override
+    public CmisContentStream getContentStream() throws IOException {
         byte[] content = S3Facade.get(getId());
         String contentType = getContentType(getId());
         return new CmisS3ContentStream(getName(), content.length, contentType, new ByteArrayInputStream(content));
