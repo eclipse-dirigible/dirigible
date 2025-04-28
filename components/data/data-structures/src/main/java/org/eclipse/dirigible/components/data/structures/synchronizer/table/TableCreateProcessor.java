@@ -72,16 +72,18 @@ public class TableCreateProcessor {
             String precision = columnModel.getPrecision();
             String args = "";
             if (type.equals(DataType.DECIMAL)) {
-                if (precision != null && scale != null) {
+                if (precision == null && scale == null) {
+                    // don't add brackets = use default DB values for precision and scale
+                } else if (precision != null && scale != null) {
                     args = ISqlKeywords.OPEN + precision + "," + scale + ISqlKeywords.CLOSE;
                 } else {
                     throw new IllegalArgumentException(
-                            "Missing scale and/or precision for decimal column in table " + tableModel.getName());
+                            "Missing scale or precision for decimal column [" + name + "] in table " + tableModel.getName());
                 }
             }
-            if (length != null) {
-                if (type.equals(DataType.VARCHAR) || type.equals(DataType.CHAR) || type.equals(DataType.NVARCHAR)
-                        || type.equals(DataType.CHARACTER_VARYING)) {
+            if (type.equals(DataType.VARCHAR) || type.equals(DataType.CHAR) || type.equals(DataType.NVARCHAR)
+                    || type.equals(DataType.CHARACTER_VARYING)) {
+                if (length != null) {
                     args = ISqlKeywords.OPEN + length + ISqlKeywords.CLOSE;
                 }
             }
