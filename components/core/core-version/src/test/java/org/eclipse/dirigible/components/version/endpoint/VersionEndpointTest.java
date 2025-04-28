@@ -9,12 +9,11 @@
  */
 package org.eclipse.dirigible.components.version.endpoint;
 
-
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
@@ -25,7 +24,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
-import static org.hamcrest.CoreMatchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -41,17 +39,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 public class VersionEndpointTest {
 
-    /** The mock mvc. */
-    @Autowired
-    private MockMvc mockMvc;
-
     /** The wac. */
     @Autowired
     protected WebApplicationContext wac;
-
+    /** The mock mvc. */
+    @Autowired
+    private MockMvc mockMvc;
     /** The spring security filter chain. */
     @Autowired
     private FilterChainProxy springSecurityFilterChain;
+
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Test get version.
@@ -60,19 +64,25 @@ public class VersionEndpointTest {
      */
     @Test
     public void testGetVersion() throws Exception {
+        Configuration.reloadConfigurations();
+
         // TODO: Update expected value when engines added.
+        String json = """
+                {
+                    "productName": "dirigible",
+                    "productVersion": "0.0.1",
+                    "productCommitId": "test",
+                    "productRepository": "https://github.com/eclipse/dirigible",
+                    "productType": "all",
+                    "instanceName": "server-spring-boot",
+                    "repositoryProvider": "local",
+                    "databaseProvider": "local",
+                    "engines": []
+                }
+                """;
         mockMvc.perform(get("/services/core/version"))
                .andExpect(status().isOk())
-               .andExpect(content().string(containsString("{\"productName\":\"dirigible\",\"productVersion\":\"0.0"
-                       + ".1\",\"productCommitId\":\"test\",\"productRepository\":\"https://github"
-                       + ".com/eclipse/dirigible\",\"productType\":\"all\",\"instanceName\":\"server-spring-boot\","
-                       + "\"repositoryProvider\":\"local\",\"databaseProvider\":\"local\",\"engines\":[]}")));
+               .andExpect(content().json(json));
     }
 
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
-    }
 }

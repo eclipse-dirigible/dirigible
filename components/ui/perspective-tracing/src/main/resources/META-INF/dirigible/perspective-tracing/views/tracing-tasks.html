@@ -30,6 +30,7 @@
             <bk-toolbar-spacer></bk-toolbar-spacer>
             <bk-button state="transparent" toggled="displayTracing" glyph="sap-icon--log" title="Enable tracing" aria-label="Enable tracing" ng-click="toggleTracing()"></bk-button>
             <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="reload()"></bk-button>
+            <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="transparent" toggled="displaySearch" glyph="sap-icon--search" title="Toggle search" aria-label="Toggle search" ng-click="toggleSearch()"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="transparent" glyph="sap-icon--delete" title="Clean" aria-label="Clean" ng-click="clean()"></bk-button>
@@ -45,10 +46,10 @@
                             <bk-checkbox id="cb-all" ng-model="selection.allSelected" ng-change="selectAllChanged()"></bk-checkbox>
                             <bk-checkbox-label empty="true" for="cb-all"></bk-checkbox-label>
                         </th> -->
-                        <th bk-table-header-cell>Status</th>
-                        <th bk-table-header-cell>Type</th>
-                        <th bk-table-header-cell>Execution</th>
-                        <th bk-table-header-cell>Step</th>
+                        <th bk-table-header-cell interactive="false">Status</th>
+                        <th bk-table-header-cell interactive="false">Type</th>
+                        <th bk-table-header-cell interactive="false">Execution</th>
+                        <th bk-table-header-cell interactive="false">Step</th>
                     </tr>
                 </thead>
                 <tbody bk-table-body>

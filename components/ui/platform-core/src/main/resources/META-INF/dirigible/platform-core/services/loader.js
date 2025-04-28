@@ -70,11 +70,15 @@ function processScriptRequest(scriptIds) {
             scriptList.forEach(function (script) {
                 if (typeof script === 'string') {
                     let text = registry.getText(script);
-                    if (text.includes('//# sourceMappingURL=')) {
-                        text = text.replace('//# sourceMappingURL=', `//# sourceMappingURL=/webjars${script.slice(0, script.lastIndexOf('/') + 1)}`);
-                        text += '\n';
-                    }
-                    responseContent += text;
+                    if (text !== null) {
+						if (text.includes('//# sourceMappingURL=')) {
+	                        text = text.replace('//# sourceMappingURL=', `//# sourceMappingURL=/webjars${script.slice(0, script.lastIndexOf('/') + 1)}`);
+	                        text += '\n';
+	                    }
+	                    responseContent += text;
+					} else {
+						console.error("Cannot load the script: " + script);	
+					}
                 } else {
                     responseContent += script() + '\n';
                 }

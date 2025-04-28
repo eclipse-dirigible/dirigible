@@ -9,8 +9,8 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.eclipse.dirigible.tests.PredefinedProjectIT;
-import org.eclipse.dirigible.tests.projects.TestProject;
+import org.eclipse.dirigible.tests.base.PredefinedProjectIT;
+import org.eclipse.dirigible.tests.base.TestProject;
 import org.springframework.beans.factory.annotation.Autowired;
 
 public class DependsOnIT extends PredefinedProjectIT {

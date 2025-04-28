@@ -1,9 +1,9 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.eclipse.dirigible.tests.EdmView;
-import org.eclipse.dirigible.tests.IDE;
-import org.eclipse.dirigible.tests.framework.Browser;
-import org.eclipse.dirigible.tests.util.ProjectUtil;
+import org.eclipse.dirigible.tests.base.ProjectUtil;
+import org.eclipse.dirigible.tests.framework.browser.Browser;
+import org.eclipse.dirigible.tests.framework.ide.EdmView;
+import org.eclipse.dirigible.tests.framework.ide.IDE;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 

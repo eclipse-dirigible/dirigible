@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.engine.cms.internal.repository;
 
+import org.eclipse.dirigible.components.engine.cms.CmisContentStream;
 import org.eclipse.dirigible.components.engine.cms.CmisDocument;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -81,11 +82,12 @@ public class CmisInternalDocument extends CmisInternalObject implements CmisDocu
     }
 
     /**
-     * Returns the CmisInternalContentStream representing the contents of this CmisDocument.
+     * Returns the CmisContentStream representing the contents of this CmisDocument.
      *
      * @return Content Stream
      */
-    public CmisInternalContentStream getContentStream() {
+    @Override
+    public CmisContentStream getContentStream() throws IOException {
         byte[] content = this.internalResource.getContent();
         return new CmisInternalContentStream(this.internalResource.getName(), content.length, this.internalResource.getContentType(),
                 new ByteArrayInputStream(content));

@@ -1073,20 +1073,26 @@ div.fd-input-group[readonly] {
   margin: 0;
 }
 
-.fd-table--no-outer-border .fd-table__cell--no-data,
-.bk-table--no-outer-vertical-borders .fd-table__cell--no-data,
-.bk-table--bottom-outer-border .fd-table__cell--no-data {
+.fd-table--no-outer-border .fd-table__cell--no-data {
   border: none;
   border-style: none !important;
 }
 
-.bk-table--no-outer-horizontal-borders {
+.bk-table--no-outer-horizontal-borders .fd-table__header .fd-table__cell {
   border-top: hidden;
+}
+
+.bk-table--no-outer-horizontal-borders .fd-table__body .fd-table__row:last-child .fd-table__cell {
   border-bottom: hidden;
 }
 
-.bk-table--no-outer-vertical-borders {
+.bk-table--no-outer-vertical-borders .fd-table__header .fd-table__cell:first-child,
+.bk-table--no-outer-vertical-borders .fd-table__body .fd-table__cell:first-child {
   border-left: hidden;
+}
+
+.bk-table--no-outer-vertical-borders .fd-table__header .fd-table__cell:last-child,
+.bk-table--no-outer-vertical-borders .fd-table__body .fd-table__cell:last-child {
   border-right: hidden;
 }
 

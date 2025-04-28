@@ -15,12 +15,13 @@ import { Configurations } from 'sdk/core';
 rs.service()
     .resource('')
     .get(function (ctx, request, response) {
-        response.print(Configurations.get("DIRIGIBLE_TRACING_TASK_ENABLED"));
+        response.setContentType('text/plain');
+        response.print(Configurations.get('DIRIGIBLE_TRACING_TASK_ENABLED') ?? 'false');
     })
     .post(function (ctx, request, response) {
-        let flag = Configurations.get("DIRIGIBLE_TRACING_TASK_ENABLED");
-        flag = flag === "true" ? "false" : "true";
-        Configurations.set("DIRIGIBLE_TRACING_TASK_ENABLED", flag);
+        const flag = Configurations.get('DIRIGIBLE_TRACING_TASK_ENABLED') === 'true' ? 'false' : 'true';
+        Configurations.set('DIRIGIBLE_TRACING_TASK_ENABLED', flag);
+        response.setContentType('text/plain');
         response.print(flag);
     })
     .execute();

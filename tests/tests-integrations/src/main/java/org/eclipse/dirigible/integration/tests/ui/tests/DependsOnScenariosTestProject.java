@@ -9,13 +9,13 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.eclipse.dirigible.tests.EdmView;
-import org.eclipse.dirigible.tests.IDE;
-import org.eclipse.dirigible.tests.framework.Browser;
-import org.eclipse.dirigible.tests.framework.HtmlAttribute;
-import org.eclipse.dirigible.tests.framework.HtmlElementType;
-import org.eclipse.dirigible.tests.projects.BaseTestProject;
-import org.eclipse.dirigible.tests.util.ProjectUtil;
+import org.eclipse.dirigible.tests.base.BaseTestProject;
+import org.eclipse.dirigible.tests.base.ProjectUtil;
+import org.eclipse.dirigible.tests.framework.browser.Browser;
+import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
+import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
+import org.eclipse.dirigible.tests.framework.ide.EdmView;
+import org.eclipse.dirigible.tests.framework.ide.IDE;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -62,6 +62,17 @@ class DependsOnScenariosTestProject extends BaseTestProject {
         assertCustomerPaymentAmount();
     }
 
+    private void assertCustomerPaymentAmount() {
+        clickEmptyCustomerField();
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", "Customer A");
+        browser.assertElementValueByAttributes(HtmlElementType.INPUT, Map.of(HtmlAttribute.ID, "idAmount"), "101");
+
+        clickFilledCustomerField();
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", "Customer B");
+        browser.assertElementValueByAttributes(HtmlElementType.INPUT, Map.of(HtmlAttribute.ID, "idAmount"), "201");
+
+    }
+
     private void verifyCustomerPayment() {
         browser.openPath(VERIFICATION_URI);
         browser.clickOnElementWithText(HtmlElementType.SPAN, "SalesOrder");
@@ -72,6 +83,29 @@ class DependsOnScenariosTestProject extends BaseTestProject {
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
 
         assertCustomerPayment();
+    }
+
+    private void assertCustomerPayment() {
+        clickEmptyCustomerField();
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", "Customer A");
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search CustomerPayment ...");
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Payment 1");
+
+        clickFilledCustomerField();
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", "Customer B");
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search CustomerPayment ...");
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Payment 2");
+
+    }
+
+    private void clickEmptyCustomerField() {
+        browser.clickElementByAttributes(HtmlElementType.INPUT, Map.of(HtmlAttribute.CLASS,
+                "fd-input ng-empty ng-valid fd-input-group__input", HtmlAttribute.PLACEHOLDER, "Search Customer ..."));
+    }
+
+    private void clickFilledCustomerField() {
+        browser.clickElementByAttributes(HtmlElementType.INPUT, Map.of(HtmlAttribute.CLASS,
+                "fd-input ng-valid fd-input-group__input ng-touched ng-not-empty", HtmlAttribute.PLACEHOLDER, "Search Customer ..."));
     }
 
     private void verifyOrderCustomer() {
@@ -102,6 +136,12 @@ class DependsOnScenariosTestProject extends BaseTestProject {
         assertProductPrice("Product B ", "20");
     }
 
+    private void assertProductPrice(String product, String price) {
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Product ...");
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", product);
+        browser.assertElementValueByAttributes(HtmlElementType.INPUT, Map.of(HtmlAttribute.ID, "idPrice"), price);
+    }
+
     private void verifyProductUom() {
         browser.openPath(VERIFICATION_URI);
         browser.clickOnElementWithText(HtmlElementType.SPAN, "SalesOrder");
@@ -115,10 +155,16 @@ class DependsOnScenariosTestProject extends BaseTestProject {
         assertProductUom("Product B", "Liter");
     }
 
+    private void assertProductUom(String product, String uom) {
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Product ...");
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", product);
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search UoM ...");
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, uom);
+    }
+
     private void verifyCountryCityDependency() {
         browser.openPath(VERIFICATION_URI);
         browser.clickOnElementWithText(HtmlElementType.SPAN, "Customer");
-
 
         browser.clickElementByAttributes(HtmlElementType.BUTTON,
                 Map.of(HtmlAttribute.GLYPH, "sap-icon--add", HtmlAttribute.CLASS, "fd-button fd-button--compact fd-button--transparent"));
@@ -127,53 +173,6 @@ class DependsOnScenariosTestProject extends BaseTestProject {
 
         asserCountryCity("Bulgaria", "Sofia");
         asserCountryCity("Italy", "Rome");
-    }
-
-    private void clickEmptyCustomerField() {
-        browser.clickElementByAttributes(HtmlElementType.INPUT, Map.of(HtmlAttribute.CLASS,
-                "fd-input ng-empty ng-valid fd-input-group__input", HtmlAttribute.PLACEHOLDER, "Search Customer ..."));
-    }
-
-    private void clickFilledCustomerField() {
-        browser.clickElementByAttributes(HtmlElementType.INPUT, Map.of(HtmlAttribute.CLASS,
-                "fd-input ng-valid fd-input-group__input ng-touched ng-not-empty", HtmlAttribute.PLACEHOLDER, "Search Customer ..."));
-    }
-
-    private void assertCustomerPaymentAmount() {
-        clickEmptyCustomerField();
-        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", "Customer A");
-        browser.assertElementValueByAttributes(HtmlElementType.INPUT, Map.of(HtmlAttribute.ID, "idAmount"), "101");
-
-        clickFilledCustomerField();
-        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", "Customer B");
-        browser.assertElementValueByAttributes(HtmlElementType.INPUT, Map.of(HtmlAttribute.ID, "idAmount"), "201");
-
-    }
-
-    private void assertCustomerPayment() {
-        clickEmptyCustomerField();
-        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", "Customer A");
-        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search CustomerPayment ...");
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Payment 1");
-
-        clickFilledCustomerField();
-        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", "Customer B");
-        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search CustomerPayment ...");
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Payment 2");
-
-    }
-
-    private void assertProductPrice(String product, String price) {
-        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Product ...");
-        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", product);
-        browser.assertElementValueByAttributes(HtmlElementType.INPUT, Map.of(HtmlAttribute.ID, "idPrice"), price);
-    }
-
-    private void assertProductUom(String product, String uom) {
-        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Product ...");
-        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", product);
-        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search UoM ...");
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, uom);
     }
 
     private void asserCountryCity(String country, String city) {

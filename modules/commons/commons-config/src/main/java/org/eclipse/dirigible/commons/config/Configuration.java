@@ -9,24 +9,19 @@
  */
 package org.eclipse.dirigible.commons.config;
 
-import static java.text.MessageFormat.format;
-import java.io.IOException;
-import java.io.InputStream;
-import java.lang.reflect.Field;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import org.apache.commons.lang3.reflect.FieldUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.reflect.Field;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import static java.text.MessageFormat.format;
 
 /**
  * Configuration Facade class keeps all the configurations in the Dirigible instance It has the
@@ -52,12 +47,14 @@ public class Configuration {
     private static final Map<String, String> DEPLOYMENT_VARIABLES = Collections.synchronizedMap(new HashMap<>());
     /** The Constant MODULE_VARIABLES. */
     private static final Map<String, String> MODULE_VARIABLES = Collections.synchronizedMap(new HashMap<>());
-    /** The Constant CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES. */
-    private static final String CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES = "/dirigible.properties";
+    /** The Constant CONFIG_FILE_PATH_DIRIGIBLE_COMMON_PROPERTIES. */
+    private static final String CONFIG_FILE_PATH_DIRIGIBLE_COMMON_PROPERTIES = "/dirigible-commons.properties";
+    private static final String CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES_OVERRIDES = "/dirigible.properties";
     /** The Constant ERROR_MESSAGE_CONFIGURATION_DOES_NOT_EXIST. */
     private static final String ERROR_MESSAGE_CONFIGURATION_DOES_NOT_EXIST = "Configuration file {0} does not exist";
     /** The Constant CONFIGURATION_PARAMETERS. */
     private static final String[] CONFIGURATION_PARAMETERS = getConfigParams();
+    private static final Logger LOGGER = LoggerFactory.getLogger(Configuration.class);
     /** The loaded. */
     public static boolean LOADED = false;
 
@@ -87,7 +84,7 @@ public class Configuration {
         DEPLOYMENT_VARIABLES.clear();
         MODULE_VARIABLES.clear();
 
-        loadDeploymentConfig(CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES);
+        loadDeploymentConfig(CONFIG_FILE_PATH_DIRIGIBLE_COMMON_PROPERTIES, CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES_OVERRIDES);
         loadEnvironmentConfig();
         LOADED = true;
     }
@@ -97,8 +94,22 @@ public class Configuration {
      *
      * @param path the path
      */
-    private static void loadDeploymentConfig(String path) {
+    private static void loadDeploymentConfig(String path, String overridePath) {
         load(path, ConfigType.DEPLOYMENT);
+        overrideConfig(overridePath);
+    }
+
+    private static void overrideConfig(String overridePath) {
+        try (InputStream inputStream = Configuration.class.getResourceAsStream(overridePath)) {
+            if (null == inputStream) {
+                LOGGER.info("Override file with path [{}] was not found.", overridePath);
+            } else {
+                LOGGER.info("Found override file with path [{}]. Will use it to override the configs.", overridePath);
+                load(overridePath, ConfigType.DEPLOYMENT);
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to load file with path " + overridePath, e);
+        }
     }
 
     /**
@@ -110,9 +121,8 @@ public class Configuration {
     private static void load(String path, ConfigType type) {
         try {
             Properties custom = new Properties();
-            InputStream in = Configuration.class.getResourceAsStream(path);
-            if (in != null) {
-                try {
+            try (InputStream in = Configuration.class.getResourceAsStream(path)) {
+                if (in != null) {
                     custom.load(in);
                     switch (type) {
                         case RUNTIME:
@@ -130,23 +140,15 @@ public class Configuration {
                         default:
                             break;
                     }
-                } finally {
-                    in.close();
-                }
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Configuration loaded: " + path);
-                }
-            } else if (!path.equals(CONFIG_FILE_PATH_DIRIGIBLE_PROPERTIES)) {
-                throw new IOException(format(ERROR_MESSAGE_CONFIGURATION_DOES_NOT_EXIST, path));
-            } else {
-                if (logger.isDebugEnabled()) {
-                    logger.debug(format(ERROR_MESSAGE_CONFIGURATION_DOES_NOT_EXIST, path));
+                    logger.debug("Configuration loaded from: [{}]", path);
+                } else if (!path.equals(CONFIG_FILE_PATH_DIRIGIBLE_COMMON_PROPERTIES)) {
+                    throw new IOException(format(ERROR_MESSAGE_CONFIGURATION_DOES_NOT_EXIST, path));
+                } else {
+                    logger.debug("Configuration file [{}] does not exist", path);
                 }
             }
         } catch (IOException e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
+            logger.error("Failed to load from file with path [{}]", path, e);
         }
     }
 

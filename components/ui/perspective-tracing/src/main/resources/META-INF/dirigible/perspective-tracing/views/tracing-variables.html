@@ -29,79 +29,65 @@
         <bk-fieldset class="fd-margin--sm">
             <bk-form-group name="viewForm">
                 <bk-form-item horizontal="true">
-                    <bk-form-label for="type" colon="true" style="width: 80px">Type</bk-form-label>
-                    <bk-input id="type" name="type" ng-model="selectedTask.type" type="text" readonly>
-                    </bk-input>
-                    <bk-form-label for="status" colon="true" style="margin-left: 8px">Status</bk-form-label>
-                    <bk-input id="status" name="status" ng-model="selectedTask.status" type="text" readonly>
-                    </bk-input>
+                    <bk-form-label for="type" colon="true" style="width: 4.125rem">Type</bk-form-label>
+                    <bk-input id="type" name="type" ng-model="selectedTask.type" type="text" readonly></bk-input>
+                    <bk-form-label for="status" colon="true" style="min-width: 3.625rem;margin-left: 0.5rem">Status</bk-form-label>
+                    <bk-input id="status" name="status" ng-model="selectedTask.status" type="text" readonly></bk-input>
                 </bk-form-item>
                 <bk-form-item horizontal="true">
-                    <bk-form-label for="execution" colon="true" style="width: 80px">Execution</bk-form-label>
-                    <bk-input id="execution" name="execution" ng-model="selectedTask.execution" type="text" readonly>
-                    </bk-input>
-                    <bk-form-label for="step" colon="true" style="margin-left: 8px">Step</bk-form-label>
-                    <bk-input id="step" name="step" ng-model="selectedTask.step" type="text" readonly>
-                    </bk-input>
+                    <bk-form-label for="execution" colon="true" style="width: 4.125rem">Execution</bk-form-label>
+                    <bk-input id="execution" name="execution" ng-model="selectedTask.execution" type="text" readonly></bk-input>
+                    <bk-form-label for="step" colon="true" style="min-width: 3.625rem;margin-left: 0.5rem">Step</bk-form-label>
+                    <bk-input id="step" name="step" ng-model="selectedTask.step" type="text" readonly></bk-input>
                 </bk-form-item>
                 <bk-form-item horizontal="true">
-                    <bk-form-label for="definition" colon="true" style="width: 80px">Definition</bk-form-label>
-                    <bk-input id="definition" name="definition" ng-model="selectedTask.definition" type="text" readonly>
-                    </bk-input>
-                    <bk-form-label for="instance" colon="true" style="margin-left: 8px">Instance</bk-form-label>
-                    <bk-input id="instance" name="instance" ng-model="selectedTask.instance" type="text" readonly>
-                    </bk-input>
+                    <bk-form-label for="definition" colon="true" style="width: 4.125rem">Definition</bk-form-label>
+                    <bk-input id="definition" name="definition" ng-model="selectedTask.definition" type="text" readonly></bk-input>
+                    <bk-form-label for="instance" colon="true" style="min-width: 3.625rem;margin-left: 0.5rem">Instance</bk-form-label>
+                    <bk-input id="instance" name="instance" ng-model="selectedTask.instance" type="text" readonly></bk-input>
                 </bk-form-item>
                 <bk-form-item horizontal="true">
-                    <bk-form-label for="tenant" colon="true" style="width: 80px">Tenant</bk-form-label>
-                    <bk-input id="tenant" name="tenant" ng-model="selectedTask.tenant" type="text" readonly>
-                    </bk-input>
-                    <bk-form-label for="thread" colon="true" style="margin-left: 8px">Thread</bk-form-label>
-                    <bk-input id="thread" name="thread" ng-model="selectedTask.thread" type="text" readonly>
-                    </bk-input>
+                    <bk-form-label for="tenant" colon="true" style="width: 4.125rem">Tenant</bk-form-label>
+                    <bk-input id="tenant" name="tenant" ng-model="selectedTask.tenant" type="text" readonly></bk-input>
+                    <bk-form-label for="thread" colon="true" style="min-width: 3.625rem;margin-left: 0.5rem">Thread</bk-form-label>
+                    <bk-input id="thread" name="thread" ng-model="selectedTask.thread" type="text" readonly></bk-input>
                 </bk-form-item>
                 <bk-form-item horizontal="true">
-                    <bk-form-label for="started" colon="true" style="width: 80px">Started</bk-form-label>
-                    <bk-input id="started" name="started" ng-model="selectedTask.started" type="text" readonly>
-                    </bk-input>
-                    <bk-form-label for="ended" colon="true" style="margin-left: 8px">Ended</bk-form-label>
-                    <bk-input id="ended" name="ended" ng-model="selectedTask.ended" type="text" readonly>
-                    </bk-input>
+                    <bk-form-label for="started" colon="true" style="width: 4.125rem">Started</bk-form-label>
+                    <bk-input id="started" name="started" ng-model="selectedTask.started" type="text" readonly></bk-input>
+                    <bk-form-label for="ended" colon="true" style="min-width: 3.625rem;margin-left: 0.5rem">Ended</bk-form-label>
+                    <bk-input id="ended" name="ended" ng-model="selectedTask.ended" type="text" readonly></bk-input>
                 </bk-form-item>
                 <bk-form-item horizontal="false">
                     <bk-form-label for="error" colon="true">Error</bk-form-label>
-                    <bk-textarea id="error" name="error" ng-model="selectedTask.error" cols=20 readonly>
-                    </bk-textarea>
+                    <bk-textarea id="error" name="error" ng-model="selectedTask.error" cols=20 readonly></bk-textarea>
                 </bk-form-item>
                 <bk-form-item horizontal="false">
                     <bk-form-label for="diff" colon="true">Changes</bk-form-label>
-                    <bk-textarea id="diff" name="diff" ng-model="selectedTask.diff" cols=20 readonly>
-                    </bk-textarea>
+                    <bk-textarea id="diff" name="diff" ng-model="selectedTask.diff" cols=20 readonly></bk-textarea>
                 </bk-form-item>
             </bk-form-group>
         </bk-fieldset>
-        <bk-toolbar compact="true">
-            <!-- <bk-toolbar-spacer></bk-toolbar-spacer>
-            <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="reload()"></bk-button> -->
+        <!-- <bk-toolbar class="bk-border--top" compact="true">
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="reload()"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
-            <bk-button state="transparent" toggled="displaySearch" glyph="sap-icon--search" title="Toggle search" aria-label="Toggle search" ng-click="toggleSearch()">
-            </bk-button>
+            <bk-button state="transparent" toggled="displaySearch" glyph="sap-icon--search" title="Toggle search" aria-label="Toggle search" ng-click="toggleSearch()"></bk-button>
         </bk-toolbar>
         <bk-toolbar ng-if="displaySearch">
-            <bk-input type="search" placeholder="Search by name" ng-keyup="inputSearchKeyUp($event)" ng-model="searchText" bk-focus="true">
-            </bk-input>
-        </bk-toolbar>
+            <bk-input type="search" placeholder="Search by name" ng-keyup="inputSearchKeyUp($event)" ng-model="searchText" bk-focus="true"></bk-input>
+        </bk-toolbar> -->
         <bk-scrollbar class="bk-fill-parent">
-            <table bk-table outer-borders="bottom" display-mode="compact">
+            <table bk-table outer-borders="horizontal" display-mode="compact">
                 <thead bk-table-header sticky="true">
                     <tr bk-table-row>
-                        <th bk-table-header-cell>Name</th>
-                        <th bk-table-header-cell>Input</th>
-                        <th bk-table-header-cell>Output</th>
+                        <th bk-table-header-cell interactive="false">Name</th>
+                        <th bk-table-header-cell interactive="false">Input</th>
+                        <th bk-table-header-cell interactive="false">Output</th>
                     </tr>
                 </thead>
                 <tbody bk-table-body>
-                    <tr bk-table-row ng-repeat="next in variablesList track by next.name" hoverable="true" activable="true">
+                    <tr bk-table-row ng-repeat="next in variablesList track by next.name" hoverable="false" activable="false">
                         <td bk-table-cell>{{next.name}}</td>
                         <td bk-table-cell>{{next.input}}</td>
                         <td bk-table-cell>{{next.output}}</td>

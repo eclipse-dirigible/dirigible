@@ -10,8 +10,8 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const ideTracingTasksView = angular.module('ide-tracing-tasks', ['platformView', 'blimpKit']);
-ideTracingTasksView.constant('Notifications', new NotificationHub());
-ideTracingTasksView.controller('IDETracingTasksViewController', ($scope, $http, $timeout, Notifications) => {
+ideTracingTasksView.controller('IDETracingTasksViewController', ($scope, $http, $timeout) => {
+    const MessageHub = new MessageHubApi()
     $scope.selectAll = false;
     $scope.searchField = { text: '' };
     $scope.filterBy = "";
@@ -30,30 +30,31 @@ ideTracingTasksView.controller('IDETracingTasksViewController', ($scope, $http, 
 
         const pageNumber = (args && args.pageNumber) || $scope.currentPage;
         const pageSize = (args && args.pageSize) || $scope.pageSize;
-        const limit = pageNumber * pageSize;
+        // const limit = pageNumber * pageSize;
         const startIndex = (pageNumber - 1) * pageSize;
         if (startIndex >= $scope.totalRows) {
             return;
         }
 
         if ($scope.filterBy && $scope.filterBy !== '') {
-            $http.get('/services/core/tracing/search', { params: { 'execution': $scope.filterBy } })
-                .then((response) => {
-                    $scope.tasksList = response.data;
-                });
+            $http.get('/services/core/tracing/search', { params: { 'execution': $scope.filterBy } }).then((response) => {
+                $scope.tasksList = response.data;
+            }, (error) => {
+                console.error(error);
+            });
         } else {
-            $http.get('/services/core/tracing')
-                .then((response) => {
-                    $scope.tasksList = response.data;
-                });
+            $http.get('/services/core/tracing').then((response) => {
+                $scope.tasksList = response.data;
+            }, (error) => {
+                console.error(error);
+            });
         }
 
-
-
-        $http.get('/services/js/perspective-tracing/service/enable-tracing.js')
-            .then((response) => {
-                $scope.displayTracing = ('true' === response.data);
-            });
+        $http.get('/services/js/perspective-tracing/service/enable-tracing.js').then((response) => {
+            $scope.displayTracing = ('true' === response.data);
+        }, (error) => {
+            console.error(error);
+        });
     }
 
     fetchData();
@@ -67,10 +68,11 @@ ideTracingTasksView.controller('IDETracingTasksViewController', ($scope, $http, 
     };
 
     $scope.clean = () => {
-        $http.delete('/services/core/tracing')
-            .then((response) => {
-                $scope.tasksList = response.data;
-            });
+        $http.delete('/services/core/tracing').then((response) => {
+            $scope.tasksList = response.data;
+        }, (error) => {
+            console.error(error);
+        });
     };
 
     $scope.toggleSearch = () => {
@@ -78,10 +80,11 @@ ideTracingTasksView.controller('IDETracingTasksViewController', ($scope, $http, 
     };
 
     $scope.toggleTracing = () => {
-        $http.post('/services/js/perspective-tracing/service/enable-tracing.js')
-            .then((response) => {
-                $scope.displayTracing = ('true' === response.data);
-            });
+        $http.post('/services/js/perspective-tracing/service/enable-tracing.js').then((response) => {
+            $scope.displayTracing = ('true' === response.data);
+        }, (error) => {
+            console.error(error);
+        });
     };
 
     $scope.selectAllChanged = () => {
@@ -92,8 +95,8 @@ ideTracingTasksView.controller('IDETracingTasksViewController', ($scope, $http, 
 
     $scope.selectionChanged = (task) => {
         $scope.selectAll = $scope.tasksList.every(x => x.selected = false);
-        Notifications.postMessage({ topic: 'tracing.task', data: { task: task.id } });
-        Notifications.postMessage({ topic: 'tracing.task.selected', data: { task: task.id } });
+        MessageHub.postMessage({ topic: 'tracing.task', data: { task: task.id } });
+        MessageHub.postMessage({ topic: 'tracing.task.selected', data: { task: task.id } });
         task.selected = true;
     };
 

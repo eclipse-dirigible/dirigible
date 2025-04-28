@@ -202,7 +202,7 @@ public class DirigibleProcessDiagramCanvas {
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setPaint(TASK_BORDER_COLOR);
 
-        Font font = new Font(activityFontName, Font.BOLD, FONT_SIZE);
+        Font font = new Font(activityFontName, Font.PLAIN, FONT_SIZE);
         g.setFont(font);
         this.fontMetrics = g.getFontMetrics();
 
@@ -210,31 +210,55 @@ public class DirigibleProcessDiagramCanvas {
         ANNOTATION_FONT = new Font(annotationFontName, Font.PLAIN, FONT_SIZE);
 
         try {
-            USERTASK_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/userTask.png", customClassLoader));
-            SCRIPTTASK_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/scriptTask.png", customClassLoader));
-            SERVICETASK_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/serviceTask.png", customClassLoader));
-            RECEIVETASK_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/receiveTask.png", customClassLoader));
-            SENDTASK_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/sendTask.png", customClassLoader));
-            CASETASK_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/caseTask.png", customClassLoader));
-            MANUALTASK_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/manualTask.png", customClassLoader));
-            BUSINESS_RULE_TASK_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/businessRuleTask.png", customClassLoader));
-            SHELL_TASK_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/shellTask.png", customClassLoader));
-            DMN_TASK_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/dmnTask.png", customClassLoader));
-            CAMEL_TASK_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/camelTask.png", customClassLoader));
-            HTTP_TASK_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/httpTask.png", customClassLoader));
+            USERTASK_IMAGE =
+                    ImageIO.read(ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/user.png", customClassLoader));
+            SCRIPTTASK_IMAGE = ImageIO.read(
+                    ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/script.png", customClassLoader));
+            SERVICETASK_IMAGE = ImageIO.read(
+                    ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/service.png", customClassLoader));
+            RECEIVETASK_IMAGE = ImageIO.read(
+                    ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/receive.png", customClassLoader));
+            SENDTASK_IMAGE =
+                    ImageIO.read(ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/send.png", customClassLoader));
+            CASETASK_IMAGE =
+                    ImageIO.read(ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/case.png", customClassLoader));
+            MANUALTASK_IMAGE = ImageIO.read(
+                    ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/manual.png", customClassLoader));
+            BUSINESS_RULE_TASK_IMAGE = ImageIO.read(
+                    ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/business-rule.png", customClassLoader));
+            SHELL_TASK_IMAGE =
+                    ImageIO.read(ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/shell.png", customClassLoader));
+            DMN_TASK_IMAGE = ImageIO.read(
+                    ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/decision.png", customClassLoader));
+            CAMEL_TASK_IMAGE =
+                    ImageIO.read(ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/camel.png", customClassLoader));
+            HTTP_TASK_IMAGE =
+                    ImageIO.read(ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/http.png", customClassLoader));
 
-            TIMER_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/timer.png", customClassLoader));
-            COMPENSATE_THROW_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/compensate-throw.png", customClassLoader));
-            COMPENSATE_CATCH_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/compensate.png", customClassLoader));
-            CONDITIONAL_CATCH_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/conditional.png", customClassLoader));
-            ERROR_THROW_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/error-throw.png", customClassLoader));
-            ERROR_CATCH_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/error.png", customClassLoader));
-            ESCALATION_THROW_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/escalation-throw.png", customClassLoader));
-            ESCALATION_CATCH_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/escalation.png", customClassLoader));
-            MESSAGE_THROW_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/message-throw.png", customClassLoader));
-            MESSAGE_CATCH_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/message.png", customClassLoader));
-            SIGNAL_THROW_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/signal-throw.png", customClassLoader));
-            SIGNAL_CATCH_IMAGE = ImageIO.read(ReflectUtil.getResource("org/flowable/icons/signal.png", customClassLoader));
+            TIMER_IMAGE =
+                    ImageIO.read(ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/timer.png", customClassLoader));
+            COMPENSATE_THROW_IMAGE = ImageIO.read(
+                    ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/compensate-throw.png", customClassLoader));
+            COMPENSATE_CATCH_IMAGE = ImageIO.read(
+                    ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/compensate.png", customClassLoader));
+            CONDITIONAL_CATCH_IMAGE = ImageIO.read(
+                    ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/conditional.png", customClassLoader));
+            ERROR_THROW_IMAGE = ImageIO.read(
+                    ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/error-throw.png", customClassLoader));
+            ERROR_CATCH_IMAGE =
+                    ImageIO.read(ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/error.png", customClassLoader));
+            ESCALATION_THROW_IMAGE = ImageIO.read(
+                    ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/escalation-throw.png", customClassLoader));
+            ESCALATION_CATCH_IMAGE = ImageIO.read(
+                    ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/escalation.png", customClassLoader));
+            MESSAGE_THROW_IMAGE = ImageIO.read(
+                    ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/message-throw.png", customClassLoader));
+            MESSAGE_CATCH_IMAGE = ImageIO.read(
+                    ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/message.png", customClassLoader));
+            SIGNAL_THROW_IMAGE = ImageIO.read(
+                    ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/signal-throw.png", customClassLoader));
+            SIGNAL_CATCH_IMAGE = ImageIO.read(
+                    ReflectUtil.getResource("org/eclipse/dirigible/components/engine/bpm/icons/signal.png", customClassLoader));
 
         } catch (IOException e) {
             LOGGER.warn("Could not load image for process diagram creation: {}", e.getMessage());

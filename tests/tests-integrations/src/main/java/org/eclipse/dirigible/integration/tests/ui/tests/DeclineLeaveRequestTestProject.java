@@ -10,11 +10,11 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import com.icegreen.greenmail.util.GreenMail;
-import org.eclipse.dirigible.tests.EdmView;
-import org.eclipse.dirigible.tests.IDE;
-import org.eclipse.dirigible.tests.IDEFactory;
-import org.eclipse.dirigible.tests.util.ProjectUtil;
-import org.eclipse.dirigible.tests.util.SecurityUtil;
+import org.eclipse.dirigible.tests.base.ProjectUtil;
+import org.eclipse.dirigible.tests.framework.ide.EdmView;
+import org.eclipse.dirigible.tests.framework.ide.IDE;
+import org.eclipse.dirigible.tests.framework.ide.IDEFactory;
+import org.eclipse.dirigible.tests.framework.security.SecurityUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 

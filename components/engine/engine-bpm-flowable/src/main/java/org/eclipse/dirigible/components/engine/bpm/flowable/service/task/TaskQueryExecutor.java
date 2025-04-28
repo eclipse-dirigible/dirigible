@@ -16,6 +16,8 @@ import org.flowable.task.api.Task;
 import org.flowable.task.api.TaskInfoQuery;
 import org.flowable.task.api.TaskQuery;
 import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.eclipse.dirigible.components.engine.bpm.flowable.service.task.TaskQueryExecutor.Type.*;
@@ -34,6 +36,10 @@ public record TaskQueryExecutor(BpmService bpmService) {
      * @return the list
      */
     public List<Task> findTasks(String processInstanceId, Type type) {
+        if (UserFacade.getUserRoles()
+                      .isEmpty()) {
+            return new ArrayList<Task>();
+        }
         TaskInfoQuery<TaskQuery, Task> taskQuery = prepareQuery(type);
         taskQuery.processInstanceId(processInstanceId);
         return taskQuery.list();
@@ -46,6 +52,10 @@ public record TaskQueryExecutor(BpmService bpmService) {
      * @return the list
      */
     public List<Task> findTasks(Type type) {
+        if (UserFacade.getUserRoles()
+                      .isEmpty()) {
+            return new ArrayList<Task>();
+        }
         TaskInfoQuery<TaskQuery, Task> taskQuery = prepareQuery(type);
         return taskQuery.list();
     }

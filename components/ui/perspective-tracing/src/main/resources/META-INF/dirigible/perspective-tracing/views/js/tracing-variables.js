@@ -10,12 +10,10 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const ideTracingVariablesView = angular.module('ide-tracing-variables', ['platformView', 'blimpKit']);
-ideTracingVariablesView.constant('Notifications', new NotificationHub());
-ideTracingVariablesView.constant('Dialogs', new DialogHub());
-ideTracingVariablesView.controller('IDETracingVariablesViewController', ($scope, $http, Notifications, Dialogs) => {
-
+ideTracingVariablesView.controller('IDETracingVariablesViewController', ($scope, $http) => {
+    const Dialogs = new DialogHub();
     $scope.selectAll = false;
-    $scope.searchText = "";
+    $scope.searchText = '';
     $scope.displaySearch = false;
     $scope.variablesList = [];
     $scope.pageSize = 10;
@@ -31,37 +29,39 @@ ideTracingVariablesView.controller('IDETracingVariablesViewController', ($scope,
         $scope.displaySearch = !$scope.displaySearch;
     };
 
-    Notifications.addMessageListener({
+    Dialogs.addMessageListener({
         topic: 'tracing.task.selected',
         handler: (data) => {
-            $scope.$evalAsync(() => {
-                if (data.hasOwnProperty('task')) {
+            if (data.hasOwnProperty('task')) {
+                $scope.$evalAsync(() => {
                     $scope.selectedTaskId = data.task;
-                    $http.get('/services/core/tracing/' + $scope.selectedTaskId)
-                        .then((response) => {
-                            $scope.selectedTask = response.data;
-                            $scope.variablesList = [];
-                            for (const [name, value] of Object.entries(response.data.input)) {
-                                $scope.variablesList.push({ name: `${name}`, input: `${value}` });
-                            }
-                            for (const [name, value] of Object.entries(response.data.output)) {
-                                const found = $scope.variablesList.find((element) => element.name === name);
-                                if (found) {
-                                    found.output = value;
-                                } else {
-                                    $scope.variablesList.push({ name: `${name}`, input: null, output: `${value}` });
-                                }
-                            }
-                        });
-                } else {
-                    Dialogs.showAlert({
-                        title: 'Missing data',
-                        message: 'Process definition is missing from event!',
-                        type: AlertTypes.Error,
-                        preformatted: false,
-                    });
-                }
-            });
+                });
+                $http.get(`/services/core/tracing/${data.task}`).then((response) => {
+                    $scope.selectedTask = response.data;
+                    $scope.variablesList = [];
+                    for (const [name, value] of Object.entries(response.data.input)) {
+                        $scope.variablesList.push({ name: `${name}`, input: `${value}` });
+                    }
+                    for (const [name, value] of Object.entries(response.data.output)) {
+                        const found = $scope.variablesList.find((element) => element.name === name);
+                        if (found) {
+                            found.output = value;
+                        } else {
+                            $scope.variablesList.push({ name: `${name}`, input: null, output: `${value}` });
+                        }
+                    }
+                }, (error) => {
+                    console.error(error);
+                });
+            } else {
+                Dialogs.showAlert({
+                    title: 'Missing data',
+                    message: 'Process definition is missing from event!',
+                    type: AlertTypes.Error,
+                    preformatted: false,
+                });
+            }
+
         }
     });
 
@@ -98,5 +98,4 @@ ideTracingVariablesView.controller('IDETracingVariablesViewController', ($scope,
     $scope.refresh = () => {
         fetchData();
     };
-
 });

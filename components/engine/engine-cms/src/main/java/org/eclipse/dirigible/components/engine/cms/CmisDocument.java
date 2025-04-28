@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.components.engine.cms;
 
+import java.io.IOException;
+
 /**
  * The Interface CmisDocument.
  */
@@ -19,4 +21,11 @@ public interface CmisDocument {
      * @return the path
      */
     public String getPath();
+
+    /**
+     * Returns the CmisContentStream representing the contents of this CmisDocument.
+     *
+     * @return Content Stream
+     */
+    public CmisContentStream getContentStream() throws IOException;
 }

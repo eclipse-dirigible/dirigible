@@ -11,9 +11,9 @@ package org.eclipse.dirigible.integration.tests.api.rest;
 
 import io.restassured.RestAssured;
 import io.restassured.specification.RequestSpecification;
-import org.eclipse.dirigible.tests.IntegrationTest;
-import org.eclipse.dirigible.tests.TenantCreator;
-import org.eclipse.dirigible.tests.restassured.RestAssuredExecutor;
+import org.eclipse.dirigible.tests.base.IntegrationTest;
+import org.eclipse.dirigible.tests.base.TenantCreator;
+import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.hamcrest.Matchers;
 import org.springframework.beans.factory.annotation.Autowired;
 

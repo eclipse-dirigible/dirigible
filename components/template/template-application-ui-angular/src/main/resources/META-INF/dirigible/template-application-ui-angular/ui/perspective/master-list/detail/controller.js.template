@@ -16,6 +16,9 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				hasHeader: true,
         		title: action.label,
 				path: action.path,
+				params: {
+					selectedMainEntityId: $scope.selectedMainEntityId,
+				},
 				closeButton: true
 			});
 		};
@@ -26,7 +29,8 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
         		title: action.label,
 				path: action.path,
 				params: {
-					id: $scope.entity.${primaryKeysString}
+					id: $scope.entity.${primaryKeysString},
+					selectedMainEntityId: $scope.selectedMainEntityId,
 				},
 				closeButton: true
 			});
