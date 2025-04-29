@@ -850,6 +850,10 @@ gitProjectsView.controller('GitProjectsController', ($scope, StatusBar, Dialogs,
                                 title: 'Pull successful',
                                 description: 'Pulled all repositories.',
                             });
+                            Workspace.announceWorkspaceChanged({
+                                workspace: $scope.selectedWorkspace,
+                                params: { gitAction: 'pull' },
+                            });
                         }
                         $scope.$evalAsync(() => {
                             $scope.state.busyText = 'Loading...';
@@ -869,6 +873,10 @@ gitProjectsView.controller('GitProjectsController', ($scope, StatusBar, Dialogs,
                         type: 'positive',
                         title: 'Pull successful',
                         description: `Pulled '${$scope.selectedRepository.name}'.`,
+                    });
+                    Workspace.announceWorkspaceChanged({
+                        workspace: $scope.selectedWorkspace,
+                        params: { gitAction: 'pull' },
                     });
                 }, (response) => {
                     Notifications.show({

@@ -69,16 +69,22 @@ public class TableCreateProcessor {
             boolean isUnique = columnModel.isUnique();
             String defaultValue = columnModel.getDefaultValue();
             String scale = columnModel.getScale();
+            String precision = columnModel.getPrecision();
             String args = "";
-            if (length != null) {
-                if (type.equals(DataType.VARCHAR) || type.equals(DataType.CHAR) || type.equals(DataType.NVARCHAR)
-                        || type.equals(DataType.CHARACTER_VARYING)) {
-                    args = ISqlKeywords.OPEN + length + ISqlKeywords.CLOSE;
+            if (type.equals(DataType.DECIMAL)) {
+                if (precision == null && scale == null) {
+                    // don't add brackets = use default DB values for precision and scale
+                } else if (precision != null && scale != null) {
+                    args = ISqlKeywords.OPEN + precision + "," + scale + ISqlKeywords.CLOSE;
+                } else {
+                    throw new IllegalArgumentException(
+                            "Missing scale or precision for decimal column [" + name + "] in table " + tableModel.getName());
                 }
-                if (scale != null) {
-                    if (type.equals(DataType.DECIMAL)) {
-                        args = ISqlKeywords.OPEN + length + "," + scale + ISqlKeywords.CLOSE;
-                    }
+            }
+            if (type.equals(DataType.VARCHAR) || type.equals(DataType.CHAR) || type.equals(DataType.NVARCHAR)
+                    || type.equals(DataType.CHARACTER_VARYING)) {
+                if (length != null) {
+                    args = ISqlKeywords.OPEN + length + ISqlKeywords.CLOSE;
                 }
             }
             if (defaultValue != null) {

@@ -317,18 +317,15 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
      * @param columnModel the column model
      */
     private static void setColumnAttributes(JsonObject column, TableColumn columnModel) {
-        columnModel.setName(column.get("name") != null && !column.get("name")
-                                                                 .isJsonNull() ? column.get("name")
-                                                                                       .getAsString()
-                                                                         : "unknown");
-        columnModel.setType(column.get("type") != null && !column.get("type")
-                                                                 .isJsonNull() ? column.get("type")
-                                                                                       .getAsString()
-                                                                         : "unknown");
-        columnModel.setLength(column.get("length") != null && !column.get("length")
-                                                                     .isJsonNull() ? column.get("length")
-                                                                                           .getAsString()
-                                                                             : null);
+        String nameValue = getJsonElementValue(column, "name", "unknown");
+        columnModel.setName(nameValue);
+
+        String typeValue = getJsonElementValue(column, "type", "unknown");
+        columnModel.setType(typeValue);
+
+        String lengthValue = getJsonElementValue(column, "length", null);
+        columnModel.setLength(lengthValue);
+
         columnModel.setPrimaryKey(column.get("primaryKey") != null && !column.get("primaryKey")
                                                                              .isJsonNull()
                 && column.get("primaryKey")
@@ -341,14 +338,20 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
                                                                          .isJsonNull()
                 && column.get("nullable")
                          .getAsBoolean());
-        columnModel.setDefaultValue(column.get("defaultValue") != null && !column.get("defaultValue")
-                                                                                 .isJsonNull() ? column.get("defaultValue")
-                                                                                                       .getAsString()
-                                                                                         : null);
-        columnModel.setScale(column.get("scale") != null && !column.get("scale")
-                                                                   .isJsonNull() ? column.get("scale")
-                                                                                         .getAsString()
-                                                                           : null);
+
+        String defaultValue = getJsonElementValue(column, "defaultValue", null);
+        columnModel.setDefaultValue(defaultValue);
+
+        String scaleValue = getJsonElementValue(column, "scale", null);
+        columnModel.setScale(scaleValue);
+
+        String precisionValue = getJsonElementValue(column, "precision", null);
+        columnModel.setPrecision(precisionValue);
+    }
+
+    private static String getJsonElementValue(JsonObject jsonObject, String memberName, String defaultValue) {
+        JsonElement jsonElement = jsonObject.get(memberName);
+        return (jsonElement != null && !jsonElement.isJsonNull()) ? jsonElement.getAsString() : defaultValue;
     }
 
     /**

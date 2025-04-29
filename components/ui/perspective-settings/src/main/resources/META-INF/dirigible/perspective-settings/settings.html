@@ -28,7 +28,7 @@
     <body>
         <split direction="horizontal">
             <split-pane size="20" min-size="280">
-                <bk-list>
+                <bk-list bk-scrollbar class="bk-full-height">
                     <bk-list-item interactive="true" ng-repeat="setting in settings track by setting.id" ng-click="switchSetting(setting.id)" selected="setting.id === activeId">
                         <bk-list-icon glyph="{{::setting.glyph || 'sap-icon'}}"></bk-list-icon>
                         <bk-list-title>{{::setting.label}}</bk-list-title>

@@ -370,11 +370,11 @@
                         "relationshipEntityPerspectiveLabel": "Entities"
                     },
                     {
-                        "dataLength": "18",
+                        "dataLength": "16",
                         "dataName": "PRODUCT_PRICE",
                         "dataNullable": "true",
-                        "dataPrecision": "2",
-                        "dataScale": "16",
+                        "dataPrecision": "16",
+                        "dataScale": "2",
                         "dataType": "DECIMAL",
                         "description": "",
                         "name": "Price",

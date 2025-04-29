@@ -49,7 +49,7 @@ export interface CountryEntityOptions {
     },
     $select?: (keyof CountryEntity)[],
     $sort?: string | (keyof CountryEntity)[],
-    $order?: 'asc' | 'desc',
+    $order?: 'ASC' | 'DESC',
     $offset?: number,
     $limit?: number,
 }
@@ -92,10 +92,10 @@ export class CountryRepository {
     private readonly dao;
 
     constructor(dataSource = "DefaultDB") {
-        this.dao = daoApi.create(CountryRepository.DEFINITION, null, dataSource);
+        this.dao = daoApi.create(CountryRepository.DEFINITION, undefined, dataSource);
     }
 
-    public findAll(options?: CountryEntityOptions): CountryEntity[] {
+    public findAll(options: CountryEntityOptions = {}): CountryEntity[] {
         return this.dao.list(options);
     }
 

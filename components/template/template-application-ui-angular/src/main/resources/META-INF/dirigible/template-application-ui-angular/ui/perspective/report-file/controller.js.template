@@ -23,6 +23,8 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				params: {
 					filterEntity: $scope.filterEntity,
 				},
+				maxWidth: action.maxWidth,
+				maxHeight: action.maxHeight,
 				closeButton: true
 			});
 		};

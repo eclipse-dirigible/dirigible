@@ -30,6 +30,8 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			#end
 		#end
 				},
+				maxWidth: action.maxWidth,
+				maxHeight: action.maxHeight,
 				closeButton: true,
 			});
 		};

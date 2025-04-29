@@ -76,7 +76,7 @@ export interface CustomerEntityOptions {
     },
     $select?: (keyof CustomerEntity)[],
     $sort?: string | (keyof CustomerEntity)[],
-    $order?: 'asc' | 'desc',
+    $order?: 'ASC' | 'DESC',
     $offset?: number,
     $limit?: number,
 }
@@ -134,10 +134,10 @@ export class CustomerRepository {
     private readonly dao;
 
     constructor(dataSource = "DefaultDB") {
-        this.dao = daoApi.create(CustomerRepository.DEFINITION, null, dataSource);
+        this.dao = daoApi.create(CustomerRepository.DEFINITION, undefined, dataSource);
     }
 
-    public findAll(options?: CustomerEntityOptions): CustomerEntity[] {
+    public findAll(options: CustomerEntityOptions = {}): CustomerEntity[] {
         return this.dao.list(options);
     }
 

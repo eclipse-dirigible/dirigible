@@ -39,7 +39,7 @@
                         </bk-input-group-addon>
                     </bk-input-group>
                 </bk-toolbar>
-                <bk-list>
+                <bk-list bk-scrollbar class="bk-full-height">
                     <bk-list-item interactive="true" ng-repeat="setting in settings track by setting.id" ng-hide="setting.hide" ng-click="switchSetting(setting.id)" selected="setting.id === activeId">
                         <bk-list-title>{{::setting.label}}</bk-list-title>
                     </bk-list-item>

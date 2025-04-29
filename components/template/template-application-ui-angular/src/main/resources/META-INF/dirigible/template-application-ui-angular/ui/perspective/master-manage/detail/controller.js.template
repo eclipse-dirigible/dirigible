@@ -20,6 +20,8 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 					selectedMainEntityKey: '${masterEntityId}',
 					selectedMainEntityId: $scope.selectedMainEntityId,
 				},
+				maxWidth: action.maxWidth,
+				maxHeight: action.maxHeight,
 				closeButton: true
 			});
 		};

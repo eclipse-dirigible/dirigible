@@ -49,7 +49,7 @@ export interface UoMEntityOptions {
     },
     $select?: (keyof UoMEntity)[],
     $sort?: string | (keyof UoMEntity)[],
-    $order?: 'asc' | 'desc',
+    $order?: 'ASC' | 'DESC',
     $offset?: number,
     $limit?: number,
 }
@@ -92,10 +92,10 @@ export class UoMRepository {
     private readonly dao;
 
     constructor(dataSource = "DefaultDB") {
-        this.dao = daoApi.create(UoMRepository.DEFINITION, null, dataSource);
+        this.dao = daoApi.create(UoMRepository.DEFINITION, undefined, dataSource);
     }
 
-    public findAll(options?: UoMEntityOptions): UoMEntity[] {
+    public findAll(options: UoMEntityOptions = {}): UoMEntity[] {
         return this.dao.list(options);
     }
 

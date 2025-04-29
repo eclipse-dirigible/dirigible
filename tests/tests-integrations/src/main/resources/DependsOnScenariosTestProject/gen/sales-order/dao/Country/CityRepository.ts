@@ -58,7 +58,7 @@ export interface CityEntityOptions {
     },
     $select?: (keyof CityEntity)[],
     $sort?: string | (keyof CityEntity)[],
-    $order?: 'asc' | 'desc',
+    $order?: 'ASC' | 'DESC',
     $offset?: number,
     $limit?: number,
 }
@@ -106,10 +106,10 @@ export class CityRepository {
     private readonly dao;
 
     constructor(dataSource = "DefaultDB") {
-        this.dao = daoApi.create(CityRepository.DEFINITION, null, dataSource);
+        this.dao = daoApi.create(CityRepository.DEFINITION, undefined, dataSource);
     }
 
-    public findAll(options?: CityEntityOptions): CityEntity[] {
+    public findAll(options: CityEntityOptions = {}): CityEntity[] {
         return this.dao.list(options);
     }
 

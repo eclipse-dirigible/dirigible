@@ -941,7 +941,7 @@ class DirigibleEditor {
         });
 
         workspaceHub.onSaveFile(async function (data) {
-            if (data.file && data.file === fileIO.resolveResourcePath()) {
+            if (data.path && data.path === fileIO.resolveResourcePath()) {
                 const model = editor.getModel();
                 if (DirigibleEditor.#isDirty(model)) {
                     fileIO.saveText(model.getValue()).then(() => {

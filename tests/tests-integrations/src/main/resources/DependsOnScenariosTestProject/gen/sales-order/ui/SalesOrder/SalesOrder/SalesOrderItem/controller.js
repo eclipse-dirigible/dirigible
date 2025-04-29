@@ -19,6 +19,8 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 					selectedMainEntityKey: 'SalesOrder',
 					selectedMainEntityId: $scope.selectedMainEntityId,
 				},
+				maxWidth: action.maxWidth,
+				maxHeight: action.maxHeight,
 				closeButton: true
 			});
 		};

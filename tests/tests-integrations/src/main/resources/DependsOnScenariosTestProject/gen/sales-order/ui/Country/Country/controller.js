@@ -20,6 +20,8 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				hasHeader: true,
         		title: action.label,
 				path: action.path,
+				maxWidth: action.maxWidth,
+				maxHeight: action.maxHeight,
 				closeButton: true
 			});
 		};
