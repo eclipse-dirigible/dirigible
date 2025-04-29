@@ -590,9 +590,68 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     },
                 },
                 {
+                    controlId: 'input-combobox',
+                    label: 'Combo Box',
+                    svg: '/services/web/editor-form-builder/images/combobox.svg',
+                    description: 'Combobox selection',
+                    template: `<div class="fb-control-wrapper" ng-click="showProps($event)" data-id="{{id}}"><bk-form-item horizontal="props.horizontal.value">
+                        <bk-form-label colon="true" ng-required="props.required.value" for="{{props.id.value}}">{{ props.label.value }}</bk-form-label>
+                        <bk-combobox-input compact="props.isCompact.value" dropdown-items="[{text: 'combo',value: 'combo'}]" ng-required="props.required.value" placeholder="{{props.placeholder.value}}" btn-aria-label="show/hide {{ props.label.value }} options" list-aria-label="{{ props.label.value }} options"></bk-combobox-input>
+                    </bk-form-item></div>`,
+                    props: {
+                        id: {
+                            type: 'text',
+                            label: 'ID',
+                            placeholder: 'Form Item ID',
+                            value: '',
+                            required: true,
+                        },
+                        label: {
+                            type: 'text',
+                            label: 'Label',
+                            value: 'Input',
+                            placeholder: 'Input label',
+                            required: false,
+                        },
+                        horizontal: {
+                            type: 'checkbox',
+                            label: 'Is horizontal',
+                            value: false,
+                        },
+                        isCompact: {
+                            type: 'checkbox',
+                            label: 'Compact',
+                            value: false,
+                        },
+                        placeholder: {
+                            type: 'text',
+                            label: 'Placeholder',
+                            value: '',
+                            placeholder: 'Input placeholder',
+                        },
+                        model: {
+                            type: 'text',
+                            label: 'Model',
+                            value: '',
+                            placeholder: '',
+                        },
+                        items: {
+                            type: 'text',
+                            label: 'Items',
+                            value: '',
+                            placeholder: '',
+                        },
+                        required: {
+                            type: 'checkbox',
+                            label: 'Is required',
+                            value: true,
+                        },
+                    },
+                },
+                {
                     controlId: 'input-select',
                     label: 'Dropdown',
-                    icon: 'sap-icon--down',
+                    svg: '/services/web/editor-form-builder/images/select.svg',
                     description: 'Dropdown selection',
                     template: `<div class="fb-control-wrapper" ng-click="showProps($event)" data-id="{{id}}"><bk-form-item horizontal="props.horizontal.value">
                         <bk-form-label colon="true" ng-required="props.required.value" for="{{props.id.value}}">{{ props.label.value }}</bk-form-label>

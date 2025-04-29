@@ -52,7 +52,7 @@
                             <bk-list id="{{::componentGroup.id}}" data-type="componentPanel">
                                 <bk-list-item ng-repeat="control in componentGroup.items track by $index" data-pindex="{{::$parent.$index}}" data-cindex="{{::$index}}" title="{{::control.description}}"
                                     ng-init="$last && initControlGroup(componentGroup.id)">
-                                    <bk-list-icon glyph="{{::control.icon}}" ng-attr-rotate="{{::control.iconRotate ? '90' : undefined}}"></bk-list-icon>
+                                    <bk-list-icon ng-attr-glyph="{{::control.icon}}" ng-attr-svg-path="{{::control.svg}}" ng-attr-rotate="{{::control.iconRotate ? '90' : undefined}}"></bk-list-icon>
                                     <bk-list-title>{{::control.label}}</bk-list-title>
                                 </bk-list-item>
                             </bk-list>
