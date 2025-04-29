@@ -14,7 +14,6 @@
  */
 
 import { Streams } from "sdk/io";
-import { user } from "sdk/security";
 
 const BpmFacade = Java.type("org.eclipse.dirigible.components.api.bpm.BpmFacade");
 
@@ -33,11 +32,7 @@ export class Tasks {
 	 * Returns all variables. This will include all variables of parent scopes too.
 	 */
 	public static getVariables(taskId: string): Map<string, any> {
-		const variables = BpmFacade.getTaskVariables(taskId);
-		for (const [key, value] of variables) {
-			variables.set(key, parseValue(value));
-		}
-		return variables;
+		return parseValuesMap(BpmFacade.getTaskVariables(taskId));
 	}
 
 	public static setVariable(taskId: string, variableName: string, value: any): void {
@@ -45,10 +40,7 @@ export class Tasks {
 	}
 
 	public static setVariables(taskId: string, variables: Map<string, any>): void {
-		for (const [key, value] of variables) {
-			variables.set(key, stringifyValue(value));
-		}
-		BpmFacade.setTaskVariables(taskId, variables);
+		BpmFacade.setTaskVariables(taskId, stringifyValuesMap(variables));
 	}
 
 	public static complete(taskId: string, variables: { [key: string]: any } = {}): void {
@@ -529,7 +521,7 @@ export class TaskService {
 	 *             when the task or user doesn't exist.
 	 */
 	public deleteUserIdentityLink(taskId: string, userId: string, identityLinkType: string): void {
-		this.deleteUserIdentityLink(taskId, userId, identityLinkType);
+		this.taskService.deleteUserIdentityLink(taskId, userId, identityLinkType);
 	}
 
 	/**
@@ -596,35 +588,35 @@ export class TaskService {
 	 * set variable on a task. If the variable is not already existing, it will be created in the most outer scope. This means the process instance in case this task is related to an execution.
 	 */
 	public setVariable(taskId: string, variableName: string, value: any): void {
-		this.taskService.setVariable(taskId, variableName, value);
+		this.taskService.setVariable(taskId, variableName, stringifyValue(value));
 	}
 
 	/**
 	 * set variables on a task. If the variable is not already existing, it will be created in the most outer scope. This means the process instance in case this task is related to an execution.
 	 */
 	public setVariables(taskId: string, variables: Map<string, any>): void {
-		this.taskService.setVariables(taskId, variables);
+		this.taskService.setVariables(taskId, stringifyValuesMap(variables));
 	}
 
 	/**
 	 * set variable on a task. If the variable is not already existing, it will be created in the task.
 	 */
 	public setVariableLocal(taskId: string, variableName: string, value: any): void {
-		this.taskService.setVariableLocal(taskId, variableName, value);
+		this.taskService.setVariableLocal(taskId, variableName, stringifyValue(value));
 	}
 
 	/**
 	 * set variables on a task. If the variable is not already existing, it will be created in the task.
 	 */
 	public setVariablesLocal(taskId: string, variables: Map<string, any>): void {
-		this.taskService.setVariablesLocal(taskId, variables);
+		this.taskService.setVariablesLocal(taskId, stringifyValuesMap(variables));
 	}
 
 	/**
 	 * get a variables and search in the task scope and if available also the execution scopes.
 	 */
 	public getVariable(taskId: string, variableName: string): any {
-		this.taskService.getVariable(taskId, variableName);
+		return parseValue(this.taskService.getVariable(taskId, variableName));
 	}
 
 	/**
@@ -653,7 +645,7 @@ export class TaskService {
 	 * checks whether or not the task has a variable defined with the given name.
 	 */
 	public getVariableLocal(taskId: string, variableName: string): any {
-		return this.taskService.getVariableLocal(taskId, variableName);
+		return parseValue(this.taskService.getVariableLocal(taskId, variableName));
 	}
 
 	/**
@@ -684,9 +676,9 @@ export class TaskService {
 	 */
 	public getVariables(taskId: string, variableNames?: string[]): Map<string, any> {
 		if (this.isNotNull(variableNames)) {
-			return this.taskService.getVariables(taskId, variableNames);
+			return parseValuesMap(this.taskService.getVariables(taskId, variableNames));
 		} else {
-			return this.taskService.getVariables(taskId);
+			return parseValuesMap(this.taskService.getVariables(taskId));
 		}
 	}
 
@@ -715,9 +707,9 @@ export class TaskService {
 	 */
 	public getVariablesLocal(taskId: string, variableNames?: string[]): Map<string, any> {
 		if (this.isNotNull(variableNames)) {
-			return this.taskService.getVariablesLocal(taskId, variableNames);
+			return parseValuesMap(this.taskService.getVariablesLocal(taskId, variableNames));
 		} else {
-			return this.taskService.getVariablesLocal(taskId);
+			return parseValuesMap(this.taskService.getVariablesLocal(taskId));
 		}
 	}
 
@@ -748,7 +740,7 @@ export class TaskService {
 	 * Removes the variable from the task. When the variable does not exist, nothing happens.
 	 */
 	public removeVariable(taskId: string, variableName: string): void {
-		return this.removeVariable(taskId, variableName);
+		this.taskService.removeVariable(taskId, variableName);
 	}
 
 	/**
@@ -856,7 +848,7 @@ export class TaskService {
 	 *             when no comment exists with the given id.
 	 */
 	public deleteComment(commentId: string): void {
-		return this.taskService.deleteComment(commentId);
+		this.taskService.deleteComment(commentId);
 	}
 
 	/** The comments related to the given task. */
@@ -925,7 +917,7 @@ export class TaskService {
 
 	/** The list of attachments associated to a task */
 	public getTaskAttachments(taskId: string): Attachment[] {
-		return this.getTaskAttachments(taskId);
+		return this.taskService.getTaskAttachments(taskId);
 	}
 
 	/** The list of attachments associated to a process instance */
@@ -935,7 +927,7 @@ export class TaskService {
 
 	/** Delete an attachment */
 	public deleteAttachment(attachmentId: string): void {
-		return this.taskService.deleteAttachment(attachmentId);
+		this.taskService.deleteAttachment(attachmentId);
 	}
 
 	/** The list of subtasks for this parent task */
@@ -3022,6 +3014,13 @@ function parseValue(value: any) {
 	return value;
 }
 
+function parseValuesMap(variables: Map<string, any>): Map<string, any> {
+	for (const [key, value] of variables) {
+		variables.set(key, parseValue(value));
+	}
+	return variables;
+}
+
 function stringifyValue(value: any): any {
 	if (Array.isArray(value)) {
 		// @ts-ignore
@@ -3030,6 +3029,13 @@ function stringifyValue(value: any): any {
 		return JSON.stringify(value);
 	}
 	return value;
+}
+
+function stringifyValuesMap(variables: Map<string, any>): Map<string, any> {
+	for (const [key, value] of variables) {
+		variables.set(key, stringifyValue(value));
+	}
+	return variables;
 }
 
 // @ts-ignore
