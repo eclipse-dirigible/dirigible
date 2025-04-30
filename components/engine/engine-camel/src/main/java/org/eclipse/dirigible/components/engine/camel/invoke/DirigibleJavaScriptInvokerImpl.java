@@ -111,7 +111,14 @@ class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
 
     private boolean isPromise(Value value) {
         return value.hasMember("then") && value.getMember("then")
-                                               .canExecute();
+                                               .canExecute()
+                && getMetaObjectString(value).contains("function Promise");
+    }
+
+    private String getMetaObjectString(Value value) {
+        Value metaObject = value.getMetaObject();
+        String metaObjectString = metaObject.toString();
+        return null == metaObject ? "" : (metaObjectString == null ? "" : metaObjectString);
     }
 
     private IntegrationMessage executePromise(Value promise) {
