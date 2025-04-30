@@ -96,7 +96,7 @@ class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
         }
 
         if (isPromise(value)) {
-            LOGGER.debug("Returned value [{}] is a promise of [{}].", value, IntegrationMessage.class);
+            LOGGER.debug("Returned value [{}] is a promise.", value);
 
             return executePromise(value);
         }
@@ -129,14 +129,17 @@ class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
             return null;
         });
 
-        // Wait for the Promise to resolve
+        waitForPromiseToResolve(promise, latch);
+
+        return resultRef.get();
+    }
+
+    private void waitForPromiseToResolve(Value promise, CountDownLatch latch) {
         try {
             latch.await();
         } catch (InterruptedException e) {
             throw new IllegalStateException("Failed to await for promise execution for: " + promise, e);
         }
-
-        return resultRef.get();
     }
 
 }
