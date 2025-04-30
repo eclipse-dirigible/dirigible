@@ -947,6 +947,134 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                         },
                     },
                 },
+                {
+                    controlId: 'table',
+                    label: 'Table',
+                    icon: 'sap-icon--table-view',
+                    description: 'Table container',
+                    template: `<div class="fb-control-wrapper" ng-click="showProps($event)" data-id="{{id}}"><bk-form-item horizontal="false">
+                        <table bk-table fixed="props.isFixed.value" display-mode="{{props.displayMode.value}}" outer-borders="{{props.outerBorders.value}}" inner-borders="{{props.innerBorders.value}}">
+                            <thead bk-table-header interactive="false">
+                                <tr bk-table-row>
+                                    <th bk-table-header-cell>Name</th>
+                                    <th bk-table-header-cell>Age</th>
+                                </tr>
+                            </thead>
+                            <tbody bk-table-body>
+                                <tr bk-table-row hoverable="false" activable="false">
+                                    <td bk-table-cell>Ivan</td>
+                                    <td bk-table-cell>34</td>
+                                </tr>
+                                <tr bk-table-row hoverable="false" activable="false">
+                                    <td bk-table-cell>John</td>
+                                    <td bk-table-cell>46</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </bk-form-item></div>`,
+                    props: {
+                        id: {
+                            type: 'text',
+                            label: 'ID',
+                            placeholder: 'Form Item ID',
+                            value: '',
+                            required: true,
+                        },
+                        isFixed: {
+                            type: 'checkbox',
+                            label: 'Fixed',
+                            value: false,
+                        },
+                        displayMode: {
+                            type: 'dropdown',
+                            label: 'Display mode',
+                            value: '',
+                            items: [
+                                {
+                                    label: 'Default',
+                                    value: '',
+                                },
+                                {
+                                    label: 'Compact',
+                                    value: 'compact',
+                                },
+                                {
+                                    label: 'Condensed',
+                                    value: 'condensed',
+                                },
+                            ]
+                        },
+                        outerBorders: {
+                            type: 'dropdown',
+                            label: 'Outer borders',
+                            value: '',
+                            items: [
+                                {
+                                    label: 'All',
+                                    value: '',
+                                },
+                                {
+                                    label: 'Horizontal',
+                                    value: 'horizontal',
+                                },
+                                {
+                                    label: 'Vertical',
+                                    value: 'vertical',
+                                },
+                                {
+                                    label: 'Top',
+                                    value: 'top',
+                                },
+                                {
+                                    label: 'Bottom',
+                                    value: 'bottom',
+                                },
+                                {
+                                    label: 'None',
+                                    value: 'none',
+                                },
+                            ]
+                        },
+                        innerBorders: {
+                            type: 'dropdown',
+                            label: 'Inner borders',
+                            value: '',
+                            items: [
+                                {
+                                    label: 'All',
+                                    value: '',
+                                },
+                                {
+                                    label: 'Horizontal',
+                                    value: 'horizontal',
+                                },
+                                {
+                                    label: 'Vertical',
+                                    value: 'vertical',
+                                },
+                                {
+                                    label: 'Top',
+                                    value: 'top',
+                                },
+                                {
+                                    label: 'None',
+                                    value: 'none',
+                                },
+                            ]
+                        },
+                        model: {
+                            type: 'text',
+                            label: 'Model',
+                            value: '',
+                            placeholder: 'tableData',
+                        },
+                        info: {
+                            type: 'textinfo',
+                            label: 'Example model data',
+                            value: `{\n  headers: ['Name', 'Age'],\n  rows: [\n    ['Ivan', 34],\n    ['John', 46]\n  ]\n}`,
+                        },
+                    },
+                },
             ]
         },
         {
@@ -1646,12 +1774,14 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     groupId: model[i].groupId
                 };
                 for (const key in model[i].$scope.props) {
-                    if (model[i].$scope.props[key].enabledOn) {
-                        if (model[i].$scope.props[model[i].$scope.props[key].enabledOn.key].value === model[i].$scope.props[key].enabledOn.value)
-                            //@ts-ignore
+                    if (model[i].$scope.props[key].type !== 'textinfo') {
+                        if (model[i].$scope.props[key].enabledOn) {
+                            if (model[i].$scope.props[model[i].$scope.props[key].enabledOn.key].value === model[i].$scope.props[key].enabledOn.value)
+                                //@ts-ignore
+                                controlObj[key] = model[i].$scope.props[key].value;
+                        } else { //@ts-ignore
                             controlObj[key] = model[i].$scope.props[key].value;
-                    } else { //@ts-ignore
-                        controlObj[key] = model[i].$scope.props[key].value;
+                        }
                     }
                 }
                 formJson.push(controlObj);

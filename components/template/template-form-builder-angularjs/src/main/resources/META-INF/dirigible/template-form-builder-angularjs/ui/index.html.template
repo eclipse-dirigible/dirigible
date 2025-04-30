@@ -133,6 +133,19 @@
 					</bk-form-item>
 		#end
 				</bk-form-group>
+	#elseif($element.controlId == "table")
+				<table bk-table fixed="$element.isFixed" display-mode="$element.displayMode" outer-borders="$element.outerBorders" inner-borders="$element.innerBorders">
+					<thead bk-table-header interactive="false">
+						<tr bk-table-row>
+							<th bk-table-header-cell ng-repeat="header in ${element.model}.headers track by $index">{{header}}</th>
+						</tr>
+					</thead>
+					<tbody bk-table-body>
+						<tr bk-table-row hoverable="false" activable="false" ng-repeat="cell in ${element.model}.rows track by $index">
+							<td bk-table-cell ng-repeat="next in cell">{{next}}</td>
+						</tr>
+					</tbody>
+				</table>
 	#elseif($element.controlId == "button")
 				<div>
 					<bk-button#if($element.sizeToText) class="bk-float-right"#else class="bk-full-width"#end #if($element.isSubmit)type="submit" ng-disabled="!forms.form.$valid"#end label="$element.label" compact="$element.isCompact" state="$element.type"#if($element.callback) ng-click="$element.callback"#end></bk-button>
