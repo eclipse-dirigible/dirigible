@@ -24,16 +24,12 @@ public class InsertBuilder extends AbstractSqlBuilder {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(InsertBuilder.class);
-
-    /** The table. */
-    private String table = null;
-
     /** The columns. */
     private final List<String> columns = new ArrayList<String>();
-
     /** The values. */
     private final List<String> values = new ArrayList<String>();
-
+    /** The table. */
+    private String table = null;
     /** The select. */
     private String select = null;
 
@@ -150,6 +146,15 @@ public class InsertBuilder extends AbstractSqlBuilder {
     }
 
     /**
+     * Gets the table.
+     *
+     * @return the table
+     */
+    public String getTable() {
+        return table;
+    }
+
+    /**
      * Generate columns.
      *
      * @param sql the sql
@@ -161,6 +166,22 @@ public class InsertBuilder extends AbstractSqlBuilder {
                .append(traverseColumns())
                .append(CLOSE);
         }
+    }
+
+    /**
+     * Traverse columns.
+     *
+     * @return the string
+     */
+    protected String traverseColumns() {
+        StringBuilder snippet = new StringBuilder();
+        for (String column : this.columns) {
+            String columnName = encapsulate(column, true);
+            snippet.append(columnName)
+                   .append(COMMA)
+                   .append(SPACE);
+        }
+        return snippet.substring(0, snippet.length() - 2);
     }
 
     /**
@@ -184,34 +205,6 @@ public class InsertBuilder extends AbstractSqlBuilder {
                .append(enumerateValues())
                .append(CLOSE);
         }
-    }
-
-    /**
-     * Generate select.
-     *
-     * @param sql the sql
-     */
-    protected void generateSelect(StringBuilder sql) {
-        if (this.select != null) {
-            sql.append(SPACE)
-               .append(this.select);
-        }
-    }
-
-    /**
-     * Traverse columns.
-     *
-     * @return the string
-     */
-    protected String traverseColumns() {
-        StringBuilder snippet = new StringBuilder();
-        for (String column : this.columns) {
-            String columnName = encapsulate(column);
-            snippet.append(columnName)
-                   .append(COMMA)
-                   .append(SPACE);
-        }
-        return snippet.substring(0, snippet.length() - 2);
     }
 
     /**
@@ -245,21 +238,24 @@ public class InsertBuilder extends AbstractSqlBuilder {
     }
 
     /**
+     * Generate select.
+     *
+     * @param sql the sql
+     */
+    protected void generateSelect(StringBuilder sql) {
+        if (this.select != null) {
+            sql.append(SPACE)
+               .append(this.select);
+        }
+    }
+
+    /**
      * Generate insert.
      *
      * @param sql the sql
      */
     protected void generateInsert(StringBuilder sql) {
         sql.append(KEYWORD_INSERT);
-    }
-
-    /**
-     * Gets the table.
-     *
-     * @return the table
-     */
-    public String getTable() {
-        return table;
     }
 
     /**
