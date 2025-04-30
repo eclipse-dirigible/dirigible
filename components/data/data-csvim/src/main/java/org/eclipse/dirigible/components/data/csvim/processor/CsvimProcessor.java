@@ -9,6 +9,20 @@
  */
 package org.eclipse.dirigible.components.data.csvim.processor;
 
+import static org.eclipse.dirigible.components.api.platform.RepositoryFacade.getResource;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
+import javax.sql.DataSource;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -32,22 +46,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-
-import javax.sql.DataSource;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.stream.Collectors;
-
-import static org.eclipse.dirigible.components.api.platform.RepositoryFacade.getResource;
 
 /**
  * The Class CsvimProcessor.
@@ -220,8 +218,10 @@ public class CsvimProcessor {
                 }
             }
 
-            insertCsvRecords(connection, targetSchema, tableMetadata, recordsToInsert, csvParser.getHeaderNames(), csvFile);
-            if (Boolean.TRUE.equals(csvFile.getUpsert())) {
+            if (recordsToInsert.size() > 0) {
+                insertCsvRecords(connection, targetSchema, tableMetadata, recordsToInsert, csvParser.getHeaderNames(), csvFile);
+            }
+            if (Boolean.TRUE.equals(csvFile.getUpsert()) && recordsToUpdate.size() > 0) {
                 updateCsvRecords(connection, targetSchema, tableMetadata, recordsToUpdate, csvParser.getHeaderNames(), pkName, csvFile);
             }
             if (countAll > 0 && csvFile.getSequence() != null) {

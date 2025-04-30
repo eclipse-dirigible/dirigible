@@ -9,6 +9,16 @@
  */
 package org.eclipse.dirigible.components.data.csvim.processor;
 
+import java.io.ByteArrayInputStream;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Types;
+import java.util.Base64;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.dirigible.commons.api.helpers.DateTimeUtils;
@@ -28,17 +38,6 @@ import org.postgresql.util.PGobject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-
-import java.io.ByteArrayInputStream;
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Types;
-import java.util.Base64;
-import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * The Class CsvProcessor.
@@ -75,7 +74,7 @@ public class CsvProcessor {
     public void insert(Connection connection, String schema, TableMetadata tableMetadata, List<CsvRecord> csvRecords,
             List<String> headerNames, CsvFile csvFile) throws SQLException {
         if (csvRecords.isEmpty()) {
-            logger.info("Skipping import - CSV records are empty for csv file [{}].", csvFile);
+            logger.warn("Skipping import - CSV records are empty for csv file [{}].", csvFile);
             return;
         }
 
