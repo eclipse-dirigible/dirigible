@@ -80,8 +80,8 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
             { value: 'BIT', label: 'BIT' }
         ];
         $scope.dataOrderByOptions = [
-            { value: 'ASC', label: 'ASCENDING' },
-            { value: 'DESC', label: 'DESCENDING' }
+            { value: 'ASC', text: 'Ascending' },
+            { value: 'DESC', text: 'Descending' }
         ];
         $scope.widgetTypes = [
             { value: 'TEXTBOX', label: 'Text Box' },

@@ -180,9 +180,8 @@
                             <bk-form-label for="dbtype" colon="true">Order by</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-select placeholder="Select an order by option" label-id="dborder" ng-model="dataParameters.dataOrderBy" dropdown-fixed="true">
-                                <bk-option text="{{ order.label }}" value="order.value" ng-repeat="order in dataOrderByOptions track by $index"></bk-option>
-                            </bk-select>
+                            <bk-combobox-input input-id="dborder" ng-model="dataParameters.dataOrderBy" dropdown-items="dataOrderByOptions" placeholder="Select an order by option">
+	                        </bk-combobox-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
