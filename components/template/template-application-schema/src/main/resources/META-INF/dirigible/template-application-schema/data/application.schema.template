@@ -42,6 +42,9 @@
 #else
                         "nullable": true,
 #end
+#if($property.dataUnique)
+                        "unique": true,
+#end
                         "name": "${property.dataName}"
 #if($foreach.hasNext)
                     },
