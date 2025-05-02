@@ -28,6 +28,11 @@ public class GitPerspective {
     }
 
     public void cloneRepository(String repositoryUrl, Optional<String> user, Optional<String> pass, Optional<String> branch) {
+        cloneRepository(repositoryUrl, user, pass, branch, 2000);
+    }
+
+    public void cloneRepository(String repositoryUrl, Optional<String> user, Optional<String> pass, Optional<String> branch,
+            long waitForCloneMillis) {
         browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.TITLE, "Clone");
 
         browser.enterTextInElementById("curli", repositoryUrl);
@@ -38,7 +43,7 @@ public class GitPerspective {
 
         browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.LABEL, "Clone");
 
-        SleepUtil.sleepMillis(2000);
+        SleepUtil.sleepMillis(waitForCloneMillis);
 
         assertClonedRepository();
     }
