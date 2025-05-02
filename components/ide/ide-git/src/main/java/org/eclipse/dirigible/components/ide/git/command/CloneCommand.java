@@ -245,33 +245,36 @@ public class CloneCommand {
             throws IOException, GitConnectorException {
         Project selectedProject = workspace.getProject(projectName);
         org.eclipse.dirigible.components.ide.workspace.domain.File packageJson = selectedProject.getFile(PACKAGE_JSON);
-        if (packageJson.exists()) {
-            String root = commandService.getRepositoryRoot();
-            String workingDirectory = root + packageJson.getParent()
-                                                        .getPath();
-            try {
-                commandService.executeCommandLine(workingDirectory, NPM_INSTALL, null, null, null);
-                Folder nodeModules = selectedProject.getFolder(NODE_MODULES);
-                if (nodeModules.exists()) {
-                    for (Folder folder : nodeModules.getFolders()) {
-                        if (folder.getName()
-                                  .startsWith("@")) {
-                            for (Folder subFolder : folder.getFolders()) {
-                                subFolder.copyTo(IRepositoryStructure.PATH_REGISTRY_PUBLIC + IRepository.SEPARATOR + subFolder.getName());
-                                logger.trace("Retrieving the NPM dependency [{}]", subFolder.getName());
-                            }
-                        } else {
-                            folder.copyTo(IRepositoryStructure.PATH_REGISTRY_PUBLIC + IRepository.SEPARATOR + folder.getName());
-                            logger.trace("Retrieving the NPM dependency [{}]", folder.getName());
+        if (!packageJson.exists()) {
+            logger.info("Will not get the NPM dependencies of the project [{}] since there is NO [{}] file.", projectName, PACKAGE_JSON);
+            return;
+        }
+        logger.info("Retrieving the NPM dependencies of the project [{}] since there is [{}] file...", projectName, PACKAGE_JSON);
+        String root = commandService.getRepositoryRoot();
+        String workingDirectory = root + packageJson.getParent()
+                                                    .getPath();
+        try {
+            commandService.executeCommandLine(workingDirectory, NPM_INSTALL, null, null, null);
+            Folder nodeModules = selectedProject.getFolder(NODE_MODULES);
+            if (nodeModules.exists()) {
+                for (Folder folder : nodeModules.getFolders()) {
+                    if (folder.getName()
+                              .startsWith("@")) {
+                        for (Folder subFolder : folder.getFolders()) {
+                            subFolder.copyTo(IRepositoryStructure.PATH_REGISTRY_PUBLIC + IRepository.SEPARATOR + subFolder.getName());
+                            logger.trace("Retrieving the NPM dependency [{}]", subFolder.getName());
                         }
+                    } else {
+                        folder.copyTo(IRepositoryStructure.PATH_REGISTRY_PUBLIC + IRepository.SEPARATOR + folder.getName());
+                        logger.trace("Retrieving the NPM dependency [{}]", folder.getName());
                     }
                 }
-                nodeModules.delete();
-            } catch (Exception e) {
-                logger.error("Retrieving the NPM dependencies of the project [{}] failed", projectName, e);
             }
-            logger.info("Retrieving the NPM dependencies of the project [{}] finished", projectName);
+            nodeModules.delete();
+        } catch (Exception e) {
+            logger.error("Retrieving the NPM dependencies of the project [{}] failed", projectName, e);
         }
+        logger.info("Retrieving the NPM dependencies of the project [{}] finished", projectName);
     }
 
     /**
