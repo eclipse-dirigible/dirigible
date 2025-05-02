@@ -215,6 +215,8 @@
         <fontawesome.version>4.7.0</fontawesome.version>
         <ag-grid.version>27.1.0</ag-grid.version>
         <papaparse.version>5.3.2</papaparse.version>
+        <i18next.version>25.0.2</i18next.version>
+        <i18next-http-backend.version>3.0.2</i18next-http-backend.version>
 
         <!-- Tests -->
         <testcontainers.version>1.20.6</testcontainers.version>
@@ -506,6 +508,9 @@
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/resources-core/ui/**
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/resources-locale/**
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/platform-core/ui/**

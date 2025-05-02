@@ -120,6 +120,16 @@
 			<artifactId>papaparse</artifactId>
 			<version>${papaparse.version}</version>
 		</dependency>
+		<dependency>
+			<groupId>org.webjars.npm</groupId>
+			<artifactId>i18next</artifactId>
+			<version>${i18next.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.webjars.npm</groupId>
+			<artifactId>i18next-http-backend</artifactId>
+			<version>${i18next-http-backend.version.version}</version>
+		</dependency>
     </dependencies>
     
     <build>

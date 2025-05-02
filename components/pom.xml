@@ -243,6 +243,7 @@
         <module>ui/service-generate</module>
         <module>ui/service-actions</module>
         <module>ui/service-git</module>
+        <module>ui/service-locale</module>
         <module>ui/service-extensions</module>
         <module>ui/editor-monaco</module>
         <module>ui/editor-monaco-extensions</module>
@@ -294,6 +295,7 @@
         <module>resources/resources-inbox</module>
         <module>resources/resources-documents</module>
         <module>resources/resources-karavan-libs</module>
+        <module>resources/resources-locale</module>
 
         <!-- Templates -->
         <module>template/template-application-angular</module>
@@ -1388,6 +1390,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-service-git</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-service-locale</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
