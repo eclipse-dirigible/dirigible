@@ -203,7 +203,7 @@ function createModel(graph) {
 					if (property.widgetDropDownValue !== null) {
 						model.push(' widgetDropDownValue="' + _.escape(property.widgetDropDownValue) + '"');
 					}
-					if (property.widgetDropDownMultiSelect !== null) {
+					if (property.widgetDropDownMultiSelect === "true" || property.widgetDropDownMultiSelect === "false") {
 						model.push(' widgetDropDownMultiSelect="' + _.escape(property.widgetDropDownMultiSelect) + '"');
 					}
 					if (property.widgetDependsOnProperty !== null) {
