@@ -32,7 +32,9 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static java.text.MessageFormat.format;
 
@@ -352,7 +354,7 @@ public class DatabaseFacade implements InitializingBean {
      * @throws IllegalArgumentException if the provided datasouce is not found
      * @throws RuntimeException if an error occur
      */
-    public static List<Long> insert(String sql, String parameters, String datasourceName) throws Throwable {
+    public static List<Map<String, Object>> insert(String sql, String parameters, String datasourceName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
         if (dataSource == null) {
             throw new IllegalArgumentException("DataSource [" + datasourceName + "] not known.");
@@ -367,13 +369,25 @@ public class DatabaseFacade implements InitializingBean {
                     IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
                     ParametersSetter.setParameters(parameters, statement);
                 }
+
                 int updatedRows = preparedStatement.executeUpdate();
-                List<Long> generatedIds = new ArrayList<>(updatedRows);
+                List<Map<String, Object>> generatedKeysList = new ArrayList<>(updatedRows);
+
                 try (ResultSet generatedKeys = preparedStatement.getGeneratedKeys()) {
+                    ResultSetMetaData metaData = generatedKeys.getMetaData();
+                    int columnCount = metaData.getColumnCount();
+
                     while (generatedKeys.next()) {
-                        generatedIds.add(generatedKeys.getLong(1));
+                        Map<String, Object> keyRow = new LinkedHashMap<>();
+                        for (int i = 1; i <= columnCount; i++) {
+                            String columnName = metaData.getColumnLabel(i);
+                            Object value = generatedKeys.getObject(i);
+                            keyRow.put(columnName, value);
+                        }
+                        generatedKeysList.add(keyRow);
                     }
-                    return generatedIds;
+
+                    return generatedKeysList;
                 }
             } catch (SQLException | RuntimeException ex) {
                 logger.error("Failed to execute insert statement [{}] in data source [{}].", sql, datasourceName, ex);
