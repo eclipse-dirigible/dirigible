@@ -342,6 +342,7 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 				cell.value.widgetIsMajor = data.widgetIsMajor;
 				cell.value.widgetDropDownKey = data.widgetDropDownKey;
 				cell.value.widgetDropDownValue = data.widgetDropDownValue;
+				cell.value.widgetDropDownMultiSelect = data.widgetDropDownMultiSelect;
 				cell.value.widgetDependsOnProperty = data.widgetDependsOnProperty;
 				cell.value.widgetDependsOnEntity = data.widgetDependsOnEntity;
 				cell.value.widgetDependsOnValueFrom = data.widgetDependsOnValueFrom;
@@ -942,6 +943,7 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 									widgetIsMajor: cell.value.widgetIsMajor,
 									widgetDropDownKey: cell.value.widgetDropDownKey,
 									widgetDropDownValue: cell.value.widgetDropDownValue,
+									widgetDropDownMultiSelect: cell.value.widgetDropDownMultiSelect,
 									widgetDependsOnProperty: cell.value.widgetDependsOnProperty,
 									widgetDependsOnEntity: cell.value.widgetDependsOnEntity,
 									widgetDependsOnValueFrom: cell.value.widgetDependsOnValueFrom,

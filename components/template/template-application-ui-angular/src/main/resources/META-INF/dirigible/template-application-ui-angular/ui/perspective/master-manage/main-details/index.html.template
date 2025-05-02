@@ -26,6 +26,9 @@
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--7 #end">
 	                        <bk-combobox-input input-id="id${property.name}"
+								#if($property.widgetDropDownMultiSelect)
+								multi-select="true"
+								#end
 	                            name="${property.name}"
 	                            state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 	                            ng-required="${property.isRequiredProperty}"

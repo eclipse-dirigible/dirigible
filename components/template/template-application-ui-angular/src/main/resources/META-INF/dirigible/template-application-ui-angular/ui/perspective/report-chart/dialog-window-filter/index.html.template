@@ -24,6 +24,9 @@
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
                         <bk-combobox-input input-id="id${property.name}"
+                            #if($property.widgetDropDownMultiSelect)
+                            multi-select="true"
+                            #end
                             name="${property.name}"
                             state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
                             ng-required="${property.isRequiredProperty}"

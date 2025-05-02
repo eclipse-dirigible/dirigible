@@ -213,6 +213,7 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
                             widgetIsMajor: $scope.dataParameters.widgetIsMajor,
                             widgetDropDownKey: $scope.dataParameters.widgetDropDownKey,
                             widgetDropDownValue: $scope.dataParameters.widgetDropDownValue,
+                            widgetDropDownMultiSelect: $scope.dataParameters.widgetDropDownMultiSelect,
                             widgetDependsOnProperty: $scope.dataParameters.widgetDependsOnProperty,
                             widgetDependsOnEntity: $scope.dataParameters.widgetDependsOnEntity,
                             widgetDependsOnValueFrom: $scope.dataParameters.widgetDependsOnValueFrom,

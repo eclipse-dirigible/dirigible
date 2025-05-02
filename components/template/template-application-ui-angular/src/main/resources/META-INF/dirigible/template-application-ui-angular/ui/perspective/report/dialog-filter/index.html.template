@@ -28,6 +28,9 @@
                         </div>
                         <div class="fd-col fd-col-md--8">
 	                        <bk-combobox-input input-id="id${property.name}"
+								#if($property.widgetDropDownMultiSelect)
+								multi-select="true"
+								#end
 	                            name="${property.name}"
 	                            state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 	                            ng-model="entity.${property.name}"
