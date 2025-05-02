@@ -19,7 +19,7 @@ export interface InsertParameter {
 
 export class Insert {
 
-	public static execute(sql: string, parameters?: (string | number | boolean | Date | InsertParameter)[], datasourceName?: string): number {
+	public static execute(sql: string, parameters?: (string | number | boolean | Date | InsertParameter)[], datasourceName?: string):  Array<Record<string, any>> {
 		return DatabaseFacade.insert(sql, parameters ? JSON.stringify(parameters) : undefined, datasourceName);
 	}
 }
