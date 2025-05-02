@@ -10,7 +10,7 @@
 package org.eclipse.dirigible.components.engine.command.service;
 
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
-import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.commons.process.Piper;
 import org.eclipse.dirigible.commons.process.ProcessUtils;
 import org.eclipse.dirigible.components.api.http.HttpRequestFacade;
@@ -20,7 +20,6 @@ import org.eclipse.dirigible.components.registry.accessor.RegistryAccessor;
 import org.eclipse.dirigible.repository.api.IResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.annotation.RequestScope;
 
@@ -37,19 +36,14 @@ import java.util.Map;
 @Service
 @RequestScope
 public class CommandService {
-
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(CommandService.class);
 
-    /** The Constant COMMAND_EXTENSION. */
-    public static final String COMMAND_EXTENSION = ".command";
+    private final RegistryAccessor registryAccessor;
 
-    /** The Constant DIRIGIBLE_EXEC_COMMAND_LOGGING_ENABLED. */
-    private static final String DIRIGIBLE_EXEC_COMMAND_LOGGING_ENABLED = "DIRIGIBLE_EXEC_COMMAND_LOGGING_ENABLED";
-
-    /** The registry accessor. */
-    @Autowired
-    private RegistryAccessor registryAccessor;
+    CommandService(RegistryAccessor registryAccessor) {
+        this.registryAccessor = registryAccessor;
+    }
 
     /**
      * Exist resource.
@@ -62,26 +56,6 @@ public class CommandService {
     }
 
     /**
-     * Gets the resource.
-     *
-     * @param path the requested resource location
-     * @return the {@link IResource} instance
-     */
-    public IResource getResource(String path) {
-        return registryAccessor.getResource(path);
-    }
-
-    /**
-     * Gets the resource content.
-     *
-     * @param path the requested resource location
-     * @return the {@link IResource} content as a byte array
-     */
-    public byte[] getResourceContent(String path) {
-        return registryAccessor.getRegistryContent(path);
-    }
-
-    /**
      * Execute service.
      *
      * @param module the module
@@ -91,12 +65,8 @@ public class CommandService {
      */
     public String executeCommand(String module, Map<String, String> params) throws Exception {
 
-        if (logger.isTraceEnabled()) {
-            logger.trace("entering: executeCommand()"); //$NON-NLS-1$
-        }
-        if (logger.isTraceEnabled()) {
-            logger.trace("module = " + module); //$NON-NLS-1$
-        }
+        logger.trace("entering: executeCommand()"); //$NON-NLS-1$
+        logger.trace("module = {}", module); //$NON-NLS-1$
 
         if (module == null) {
             throw new IllegalArgumentException("Command module name cannot be null");
@@ -117,9 +87,7 @@ public class CommandService {
         try {
             commandDefinition = GsonHelper.fromJson(commandSource, Command.class);
         } catch (Exception e2) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e2.getMessage(), e2);
-            }
+            logger.error(e2.getMessage(), e2);
             throw new Exception(e2);
         }
 
@@ -133,15 +101,31 @@ public class CommandService {
         try {
             HttpResponseFacade.setContentType(commandDefinition.getContentType());
         } catch (Exception e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
+            logger.error(e.getMessage(), e);
         }
 
-        if (logger.isTraceEnabled()) {
-            logger.trace("exiting: executeCommand()");
-        }
+        logger.trace("exiting: executeCommand()");
         return result;
+    }
+
+    /**
+     * Gets the resource.
+     *
+     * @param path the requested resource location
+     * @return the {@link IResource} instance
+     */
+    public IResource getResource(String path) {
+        return registryAccessor.getResource(path);
+    }
+
+    /**
+     * Gets the resource content.
+     *
+     * @param path the requested resource location
+     * @return the {@link IResource} content as a byte array
+     */
+    public byte[] getResourceContent(String path) {
+        return registryAccessor.getRegistryContent(path);
     }
 
     /**
@@ -167,72 +151,57 @@ public class CommandService {
      */
     public String executeCommandLine(String workingDirectory, String commandLine, Map<String, String> forAdding, List<String> forRemoving,
             Map<String, String> params) throws Exception {
-        String result;
 
-        String[] args;
-        try {
-            args = ProcessUtils.translateCommandline(commandLine);
-        } catch (Exception e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
-            throw new Exception(e);
-        }
+        String[] args = translateCommandLine(commandLine);
 
         if (shouldLogCommand()) {
-            if (logger.isDebugEnabled()) {
-                logger.debug("executing command=" + commandLine); //$NON-NLS-1$
-            }
+            logger.debug("executing command={}", commandLine);
         }
 
         ByteArrayOutputStream out;
+        ProcessBuilder processBuilder = ProcessUtils.createProcess(args);
+
+        ProcessUtils.addEnvironmentVariables(processBuilder, forAdding);
+        ProcessUtils.addEnvironmentVariables(processBuilder, params);
+        ProcessUtils.removeEnvironmentVariables(processBuilder, forRemoving);
+
+        processBuilder.directory(new File(workingDirectory));
+
+        processBuilder.redirectErrorStream(true);
+
+        out = new ByteArrayOutputStream();
+        Process process = ProcessUtils.startProcess(args, processBuilder);
+        Piper pipe = new Piper(process.getInputStream(), out);
+        new Thread(pipe).start();
         try {
-            ProcessBuilder processBuilder = ProcessUtils.createProcess(args);
-
-            ProcessUtils.addEnvironmentVariables(processBuilder, forAdding);
-            ProcessUtils.addEnvironmentVariables(processBuilder, params);
-            ProcessUtils.removeEnvironmentVariables(processBuilder, forRemoving);
-
-            processBuilder.directory(new File(workingDirectory));
-
-            processBuilder.redirectErrorStream(true);
-
-            out = new ByteArrayOutputStream();
-            Process process = ProcessUtils.startProcess(args, processBuilder);
-            Piper pipe = new Piper(process.getInputStream(), out);
-            new Thread(pipe).start();
-            try {
-                int i = 0;
-                boolean deadYet = false;
-                do {
-                    Thread.sleep(ProcessUtils.DEFAULT_WAIT_TIME);
-                    try {
-                        process.exitValue();
-                        deadYet = true;
-                    } catch (IllegalThreadStateException e) {
-                        if (++i >= ProcessUtils.DEFAULT_LOOP_COUNT) {
-                            process.destroy();
-                            String message =
-                                    "Exceeds timeout - " + ((ProcessUtils.DEFAULT_WAIT_TIME / 1000) * ProcessUtils.DEFAULT_LOOP_COUNT);
-                            throw new RuntimeException(message, e);
-                        }
+            int i = 0;
+            boolean deadYet = false;
+            do {
+                Thread.sleep(ProcessUtils.DEFAULT_WAIT_TIME);
+                try {
+                    process.exitValue();
+                    deadYet = true;
+                } catch (IllegalThreadStateException e) {
+                    if (++i >= ProcessUtils.DEFAULT_LOOP_COUNT) {
+                        process.destroy();
+                        String message = "Exceeds timeout - " + ((ProcessUtils.DEFAULT_WAIT_TIME / 1000) * ProcessUtils.DEFAULT_LOOP_COUNT);
+                        throw new RuntimeException(message, e);
                     }
-                } while (!deadYet);
-
-            } catch (Exception e) {
-                if (logger.isErrorEnabled()) {
-                    logger.error(e.getMessage(), e);
                 }
-                throw new IOException(e);
-            }
+            } while (!deadYet);
+
         } catch (Exception e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
-            throw new Exception(e);
+            throw new IOException(e);
         }
-        result = out.toString(StandardCharsets.UTF_8);
-        return result;
+        return out.toString(StandardCharsets.UTF_8);
+    }
+
+    private static String[] translateCommandLine(String commandLine) throws Exception {
+        try {
+            return ProcessUtils.translateCommandline(commandLine);
+        } catch (Exception e) {
+            throw new Exception("Failed to translate commandLine [" + commandLine + "]", e);
+        }
     }
 
     /**
@@ -241,8 +210,7 @@ public class CommandService {
      * @return true, if successful
      */
     private boolean shouldLogCommand() {
-        String shouldEnableLogging = Configuration.get(DIRIGIBLE_EXEC_COMMAND_LOGGING_ENABLED);
-        return Boolean.parseBoolean(shouldEnableLogging);
+        return DirigibleConfig.EXEC_COMMAND_LOGGING_ENABLED.getBooleanValue();
     }
 
 }

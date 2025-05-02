@@ -349,7 +349,6 @@ public class Configuration {
                 "DIRIGIBLE_PRODUCT_TYPE", //
                 "DIRIGIBLE_INSTANCE_NAME", //
                 "DIRIGIBLE_SPARK_CLIENT_URI", //
-                "DIRIGIBLE_EXEC_COMMAND_LOGGING_ENABLED", //
                 "DIRIGIBLE_TERMINAL_ENABLED", //
                 "DIRIGIBLE_MAIL_CONFIG_PROVIDER", //
                 "DIRIGIBLE_MAIL_SMTPS_HOST", //
