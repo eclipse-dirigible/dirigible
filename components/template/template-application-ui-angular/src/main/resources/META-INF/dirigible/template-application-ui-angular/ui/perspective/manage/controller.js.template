@@ -192,7 +192,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 
 		$scope.deleteEntity = (entity) => {
 			let id = entity.${primaryKeysString};
-			Dialog.showDialog({
+			Dialogs.showDialog({
 				title: 'Delete ${name}?',
 				message: `Are you sure you want to delete ${name}? This action cannot be undone.`,
 				buttons: [{
