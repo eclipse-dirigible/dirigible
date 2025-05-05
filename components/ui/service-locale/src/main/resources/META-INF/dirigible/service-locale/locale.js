@@ -64,7 +64,7 @@ function isCached() {
 }
 
 function getLocale() {
-    const common = JSON.parse(registry.getText(`/resources-locales/${lang}/common.json`));
+    const common = JSON.parse(registry.getText(`/resources-locale/${lang}/common.json`));
     const requested = JSON.parse(registry.getText(localePath));
     const responseContent = {
         ...common,

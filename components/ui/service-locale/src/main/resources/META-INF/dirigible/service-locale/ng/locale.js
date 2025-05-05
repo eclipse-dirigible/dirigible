@@ -11,11 +11,11 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 angular.module('LocaleService', []).provider('LocaleService', function LocaleServiceProvider() {
-    let localePath = '';
+    let localePath = viewData.localePath ?? '';
+    let localeNs = viewData.localeNs ?? ''
     let loaded = false;
     this.debug = false;
-    this.setPath = (path) => {
-        localePath = path;
+    function init() {
         i18next.use(i18nextHttpBackend).init({
             lng: 'en-US',
             supportedLngs: ['en-US', 'bg-BG'],
@@ -23,25 +23,42 @@ angular.module('LocaleService', []).provider('LocaleService', function LocaleSer
             load: 'currentOnly',
             preload: ['en-US'],
             debug: this.debug,
-            ns: ['welcome'],
+            ns: localeNs,
             maxRetries: 1,
             backend: {
                 loadPath: `/services/js/service-locale/locale.js?path=${localePath}&lng={{lng}}&ns={{ns}}`
             }
-        }, () => {
+        }, (_, getError) => {
+            if (getError()) console.error(getError());
             loaded = true;
         });
+    }
+    this.setPath = (path) => {
+        localePath = path;
+        loaded = false;
+        init();
     };
     this.getPath = () => {
         return localePath;
+    };
+    this.setNs = (ns) => {
+        localeNs = ns;
+        loaded = false;
+        init();
+    };
+    this.getNs = () => {
+        return localeNs;
     };
     this.getTranslation = (key) => {
         if (loaded) return i18next.t(key);
     };
     this.$get = function localeFactory() {
+        init();
         return {
             setPath: this.setPath,
             getPath: this.getPath,
+            setNs: this.setNs,
+            getNs: this.getNs,
             isLoaded: () => loaded,
             getTranslation: this.getTranslation,
         };
