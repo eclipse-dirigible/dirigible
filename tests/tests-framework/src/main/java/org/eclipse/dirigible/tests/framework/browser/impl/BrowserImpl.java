@@ -343,23 +343,23 @@ class BrowserImpl implements Browser {
         boolean continueExecution = true;
         boolean finalExecution = false;
         for (int idx = 1; (continueExecution || finalExecution); idx++) {
-            LOGGER.debug("Check #{}: Searching for element by selector [{}] and conditions [{}]", idx, by, conditions);
+            LOGGER.debug("Check #{}: Searching for element by selector [{}] and conditions [{}]", idx, by, Arrays.toString(conditions));
             // start from parent frame
             Selenide.switchTo()
                     .defaultContent();
 
             Set<SelenideElement> elements = findElementsInFramesRecursively(by, conditions);
             if (elements.size() > 1) {
-                failWithScreenshot("Found [" + elements.size() + "] elements by [" + by + "] and conditions [" + conditions
+                failWithScreenshot("Found [" + elements.size() + "] elements by [" + by + "] and conditions [" + Arrays.toString(conditions)
                         + "] but expected at most one.");
             }
 
             if (elements.size() == 1) {
-                LOGGER.debug("Element by [{}] and conditions [{}] was FOUND.", by, conditions);
+                LOGGER.debug("Element by [{}] and conditions [{}] was FOUND.", by, Arrays.toString(conditions));
                 return Optional.of(elements.iterator()
                                            .next());
             }
-            LOGGER.debug("Element by [{}] and conditions [{}] was NOT found. Will try again.", by, conditions);
+            LOGGER.debug("Element by [{}] and conditions [{}] was NOT found. Will try again.", by, Arrays.toString(conditions));
 
             boolean timeoutReached = System.currentTimeMillis() >= maxWaitTime;
             if (timeoutReached) {
@@ -367,7 +367,8 @@ class BrowserImpl implements Browser {
                     finalExecution = false;
                     break;
                 }
-                LOGGER.debug("Element by [{}] and conditions [{}] was NOT found. Will try to reload the page and find it.", by, conditions);
+                LOGGER.debug("Element by [{}] and conditions [{}] was NOT found. Will try to reload the page and find it.", by,
+                        Arrays.toString(conditions));
                 reload();
                 SleepUtil.sleepSeconds(3);
                 continueExecution = false;
