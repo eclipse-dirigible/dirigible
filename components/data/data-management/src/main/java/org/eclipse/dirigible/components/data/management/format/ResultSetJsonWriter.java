@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.lang3.ClassUtils;
 import org.eclipse.dirigible.components.data.management.helpers.ResultParameters;
 
+import java.io.IOException;
 import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -128,10 +129,7 @@ public class ResultSetJsonWriter extends AbstractResultSetWriter<String> {
                     String clobValue = readClob(clob);
                     jsonGenerator.writeString(clobValue);
                 } else if (value instanceof Date) {
-                    String dateFormatCfg = resultParameters.orElse(DEFAULT_RESULT_PARAMETERS)
-                                                           .getDateFormat();
-                    String formattedValue = serializeSqlDate((Date) value, (null == dateFormatCfg) ? ISO_8601_DATA_FORMAT : dateFormatCfg);
-                    jsonGenerator.writeString(formattedValue);
+                    writeDate(resultParameters, jsonGenerator, value);
                 } else {
                     jsonGenerator.writeString(value == null ? null : value.toString());
                 }
@@ -146,6 +144,26 @@ public class ResultSetJsonWriter extends AbstractResultSetWriter<String> {
 
         jsonGenerator.writeEndArray();
         jsonGenerator.flush();
+    }
+
+    private void writeDate(Optional<ResultParameters> resultParameters, JsonGenerator jsonGenerator, Object value) throws IOException {
+        Optional<String> dateFormatCfg = getDateFormat(resultParameters);
+        if (dateFormatCfg.isEmpty()) {
+            jsonGenerator.writeString(value.toString());
+        } else {
+            String formattedValue = serializeSqlDate((Date) value, dateFormatCfg.get());
+            jsonGenerator.writeString(formattedValue);
+        }
+    }
+
+    private Optional<String> getDateFormat(Optional<ResultParameters> resultParameters) {
+        if (resultParameters.isEmpty()) {
+            return Optional.empty();
+        }
+
+        String dateFormat = resultParameters.get()
+                                            .getDateFormat();
+        return Optional.ofNullable(dateFormat);
     }
 
     private String serializeSqlDate(Date sqlDate, String pattern) {
