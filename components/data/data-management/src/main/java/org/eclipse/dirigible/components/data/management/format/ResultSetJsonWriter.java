@@ -123,8 +123,7 @@ public class ResultSetJsonWriter extends AbstractResultSetWriter<String> {
                 } else if (value instanceof Clob clob) {
                     String clobValue = readClob(clob);
                     jsonGenerator.writeString(clobValue);
-                }
-                if (value instanceof Date) {
+                } else if (value instanceof Date) {
                     String formattedValue = serializeSqlDate((Date) value, dateFormat);
                     jsonGenerator.writeString(formattedValue);
                 } else {
