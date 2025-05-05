@@ -129,7 +129,6 @@
             <groupId>org.webjars.npm</groupId>
             <artifactId>i18next-http-backend</artifactId>
             <version>${i18next-http-backend.version}</version>
-            <scope>provided</scope>
             <exclusions>
                 <exclusion>
                     <groupId>org.webjars.npm</groupId>
