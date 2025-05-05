@@ -49,7 +49,7 @@ public class DatabaseResultSetHelper {
      * @throws Exception the exception
      */
     public static void toJson(ResultSet resultSet, boolean limited, boolean stringify, OutputStream output) throws Exception {
-        toJson(resultSet, limited, stringify, output, null);
+        toJson(resultSet, limited, stringify, output, Optional.empty());
     }
 
     /**
