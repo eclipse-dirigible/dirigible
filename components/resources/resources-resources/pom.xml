@@ -128,7 +128,7 @@
 		<dependency>
 			<groupId>org.webjars.npm</groupId>
 			<artifactId>i18next-http-backend</artifactId>
-			<version>${i18next-http-backend.version.version}</version>
+			<version>${i18next-http-backend.version}</version>
 		</dependency>
     </dependencies>
     

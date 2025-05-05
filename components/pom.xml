@@ -1601,6 +1601,11 @@
                 <artifactId>dirigible-components-resources-karavan-libs</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-locale</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
