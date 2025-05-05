@@ -9,25 +9,6 @@
  */
 package org.eclipse.dirigible.components.api.db;
 
-import static java.text.MessageFormat.format;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.StringWriter;
-import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import javax.sql.DataSource;
 import org.apache.commons.io.output.WriterOutputStream;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.base.logging.LoggingExecutor;
@@ -47,6 +28,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import javax.sql.DataSource;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.sql.*;
+import java.util.*;
+
+import static java.text.MessageFormat.format;
 
 /**
  * The Class DatabaseFacade.
@@ -379,38 +368,55 @@ public class DatabaseFacade implements InitializingBean {
 
         return LoggingExecutor.executeWithException(dataSource, () -> {
 
-            try (Connection connection = dataSource.getConnection();
-                    PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            try (Connection connection = dataSource.getConnection()) {
+                try (PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
-                if (parameters != null) {
-                    IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                    ParametersSetter.setParameters(parameters, statement);
-                }
-
-                int updatedRows = preparedStatement.executeUpdate();
-                List<Map<String, Object>> generatedKeysList = new ArrayList<>(updatedRows);
-
-                try (ResultSet generatedKeys = preparedStatement.getGeneratedKeys()) {
-                    ResultSetMetaData metaData = generatedKeys.getMetaData();
-                    int columnCount = metaData.getColumnCount();
-
-                    while (generatedKeys.next()) {
-                        Map<String, Object> keyRow = new LinkedHashMap<>();
-                        for (int i = 1; i <= columnCount; i++) {
-                            String columnName = metaData.getColumnLabel(i);
-                            Object value = generatedKeys.getObject(i);
-                            keyRow.put(columnName, value);
-                        }
-                        generatedKeysList.add(keyRow);
+                    if (parameters != null) {
+                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
+                        ParametersSetter.setParameters(parameters, statement);
                     }
 
-                    return generatedKeysList;
+                    int updatedRows = preparedStatement.executeUpdate();
+                    List<Map<String, Object>> generatedKeysList = new ArrayList<>(updatedRows);
+
+                    try (ResultSet generatedKeys = preparedStatement.getGeneratedKeys()) {
+                        ResultSetMetaData metaData = generatedKeys.getMetaData();
+                        int columnCount = metaData.getColumnCount();
+
+                        while (generatedKeys.next()) {
+                            Map<String, Object> keyRow = new LinkedHashMap<>();
+                            for (int i = 1; i <= columnCount; i++) {
+                                String columnName = metaData.getColumnLabel(i);
+                                Object value = generatedKeys.getObject(i);
+                                keyRow.put(columnName, value);
+                            }
+                            generatedKeysList.add(keyRow);
+                        }
+
+                        return generatedKeysList;
+                    }
+                } catch (SQLFeatureNotSupportedException ex) {
+                    logger.warn("RETURN_GENERATED_KEYS not supported for connection [{}]. Will execute insert without this option.",
+                            connection, ex);
+                    insertWithoutResult(sql, parameters, connection);
+                    return Collections.emptyList();
                 }
             } catch (SQLException | RuntimeException ex) {
                 logger.error("Failed to execute insert statement [{}] in data source [{}].", sql, datasourceName, ex);
                 throw ex;
             }
+
         });
+    }
+
+    private static void insertWithoutResult(String sql, String parameters, Connection connection) throws SQLException {
+        try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
+            if (parameters != null) {
+                IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
+                ParametersSetter.setParameters(parameters, statement);
+            }
+            preparedStatement.executeUpdate();
+        }
     }
 
     // =========== Insert ===========
