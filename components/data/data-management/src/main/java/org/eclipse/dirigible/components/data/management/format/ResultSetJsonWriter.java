@@ -12,12 +12,14 @@ package org.eclipse.dirigible.components.data.management.format;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.lang3.ClassUtils;
+import org.eclipse.dirigible.components.data.management.helpers.ResultParameters;
 
 import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.sql.*;
 import java.text.SimpleDateFormat;
+import java.util.Optional;
 
 /**
  * The ResultSet JSON Writer.
@@ -25,6 +27,7 @@ import java.text.SimpleDateFormat;
 public class ResultSetJsonWriter extends AbstractResultSetWriter<String> {
 
     private static final String ISO_8601_DATA_FORMAT = "YYYY-MM-DD";
+    private static final ResultParameters DEFAULT_RESULT_PARAMETERS = new ResultParameters(ISO_8601_DATA_FORMAT);
     /** The object mapper. */
     private final ObjectMapper objectMapper = new ObjectMapper();
     /** The limited. */
@@ -52,10 +55,11 @@ public class ResultSetJsonWriter extends AbstractResultSetWriter<String> {
 
     @Override
     public void write(ResultSet resultSet, OutputStream output) throws Exception {
-        write(resultSet, output, ISO_8601_DATA_FORMAT);
+        write(resultSet, output, Optional.of(DEFAULT_RESULT_PARAMETERS));
     }
 
-    public void write(ResultSet resultSet, OutputStream output, String dateFormat) throws Exception {
+    @Override
+    public void write(ResultSet resultSet, OutputStream output, Optional<ResultParameters> resultParameters) throws Exception {
 
         JsonGenerator jsonGenerator = objectMapper.getFactory()
                                                   .createGenerator(output);
@@ -124,7 +128,9 @@ public class ResultSetJsonWriter extends AbstractResultSetWriter<String> {
                     String clobValue = readClob(clob);
                     jsonGenerator.writeString(clobValue);
                 } else if (value instanceof Date) {
-                    String formattedValue = serializeSqlDate((Date) value, dateFormat);
+                    String dateFormatCfg = resultParameters.orElse(DEFAULT_RESULT_PARAMETERS)
+                                                           .getDateFormat();
+                    String formattedValue = serializeSqlDate((Date) value, (null == dateFormatCfg) ? ISO_8601_DATA_FORMAT : dateFormatCfg);
                     jsonGenerator.writeString(formattedValue);
                 } else {
                     jsonGenerator.writeString(value == null ? null : value.toString());

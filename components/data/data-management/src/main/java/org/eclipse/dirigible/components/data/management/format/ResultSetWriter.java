@@ -9,8 +9,11 @@
  */
 package org.eclipse.dirigible.components.data.management.format;
 
+import org.eclipse.dirigible.components.data.management.helpers.ResultParameters;
+
 import java.io.OutputStream;
 import java.sql.ResultSet;
+import java.util.Optional;
 
 /**
  * The ResultSet Writer.
@@ -31,9 +34,9 @@ public interface ResultSetWriter<T> {
     /**
      * @param rs the rs
      * @param output the output
-     * @param dateFormat required date format
+     * @param resultParameters result parameters
      * @throws Exception the exception
      */
-    void write(ResultSet rs, OutputStream output, String dateFormat) throws Exception;
+    void write(ResultSet rs, OutputStream output, Optional<ResultParameters> resultParameters) throws Exception;
 
 }

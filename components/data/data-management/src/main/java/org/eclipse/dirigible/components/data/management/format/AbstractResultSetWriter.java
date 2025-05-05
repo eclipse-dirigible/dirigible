@@ -10,10 +10,12 @@
 package org.eclipse.dirigible.components.data.management.format;
 
 import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.components.data.management.helpers.ResultParameters;
 import org.eclipse.dirigible.components.database.DatabaseParameters;
 
 import java.io.OutputStream;
 import java.sql.ResultSet;
+import java.util.Optional;
 
 /**
  * The Abstract ResultSet Writer.
@@ -92,7 +94,8 @@ public abstract class AbstractResultSetWriter<T> implements ResultSetWriter<T> {
         this.stringify = stringify;
     }
 
-    public void write(ResultSet rs, OutputStream output, String dateFormat) throws Exception {
+    @Override
+    public void write(ResultSet rs, OutputStream output, Optional<ResultParameters> resultParameters) throws Exception {
         write(rs, output);
     }
 

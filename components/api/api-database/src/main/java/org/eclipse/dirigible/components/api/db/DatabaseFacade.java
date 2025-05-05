@@ -14,6 +14,7 @@ import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.base.logging.LoggingExecutor;
 import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper;
 import org.eclipse.dirigible.components.data.management.helpers.DatabaseResultSetHelper;
+import org.eclipse.dirigible.components.data.management.helpers.ResultParameters;
 import org.eclipse.dirigible.components.data.management.service.DatabaseDefinitionService;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.database.DirigibleConnection;
@@ -31,10 +32,7 @@ import javax.sql.DataSource;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static java.text.MessageFormat.format;
 
@@ -236,7 +234,10 @@ public class DatabaseFacade implements InitializingBean {
         return query(sql, parameters, datasourceName, null);
     }
 
-    public static String query(String sql, String parameters, String datasourceName, String dateFormat) throws Throwable {
+    public static String query(String sql, String parameters, String datasourceName, String resultParametersJson) throws Throwable {
+        ResultParameters resultParameters =
+                null == resultParametersJson ? null : GsonHelper.fromJson(resultParametersJson, ResultParameters.class);
+
         DataSource dataSource = getDataSource(datasourceName);
         return LoggingExecutor.executeWithException(dataSource, () -> {
             if (dataSource == null) {
@@ -260,7 +261,7 @@ public class DatabaseFacade implements InitializingBean {
                     } catch (IOException e) {
                         throw new Exception(e);
                     }
-                    DatabaseResultSetHelper.toJson(resultSet, false, false, output, dateFormat);
+                    DatabaseResultSetHelper.toJson(resultSet, false, false, output, Optional.ofNullable(resultParameters));
                     return sw.toString();
                 }
             } catch (Exception ex) {
