@@ -29,8 +29,8 @@ export interface NamedQueryParameter {
 
 export class Query {
 
-	public static execute(sql: string, parameters?: (string | number | boolean | Date | QueryParameter)[], datasourceName?: string): any[] {
-		const resultset = DatabaseFacade.query(sql, parameters ? JSON.stringify(parameters) : undefined, datasourceName);
+	public static execute(sql: string, parameters?: (string | number | boolean | Date | QueryParameter)[], datasourceName?: string,  dateFormat?: string): any[] {
+		const resultset = DatabaseFacade.query(sql, parameters ? JSON.stringify(parameters) : undefined, datasourceName, dateFormat);
 		return JSON.parse(resultset);
 	}
 	

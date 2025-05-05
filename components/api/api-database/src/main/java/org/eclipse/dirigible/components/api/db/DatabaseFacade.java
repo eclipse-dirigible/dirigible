@@ -233,6 +233,10 @@ public class DatabaseFacade implements InitializingBean {
      * @throws Exception the exception
      */
     public static String query(String sql, String parameters, String datasourceName) throws Throwable {
+        return query(sql, parameters, datasourceName, null);
+    }
+
+    public static String query(String sql, String parameters, String datasourceName, String dateFormat) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
         return LoggingExecutor.executeWithException(dataSource, () -> {
             if (dataSource == null) {
@@ -256,7 +260,7 @@ public class DatabaseFacade implements InitializingBean {
                     } catch (IOException e) {
                         throw new Exception(e);
                     }
-                    DatabaseResultSetHelper.toJson(resultSet, false, false, output);
+                    DatabaseResultSetHelper.toJson(resultSet, false, false, output, dateFormat);
                     return sw.toString();
                 }
             } catch (Exception ex) {

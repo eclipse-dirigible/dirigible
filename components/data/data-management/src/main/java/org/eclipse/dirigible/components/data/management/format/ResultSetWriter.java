@@ -11,7 +11,6 @@ package org.eclipse.dirigible.components.data.management.format;
 
 import java.io.OutputStream;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 
 /**
  * The ResultSet Writer.
@@ -28,5 +27,13 @@ public interface ResultSetWriter<T> {
      * @throws Exception the exception
      */
     void write(ResultSet rs, OutputStream output) throws Exception;
+
+    /**
+     * @param rs the rs
+     * @param output the output
+     * @param dateFormat required date format
+     * @throws Exception the exception
+     */
+    void write(ResultSet rs, OutputStream output, String dateFormat) throws Exception;
 
 }

@@ -48,10 +48,29 @@ public class DatabaseResultSetHelper {
      * @throws Exception the exception
      */
     public static void toJson(ResultSet resultSet, boolean limited, boolean stringify, OutputStream output) throws Exception {
+        toJson(resultSet, limited, stringify, output, null);
+    }
+
+    /**
+     * Prints the provided ResultSet to the {@link ResultSetJsonWriter} writer.
+     *
+     * @param resultSet the result set
+     * @param limited the limited
+     * @param stringify the stringified flag
+     * @param output the output
+     * @param dateFormat required date format
+     * @throws Exception the exception
+     */
+    public static void toJson(ResultSet resultSet, boolean limited, boolean stringify, OutputStream output, String dateFormat)
+            throws Exception {
         ResultSetJsonWriter writer = new ResultSetJsonWriter();
         writer.setLimited(limited);
         writer.setStringified(stringify);
-        writer.write(resultSet, output);
+        if (null == dateFormat) {
+            writer.write(resultSet, output);
+        } else {
+            writer.write(resultSet, output, dateFormat);
+        }
         output.flush();
     }
 
