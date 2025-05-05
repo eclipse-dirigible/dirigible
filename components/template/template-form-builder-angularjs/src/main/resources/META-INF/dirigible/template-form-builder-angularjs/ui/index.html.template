@@ -137,12 +137,16 @@
 				<table bk-table fixed="$element.isFixed" display-mode="$element.displayMode" outer-borders="$element.outerBorders" inner-borders="$element.innerBorders">
 					<thead bk-table-header interactive="false">
 						<tr bk-table-row>
-							<th bk-table-header-cell ng-repeat="header in ${element.model}.headers track by $index">{{header}}</th>
+		#foreach($header in $element.headers)
+							<th bk-table-header-cell>$header.label</th>
+		#end
 						</tr>
 					</thead>
 					<tbody bk-table-body>
-						<tr bk-table-row hoverable="false" activable="false" ng-repeat="cell in ${element.model}.rows track by $index">
-							<td bk-table-cell ng-repeat="next in cell">{{next}}</td>
+						<tr bk-table-row hoverable="false" activable="false" ng-repeat="cell in ${element.model} track by $index">
+		#foreach($header in $element.headers)
+							<td bk-table-cell>{{cell['$header.value']}}</td>
+		#end
 						</tr>
 					</tbody>
 				</table>

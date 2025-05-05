@@ -722,6 +722,8 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                             enabledOn: { key: 'staticData', value: true },
                             type: 'list',
                             label: 'Options',
+                            labelText: 'Label',
+                            valueText: 'Value',
                             defaultValue: '',
                             value: [
                                 { label: 'Item 1', value: 'item1' },
@@ -833,6 +835,8 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                             enabledOn: { key: 'staticData', value: true },
                             type: 'list',
                             label: 'Options',
+                            labelText: 'Label',
+                            valueText: 'Value',
                             defaultValue: '',
                             value: [
                                 { label: 'Item 1', value: 'item1' },
@@ -956,18 +960,12 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                         <table bk-table fixed="props.isFixed.value" display-mode="{{props.displayMode.value}}" outer-borders="{{props.outerBorders.value}}" inner-borders="{{props.innerBorders.value}}">
                             <thead bk-table-header interactive="false">
                                 <tr bk-table-row>
-                                    <th bk-table-header-cell>Name</th>
-                                    <th bk-table-header-cell>Age</th>
+                                    <th bk-table-header-cell ng-repeat="header in props.headers.value track by $index">{{header.label}}</th>
                                 </tr>
                             </thead>
                             <tbody bk-table-body>
                                 <tr bk-table-row hoverable="false" activable="false">
-                                    <td bk-table-cell>Ivan</td>
-                                    <td bk-table-cell>34</td>
-                                </tr>
-                                <tr bk-table-row hoverable="false" activable="false">
-                                    <td bk-table-cell>John</td>
-                                    <td bk-table-cell>46</td>
+                                    <td bk-table-cell ng-repeat="header in props.headers.value track by $index">row['{{header.value}}']</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -1062,6 +1060,16 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                                 },
                             ]
                         },
+                        headers: {
+                            type: 'list',
+                            label: 'Headers',
+                            labelText: 'Label',
+                            valueText: 'Key',
+                            value: [
+                                { label: 'Name', value: 'name' },
+                                { label: 'Age', value: 'age' }
+                            ]
+                        },
                         model: {
                             type: 'text',
                             label: 'Model',
@@ -1071,7 +1079,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                         info: {
                             type: 'textinfo',
                             label: 'Example model data',
-                            value: `{\n  headers: ['Name', 'Age'],\n  rows: [\n    ['Ivan', 34],\n    ['John', 46]\n  ]\n}`,
+                            value: `[\n   {\n      "name":"John Doe",\n      "age":34\n   },\n   {\n      "name":"Jane Doe",\n      "age":35\n   }\n]`,
                         },
                     },
                 },
@@ -1345,7 +1353,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
             title: 'Add item',
             form: {
                 'aliLabel': {
-                    label: 'Label',
+                    label: item.labelText,
                     controlType: 'input',
                     placeholder: '',
                     type: 'text',
@@ -1354,7 +1362,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     required: true
                 },
                 'aliValue': {
-                    label: 'Value',
+                    label: item.valueText,
                     controlType: 'input',
                     placeholder: '',
                     type: 'text',
@@ -1395,12 +1403,12 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
         });
     };
 
-    $scope.editListItem = (listItem) => {
+    $scope.editListItem = (listItem, labelText, valueText) => {
         dialogHub.showFormDialog({
             title: 'Edit item',
             form: {
                 'aliLabel': {
-                    label: 'Label',
+                    label: labelText,
                     controlType: 'input',
                     placeholder: '',
                     type: 'text',
@@ -1410,7 +1418,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     required: true
                 },
                 'aliValue': {
-                    label: 'Value',
+                    label: valueText,
                     controlType: 'input',
                     placeholder: '',
                     type: 'text',
