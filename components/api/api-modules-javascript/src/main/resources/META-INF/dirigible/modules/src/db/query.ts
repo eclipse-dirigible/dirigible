@@ -27,10 +27,14 @@ export interface NamedQueryParameter {
 	readonly value: any;
 }
 
+export interface ResultParameter {
+	readonly dateFormat: string;
+}
+
 export class Query {
 
-	public static execute(sql: string, parameters?: (string | number | boolean | Date | QueryParameter)[], datasourceName?: string): any[] {
-		const resultset = DatabaseFacade.query(sql, parameters ? JSON.stringify(parameters) : undefined, datasourceName);
+	public static execute(sql: string, parameters?: (string | number | boolean | Date | QueryParameter)[], datasourceName?: string,  resultParameter?: ResultParameter): any[] {
+		const resultset = DatabaseFacade.query(sql, parameters ? JSON.stringify(parameters) : undefined, datasourceName, resultParameter ? JSON.stringify(resultParameter) : undefined);
 		return JSON.parse(resultset);
 	}
 	

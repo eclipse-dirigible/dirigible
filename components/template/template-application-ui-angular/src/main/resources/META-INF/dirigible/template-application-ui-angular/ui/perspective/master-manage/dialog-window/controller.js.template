@@ -32,6 +32,11 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
 			$scope.options${property.name} = params.options${property.name};
+#if($property.widgetDropDownMultiSelect)
+			if (${dollar}scope.entity.${property.name}) {
+				${dollar}scope.entity.${property.name} = ${dollar}scope.entity.${property.name}.split(',').map(e => parseInt(e));
+			}
+#end
 #end
 #end
 		}
@@ -39,6 +44,13 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		$scope.create = () => {
 			let entity = $scope.entity;
 			entity[$scope.selectedMainEntityKey] = $scope.selectedMainEntityId;
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN" && $property.widgetDropDownMultiSelect)
+			if (entity.${property.name}) {
+				entity.${property.name} = entity.${property.name}.join();
+			}
+#end
+#end
 			EntityService.create(entity).then((response) => {
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityCreated', data: response.data });
 				Dialogs.showAlert({
@@ -60,6 +72,13 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			let id = ${dollar}scope.entity.${primaryKeysString};
 			let entity = $scope.entity;
 			entity[$scope.selectedMainEntityKey] = $scope.selectedMainEntityId;
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN" && $property.widgetDropDownMultiSelect)
+			if (entity.${property.name}) {
+				entity.${property.name} = entity.${property.name}.join();
+			}
+#end
+#end
 			EntityService.update(id, entity).then((response) => {
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityUpdated', data: response.data });
 				$scope.cancel();

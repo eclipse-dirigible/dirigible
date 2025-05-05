@@ -336,6 +336,9 @@
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.widgetType === 'DROPDOWN'">
                             <bk-input id="uidv" type="text" ng-required="true" ng-model="dataParameters.widgetDropDownValue"></bk-input>
                         </div>
+                        <bk-checkbox id="uidms" compact="false" ng-required="false" ng-model="dataParameters.widgetDropDownMultiSelect" data-ng-true-value="'true'" data-ng-false-value="'false'"
+                            ng-show="dataParameters.widgetType === 'DROPDOWN'"></bk-checkbox>
+                        <bk-checkbox-label for="uidms" ng-show="dataParameters.widgetType === 'DROPDOWN'">Multi-Select</bk-checkbox-label>
                     </bk-form-item>
 
                     <bk-form-item class="fd-row fd-margin-top--tiny">

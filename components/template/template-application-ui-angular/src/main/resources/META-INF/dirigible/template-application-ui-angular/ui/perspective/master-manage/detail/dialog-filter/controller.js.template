@@ -24,6 +24,11 @@ angular.module('page', ['blimpKit', 'platformView']).controller('PageController'
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
 		$scope.options${property.name} = params.options${property.name};
+#if($property.widgetDropDownMultiSelect)
+		if (${dollar}scope.entity.${property.name}) {
+			${dollar}scope.entity.${property.name} = ${dollar}scope.entity.${property.name}.split(',').map(e => parseInt(e));
+		}
+#end
 #end
 #end
 	}

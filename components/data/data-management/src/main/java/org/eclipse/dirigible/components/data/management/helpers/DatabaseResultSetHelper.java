@@ -17,6 +17,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
+import java.util.Optional;
 
 /**
  * The Database Result SetHelper.
@@ -48,10 +49,25 @@ public class DatabaseResultSetHelper {
      * @throws Exception the exception
      */
     public static void toJson(ResultSet resultSet, boolean limited, boolean stringify, OutputStream output) throws Exception {
+        toJson(resultSet, limited, stringify, output, null);
+    }
+
+    /**
+     * Prints the provided ResultSet to the {@link ResultSetJsonWriter} writer.
+     *
+     * @param resultSet the result set
+     * @param limited the limited
+     * @param stringify the stringified flag
+     * @param output the output
+     * @param resultParameters result parameters
+     * @throws Exception the exception
+     */
+    public static void toJson(ResultSet resultSet, boolean limited, boolean stringify, OutputStream output,
+            Optional<ResultParameters> resultParameters) throws Exception {
         ResultSetJsonWriter writer = new ResultSetJsonWriter();
         writer.setLimited(limited);
         writer.setStringified(stringify);
-        writer.write(resultSet, output);
+        writer.write(resultSet, output, resultParameters);
         output.flush();
     }
 

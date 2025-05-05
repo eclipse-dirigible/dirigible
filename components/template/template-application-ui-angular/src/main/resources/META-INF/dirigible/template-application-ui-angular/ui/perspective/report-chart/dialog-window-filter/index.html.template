@@ -24,9 +24,14 @@
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
                         <bk-combobox-input input-id="id${property.name}"
+                            #if($property.widgetDropDownMultiSelect)
+                            multi-select="true"
+                            #end
                             name="${property.name}"
+#if(!$property.isCalculatedProperty)
                             state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
                             ng-required="${property.isRequiredProperty}"
+#end
                             ng-model="entity.${property.name}"
 #if($property.isCalculatedProperty == "true")
                             is-readonly="true"
@@ -41,7 +46,9 @@
                     	<div class="fd-col fd-col-md--2"></div>
                         <bk-checkbox id="id${property.name}"
                             compact="false"
+#if(!$property.isCalculatedProperty)
                             ng-required="${property.isRequiredProperty}"
+#end
 #if($property.isCalculatedProperty == "true")
                             ng-readonly="true"
 #end
@@ -54,11 +61,17 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
+#if(!$property.isCalculatedProperty)
                         <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+#else
+                        <bk-form-input-message>
+#end
                             <bk-input id="id${property.name}"
                                 name="${property.name}"
+#if(!$property.isCalculatedProperty)
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
+#end
                                 ng-model="entity.${property.name}"
 #if($property.isCalculatedProperty == "true")
                                 ng-readonly="true"
@@ -76,8 +89,10 @@
                         <bk-step-input input-id="id${property.name}"
                             class="right-align"
                             name="${property.name}"
+#if(!$property.isCalculatedProperty)
                             state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
                             ng-required="${property.isRequiredProperty}"
+#end
                             ng-model="entity.${property.name}"
 #if($property.isCalculatedProperty == "true")
                             is-readonly="true"
@@ -90,11 +105,17 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
+#if(!$property.isCalculatedProperty)
                         <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+#else
+                        <bk-form-input-message>
+#end
                             <bk-input id="id${property.name}"
                                 name="${property.name}"
+#if(!$property.isCalculatedProperty)
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
+#end
                                 ng-model="entity.${property.name}"
 #if($property.isCalculatedProperty == "true")
                                 ng-readonly="true"
@@ -108,11 +129,17 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
+#if(!$property.isCalculatedProperty)
                         <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+#else
+                        <bk-form-input-message>
+#end
                             <bk-input id="id${property.name}"
                                 name="${property.name}"
+#if(!$property.isCalculatedProperty)
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
+#end
                                 ng-model="entity.${property.name}"
 #if($property.isCalculatedProperty == "true")
                                 ng-readonly="true"
@@ -126,11 +153,17 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
+#if(!$property.isCalculatedProperty)
                         <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+#else
+                        <bk-form-input-message>
+#end
                             <bk-input id="id${property.name}"
                                 name="${property.name}"
+#if(!$property.isCalculatedProperty)
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
+#end
                                 ng-model="entity.${property.name}"
 #if($property.isCalculatedProperty == "true")
                                 ng-readonly="true"
@@ -144,11 +177,17 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
+#if(!$property.isCalculatedProperty)
                         <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+#else
+                        <bk-form-input-message>
+#end
                             <bk-input id="id${property.name}"
                                 name="${property.name}"
+#if(!$property.isCalculatedProperty)
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
+#end
                                 ng-model="entity.${property.name}"
 #if($property.isCalculatedProperty == "true")
                                 ng-readonly="true"
@@ -162,11 +201,17 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
+#if(!$property.isCalculatedProperty)
                         <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+#else
+                        <bk-form-input-message>
+#end
                             <bk-input id="id${property.name}"
                                 name="${property.name}"
+#if(!$property.isCalculatedProperty)
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
+#end
                                 ng-model="entity.${property.name}"
 #if($property.isCalculatedProperty == "true")
                                 ng-readonly="true"
@@ -180,22 +225,30 @@
 						<div class="fd-col fd-col-md--2">
 							<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
 						</div>
+#if(!$property.isCalculatedProperty)
                         <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn\'t match the required pattern: ${property.inputRule}'">
+#else
+                        <bk-form-input-message>
+#end
                             <bk-textarea id="id${property.name}"
                                 name="${property.name}"
+#if(!$property.isCalculatedProperty)
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
                                 ng-required="${property.isRequiredProperty}"
+#end
                                 ng-model="entity.${property.name}"
 #if($property.isCalculatedProperty == "true")
                                 ng-readonly="true"
 #end
-	#if($property.minLength)
+	#if($property.minLength && !$property.isCalculatedProperty)
 									ng-minlength="${property.minLength}"
 	#end
-	#if($property.maxLength)
+	#if($property.maxLength && !$property.isCalculatedProperty)
 									ng-maxlength="${property.maxLength}"
 	#end
+    #if(!$property.isCalculatedProperty)
                                 input-rules="{ patterns: ['${property.inputRule}'] }"
+    #end
                                 placeholder="Enter ${property.widgetLabel}">
                             </bk-textarea>
                         </bk-form-input-message>
@@ -205,22 +258,30 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
+#if(!$property.isCalculatedProperty)
                         <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn\'t match the required pattern:#if($property.inputRule == "")^[0-9]{0,14}$#else ${property.inputRule}#end'">
+#else
+                        <bk-form-input-message>
+#end
                             <bk-input id="id${property.name}"
                                 name="${property.name}"
+#if(!$property.isCalculatedProperty)
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
+#end
                                 ng-model="entity.${property.name}"
 #if($property.isCalculatedProperty == "true")
                                 ng-readonly="true"
 #end
-	#if($property.minLength)
+	#if($property.minLength && !$property.isCalculatedProperty)
 									ng-minlength="${property.minLength}"
 	#end
-	#if($property.maxLength)
+	#if($property.maxLength && !$property.isCalculatedProperty)
 									ng-maxlength="${property.maxLength}"
 	#end
+    #if(!$property.isCalculatedProperty)
                                 input-rules="{ patterns:#if($property.inputRule == "")['^[0-9]{0,14}$']#else ['${property.inputRule}']#end }"
+    #end
                                 type="tel"
                                 placeholder="Enter ${property.widgetLabel}">
                             </bk-input>
@@ -231,22 +292,30 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
+#if(!$property.isCalculatedProperty)
                         <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn\'t match the required pattern: ${property.inputRule}'">
+#else
+                        <bk-form-input-message>
+#end
                             <bk-input id="id${property.name}"
                                 name="${property.name}"
+#if(!$property.isCalculatedProperty)
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
+#end
                                 ng-model="entity.${property.name}"
 #if($property.isCalculatedProperty == "true")
                                 ng-readonly="true"
 #end
-	#if($property.minLength)
+	#if($property.minLength && !$property.isCalculatedProperty)
 									ng-minlength="${property.minLength}"
 	#end
-	#if($property.maxLength)
+	#if($property.maxLength && !$property.isCalculatedProperty)
 									ng-maxlength="${property.maxLength}"
 	#end
+    #if(!$property.isCalculatedProperty)
                                 input-rules="{ patterns: ['${property.inputRule}'] }"
+    #end
                                 type="url"
                                 placeholder="Enter ${property.widgetLabel}">
                             </bk-input>
@@ -257,22 +326,30 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
+#if(!$property.isCalculatedProperty)
                         <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn\'t match the required pattern: ${property.inputRule}'">
+#else
+                        <bk-form-input-message>
+#end
                             <bk-input id="id${property.name}"
                                 name="${property.name}"
+#if(!$property.isCalculatedProperty)
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
+#end
                                 ng-model="entity.${property.name}"
 #if($property.isCalculatedProperty == "true")
                                 ng-readonly="true"
 #end
-	#if($property.minLength)
+	#if($property.minLength && !$property.isCalculatedProperty)
 									ng-minlength="${property.minLength}"
 	#end
-	#if($property.maxLength)
+	#if($property.maxLength && !$property.isCalculatedProperty)
 									ng-maxlength="${property.maxLength}"
 	#end
+    #if(!$property.isCalculatedProperty)
                                 input-rules="{ patterns: ['${property.inputRule}'] }"
+    #end
                                 type="email"
                                 placeholder="Enter ${property.widgetLabel}">
                             </bk-input>
@@ -283,22 +360,30 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
                         </div>
+#if(!$property.isCalculatedProperty)
                         <bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn\'t match the required pattern: ${property.inputRule}'">
+#else
+                        <bk-form-input-message>
+#end
                             <bk-input id="id${property.name}"
                                 name="${property.name}"
+#if(!$property.isCalculatedProperty)
                                 state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-required="${property.isRequiredProperty}"
+#end
                                 ng-model="entity.${property.name}"
 #if($property.isCalculatedProperty == "true")
                                 ng-readonly="true"
 #end
-	#if($property.minLength)
+	#if($property.minLength && !$property.isCalculatedProperty)
 									ng-minlength="${property.minLength}"
 	#end
-	#if($property.maxLength)
+	#if($property.maxLength && !$property.isCalculatedProperty)
 									ng-maxlength="${property.maxLength}"
 	#end
+    #if(!$property.isCalculatedProperty)
                                 input-rules="{ patterns: ['${property.inputRule}'] }"
+    #end
                                 type="text"
                                 placeholder="Enter ${property.widgetLabel}">
                             </bk-input>

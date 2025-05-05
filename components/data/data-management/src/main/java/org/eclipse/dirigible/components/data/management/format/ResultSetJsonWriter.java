@@ -9,53 +9,32 @@
  */
 package org.eclipse.dirigible.components.data.management.format;
 
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.lang3.ClassUtils;
+import org.eclipse.dirigible.components.data.management.helpers.ResultParameters;
+
+import java.io.IOException;
 import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.sql.Blob;
-import java.sql.Clob;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-
-import jakarta.annotation.PostConstruct;
-
-import org.apache.commons.lang3.ClassUtils;
-import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
-
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
+import java.sql.*;
+import java.text.SimpleDateFormat;
+import java.util.Optional;
 
 /**
  * The ResultSet JSON Writer.
  */
 public class ResultSetJsonWriter extends AbstractResultSetWriter<String> {
 
+    private static final String ISO_8601_DATA_FORMAT = "YYYY-MM-DD";
+    private static final ResultParameters DEFAULT_RESULT_PARAMETERS = new ResultParameters(ISO_8601_DATA_FORMAT);
+    /** The object mapper. */
+    private final ObjectMapper objectMapper = new ObjectMapper();
     /** The limited. */
     private boolean limited = true;
-
     /** The stringify. */
     private boolean stringify = true;
-
-    /**
-     * Checks if is limited.
-     *
-     * @return true, if is limited
-     */
-    public boolean isLimited() {
-        return limited;
-    }
-
-    /**
-     * Sets the limited.
-     *
-     * @param limited the new limited
-     */
-    public void setLimited(boolean limited) {
-        this.limited = limited;
-    }
 
     /**
      * Checks if is stringified.
@@ -75,18 +54,13 @@ public class ResultSetJsonWriter extends AbstractResultSetWriter<String> {
         this.stringify = stringify;
     }
 
-    /** The object mapper. */
-    private ObjectMapper objectMapper = new ObjectMapper();
-
-    /**
-     * Write.
-     *
-     * @param resultSet the result set
-     * @param output the output
-     * @throws Exception the exception
-     */
     @Override
     public void write(ResultSet resultSet, OutputStream output) throws Exception {
+        write(resultSet, output, Optional.of(DEFAULT_RESULT_PARAMETERS));
+    }
+
+    @Override
+    public void write(ResultSet resultSet, OutputStream output, Optional<ResultParameters> resultParameters) throws Exception {
 
         JsonGenerator jsonGenerator = objectMapper.getFactory()
                                                   .createGenerator(output);
@@ -126,11 +100,10 @@ public class ResultSetJsonWriter extends AbstractResultSetWriter<String> {
                 }
 
                 jsonGenerator.writeFieldName(label != null ? label : name);
-
                 if (value instanceof String) {
                     jsonGenerator.writeString((String) value);
                 } else if (value instanceof Character) {
-                    jsonGenerator.writeString(new String(new char[] {(char) value}));
+                    jsonGenerator.writeString(String.valueOf((char) value));
                 } else if (value instanceof Float) {
                     jsonGenerator.writeNumber((Float) value);
                 } else if (value instanceof Double) {
@@ -149,14 +122,14 @@ public class ResultSetJsonWriter extends AbstractResultSetWriter<String> {
                     jsonGenerator.writeNumber((Short) value);
                 } else if (value instanceof Boolean) {
                     jsonGenerator.writeBoolean((Boolean) value);
-                } else if (value instanceof Blob) {
-                    Blob blob = (Blob) value;
+                } else if (value instanceof Blob blob) {
                     int[] intArray = readBlob(blob);
                     jsonGenerator.writeArray(intArray, 0, intArray.length - 1);
-                } else if (value instanceof Clob) {
-                    Clob clob = (Clob) value;
+                } else if (value instanceof Clob clob) {
                     String clobValue = readClob(clob);
                     jsonGenerator.writeString(clobValue);
+                } else if (value instanceof Date) {
+                    writeDate(resultParameters, jsonGenerator, value);
                 } else {
                     jsonGenerator.writeString(value == null ? null : value.toString());
                 }
@@ -171,6 +144,49 @@ public class ResultSetJsonWriter extends AbstractResultSetWriter<String> {
 
         jsonGenerator.writeEndArray();
         jsonGenerator.flush();
+    }
+
+    private void writeDate(Optional<ResultParameters> resultParameters, JsonGenerator jsonGenerator, Object value) throws IOException {
+        Optional<String> dateFormatCfg = getDateFormat(resultParameters);
+        if (dateFormatCfg.isEmpty()) {
+            jsonGenerator.writeString(value.toString());
+        } else {
+            String formattedValue = serializeSqlDate((Date) value, dateFormatCfg.get());
+            jsonGenerator.writeString(formattedValue);
+        }
+    }
+
+    private Optional<String> getDateFormat(Optional<ResultParameters> resultParameters) {
+        if (resultParameters.isEmpty()) {
+            return Optional.empty();
+        }
+
+        String dateFormat = resultParameters.get()
+                                            .getDateFormat();
+        return Optional.ofNullable(dateFormat);
+    }
+
+    private String serializeSqlDate(Date sqlDate, String pattern) {
+        SimpleDateFormat formatter = new SimpleDateFormat(pattern);
+        return formatter.format(sqlDate);
+    }
+
+    /**
+     * Checks if is limited.
+     *
+     * @return true, if is limited
+     */
+    public boolean isLimited() {
+        return limited;
+    }
+
+    /**
+     * Sets the limited.
+     *
+     * @param limited the new limited
+     */
+    public void setLimited(boolean limited) {
+        this.limited = limited;
     }
 
     /**
@@ -199,8 +215,7 @@ public class ResultSetJsonWriter extends AbstractResultSetWriter<String> {
     private String readClob(Clob clob) throws SQLException {
         long clobLength = clob.length();
         if (clobLength <= Integer.MAX_VALUE) {
-            String clobAsString = clob.getSubString(1, (int) clobLength);
-            return clobAsString;
+            return clob.getSubString(1, (int) clobLength);
         }
         return "The size of the CLOB is too big";
     }

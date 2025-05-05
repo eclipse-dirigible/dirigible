@@ -9,20 +9,16 @@
  */
 package org.eclipse.dirigible.components.ide.workspace.service;
 
-import java.util.*;
-
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.base.publisher.PublisherHandler;
-import org.eclipse.dirigible.repository.api.ICollection;
-import org.eclipse.dirigible.repository.api.IRepository;
-import org.eclipse.dirigible.repository.api.IRepositoryStructure;
-import org.eclipse.dirigible.repository.api.IResource;
-import org.eclipse.dirigible.repository.api.RepositoryPath;
+import org.eclipse.dirigible.repository.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 /**
  * The Class PublisherService.
@@ -39,7 +35,6 @@ public class PublisherService {
     /** The publisher handlers. */
     private final List<PublisherHandler> publisherHandlers;
 
-
     /** The repository. */
     private final IRepository repository;
 
@@ -53,15 +48,6 @@ public class PublisherService {
     public PublisherService(IRepository repository, List<PublisherHandler> publisherHandlers) {
         this.repository = repository;
         this.publisherHandlers = publisherHandlers;
-    }
-
-    /**
-     * Gets the repository.
-     *
-     * @return the repository
-     */
-    public IRepository getRepository() {
-        return repository;
     }
 
     /**
@@ -108,16 +94,12 @@ public class PublisherService {
     }
 
     /**
-     * Unpublish.
+     * Gets the repository.
      *
-     * @param path the path
+     * @return the repository
      */
-    public void unpublish(String path) {
-        if (Boolean.parseBoolean(Configuration.get(DIRIGIBLE_PUBLISH_DISABLED, Boolean.FALSE.toString()))) {
-            return;
-        }
-        String targetLocation = new RepositoryPath(IRepositoryStructure.PATH_REGISTRY_PUBLIC, path).toString();
-        unpublishResource(targetLocation);
+    public IRepository getRepository() {
+        return repository;
     }
 
     /**
@@ -142,8 +124,11 @@ public class PublisherService {
         if (sourceCollection.exists()) {
             // publish collection
             ICollection targetCollection = getRepository().getCollection(targetLocation);
+            logger.info("Publishing collection: [{}] to [{}]", sourceCollection.getPath(), targetCollection.getPath());
+            long currentMillis = System.currentTimeMillis();
             sourceCollection.copyTo(targetCollection.getPath());
-            logger.info("Published collection: {} -> {}", sourceCollection.getPath(), targetCollection.getPath());
+            logger.info("Published collection: [{}] to [{}]. Copy took [{}] millis", sourceCollection.getPath(), targetCollection.getPath(),
+                    (System.currentTimeMillis() - currentMillis));
         } else {
             // publish a single resource
             IResource sourceResource = getRepository().getResource(sourceLocation);
@@ -165,6 +150,44 @@ public class PublisherService {
                 logger.error(e.getMessage(), e);
             }
         }
+    }
+
+    /**
+     * Generate workspace path.
+     *
+     * @param user the user
+     * @param workspace the workspace
+     * @param project the project
+     * @param path the path
+     * @return the string builder
+     */
+    private StringBuilder generateWorkspacePath(String user, String workspace, String project, String path) {
+        StringBuilder relativePath = new StringBuilder(IRepositoryStructure.PATH_USERS).append(IRepositoryStructure.SEPARATOR)
+                                                                                       .append(user)
+                                                                                       .append(IRepositoryStructure.SEPARATOR)
+                                                                                       .append(workspace);
+        if (project != null) {
+            relativePath.append(IRepositoryStructure.SEPARATOR)
+                        .append(project);
+        }
+        if (path != null) {
+            relativePath.append(IRepositoryStructure.SEPARATOR)
+                        .append(path);
+        }
+        return relativePath;
+    }
+
+    /**
+     * Unpublish.
+     *
+     * @param path the path
+     */
+    public void unpublish(String path) {
+        if (Boolean.parseBoolean(Configuration.get(DIRIGIBLE_PUBLISH_DISABLED, Boolean.FALSE.toString()))) {
+            return;
+        }
+        String targetLocation = new RepositoryPath(IRepositoryStructure.PATH_REGISTRY_PUBLIC, path).toString();
+        unpublishResource(targetLocation);
     }
 
     /**
@@ -207,31 +230,6 @@ public class PublisherService {
                 logger.error(e.getMessage(), e);
             }
         }
-    }
-
-    /**
-     * Generate workspace path.
-     *
-     * @param user the user
-     * @param workspace the workspace
-     * @param project the project
-     * @param path the path
-     * @return the string builder
-     */
-    private StringBuilder generateWorkspacePath(String user, String workspace, String project, String path) {
-        StringBuilder relativePath = new StringBuilder(IRepositoryStructure.PATH_USERS).append(IRepositoryStructure.SEPARATOR)
-                                                                                       .append(user)
-                                                                                       .append(IRepositoryStructure.SEPARATOR)
-                                                                                       .append(workspace);
-        if (project != null) {
-            relativePath.append(IRepositoryStructure.SEPARATOR)
-                        .append(project);
-        }
-        if (path != null) {
-            relativePath.append(IRepositoryStructure.SEPARATOR)
-                        .append(path);
-        }
-        return relativePath;
     }
 
 }

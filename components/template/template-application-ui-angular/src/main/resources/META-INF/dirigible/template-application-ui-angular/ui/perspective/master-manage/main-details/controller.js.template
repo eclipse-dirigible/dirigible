@@ -143,6 +143,11 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		//-----------------Events-------------------//
 
 		$scope.create = () => {
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN" && $property.widgetDropDownMultiSelect)
+			${dollar}scope.entity.${property.name} = ${dollar}scope.entity.${property.name}.join();
+#end
+#end
 			EntityService.create($scope.entity).then((response) => {
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityCreated', data: response.data });
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.clearDetails' , data: response.data });
@@ -163,6 +168,11 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		};
 
 		$scope.update = () => {
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN" && $property.widgetDropDownMultiSelect)
+			${dollar}scope.entity.${property.name} = ${dollar}scope.entity.${property.name}.join();
+#end
+#end
 			EntityService.update($scope.entity.${primaryKeysString}, $scope.entity).then((response) => {
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityUpdated', data: response.data });
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.clearDetails', data: response.data });
