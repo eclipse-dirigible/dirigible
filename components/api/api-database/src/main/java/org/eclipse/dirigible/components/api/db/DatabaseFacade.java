@@ -397,7 +397,7 @@ public class DatabaseFacade implements InitializingBean {
                     }
                 } catch (SQLFeatureNotSupportedException ex) {
                     logger.debug("RETURN_GENERATED_KEYS not supported for connection [{}]. Will execute insert without this option.",
-                            connection, ex.getMessage());
+                            connection, ex);
                     insertWithoutResult(sql, parameters, connection);
                     return Collections.emptyList();
                 }
