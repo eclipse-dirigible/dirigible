@@ -46,12 +46,12 @@ public class DatabaseFacade implements InitializingBean {
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(DatabaseFacade.class);
 
+    private static final Set<String> DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE = new HashSet<>();
+
     /** The database facade. */
     private static DatabaseFacade INSTANCE;
-
     /** The database definition service. */
     private final DatabaseDefinitionService databaseDefinitionService;
-
     /** The data sources manager. */
     private final DataSourcesManager dataSourcesManager;
 
@@ -208,6 +208,8 @@ public class DatabaseFacade implements InitializingBean {
         });
     }
 
+    // ============ Query ===========
+
     /**
      * Executes SQL query.
      *
@@ -219,8 +221,6 @@ public class DatabaseFacade implements InitializingBean {
     public static String query(String sql, String parameters) throws Throwable {
         return query(sql, parameters, null);
     }
-
-    // ============ Query ===========
 
     /**
      * Executes SQL query.
@@ -361,12 +361,21 @@ public class DatabaseFacade implements InitializingBean {
      * @throws RuntimeException if an error occur
      */
     public static List<Map<String, Object>> insert(String sql, String parameters, String datasourceName) throws Throwable {
-        DataSource dataSource = getDataSource(datasourceName);
+        DirigibleDataSource dataSource = getDataSource(datasourceName);
         if (dataSource == null) {
             throw new IllegalArgumentException("DataSource [" + datasourceName + "] not known.");
         }
 
         return LoggingExecutor.executeWithException(dataSource, () -> {
+
+            if (DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.contains(dataSource.getName())) {
+                logger.debug("RETURN_GENERATED_KEYS not supported for data source [{}]. Will execute insert without this option.",
+                        dataSource);
+                try (Connection connection = dataSource.getConnection()) {
+                    insertWithoutResult(sql, parameters, connection);
+                    return Collections.emptyList();
+                }
+            }
 
             try (Connection connection = dataSource.getConnection()) {
                 try (PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -396,8 +405,9 @@ public class DatabaseFacade implements InitializingBean {
                         return generatedKeysList;
                     }
                 } catch (SQLFeatureNotSupportedException ex) {
-                    logger.debug("RETURN_GENERATED_KEYS not supported for connection [{}]. Will execute insert without this option.",
-                            connection, ex);
+                    DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.add(dataSource.getName());
+                    logger.debug("RETURN_GENERATED_KEYS not supported for data source [{}]. Will execute insert without this option.",
+                            dataSource, ex);
                     insertWithoutResult(sql, parameters, connection);
                     return Collections.emptyList();
                 }
