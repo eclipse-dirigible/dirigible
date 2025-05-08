@@ -386,27 +386,11 @@ public class DatabaseFacade implements InitializingBean {
                     }
 
                     int updatedRows = preparedStatement.executeUpdate();
-                    List<Map<String, Object>> generatedKeysList = new ArrayList<>(updatedRows);
 
-                    try (ResultSet generatedKeys = preparedStatement.getGeneratedKeys()) {
-                        ResultSetMetaData metaData = generatedKeys.getMetaData();
-                        int columnCount = metaData.getColumnCount();
-
-                        while (generatedKeys.next()) {
-                            Map<String, Object> keyRow = new LinkedHashMap<>();
-                            for (int i = 1; i <= columnCount; i++) {
-                                String columnName = metaData.getColumnLabel(i);
-                                Object value = generatedKeys.getObject(i);
-                                keyRow.put(columnName, value);
-                            }
-                            generatedKeysList.add(keyRow);
-                        }
-
-                        return generatedKeysList;
-                    }
+                    return createGeneratedKeys(updatedRows, preparedStatement);
                 } catch (SQLFeatureNotSupportedException ex) {
                     DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.add(dataSource.getName());
-                    logger.debug("RETURN_GENERATED_KEYS not supported for data source [{}]. Will execute insert without this option.",
+                    logger.warn("RETURN_GENERATED_KEYS not supported for data source [{}]. Will execute insert without this option.",
                             dataSource, ex);
                     insertWithoutResult(sql, parameters, connection);
                     return Collections.emptyList();
@@ -415,8 +399,28 @@ public class DatabaseFacade implements InitializingBean {
                 logger.error("Failed to execute insert statement [{}] in data source [{}].", sql, datasourceName, ex);
                 throw ex;
             }
-
         });
+    }
+
+    private static List<Map<String, Object>> createGeneratedKeys(int updatedRows, PreparedStatement preparedStatement) throws SQLException {
+        List<Map<String, Object>> generatedKeysList = new ArrayList<>(updatedRows);
+
+        try (ResultSet generatedKeys = preparedStatement.getGeneratedKeys()) {
+            ResultSetMetaData metaData = generatedKeys.getMetaData();
+            int columnCount = metaData.getColumnCount();
+
+            while (generatedKeys.next()) {
+                Map<String, Object> keyRow = new LinkedHashMap<>();
+                for (int i = 1; i <= columnCount; i++) {
+                    String columnName = metaData.getColumnLabel(i);
+                    Object value = generatedKeys.getObject(i);
+                    keyRow.put(columnName, value);
+                }
+                generatedKeysList.add(keyRow);
+            }
+
+            return generatedKeysList;
+        }
     }
 
     private static void insertWithoutResult(String sql, String parameters, Connection connection) throws SQLException {
@@ -426,6 +430,71 @@ public class DatabaseFacade implements InitializingBean {
                 ParametersSetter.setParameters(parameters, statement);
             }
             preparedStatement.executeUpdate();
+        }
+    }
+
+    public static List<List<Map<String, Object>>> insertMany(String sql, String parameters, String datasourceName) throws Throwable {
+        DirigibleDataSource dataSource = getDataSource(datasourceName);
+        if (dataSource == null) {
+            throw new IllegalArgumentException("DataSource [" + datasourceName + "] not known.");
+        }
+
+        return LoggingExecutor.executeWithException(dataSource, () -> {
+
+            if (DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.contains(dataSource.getName())) {
+                logger.debug("RETURN_GENERATED_KEYS not supported for data source [{}]. Will execute insert without this option.",
+                        dataSource);
+                insertManyWithoutResult(sql, parameters, dataSource);
+                return Collections.emptyList();
+            }
+
+            try (Connection connection = dataSource.getConnection()) {
+                connection.setAutoCommit(false);
+                try (PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+
+                    if (parameters != null) {
+                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
+                        ParametersSetter.setManyParameters(parameters, statement);
+                    }
+
+                    int[] results = preparedStatement.executeBatch();
+                    connection.commit();
+
+                    List<List<Map<String, Object>>> allGeneratedKeys = new ArrayList<>(results.length);
+                    for (int updatedRows : results) {
+                        List<Map<String, Object>> generatedKeys = createGeneratedKeys(updatedRows, preparedStatement);
+                        allGeneratedKeys.add(generatedKeys);
+                    }
+                    return allGeneratedKeys;
+                } catch (SQLFeatureNotSupportedException ex) {
+                    DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.add(dataSource.getName());
+                    logger.warn("RETURN_GENERATED_KEYS not supported for data source [{}]. Will execute insert without this option.",
+                            dataSource, ex);
+                    insertManyWithoutResult(sql, parameters, connection);
+                    return Collections.emptyList();
+                }
+            } catch (SQLException | RuntimeException ex) {
+                logger.error("Failed to execute insert statement [{}] in data source [{}].", sql, datasourceName, ex);
+                throw ex;
+            }
+        });
+    }
+
+    private static void insertManyWithoutResult(String sql, String parameters, DirigibleDataSource dataSource) throws SQLException {
+        try (Connection connection = dataSource.getConnection()) {
+            insertManyWithoutResult(sql, parameters, connection);
+        }
+    }
+
+    private static void insertManyWithoutResult(String sql, String parameters, Connection connection) throws SQLException {
+        try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
+            connection.setAutoCommit(false);
+            if (parameters != null) {
+                IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
+                ParametersSetter.setManyParameters(parameters, statement);
+            }
+            preparedStatement.executeBatch();
+            connection.commit();
         }
     }
 
