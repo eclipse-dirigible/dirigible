@@ -203,7 +203,7 @@
         <fundamental-styles.version>0.38.0</fundamental-styles.version>
         <angular-aria.version>1.8.2</angular-aria.version>
         <split.js.version>1.6.5</split.js.version>
-        <diff.version>5.1.0</diff.version>
+        <diff.version>7.0.0</diff.version>
         <monaco-editor.version>0.40.0</monaco-editor.version>
         <requirejs.version>2.3.6</requirejs.version>
         <jstree.version>3.3.12</jstree.version>
