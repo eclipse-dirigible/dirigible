@@ -385,9 +385,9 @@ public class DatabaseFacade implements InitializingBean {
                         ParametersSetter.setParameters(parameters, statement);
                     }
 
-                    int updatedRows = preparedStatement.executeUpdate();
+                    preparedStatement.executeUpdate();
+                    return createGeneratedKeys(preparedStatement);
 
-                    return createGeneratedKeys(updatedRows, preparedStatement);
                 } catch (SQLFeatureNotSupportedException ex) {
                     DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.add(dataSource.getName());
                     logger.warn("RETURN_GENERATED_KEYS not supported for data source [{}]. Will execute insert without this option.",
@@ -402,8 +402,8 @@ public class DatabaseFacade implements InitializingBean {
         });
     }
 
-    private static List<Map<String, Object>> createGeneratedKeys(int updatedRows, PreparedStatement preparedStatement) throws SQLException {
-        List<Map<String, Object>> generatedKeysList = new ArrayList<>(updatedRows);
+    private static List<Map<String, Object>> createGeneratedKeys(PreparedStatement preparedStatement) throws SQLException {
+        List<Map<String, Object>> generatedKeysList = new ArrayList<>();
 
         try (ResultSet generatedKeys = preparedStatement.getGeneratedKeys()) {
             ResultSetMetaData metaData = generatedKeys.getMetaData();
@@ -433,7 +433,7 @@ public class DatabaseFacade implements InitializingBean {
         }
     }
 
-    public static List<List<Map<String, Object>>> insertMany(String sql, String parameters, String datasourceName) throws Throwable {
+    public static List<Map<String, Object>> insertMany(String sql, String parameters, String datasourceName) throws Throwable {
         DirigibleDataSource dataSource = getDataSource(datasourceName);
         if (dataSource == null) {
             throw new IllegalArgumentException("DataSource [" + datasourceName + "] not known.");
@@ -457,15 +457,13 @@ public class DatabaseFacade implements InitializingBean {
                         ParametersSetter.setManyParameters(parameters, statement);
                     }
 
-                    int[] results = preparedStatement.executeBatch();
-                    connection.commit();
+                    preparedStatement.executeBatch();
 
-                    List<List<Map<String, Object>>> allGeneratedKeys = new ArrayList<>(results.length);
-                    for (int updatedRows : results) {
-                        List<Map<String, Object>> generatedKeys = createGeneratedKeys(updatedRows, preparedStatement);
-                        allGeneratedKeys.add(generatedKeys);
-                    }
-                    return allGeneratedKeys;
+                    List<Map<String, Object>> generatedKeys = createGeneratedKeys(preparedStatement);
+
+                    connection.commit();
+                    return generatedKeys;
+
                 } catch (SQLFeatureNotSupportedException ex) {
                     DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.add(dataSource.getName());
                     logger.warn("RETURN_GENERATED_KEYS not supported for data source [{}]. Will execute insert without this option.",
@@ -487,8 +485,8 @@ public class DatabaseFacade implements InitializingBean {
     }
 
     private static void insertManyWithoutResult(String sql, String parameters, Connection connection) throws SQLException {
+        connection.setAutoCommit(false);
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
-            connection.setAutoCommit(false);
             if (parameters != null) {
                 IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
                 ParametersSetter.setManyParameters(parameters, statement);
