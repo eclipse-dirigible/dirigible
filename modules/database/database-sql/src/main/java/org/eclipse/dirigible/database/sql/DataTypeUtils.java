@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.database.sql;
 
+import static java.text.MessageFormat.format;
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
@@ -18,8 +19,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-
-import static java.text.MessageFormat.format;
 
 /**
  * The Class DataTypeUtils.
@@ -370,8 +369,8 @@ public class DataTypeUtils {
      * @return the unified database type
      */
     public static String getUnifiedDatabaseType(String type) {
-        if (UNIFIED_STRING_FROM_DATABASE_TYPE.containsKey(type)) {
-            return UNIFIED_STRING_FROM_DATABASE_TYPE.get(type);
+        if (UNIFIED_STRING_FROM_DATABASE_TYPE.containsKey(type.toUpperCase())) {
+            return UNIFIED_STRING_FROM_DATABASE_TYPE.get(type.toUpperCase());
         }
         return type;
     }

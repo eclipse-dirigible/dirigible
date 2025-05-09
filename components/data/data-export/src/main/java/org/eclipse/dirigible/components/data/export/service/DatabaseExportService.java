@@ -9,27 +9,31 @@
  */
 package org.eclipse.dirigible.components.data.export.service;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper;
 import org.eclipse.dirigible.components.data.management.service.DatabaseExecutionService;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.database.DatabaseParameters;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
+import org.eclipse.dirigible.database.sql.DataType;
+import org.eclipse.dirigible.database.sql.DataTypeUtils;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-
-import java.io.IOException;
-import java.io.OutputStream;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 
 /**
  * The Class DataSourceMetadataService.
@@ -82,13 +86,19 @@ public class DatabaseExportService {
                               .isMongoDB()) {
                     dialect.exportData(connection, structure, output);
                     return;
+                } else {
+                    String integerPrimaryKey = getIntegerPrimaryKey(connection, structure);
+                    if (integerPrimaryKey != null) {
+                        sql += " ORDER BY \"" + integerPrimaryKey + "\"";
+                    }
                 }
             } catch (Exception e) {
                 logger.error(e.getMessage(), e);
             }
 
-            databaseExecutionService.executeStatement(dataSource, sql, true, false, true, true, output);
+            databaseExecutionService.executeStatement(dataSource, sql, true, false, true, false, output);
         }
+
     }
 
     /**
@@ -157,6 +167,12 @@ public class DatabaseExportService {
                             try {
                                 sql = SqlDialectFactory.getDialect(dataSource)
                                                        .allQuery(artifactName);
+                                try (Connection connection = dataSource.getConnection()) {
+                                    String integerPrimaryKey = getIntegerPrimaryKey(connection, artifact);
+                                    if (integerPrimaryKey != null) {
+                                        sql += " ORDER BY \"" + integerPrimaryKey + "\"";
+                                    }
+                                }
                             } catch (Exception e) {
                                 logger.error(e.getMessage(), e);
                             }
@@ -183,4 +199,25 @@ public class DatabaseExportService {
         }
     }
 
+    public static String getIntegerPrimaryKey(Connection connection, String tableName) {
+        String integerPrimaryKey = null;
+        try {
+            DatabaseMetaData metaData = connection.getMetaData();
+            ResultSet primaryKeysResultSet = metaData.getPrimaryKeys(connection.getCatalog(), null, tableName);
+            if (primaryKeysResultSet.next()) {
+                String columnName = primaryKeysResultSet.getString(DatabaseParameters.JDBC_COLUMN_NAME_PROPERTY);
+                ResultSet columns = metaData.getColumns(connection.getCatalog(), null, tableName, columnName);
+                if (columns.next()) {
+                    String columnType = columns.getString(DatabaseParameters.JDBC_COLUMN_TYPE_PROPERTY);
+                    if (DataType.INTEGER.isOfType(DataTypeUtils.getUnifiedDatabaseType(columnType))) {
+                        integerPrimaryKey = columnName;
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            // Do nothing
+        }
+
+        return integerPrimaryKey;
+    }
 }

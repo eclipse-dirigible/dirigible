@@ -19,6 +19,7 @@ import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.io.IOUtils;
@@ -92,95 +93,100 @@ public class ResultSetCsvWriter extends AbstractResultSetWriter<String> {
      */
     @Override
     public void write(ResultSet resultSet, OutputStream output) throws Exception {
-
         OutputStreamWriter sw = new OutputStreamWriter(output);
 
         ResultSetMetaData resultSetMetaData = resultSet.getMetaData();
 
         int count = 0;
         List<String> names = new ArrayList<>();
-        if (resultSet.next()) {
-            if (resultSetMetaData == null) {
-                resultSetMetaData = resultSet.getMetaData(); // dynamic result set metadata
-            }
-            for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
-                String name = resultSetMetaData.getColumnName(i);
-                names.add(name);
-            }
+        if (resultSetMetaData == null) {
+            resultSetMetaData = resultSet.getMetaData(); // dynamic result set metadata
+        }
+        for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
+            String name = resultSetMetaData.getColumnName(i);
+            names.add(name);
         }
 
-        CSVFormat csvFormat = CSVFormat.DEFAULT.builder()
-                                               .setHeader(names.stream()
-                                                               .toArray(String[]::new))
-                                               .build();
+        if (!resultSet.next()) {
+            sw.write(names.stream()
+                          .collect(Collectors.joining(",")));
+            sw.flush();
+            return;
+        }
+
         try {
-            try (final CSVPrinter printer = new CSVPrinter(sw, csvFormat)) {
-                count = 0;
-                do {
-                    List<Object> values = new ArrayList<>();
-                    for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
-                        Object value = null;
-                        String name = resultSetMetaData.getColumnName(i);
-                        int dbt = resultSetMetaData.getColumnType(i);
-                        if (dbt == Types.BLOB || dbt == Types.BINARY || dbt == Types.LONGVARBINARY) {
-                            InputStream is = resultSet.getBinaryStream(name);
-                            if (is == null && stringify) {
-                                value = "[NULL]";
-                            } else if (is != null) {
-                                byte[] ba = IOUtils.toByteArray(is);
-                                if (stringify) {
-                                    value = "[BLOB]";
-                                } else {
-                                    value = Base64.getEncoder()
-                                                  .encodeToString(ba);
-                                }
-                            }
-                        } else if (dbt == Types.CLOB || dbt == Types.LONGVARCHAR) {
-                            Clob clob = resultSet.getClob(name);
-                            if (clob == null && stringify) {
-                                value = "[NULL]";
-                            } else if (clob != null) {
-                                byte[] ba = IOUtils.toByteArray(clob.getAsciiStream());
-                                if (stringify) {
-                                    value = "[CLOB]";
-                                } else {
-                                    value = Base64.getEncoder()
-                                                  .encodeToString(ba);
-                                }
-                            }
-                        } else if (dbt == Types.OTHER) {
-                            Object dataObject = resultSet.getObject(name);
-                            if (dataObject instanceof PGobject) {
-                                value = ((PGobject) dataObject).getValue();
-                            }
-                        } else {
-                            value = resultSet.getObject(name);
-                            if (value == null && stringify) {
-                                value = "[NULL]";
-                            }
-                            if (value != null && !ClassUtils.isPrimitiveOrWrapper(value.getClass()) && value.getClass() != String.class
-                                    && !java.util.Date.class.isAssignableFrom(value.getClass())
-                                    && !java.math.BigInteger.class.isAssignableFrom(value.getClass())
-                                    && !java.math.BigDecimal.class.isAssignableFrom(value.getClass())) {
-                                if (stringify) {
-                                    value = "[BINARY]";
-                                }
+            CSVFormat csvFormat = CSVFormat.DEFAULT.builder()
+                                                   .setHeader(names.stream()
+                                                                   .toArray(String[]::new))
+                                                   .build();
+            CSVPrinter printer = new CSVPrinter(sw, csvFormat);
+            count = 0;
+            do {
+                List<Object> values = new ArrayList<>();
+                for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
+                    Object value = null;
+                    String name = resultSetMetaData.getColumnName(i);
+                    int dbt = resultSetMetaData.getColumnType(i);
+                    if (dbt == Types.BLOB || dbt == Types.BINARY || dbt == Types.LONGVARBINARY) {
+                        InputStream is = resultSet.getBinaryStream(name);
+                        if (is == null && stringify) {
+                            value = "[NULL]";
+                        } else if (is != null) {
+                            byte[] ba = IOUtils.toByteArray(is);
+                            if (stringify) {
+                                value = "[BLOB]";
+                            } else {
+                                value = Base64.getEncoder()
+                                              .encodeToString(ba);
                             }
                         }
-                        values.add(value);
+                    } else if (dbt == Types.CLOB || dbt == Types.LONGVARCHAR) {
+                        Clob clob = resultSet.getClob(name);
+                        if (clob == null && stringify) {
+                            value = "[NULL]";
+                        } else if (clob != null) {
+                            byte[] ba = IOUtils.toByteArray(clob.getAsciiStream());
+                            if (stringify) {
+                                value = "[CLOB]";
+                            } else {
+                                value = Base64.getEncoder()
+                                              .encodeToString(ba);
+                            }
+                        }
+                    } else if (dbt == Types.OTHER) {
+                        Object dataObject = resultSet.getObject(name);
+                        if (dataObject instanceof PGobject) {
+                            value = ((PGobject) dataObject).getValue();
+                        }
+                    } else {
+                        value = resultSet.getObject(name);
+                        if (value == null && stringify) {
+                            value = "[NULL]";
+                        }
+                        if (value != null && !ClassUtils.isPrimitiveOrWrapper(value.getClass()) && value.getClass() != String.class
+                                && !java.util.Date.class.isAssignableFrom(value.getClass())
+                                && !java.math.BigInteger.class.isAssignableFrom(value.getClass())
+                                && !java.math.BigDecimal.class.isAssignableFrom(value.getClass())) {
+                            if (stringify) {
+                                value = "[BINARY]";
+                            }
+                        }
                     }
-                    try {
-                        printer.printRecord(values);
-                    } catch (Exception e) {
-                        logger.error(e.getMessage());
-                    }
+                    values.add(value);
+                }
+                try {
+                    printer.printRecord(values);
+                    printer.flush();
+                } catch (Exception e) {
+                    logger.error(e.getMessage());
+                    printer.close();
+                }
 
-                    if (this.isLimited() && (++count > getLimit())) {
-                        break;
-                    }
-                } while (resultSet.next());
+                if (this.isLimited() && (++count > getLimit())) {
+                    break;
+                }
+            } while (resultSet.next());
 
-            }
         } catch (Exception e) {
             logger.error(e.getMessage(), e);
         }
