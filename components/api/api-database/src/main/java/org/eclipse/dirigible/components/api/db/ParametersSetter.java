@@ -13,6 +13,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import org.eclipse.dirigible.commons.api.helpers.BytesHelper;
+import org.eclipse.dirigible.commons.api.helpers.DateTimeUtils;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.database.NamedParameterStatement;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
@@ -25,6 +26,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -1143,6 +1145,26 @@ class ParametersSetter {
 
         if (parameterElement.getAsJsonPrimitive()
                             .isString()) {
+            String paramStringValue = parameterElement.getAsString();
+
+            Optional<Timestamp> timestamp = DateTimeUtils.optionallyParseDateTime(paramStringValue);
+            if (timestamp.isPresent()) {
+                preparedStatement.setTimestamp(paramIndex, timestamp.get());
+                return;
+            }
+
+            Optional<Date> date = DateTimeUtils.optionallyParseDate(paramStringValue);
+            if (date.isPresent()) {
+                preparedStatement.setDate(paramIndex, date.get());
+                return;
+            }
+
+            Optional<Time> time = DateTimeUtils.optionallyParseTime(paramStringValue);
+            if (time.isPresent()) {
+                preparedStatement.setTime(paramIndex, time.get());
+                return;
+            }
+
             preparedStatement.setString(paramIndex, parameterElement.getAsString());
             return;
         }

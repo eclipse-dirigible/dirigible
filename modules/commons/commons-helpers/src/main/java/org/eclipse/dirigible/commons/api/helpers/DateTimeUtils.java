@@ -10,6 +10,8 @@
 package org.eclipse.dirigible.commons.api.helpers;
 
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Date;
 import java.sql.Time;
@@ -22,6 +24,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.util.Locale;
+import java.util.Optional;
 
 /**
  * The Class DateTimeUtils.
@@ -49,20 +52,40 @@ public class DateTimeUtils {
                     + "[yyyy-MM-dd HH:mm:ss.SSS]" + "[yyyy-MM-dd HH:mm:ss.SS]" + "[yyyy-MM-dd HH:mm:ss.S]"
                     + "[yyyy/MM/dd HH:mm:ss[.SSS][ Z]]" + "[yyyy-MM-dd HH:mm:ss[.SSS][ Z]]" + "[dd[ ]MMM[ ]yyyy:HH:mm:ss.SSS[ Z]]",
             Locale.ENGLISH);
+    private static final Logger LOGGER = LoggerFactory.getLogger(DateTimeUtils.class);
 
     /**
-     * Parses the date.
+     * Numberize.
      *
      * @param value the value
-     * @return the date
+     * @return the string
      */
-    public static Date parseDate(String value) {
-        value = sanitize(value);
-        try {
-            return Date.valueOf(LocalDate.parse(value, dateFormatter));
-        } catch (DateTimeParseException ex) {
-            throw new DateTimeException("Failed to parse [" + value + "] using date formatter " + dateFormatter, ex);
+    private String numberize(String value) {
+        if (StringUtils.isEmpty(value)) {
+            value = "0";
         }
+        return value;
+    }
+
+    public static Optional<Timestamp> optionallyParseDateTime(String value) {
+        try {
+            return Optional.of(parseDateTime(value));
+        } catch (DateTimeParseException ex) {
+            LOGGER.debug("[{}] cannot be parsed to date time", ex);
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Parses the date time.
+     *
+     * @param value the value
+     * @return the timestamp
+     */
+    public static Timestamp parseDateTime(String value) {
+        value = sanitize(value);
+        value = timezonize(value);
+        return Timestamp.valueOf(LocalDateTime.parse(value, datetimeFormatter));
     }
 
     /**
@@ -82,6 +105,52 @@ public class DateTimeUtils {
     }
 
     /**
+     * Timezonize.
+     *
+     * @param value the value
+     * @return the string
+     */
+    private static String timezonize(String value) {
+        if (value != null && value.indexOf('.') == value.length() - 8) {
+            value = value.substring(0, value.indexOf('.') + 4) + " +" + value.substring(value.indexOf('.') + 4);
+        }
+        return value;
+    }
+
+    public static Optional<Date> optionallyParseDate(String value) {
+        try {
+            return Optional.of(parseDate(value));
+        } catch (DateTimeException ex) {
+            LOGGER.debug("[{}] cannot be parsed to date", ex);
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Parses the date.
+     *
+     * @param value the value
+     * @return the date
+     */
+    public static Date parseDate(String value) {
+        value = sanitize(value);
+        try {
+            return Date.valueOf(LocalDate.parse(value, dateFormatter));
+        } catch (DateTimeParseException ex) {
+            throw new DateTimeException("Failed to parse [" + value + "] using date formatter " + dateFormatter, ex);
+        }
+    }
+
+    public static Optional<Time> optionallyParseTime(String value) {
+        try {
+            return Optional.of(parseTime(value));
+        } catch (DateTimeException ex) {
+            LOGGER.debug("[{}] cannot be parsed to time", ex);
+            return Optional.empty();
+        }
+    }
+
+    /**
      * Parses the time.
      *
      * @param value the value
@@ -96,43 +165,5 @@ public class DateTimeUtils {
             throw new DateTimeException("Failed to parse [" + value + "] using time formatter " + timeFormatter, ex);
         }
     }
-
-    /**
-     * Timezonize.
-     *
-     * @param value the value
-     * @return the string
-     */
-    private static String timezonize(String value) {
-        if (value != null && value.indexOf('.') == value.length() - 8) {
-            value = value.substring(0, value.indexOf('.') + 4) + " +" + value.substring(value.indexOf('.') + 4);
-        }
-        return value;
-    }
-
-    /**
-     * Parses the date time.
-     *
-     * @param value the value
-     * @return the timestamp
-     */
-    public static Timestamp parseDateTime(String value) {
-        value = sanitize(value);
-        value = timezonize(value);
-        return Timestamp.valueOf(LocalDateTime.parse(value, datetimeFormatter));
-    }
-
-    /**
-     * Numberize.
-     *
-     * @param value the value
-     * @return the string
-     */
-    private String numberize(String value) {
-        if (StringUtils.isEmpty(value)) {
-            value = "0";
-        }
-        return value;
-    }
-
 }
+
