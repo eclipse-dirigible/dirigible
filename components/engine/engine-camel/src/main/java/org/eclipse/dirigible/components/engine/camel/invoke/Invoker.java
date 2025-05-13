@@ -52,10 +52,11 @@ public class Invoker {
      * @param routeId the route id
      * @param payload the payload
      * @param headers the headers
+     * @param exchangeProperties
      * @return the object
      */
     @CalledFromJS
-    public Object invokeRoute(String routeId, Object payload, Map<String, Object> headers) {
-        return processor.invokeRoute(routeId, payload, headers);
+    public Object invokeRoute(String routeId, Object payload, Map<String, Object> headers, Map<String, Object> exchangeProperties) {
+        return processor.invokeRoute(routeId, payload, headers, exchangeProperties);
     }
 }
