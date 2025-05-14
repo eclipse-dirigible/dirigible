@@ -17,9 +17,9 @@ public class CreateTextFileIT extends UserInterfaceIntegrationTest {
     void test() {
         Workbench workbench = ide.openWorkbench();
         workbench.createNewProject(this.getClass()
-                .getSimpleName());
+                                       .getSimpleName());
 
-        workbench.createCustomElementInProject(PROJECT_NAME,FILE_NAME,"File");
+        workbench.createCustomElementInProject(PROJECT_NAME, FILE_NAME, "File");
         workbench.openFile(FILE_NAME);
 
         assertFileTabIsOpen(FILE_NAME);
@@ -32,7 +32,7 @@ public class CreateTextFileIT extends UserInterfaceIntegrationTest {
 
     private void assertTextIsPresent() {
         browser.clickOnElementById(PREVIEW_ID);
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.PRE,FILE_CONTENT);
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.PRE, FILE_CONTENT);
     }
 
     private void assertFileTabIsOpen(String fileName) {
@@ -40,7 +40,5 @@ public class CreateTextFileIT extends UserInterfaceIntegrationTest {
     }
 
 }
-
-
 
 
