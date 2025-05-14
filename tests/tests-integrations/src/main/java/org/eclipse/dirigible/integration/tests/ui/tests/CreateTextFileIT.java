@@ -19,7 +19,7 @@ public class CreateTextFileIT extends UserInterfaceIntegrationTest {
         workbench.createNewProject(this.getClass()
                 .getSimpleName());
 
-        workbench.createCustomFileInProject(PROJECT_NAME,FILE_NAME );
+        workbench.createCustomElementInProject(PROJECT_NAME,FILE_NAME,"File");
         workbench.openFile(FILE_NAME);
 
         assertFileTabIsOpen(FILE_NAME);
