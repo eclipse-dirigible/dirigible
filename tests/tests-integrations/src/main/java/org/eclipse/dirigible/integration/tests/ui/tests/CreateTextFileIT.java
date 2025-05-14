@@ -8,10 +8,10 @@ import org.junit.jupiter.api.Test;
 
 public class CreateTextFileIT extends UserInterfaceIntegrationTest {
 
-    public static final String FILE_NAME = "test.txt";
-    public static final String FILE_CONTENT = "my sample text";
-    public static final String PROJECT_NAME = "CreateTextFileIT";
-    public static final String PREVIEW_ID = "preview";
+    private static final String FILE_NAME = "test.txt";
+    private static final String FILE_CONTENT = "my sample text";
+    private static final String PROJECT_NAME = "CreateTextFileIT";
+    private static final String PREVIEW_ID = "preview";
 
     @Test
     void test() {
