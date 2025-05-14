@@ -102,9 +102,9 @@ public class Workbench {
         browser.type(content);
     }
 
-    public void createCustomFileInProject(String projectName, String fileName) {
+    public void createCustomElementInProject(String projectName, String fileName,String elementType) {
         browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
-        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", "File");
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", elementType);
 
         browser.enterTextInElementById(FILE_NAME_INPUT_ID, fileName);
         browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_BUTTON_TEXT);
@@ -113,4 +113,5 @@ public class Workbench {
     public void saveAll() {
         browser.clickOnElementByAttributeValue(HtmlElementType.BUTTON, HtmlAttribute.GLYPH, "sap-icon--save");
     }
+
 }
