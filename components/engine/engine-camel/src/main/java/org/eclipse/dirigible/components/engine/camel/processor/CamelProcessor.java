@@ -9,10 +9,6 @@
  */
 package org.eclipse.dirigible.components.engine.camel.processor;
 
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-
 import org.apache.camel.FluentProducerTemplate;
 import org.apache.camel.component.platform.http.springboot.CamelRequestHandlerMapping;
 import org.apache.camel.impl.engine.DefaultRoutesLoader;
@@ -23,6 +19,10 @@ import org.apache.camel.support.ResourceHelper;
 import org.eclipse.dirigible.components.engine.camel.domain.Camel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * The Class CamelProcessor.
@@ -68,17 +68,6 @@ public class CamelProcessor {
     }
 
     /**
-     * On remove.
-     *
-     * @param camel the camel
-     */
-    public void onRemove(Camel camel) {
-        camels.remove(camel.getId());
-        removeAllRoutes();
-        addAllRoutes();
-    }
-
-    /**
      * Adds the all routes.
      */
     private void addAllRoutes() {
@@ -107,17 +96,30 @@ public class CamelProcessor {
     }
 
     /**
+     * On remove.
+     *
+     * @param camel the camel
+     */
+    public void onRemove(Camel camel) {
+        camels.remove(camel.getId());
+        removeAllRoutes();
+        addAllRoutes();
+    }
+
+    /**
      * Invoke route.
      *
      * @param routeId the route id
      * @param payload the payload
      * @param headers the headers
+     * @param exchangeProperties
      * @return the object
      */
-    public Object invokeRoute(String routeId, Object payload, Map<String, Object> headers) {
+    public Object invokeRoute(String routeId, Object payload, Map<String, Object> headers, Map<String, Object> exchangeProperties) {
         try (FluentProducerTemplate producer = context.createFluentProducerTemplate()) {
             return producer.withHeaders(headers)
                            .withBody(payload)
+                           .withExchangeProperties(exchangeProperties)
                            .to(routeId)
                            .request();
         } catch (IOException e) {
