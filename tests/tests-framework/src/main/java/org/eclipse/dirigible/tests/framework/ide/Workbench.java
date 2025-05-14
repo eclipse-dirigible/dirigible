@@ -102,7 +102,7 @@ public class Workbench {
         browser.type(content);
     }
 
-    public void createCustomElementInProject(String projectName, String fileName,String elementType) {
+    public void createCustomElementInProject(String projectName, String fileName, String elementType) {
         browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", elementType);
 
