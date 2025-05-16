@@ -1,7 +1,9 @@
 import { sql, query, update, insert } from "sdk/db";
 import { assertEquals, test } from "sdk/junit"
 
-test('create-insert-select-db-test', () => {
+const testName = 'create-insert-select-db-test';
+test(testName, () => {
+    console.log(`Executing ${testName}...`);
     const tableName = 'TEACHERS';
     const DATE_FORMAT = 'yyyyMMdd';
     const createTableSql = sql.getDialect()
