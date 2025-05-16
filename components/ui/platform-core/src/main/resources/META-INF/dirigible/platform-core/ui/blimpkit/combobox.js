@@ -30,7 +30,8 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
             btnAriaLabel: '@',
             listAriaLabel: '@',
             multiSelect: '<?',
-            maxBodyHeight: '@?'
+            maxBodyHeight: '@?',
+            filter: '@'
         },
         link: function (scope, element, _attrs, ngModel) {
             scope.defaultHeight = 16;
@@ -130,9 +131,12 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
                 }
             };
 
+            const filterStartsWith = (x) => x.text.toLowerCase().startsWith(scope.search.term.toLowerCase());
+            const filterContains = (x) => x.text.toLowerCase().includes(scope.search.term.toLowerCase());
+
             scope.filterValues = () => {
                 if (scope.search.term) {
-                    scope.filteredDropdownItems = scope.dropdownItems.filter(x => x.text.toLowerCase().startsWith(scope.search.term.toLowerCase()));
+                    scope.filteredDropdownItems = scope.dropdownItems.filter(scope.filter === 'Contains' ? filterContains : filterStartsWith);
                 } else {
                     scope.filteredDropdownItems = scope.dropdownItems;
                 }
@@ -223,11 +227,12 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
             };
 
             scope.shouldRenderHighlightedText = (value) => {
+                if (scope.filter && scope.filter !== 'StartsWith') return false;
                 return value.toLowerCase().startsWith(scope.search.term.toLowerCase()) && value.length > scope.search.term.length;
             };
 
             scope.getLabel = (value) => {
-                return scope.shouldRenderHighlightedText(value) ? value.substring(scope.search.term.length) : value;
+                return scope.search.term && scope.shouldRenderHighlightedText(value) ? value.substring(scope.search.term.length) : value;
             };
 
             scope.getListClasses = () => classNames({
@@ -307,13 +312,12 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
                     <bk-list class="{{getListClasses()}}" dropdown-mode="true" compact="compact" has-message="!!message" aria-label="{{listAriaLabel}}">
                         <bk-list-item ng-repeat="item in filteredDropdownItems" role="option" tabindex="0" selected="isSelected(item)" ng-click="onItemClick(item)">
                             <bk-list-form-item ng-if="multiSelect">
-                                <bk-checkbox id="{{getCheckboxId(item.value)}}" compact="compact" ng-checked="isSelected(item)">
-                                </bk-checkbox>
+                                <bk-checkbox id="{{getCheckboxId(item.value)}}" compact="compact" ng-checked="isSelected(item)"></bk-checkbox>
                                 <bk-checkbox-label empty="true" compact="compact" for="{{getCheckboxId(item.value)}}" ng-click="$event.preventDefault()" tabindex="-1"></bk-checkbox-label>
                             </bk-list-form-item>
                             <bk-list-icon ng-if="item.glyph || item.svg" glyph="{{item.glyph}}" svg-path="{{item.svg}}"></bk-list-icon>
                             <bk-list-title>
-                                <span ng-if="shouldRenderHighlightedText(item.text)" class="fd-list__bold">{{ getHighlightedText(item.text) }}</span>{{ getLabel(item.text) }}
+                                <span ng-if="search.term && shouldRenderHighlightedText(item.text)" class="fd-list__bold">{{ getHighlightedText(item.text) }}</span>{{ getLabel(item.text) }}
                             </bk-list-title>
                             <bk-list-seconday ng-if="item.secondaryText">{{ item.secondaryText }}</bk-list-seconday>
                         </bk-list-item>
