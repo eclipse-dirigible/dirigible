@@ -6,6 +6,14 @@ test(testName, () => {
     console.log(`Executing ${testName}...`);
     const tableName = 'TEACHERS';
     const DATE_FORMAT = 'yyyyMMdd';
+
+    try {
+        const dropSql = sql.getDialect().drop().table(tableName).build();
+        update.execute(dropSql);
+    } catch (e) {
+        console.log(`Table [${tableName}] is missing`);
+    }
+
     const createTableSql = sql.getDialect()
         .create()
         .table(tableName)
