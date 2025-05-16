@@ -23,3 +23,4 @@ public class CamelTransactionsCommitIT extends PredefinedProjectIT {
         return testProject;
     }
 }
+
