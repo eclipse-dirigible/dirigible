@@ -31,7 +31,7 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
             listAriaLabel: '@',
             multiSelect: '<?',
             maxBodyHeight: '@?',
-            filter: '@'
+            filter: '@?'
         },
         link: function (scope, element, _attrs, ngModel) {
             scope.defaultHeight = 16;
