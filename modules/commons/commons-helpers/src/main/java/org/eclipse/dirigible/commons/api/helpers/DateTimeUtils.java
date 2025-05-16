@@ -71,7 +71,7 @@ public class DateTimeUtils {
         try {
             return Optional.of(parseDateTime(value));
         } catch (DateTimeParseException ex) {
-            LOGGER.debug("[{}] cannot be parsed to date time", ex);
+            LOGGER.debug("[{}] cannot be parsed to date time", value, ex);
             return Optional.empty();
         }
     }
@@ -121,7 +121,7 @@ public class DateTimeUtils {
         try {
             return Optional.of(parseDate(value));
         } catch (DateTimeException ex) {
-            LOGGER.debug("[{}] cannot be parsed to date", ex);
+            LOGGER.debug("[{}] cannot be parsed to date", value, ex);
             return Optional.empty();
         }
     }
@@ -145,7 +145,7 @@ public class DateTimeUtils {
         try {
             return Optional.of(parseTime(value));
         } catch (DateTimeException ex) {
-            LOGGER.debug("[{}] cannot be parsed to time", ex);
+            LOGGER.debug("[{}] cannot be parsed to time", value, ex);
             return Optional.empty();
         }
     }

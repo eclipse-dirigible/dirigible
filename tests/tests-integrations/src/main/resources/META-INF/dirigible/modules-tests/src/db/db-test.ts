@@ -39,7 +39,7 @@ test('create-insert-select-db-test', () => {
     insert.executeMany(insertSql, batchValues);
 
     const insertedEntries = query.execute(selectSql, undefined, undefined, resultParameters);
-    assertEquals('Unexpected entries after insert', 2, entries.length);
+    assertEquals('Unexpected entries after insert', 2, insertedEntries.length);
 
     const expectedEntries = `[{"Id":1,"Name":"John","Birthday":"20001220"},{"Id":2,"Name":"Mary","Birthday":"20011121"}]`;
     assertEquals('Unexpected entries', expectedEntries, JSON.stringify(insertedEntries));
