@@ -596,7 +596,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     description: 'Combobox selection',
                     template: `<div class="fb-control-wrapper" ng-click="showProps($event)" data-id="{{id}}"><bk-form-item horizontal="props.horizontal.value">
                         <bk-form-label colon="true" ng-required="props.required.value" for="{{props.id.value}}">{{ props.label.value }}</bk-form-label>
-                        <bk-combobox-input compact="props.isCompact.value" dropdown-items="[{text: 'combo',value: 'combo'}]" ng-required="props.required.value" placeholder="{{props.placeholder.value}}" btn-aria-label="show/hide {{ props.label.value }} options" list-aria-label="{{ props.label.value }} options"></bk-combobox-input>
+                        <bk-combobox-input compact="props.isCompact.value" filter="{{props.filter.value}}" dropdown-items="[{text: 'combo',value: 'combo'}]" ng-required="props.required.value" placeholder="{{props.placeholder.value}}" btn-aria-label="show/hide {{ props.label.value }} options" list-aria-label="{{ props.label.value }} options"></bk-combobox-input>
                     </bk-form-item></div>`,
                     props: {
                         id: {
@@ -628,6 +628,21 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                             label: 'Placeholder',
                             value: '',
                             placeholder: 'Input placeholder',
+                        },
+                        filter: {
+                            type: 'dropdown',
+                            label: 'Filter type',
+                            value: '',
+                            items: [
+                                {
+                                    label: 'StartsWith',
+                                    value: '',
+                                },
+                                {
+                                    label: 'Contains',
+                                    value: 'Contains',
+                                },
+                            ]
                         },
                         model: {
                             type: 'text',
