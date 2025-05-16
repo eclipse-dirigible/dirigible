@@ -1,0 +1,17 @@
+- route:
+    id: http-oute-wge2
+    nodePrefixId: http-route-52f
+    from:
+      id: from-aw23
+      description: Expose path /services/integrations/CamelAsyncStepITRoute
+      uri: platform-http
+      parameters:
+        path: CamelAsyncStepITRoute
+        httpMethodRestrict: GET
+      steps:
+        - to:
+            id: to-c54d
+            description: Call async-step.ts
+            uri: dirigible-java-script
+            parameters:
+              javaScriptPath: CamelAsyncStepIT/async-step.ts
