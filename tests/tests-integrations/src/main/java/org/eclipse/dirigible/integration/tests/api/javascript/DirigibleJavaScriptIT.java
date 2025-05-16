@@ -17,7 +17,7 @@ import org.junit.jupiter.api.TestFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
 
-import java.util.Set;
+import java.util.List;
 
 public class DirigibleJavaScriptIT extends IntegrationTest {
 
@@ -28,7 +28,7 @@ public class DirigibleJavaScriptIT extends IntegrationTest {
     private ProjectStatusProvider projectStatusProvider;
 
     @TestFactory
-    Set<DynamicContainer> jsTests() {
+    List<DynamicContainer> jsTests() {
         // register all JS tests defined in [src/test/resources/META-INF/dirigible/modules-tests]
         return jsTestFactory.createTestContainers();
     }

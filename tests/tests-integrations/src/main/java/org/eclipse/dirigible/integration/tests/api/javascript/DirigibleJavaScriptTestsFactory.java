@@ -16,8 +16,6 @@ import org.eclipse.dirigible.graalium.core.javascript.modules.ModuleType;
 import org.graalvm.polyglot.Source;
 import org.junit.jupiter.api.DynamicContainer;
 import org.junit.jupiter.api.DynamicTest;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
@@ -26,39 +24,35 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Component
 class DirigibleJavaScriptTestsFactory implements AutoCloseable {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleJavaScriptTestsFactory.class);
-
     private static final String TESTS_PROJECT_NAME = "modules-tests";
 
     private DirigibleJavascriptCodeRunner codeRunner;
 
-    synchronized Set<DynamicContainer> createTestContainers() {
+    synchronized List<DynamicContainer> createTestContainers() {
         if (codeRunner == null) {
             codeRunner = new DirigibleJavascriptCodeRunner();
         }
-        Set<Path> testFilesInProject = findAllTestFiles(TESTS_PROJECT_NAME);
-        Set<DynamicContainer> containers = testFilesInProject.stream()
-                                                             .map(this::registerTest)
-                                                             .collect(Collectors.toSet());
-        LOGGER.info("Created [{}] containers: {}", containers.size(), containers);
-        return containers;
+        List<Path> testFilesInProject = findAllTestFiles(TESTS_PROJECT_NAME);
+        return testFilesInProject.stream()
+                                 .map(this::registerTest)
+                                 .toList();
     }
 
-    private Set<Path> findAllTestFiles(String projectName) {
+    private List<Path> findAllTestFiles(String projectName) {
         Path projectPath = codeRunner.getSourceProvider()
                                      .getAbsoluteProjectPath(projectName);
         try {
             try (Stream<Path> filesStream = Files.walk(projectPath)
                                                  .filter(path -> path.toString()
-                                                                     .endsWith(".js"))) {
-                return filesStream.collect(Collectors.toSet());
+                                                                     .endsWith(".mjs")
+                                                         || path.toString()
+                                                                .endsWith(".js"))) {
+                return filesStream.toList();
             }
         } catch (IOException ex) {
             throw new IllegalArgumentException("Could not get test files for project: " + projectName, ex);
