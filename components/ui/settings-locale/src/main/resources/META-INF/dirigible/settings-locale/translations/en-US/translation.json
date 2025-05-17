@@ -1,0 +1,7 @@
+{
+    "regionAndLang": "$t(region) & $t(language)",
+    "errMsg": {
+        "langChangeTitle": "Unable to change language",
+        "langChange": "Please look at the console for more information"
+    }
+}

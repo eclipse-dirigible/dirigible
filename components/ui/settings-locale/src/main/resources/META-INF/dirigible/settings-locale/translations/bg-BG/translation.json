@@ -1,0 +1,7 @@
+{
+    "regionAndLang": "$t(region) & $t(language)",
+    "errMsg": {
+        "langChangeTitle": "Езикът не може да се промени",
+        "langChange": "Моля, вижте конзолата за повече информация"
+    }
+}

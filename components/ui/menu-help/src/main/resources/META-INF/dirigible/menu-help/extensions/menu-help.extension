@@ -1,0 +1,5 @@
+{
+    "module": "menu-help/configs/help.js",
+    "extensionPoint": "platform-menus",
+    "description": "Shell help menu"
+}
