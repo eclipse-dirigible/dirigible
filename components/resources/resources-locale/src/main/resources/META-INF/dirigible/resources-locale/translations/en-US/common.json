@@ -1,0 +1,22 @@
+{
+    "yes": "Yes",
+    "no": "No",
+    "cancel": "Cancel",
+    "add": "Add",
+    "edit": "Edit",
+    "delete": "Delete",
+    "remove": "Remove",
+    "help": "Help",
+    "new": "New",
+    "region": "Region",
+    "language": "Language",
+    "window": "Window",
+    "shells": "Shells",
+    "perspectives": "Perspectives",
+    "views": "Views",
+    "notificationsNum": "Notifications ({{num}})",
+    "noNotifications": "No Notifications",
+    "clearAll": "Clear all",
+    "username": "Username",
+    "logout": "Logout"
+}

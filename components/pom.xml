@@ -208,6 +208,7 @@
         <module>ui/perspective-security</module>
         <module>ui/perspective-processes</module>
         <module>ui/perspective-tracing</module>
+        <module>ui/settings-locale</module>
         <module>ui/view-welcome</module>
         <module>ui/view-search</module>
         <module>ui/view-projects</module>
@@ -243,7 +244,6 @@
         <module>ui/service-generate</module>
         <module>ui/service-actions</module>
         <module>ui/service-git</module>
-        <module>ui/service-locale</module>
         <module>ui/service-extensions</module>
         <module>ui/editor-monaco</module>
         <module>ui/editor-monaco-extensions</module>
@@ -278,6 +278,7 @@
         <module>ui/menu-security</module>
         <module>ui/menu-websockets</module>
         <module>ui/menu-csv</module>
+        <module>ui/menu-help</module>
 
         <!-- Resources -->
         <module>resources/resources-core</module>
@@ -1218,6 +1219,12 @@
 
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-settings-locale</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-view-welcome</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -1394,11 +1401,6 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-ui-service-locale</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-service-extensions</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -1562,6 +1564,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-menu-csv</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-menu-help</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

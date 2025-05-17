@@ -12,6 +12,7 @@
 const perspectiveData = {
 	id: 'Reports',
 	label: 'Reports',
+	translation: 'dashboard:reports',
 	path: '/services/web/dashboard/perspectives/reports.html',
 	order: 10,
 	icon: '/services/web/dashboard/images/reports.svg',

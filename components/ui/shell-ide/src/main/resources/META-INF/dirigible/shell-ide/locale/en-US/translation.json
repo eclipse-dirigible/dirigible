@@ -1,0 +1,11 @@
+{
+    "windowMenu": "Window",
+    "shells": "Shells",
+    "perspectives": "Perspectives",
+    "views": "Views",
+    "notificationsNum": "Notifications ({{num}})",
+    "noNotifications": "No Notifications",
+    "clearAll": "Clear all",
+    "username": "Username",
+    "logout": "Logout"
+}

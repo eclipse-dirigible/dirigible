@@ -125,23 +125,6 @@
             <artifactId>i18next</artifactId>
             <version>${i18next.version}</version>
         </dependency>
-        <dependency>
-            <groupId>org.webjars.npm</groupId>
-            <artifactId>i18next-http-backend</artifactId>
-            <version>${i18next-http-backend.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.webjars.npm</groupId>
-                    <artifactId>node-fetch</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>org.webjars.npm</groupId>
-            <artifactId>node-fetch</artifactId>
-            <version>3.3.2</version>
-            <!-- Try with latest 2.*.* as well           <version>2.7.0</version>-->
-        </dependency>
     </dependencies>
 
     <build>

@@ -9,12 +9,18 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const dashboard = angular.module('dashboard', ['blimpKit', 'platformView']);
-dashboard.controller('DashboardController', ($scope, Extensions) => {
+const dashboard = angular.module('dashboard', ['blimpKit', 'platformView', 'platformLocale']);
+dashboard.controller('DashboardController', ($scope, Extensions, LocaleService) => {
+    $scope.loadingLabel = 'Loading...';
+    $scope.errorMessage = 'Failed to load widget list';
+    LocaleService.onLoad(() => {
+        $scope.loadingLabel = `${LocaleService.t('loading')}...`;
+        $scope.errorMessage = LocaleService.t('dashboard:errMsg.widgetList');
+    });
     $scope.state = {
         isBusy: true,
         error: false,
-        busyText: 'Loading...',
+        busyText: $scope.loadingLabel,
     };
 
     $scope.smallWidgets = [];
@@ -35,6 +41,5 @@ dashboard.controller('DashboardController', ($scope, Extensions) => {
     }).catch((error) => {
         console.error('Error fetching widget list:', error);
         $scope.state.error = true;
-        $scope.errorMessage = 'Failed to load widget list';
     });
 });

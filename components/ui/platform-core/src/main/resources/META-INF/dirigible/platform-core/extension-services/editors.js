@@ -14,7 +14,7 @@ import { request, response } from "sdk/http";
 import { uuid } from "sdk/utils";
 
 const editors = [];
-const extensionPoints = (request.getParameter('extensionPoints') || 'platform-editors').split(',');
+const extensionPoints = request.getParameterValues('extensionPoints') ?? ['platform-editors'];
 const editorExtensions = [];
 for (let i = 0; i < extensionPoints.length; i++) {
 	// @ts-ignore

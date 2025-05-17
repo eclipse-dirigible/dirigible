@@ -71,14 +71,14 @@ function processScriptRequest(scriptIds) {
                 if (typeof script === 'string') {
                     let text = registry.getText(script);
                     if (text !== null) {
-						if (text.includes('//# sourceMappingURL=')) {
-	                        text = text.replace('//# sourceMappingURL=', `//# sourceMappingURL=/webjars${script.slice(0, script.lastIndexOf('/') + 1)}`);
-	                        text += '\n';
-	                    }
-	                    responseContent += text;
-					} else {
-						console.error("Cannot load the script: " + script);	
-					}
+                        if (text.includes('//# sourceMappingURL=')) {
+                            text = text.replace('//# sourceMappingURL=', `//# sourceMappingURL=/webjars${script.slice(0, script.lastIndexOf('/') + 1)}`);
+                            text += '\n';
+                        }
+                        responseContent += text;
+                    } else {
+                        console.error("Cannot load the script: " + script);
+                    }
                 } else {
                     responseContent += script() + '\n';
                 }
@@ -162,6 +162,7 @@ function getScriptList(scriptId) {
         '/platform-core/ui/blimpkit/vertical-navigation.js',
         '/platform-core/ui/blimpkit/wizard.js',
     ];
+    const locale = ['/i18next/25.0.2/dist/umd/i18next.min.js', '/platform-core/ui/platform/locale.js'];
     const cookies = '/angularjs/1.8.2/angular-cookies.min.js';
     const editorsService = '/platform-core/ui/platform/editors.js';
     const viewCss = [
@@ -192,6 +193,7 @@ function getScriptList(scriptId) {
         case 'shell-js':
             return [
                 ...baseJs,
+                ...locale,
                 cookies,
                 '/platform-core/ui/platform/shell.js',
             ];
@@ -214,7 +216,7 @@ function getScriptList(scriptId) {
             return ['/editor-monaco/embeddable/editor.js', '/monaco-editor/0.40.0/min/vs/loader.js', '/monaco-editor/0.40.0/min/vs/editor/editor.main.nls.js', '/monaco-editor/0.40.0/min/vs/editor/editor.main.js'];
         case 'code-editor-css':
             return ['/editor-monaco/css/embeddable.css', '/monaco-editor/0.40.0/min/vs/editor/editor.main.css'];
-        case 'cookies':
+        case 'cookies-js':
             return [cookies];
         case 'jstree-js':
             return ['/jstree/3.3.12/jstree.min.js', '/platform-core/ui/jstree/indicator.plugin.js'];
@@ -224,6 +226,8 @@ function getScriptList(scriptId) {
             return [editorsService];
         case 'sortable-js':
             return ['/sortablejs/1.15.2/Sortable.min.js'];
+        case 'locale-js':
+            return locale;
     }
 }
 

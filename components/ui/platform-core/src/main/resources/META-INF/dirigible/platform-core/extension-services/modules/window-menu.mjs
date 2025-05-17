@@ -19,17 +19,21 @@ export async function getWindowMenu(perspectiveExtPoints = [], viewExtPoints = [
 	const shells = await getShells(shellExtPoints);
 
 	const menu = {
+		translation: 'window',
 		label: 'Window',
 		items: [
 			{
+				translation: 'shells',
 				label: 'Shells',
 				items: [],
 			},
 			{
+				translation: 'perspectives',
 				label: 'Perspectives',
 				items: [],
 			},
 			{
+				translation: 'views',
 				label: 'Views',
 				items: [],
 			},
@@ -39,6 +43,7 @@ export async function getWindowMenu(perspectiveExtPoints = [], viewExtPoints = [
 	for (let i = 0; i < shells.length; i++) {
 		menu.items[0].items.push({
 			id: shells[i].id,
+			translation: shells[i].translation,
 			label: shells[i].label,
 			link: shells[i].path,
 			action: 'open',
@@ -48,6 +53,7 @@ export async function getWindowMenu(perspectiveExtPoints = [], viewExtPoints = [
 	for (let p = 0; p < perspectives.perspectives.length; p++) {
 		menu.items[1].items.push({
 			id: perspectives.perspectives[p].id,
+			translation: perspectives.perspectives[p].translation,
 			label: perspectives.perspectives[p].label,
 			action: 'showPerspective',
 		});
@@ -60,6 +66,7 @@ export async function getWindowMenu(perspectiveExtPoints = [], viewExtPoints = [
 	for (let u = 0; u < perspectives.utilities.length; u++) {
 		menu.items[1].items.push({
 			id: perspectives.utilities[u].id,
+			translation: perspectives.utilities[u].translation,
 			label: perspectives.utilities[u].label,
 			action: 'showPerspective',
 		});
@@ -68,6 +75,7 @@ export async function getWindowMenu(perspectiveExtPoints = [], viewExtPoints = [
 	for (let i = 0; i < views.length; i++) {
 		menu.items[2].items.push({
 			id: views[i].id,
+			translation: views[i].translation,
 			label: views[i].label,
 			action: 'openView',
 		});
