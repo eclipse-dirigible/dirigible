@@ -119,7 +119,7 @@
         <!-- Spring -->
         <spring.boot.version>3.4.5</spring.boot.version>
         <spring.admin.version>3.4.5</spring.admin.version>
-        <springdoc.version>2.8.6</springdoc.version>
+        <springdoc.version>2.8.8</springdoc.version>
 
         <!-- Webjars -->
         <webjars.bootstrap.version>5.3.5</webjars.bootstrap.version>
@@ -178,7 +178,7 @@
         <!-- JDBC -->
         <mongodb.version>3.12.14</mongodb.version>
         <ngdbc.version>2.24.7</ngdbc.version>
-        <snowflake.version>3.23.2</snowflake.version>
+        <snowflake.version>3.24.0</snowflake.version>
         <mysql.version>8.4.0</mysql.version>
 
         <!-- QLDB -->
@@ -219,7 +219,7 @@
 
         <!-- Tests -->
         <testcontainers.version>1.21.0</testcontainers.version>
-        <selenide.version>7.8.1</selenide.version>
+        <selenide.version>7.9.2</selenide.version>
 
         <profile.content.phase>none</profile.content.phase>
 
@@ -921,7 +921,7 @@
             <dependency>
                 <groupId>org.seleniumhq.selenium</groupId>
                 <artifactId>selenium-java</artifactId>
-                <version>4.31.0</version>
+                <version>4.32.0</version>
                 <scope>test</scope>
             </dependency>
             <dependency>

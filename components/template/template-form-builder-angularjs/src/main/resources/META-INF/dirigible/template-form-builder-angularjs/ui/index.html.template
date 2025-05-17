@@ -99,7 +99,7 @@
 	#elseif($element.controlId == "input-combobox")
 				<bk-form-item horizontal="$element.horizontal">
 					<bk-form-label id="$element.id" colon="true" ng-required="$element.required" for="$element.id">$element.label</bk-form-label>
-					<bk-combobox-input compact="$element.isCompact" dropdown-items="$element.items" ng-model="model.$element.model" ng-required="$element.required" placeholder="$element.placeholder" btn-aria-label="show/hide $element.label options" list-aria-label="$element.label options"></bk-combobox-input>
+					<bk-combobox-input compact="$element.isCompact"#if($element.filter) filter="$element.filter"#end dropdown-items="$element.items" ng-model="model.$element.model" ng-required="$element.required" placeholder="$element.placeholder" btn-aria-label="show/hide $element.label options" list-aria-label="$element.label options"></bk-combobox-input>
 				</bk-form-item>
 	#elseif($element.controlId == "input-select" && $element.staticData != true)
 				<bk-form-item horizontal="$element.horizontal">
@@ -133,6 +133,23 @@
 					</bk-form-item>
 		#end
 				</bk-form-group>
+	#elseif($element.controlId == "table")
+				<table bk-table fixed="$element.isFixed" display-mode="$element.displayMode" outer-borders="$element.outerBorders" inner-borders="$element.innerBorders">
+					<thead bk-table-header interactive="false">
+						<tr bk-table-row>
+		#foreach($header in $element.headers)
+							<th bk-table-header-cell>$header.label</th>
+		#end
+						</tr>
+					</thead>
+					<tbody bk-table-body>
+						<tr bk-table-row hoverable="false" activable="false" ng-repeat="cell in ${element.model} track by $index">
+		#foreach($header in $element.headers)
+							<td bk-table-cell>{{cell['$header.value']}}</td>
+		#end
+						</tr>
+					</tbody>
+				</table>
 	#elseif($element.controlId == "button")
 				<div>
 					<bk-button#if($element.sizeToText) class="bk-float-right"#else class="bk-full-width"#end #if($element.isSubmit)type="submit" ng-disabled="!forms.form.$valid"#end label="$element.label" compact="$element.isCompact" state="$element.type"#if($element.callback) ng-click="$element.callback"#end></bk-button>

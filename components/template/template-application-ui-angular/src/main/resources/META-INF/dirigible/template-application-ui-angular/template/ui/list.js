@@ -16,6 +16,7 @@ export function getSources(parameters) {
 		{
 			location: "/template-application-ui-angular/ui/perspective/perspective.extension.template",
 			action: "generate",
+			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/perspective.extension",
 			collection: "uiListModels"
 		},

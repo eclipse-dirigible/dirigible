@@ -17,6 +17,7 @@ import org.eclipse.dirigible.components.data.management.helpers.DatabaseResultSe
 import org.eclipse.dirigible.components.data.management.helpers.ResultParameters;
 import org.eclipse.dirigible.components.data.management.service.DatabaseDefinitionService;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.database.DatabaseParameters;
 import org.eclipse.dirigible.components.database.DirigibleConnection;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.components.database.NamedParameterStatement;
@@ -45,12 +46,12 @@ public class DatabaseFacade implements InitializingBean {
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(DatabaseFacade.class);
 
+    private static final Set<String> DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE = new HashSet<>();
+
     /** The database facade. */
     private static DatabaseFacade INSTANCE;
-
     /** The database definition service. */
     private final DatabaseDefinitionService databaseDefinitionService;
-
     /** The data sources manager. */
     private final DataSourcesManager dataSourcesManager;
 
@@ -207,6 +208,8 @@ public class DatabaseFacade implements InitializingBean {
         });
     }
 
+    // ============ Query ===========
+
     /**
      * Executes SQL query.
      *
@@ -218,8 +221,6 @@ public class DatabaseFacade implements InitializingBean {
     public static String query(String sql, String parameters) throws Throwable {
         return query(sql, parameters, null);
     }
-
-    // ============ Query ===========
 
     /**
      * Executes SQL query.
@@ -360,45 +361,139 @@ public class DatabaseFacade implements InitializingBean {
      * @throws RuntimeException if an error occur
      */
     public static List<Map<String, Object>> insert(String sql, String parameters, String datasourceName) throws Throwable {
-        DataSource dataSource = getDataSource(datasourceName);
+        DirigibleDataSource dataSource = getDataSource(datasourceName);
         if (dataSource == null) {
             throw new IllegalArgumentException("DataSource [" + datasourceName + "] not known.");
         }
 
         return LoggingExecutor.executeWithException(dataSource, () -> {
 
-            try (Connection connection = dataSource.getConnection();
-                    PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-
-                if (parameters != null) {
-                    IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                    ParametersSetter.setParameters(parameters, statement);
+            if (DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.contains(dataSource.getName())) {
+                logger.debug("RETURN_GENERATED_KEYS not supported for data source [{}]. Will execute insert without this option.",
+                        dataSource);
+                try (Connection connection = dataSource.getConnection()) {
+                    insertWithoutResult(sql, parameters, connection);
+                    return Collections.emptyList();
                 }
+            }
 
-                int updatedRows = preparedStatement.executeUpdate();
-                List<Map<String, Object>> generatedKeysList = new ArrayList<>(updatedRows);
+            try (Connection connection = dataSource.getConnection()) {
+                try (PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
-                try (ResultSet generatedKeys = preparedStatement.getGeneratedKeys()) {
-                    ResultSetMetaData metaData = generatedKeys.getMetaData();
-                    int columnCount = metaData.getColumnCount();
-
-                    while (generatedKeys.next()) {
-                        Map<String, Object> keyRow = new LinkedHashMap<>();
-                        for (int i = 1; i <= columnCount; i++) {
-                            String columnName = metaData.getColumnLabel(i);
-                            Object value = generatedKeys.getObject(i);
-                            keyRow.put(columnName, value);
-                        }
-                        generatedKeysList.add(keyRow);
+                    if (parameters != null) {
+                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
+                        ParametersSetter.setParameters(parameters, statement);
                     }
 
-                    return generatedKeysList;
+                    preparedStatement.executeUpdate();
+                    return createGeneratedKeys(preparedStatement);
+
+                } catch (SQLFeatureNotSupportedException ex) {
+                    DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.add(dataSource.getName());
+                    logger.warn("RETURN_GENERATED_KEYS not supported for data source [{}]. Will execute insert without this option.",
+                            dataSource, ex);
+                    insertWithoutResult(sql, parameters, connection);
+                    return Collections.emptyList();
                 }
             } catch (SQLException | RuntimeException ex) {
                 logger.error("Failed to execute insert statement [{}] in data source [{}].", sql, datasourceName, ex);
                 throw ex;
             }
         });
+    }
+
+    private static List<Map<String, Object>> createGeneratedKeys(PreparedStatement preparedStatement) throws SQLException {
+        List<Map<String, Object>> generatedKeysList = new ArrayList<>();
+
+        try (ResultSet generatedKeys = preparedStatement.getGeneratedKeys()) {
+            ResultSetMetaData metaData = generatedKeys.getMetaData();
+            int columnCount = metaData.getColumnCount();
+
+            while (generatedKeys.next()) {
+                Map<String, Object> keyRow = new LinkedHashMap<>();
+                for (int i = 1; i <= columnCount; i++) {
+                    String columnName = metaData.getColumnLabel(i);
+                    Object value = generatedKeys.getObject(i);
+                    keyRow.put(columnName, value);
+                }
+                generatedKeysList.add(keyRow);
+            }
+
+            return generatedKeysList;
+        }
+    }
+
+    private static void insertWithoutResult(String sql, String parameters, Connection connection) throws SQLException {
+        try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
+            if (parameters != null) {
+                IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
+                ParametersSetter.setParameters(parameters, statement);
+            }
+            preparedStatement.executeUpdate();
+        }
+    }
+
+    public static List<Map<String, Object>> insertMany(String sql, String parameters, String datasourceName) throws Throwable {
+        DirigibleDataSource dataSource = getDataSource(datasourceName);
+        if (dataSource == null) {
+            throw new IllegalArgumentException("DataSource [" + datasourceName + "] not known.");
+        }
+
+        return LoggingExecutor.executeWithException(dataSource, () -> {
+
+            if (DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.contains(dataSource.getName())) {
+                logger.debug("RETURN_GENERATED_KEYS not supported for data source [{}]. Will execute insert without this option.",
+                        dataSource);
+                insertManyWithoutResult(sql, parameters, dataSource);
+                return Collections.emptyList();
+            }
+
+            try (Connection connection = dataSource.getConnection()) {
+                connection.setAutoCommit(false);
+                try (PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+
+                    if (parameters != null) {
+                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
+                        ParametersSetter.setManyParameters(parameters, statement);
+                    }
+
+                    preparedStatement.executeBatch();
+
+                    List<Map<String, Object>> generatedKeys = createGeneratedKeys(preparedStatement);
+
+                    connection.commit();
+                    return generatedKeys;
+
+                } catch (SQLFeatureNotSupportedException ex) {
+                    DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.add(dataSource.getName());
+                    logger.warn("RETURN_GENERATED_KEYS not supported for data source [{}]. Will execute insert without this option.",
+                            dataSource, ex);
+                    insertManyWithoutResult(sql, parameters, connection);
+                    return Collections.emptyList();
+                }
+            } catch (SQLException | RuntimeException ex) {
+                logger.error("Failed to execute insert statement [{}] in data source [{}].", sql, datasourceName, ex);
+                throw ex;
+            }
+        });
+    }
+
+    private static void insertManyWithoutResult(String sql, String parameters, DirigibleDataSource dataSource) throws SQLException {
+        try (Connection connection = dataSource.getConnection()) {
+            insertManyWithoutResult(sql, parameters, connection);
+        }
+    }
+
+    private static void insertManyWithoutResult(String sql, String parameters, Connection connection) throws SQLException {
+        connection.setAutoCommit(false);
+        try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
+            if (parameters != null) {
+                IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
+                ParametersSetter.setManyParameters(parameters, statement);
+            }
+            preparedStatement.executeBatch();
+            connection.commit();
+        }
     }
 
     // =========== Insert ===========
@@ -674,7 +769,34 @@ public class DatabaseFacade implements InitializingBean {
     private static void createSequenceInternal(String sequence, final Integer seqStart, Connection connection, String tableName)
             throws SQLException {
         Integer sequenceStart = seqStart;
+        Integer sequenceMaxStart = seqStart;
+        Integer sequenceCountStart = seqStart;
+
         if (sequenceStart == null && tableName != null) {
+            try {
+
+                ResultSet primaryKeysResultSet = connection.getMetaData()
+                                                           .getPrimaryKeys(connection.getCatalog(), null, tableName);
+                if (primaryKeysResultSet.next()) {
+                    String columnName = primaryKeysResultSet.getString(DatabaseParameters.JDBC_COLUMN_NAME_PROPERTY);
+                    String maxSql = SqlFactory.getNative(connection)
+                                              .select()
+                                              .column("max(" + columnName + ")")
+                                              .from(tableName)
+                                              .build();
+                    try (PreparedStatement countPreparedStatement = connection.prepareStatement(maxSql)) {
+                        ResultSet rs = countPreparedStatement.executeQuery();
+                        if (rs.next()) {
+                            sequenceMaxStart = rs.getInt(1);
+                            sequenceMaxStart++;
+                        }
+                    } catch (SQLException e) {
+                        // Do nothing
+                    }
+                }
+            } catch (SQLException e) {
+                // Do nothing, fall back to the count approach
+            }
             String countSql = SqlFactory.getNative(connection)
                                         .select()
                                         .column("count(*)")
@@ -683,12 +805,19 @@ public class DatabaseFacade implements InitializingBean {
             try (PreparedStatement countPreparedStatement = connection.prepareStatement(countSql)) {
                 ResultSet rs = countPreparedStatement.executeQuery();
                 if (rs.next()) {
-                    sequenceStart = rs.getInt(1);
-                    sequenceStart++;
+                    sequenceCountStart = rs.getInt(1);
+                    sequenceCountStart++;
                 }
             } catch (SQLException e) {
                 // Do nothing
             }
+        }
+
+        if (sequenceStart == null || sequenceMaxStart > sequenceStart) {
+            sequenceStart = sequenceMaxStart;
+        }
+        if (sequenceStart == null || sequenceCountStart > sequenceStart) {
+            sequenceStart = sequenceCountStart;
         }
 
         String sql = SqlFactory.getNative(connection)

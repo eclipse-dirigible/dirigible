@@ -13,6 +13,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import org.eclipse.dirigible.commons.api.helpers.BytesHelper;
+import org.eclipse.dirigible.commons.api.helpers.DateTimeUtils;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.database.NamedParameterStatement;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
@@ -25,6 +26,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -46,6 +48,8 @@ class ParametersSetter {
             new BigIntParamSetter(), //
             new RealParamSetter(), //
             new BlobParamSetter());
+    private static final Logger LOGGER = LoggerFactory.getLogger(ParametersSetter.class);
+
 
     /**
      * The Interface ParamSetter.
@@ -201,7 +205,7 @@ class ParametersSetter {
 
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isString()) {
-                Date value = null;
+                Date value;
                 try {
                     value = new Date(Long.parseLong(sourceParam.getAsJsonPrimitive()
                                                                .getAsString()));
@@ -240,7 +244,7 @@ class ParametersSetter {
 
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isString()) {
-                Date value = null;
+                Date value;
                 try {
                     value = new Date(Long.parseLong(sourceParam.getAsJsonPrimitive()
                                                                .getAsString()));
@@ -303,7 +307,7 @@ class ParametersSetter {
             }
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isString()) {
-                Timestamp value = null;
+                Timestamp value;
                 try {
                     value = new Timestamp(Long.parseLong(sourceParam.getAsJsonPrimitive()
                                                                     .getAsString()));
@@ -363,7 +367,7 @@ class ParametersSetter {
             }
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isString()) {
-                Timestamp value = null;
+                Timestamp value;
                 try {
                     value = new Timestamp(Long.parseLong(sourceParam.getAsJsonPrimitive()
                                                                     .getAsString()));
@@ -418,7 +422,7 @@ class ParametersSetter {
 
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isString()) {
-                Time value = null;
+                Time value;
                 try {
                     value = new Time(Long.parseLong(sourceParam.getAsJsonPrimitive()
                                                                .getAsString()));
@@ -458,7 +462,7 @@ class ParametersSetter {
 
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isString()) {
-                Time value = null;
+                Time value;
                 try {
                     value = new Time(Long.parseLong(sourceParam.getAsJsonPrimitive()
                                                                .getAsString()));
@@ -508,15 +512,15 @@ class ParametersSetter {
                 throws SQLException {
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isNumber()) {
-                Integer value = sourceParam.getAsJsonPrimitive()
-                                           .getAsInt();
+                int value = sourceParam.getAsJsonPrimitive()
+                                       .getAsInt();
                 preparedStatement.setInt(paramIndex, value);
                 return;
             }
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isString()) {
-                Integer value = Integer.parseInt(sourceParam.getAsJsonPrimitive()
-                                                            .getAsString());
+                int value = Integer.parseInt(sourceParam.getAsJsonPrimitive()
+                                                        .getAsString());
                 preparedStatement.setInt(paramIndex, value);
                 return;
             }
@@ -537,15 +541,15 @@ class ParametersSetter {
                 throws SQLException {
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isNumber()) {
-                Integer value = sourceParam.getAsJsonPrimitive()
-                                           .getAsInt();
+                int value = sourceParam.getAsJsonPrimitive()
+                                       .getAsInt();
                 preparedStatement.setInt(paramName, value);
                 return;
             }
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isString()) {
-                Integer value = Integer.parseInt(sourceParam.getAsJsonPrimitive()
-                                                            .getAsString());
+                int value = Integer.parseInt(sourceParam.getAsJsonPrimitive()
+                                                        .getAsString());
                 preparedStatement.setInt(paramName, value);
                 return;
             }
@@ -736,7 +740,7 @@ class ParametersSetter {
                 throws SQLException {
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isNumber()) {
-                Long value = sourceParam.getAsJsonPrimitive()
+                long value = sourceParam.getAsJsonPrimitive()
                                         .getAsBigInteger()
                                         .longValue();
                 preparedStatement.setLong(paramIndex, value);
@@ -744,7 +748,7 @@ class ParametersSetter {
             }
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isString()) {
-                Long value = Long.parseLong(sourceParam.getAsJsonPrimitive()
+                long value = Long.parseLong(sourceParam.getAsJsonPrimitive()
                                                        .getAsString());
                 preparedStatement.setLong(paramIndex, value);
                 return;
@@ -766,7 +770,7 @@ class ParametersSetter {
                 throws SQLException {
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isNumber()) {
-                Long value = sourceParam.getAsJsonPrimitive()
+                long value = sourceParam.getAsJsonPrimitive()
                                         .getAsBigInteger()
                                         .longValue();
                 preparedStatement.setLong(paramName, value);
@@ -774,7 +778,7 @@ class ParametersSetter {
             }
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isString()) {
-                Long value = Long.parseLong(sourceParam.getAsJsonPrimitive()
+                long value = Long.parseLong(sourceParam.getAsJsonPrimitive()
                                                        .getAsString());
                 preparedStatement.setLong(paramName, value);
                 return;
@@ -814,7 +818,7 @@ class ParametersSetter {
                 throws SQLException {
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isNumber()) {
-                Float value = sourceParam.getAsJsonPrimitive()
+                float value = sourceParam.getAsJsonPrimitive()
                                          .getAsNumber()
                                          .floatValue();
                 preparedStatement.setFloat(paramIndex, value);
@@ -822,7 +826,7 @@ class ParametersSetter {
             }
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isString()) {
-                Float value = Float.parseFloat(sourceParam.getAsJsonPrimitive()
+                float value = Float.parseFloat(sourceParam.getAsJsonPrimitive()
                                                           .getAsString());
                 preparedStatement.setFloat(paramIndex, value);
                 return;
@@ -844,7 +848,7 @@ class ParametersSetter {
                 throws SQLException {
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isNumber()) {
-                Float value = sourceParam.getAsJsonPrimitive()
+                float value = sourceParam.getAsJsonPrimitive()
                                          .getAsNumber()
                                          .floatValue();
                 preparedStatement.setFloat(paramName, value);
@@ -852,7 +856,7 @@ class ParametersSetter {
             }
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isString()) {
-                Float value = Float.parseFloat(sourceParam.getAsJsonPrimitive()
+                float value = Float.parseFloat(sourceParam.getAsJsonPrimitive()
                                                           .getAsString());
                 preparedStatement.setFloat(paramName, value);
                 return;
@@ -892,7 +896,7 @@ class ParametersSetter {
                 throws SQLException {
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isNumber()) {
-                Double value = sourceParam.getAsJsonPrimitive()
+                double value = sourceParam.getAsJsonPrimitive()
                                           .getAsNumber()
                                           .doubleValue();
                 preparedStatement.setDouble(paramIndex, value);
@@ -900,7 +904,7 @@ class ParametersSetter {
             }
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isString()) {
-                Double value = Double.parseDouble(sourceParam.getAsJsonPrimitive()
+                double value = Double.parseDouble(sourceParam.getAsJsonPrimitive()
                                                              .getAsString());
                 preparedStatement.setDouble(paramIndex, value);
                 return;
@@ -922,7 +926,7 @@ class ParametersSetter {
                 throws SQLException {
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isNumber()) {
-                Double value = sourceParam.getAsJsonPrimitive()
+                double value = sourceParam.getAsJsonPrimitive()
                                           .getAsNumber()
                                           .doubleValue();
                 preparedStatement.setDouble(paramName, value);
@@ -930,7 +934,7 @@ class ParametersSetter {
             }
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isString()) {
-                Double value = Double.parseDouble(sourceParam.getAsJsonPrimitive()
+                double value = Double.parseDouble(sourceParam.getAsJsonPrimitive()
                                                              .getAsString());
                 preparedStatement.setDouble(paramName, value);
                 return;
@@ -970,14 +974,14 @@ class ParametersSetter {
                 throws SQLException {
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isNumber()) {
-                Boolean value = sourceParam.getAsJsonPrimitive()
+                boolean value = sourceParam.getAsJsonPrimitive()
                                            .getAsBoolean();
                 preparedStatement.setBoolean(paramIndex, value);
                 return;
             }
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isString()) {
-                Boolean value = Boolean.parseBoolean(sourceParam.getAsJsonPrimitive()
+                boolean value = Boolean.parseBoolean(sourceParam.getAsJsonPrimitive()
                                                                 .getAsString());
                 preparedStatement.setBoolean(paramIndex, value);
                 return;
@@ -999,14 +1003,14 @@ class ParametersSetter {
                 throws SQLException {
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isNumber()) {
-                Boolean value = sourceParam.getAsJsonPrimitive()
+                boolean value = sourceParam.getAsJsonPrimitive()
                                            .getAsBoolean();
                 preparedStatement.setBoolean(paramName, value);
                 return;
             }
             if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                             .isString()) {
-                Boolean value = Boolean.parseBoolean(sourceParam.getAsJsonPrimitive()
+                boolean value = Boolean.parseBoolean(sourceParam.getAsJsonPrimitive()
                                                                 .getAsString());
                 preparedStatement.setBoolean(paramName, value);
                 return;
@@ -1141,6 +1145,26 @@ class ParametersSetter {
 
         if (parameterElement.getAsJsonPrimitive()
                             .isString()) {
+            String paramStringValue = parameterElement.getAsString();
+
+            Optional<Timestamp> timestamp = DateTimeUtils.optionallyParseDateTime(paramStringValue);
+            if (timestamp.isPresent()) {
+                preparedStatement.setTimestamp(paramIndex, timestamp.get());
+                return;
+            }
+
+            Optional<Date> date = DateTimeUtils.optionallyParseDate(paramStringValue);
+            if (date.isPresent()) {
+                preparedStatement.setDate(paramIndex, date.get());
+                return;
+            }
+
+            Optional<Time> time = DateTimeUtils.optionallyParseTime(paramStringValue);
+            if (time.isPresent()) {
+                preparedStatement.setTime(paramIndex, time.get());
+                return;
+            }
+
             preparedStatement.setString(paramIndex, parameterElement.getAsString());
             return;
         }
@@ -1151,7 +1175,7 @@ class ParametersSetter {
             return;
         }
 
-        throw new IllegalArgumentException("Parameter type unkown");
+        throw new IllegalArgumentException("The type of parameter [" + parameterElement + "] as index [" + paramIndex + "] is unknown");
     }
 
     /**
@@ -1163,60 +1187,56 @@ class ParametersSetter {
      * @throws SQLException the SQL exception
      */
     private static void setNumber(PreparedStatement preparedStatement, int paramIndex, JsonElement parameterElement) throws SQLException {
-        boolean isNumberParameterSet = false;
-        int numberIndex = paramIndex;
-
-        double doubleValue = parameterElement.getAsDouble();
-        boolean floatingPointValue = doubleValue % 1 != 0;
-        if (floatingPointValue) {
+        if (isFloatingPointValue(parameterElement)) {
             try {
-                preparedStatement.setDouble(numberIndex, doubleValue);
+                preparedStatement.setDouble(paramIndex, parameterElement.getAsDouble());
                 return;
             } catch (SQLException | ClassCastException e) {
+                LOGGER.debug("Failed to set value [{}] at index [{}] as double", parameterElement, paramIndex, e);
                 // Do nothing
             }
         }
 
-        if (!isNumberParameterSet) {
-            try {
-                preparedStatement.setInt(numberIndex, parameterElement.getAsInt());
-                isNumberParameterSet = true;
-            } catch (SQLException | ClassCastException e) {
-                // Do nothing
-            }
+        try {
+            preparedStatement.setInt(paramIndex, parameterElement.getAsInt());
+            return;
+        } catch (SQLException | ClassCastException e) {
+            LOGGER.debug("Failed to set value [{}] at index [{}] as int", parameterElement, paramIndex, e);
+            // Do nothing
         }
 
-        if (!isNumberParameterSet) {
-            try {
-                preparedStatement.setShort(numberIndex, parameterElement.getAsShort());
-                isNumberParameterSet = true;
-            } catch (SQLException | ClassCastException e) {
-                // Do nothing
-            }
+        try {
+            preparedStatement.setShort(paramIndex, parameterElement.getAsShort());
+            return;
+        } catch (SQLException | ClassCastException e) {
+            LOGGER.debug("Failed to set value [{}] at index [{}] as short", parameterElement, paramIndex, e);
+            // Do nothing
         }
 
-        if (!isNumberParameterSet) {
-            try {
-                preparedStatement.setLong(numberIndex, parameterElement.getAsLong());
-                isNumberParameterSet = true;
-            } catch (SQLException | ClassCastException e) {
-                // Do nothing
-            }
+        try {
+            preparedStatement.setLong(paramIndex, parameterElement.getAsLong());
+            return;
+        } catch (SQLException | ClassCastException e) {
+            LOGGER.debug("Failed to set value [{}] at index [{}] as long", parameterElement, paramIndex, e);
+            // Do nothing
         }
 
-        if (!isNumberParameterSet) {
-            try {
-                preparedStatement.setBigDecimal(numberIndex, parameterElement.getAsBigDecimal());
-                isNumberParameterSet = true;
-            } catch (SQLException | ClassCastException e) {
-                // Do nothing
-            }
+        try {
+            preparedStatement.setBigDecimal(paramIndex, parameterElement.getAsBigDecimal());
+            return;
+        } catch (SQLException | ClassCastException e) {
+            LOGGER.debug("Failed to set value [{}] at index [{}] as big decimal", parameterElement, paramIndex, e);
+            // Do nothing
         }
 
-        if (!isNumberParameterSet) {
-            preparedStatement.setObject(numberIndex, parameterElement.getAsNumber()
-                                                                     .toString());
-        }
+        preparedStatement.setObject(paramIndex, parameterElement.getAsNumber()
+                                                                .toString());
+    }
+
+    private static boolean isFloatingPointValue(JsonElement parameterElement) {
+        String numberStr = Double.toString(parameterElement.getAsDouble());
+
+        return numberStr.contains(".") || numberStr.contains("e") || numberStr.contains("E");
     }
 
     /**
@@ -1270,6 +1290,39 @@ class ParametersSetter {
                     preparedStatement.getNamed(), dataType);
         } else {
             throw new IllegalArgumentException("Unknown type of the prepared statement while setting parameter.");
+        }
+    }
+
+    static void setManyParameters(String parameters, IndexedOrNamedStatement preparedStatement) throws SQLException {
+        JsonElement parametersElement = GsonHelper.parseJson(parameters);
+        if (!(parametersElement instanceof JsonArray parametersArray)) {
+            throw new IllegalArgumentException(
+                    "Parameters must be provided as a JSON array of JSON arrays, e.g. [[1,\"John\",9876],[2,\"Mary\",1234]]");
+        }
+
+        for (JsonElement parameterElement : parametersArray) {
+            if (!(parameterElement instanceof JsonArray elementParametersArray)) {
+                throw new IllegalArgumentException("Parameters must be provided as a JSON array, e.g. [1,\"John\",9876]");
+            }
+            for (int idx = 0; idx < elementParametersArray.size(); idx++) {
+                JsonElement elementParameter = elementParametersArray.get(idx);
+                int paramIndex = (idx + 1);
+                setParameter(preparedStatement, paramIndex, elementParameter);
+            }
+            addBatch(preparedStatement);
+        }
+    }
+
+    private static void addBatch(IndexedOrNamedStatement preparedStatement) throws SQLException {
+        if (preparedStatement.isIndexed()) {
+            preparedStatement.getIndexed()
+                             .addBatch();
+
+        }
+
+        if (preparedStatement.isNamed()) {
+            preparedStatement.getNamed()
+                             .addBatch();
         }
     }
 

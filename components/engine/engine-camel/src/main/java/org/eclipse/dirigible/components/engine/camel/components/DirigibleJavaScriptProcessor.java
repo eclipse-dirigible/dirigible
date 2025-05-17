@@ -9,8 +9,6 @@
  */
 package org.eclipse.dirigible.components.engine.camel.components;
 
-import java.util.Map;
-
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
@@ -20,6 +18,8 @@ import org.eclipse.dirigible.components.tracing.TaskState;
 import org.eclipse.dirigible.components.tracing.TaskStateUtil;
 import org.eclipse.dirigible.components.tracing.TaskType;
 import org.eclipse.dirigible.components.tracing.TracingFacade;
+
+import java.util.Map;
 
 class DirigibleJavaScriptProcessor implements Processor {
 
@@ -56,7 +56,7 @@ class DirigibleJavaScriptProcessor implements Processor {
                 Map<String, String> output = TaskStateUtil.getVariables(exchange.getVariables());
                 TracingFacade.taskFailed(taskState, output, e.getMessage());
             }
-            throw new DirigibleJavaScriptException("Exception during invokation of: " + DirigibleJavaScriptInvoker.class, e);
+            throw new DirigibleJavaScriptException("Exception during invocation of: " + DirigibleJavaScriptInvoker.class, e);
         }
     }
 

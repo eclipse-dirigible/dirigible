@@ -19,8 +19,14 @@ export interface InsertParameter {
 
 export class Insert {
 
-	public static execute(sql: string, parameters?: (string | number | boolean | Date | InsertParameter)[], datasourceName?: string):  Array<Record<string, any>> {
-		return DatabaseFacade.insert(sql, parameters ? JSON.stringify(parameters) : undefined, datasourceName);
+	public static execute(sql: string, parameters?: (string | number | boolean | Date | InsertParameter)[], datasourceName?: string): Array<Record<string, any>> {
+        const params = parameters ? JSON.stringify(parameters) : undefined;
+		return DatabaseFacade.insert(sql, params, datasourceName);
+	}
+
+	public static executeMany(sql: string, parameters?: ((string | number | boolean | Date | InsertParameter)[])[], datasourceName?: string): Array<Record<string, any>> {
+		const params = parameters ? JSON.stringify(parameters) : undefined;
+		return DatabaseFacade.insertMany(sql, params, datasourceName);
 	}
 }
 

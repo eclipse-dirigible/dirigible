@@ -15,7 +15,7 @@ angular.module('forms', ['blimpKit', 'platformView']).controller('FormController
     $scope.model = {};
 #macro(formWidgets $elements)
 #foreach($element in $elements)
-	#if($element.controlId == "input-number")
+    #if($element.controlId == "input-number")
     $scope.model.$element.model = 0;
 	#elseif($element.controlId == "input-checkbox")
     $scope.model.$element.model = false;
@@ -51,9 +51,9 @@ angular.module('forms', ['blimpKit', 'platformView']).controller('FormController
     $scope.model.$element.model = '#ffbe6f';
 	#elseif($element.controlId == "paragraph")
     #if($element.model && $element.text)
-        $scope.model.$element.model = `$element.text`;
+    $scope.model.$element.model = `$element.text`;
     #elseif($element.model)
-        $scope.model.$element.model = null;
+    $scope.model.$element.model = null;
     #end
 	#end
     #if($element.children)

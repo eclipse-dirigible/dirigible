@@ -32,6 +32,9 @@ import com.mongodb.client.model.InsertOneModel;
 import com.mongodb.client.model.UpdateOneModel;
 import com.mongodb.client.model.UpdateOptions;
 import com.mongodb.client.model.WriteModel;
+import static com.mongodb.client.model.Projections.*;
+
+
 
 /**
  * The Class MongoDBStatement.
@@ -128,14 +131,31 @@ public class MongoDBStatement implements Statement {
                 searchHits = db.getCollection(collectionName)
                                .find(filter);
             }
-            if (filterDocument.containsKey("batchSize"))
+            if (filterDocument.containsKey("projection")) {
+                searchHits.projection(filterDocument.getDocument("projection"));
+            }
+            if (filterDocument.containsKey("batchSize")) {
                 searchHits.batchSize(filterDocument.getInt32("batchSize")
                                                    .getValue());
-            if (filterDocument.containsKey("limit"))
+            }
+            if (filterDocument.containsKey("limit")) {
                 searchHits.limit(filterDocument.getInt32("limit")
                                                .getValue());
-            if (filterDocument.containsKey("sort"))
+            }
+            if (filterDocument.containsKey("sort")) {
                 searchHits.sort(filterDocument.getDocument("sort"));
+            }
+            if (filterDocument.containsKey("skip")) {
+                searchHits.limit(filterDocument.getInt32("skip")
+                                               .getValue());
+            }
+            if (filterDocument.containsKey("maxTimeMS")) {
+                searchHits.limit(filterDocument.getInt32("maxTimeMS")
+                                               .getValue());
+            }
+            if (filterDocument.containsKey("collation")) {
+                searchHits.sort(filterDocument.getDocument("collation"));
+            }
             return new MongoDBResultSet(this, searchHits);
         } else if (filterDocument.containsKey("count")) {
             String collectionName = filterDocument.getString("count")

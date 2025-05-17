@@ -596,7 +596,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     description: 'Combobox selection',
                     template: `<div class="fb-control-wrapper" ng-click="showProps($event)" data-id="{{id}}"><bk-form-item horizontal="props.horizontal.value">
                         <bk-form-label colon="true" ng-required="props.required.value" for="{{props.id.value}}">{{ props.label.value }}</bk-form-label>
-                        <bk-combobox-input compact="props.isCompact.value" dropdown-items="[{text: 'combo',value: 'combo'}]" ng-required="props.required.value" placeholder="{{props.placeholder.value}}" btn-aria-label="show/hide {{ props.label.value }} options" list-aria-label="{{ props.label.value }} options"></bk-combobox-input>
+                        <bk-combobox-input compact="props.isCompact.value" filter="{{props.filter.value}}" dropdown-items="[{text: 'combo',value: 'combo'}]" ng-required="props.required.value" placeholder="{{props.placeholder.value}}" btn-aria-label="show/hide {{ props.label.value }} options" list-aria-label="{{ props.label.value }} options"></bk-combobox-input>
                     </bk-form-item></div>`,
                     props: {
                         id: {
@@ -628,6 +628,21 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                             label: 'Placeholder',
                             value: '',
                             placeholder: 'Input placeholder',
+                        },
+                        filter: {
+                            type: 'dropdown',
+                            label: 'Filter type',
+                            value: '',
+                            items: [
+                                {
+                                    label: 'StartsWith',
+                                    value: '',
+                                },
+                                {
+                                    label: 'Contains',
+                                    value: 'Contains',
+                                },
+                            ]
                         },
                         model: {
                             type: 'text',
@@ -722,6 +737,8 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                             enabledOn: { key: 'staticData', value: true },
                             type: 'list',
                             label: 'Options',
+                            labelText: 'Label',
+                            valueText: 'Value',
                             defaultValue: '',
                             value: [
                                 { label: 'Item 1', value: 'item1' },
@@ -833,6 +850,8 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                             enabledOn: { key: 'staticData', value: true },
                             type: 'list',
                             label: 'Options',
+                            labelText: 'Label',
+                            valueText: 'Value',
                             defaultValue: '',
                             value: [
                                 { label: 'Item 1', value: 'item1' },
@@ -944,6 +963,138 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                             label: 'Model',
                             value: '',
                             placeholder: '',
+                        },
+                    },
+                },
+                {
+                    controlId: 'table',
+                    label: 'Table',
+                    icon: 'sap-icon--table-view',
+                    description: 'Table container',
+                    template: `<div class="fb-control-wrapper" ng-click="showProps($event)" data-id="{{id}}"><bk-form-item horizontal="false">
+                        <table bk-table fixed="props.isFixed.value" display-mode="{{props.displayMode.value}}" outer-borders="{{props.outerBorders.value}}" inner-borders="{{props.innerBorders.value}}">
+                            <thead bk-table-header interactive="false">
+                                <tr bk-table-row>
+                                    <th bk-table-header-cell ng-repeat="header in props.headers.value track by $index">{{header.label}}</th>
+                                </tr>
+                            </thead>
+                            <tbody bk-table-body>
+                                <tr bk-table-row hoverable="false" activable="false">
+                                    <td bk-table-cell ng-repeat="header in props.headers.value track by $index">row['{{header.value}}']</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </bk-form-item></div>`,
+                    props: {
+                        id: {
+                            type: 'text',
+                            label: 'ID',
+                            placeholder: 'Form Item ID',
+                            value: '',
+                            required: true,
+                        },
+                        isFixed: {
+                            type: 'checkbox',
+                            label: 'Fixed',
+                            value: false,
+                        },
+                        displayMode: {
+                            type: 'dropdown',
+                            label: 'Display mode',
+                            value: '',
+                            items: [
+                                {
+                                    label: 'Default',
+                                    value: '',
+                                },
+                                {
+                                    label: 'Compact',
+                                    value: 'compact',
+                                },
+                                {
+                                    label: 'Condensed',
+                                    value: 'condensed',
+                                },
+                            ]
+                        },
+                        outerBorders: {
+                            type: 'dropdown',
+                            label: 'Outer borders',
+                            value: '',
+                            items: [
+                                {
+                                    label: 'All',
+                                    value: '',
+                                },
+                                {
+                                    label: 'Horizontal',
+                                    value: 'horizontal',
+                                },
+                                {
+                                    label: 'Vertical',
+                                    value: 'vertical',
+                                },
+                                {
+                                    label: 'Top',
+                                    value: 'top',
+                                },
+                                {
+                                    label: 'Bottom',
+                                    value: 'bottom',
+                                },
+                                {
+                                    label: 'None',
+                                    value: 'none',
+                                },
+                            ]
+                        },
+                        innerBorders: {
+                            type: 'dropdown',
+                            label: 'Inner borders',
+                            value: '',
+                            items: [
+                                {
+                                    label: 'All',
+                                    value: '',
+                                },
+                                {
+                                    label: 'Horizontal',
+                                    value: 'horizontal',
+                                },
+                                {
+                                    label: 'Vertical',
+                                    value: 'vertical',
+                                },
+                                {
+                                    label: 'Top',
+                                    value: 'top',
+                                },
+                                {
+                                    label: 'None',
+                                    value: 'none',
+                                },
+                            ]
+                        },
+                        headers: {
+                            type: 'list',
+                            label: 'Headers',
+                            labelText: 'Label',
+                            valueText: 'Key',
+                            value: [
+                                { label: 'Name', value: 'name' },
+                                { label: 'Age', value: 'age' }
+                            ]
+                        },
+                        model: {
+                            type: 'text',
+                            label: 'Model',
+                            value: '',
+                            placeholder: 'tableData',
+                        },
+                        info: {
+                            type: 'textinfo',
+                            label: 'Example model data',
+                            value: `[\n   {\n      "name":"John Doe",\n      "age":34\n   },\n   {\n      "name":"Jane Doe",\n      "age":35\n   }\n]`,
                         },
                     },
                 },
@@ -1217,7 +1368,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
             title: 'Add item',
             form: {
                 'aliLabel': {
-                    label: 'Label',
+                    label: item.labelText,
                     controlType: 'input',
                     placeholder: '',
                     type: 'text',
@@ -1226,7 +1377,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     required: true
                 },
                 'aliValue': {
-                    label: 'Value',
+                    label: item.valueText,
                     controlType: 'input',
                     placeholder: '',
                     type: 'text',
@@ -1267,12 +1418,12 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
         });
     };
 
-    $scope.editListItem = (listItem) => {
+    $scope.editListItem = (listItem, labelText, valueText) => {
         dialogHub.showFormDialog({
             title: 'Edit item',
             form: {
                 'aliLabel': {
-                    label: 'Label',
+                    label: labelText,
                     controlType: 'input',
                     placeholder: '',
                     type: 'text',
@@ -1282,7 +1433,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     required: true
                 },
                 'aliValue': {
-                    label: 'Value',
+                    label: valueText,
                     controlType: 'input',
                     placeholder: '',
                     type: 'text',
@@ -1646,12 +1797,14 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     groupId: model[i].groupId
                 };
                 for (const key in model[i].$scope.props) {
-                    if (model[i].$scope.props[key].enabledOn) {
-                        if (model[i].$scope.props[model[i].$scope.props[key].enabledOn.key].value === model[i].$scope.props[key].enabledOn.value)
-                            //@ts-ignore
+                    if (model[i].$scope.props[key].type !== 'textinfo') {
+                        if (model[i].$scope.props[key].enabledOn) {
+                            if (model[i].$scope.props[model[i].$scope.props[key].enabledOn.key].value === model[i].$scope.props[key].enabledOn.value)
+                                //@ts-ignore
+                                controlObj[key] = model[i].$scope.props[key].value;
+                        } else { //@ts-ignore
                             controlObj[key] = model[i].$scope.props[key].value;
-                    } else { //@ts-ignore
-                        controlObj[key] = model[i].$scope.props[key].value;
+                        }
                     }
                 }
                 formJson.push(controlObj);

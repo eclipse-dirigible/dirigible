@@ -99,6 +99,11 @@
                                         </bk-form-input-message>
                                     </bk-form-item>
 
+                                    <bk-form-item ng-if="item.type === 'textinfo'">
+                                        <bk-form-label colon="true" for="{{ 'p' + key }}">{{ item.label }}</bk-form-label>
+                                        <bk-textarea id="{{ item.id }}" style="min-height:14.25rem" name="{{ 'p' + key }}" ng-model="item.value" ng-readonly="true"></bk-textarea>
+                                    </bk-form-item>
+
                                     <bk-form-item ng-if="item.type === 'number' && isPropEnabled(item.enabledOn)">
                                         <bk-form-label colon="true" required="item.required" for="{{ 'p' + key }}">{{ item.label }}</bk-form-label>
                                         <bk-step-input input-id="{{ 'p' + key }}" ng-model="item.value" state="{{ item.error ? 'error' : '' }}" name="{{ 'p' + key }}" ng-required="item.required" ng-attr-min="item.min" ng-attr-max="item.max"
@@ -124,24 +129,24 @@
                                             <bk-button glyph="sap-icon--add" compact="true" title="Add option to list" state="transparent" label="Add" aria-label="Add option to list" ng-click="addListItem(item)"></bk-button>
                                         </div>
                                         <table bk-table display-mode="compact">
-                                            <thead bk-table-header>
+                                            <thead bk-table-header interactive="false">
                                                 <tr bk-table-row>
-                                                    <th bk-table-header-cell content-type="checkbox"></th>
-                                                    <th bk-table-header-cell>Label</th>
-                                                    <th bk-table-header-cell>Value</th>
+                                                    <th ng-if="item.defaultValue" bk-table-header-cell content-type="checkbox"></th>
+                                                    <th bk-table-header-cell>{{ item.labelText }}</th>
+                                                    <th bk-table-header-cell>{{ item.valueText }}</th>
                                                     <th bk-table-header-cell></th>
                                                 </tr>
                                             </thead>
                                             <tbody bk-table-body>
-                                                <tr bk-table-row hoverable="true" ng-repeat="listItem in item.value track by $index">
-                                                    <td bk-table-cell content-type="checkbox">
+                                                <tr bk-table-row hoverable="false" ng-repeat="listItem in item.value track by $index">
+                                                    <td ng-if="item.defaultValue" bk-table-cell interactive="false" content-type="checkbox">
                                                         <bk-checkbox id="{{listItem + $index}}" ng-checked="item.defaultValue === listItem.value" ng-click="setListDefault(item, $index)"></bk-checkbox>
                                                         <bk-checkbox-label empty="true" for="{{listItem + $index}}"></bk-checkbox-label>
                                                     </td>
-                                                    <td bk-table-cell>{{listItem.label}}</td>
-                                                    <td bk-table-cell>{{listItem.value}}</td>
-                                                    <td bk-table-cell fit-content="true">
-                                                        <bk-button glyph="sap-icon--edit" title="Edit option" state="transparent" aria-label="Edit option" ng-click="editListItem(listItem)"></bk-button>
+                                                    <td bk-table-cell interactive="false">{{listItem.label}}</td>
+                                                    <td bk-table-cell interactive="false">{{listItem.value}}</td>
+                                                    <td bk-table-cell interactive="false" fit-content="true">
+                                                        <bk-button glyph="sap-icon--edit" title="Edit option" state="transparent" aria-label="Edit option" ng-click="editListItem(listItem, item.labelText, item.valueText)"></bk-button>
                                                         <bk-button glyph="sap-icon--delete" title="Delete option" state="transparent" aria-label="Delete option" ng-click="deleteListItem(item.value, $index)"></bk-button>
                                                     </td>
                                                 </tr>

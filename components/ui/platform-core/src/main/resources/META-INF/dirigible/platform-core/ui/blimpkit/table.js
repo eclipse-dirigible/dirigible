@@ -26,8 +26,8 @@ blimpkit.directive('bkTable', (classNames) => ({
         $scope.getClasses = () => classNames('fd-table', {
             'fd-table--top-border fd-table--no-horizontal-borders fd-table--no-vertical-borders': $scope.innerBorders === 'top',
             'fd-table--no-horizontal-borders fd-table--no-vertical-borders': $scope.innerBorders === 'none',
-            'fd-table--no-horizontal-borders': $scope.innerBorders === 'horizontal',
-            'fd-table--no-vertical-borders': $scope.innerBorders === 'vertical',
+            'fd-table--no-horizontal-borders': $scope.innerBorders === 'vertical',
+            'fd-table--no-vertical-borders': $scope.innerBorders === 'horizontal',
             'fd-table--compact': $scope.displayMode === 'compact',
             'fd-table--condensed': $scope.displayMode === 'condensed',
             'bk-table--no-outer-horizontal-borders': $scope.outerBorders === 'vertical',
