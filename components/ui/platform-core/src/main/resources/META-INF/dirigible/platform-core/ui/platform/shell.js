@@ -345,7 +345,7 @@ if (window !== top) {
                             <span bk-list-navigation-item-text>{{navItem.translation | t:navItem.label}}</span>
                             <bk-list-navigation-item-arrow aria-label="expand perspective group" is-expanded="navItem.expanded"></bk-list-navigation-item-arrow>
                             <bk-list>
-                                <bk-list-navigation-item ng-repeat="navGroupItem in navItem.items track by navGroupItem.id" ng-click="$event.stopPropagation();switchPerspective(navGroupItem.id, navGroupItem.label, navGroupItem.translation)" >
+                                <bk-list-navigation-item ng-repeat="navGroupItem in navItem.items track by navGroupItem.id" ng-click="$event.stopPropagation();switchPerspective(navGroupItem.id, navGroupItem.label, navGroupItem.translation)">
                                     <span bk-list-navigation-item-text>{{navGroupItem.translation | t:navGroupItem.label}}</span>
                                     <bk-list-navigation-item-indicator ng-if="isActive(navGroupItem.id, navItem.id)"></bk-list-navigation-item-indicator>
                                 </bk-list-navigation-item>
@@ -360,7 +360,7 @@ if (window !== top) {
                         </bk-list-navigation-item>
                     </bk-list>
                     <bk-list aria-label="Perspective list" ng-if="condensed">
-                        <bk-list-navigation-item ng-repeat-start="navItem in config.perspectives track by navItem.id" ng-if="!navItem.items" indicated="navItem.id === activeId" ng-click="switchPerspective(navItem.id, navItem.label)" title="{{::navItem.label}}" id="perspective-{{::navItem.id}}">
+                        <bk-list-navigation-item ng-repeat-start="navItem in config.perspectives track by navItem.id" ng-if="!navItem.items" indicated="navItem.id === activeId" ng-click="switchPerspective(navItem.id, navItem.label, navItem.translation)" title="{{::navItem.label}}" id="perspective-{{::navItem.id}}">
                             <bk-list-navigation-item-icon icon-size="lg" svg-path="{{getIcon(navItem.icon)}}"></bk-list-navigation-item-icon>
                             <span bk-list-navigation-item-text>{{navItem.translation | t:navItem.label}}</span>
                             <bk-list-navigation-item-indicator ng-if="navItem.id === activeId"></bk-list-navigation-item-indicator>

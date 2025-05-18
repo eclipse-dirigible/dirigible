@@ -13,8 +13,7 @@
 angular.module('platformLocale', []).provider('LocaleService', function LocaleServiceProvider() {
     if (!top.hasOwnProperty('i18next')) throw Error('LocaleService: i18next is not loaded');
     const callbacksListeners = [];
-    const initListeners = []
-    const storageKey = `${getBrandingInfo().prefix}.locale.language`;
+    const storageKey = `${getBrandingInfo().prefix}.${top.getConfigData().id}.locale.language`;
     let savedLanguage = localStorage.getItem(storageKey);
     if (!savedLanguage) {
         localStorage.setItem(storageKey, 'en-US');
@@ -32,13 +31,6 @@ angular.module('platformLocale', []).provider('LocaleService', function LocaleSe
         else return new Promise((resolve, _) => resolve(savedLanguage));
     };
     this.$get = ['$rootScope', '$http', 'Extensions', function localeFactory($rootScope, $http, Extensions) {
-        const changeListener = () => {
-            $rootScope.$applyAsync(() => {
-                for (let l = 0; l < callbacksListeners.length; l++) {
-                    callbacksListeners[l]();
-                }
-            });
-        };
         if (!top.i18next['loadingTranslations']) {
             top.i18next['loadingTranslations'] = true;
             Extensions.getLocales().then((response) => {
@@ -50,15 +42,11 @@ angular.module('platformLocale', []).provider('LocaleService', function LocaleSe
                 $http.get(langPath).then((translations) => {
                     init({ [savedLanguage]: translations.data }).then((_, err) => {
                         if (err) console.error(err);
-                        top.i18next.on('languageChanged', changeListener);
                         $rootScope.$applyAsync(() => {
                             for (let l = 0; l < callbacksListeners.length; l++) {
                                 callbacksListeners[l]();
                             }
-                            for (let l = 0; l < initListeners.length; l++) {
-                                initListeners[l]();
-                            }
-                            initListeners.length = 0;
+                            callbacksListeners.length = 0;
                         });
                     });
                 }, (error) => {
@@ -70,36 +58,27 @@ angular.module('platformLocale', []).provider('LocaleService', function LocaleSe
         }
         return {
             changeLanguage: (lang) => {
-                return new Promise((resolve, reject) => {
-                    if (savedLanguage !== lang && top.i18next.locales.find((locale) => locale.id === lang)) {
-                        top.i18next.changeLanguage(lang, (err) => {
-                            if (err) reject(err);
-                            else {
-                                resolve(lang);
-                                localStorage.setItem(storageKey, lang);
-                                savedLanguage = lang;
-                            }
-                        });
-                    } else reject(`Cannot set language '${lang}' as it's not registered`);
-                });
+                if (savedLanguage !== lang && top.i18next.locales.find((locale) => locale.id === lang)) {
+                    localStorage.setItem(storageKey, lang);
+                    savedLanguage = lang;
+                } else throw { notRegistered: true };
             },
             getLanguage: () => savedLanguage,
             getLanguages: () => top.i18next.locales ?? [],
-            t: top.i18next.t,
-            onLoad: (callback) => {
-                callbacksListeners.push(callback);
-                if (top.i18next.isInitialized) callback();
+            t: (key, options, fallback) => {
+                const keyOptions = angular.isDefined(options) ? options : fallback;
+                return top.i18next.t(key ?? '', keyOptions);
             },
             onInit: (callback) => {
                 if (top.i18next.isInitialized) callback();
-                else initListeners.push(callback);
+                else callbacksListeners.push(callback);
             },
         };
     }];
 }).filter('t', (LocaleService) => {
     function filter(key, options, fallback) {
-        const localOptions = angular.isDefined(options) ? options : fallback;
-        return LocaleService.t(key ?? '', localOptions);
+        const keyOptions = angular.isDefined(options) ? options : fallback;
+        return LocaleService.t(key ?? '', keyOptions);
     }
     filter.$stateful = true;
     return filter;

@@ -13,7 +13,7 @@ const dashboard = angular.module('dashboard', ['blimpKit', 'platformView', 'plat
 dashboard.controller('DashboardController', ($scope, Extensions, LocaleService) => {
     $scope.loadingLabel = 'Loading...';
     $scope.errorMessage = 'Failed to load widget list';
-    LocaleService.onLoad(() => {
+    LocaleService.onInit(() => {
         $scope.loadingLabel = `${LocaleService.t('loading')}...`;
         $scope.errorMessage = LocaleService.t('dashboard:errMsg.widgetList');
     });

@@ -35,9 +35,13 @@
     },
     "settings-locale": {
         "regionAndLang": "$t(region) & $t(language)",
+        "langChanged": "Language changed",
+        "langChangedReload": "Changes will take effect after a refresh",
+        "later": "Later",
         "errMsg": {
             "langChangeTitle": "Unable to change language",
-            "langChange": "Please look at the console for more information"
+            "langChange": "Please look at the console for more information",
+            "notRegistered": "Cannot set language '{{lang}}' as it's not registered"
         }
     },
     "perspective-workbench": {

@@ -13,8 +13,8 @@
 -->
 <div>
     <!-- Window -->
-    <bk-dialog ng-repeat="window in dialogWindows track by window.id" visible="true" window-width="{{window.width}}" window-height="{{window.height}}" window-max-width="{{window.maxWidth}}"
-        window-max-height="{{window.maxHeight}}" window-min-width="{{window.minWidth}}" window-min-height="{{window.minHeight}}">
+    <bk-dialog ng-repeat="window in dialogWindows track by window.id" visible="true" window-width="{{window.width}}" window-height="{{window.height}}" window-max-width="{{window.maxWidth}}" window-max-height="{{window.maxHeight}}"
+        window-min-width="{{window.minWidth}}" window-min-height="{{window.minHeight}}">
         <bk-dialog-header ng-if="window.hasHeader" header="{{window.header}}" title="{{window.label}}" subheader="{{window.subheader}}">
             <bk-button ng-if="window.closeButton" glyph="sap-icon--decline" aria-label="Close dialog window" round="true" compact="true" ng-click="closeDialogWindow()"></bk-button>
         </bk-dialog-header>
@@ -30,8 +30,7 @@
         <bk-dialog-body class="bk-padding{{dialogs[0].preformatted ? ' bk-preformatted' : ''}}">{{dialogs[0].message}}</bk-dialog-body>
         <bk-dialog-footer compact="true">
             <bk-bar-element ng-repeat="button in dialogs[0].buttons track by button.id">
-                <bk-button label="{{button.label}}" decisive="true" ng-click="closeDialog(button.id)" state="{{button.state}}">
-                </bk-button>
+                <bk-button label="{{button.label}}" decisive="true" ng-click="closeDialog(button.id)" state="{{button.state}}"></bk-button>
             </bk-bar-element>
         </bk-dialog-footer>
     </bk-dialog>
@@ -40,8 +39,7 @@
         <p class="fd-text{{messageBoxes[0].preformatted ? ' bk-preformatted' : ''}}">{{messageBoxes[0].message}}</p>
         <bk-message-box-footer compact="true">
             <bk-bar-element ng-repeat="button in messageBoxes[0].buttons track by button.id">
-                <bk-button label="{{button.label}}" decisive="true" ng-click="closeAlert(button.id)" state="{{button.state}}">
-                </bk-button>
+                <bk-button label="{{button.label}}" decisive="true" ng-click="closeAlert(button.id)" state="{{button.state}}"></bk-button>
             </bk-bar-element>
         </bk-message-box-footer>
     </bk-message-box>
