@@ -25,7 +25,8 @@ angular.module('locale', ['blimpKit', 'platformView', 'platformLocale']).control
                 buttons: [
                     { id: 'ref', label: LocaleService.t('refresh', 'Refresh'), state: ButtonStates.Emphasized },
                     { id: 'later', label: LocaleService.t('settings-locale:later', 'Later') }
-                ]
+                ],
+                closeButton: false,
             }).then((buttonId) => {
                 if (buttonId === 'ref') top.window.location.reload();
             });
