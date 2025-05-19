@@ -40,8 +40,9 @@ class ParamJsonObject {
 
     private static String getName(JsonObject jsonObject) {
         JsonElement nameElement = jsonObject.get("name");
-        return nameElement.getAsJsonPrimitive()
-                          .getAsString();
+        return null == nameElement ? null
+                : nameElement.getAsJsonPrimitive()
+                             .getAsString();
     }
 
     private static String getType(JsonObject jsonObject) {

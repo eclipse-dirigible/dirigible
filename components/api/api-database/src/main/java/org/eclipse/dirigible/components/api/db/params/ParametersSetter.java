@@ -132,9 +132,6 @@ public class ParametersSetter {
 
     private static void setParameter(PreparedStatement preparedStatement, int sqlParamIndex, JsonElement parameterElement)
             throws IllegalArgumentException, SQLException {
-        if (!parameterElement.isJsonPrimitive()) {
-            throw new IllegalArgumentException("Parameters must contain primitives only. Parameter element: " + parameterElement);
-        }
 
         ParameterMetaData parameterMetaData = preparedStatement.getParameterMetaData();
         int sqlType = parameterMetaData.getParameterType(sqlParamIndex);
@@ -144,7 +141,25 @@ public class ParametersSetter {
         LOGGER.debug("Found param setter [{}] for sql type [{}] which is converted to dirigible type [{}]", paramSetter, sqlType,
                 dirigibleSqlType);
 
-        paramSetter.setParam(parameterElement, sqlParamIndex, preparedStatement, dirigibleSqlType);
+        if (parameterElement.isJsonPrimitive()) {
+            paramSetter.setParam(parameterElement, sqlParamIndex, preparedStatement, dirigibleSqlType);
+        }
+
+        if (parameterElement.isJsonObject()) {
+            ParamJsonObject paramJsonObject = ParamJsonObject.fromJsonElement(parameterElement);
+
+            JsonElement valueElement = paramJsonObject.getValueElement();
+            if (null == valueElement || valueElement.isJsonNull()) {
+                preparedStatement.setNull(sqlParamIndex, sqlType);
+                return;
+            }
+
+            paramSetter.setParam(valueElement, sqlParamIndex, preparedStatement, dirigibleSqlType);
+            return;
+        }
+
+        throw new IllegalArgumentException("Parameters must contain primitives or objects only. Parameter element: " + parameterElement);
+
     }
 
 }
