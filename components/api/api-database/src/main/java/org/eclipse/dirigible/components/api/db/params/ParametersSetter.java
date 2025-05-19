@@ -13,7 +13,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import org.eclipse.dirigible.commons.api.helpers.DateTimeUtils;
 import org.eclipse.dirigible.components.api.db.InsertParameters;
-import org.eclipse.dirigible.components.api.db.ParamJsonObject;
 import org.eclipse.dirigible.components.database.NamedParameterStatement;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
 import org.slf4j.Logger;

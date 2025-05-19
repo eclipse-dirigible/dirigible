@@ -1,9 +1,9 @@
-package org.eclipse.dirigible.components.api.db;
+package org.eclipse.dirigible.components.api.db.params;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-public class ParamJsonObject {
+class ParamJsonObject {
 
     private final String name;
     private final String type;
@@ -27,7 +27,7 @@ public class ParamJsonObject {
         return valueElement;
     }
 
-    public static ParamJsonObject fromJsonElement(JsonElement parameterElement) throws IllegalArgumentException {
+    static ParamJsonObject fromJsonElement(JsonElement parameterElement) throws IllegalArgumentException {
         JsonObject jsonObject = parameterElement.getAsJsonObject();
         String name = getName(jsonObject);
 
