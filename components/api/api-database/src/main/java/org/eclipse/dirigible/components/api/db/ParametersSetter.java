@@ -1101,26 +1101,18 @@ class ParametersSetter {
         }
     }
 
-    /**
-     * Sets the parameter.
-     *
-     * @param preparedStatement the prepared statement
-     * @param paramIndex the param index
-     * @param parameterElement the parameter element
-     * @throws SQLException the SQL exception
-     */
-    private static void setParameter(IndexedOrNamedStatement preparedStatement, int paramIndex, JsonElement parameterElement)
-            throws SQLException {
+    private static void setParameter(IndexedOrNamedStatement preparedStatement, int sqlParamIndex, JsonElement parameterElement)
+            throws IllegalArgumentException, SQLException {
         if (parameterElement.isJsonPrimitive()) {
             if (preparedStatement.isNamed()) {
                 throw new IllegalArgumentException("Primitive types can be set only to index based prepared statement.");
             }
-            setJsonPrimitiveParam(preparedStatement.getIndexed(), paramIndex, parameterElement);
+            setJsonPrimitiveParam(preparedStatement.getIndexed(), sqlParamIndex, parameterElement);
             return;
         }
 
         if (parameterElement.isJsonObject()) {
-            setJsonObjectParam(preparedStatement, paramIndex, parameterElement);
+            setJsonObjectParam(preparedStatement, sqlParamIndex, parameterElement);
             return;
         }
 
@@ -1293,36 +1285,37 @@ class ParametersSetter {
         }
     }
 
-    static void setManyParameters(String parameters, IndexedOrNamedStatement preparedStatement) throws SQLException {
-        JsonElement parametersElement = GsonHelper.parseJson(parameters);
-        if (!(parametersElement instanceof JsonArray parametersArray)) {
+    static void setManyParameters(JsonElement parametersElement, PreparedStatement preparedStatement,
+            Optional<InsertParameters> insertParameters) throws IllegalArgumentException, SQLException {
+        if (!parametersElement.isJsonArray()) {
             throw new IllegalArgumentException(
                     "Parameters must be provided as a JSON array of JSON arrays, e.g. [[1,\"John\",9876],[2,\"Mary\",1234]]");
         }
+        JsonArray parametersArray = parametersElement.getAsJsonArray();
 
         for (JsonElement parameterElement : parametersArray) {
-            if (!(parameterElement instanceof JsonArray elementParametersArray)) {
+            if (!parameterElement.isJsonArray()) {
                 throw new IllegalArgumentException("Parameters must be provided as a JSON array, e.g. [1,\"John\",9876]");
             }
+            JsonArray elementParametersArray = parameterElement.getAsJsonArray();
+
+            ParameterMetaData paramsMetaData = preparedStatement.getParameterMetaData();
+            int sqlParametersCount = paramsMetaData.getParameterCount();
+            int paramsCount = elementParametersArray.size();
+            if (sqlParametersCount != paramsCount) {
+                throw new IllegalArgumentException(
+                        "Provided invalid parameters count of [" + paramsCount + "] but expected: " + sqlParametersCount);
+            }
+
             for (int idx = 0; idx < elementParametersArray.size(); idx++) {
                 JsonElement elementParameter = elementParametersArray.get(idx);
-                int paramIndex = (idx + 1);
-                setParameter(preparedStatement, paramIndex, elementParameter);
+                int sqlParamIndex = (idx + 1);
+
+                IndexedOrNamedStatement indexedOrNamedStatement = new IndexedOrNamedStatement(preparedStatement);
+                setParameter(indexedOrNamedStatement, sqlParamIndex, elementParameter);
             }
-            addBatch(preparedStatement);
-        }
-    }
 
-    private static void addBatch(IndexedOrNamedStatement preparedStatement) throws SQLException {
-        if (preparedStatement.isIndexed()) {
-            preparedStatement.getIndexed()
-                             .addBatch();
-
-        }
-
-        if (preparedStatement.isNamed()) {
-            preparedStatement.getNamed()
-                             .addBatch();
+            preparedStatement.addBatch();
         }
     }
 

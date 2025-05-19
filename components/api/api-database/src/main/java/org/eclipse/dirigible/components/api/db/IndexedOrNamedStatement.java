@@ -9,9 +9,9 @@
  */
 package org.eclipse.dirigible.components.api.db;
 
-import java.sql.PreparedStatement;
-
 import org.eclipse.dirigible.components.database.NamedParameterStatement;
+
+import java.sql.PreparedStatement;
 
 /**
  * The Class IndexedOrNamedStatement.
@@ -34,8 +34,6 @@ public class IndexedOrNamedStatement {
         this.indexed = indexed;
     }
 
-
-
     /**
      * Instantiates a new indexed or named statement.
      *
@@ -56,30 +54,12 @@ public class IndexedOrNamedStatement {
     }
 
     /**
-     * Sets the indexed.
-     *
-     * @param indexed the indexed to set
-     */
-    public void setIndexed(PreparedStatement indexed) {
-        this.indexed = indexed;
-    }
-
-    /**
      * Gets the named.
      *
      * @return the named
      */
     public NamedParameterStatement getNamed() {
         return named;
-    }
-
-    /**
-     * Sets the named.
-     *
-     * @param named the named to set
-     */
-    public void setNamed(NamedParameterStatement named) {
-        this.named = named;
     }
 
     /**
@@ -92,6 +72,15 @@ public class IndexedOrNamedStatement {
     }
 
     /**
+     * Sets the indexed.
+     *
+     * @param indexed the indexed to set
+     */
+    public void setIndexed(PreparedStatement indexed) {
+        this.indexed = indexed;
+    }
+
+    /**
      * Checks if is named.
      *
      * @return true, if is named
@@ -100,4 +89,17 @@ public class IndexedOrNamedStatement {
         return this.named != null;
     }
 
+    /**
+     * Sets the named.
+     *
+     * @param named the named to set
+     */
+    public void setNamed(NamedParameterStatement named) {
+        this.named = named;
+    }
+
+    @Override
+    public String toString() {
+        return "IndexedOrNamedStatement{" + "indexed=" + indexed + ", named=" + named + '}';
+    }
 }
