@@ -10,7 +10,7 @@ abstract class BaseParamSetter implements ParamSetter {
      * @param sourceParam the source param
      * @param dataType the data type
      */
-    protected void throwWrongValue(JsonElement sourceParam, String dataType) {
+    protected void throwWrongValue(JsonElement sourceParam, String dataType) throws IllegalArgumentException {
         throw new IllegalArgumentException("Wrong value [" + sourceParam + "] for parameter of type " + dataType);
     }
 }

@@ -49,6 +49,7 @@ class DateParamSetter extends BaseParamSetter {
             Optional<Date> date = DateTimeUtils.optionallyParseDate(paramStringValue);
             if (date.isPresent()) {
                 preparedStatement.setDate(paramIndex, date.get());
+                return;
             }
         }
         throwWrongValue(sourceParam, dataType);
@@ -80,6 +81,7 @@ class DateParamSetter extends BaseParamSetter {
             Optional<Date> date = DateTimeUtils.optionallyParseDate(paramStringValue);
             if (date.isPresent()) {
                 preparedStatement.setDate(paramName, date.get());
+                return;
             }
         }
         throwWrongValue(sourceParam, dataType);

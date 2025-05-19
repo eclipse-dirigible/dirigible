@@ -51,6 +51,7 @@ class TimestampParamSetter extends BaseParamSetter {
             Optional<Timestamp> timestamp = DateTimeUtils.optionallyParseDateTime(paramStringValue);
             if (timestamp.isPresent()) {
                 preparedStatement.setTimestamp(paramIndex, timestamp.get());
+                return;
             }
         }
         throwWrongValue(sourceParam, dataType);
@@ -83,6 +84,7 @@ class TimestampParamSetter extends BaseParamSetter {
             Optional<Timestamp> timestamp = DateTimeUtils.optionallyParseDateTime(paramStringValue);
             if (timestamp.isPresent()) {
                 preparedStatement.setTimestamp(paramName, timestamp.get());
+                return;
             }
         }
         throwWrongValue(sourceParam, dataType);
