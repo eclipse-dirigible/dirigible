@@ -1,12 +1,14 @@
 package org.eclipse.dirigible.components.api.db.params;
 
 import com.google.gson.JsonElement;
+import org.eclipse.dirigible.commons.api.helpers.DateTimeUtils;
 import org.eclipse.dirigible.components.database.NamedParameterStatement;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
 
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Time;
+import java.util.Optional;
 
 class TimeParamSetter extends BaseParamSetter {
 
@@ -43,19 +45,12 @@ class TimeParamSetter extends BaseParamSetter {
 
         if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                         .isString()) {
-            Time value;
-            try {
-                value = new Time(Long.parseLong(sourceParam.getAsJsonPrimitive()
-                                                           .getAsString()));
-            } catch (NumberFormatException e) {
-                // assume XSDTime
-                value = new Time(jakarta.xml.bind.DatatypeConverter.parseTime(sourceParam.getAsJsonPrimitive()
-                                                                                         .getAsString())
-                                                                   .getTime()
-                                                                   .getTime());
+            String paramStringValue = sourceParam.getAsString();
+            Optional<Time> time = DateTimeUtils.optionallyParseTime(paramStringValue);
+            if (time.isPresent()) {
+                preparedStatement.setTime(paramIndex, time.get());
+                return;
             }
-            preparedStatement.setTime(paramIndex, value);
-            return;
         }
 
         throwWrongValue(sourceParam, dataType);
@@ -83,19 +78,12 @@ class TimeParamSetter extends BaseParamSetter {
 
         if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                         .isString()) {
-            Time value;
-            try {
-                value = new Time(Long.parseLong(sourceParam.getAsJsonPrimitive()
-                                                           .getAsString()));
-            } catch (NumberFormatException e) {
-                // assume XSDTime
-                value = new Time(jakarta.xml.bind.DatatypeConverter.parseTime(sourceParam.getAsJsonPrimitive()
-                                                                                         .getAsString())
-                                                                   .getTime()
-                                                                   .getTime());
+            String paramStringValue = sourceParam.getAsString();
+            Optional<Time> time = DateTimeUtils.optionallyParseTime(paramStringValue);
+            if (time.isPresent()) {
+                preparedStatement.setTime(paramName, time.get());
+                return;
             }
-            preparedStatement.setTime(paramName, value);
-            return;
         }
 
         throwWrongValue(sourceParam, dataType);

@@ -101,6 +101,14 @@ public class ParametersSetter {
         }
     }
 
+    private static JsonArray getParametersArray(JsonElement parametersElement) {
+        if (!parametersElement.isJsonArray()) {
+            throw new IllegalArgumentException(
+                    "Parameters must be provided as a JSON array of JSON arrays, e.g. [[1,\"John\",9876],[2,\"Mary\",1234]]");
+        }
+        return parametersElement.getAsJsonArray();
+    }
+
     public static void setParameters(JsonElement parameters, PreparedStatement preparedStatement) throws SQLException {
         if (!parameters.isJsonArray()) {
             throw new IllegalArgumentException("Parameters must be provided as a JSON array, e.g. [1, 'John', 9876]");
@@ -140,14 +148,6 @@ public class ParametersSetter {
                 dirigibleSqlType);
 
         paramSetter.setParam(parameterElement, sqlParamIndex, preparedStatement, dirigibleSqlType);
-    }
-
-    private static JsonArray getParametersArray(JsonElement parametersElement) {
-        if (!parametersElement.isJsonArray()) {
-            throw new IllegalArgumentException(
-                    "Parameters must be provided as a JSON array of JSON arrays, e.g. [[1,\"John\",9876],[2,\"Mary\",1234]]");
-        }
-        return parametersElement.getAsJsonArray();
     }
 
 }

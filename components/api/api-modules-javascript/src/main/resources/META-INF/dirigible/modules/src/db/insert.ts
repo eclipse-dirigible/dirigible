@@ -26,7 +26,7 @@ export class Insert {
 
 	public static executeMany(sql: string, parameters?: ((string | number | boolean | Date | InsertParameter)[])[], datasourceName?: string): Array<Record<string, any>> {
 		const params = parameters ? JSON.stringify(parameters) : undefined;
-		return DatabaseFacade.insertMany(sql, params, datasourceName);
+		return DatabaseFacade.insertMany(sql, params, datasourceName, undefined);
 	}
 }
 

@@ -1,12 +1,14 @@
 package org.eclipse.dirigible.components.api.db.params;
 
 import com.google.gson.JsonElement;
+import org.eclipse.dirigible.commons.api.helpers.DateTimeUtils;
 import org.eclipse.dirigible.components.database.NamedParameterStatement;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
 
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.Optional;
 
 class DateParamSetter extends BaseParamSetter {
 
@@ -43,19 +45,11 @@ class DateParamSetter extends BaseParamSetter {
 
         if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                         .isString()) {
-            Date value;
-            try {
-                value = new Date(Long.parseLong(sourceParam.getAsJsonPrimitive()
-                                                           .getAsString()));
-            } catch (NumberFormatException e) {
-                // assume date string in ISO format e.g. 2018-05-22T21:00:00.000Z
-                value = new Date(jakarta.xml.bind.DatatypeConverter.parseDateTime(sourceParam.getAsJsonPrimitive()
-                                                                                             .getAsString())
-                                                                   .getTime()
-                                                                   .getTime());
+            String paramStringValue = sourceParam.getAsString();
+            Optional<Date> date = DateTimeUtils.optionallyParseDate(paramStringValue);
+            if (date.isPresent()) {
+                preparedStatement.setDate(paramIndex, date.get());
             }
-            preparedStatement.setDate(paramIndex, value);
-            return;
         }
         throwWrongValue(sourceParam, dataType);
     }
@@ -82,19 +76,11 @@ class DateParamSetter extends BaseParamSetter {
 
         if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                         .isString()) {
-            Date value;
-            try {
-                value = new Date(Long.parseLong(sourceParam.getAsJsonPrimitive()
-                                                           .getAsString()));
-            } catch (NumberFormatException e) {
-                // assume date string in ISO format e.g. 2018-05-22T21:00:00.000Z
-                value = new Date(jakarta.xml.bind.DatatypeConverter.parseDateTime(sourceParam.getAsJsonPrimitive()
-                                                                                             .getAsString())
-                                                                   .getTime()
-                                                                   .getTime());
+            String paramStringValue = sourceParam.getAsString();
+            Optional<Date> date = DateTimeUtils.optionallyParseDate(paramStringValue);
+            if (date.isPresent()) {
+                preparedStatement.setDate(paramName, date.get());
             }
-            preparedStatement.setDate(paramName, value);
-            return;
         }
         throwWrongValue(sourceParam, dataType);
     }
