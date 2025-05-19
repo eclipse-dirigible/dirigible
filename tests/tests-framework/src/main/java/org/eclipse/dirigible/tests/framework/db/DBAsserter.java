@@ -27,24 +27,27 @@ public class DBAsserter {
     }
 
     public void assertRowCount(String tableName, int expectedRowCount) {
-        DataSource dataSource = dataSourcesManager.getDefaultDataSource();
-        AssertDbConnection connection = AssertDbConnectionFactory.of(dataSource)
-                                                                 .create();
-
-        Table table = connection.table(tableName)
-                                .build();
+        Table table = getDefaultDbTable(tableName);
 
         Assertions.assertThat(table)
                   .hasNumberOfRows(expectedRowCount);
     }
 
-    public void assertRowHasColumnWithValue(String tableName, int rowIndex, String columnName, Object expectedValue) {
-        DataSource dataSource = dataSourcesManager.getDefaultDataSource();
-        AssertDbConnection connection = AssertDbConnectionFactory.of(dataSource)
-                                                                 .create();
+    public Table getDefaultDbTable(String tableName) {
+        AssertDbConnection connection = getDefaultDbAssertDbConnection();
 
-        Table table = connection.table(tableName)
-                                .build();
+        return connection.table(tableName)
+                         .build();
+    }
+
+    public AssertDbConnection getDefaultDbAssertDbConnection() {
+        DataSource dataSource = dataSourcesManager.getDefaultDataSource();
+        return AssertDbConnectionFactory.of(dataSource)
+                                        .create();
+    }
+
+    public void assertRowHasColumnWithValue(String tableName, int rowIndex, String columnName, Object expectedValue) {
+        Table table = getDefaultDbTable(tableName);
 
         Assertions.assertThat(table)
                   .row(rowIndex)
@@ -53,12 +56,7 @@ public class DBAsserter {
     }
 
     public void assertTableHasColumn(String tableName, String columnName) {
-        DataSource dataSource = dataSourcesManager.getDefaultDataSource();
-        AssertDbConnection connection = AssertDbConnectionFactory.of(dataSource)
-                                                                 .create();
-
-        Table table = connection.table(tableName)
-                                .build();
+        Table table = getDefaultDbTable(tableName);
 
         Assertions.assertThat(table)
                   .column(columnName);
