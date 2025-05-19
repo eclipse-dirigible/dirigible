@@ -1,0 +1,68 @@
+package org.eclipse.dirigible.components.api.db.params;
+
+import com.google.gson.JsonElement;
+import org.eclipse.dirigible.commons.api.helpers.BytesHelper;
+import org.eclipse.dirigible.components.database.NamedParameterStatement;
+import org.eclipse.dirigible.database.sql.DataTypeUtils;
+
+import java.io.ByteArrayInputStream;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+
+class BlobParamSetter extends BaseParamSetter {
+
+    /**
+     * Checks if is applicable.
+     *
+     * @param dataType the data type
+     * @return true, if is applicable
+     */
+    @Override
+    public boolean isApplicable(String dataType) {
+        return DataTypeUtils.isBlob(dataType);
+    }
+
+    /**
+     * Sets the param.
+     *
+     * @param sourceParam the source param
+     * @param paramIndex the param index
+     * @param preparedStatement the prepared statement
+     * @param dataType the data type
+     * @throws SQLException the SQL exception
+     */
+    @Override
+    public void setParam(JsonElement sourceParam, int paramIndex, PreparedStatement preparedStatement, String dataType)
+            throws SQLException {
+        if (sourceParam.isJsonArray()) {
+            byte[] bytes = BytesHelper.jsonToBytes(sourceParam.getAsJsonArray()
+                                                              .toString());
+            preparedStatement.setBinaryStream(paramIndex, new ByteArrayInputStream(bytes), bytes.length);
+            return;
+        }
+
+        throwWrongValue(sourceParam, dataType);
+    }
+
+    /**
+     * Sets the param.
+     *
+     * @param sourceParam the source param
+     * @param paramName the param name
+     * @param preparedStatement the prepared statement
+     * @param dataType the data type
+     * @throws SQLException the SQL exception
+     */
+    @Override
+    public void setParam(JsonElement sourceParam, String paramName, NamedParameterStatement preparedStatement, String dataType)
+            throws SQLException {
+        if (sourceParam.isJsonArray()) {
+            byte[] bytes = BytesHelper.jsonToBytes(sourceParam.getAsJsonArray()
+                                                              .toString());
+            preparedStatement.setBinaryStream(paramName, new ByteArrayInputStream(bytes), bytes.length);
+            return;
+        }
+
+        throwWrongValue(sourceParam, dataType);
+    }
+}

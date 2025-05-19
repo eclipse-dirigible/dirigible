@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.api.db;
 import com.google.gson.JsonElement;
 import org.apache.commons.io.output.WriterOutputStream;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
+import org.eclipse.dirigible.components.api.db.params.ParametersSetter;
 import org.eclipse.dirigible.components.base.logging.LoggingExecutor;
 import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper;
 import org.eclipse.dirigible.components.data.management.helpers.DatabaseResultSetHelper;
@@ -167,9 +168,7 @@ public class DatabaseFacade implements InitializingBean {
      */
     public static String getMetadata() throws Throwable {
         DataSource dataSource = getDataSource(null);
-        return LoggingExecutor.executeWithException(dataSource, () -> {
-            return DatabaseMetadataHelper.getMetadataAsJson(dataSource);
-        });
+        return LoggingExecutor.executeWithException(dataSource, () -> DatabaseMetadataHelper.getMetadataAsJson(dataSource));
     }
 
     /**
@@ -192,9 +191,7 @@ public class DatabaseFacade implements InitializingBean {
      */
     public static String getProductName() throws Throwable {
         DataSource dataSource = getDataSource(null);
-        return LoggingExecutor.executeWithException(dataSource, () -> {
-            return DatabaseMetadataHelper.getProductName(dataSource);
-        });
+        return LoggingExecutor.executeWithException(dataSource, () -> DatabaseMetadataHelper.getProductName(dataSource));
     }
 
     // ============ Query ===========

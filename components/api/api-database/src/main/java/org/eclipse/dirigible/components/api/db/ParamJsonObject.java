@@ -3,7 +3,7 @@ package org.eclipse.dirigible.components.api.db;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-class ParamJsonObject {
+public class ParamJsonObject {
 
     private final String name;
     private final String type;
@@ -27,7 +27,7 @@ class ParamJsonObject {
         return valueElement;
     }
 
-    static ParamJsonObject fromJsonElement(JsonElement parameterElement) throws IllegalArgumentException {
+    public static ParamJsonObject fromJsonElement(JsonElement parameterElement) throws IllegalArgumentException {
         JsonObject jsonObject = parameterElement.getAsJsonObject();
         String name = getName(jsonObject);
 
