@@ -143,6 +143,7 @@ public class ParametersSetter {
 
         if (parameterElement.isJsonPrimitive()) {
             paramSetter.setParam(parameterElement, sqlParamIndex, preparedStatement, dirigibleSqlType);
+            return;
         }
 
         if (parameterElement.isJsonObject()) {
