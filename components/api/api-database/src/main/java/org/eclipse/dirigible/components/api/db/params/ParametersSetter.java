@@ -44,11 +44,11 @@ public class ParametersSetter {
             new TinyIntParamSetter());
 
     public static void setParameters(JsonElement parameters, NamedParameterStatement preparedStatement) throws SQLException {
-        if (!(parameters instanceof JsonArray parametersArray)) {
+        if (!parameters.isJsonArray()) {
             throw new IllegalArgumentException("Parameters must be provided as a JSON array, e.g. [1, 'John', 9876]");
         }
 
-        for (JsonElement parameterElement : parametersArray) {
+        for (JsonElement parameterElement : parameters.getAsJsonArray()) {
             setParameter(preparedStatement, parameterElement);
         }
     }
@@ -56,16 +56,14 @@ public class ParametersSetter {
     private static void setParameter(NamedParameterStatement preparedStatement, JsonElement parameterElement)
             throws IllegalArgumentException, SQLException {
 
-        if (parameterElement.isJsonObject()) {
-            setJsonObjectParam(preparedStatement, parameterElement);
-            return;
+        if (!parameterElement.isJsonObject()) {
+            throw new IllegalArgumentException("Parameters must contain objects only. Parameter element: " + parameterElement);
         }
 
-        throw new IllegalArgumentException("Parameters must contain objects only. Parameter element: " + parameterElement);
+        setJsonObjectParam(preparedStatement, parameterElement);
     }
 
     private static void setJsonObjectParam(NamedParameterStatement preparedStatement, JsonElement parameterElement) throws SQLException {
-
         ParamJsonObject paramJsonObject = ParamJsonObject.fromJsonElement(parameterElement);
 
         String name = paramJsonObject.getName();
@@ -90,36 +88,51 @@ public class ParametersSetter {
                                    "Parameter 'type'[" + dataType + "] must be a string representing a valid database type name"));
     }
 
+    public static void setManyParameters(JsonElement parametersElement, PreparedStatement preparedStatement,
+            Optional<InsertParameters> insertParameters) throws IllegalArgumentException, SQLException {
+        //TODO: use insertParameters
+        JsonArray parametersArray = getParametersArray(parametersElement);
+
+        for (int paramsIdx = 0; paramsIdx < parametersArray.size(); paramsIdx++) {
+            JsonElement parameters = parametersArray.get(paramsIdx);
+            setParameters(parameters, preparedStatement);
+            preparedStatement.addBatch();
+        }
+    }
+
     public static void setParameters(JsonElement parameters, PreparedStatement preparedStatement) throws SQLException {
-        if (!(parameters instanceof JsonArray parametersArray)) {
+        if (!parameters.isJsonArray()) {
             throw new IllegalArgumentException("Parameters must be provided as a JSON array, e.g. [1, 'John', 9876]");
         }
 
-        int paramIndex = 1;
-        for (JsonElement parameterElement : parametersArray) {
-            setParameter(preparedStatement, paramIndex, parameterElement);
-            paramIndex++;
+        JsonArray paramsArray = parameters.getAsJsonArray();
+
+        ParameterMetaData paramsMetaData = preparedStatement.getParameterMetaData();
+        int sqlParametersCount = paramsMetaData.getParameterCount();
+
+        int paramsCount = paramsArray.size();
+        if (sqlParametersCount != paramsCount) {
+            String errMsg = "Provided invalid parameters count of [" + paramsCount + "]. Expected parameters count: " + sqlParametersCount;
+            throw new IllegalArgumentException(errMsg);
+        }
+
+        for (int idx = 0; idx < paramsCount; idx++) {
+            int sqlParamIndex = idx + 1;
+            JsonElement parameter = paramsArray.get(idx);
+
+            setParameter(preparedStatement, sqlParamIndex, parameter);
         }
     }
 
     private static void setParameter(PreparedStatement preparedStatement, int sqlParamIndex, JsonElement parameterElement)
             throws IllegalArgumentException, SQLException {
-        if (parameterElement.isJsonPrimitive()) {
-            setJsonPrimitiveParam(preparedStatement, sqlParamIndex, parameterElement);
-            return;
+        if (!parameterElement.isJsonPrimitive()) {
+            throw new IllegalArgumentException("Parameters must contain primitives only. Parameter element: " + parameterElement);
         }
 
-        throw new IllegalArgumentException("Parameters must contain primitives only. Parameter element: " + parameterElement);
+        setJsonPrimitiveParam(preparedStatement, sqlParamIndex, parameterElement);
     }
 
-    /**
-     * Sets the json primitive param.
-     *
-     * @param preparedStatement the prepared statement
-     * @param paramIndex the param index
-     * @param parameterElement the parameter element
-     * @throws SQLException the SQL exception
-     */
     private static void setJsonPrimitiveParam(PreparedStatement preparedStatement, int paramIndex, JsonElement parameterElement)
             throws SQLException {
         if (parameterElement.getAsJsonPrimitive()
@@ -163,14 +176,6 @@ public class ParametersSetter {
         throw new IllegalArgumentException("The type of parameter [" + parameterElement + "] as index [" + paramIndex + "] is unknown");
     }
 
-    /**
-     * Sets the number.
-     *
-     * @param preparedStatement the prepared statement
-     * @param paramIndex the param index
-     * @param parameterElement the parameter element
-     * @throws SQLException the SQL exception
-     */
     private static void setNumber(PreparedStatement preparedStatement, int paramIndex, JsonElement parameterElement) throws SQLException {
         if (isFloatingPointValue(parameterElement)) {
             try {
@@ -222,40 +227,6 @@ public class ParametersSetter {
         String numberStr = Double.toString(parameterElement.getAsDouble());
 
         return numberStr.contains(".") || numberStr.contains("e") || numberStr.contains("E");
-    }
-
-    public static void setManyParameters(JsonElement parametersElement, PreparedStatement preparedStatement,
-            Optional<InsertParameters> insertParameters) throws IllegalArgumentException, SQLException {
-        JsonArray parametersArray = getParametersArray(parametersElement);
-
-        ParameterMetaData paramsMetaData = preparedStatement.getParameterMetaData();
-        int sqlParametersCount = paramsMetaData.getParameterCount();
-
-        for (int paramsIdx = 0; paramsIdx < parametersArray.size(); paramsIdx++) {
-            JsonElement parameterElement = parametersArray.get(paramsIdx);
-
-            if (!parameterElement.isJsonArray()) {
-                throw new IllegalArgumentException(
-                        "Parameters at index [" + paramsIdx + "] must be provided as a JSON array, e.g. [1,\"John\",9876]");
-            }
-            JsonArray elementParametersArray = parameterElement.getAsJsonArray();
-
-            int paramsCount = elementParametersArray.size();
-            if (sqlParametersCount != paramsCount) {
-                String errMsg = "Provided invalid parameters count of [" + paramsCount + "] at index [" + paramsIdx
-                        + "]. Expected parameters count: " + sqlParametersCount;
-                throw new IllegalArgumentException(errMsg);
-            }
-
-            for (int paramIdx = 0; paramIdx < elementParametersArray.size(); paramIdx++) {
-                JsonElement elementParameter = elementParametersArray.get(paramIdx);
-                int sqlParamIndex = (paramIdx + 1);
-
-                setParameter(preparedStatement, sqlParamIndex, elementParameter);
-            }
-
-            preparedStatement.addBatch();
-        }
     }
 
     private static JsonArray getParametersArray(JsonElement parametersElement) {
