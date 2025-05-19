@@ -11,14 +11,15 @@ package org.eclipse.dirigible.components.api.db.params;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
-import org.eclipse.dirigible.commons.api.helpers.DateTimeUtils;
 import org.eclipse.dirigible.components.api.db.InsertParameters;
 import org.eclipse.dirigible.components.database.NamedParameterStatement;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.*;
+import java.sql.ParameterMetaData;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.util.Optional;
 import java.util.Set;
 
@@ -90,7 +91,7 @@ public class ParametersSetter {
 
     public static void setManyParameters(JsonElement parametersElement, PreparedStatement preparedStatement,
             Optional<InsertParameters> insertParameters) throws IllegalArgumentException, SQLException {
-        //TODO: use insertParameters
+        // TODO: use insertParameters
         JsonArray parametersArray = getParametersArray(parametersElement);
 
         for (int paramsIdx = 0; paramsIdx < parametersArray.size(); paramsIdx++) {
@@ -130,103 +131,15 @@ public class ParametersSetter {
             throw new IllegalArgumentException("Parameters must contain primitives only. Parameter element: " + parameterElement);
         }
 
-        setJsonPrimitiveParam(preparedStatement, sqlParamIndex, parameterElement);
-    }
+        ParameterMetaData parameterMetaData = preparedStatement.getParameterMetaData();
+        int sqlType = parameterMetaData.getParameterType(sqlParamIndex);
 
-    private static void setJsonPrimitiveParam(PreparedStatement preparedStatement, int paramIndex, JsonElement parameterElement)
-            throws SQLException {
-        if (parameterElement.getAsJsonPrimitive()
-                            .isBoolean()) {
-            preparedStatement.setBoolean(paramIndex, parameterElement.getAsBoolean());
-            return;
-        }
+        String dirigibleSqlType = DataTypeUtils.getDatabaseTypeName(sqlType);
+        ParamSetter paramSetter = getParamSetterForType(dirigibleSqlType);
+        LOGGER.debug("Found param setter [{}] for sql type [{}] which is converted to dirigible type [{}]", paramSetter, sqlType,
+                dirigibleSqlType);
 
-        if (parameterElement.getAsJsonPrimitive()
-                            .isString()) {
-            String paramStringValue = parameterElement.getAsString();
-
-            Optional<Timestamp> timestamp = DateTimeUtils.optionallyParseDateTime(paramStringValue);
-            if (timestamp.isPresent()) {
-                preparedStatement.setTimestamp(paramIndex, timestamp.get());
-                return;
-            }
-
-            Optional<Date> date = DateTimeUtils.optionallyParseDate(paramStringValue);
-            if (date.isPresent()) {
-                preparedStatement.setDate(paramIndex, date.get());
-                return;
-            }
-
-            Optional<Time> time = DateTimeUtils.optionallyParseTime(paramStringValue);
-            if (time.isPresent()) {
-                preparedStatement.setTime(paramIndex, time.get());
-                return;
-            }
-
-            preparedStatement.setString(paramIndex, parameterElement.getAsString());
-            return;
-        }
-
-        if (parameterElement.getAsJsonPrimitive()
-                            .isNumber()) {
-            setNumber(preparedStatement, paramIndex, parameterElement);
-            return;
-        }
-
-        throw new IllegalArgumentException("The type of parameter [" + parameterElement + "] as index [" + paramIndex + "] is unknown");
-    }
-
-    private static void setNumber(PreparedStatement preparedStatement, int paramIndex, JsonElement parameterElement) throws SQLException {
-        if (isFloatingPointValue(parameterElement)) {
-            try {
-                preparedStatement.setDouble(paramIndex, parameterElement.getAsDouble());
-                return;
-            } catch (SQLException | ClassCastException e) {
-                LOGGER.debug("Failed to set value [{}] at index [{}] as double", parameterElement, paramIndex, e);
-                // Do nothing
-            }
-        }
-
-        try {
-            preparedStatement.setInt(paramIndex, parameterElement.getAsInt());
-            return;
-        } catch (SQLException | ClassCastException e) {
-            LOGGER.debug("Failed to set value [{}] at index [{}] as int", parameterElement, paramIndex, e);
-            // Do nothing
-        }
-
-        try {
-            preparedStatement.setShort(paramIndex, parameterElement.getAsShort());
-            return;
-        } catch (SQLException | ClassCastException e) {
-            LOGGER.debug("Failed to set value [{}] at index [{}] as short", parameterElement, paramIndex, e);
-            // Do nothing
-        }
-
-        try {
-            preparedStatement.setLong(paramIndex, parameterElement.getAsLong());
-            return;
-        } catch (SQLException | ClassCastException e) {
-            LOGGER.debug("Failed to set value [{}] at index [{}] as long", parameterElement, paramIndex, e);
-            // Do nothing
-        }
-
-        try {
-            preparedStatement.setBigDecimal(paramIndex, parameterElement.getAsBigDecimal());
-            return;
-        } catch (SQLException | ClassCastException e) {
-            LOGGER.debug("Failed to set value [{}] at index [{}] as big decimal", parameterElement, paramIndex, e);
-            // Do nothing
-        }
-
-        preparedStatement.setObject(paramIndex, parameterElement.getAsNumber()
-                                                                .toString());
-    }
-
-    private static boolean isFloatingPointValue(JsonElement parameterElement) {
-        String numberStr = Double.toString(parameterElement.getAsDouble());
-
-        return numberStr.contains(".") || numberStr.contains("e") || numberStr.contains("E");
+        paramSetter.setParam(parameterElement, sqlParamIndex, preparedStatement, dirigibleSqlType);
     }
 
     private static JsonArray getParametersArray(JsonElement parametersElement) {

@@ -80,7 +80,7 @@ class DatabaseFacadeIT extends IntegrationTest {
                   .value(BIRTHDAY_COLUMN)
                   .isEqualTo(java.sql.Date.valueOf("2000-12-20"))
                   .value(BIRTHDAY_STRING_COLUMN)
-                  .isEqualTo("2000-11-21")
+                  .isEqualTo("20001121")
 
                   .row(1)
                   .value(ID_COLUMN)
@@ -90,7 +90,7 @@ class DatabaseFacadeIT extends IntegrationTest {
                   .value(BIRTHDAY_COLUMN)
                   .isEqualTo(java.sql.Date.valueOf("2001-11-21"))
                   .value(BIRTHDAY_STRING_COLUMN)
-                  .isEqualTo("2000-12-22");
+                  .isEqualTo("20001222");
     }
 
     private void insertMany(Object[][] params) throws Throwable {

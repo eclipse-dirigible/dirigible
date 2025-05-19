@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.database.sql;
 
-import static java.text.MessageFormat.format;
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
@@ -19,6 +18,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+
+import static java.text.MessageFormat.format;
 
 /**
  * The Class DataTypeUtils.
@@ -339,7 +340,7 @@ public class DataTypeUtils {
             return DATABASE_TYPE_TO_DATA_TYPE.get(type)
                                              .toString();
         }
-        throw new SqlException(format("Type [{0}] not supported. Supported tpes [{1}]", type, DATABASE_TYPE_TO_DATA_TYPE));
+        throw new SqlException(format("Type [{0}] not supported. Supported types [{1}]", type, DATABASE_TYPE_TO_DATA_TYPE));
     }
 
     /**
