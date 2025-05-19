@@ -3,5 +3,5 @@ exports.getLocale = () => ({
     label: 'Bulgarian',
     secondary: 'Български',
     common: '/dashboard/translations/bg-BG/common.json',
-    path: '/resources-locale/gen/bg-BG.json'
+    path: '/services/web/resources-locale/gen/bg-BG.json'
 });
