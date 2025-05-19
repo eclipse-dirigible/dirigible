@@ -235,8 +235,7 @@ public class DatabaseFacade implements InitializingBean {
                 try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
 
                     if (parameters.isPresent()) {
-                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                        ParametersSetter.setParameters(parameters.get(), statement);
+                        ParametersSetter.setParameters(parameters.get(), preparedStatement);
                     }
                     ResultSet resultSet = preparedStatement.executeQuery();
                     StringWriter sw = new StringWriter();
@@ -309,8 +308,7 @@ public class DatabaseFacade implements InitializingBean {
                 try (NamedParameterStatement preparedStatement = new NamedParameterStatement(connection, sql)) {
 
                     if (parameters.isPresent()) {
-                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                        ParametersSetter.setParameters(parameters.get(), statement);
+                        ParametersSetter.setParameters(parameters.get(), preparedStatement);
                     }
                     ResultSet resultSet = preparedStatement.executeQuery();
                     StringWriter sw = new StringWriter();
@@ -374,8 +372,7 @@ public class DatabaseFacade implements InitializingBean {
                 try (PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
                     if (parameters.isPresent()) {
-                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                        ParametersSetter.setParameters(parameters.get(), statement);
+                        ParametersSetter.setParameters(parameters.get(), preparedStatement);
                     }
 
                     preparedStatement.executeUpdate();
@@ -419,8 +416,7 @@ public class DatabaseFacade implements InitializingBean {
     private static void insertWithoutResult(String sql, Optional<JsonElement> parameters, Connection connection) throws SQLException {
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
             if (parameters.isPresent()) {
-                IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                ParametersSetter.setParameters(parameters.get(), statement);
+                ParametersSetter.setParameters(parameters.get(), preparedStatement);
             }
             preparedStatement.executeUpdate();
         }
@@ -518,8 +514,7 @@ public class DatabaseFacade implements InitializingBean {
                             Statement.RETURN_GENERATED_KEYS)) {
 
                 if (parameters.isPresent()) {
-                    IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                    ParametersSetter.setParameters(parameters.get(), statement);
+                    ParametersSetter.setParameters(parameters.get(), preparedStatement);
                 }
                 int updatedRows = preparedStatement.executeUpdate();
                 List<Long> generatedIds = new ArrayList<>(updatedRows);
@@ -570,8 +565,7 @@ public class DatabaseFacade implements InitializingBean {
                 try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
 
                     if (parameters.isPresent()) {
-                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                        ParametersSetter.setParameters(parameters.get(), statement);
+                        ParametersSetter.setParameters(parameters.get(), preparedStatement);
                     }
                     return preparedStatement.executeUpdate();
                 }
@@ -611,10 +605,8 @@ public class DatabaseFacade implements InitializingBean {
 
             try (Connection connection = dataSource.getConnection()) {
                 try (NamedParameterStatement preparedStatement = new NamedParameterStatement(connection, sql)) {
-
                     if (parameters.isPresent()) {
-                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                        ParametersSetter.setParameters(parameters.get(), statement);
+                        ParametersSetter.setParameters(parameters.get(), preparedStatement);
                     }
                     return preparedStatement.executeUpdate();
                 }
