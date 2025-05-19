@@ -1044,6 +1044,13 @@ div.fd-input-group[readonly] {
   margin: var(--fdInput_Field_Margin, .25rem 0);
 }
 
+.fd-popover__control.is-expanded>*[class*="-compact"],
+.fd-popover__control.is-expanded>*[class*="-condensed"],
+.fd-popover__control[aria-expanded="true"]>*[class*="-compact"],
+.fd-popover__control[aria-expanded="true"]>*[class*="-condensed"] {
+  --fdInput_Field_Margin: .1875rem 0;
+}
+
 .fd-popover__control>.fd-step-input {
   width: 100%;
 }

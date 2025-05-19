@@ -9,13 +9,6 @@
  */
 package org.eclipse.dirigible.integration.tests.api.javascript;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Collections;
-import java.util.List;
-import java.util.stream.Stream;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.dirigible.graalium.core.DirigibleJavascriptCodeRunner;
 import org.eclipse.dirigible.graalium.core.javascript.GraalJSSourceCreator;
@@ -24,6 +17,14 @@ import org.graalvm.polyglot.Source;
 import org.junit.jupiter.api.DynamicContainer;
 import org.junit.jupiter.api.DynamicTest;
 import org.springframework.stereotype.Component;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Stream;
 
 @Component
 class DirigibleJavaScriptTestsFactory implements AutoCloseable {
