@@ -143,11 +143,11 @@ public class DatabaseFacade implements InitializingBean {
      */
     private static DirigibleDataSource getDataSource(String datasourceName) {
         boolean defaultDB = datasourceName == null || datasourceName.trim()
-                                                                    .isEmpty()
-                || "DefaultDB".equals(datasourceName);
-        DirigibleDataSource dataSource = defaultDB ? DatabaseFacade.get()
-                                                                   .getDataSourcesManager()
-                                                                   .getDefaultDataSource()
+                                                                    .isEmpty() || "DefaultDB".equals(datasourceName);
+        DirigibleDataSource dataSource = defaultDB
+                ? DatabaseFacade.get()
+                                .getDataSourcesManager()
+                                .getDefaultDataSource()
                 : DatabaseFacade.get()
                                 .getDataSourcesManager()
                                 .getDataSource(datasourceName);
@@ -508,8 +508,8 @@ public class DatabaseFacade implements InitializingBean {
         return LoggingExecutor.executeWithException(dataSource, () -> {
 
             try (Connection connection = dataSource.getConnection();
-                    NamedParameterStatement preparedStatement =
-                            new NamedParameterStatement(connection, sql, Statement.RETURN_GENERATED_KEYS)) {
+                    NamedParameterStatement preparedStatement = new NamedParameterStatement(connection, sql,
+                            Statement.RETURN_GENERATED_KEYS)) {
 
                 if (parameters != null) {
                     IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);

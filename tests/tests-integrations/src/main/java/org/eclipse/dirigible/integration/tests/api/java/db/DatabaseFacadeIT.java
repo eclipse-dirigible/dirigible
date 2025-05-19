@@ -11,6 +11,7 @@ package org.eclipse.dirigible.integration.tests.api.java.db;
 
 import org.assertj.db.api.Assertions;
 import org.assertj.db.type.Table;
+import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.api.db.DatabaseFacade;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.database.DirigibleConnection;
@@ -33,7 +34,7 @@ class DatabaseFacadeIT extends IntegrationTest {
     public static final String BIRTHDAY_COLUMN = "Birthday";
     public static final String BIRTHDAY_STRING_COLUMN = "BirthdayString";
     private static final String TEST_TABLE = "TEACHERS";
-    
+
     @Autowired
     private DataSourcesManager dataSourcesManager;
 
@@ -60,18 +61,11 @@ class DatabaseFacadeIT extends IntegrationTest {
 
     @Test
     void testInsertMany() throws Throwable {
-        DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
-
-        ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
-        String insertSql = dialect.insert()
-                                  .into(TEST_TABLE)
-                                  .column(ID_COLUMN)
-                                  .column(NAME_COLUMN)
-                                  .column(BIRTHDAY_COLUMN)
-                                  .column(BIRTHDAY_STRING_COLUMN)
-                                  .build();
-        String parametersJson = "[[1,\"John\",\"2000-12-20\",\"20001121\"],[2,\"Mary\",\"2001-11-21\",\"20001222\"]]";
-        DatabaseFacade.insertMany(insertSql, parametersJson, null, null);
+        Object[][] params = {//
+                {1, "John", "2000-12-20", "20001121"}, //
+                {2, "Mary", "2001-11-21", "20001222"}//
+        };
+        insertMany(params);
 
         Table table = dbAsserter.getDefaultDbTable(TEST_TABLE);
 
@@ -97,6 +91,26 @@ class DatabaseFacadeIT extends IntegrationTest {
                   .isEqualTo(java.sql.Date.valueOf("2001-11-21"))
                   .value(BIRTHDAY_STRING_COLUMN)
                   .isEqualTo("2000-12-22");
+    }
+
+    private void insertMany(Object[][] params) throws Throwable {
+        ISqlDialect dialect = getDialect();
+        String insertSql = dialect.insert()
+                                  .into(TEST_TABLE)
+                                  .column(ID_COLUMN)
+                                  .column(NAME_COLUMN)
+                                  .column(BIRTHDAY_COLUMN)
+                                  .column(BIRTHDAY_STRING_COLUMN)
+                                  .build();
+        String parametersJson = GsonHelper.toJson(params);
+        DatabaseFacade.insertMany(insertSql, parametersJson, null, null);
+
+    }
+
+    private ISqlDialect getDialect() throws SQLException {
+        DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
+
+        return SqlDialectFactory.getDialect(dataSource);
     }
 
 }
