@@ -73,7 +73,6 @@ public class ParametersSetter {
         String name = paramJsonObject.getName();
         String dataType = paramJsonObject.getType();
 
-        ParamSetter paramSetter = getParamSetter(dataType);
         JsonElement valueElement = paramJsonObject.getValueElement();
         if (null == valueElement || valueElement.isJsonNull()) {
             Integer sqlType = DataTypeUtils.getSqlTypeByDataType(dataType);
@@ -81,10 +80,11 @@ public class ParametersSetter {
             return;
         }
 
+        ParamSetter paramSetter = getParamSetterForType(dataType);
         paramSetter.setParam(valueElement, name, preparedStatement, dataType);
     }
 
-    private static ParamSetter getParamSetter(String dataType) {
+    private static ParamSetter getParamSetterForType(String dataType) {
         return paramSetters.stream()
                            .filter(ps -> ps.isApplicable(dataType))
                            .findFirst()
