@@ -11,7 +11,6 @@ package org.eclipse.dirigible.components.api.db.params;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
-import org.eclipse.dirigible.components.api.db.InsertParameters;
 import org.eclipse.dirigible.components.database.NamedParameterStatement;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
 import org.slf4j.Logger;
@@ -20,7 +19,6 @@ import org.slf4j.LoggerFactory;
 import java.sql.ParameterMetaData;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -89,9 +87,8 @@ public class ParametersSetter {
                                    "Parameter 'type'[" + dataType + "] must be a string representing a valid database type name"));
     }
 
-    public static void setManyParameters(JsonElement parametersElement, PreparedStatement preparedStatement,
-            Optional<InsertParameters> insertParameters) throws IllegalArgumentException, SQLException {
-        // TODO: use insertParameters
+    public static void setManyParameters(JsonElement parametersElement, PreparedStatement preparedStatement)
+            throws IllegalArgumentException, SQLException {
         JsonArray parametersArray = getParametersArray(parametersElement);
 
         for (int paramsIdx = 0; paramsIdx < parametersArray.size(); paramsIdx++) {

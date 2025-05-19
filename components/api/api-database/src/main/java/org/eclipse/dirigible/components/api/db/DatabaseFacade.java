@@ -419,23 +419,21 @@ public class DatabaseFacade implements InitializingBean {
         }
     }
 
-    public static List<Map<String, Object>> insertMany(String sql, String parametersJson, String datasourceName,
-            String insertParametersJson) throws Throwable {
+    public static List<Map<String, Object>> insertMany(String sql, String parametersJson, String datasourceName) throws Throwable {
         DirigibleDataSource dataSource = getDataSource(datasourceName);
-        Optional<InsertParameters> insertParameters = getOptionalParam(insertParametersJson, InsertParameters.class);
         Optional<JsonElement> parameters = parseOptionalJson(parametersJson);
 
-        return insertMany(sql, parameters, dataSource, insertParameters);
+        return insertMany(sql, parameters, dataSource);
     }
 
-    static List<Map<String, Object>> insertMany(String sql, Optional<JsonElement> parameters, DirigibleDataSource dataSource,
-            Optional<InsertParameters> insertParameters) throws Throwable {
+    static List<Map<String, Object>> insertMany(String sql, Optional<JsonElement> parameters, DirigibleDataSource dataSource)
+            throws Throwable {
         return LoggingExecutor.executeWithException(dataSource, () -> {
 
             if (DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.contains(dataSource.getName())) {
                 logger.debug("RETURN_GENERATED_KEYS not supported for data source [{}]. Will execute insert without this option.",
                         dataSource);
-                insertManyWithoutResult(sql, parameters, dataSource, insertParameters);
+                insertManyWithoutResult(sql, parameters, dataSource);
                 return Collections.emptyList();
             }
 
@@ -444,7 +442,7 @@ public class DatabaseFacade implements InitializingBean {
                 try (PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
                     if (parameters.isPresent()) {
-                        ParametersSetter.setManyParameters(parameters.get(), preparedStatement, insertParameters);
+                        ParametersSetter.setManyParameters(parameters.get(), preparedStatement);
                     }
 
                     preparedStatement.executeBatch();
@@ -458,7 +456,7 @@ public class DatabaseFacade implements InitializingBean {
                     DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.add(dataSource.getName());
                     logger.warn("RETURN_GENERATED_KEYS not supported for data source [{}]. Will execute insert without this option.",
                             dataSource, ex);
-                    insertManyWithoutResult(sql, parameters, connection, insertParameters);
+                    insertManyWithoutResult(sql, parameters, connection);
                     return Collections.emptyList();
                 }
             } catch (SQLException | RuntimeException ex) {
@@ -468,19 +466,18 @@ public class DatabaseFacade implements InitializingBean {
         });
     }
 
-    private static void insertManyWithoutResult(String sql, Optional<JsonElement> parameters, DirigibleDataSource dataSource,
-            Optional<InsertParameters> insertParameters) throws SQLException {
+    private static void insertManyWithoutResult(String sql, Optional<JsonElement> parameters, DirigibleDataSource dataSource)
+            throws SQLException {
         try (Connection connection = dataSource.getConnection()) {
-            insertManyWithoutResult(sql, parameters, connection, insertParameters);
+            insertManyWithoutResult(sql, parameters, connection);
         }
     }
 
-    private static void insertManyWithoutResult(String sql, Optional<JsonElement> parameters, Connection connection,
-            Optional<InsertParameters> insertParameters) throws SQLException {
+    private static void insertManyWithoutResult(String sql, Optional<JsonElement> parameters, Connection connection) throws SQLException {
         connection.setAutoCommit(false);
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
             if (parameters.isPresent()) {
-                ParametersSetter.setManyParameters(parameters.get(), preparedStatement, insertParameters);
+                ParametersSetter.setManyParameters(parameters.get(), preparedStatement);
             }
             preparedStatement.executeBatch();
             connection.commit();
