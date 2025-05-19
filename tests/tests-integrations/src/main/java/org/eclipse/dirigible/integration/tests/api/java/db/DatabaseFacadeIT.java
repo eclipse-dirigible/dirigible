@@ -103,7 +103,7 @@ class DatabaseFacadeIT extends IntegrationTest {
                                   .column(BIRTHDAY_STRING_COLUMN)
                                   .build();
         String parametersJson = GsonHelper.toJson(params);
-        DatabaseFacade.insertMany(insertSql, parametersJson, null, null);
+        DatabaseFacade.insertMany(insertSql, parametersJson, null);
 
     }
 
