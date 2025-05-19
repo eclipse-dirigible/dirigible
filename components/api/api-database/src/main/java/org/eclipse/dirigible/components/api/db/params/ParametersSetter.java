@@ -29,21 +29,20 @@ import java.util.Set;
 public class ParametersSetter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ParametersSetter.class);
-
     /** The Constant paramSetters. */
     private static final Set<ParamSetter> paramSetters = Set.of(//
-            new BooleanParamSetter(), //
-            new TinyIntParamSetter(), //
-            new IntegerParamSetter(), //
-            new DoubleParamSetter(), //
-            new TextParamSetter(), //
-            new DateParamSetter(), //
-            new TimestampParamSetter(), //
-            new TimeParamSetter(), //
-            new SmallIntParamSetter(), //
             new BigIntParamSetter(), //
+            new BlobParamSetter(), //
+            new BooleanParamSetter(), //
+            new DateParamSetter(), //
+            new DoubleParamSetter(), //
+            new IntegerParamSetter(), //
             new RealParamSetter(), //
-            new BlobParamSetter());
+            new SmallIntParamSetter(), //
+            new TextParamSetter(), //
+            new TimeParamSetter(), //
+            new TimestampParamSetter(), //
+            new TinyIntParamSetter());
 
     public static void setParameters(JsonElement parameters, NamedParameterStatement preparedStatement) throws SQLException {
         if (!(parameters instanceof JsonArray parametersArray)) {
