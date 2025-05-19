@@ -13,7 +13,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import org.eclipse.dirigible.commons.api.helpers.BytesHelper;
 import org.eclipse.dirigible.commons.api.helpers.DateTimeUtils;
-import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.database.NamedParameterStatement;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
 import org.slf4j.Logger;
@@ -1087,9 +1086,8 @@ class ParametersSetter {
      * @param preparedStatement the prepared statement
      * @throws SQLException the SQL exception
      */
-    static void setParameters(String parameters, IndexedOrNamedStatement preparedStatement) throws SQLException {
-        JsonElement parametersElement = GsonHelper.parseJson(parameters);
-        if (!(parametersElement instanceof JsonArray parametersArray)) {
+    static void setParameters(JsonElement parameters, IndexedOrNamedStatement preparedStatement) throws SQLException {
+        if (!(parameters instanceof JsonArray parametersArray)) {
             throw new IllegalArgumentException("Parameters must be provided as a JSON array, e.g. [1, 'John', 9876]");
         }
 
