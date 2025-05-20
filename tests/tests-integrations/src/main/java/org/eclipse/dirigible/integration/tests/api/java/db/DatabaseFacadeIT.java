@@ -48,10 +48,10 @@ class DatabaseFacadeIT extends IntegrationTest {
         ISqlDialect dialect = SqlDialectFactory.getDialect(defaultDataSource);
         String createTableSql = dialect.create()
                                        .table(TEST_TABLE)
-                                       .columnInteger(ID_COLUMN, true)
+                                       .columnInteger(ID_COLUMN)
                                        .columnNvarchar(NAME_COLUMN, 20)
                                        .columnDate(BIRTHDAY_COLUMN)
-                                       .columnNvarchar(BIRTHDAY_STRING_COLUMN, 20, false)
+                                       .columnVarchar(BIRTHDAY_STRING_COLUMN, 20)
                                        .build();
         try (DirigibleConnection connection = defaultDataSource.getConnection();
                 PreparedStatement preparedStatement = connection.prepareStatement(createTableSql)) {
