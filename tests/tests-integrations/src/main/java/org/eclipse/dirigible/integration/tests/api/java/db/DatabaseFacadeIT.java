@@ -29,7 +29,9 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
+import java.sql.Connection;
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -37,6 +39,7 @@ import java.sql.SQLException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class DatabaseFacadeIT extends IntegrationTest {
 
     private static final String ID_COLUMN = "Id";
@@ -54,6 +57,82 @@ class DatabaseFacadeIT extends IntegrationTest {
     @SystemDataSourceName
     @Autowired
     private String systemDataSource;
+
+
+    @Nested
+    class UpdateTest {
+        @Test
+        void testUpdate() throws Throwable {
+            String updateSql = getDialect().update()
+                                           .table(TEST_TABLE)
+                                           .set(ID_COLUMN, "?")
+                                           .build();
+            String parametersJson = "[12]";
+            int updatedRows = DatabaseFacade.update(updateSql, parametersJson);
+            assertThat(updatedRows).isEqualTo(1);
+
+            String result = queryTestTable();
+            assertPreparedResult(12, result);
+        }
+
+        @Test
+        void testUpdateNamed() throws Throwable {
+            String updateSql = getDialect().update()
+                                           .table(TEST_TABLE)
+                                           .set(ID_COLUMN, ":id")
+                                           .build();
+            String parametersJson = """
+                    [
+                        {
+                            "name": "id",
+                            "type": "INT",
+                            "value": 12
+                        }
+                    ]
+                    """;
+            int updatedRows = DatabaseFacade.updateNamed(updateSql, parametersJson);
+            assertThat(updatedRows).isEqualTo(1);
+
+            String result = queryTestTable();
+            assertPreparedResult(12, result);
+        }
+    }
+
+
+    @Nested
+    class SequenceTest {
+
+        @Test
+        void testCreateSequenceByName() {
+            assertDoesNotThrow(() -> DatabaseFacade.createSequence("TEST_SEQ_01"));
+        }
+
+        @Test
+        void testCreateSequenceByNameAndStart() {
+            assertDoesNotThrow(() -> DatabaseFacade.createSequence("TEST_SEQ_02", 100));
+        }
+
+        @Test
+        void testCreateSequenceByNameStartAndDataSourceName() {
+            assertDoesNotThrow(() -> DatabaseFacade.createSequence("TEST_SEQ_03", 200, systemDataSource));
+        }
+
+        @Test
+        void testDropSequenceByName() {
+            assertDoesNotThrow(() -> {
+                DatabaseFacade.createSequence("TEST_SEQ_03");
+                DatabaseFacade.dropSequence("TEST_SEQ_03");
+            });
+        }
+
+        @Test
+        void testDropSequenceByNameAndDataSourceName() {
+            assertDoesNotThrow(() -> {
+                DatabaseFacade.createSequence("TEST_SEQ_04", 300, systemDataSource);
+                DatabaseFacade.dropSequence("TEST_SEQ_04", systemDataSource);
+            });
+        }
+    }
 
 
     @Nested
@@ -310,13 +389,33 @@ class DatabaseFacadeIT extends IntegrationTest {
 
     @BeforeEach
     void setUp() throws SQLException {
-        DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
+        deleteTestResources();
 
-        createTestTable(defaultDataSource);
+        createTestTable();
         insertTestRecord();
     }
 
-    private void createTestTable(DirigibleDataSource defaultDataSource) throws SQLException {
+    private void deleteTestResources() throws SQLException {
+        dropTableIfExists(TEST_TABLE);
+    }
+
+    private void dropTableIfExists(String tableName) throws SQLException {
+        try (Connection connection = dataSourcesManager.getDefaultDataSource()
+                                                       .getConnection()) {
+            SqlFactory sqlFactory = SqlFactory.getNative(connection);
+            if (sqlFactory.existsTable(connection, TEST_TABLE)) {
+                String dropSql = sqlFactory.drop()
+                                           .table(TEST_TABLE)
+                                           .generate();
+                PreparedStatement preparedStatement = connection.prepareStatement(dropSql);
+                preparedStatement.executeUpdate();
+            }
+
+        }
+    }
+
+    private void createTestTable() throws SQLException {
+        DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
         ISqlDialect dialect = SqlDialectFactory.getDialect(defaultDataSource);
         String createTableSql = dialect.create()
                                        .table(TEST_TABLE)
@@ -429,26 +528,6 @@ class DatabaseFacadeIT extends IntegrationTest {
         return GsonHelper.toJson(params);
     }
 
-    @Test
-    void testUpdate() throws Throwable {
-        String updateSql = getDialect().update()
-                                       .table(TEST_TABLE)
-                                       .set(ID_COLUMN, "?")
-                                       .build();
-        String parametersJson = "[12]";
-        int updatedRows = DatabaseFacade.update(updateSql, parametersJson);
-        assertThat(updatedRows).isEqualTo(1);
-
-        String result = queryTestTable();
-        assertPreparedResult(12, result);
-    }
-
-    private ISqlDialect getDialect() throws SQLException {
-        DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
-
-        return SqlDialectFactory.getDialect(dataSource);
-    }
-
     private String queryTestTable() throws Throwable {
         String selectQuery = getDialect().select()
                                          .from(TEST_TABLE)
@@ -456,26 +535,10 @@ class DatabaseFacadeIT extends IntegrationTest {
         return DatabaseFacade.query(selectQuery);
     }
 
-    @Test
-    void testUpdateNamed() throws Throwable {
-        String updateSql = getDialect().update()
-                                       .table(TEST_TABLE)
-                                       .set(ID_COLUMN, ":id")
-                                       .build();
-        String parametersJson = """
-                [
-                    {
-                        "name": "id",
-                        "type": "INT",
-                        "value": 12
-                    }
-                ]
-                """;
-        int updatedRows = DatabaseFacade.updateNamed(updateSql, parametersJson);
-        assertThat(updatedRows).isEqualTo(1);
+    private ISqlDialect getDialect() throws SQLException {
+        DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
 
-        String result = queryTestTable();
-        assertPreparedResult(12, result);
+        return SqlDialectFactory.getDialect(dataSource);
     }
 
     @Test
@@ -495,37 +558,6 @@ class DatabaseFacadeIT extends IntegrationTest {
     @Disabled("To be implemented")
     @Test
     void testNextval() {}
-
-    @Test
-    void testCreateSequenceByName() {
-        assertDoesNotThrow(() -> DatabaseFacade.createSequence("TEST_SEQ"));
-    }
-
-    @Test
-    void testCreateSequenceByNameAndStart() {
-        assertDoesNotThrow(() -> DatabaseFacade.createSequence("TEST_SEQ", 100));
-    }
-
-    @Test
-    void testCreateSequenceByNameStartAndDataSourceName() {
-        assertDoesNotThrow(() -> DatabaseFacade.createSequence("TEST_SEQ", 200, systemDataSource));
-    }
-
-    @Test
-    void testDropSequenceByName() {
-        assertDoesNotThrow(() -> {
-            DatabaseFacade.createSequence("TEST_SEQ");
-            DatabaseFacade.dropSequence("TEST_SEQ");
-        });
-    }
-
-    @Test
-    void testDropSequenceByNameAndDataSourceName() {
-        assertDoesNotThrow(() -> {
-            DatabaseFacade.createSequence("TEST_SEQ", 300, systemDataSource);
-            DatabaseFacade.dropSequence("TEST_SEQ", systemDataSource);
-        });
-    }
 
     @Test
     void testGetDefaultSqlFactory() {
