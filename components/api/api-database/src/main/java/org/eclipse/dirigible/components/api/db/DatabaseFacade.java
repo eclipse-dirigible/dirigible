@@ -144,11 +144,11 @@ public class DatabaseFacade implements InitializingBean {
      */
     private static DirigibleDataSource getDataSource(String datasourceName) {
         boolean defaultDB = datasourceName == null || datasourceName.trim()
-                                                                    .isEmpty()
-                || "DefaultDB".equals(datasourceName);
-        DirigibleDataSource dataSource = defaultDB ? DatabaseFacade.get()
-                                                                   .getDataSourcesManager()
-                                                                   .getDefaultDataSource()
+                                                                    .isEmpty() || "DefaultDB".equals(datasourceName);
+        DirigibleDataSource dataSource = defaultDB
+                ? DatabaseFacade.get()
+                                .getDataSourcesManager()
+                                .getDefaultDataSource()
                 : DatabaseFacade.get()
                                 .getDataSourcesManager()
                                 .getDataSource(datasourceName);
@@ -322,7 +322,7 @@ public class DatabaseFacade implements InitializingBean {
                     return sw.toString();
                 }
             } catch (Exception ex) {
-                logger.error("Failed to execute query statement [{}] in data source [{}].", sql, datasourceName, ex);
+                logger.error("Failed to execute query statement [{}] in data source [{}].", sql, dataSource, ex);
                 throw ex;
             }
         });
@@ -336,6 +336,8 @@ public class DatabaseFacade implements InitializingBean {
      * @throws Exception the exception
      */
     public static String queryNamed(String sql) throws Throwable {
+        // TODO: I guess this method is not needed since it doesn't support named params, it is the same
+        // like the one with query
         return queryNamed(sql, null, null);
     }
 
@@ -504,8 +506,8 @@ public class DatabaseFacade implements InitializingBean {
         return LoggingExecutor.executeWithException(dataSource, () -> {
 
             try (Connection connection = dataSource.getConnection();
-                    NamedParameterStatement preparedStatement =
-                            new NamedParameterStatement(connection, sql, Statement.RETURN_GENERATED_KEYS)) {
+                    NamedParameterStatement preparedStatement = new NamedParameterStatement(connection, sql,
+                            Statement.RETURN_GENERATED_KEYS)) {
 
                 if (parameters.isPresent()) {
                     ParametersSetter.setParameters(parameters.get(), preparedStatement);
@@ -568,7 +570,6 @@ public class DatabaseFacade implements InitializingBean {
                 throw ex;
             }
         });
-
     }
 
     /**
@@ -580,6 +581,18 @@ public class DatabaseFacade implements InitializingBean {
      */
     public static int update(String sql) throws Throwable {
         return update(sql, null, null);
+    }
+
+    /**
+     * Executes named SQL update.
+     *
+     * @param sql the sql
+     * @param parameters the parameters
+     * @return the number of the rows that has been changed
+     * @throws Exception the exception
+     */
+    public static int updateNamed(String sql, String parameters) throws Throwable {
+        return updateNamed(sql, parameters, null);
     }
 
     /**
@@ -616,23 +629,11 @@ public class DatabaseFacade implements InitializingBean {
      * Executes named SQL update.
      *
      * @param sql the sql
-     * @param parameters the parameters
-     * @return the number of the rows that has been changed
-     * @throws Exception the exception
-     */
-    public static int updateNamed(String sql, String parameters) throws Throwable {
-        return update(sql, parameters, null);
-    }
-
-    /**
-     * Executes named SQL update.
-     *
-     * @param sql the sql
      * @return the number of the rows that has been changed
      * @throws Exception the exception
      */
     public static int updateNamed(String sql) throws Throwable {
-        return update(sql, null, null);
+        return updateNamed(sql, null, null);
     }
 
     /**
@@ -829,7 +830,7 @@ public class DatabaseFacade implements InitializingBean {
      * @throws SQLException the SQL exception
      */
     public static void createSequence(String sequence, Integer start) throws Throwable {
-        createSequence(sequence, null, null);
+        createSequence(sequence, start, null);
     }
 
     /**

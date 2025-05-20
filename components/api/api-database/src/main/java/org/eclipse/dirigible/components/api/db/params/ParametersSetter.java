@@ -63,12 +63,12 @@ public class ParametersSetter {
     }
 
     private static void setJsonObjectParam(NamedParameterStatement preparedStatement, JsonElement parameterElement) throws SQLException {
-        ParamJsonObject paramJsonObject = ParamJsonObject.fromJsonElement(parameterElement);
+        NamedParamJsonObject namedParamJsonObject = NamedParamJsonObject.fromJsonElement(parameterElement);
 
-        String name = paramJsonObject.getName();
-        String dataType = paramJsonObject.getType();
+        String name = namedParamJsonObject.getName();
+        String dataType = namedParamJsonObject.getType();
 
-        JsonElement valueElement = paramJsonObject.getValueElement();
+        JsonElement valueElement = namedParamJsonObject.getValueElement();
         if (null == valueElement || valueElement.isJsonNull()) {
             Integer sqlType = DataTypeUtils.getSqlTypeByDataType(dataType);
             preparedStatement.setNull(name, sqlType);
@@ -142,12 +142,13 @@ public class ParametersSetter {
                 dirigibleSqlType);
 
         if (parameterElement.isJsonPrimitive()) {
+            // TODO: set null
             paramSetter.setParam(parameterElement, sqlParamIndex, preparedStatement, dirigibleSqlType);
             return;
         }
 
         if (parameterElement.isJsonObject()) {
-            ParamJsonObject paramJsonObject = ParamJsonObject.fromJsonElement(parameterElement);
+            IndexedParamJsonObject paramJsonObject = IndexedParamJsonObject.fromJsonElement(parameterElement);
 
             JsonElement valueElement = paramJsonObject.getValueElement();
             if (null == valueElement || valueElement.isJsonNull()) {
