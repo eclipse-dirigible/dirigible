@@ -14,9 +14,12 @@ import org.assertj.db.type.AssertDbConnection;
 import org.assertj.db.type.AssertDbConnectionFactory;
 import org.assertj.db.type.Table;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.database.sql.ISqlDialect;
+import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
+import java.sql.SQLException;
 
 @Component
 public class DBAsserter {
@@ -35,9 +38,21 @@ public class DBAsserter {
 
     public Table getDefaultDbTable(String tableName) {
         AssertDbConnection connection = getDefaultDbAssertDbConnection();
+        DataSource dataSource = dataSourcesManager.getDefaultDataSource();
+        ISqlDialect dialect = getDefaultDbDialect(dataSource);
+        char escapeSymbol = dialect.getEscapeSymbol();
+        String escapedTableName = escapeSymbol + tableName + escapeSymbol;
 
-        return connection.table(tableName)
+        return connection.table(escapedTableName)
                          .build();
+    }
+
+    private ISqlDialect getDefaultDbDialect(DataSource dataSource) {
+        try {
+            return SqlDialectFactory.getDialect(dataSource);
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to create dialect for " + dataSource, e);
+        }
     }
 
     public AssertDbConnection getDefaultDbAssertDbConnection() {

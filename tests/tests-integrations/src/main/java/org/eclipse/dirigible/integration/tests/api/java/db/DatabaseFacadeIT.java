@@ -62,17 +62,76 @@ class DatabaseFacadeIT extends IntegrationTest {
     @Nested
     class UpdateTest {
         @Test
-        void testUpdate() throws Throwable {
+        void testUpdateWithParamsArray() throws Throwable {
             String updateSql = getDialect().update()
                                            .table(TEST_TABLE)
                                            .set(ID_COLUMN, "?")
+                                           .set(NAME_COLUMN, "?")
+                                           .set(BIRTHDAY_COLUMN, "?")
+                                           .set(BIRTHDAY_STRING_COLUMN, "?")
+                                           .where(ID_COLUMN + " = 0")
                                            .build();
-            String parametersJson = "[12]";
+            String parametersJson = """
+                    [12000, "testUpdateWithParamsArray", "2009-09-29", "20101030"]
+                    """;
             int updatedRows = DatabaseFacade.update(updateSql, parametersJson);
             assertThat(updatedRows).isEqualTo(1);
 
-            String result = queryTestTable();
-            assertPreparedResult(12, result);
+            Assertions.assertThat(createAssertTestTable())
+                      .hasNumberOfRows(1)
+
+                      .row(0)
+                      .value(ID_COLUMN)
+                      .isEqualTo(12000)
+                      .value(NAME_COLUMN)
+                      .isEqualTo("testUpdateWithParamsArray")
+                      .value(BIRTHDAY_COLUMN)
+                      .isEqualTo(Date.valueOf("2009-09-29"))
+                      .value(BIRTHDAY_STRING_COLUMN)
+                      .isEqualTo("20101030");
+        }
+
+        @Test
+        void testUpdateWithParamsObjectsArray() throws Throwable {
+            String updateSql = getDialect().update()
+                                           .table(TEST_TABLE)
+                                           .set(ID_COLUMN, "?")
+                                           .set(NAME_COLUMN, "?")
+                                           .set(BIRTHDAY_COLUMN, "?")
+                                           .set(BIRTHDAY_STRING_COLUMN, "?")
+                                           .where(ID_COLUMN + " = 0")
+                                           .build();
+            String parametersJson = """
+                    [
+                        {
+                            "value": 2700
+                        },
+                        {
+                            "value": "testUpdateWithParamsObjectsArray"
+                        },
+                        {
+                            "value": "2007-07-27"
+                        },
+                        {
+                            "value": "20080828"
+                        }
+                    ]
+                    """;
+            int updatedRows = DatabaseFacade.update(updateSql, parametersJson);
+            assertThat(updatedRows).isEqualTo(1);
+
+            Assertions.assertThat(createAssertTestTable())
+                      .hasNumberOfRows(1)
+
+                      .row(0)
+                      .value(ID_COLUMN)
+                      .isEqualTo(2700)
+                      .value(NAME_COLUMN)
+                      .isEqualTo("testUpdateWithParamsObjectsArray")
+                      .value(BIRTHDAY_COLUMN)
+                      .isEqualTo(Date.valueOf("2007-07-27"))
+                      .value(BIRTHDAY_STRING_COLUMN)
+                      .isEqualTo("20080828");
         }
 
         @Test
@@ -383,6 +442,46 @@ class DatabaseFacadeIT extends IntegrationTest {
         }
     }
 
+    @Test
+    void testUpdateNamedWithParamsArray() throws Throwable {
+        String updateSql = getDialect().update()
+                                       .table(TEST_TABLE)
+                                       .set(ID_COLUMN, ":id")
+                                       .build();
+        String parametersJson = """
+                [
+                    {
+                        "name": "id",
+                        "type": "INT",
+                        "value": 12
+                    }
+                ]
+                """;
+        int updatedRows = DatabaseFacade.updateNamed(updateSql, parametersJson);
+        assertThat(updatedRows).isEqualTo(1);
+
+        String result = queryTestTable();
+        assertPreparedResult(12, result);
+    }
+
+    private static void assertPreparedResult(int id, String result) {
+        String expectedResult = "[{\"Id\":" + id + ",\"Name\":\"Peter\",\"Birthday\":\"2025-01-20\",\"BirthdayString\":\"2024-02-22\"}]";
+        JsonAsserter.assertEquals(expectedResult, result);
+    }
+
+    private String queryTestTable() throws Throwable {
+        String selectQuery = getDialect().select()
+                                         .from(TEST_TABLE)
+                                         .build();
+        return DatabaseFacade.query(selectQuery);
+    }
+
+    private ISqlDialect getDialect() throws SQLException {
+        DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
+
+        return SqlDialectFactory.getDialect(dataSource);
+    }
+
     private static String createMultiParamsJson(Object[][] params) {
         return GsonHelper.toJson(params);
     }
@@ -515,30 +614,12 @@ class DatabaseFacadeIT extends IntegrationTest {
         assertPreparedResult(0, result);
     }
 
-    private static void assertPreparedResult(int id, String result) {
-        String expectedResult = "[{\"Id\":" + id + ",\"Name\":\"Peter\",\"Birthday\":\"2025-01-20\",\"BirthdayString\":\"2024-02-22\"}]";
-        JsonAsserter.assertEquals(expectedResult, result);
-    }
-
     private Table createAssertTestTable() {
         return dbAsserter.getDefaultDbTable(TEST_TABLE);
     }
 
     private static String createParamsJson(Object... params) {
         return GsonHelper.toJson(params);
-    }
-
-    private String queryTestTable() throws Throwable {
-        String selectQuery = getDialect().select()
-                                         .from(TEST_TABLE)
-                                         .build();
-        return DatabaseFacade.query(selectQuery);
-    }
-
-    private ISqlDialect getDialect() throws SQLException {
-        DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
-
-        return SqlDialectFactory.getDialect(dataSource);
     }
 
     @Test
