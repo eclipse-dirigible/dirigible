@@ -17,7 +17,7 @@ class BooleanParamSetter extends BaseParamSetter {
      */
     @Override
     public boolean isApplicable(String dataType) {
-        return DataTypeUtils.isBoolean(dataType);
+        return DataTypeUtils.isBoolean(dataType) || DataTypeUtils.isBit(dataType);
     }
 
     /**
@@ -33,6 +33,14 @@ class BooleanParamSetter extends BaseParamSetter {
     public void setParam(JsonElement sourceParam, int paramIndex, PreparedStatement preparedStatement, String dataType)
             throws SQLException {
         if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
+                                                        .isBoolean()) {
+            boolean value = sourceParam.getAsJsonPrimitive()
+                                       .getAsBoolean();
+            preparedStatement.setBoolean(paramIndex, value);
+            return;
+        }
+
+        if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                         .isNumber()) {
             boolean value = sourceParam.getAsJsonPrimitive()
                                        .getAsBoolean();
@@ -46,6 +54,7 @@ class BooleanParamSetter extends BaseParamSetter {
             preparedStatement.setBoolean(paramIndex, value);
             return;
         }
+
         throwWrongValue(sourceParam, dataType);
     }
 

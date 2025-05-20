@@ -28,8 +28,10 @@ import java.util.Set;
 public class ParametersSetter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ParametersSetter.class);
+
     /** The Constant paramSetters. */
     private static final Set<ParamSetter> paramSetters = Set.of(//
+            new BigDecimalParamSetter(), //
             new BigIntParamSetter(), //
             new BlobParamSetter(), //
             new BooleanParamSetter(), //
@@ -84,8 +86,7 @@ public class ParametersSetter {
         return paramSetters.stream()
                            .filter(ps -> ps.isApplicable(dataType))
                            .findFirst()
-                           .orElseThrow(() -> new IllegalArgumentException(
-                                   "Parameter 'type'[" + dataType + "] must be a string representing a valid database type name"));
+                           .orElseThrow(() -> new IllegalArgumentException("Missing param setter for 'type'[" + dataType + "]"));
     }
 
     public static void setManyParameters(JsonElement parametersElement, PreparedStatement preparedStatement)
@@ -144,8 +145,8 @@ public class ParametersSetter {
 
         String dirigibleSqlType = DataTypeUtils.getDatabaseTypeName(sqlType);
         ParamSetter paramSetter = getParamSetterForType(dirigibleSqlType);
-        LOGGER.debug("Found param setter [{}] for sql type [{}] which is converted to dirigible type [{}]", paramSetter, sqlType,
-                dirigibleSqlType);
+        LOGGER.debug("Found param setter [{}] for sql type [{}] which is converted to dirigible type [{}] for element [{}]", paramSetter,
+                sqlType, dirigibleSqlType, parameterElement);
 
         if (parameterElement.isJsonPrimitive()) {
             paramSetter.setParam(parameterElement, sqlParamIndex, preparedStatement, dirigibleSqlType);

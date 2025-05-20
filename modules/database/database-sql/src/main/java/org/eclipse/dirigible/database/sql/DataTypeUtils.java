@@ -148,6 +148,8 @@ public class DataTypeUtils {
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.DECIMAL, DataType.DECIMAL);
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.BIT, DataType.BIT);
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.ARRAY, DataType.ARRAY);
+        DATABASE_TYPE_TO_DATA_TYPE.put(Types.TINYINT, DataType.TINYINT);
+        DATABASE_TYPE_TO_DATA_TYPE.put(Types.NUMERIC, DataType.NUMERIC);
 
         // chars
         STRING_TO_DATABASE_TYPE.put(VARCHAR, Types.VARCHAR);
@@ -585,5 +587,9 @@ public class DataTypeUtils {
      */
     public static boolean isArray(String dataType) {
         return DataType.ARRAY.isOfType(dataType);
+    }
+
+    public static boolean isNumeric(String dataType) {
+        return DataType.NUMERIC.isOfType(dataType);
     }
 }

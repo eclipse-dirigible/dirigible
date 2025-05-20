@@ -31,10 +31,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
 
-import java.sql.Connection;
-import java.sql.Date;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
+import java.math.BigInteger;
+import java.sql.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -197,6 +195,100 @@ class DatabaseFacadeIT extends IntegrationTest {
 
     @Nested
     class InsertTest {
+
+        @Test
+        void testInsertInTableWithAllSupportedColumnTypes() throws Throwable {
+            DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
+            ISqlDialect dialect = SqlDialectFactory.getDialect(defaultDataSource);
+            String tableName = "ALL_COLUMN_TYPES_TABLE";
+            String createTableSql = dialect.create()
+                                           .table(tableName)
+                                           .columnInteger("INT_COLUMN")
+                                           .columnVarchar("VARCHAR_COLUMN", 50)
+                                           .columnDate("DATE_COLUMN")
+                                           .columnTime("TIME_COLUMN")
+                                           .columnTimestamp("TIMESTAMP_COLUMN")
+                                           .columnBoolean("BOOLEAN_COLUMN")
+                                           .columnSmallint("SMALLINT_COLUMN")
+                                           .columnReal("REAL_COLUMN")
+                                           .columnDouble("DOUBLE_COLUMN")
+                                           .columnDecimal("DECIMAL_COLUMN", 17, 2)
+                                           .columnBigint("BIGINT_COLUMN")
+                                           .build();
+            try (DirigibleConnection connection = defaultDataSource.getConnection();
+                    PreparedStatement preparedStatement = connection.prepareStatement(createTableSql)) {
+                preparedStatement.executeUpdate();
+            }
+
+            String insertSql = getDialect().insert()
+                                           .into(tableName)
+                                           .column("INT_COLUMN")
+                                           .column("VARCHAR_COLUMN")
+                                           .column("DATE_COLUMN")
+                                           .column("TIME_COLUMN")
+                                           .column("TIMESTAMP_COLUMN")
+                                           .column("BOOLEAN_COLUMN")
+                                           .column("SMALLINT_COLUMN")
+                                           .column("REAL_COLUMN")
+                                           .column("DOUBLE_COLUMN")
+                                           .column("DECIMAL_COLUMN")
+                                           .column("BIGINT_COLUMN")
+                                           .build();
+            String parametersJson = """
+                    [
+                        42,
+                        "example text",
+                        "2025-05-20",
+                        "14:30:00",
+                        "2025-05-20 14:30:00",
+                        true,
+                        32000,
+                        3.14,
+                        2.7182818284,
+                        123456789012345.67,
+                        9223372036854775807
+                    ]
+                    """;
+            DatabaseFacade.insert(insertSql, parametersJson, null);
+
+            Table table = dbAsserter.getDefaultDbTable(tableName);
+            Assertions.assertThat(table)
+                      .hasNumberOfRows(1)
+
+                      .row(0)
+                      .value("INT_COLUMN")
+                      .isEqualTo(42)
+
+                      .value("VARCHAR_COLUMN")
+                      .isEqualTo("example text")
+
+                      .value("DATE_COLUMN")
+                      .isEqualTo(Date.valueOf("2025-05-20"))
+
+                      .value("TIME_COLUMN")
+                      .isEqualTo(Time.valueOf("14:30:00"))
+
+                      .value("TIMESTAMP_COLUMN")
+                      .isEqualTo(Timestamp.valueOf("2025-05-20 14:30:00"))
+
+                      .value("BOOLEAN_COLUMN")
+                      .isEqualTo(true)
+
+                      .value("SMALLINT_COLUMN")
+                      .isEqualTo(32000)
+
+                      .value("REAL_COLUMN")
+                      .isEqualTo(Double.valueOf(3.14))
+
+                      .value("DOUBLE_COLUMN")
+                      .isEqualTo(2.7182818284)
+
+                      .value("DECIMAL_COLUMN")
+                      .isEqualTo(123456789012345.67)
+
+                      .value("BIGINT_COLUMN")
+                      .isEqualTo(new BigInteger("9223372036854775807"));
+        }
 
         @Test
         void testInsertWithParamsArrayWithNulls() throws Throwable {

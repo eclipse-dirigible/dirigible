@@ -4,12 +4,11 @@ import com.google.gson.JsonElement;
 import org.eclipse.dirigible.components.database.NamedParameterStatement;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
 
-import java.math.BigInteger;
+import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Types;
 
-class BigIntParamSetter extends BaseParamSetter {
+class BigDecimalParamSetter extends BaseParamSetter {
 
     /**
      * Checks if is applicable.
@@ -19,7 +18,7 @@ class BigIntParamSetter extends BaseParamSetter {
      */
     @Override
     public boolean isApplicable(String dataType) {
-        return DataTypeUtils.isBigint(dataType);
+        return DataTypeUtils.isDecimal(dataType) || DataTypeUtils.isNumeric(dataType);
     }
 
     /**
@@ -36,17 +35,17 @@ class BigIntParamSetter extends BaseParamSetter {
             throws SQLException {
         if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                         .isNumber()) {
-            BigInteger value = sourceParam.getAsJsonPrimitive()
-                                          .getAsBigInteger();
-            preparedStatement.setObject(paramIndex, value, Types.BIGINT);
+            BigDecimal value = sourceParam.getAsJsonPrimitive()
+                                          .getAsBigDecimal();
+            preparedStatement.setBigDecimal(paramIndex, value);
             return;
         }
         if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                         .isString()) {
             String stringValue = sourceParam.getAsJsonPrimitive()
                                             .getAsString();
-            BigInteger value = new BigInteger(stringValue);
-            preparedStatement.setObject(paramIndex, value, Types.BIGINT);
+            BigDecimal value = new BigDecimal(stringValue);
+            preparedStatement.setBigDecimal(paramIndex, value);
             return;
         }
         throwWrongValue(sourceParam, dataType);
