@@ -38,6 +38,7 @@ import java.sql.SQLException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class DatabaseFacadeIT extends IntegrationTest {
@@ -386,15 +387,44 @@ class DatabaseFacadeIT extends IntegrationTest {
     @Nested
     class InsertManyTest {
         @Test
-        void testInsertMany() throws Throwable {
-            Object[][] params = {//
-                    {1, "John", "2000-12-20", "20001121"}, //
-                    {2, "Mary", "2001-11-21", "20001222"}//
-            };
-            insertMany(params);
+        void testInsertManyWithParamsObjectsArray() throws Throwable {
+
+            String parametersJson = """
+                    [
+                        [
+                            {
+                                "value": 1
+                            },
+                            {
+                                "value": "John"
+                            },
+                            {
+                                "value": "2000-12-20"
+                            },
+                            {
+                                "value": "20001121"
+                            }
+                        ],
+                        [
+                            {
+                                "value": 2
+                            },
+                            {
+                                "value": "Mary"
+                            },
+                            {
+                                "value": "2001-11-21"
+                            },
+                            {
+                                "value": "20001222"
+                            }
+                        ]
+                    ]
+                    """;
+
+            insertMany(parametersJson);
 
             Table table = createAssertTestTable();
-
             Assertions.assertThat(table)
                       .hasNumberOfRows(3)
 
@@ -429,7 +459,7 @@ class DatabaseFacadeIT extends IntegrationTest {
                       .isEqualTo("20001222");
         }
 
-        private void insertMany(Object[][] params) throws Throwable {
+        private void insertMany(String parametersJson) throws Throwable {
             String insertSql = getDialect().insert()
                                            .into(TEST_TABLE)
                                            .column(ID_COLUMN)
@@ -437,8 +467,187 @@ class DatabaseFacadeIT extends IntegrationTest {
                                            .column(BIRTHDAY_COLUMN)
                                            .column(BIRTHDAY_STRING_COLUMN)
                                            .build();
-            String parametersJson = createMultiParamsJson(params);
             DatabaseFacade.insertMany(insertSql, parametersJson, null);
+        }
+
+        @Test
+        void testInsertManyWithParamsArrayWithNulls() throws Throwable {
+            Object[][] params = {//
+                    {1, null, null, null}, //
+                    {2, null, null, null}//
+            };
+            insertMany(params);
+
+            Table table = createAssertTestTable();
+            Assertions.assertThat(table)
+                      .hasNumberOfRows(3)
+
+                      .row(1)
+                      .value(ID_COLUMN)
+                      .isEqualTo(1)
+                      .value(NAME_COLUMN)
+                      .isNull()
+                      .value(BIRTHDAY_COLUMN)
+                      .isNull()
+                      .value(BIRTHDAY_STRING_COLUMN)
+                      .isNull()
+
+                      .row(2)
+                      .value(ID_COLUMN)
+                      .isEqualTo(2)
+                      .value(NAME_COLUMN)
+                      .isNull()
+                      .value(BIRTHDAY_COLUMN)
+                      .isNull()
+                      .value(BIRTHDAY_STRING_COLUMN)
+                      .isNull();
+        }
+
+        private void insertMany(Object[][] params) throws Throwable {
+            String parametersJson = createMultiParamsJson(params);
+            insertMany(parametersJson);
+        }
+
+        @Test
+        void testInsertManyWithParamsObjectsArrayWithNulls() throws Throwable {
+            String parametersJson = """
+                    [
+                        [
+                            {
+                                "value": 1
+                            },
+                            {
+                                "value": null
+                            },
+                            {
+                                "value": null
+                            },
+                            {
+                                "value": null
+                            }
+                        ],
+                        [
+                            {
+                                "value": 2
+                            },
+                            {
+                                "value": null
+                            },
+                            {
+                                "value": null
+                            },
+                            {
+                            }
+                        ]
+                    ]
+                    """;
+            insertMany(parametersJson);
+
+            Table table = createAssertTestTable();
+            Assertions.assertThat(table)
+                      .hasNumberOfRows(3)
+
+                      .row(1)
+                      .value(ID_COLUMN)
+                      .isEqualTo(1)
+                      .value(NAME_COLUMN)
+                      .isNull()
+                      .value(BIRTHDAY_COLUMN)
+                      .isNull()
+                      .value(BIRTHDAY_STRING_COLUMN)
+                      .isNull()
+
+                      .row(2)
+                      .value(ID_COLUMN)
+                      .isEqualTo(2)
+                      .value(NAME_COLUMN)
+                      .isNull()
+                      .value(BIRTHDAY_COLUMN)
+                      .isNull()
+                      .value(BIRTHDAY_STRING_COLUMN)
+                      .isNull();
+        }
+
+        @Test
+        void testInsertManyWithParamsArray() throws Throwable {
+            Object[][] params = {//
+                    {1, "John", "2000-12-20", "20001121"}, //
+                    {2, "Mary", "2001-11-21", "20001222"}//
+            };
+            insertMany(params);
+
+            Table table = createAssertTestTable();
+            Assertions.assertThat(table)
+                      .hasNumberOfRows(3)
+
+                      .row(0)
+                      .value(ID_COLUMN)
+                      .isEqualTo(0)
+                      .value(NAME_COLUMN)
+                      .isEqualTo("Peter")
+                      .value(BIRTHDAY_COLUMN)
+                      .isEqualTo(Date.valueOf("2025-01-20"))
+                      .value(BIRTHDAY_STRING_COLUMN)
+                      .isEqualTo("2024-02-22")
+
+                      .row(1)
+                      .value(ID_COLUMN)
+                      .isEqualTo(1)
+                      .value(NAME_COLUMN)
+                      .isEqualTo("John")
+                      .value(BIRTHDAY_COLUMN)
+                      .isEqualTo(Date.valueOf("2000-12-20"))
+                      .value(BIRTHDAY_STRING_COLUMN)
+                      .isEqualTo("20001121")
+
+                      .row(2)
+                      .value(ID_COLUMN)
+                      .isEqualTo(2)
+                      .value(NAME_COLUMN)
+                      .isEqualTo("Mary")
+                      .value(BIRTHDAY_COLUMN)
+                      .isEqualTo(Date.valueOf("2001-11-21"))
+                      .value(BIRTHDAY_STRING_COLUMN)
+                      .isEqualTo("20001222");
+        }
+
+        @Test
+        void testInsertManyNoParams() throws Throwable {
+            String insertSql = getDialect().insert()
+                                           .into(TEST_TABLE)
+                                           .column(ID_COLUMN)
+                                           .value("789")
+                                           .build();
+            DatabaseFacade.insertMany(insertSql, null, null);
+
+            Table table = createAssertTestTable();
+            Assertions.assertThat(table)
+                      .hasNumberOfRows(2)
+
+                      .row(1)
+                      .value(ID_COLUMN)
+                      .isEqualTo(789);
+        }
+
+        @Test
+        void testInsertManyParamsCountMismatch() throws Throwable {
+            String insertSql = getDialect().insert()
+                                           .into(TEST_TABLE)
+                                           .column(ID_COLUMN)
+                                           .build();
+
+            Object[][] params = {//
+                    {1, "Test"}, //
+                    {2, "Test2"}, //
+                    {3, "Test3"}//
+            };
+            String paramsJson = createParamsJson(params);
+
+            Exception thrownException = assertThrows(IllegalArgumentException.class, () -> {
+                DatabaseFacade.insertMany(insertSql, paramsJson, null);
+            });
+
+            assertThat(thrownException.getMessage()).isEqualTo("Provided invalid parameters count of [2]. Expected parameters count: 1");
         }
     }
 

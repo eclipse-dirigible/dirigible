@@ -445,6 +445,8 @@ public class DatabaseFacade implements InitializingBean {
 
                     if (parameters.isPresent()) {
                         ParametersSetter.setManyParameters(parameters.get(), preparedStatement);
+                    } else {
+                        preparedStatement.addBatch();
                     }
 
                     preparedStatement.executeBatch();

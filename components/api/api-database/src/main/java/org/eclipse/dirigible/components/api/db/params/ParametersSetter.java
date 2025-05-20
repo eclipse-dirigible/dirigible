@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.ParameterMetaData;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.Set;
 
 /**
@@ -136,13 +137,17 @@ public class ParametersSetter {
         ParameterMetaData parameterMetaData = preparedStatement.getParameterMetaData();
         int sqlType = parameterMetaData.getParameterType(sqlParamIndex);
 
+        if (Types.NULL == sqlType || parameterElement.isJsonNull()) {
+            preparedStatement.setNull(sqlParamIndex, sqlType);
+            return;
+        }
+
         String dirigibleSqlType = DataTypeUtils.getDatabaseTypeName(sqlType);
         ParamSetter paramSetter = getParamSetterForType(dirigibleSqlType);
         LOGGER.debug("Found param setter [{}] for sql type [{}] which is converted to dirigible type [{}]", paramSetter, sqlType,
                 dirigibleSqlType);
 
         if (parameterElement.isJsonPrimitive()) {
-            // TODO: set null
             paramSetter.setParam(parameterElement, sqlParamIndex, preparedStatement, dirigibleSqlType);
             return;
         }

@@ -340,7 +340,8 @@ public class DataTypeUtils {
             return DATABASE_TYPE_TO_DATA_TYPE.get(type)
                                              .toString();
         }
-        throw new SqlException(format("Type [{0}] not supported. Supported types [{1}]", type, DATABASE_TYPE_TO_DATA_TYPE));
+        String errorMessage = "Type [" + type + "] not supported. Supported types [" + DATABASE_TYPE_TO_DATA_TYPE + "]";
+        throw new SqlException(errorMessage);
     }
 
     /**
