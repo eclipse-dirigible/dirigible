@@ -133,10 +133,18 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
 
             const filterStartsWith = (x) => x.text.toLowerCase().startsWith(scope.search.term.toLowerCase());
             const filterContains = (x) => x.text.toLowerCase().includes(scope.search.term.toLowerCase());
+            const filterContainsEach = (x) => {
+                const terms = scope.search.term.toLowerCase().split(' ');
+                const label = x.text.toLowerCase();
+                if (terms.every(term => label.includes(term))) return true;
+                return false;
+            };
 
             scope.filterValues = () => {
                 if (scope.search.term) {
-                    scope.filteredDropdownItems = scope.dropdownItems.filter(scope.filter === 'Contains' ? filterContains : filterStartsWith);
+                    if (scope.filter === 'Contains') scope.filteredDropdownItems = scope.dropdownItems.filter(filterContains);
+                    else if (scope.filter === 'ContainsEach') scope.filteredDropdownItems = scope.dropdownItems.filter(filterContainsEach);
+                    else scope.filteredDropdownItems = scope.dropdownItems.filter(filterStartsWith);
                 } else {
                     scope.filteredDropdownItems = scope.dropdownItems;
                 }

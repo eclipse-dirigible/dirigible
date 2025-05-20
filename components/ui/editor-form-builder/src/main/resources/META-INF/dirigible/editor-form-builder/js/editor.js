@@ -635,12 +635,16 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                             value: '',
                             items: [
                                 {
-                                    label: 'StartsWith',
+                                    label: 'Starts With',
                                     value: '',
                                 },
                                 {
                                     label: 'Contains',
                                     value: 'Contains',
+                                },
+                                {
+                                    label: 'Contains Each',
+                                    value: 'ContainsEach',
                                 },
                             ]
                         },
@@ -672,8 +676,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                         <bk-form-label colon="true" ng-required="props.required.value" for="{{props.id.value}}">{{ props.label.value }}</bk-form-label>
                         <bk-select placeholder="{{props.placeholder.value}}" label-id="{{ props.id.value }}" compact="props.isCompact.value"
                             ng-required="props.required.value" ng-model="props.staticOptions.defaultValue" dropdown-fixed="true">
-                            <bk-option text="{{ menuItem.label }}" value="menuItem.value" ng-repeat="menuItem in props.staticOptions.value track by $index">
-                            </bk-option>
+                            <bk-option text="{{ menuItem.label }}" value="menuItem.value" ng-repeat="menuItem in props.staticOptions.value track by $index"></bk-option>
                         </bk-select>
                     </bk-form-item></div>`,
                     props: {
