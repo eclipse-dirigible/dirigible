@@ -49,7 +49,7 @@ class DatabaseFacadeIT extends IntegrationTest {
         String createTableSql = dialect.create()
                                        .table(TEST_TABLE)
                                        .columnInteger(ID_COLUMN)
-                                       .columnNvarchar(NAME_COLUMN, 20)
+                                       .columnVarchar(NAME_COLUMN, 20)
                                        .columnDate(BIRTHDAY_COLUMN)
                                        .columnVarchar(BIRTHDAY_STRING_COLUMN, 20)
                                        .build();
