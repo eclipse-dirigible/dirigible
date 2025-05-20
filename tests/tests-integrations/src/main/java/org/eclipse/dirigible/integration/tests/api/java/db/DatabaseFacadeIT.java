@@ -199,6 +199,65 @@ class DatabaseFacadeIT extends IntegrationTest {
     class InsertTest {
 
         @Test
+        void testInsertWithParamsArrayWithNulls() throws Throwable {
+            Object[] params = {1, null, null, null};
+            String insertSql = createInsertInTestTableAllColumnsSql();
+
+            DatabaseFacade.insert(insertSql, createParamsJson(params), null);
+
+            Table table = createAssertTestTable();
+            Assertions.assertThat(table)
+                      .hasNumberOfRows(2)
+
+                      .row(1)
+                      .value(ID_COLUMN)
+                      .isEqualTo(1)
+                      .value(NAME_COLUMN)
+                      .isNull()
+                      .value(BIRTHDAY_COLUMN)
+                      .isNull()
+                      .value(BIRTHDAY_STRING_COLUMN)
+                      .isNull();
+        }
+
+        @Test
+        void testInsertWithParamsObjectsArrayWithNulls() throws Throwable {
+            String parametersJson = """
+                    [
+                        {
+                            "value": 1
+                        },
+                        {
+                            "value": null
+                        },
+                        {
+                            "value": null
+                        },
+                        {
+                            "value": null
+                        }
+                    ]
+                    """;
+
+            String insertSql = createInsertInTestTableAllColumnsSql();
+            DatabaseFacade.insert(insertSql, parametersJson, null);
+
+            Table table = createAssertTestTable();
+            Assertions.assertThat(table)
+                      .hasNumberOfRows(2)
+
+                      .row(1)
+                      .value(ID_COLUMN)
+                      .isEqualTo(1)
+                      .value(NAME_COLUMN)
+                      .isNull()
+                      .value(BIRTHDAY_COLUMN)
+                      .isNull()
+                      .value(BIRTHDAY_STRING_COLUMN)
+                      .isNull();
+        }
+
+        @Test
         void testInsertWithoutParams() throws Throwable {
             String insertSql = getDialect().insert()
                                            .into(TEST_TABLE)
@@ -217,13 +276,7 @@ class DatabaseFacadeIT extends IntegrationTest {
 
         @Test
         void testInsertWithParamsArray() throws Throwable {
-            String insertSql = getDialect().insert()
-                                           .into(TEST_TABLE)
-                                           .column(ID_COLUMN)
-                                           .column(NAME_COLUMN)
-                                           .column(BIRTHDAY_COLUMN)
-                                           .column(BIRTHDAY_STRING_COLUMN)
-                                           .build();
+            String insertSql = createInsertInTestTableAllColumnsSql();
             String parametersJson = createParamsJson(300, "Ivan", "2000-01-21", "20020222");
             DatabaseFacade.insert(insertSql, parametersJson, null);
 
@@ -243,13 +296,7 @@ class DatabaseFacadeIT extends IntegrationTest {
 
         @Test
         void testInsertWithParamsObjectsArray() throws Throwable {
-            String insertSql = getDialect().insert()
-                                           .into(TEST_TABLE)
-                                           .column(ID_COLUMN)
-                                           .column(NAME_COLUMN)
-                                           .column(BIRTHDAY_COLUMN)
-                                           .column(BIRTHDAY_STRING_COLUMN)
-                                           .build();
+            String insertSql = createInsertInTestTableAllColumnsSql();
             String parametersJson = """
                     [
                         {
@@ -460,13 +507,7 @@ class DatabaseFacadeIT extends IntegrationTest {
         }
 
         private void insertMany(String parametersJson) throws Throwable {
-            String insertSql = getDialect().insert()
-                                           .into(TEST_TABLE)
-                                           .column(ID_COLUMN)
-                                           .column(NAME_COLUMN)
-                                           .column(BIRTHDAY_COLUMN)
-                                           .column(BIRTHDAY_STRING_COLUMN)
-                                           .build();
+            String insertSql = createInsertInTestTableAllColumnsSql();
             DatabaseFacade.insertMany(insertSql, parametersJson, null);
         }
 
@@ -651,6 +692,22 @@ class DatabaseFacadeIT extends IntegrationTest {
         }
     }
 
+    private String createInsertInTestTableAllColumnsSql() throws SQLException {
+        return getDialect().insert()
+                           .into(TEST_TABLE)
+                           .column(ID_COLUMN)
+                           .column(NAME_COLUMN)
+                           .column(BIRTHDAY_COLUMN)
+                           .column(BIRTHDAY_STRING_COLUMN)
+                           .build();
+    }
+
+    private ISqlDialect getDialect() throws SQLException {
+        DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
+
+        return SqlDialectFactory.getDialect(dataSource);
+    }
+
     @Test
     void testUpdateNamedWithParamsArray() throws Throwable {
         String updateSql = getDialect().update()
@@ -683,12 +740,6 @@ class DatabaseFacadeIT extends IntegrationTest {
                                          .from(TEST_TABLE)
                                          .build();
         return DatabaseFacade.query(selectQuery);
-    }
-
-    private ISqlDialect getDialect() throws SQLException {
-        DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
-
-        return SqlDialectFactory.getDialect(dataSource);
     }
 
     private static String createMultiParamsJson(Object[][] params) {
