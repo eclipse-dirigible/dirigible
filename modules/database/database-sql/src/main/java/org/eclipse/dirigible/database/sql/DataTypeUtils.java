@@ -311,13 +311,14 @@ public class DataTypeUtils {
      *
      * @param type the type
      * @return the sql type by data type
+     * @throws IllegalArgumentException if the type is not supported
      */
-    public static Integer getSqlTypeByDataType(String type) {
+    public static Integer getSqlTypeByDataType(String type) throws IllegalArgumentException {
         type = type.toUpperCase();
         if (STRING_TO_DATABASE_TYPE.containsKey(type)) {
             return STRING_TO_DATABASE_TYPE.get(type);
         }
-        throw new SqlException(format("Type {0} not supported", type));
+        throw new IllegalArgumentException("Type [" + type + "] not supported");
     }
 
     /**

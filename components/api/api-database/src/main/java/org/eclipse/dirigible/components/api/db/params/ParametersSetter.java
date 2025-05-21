@@ -69,21 +69,26 @@ public class ParametersSetter {
 
     private static void setNamedJsonObjectParam(NamedParameterStatement preparedStatement, JsonElement parameterElement)
             throws SQLException {
-        NamedParamJsonObject namedParamJsonObject = NamedParamJsonObject.fromJsonElement(parameterElement);
+        try {
+            NamedParamJsonObject namedParamJsonObject = NamedParamJsonObject.fromJsonElement(parameterElement);
 
-        String name = namedParamJsonObject.getName();
-        String dataType = namedParamJsonObject.getType();
+            String name = namedParamJsonObject.getName();
+            String dataType = namedParamJsonObject.getType();
 
-        JsonElement valueElement = namedParamJsonObject.getValueElement();
-        if (null == valueElement || valueElement.isJsonNull()) {
-            Integer sqlType = DataTypeUtils.getSqlTypeByDataType(dataType);
-            LOGGER.debug("Dirigible sql type [{}] is mapped to [{}] for element [{}]", dataType, sqlType, parameterElement);
+            JsonElement valueElement = namedParamJsonObject.getValueElement();
+            if (null == valueElement || valueElement.isJsonNull()) {
+                Integer sqlType = DataTypeUtils.getSqlTypeByDataType(dataType);
+                LOGGER.debug("Dirigible sql type [{}] is mapped to [{}] for element [{}]", dataType, sqlType, parameterElement);
 
-            preparedStatement.setNull(name, sqlType);
-            return;
+                preparedStatement.setNull(name, sqlType);
+                return;
+            }
+
+            setNamedParamUsingSetter(preparedStatement, parameterElement, dataType, valueElement, name);
+        } catch (IllegalArgumentException ex) {
+            String errMsg = "Failed to set named param for parameter [" + parameterElement + "] in statement: " + preparedStatement;
+            throw new IllegalArgumentException(errMsg, ex);
         }
-
-        setNamedParamUsingSetter(preparedStatement, parameterElement, dataType, valueElement, name);
     }
 
     private static void setNamedParamUsingSetter(NamedParameterStatement preparedStatement, JsonElement parameterElement, String dataType,
