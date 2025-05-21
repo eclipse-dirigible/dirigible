@@ -460,7 +460,34 @@ class DatabaseFacadeIT extends IntegrationTest {
                     assertThrows(IllegalArgumentException.class, () -> DatabaseFacade.insertNamed(insertSql, parametersJson, null));
 
             assertThat(thrownException.getMessage()).contains("Parameters must contain objects only. Parameter element [[]]");
+        }
 
+        @Test
+        void testInsertWithInvalidParametersJson() throws Throwable {
+            String insertSql = getDialect().insert()
+                                           .into(TEST_TABLE)
+                                           .column(ID_COLUMN)
+                                           .value("1")
+                                           .build();
+            String parametersJson = "[{]";
+            Exception thrownException =
+                    assertThrows(IllegalArgumentException.class, () -> DatabaseFacade.insert(insertSql, parametersJson, null));
+
+            assertThat(thrownException.getMessage()).contains("Invalid json: " + parametersJson);
+        }
+
+        @Test
+        void testInsertNamedWithInvalidParametersJson() throws Throwable {
+            String insertSql = getDialect().insert()
+                                           .into(TEST_TABLE)
+                                           .column(ID_COLUMN)
+                                           .value(":name")
+                                           .build();
+            String parametersJson = "[{]";
+            Exception thrownException =
+                    assertThrows(IllegalArgumentException.class, () -> DatabaseFacade.insertNamed(insertSql, parametersJson, null));
+
+            assertThat(thrownException.getMessage()).contains("Invalid json: " + parametersJson);
         }
 
         @Test
@@ -526,6 +553,19 @@ class DatabaseFacadeIT extends IntegrationTest {
             String result = queryTestTable();
 
             assertPreparedResult(result);
+        }
+
+        @Test
+        void testQueryWithInvalidResultParametersJson() throws Throwable {
+            String selectQuery = getDialect().select()
+                                             .from(TEST_TABLE)
+                                             .build();
+            String resultParametersJson = "{[}";
+
+            Exception thrownException =
+                    assertThrows(IllegalArgumentException.class, () -> DatabaseFacade.query(selectQuery, null, null, resultParametersJson));
+
+            assertThat(thrownException.getMessage()).contains("Json: {[}] cannot be deserialized to ");
         }
 
         @Test

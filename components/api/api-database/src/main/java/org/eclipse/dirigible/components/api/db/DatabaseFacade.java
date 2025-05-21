@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.api.db;
 
 import com.google.gson.JsonElement;
+import com.google.gson.JsonSyntaxException;
 import org.apache.commons.io.output.WriterOutputStream;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.api.db.params.ParametersSetter;
@@ -256,11 +257,19 @@ public class DatabaseFacade implements InitializingBean {
     }
 
     private static <T> Optional<T> getOptionalParam(String json, Class<T> type) {
-        return Optional.ofNullable(null == json ? null : GsonHelper.fromJson(json, type));
+        try {
+            return Optional.ofNullable(null == json ? null : GsonHelper.fromJson(json, type));
+        } catch (JsonSyntaxException ex) {
+            throw new IllegalArgumentException("Json: " + json + "] cannot be deserialized to " + type, ex);
+        }
     }
 
     private static Optional<JsonElement> parseOptionalJson(String json) {
-        return Optional.ofNullable(null == json ? null : GsonHelper.parseJson(json));
+        try {
+            return Optional.ofNullable(null == json ? null : GsonHelper.parseJson(json));
+        } catch (JsonSyntaxException ex) {
+            throw new IllegalArgumentException("Invalid json: " + json, ex);
+        }
     }
 
     /**
