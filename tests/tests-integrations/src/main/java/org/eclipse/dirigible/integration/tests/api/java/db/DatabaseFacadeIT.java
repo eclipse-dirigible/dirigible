@@ -313,7 +313,7 @@ class DatabaseFacadeIT extends IntegrationTest {
         }
 
         @Test
-        void testInsertWithParamsObjectsArrayAndInvalidValues() throws Throwable {
+        void testInsertWithInvalidParamsObjects() throws Throwable {
             String parametersJson = "[[],[],[],[]]";
 
             String insertSql = createInsertInTestTableAllColumnsSql();
@@ -435,6 +435,22 @@ class DatabaseFacadeIT extends IntegrationTest {
                       .isEqualTo(Date.valueOf("2005-05-25"))
                       .value(BIRTHDAY_STRING_COLUMN)
                       .isEqualTo("20060626");
+        }
+
+        @Test
+        void testInsertNamedWithInvalidParamsObjects() throws Throwable {
+            String insertSql = getDialect().insert()
+                                           .into(TEST_TABLE)
+                                           .column(ID_COLUMN)
+                                           .value(":id")
+                                           .build();
+            String parametersJson = "[[]]";
+            Exception thrownException = assertThrows(IllegalArgumentException.class, () -> {
+                DatabaseFacade.insertNamed(insertSql, parametersJson, null);
+            });
+
+            assertThat(thrownException.getMessage()).contains("Parameters must contain objects only. Parameter element [[]]");
+
         }
 
         @Test

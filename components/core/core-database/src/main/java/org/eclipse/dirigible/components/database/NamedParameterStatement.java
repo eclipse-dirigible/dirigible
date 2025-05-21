@@ -498,6 +498,27 @@ public class NamedParameterStatement implements AutoCloseable {
 
     @Override
     public String toString() {
-        return "NamedParameterStatement{" + "statement=" + statement + ", indexMap=" + indexMap + '}';
+        return "NamedParameterStatement{" + "statement=" + statement + ", indexMap=" + toString(indexMap) + '}';
+    }
+
+    private static String toString(Map<String, int[]> map) {
+        if (null == map) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("{");
+        Iterator<Map.Entry<String, int[]>> iterator = map.entrySet()
+                                                         .iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, int[]> entry = iterator.next();
+            sb.append(entry.getKey())
+              .append("=")
+              .append(Arrays.toString(entry.getValue()));
+            if (iterator.hasNext()) {
+                sb.append(", ");
+            }
+        }
+        sb.append("}");
+        return sb.toString();
     }
 }
