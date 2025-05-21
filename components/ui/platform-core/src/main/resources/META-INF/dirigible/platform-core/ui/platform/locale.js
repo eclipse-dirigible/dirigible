@@ -13,47 +13,34 @@
 angular.module('platformLocale', []).provider('LocaleService', function LocaleServiceProvider() {
     if (!top.hasOwnProperty('i18next')) throw Error('LocaleService: i18next is not loaded');
     this.defaultLanguage = 'en-US';
+    this.namespaces = [];
     const callbacksListeners = [];
     const storageKey = `${getBrandingInfo().prefix}.${top.getConfigData().id}.locale.language`;
-    const init = (lang, translations) => {
-        if (!top.i18next.isInitialized) return top.i18next.init({
-            lng: lang,
-            load: 'currentOnly',
-            fallbackLng: 'en-US',
-            debug: false,
-            defaultNS: 'common',
-            resources: translations
-        });
-        else return new Promise((resolve, _) => resolve(lang));
-    };
-    this.$get = ['$rootScope', '$http', 'Extensions', function localeFactory($rootScope, $http, Extensions) {
+    this.$get = ['$rootScope', 'Extensions', function localeFactory($rootScope, Extensions) {
         let savedLanguage = localStorage.getItem(storageKey);
         if (!savedLanguage) {
             localStorage.setItem(storageKey, this.defaultLanguage);
             savedLanguage = this.defaultLanguage;
         }
-        if (!top.i18next['loadingTranslations']) {
-            top.i18next['loadingTranslations'] = true;
-            Extensions.getLocales().then((response) => {
-                top.i18next['locales'] = response.data;
-                let langPath = '';
-                for (let l = 0; l < top.i18next.locales.length; l++) {
-                    if (top.i18next.locales[l].id === savedLanguage) langPath += top.i18next.locales[l].path;
-                }
-                if (langPath) $http.get(langPath).then((translations) => {
-                    init(savedLanguage, { [savedLanguage]: translations.data }).then((_, err) => {
-                        if (err) console.error(err);
-                        $rootScope.$applyAsync(() => {
-                            for (let l = 0; l < callbacksListeners.length; l++) {
-                                callbacksListeners[l]();
-                            }
-                            callbacksListeners.length = 0;
-                        });
+        if (window === top) {
+            Extensions.getLocales(savedLanguage, this.namespaces).then((response) => {
+                i18next['locales'] = response.data.locales;
+                i18next.init({
+                    lng: savedLanguage,
+                    load: 'currentOnly',
+                    fallbackLng: 'en-US',
+                    debug: false,
+                    defaultNS: 'common',
+                    resources: response.data.translations
+                }).then((_, err) => {
+                    if (err) console.error(err);
+                    $rootScope.$applyAsync(() => {
+                        for (let l = 0; l < callbacksListeners.length; l++) {
+                            callbacksListeners[l]();
+                        }
+                        callbacksListeners.length = 0;
                     });
-                }, (error) => {
-                    console.error(error);
                 });
-                else console.error(`Language '${savedLanguage}' is not registered`);
             }, (error) => {
                 console.error(error);
             });

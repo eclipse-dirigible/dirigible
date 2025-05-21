@@ -90,7 +90,7 @@ angular.module('platformExtensions', []).factory('Extensions', ($http) => ({
     getThemes: (exPoints = top.PlatformExtPoints.themes) => {
         return $http.get('/services/js/platform-core/extension-services/themes.js', { params: { extensionPoints: exPoints } });
     },
-    getLocales: (exPoints = top.PlatformExtPoints.locales) => {
-        return $http.get('/services/js/platform-core/extension-services/locales.js', { params: { extensionPoints: exPoints } });
+    getLocales: (translations, namespaces, exPoints = top.PlatformExtPoints.locales) => {
+        return $http.get('/services/js/platform-core/extension-services/locales.js', { params: { extensionPoints: exPoints, translations: translations, namespaces: namespaces } });
     },
 }));

@@ -52,6 +52,7 @@ exports.getMenu = () => ({
 				separator: true
 			},
 			{
+				id: 'about',
 				translation: 'menu-help:about',
 				label: 'About',
 				action: 'openWindow',
