@@ -161,6 +161,18 @@ class DatabaseFacadeIT extends IntegrationTest {
     class SequenceTest {
 
         @Test
+        void testNextval() throws Throwable {
+            String seqName = "TEST_SEQ_05";
+            DatabaseFacade.createSequence(seqName, 1);
+
+            long nextValue = DatabaseFacade.nextval(seqName);
+            assertThat(nextValue).isEqualTo(1);
+
+            nextValue = DatabaseFacade.nextval(seqName);
+            assertThat(nextValue).isEqualTo(2);
+        }
+
+        @Test
         void testCreateSequenceByName() {
             assertDoesNotThrow(() -> DatabaseFacade.createSequence("TEST_SEQ_01"));
         }
@@ -178,16 +190,16 @@ class DatabaseFacadeIT extends IntegrationTest {
         @Test
         void testDropSequenceByName() {
             assertDoesNotThrow(() -> {
-                DatabaseFacade.createSequence("TEST_SEQ_03");
-                DatabaseFacade.dropSequence("TEST_SEQ_03");
+                DatabaseFacade.createSequence("TEST_SEQ_04");
+                DatabaseFacade.dropSequence("TEST_SEQ_04");
             });
         }
 
         @Test
         void testDropSequenceByNameAndDataSourceName() {
             assertDoesNotThrow(() -> {
-                DatabaseFacade.createSequence("TEST_SEQ_04", 300, systemDataSource);
-                DatabaseFacade.dropSequence("TEST_SEQ_04", systemDataSource);
+                DatabaseFacade.createSequence("TEST_SEQ_05", 300, systemDataSource);
+                DatabaseFacade.dropSequence("TEST_SEQ_05", systemDataSource);
             });
         }
     }
@@ -1003,12 +1015,6 @@ class DatabaseFacadeIT extends IntegrationTest {
         try (DirigibleConnection connection = DatabaseFacade.getConnection(systemDataSource)) {
             assertThat(connection).isNotNull();
         }
-    }
-
-    @Disabled("To be implemented")
-    @Test
-    void testNextval() {
-
     }
 
     @Test
