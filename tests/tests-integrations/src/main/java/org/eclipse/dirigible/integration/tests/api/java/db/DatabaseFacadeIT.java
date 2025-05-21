@@ -318,9 +318,8 @@ class DatabaseFacadeIT extends IntegrationTest {
 
             String insertSql = createInsertInTestTableAllColumnsSql();
 
-            Exception thrownException = assertThrows(IllegalArgumentException.class, () -> {
-                DatabaseFacade.insert(insertSql, parametersJson, null);
-            });
+            Exception thrownException =
+                    assertThrows(IllegalArgumentException.class, () -> DatabaseFacade.insert(insertSql, parametersJson, null));
 
             assertThat(thrownException.getMessage()).contains(
                     "Parameter with index [1] must be primitive or object. Parameter element [[]]");
@@ -445,9 +444,8 @@ class DatabaseFacadeIT extends IntegrationTest {
                                            .value(":id")
                                            .build();
             String parametersJson = "[[]]";
-            Exception thrownException = assertThrows(IllegalArgumentException.class, () -> {
-                DatabaseFacade.insertNamed(insertSql, parametersJson, null);
-            });
+            Exception thrownException =
+                    assertThrows(IllegalArgumentException.class, () -> DatabaseFacade.insertNamed(insertSql, parametersJson, null));
 
             assertThat(thrownException.getMessage()).contains("Parameters must contain objects only. Parameter element [[]]");
 
@@ -796,9 +794,8 @@ class DatabaseFacadeIT extends IntegrationTest {
             };
             String paramsJson = createParamsJson(params);
 
-            Exception thrownException = assertThrows(IllegalArgumentException.class, () -> {
-                DatabaseFacade.insertMany(insertSql, paramsJson, null);
-            });
+            Exception thrownException =
+                    assertThrows(IllegalArgumentException.class, () -> DatabaseFacade.insertMany(insertSql, paramsJson, null));
 
             assertThat(thrownException.getMessage()).contains("Provided invalid parameters count of [2]. Expected parameters count [1]");
         }
@@ -874,9 +871,9 @@ class DatabaseFacadeIT extends IntegrationTest {
         try (Connection connection = dataSourcesManager.getDefaultDataSource()
                                                        .getConnection()) {
             SqlFactory sqlFactory = SqlFactory.getNative(connection);
-            if (sqlFactory.existsTable(connection, TEST_TABLE)) {
+            if (sqlFactory.existsTable(connection, tableName)) {
                 String dropSql = sqlFactory.drop()
-                                           .table(TEST_TABLE)
+                                           .table(tableName)
                                            .generate();
                 PreparedStatement preparedStatement = connection.prepareStatement(dropSql);
                 preparedStatement.executeUpdate();
@@ -1010,7 +1007,9 @@ class DatabaseFacadeIT extends IntegrationTest {
 
     @Disabled("To be implemented")
     @Test
-    void testNextval() {}
+    void testNextval() {
+
+    }
 
     @Test
     void testGetDefaultSqlFactory() {
