@@ -337,13 +337,13 @@ public class DataTypeUtils {
      * @param type the type
      * @return the database type name
      */
-    public static String getDatabaseTypeName(Integer type) {
+    public static String getDatabaseTypeName(Integer type) throws IllegalArgumentException {
         if (isDatabaseTypeSupported(type)) {
             return DATABASE_TYPE_TO_DATA_TYPE.get(type)
                                              .toString();
         }
         String errorMessage = "Type [" + type + "] not supported. Supported types [" + DATABASE_TYPE_TO_DATA_TYPE + "]";
-        throw new SqlException(errorMessage);
+        throw new IllegalArgumentException(errorMessage);
     }
 
     /**

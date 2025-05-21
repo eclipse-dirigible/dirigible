@@ -232,7 +232,7 @@ public class DatabaseFacade implements InitializingBean {
                 try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
 
                     if (parameters.isPresent()) {
-                        ParametersSetter.setParameters(parameters.get(), preparedStatement);
+                        ParametersSetter.setIndexedParameters(parameters.get(), preparedStatement);
                     }
                     ResultSet resultSet = preparedStatement.executeQuery();
                     StringWriter sw = new StringWriter();
@@ -305,7 +305,7 @@ public class DatabaseFacade implements InitializingBean {
                 try (NamedParameterStatement preparedStatement = new NamedParameterStatement(connection, sql)) {
 
                     if (parameters.isPresent()) {
-                        ParametersSetter.setParameters(parameters.get(), preparedStatement);
+                        ParametersSetter.setNamedParameters(parameters.get(), preparedStatement);
                     }
                     ResultSet resultSet = preparedStatement.executeQuery();
                     StringWriter sw = new StringWriter();
@@ -371,7 +371,7 @@ public class DatabaseFacade implements InitializingBean {
                 try (PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
                     if (parameters.isPresent()) {
-                        ParametersSetter.setParameters(parameters.get(), preparedStatement);
+                        ParametersSetter.setIndexedParameters(parameters.get(), preparedStatement);
                     }
 
                     preparedStatement.executeUpdate();
@@ -415,7 +415,7 @@ public class DatabaseFacade implements InitializingBean {
     private static void insertWithoutResult(String sql, Optional<JsonElement> parameters, Connection connection) throws SQLException {
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
             if (parameters.isPresent()) {
-                ParametersSetter.setParameters(parameters.get(), preparedStatement);
+                ParametersSetter.setIndexedParameters(parameters.get(), preparedStatement);
             }
             preparedStatement.executeUpdate();
         }
@@ -444,7 +444,7 @@ public class DatabaseFacade implements InitializingBean {
                 try (PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
                     if (parameters.isPresent()) {
-                        ParametersSetter.setManyParameters(parameters.get(), preparedStatement);
+                        ParametersSetter.setManyIndexedParameters(parameters.get(), preparedStatement);
                     } else {
                         preparedStatement.addBatch();
                     }
@@ -481,7 +481,7 @@ public class DatabaseFacade implements InitializingBean {
         connection.setAutoCommit(false);
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
             if (parameters.isPresent()) {
-                ParametersSetter.setManyParameters(parameters.get(), preparedStatement);
+                ParametersSetter.setManyIndexedParameters(parameters.get(), preparedStatement);
             }
             preparedStatement.executeBatch();
             connection.commit();
@@ -512,7 +512,7 @@ public class DatabaseFacade implements InitializingBean {
                             new NamedParameterStatement(connection, sql, Statement.RETURN_GENERATED_KEYS)) {
 
                 if (parameters.isPresent()) {
-                    ParametersSetter.setParameters(parameters.get(), preparedStatement);
+                    ParametersSetter.setNamedParameters(parameters.get(), preparedStatement);
                 }
                 int updatedRows = preparedStatement.executeUpdate();
                 List<Long> generatedIds = new ArrayList<>(updatedRows);
@@ -563,7 +563,7 @@ public class DatabaseFacade implements InitializingBean {
                 try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
 
                     if (parameters.isPresent()) {
-                        ParametersSetter.setParameters(parameters.get(), preparedStatement);
+                        ParametersSetter.setIndexedParameters(parameters.get(), preparedStatement);
                     }
                     return preparedStatement.executeUpdate();
                 }
@@ -615,7 +615,7 @@ public class DatabaseFacade implements InitializingBean {
             try (Connection connection = dataSource.getConnection()) {
                 try (NamedParameterStatement preparedStatement = new NamedParameterStatement(connection, sql)) {
                     if (parameters.isPresent()) {
-                        ParametersSetter.setParameters(parameters.get(), preparedStatement);
+                        ParametersSetter.setNamedParameters(parameters.get(), preparedStatement);
                     }
                     return preparedStatement.executeUpdate();
                 }

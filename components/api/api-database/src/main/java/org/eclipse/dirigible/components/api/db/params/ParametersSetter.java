@@ -45,27 +45,30 @@ public class ParametersSetter {
             new TimestampParamSetter(), //
             new TinyIntParamSetter());
 
-    public static void setParameters(JsonElement parameters, NamedParameterStatement preparedStatement) throws SQLException {
+    public static void setNamedParameters(JsonElement parameters, NamedParameterStatement preparedStatement) throws SQLException {
         if (!parameters.isJsonArray()) {
-            throw new IllegalArgumentException("Parameters must be provided as a JSON array, e.g. [1, 'John', 9876]");
+            throw new IllegalArgumentException("Parameters must be provided as a JSON array, e.g. [1, 'John', 9876]. Parameters ["
+                    + parameters + "]. Statement: " + preparedStatement);
         }
 
         for (JsonElement parameterElement : parameters.getAsJsonArray()) {
-            setParameter(preparedStatement, parameterElement);
+            setNamedParameter(preparedStatement, parameterElement);
         }
     }
 
-    private static void setParameter(NamedParameterStatement preparedStatement, JsonElement parameterElement)
+    private static void setNamedParameter(NamedParameterStatement preparedStatement, JsonElement parameterElement)
             throws IllegalArgumentException, SQLException {
 
         if (!parameterElement.isJsonObject()) {
-            throw new IllegalArgumentException("Parameters must contain objects only. Parameter element: " + parameterElement);
+            throw new IllegalArgumentException(
+                    "Parameters must contain objects only. Parameter element [" + parameterElement + "]. Statement: " + preparedStatement);
         }
 
-        setJsonObjectParam(preparedStatement, parameterElement);
+        setNamedJsonObjectParam(preparedStatement, parameterElement);
     }
 
-    private static void setJsonObjectParam(NamedParameterStatement preparedStatement, JsonElement parameterElement) throws SQLException {
+    private static void setNamedJsonObjectParam(NamedParameterStatement preparedStatement, JsonElement parameterElement)
+            throws SQLException {
         NamedParamJsonObject namedParamJsonObject = NamedParamJsonObject.fromJsonElement(parameterElement);
 
         String name = namedParamJsonObject.getName();
@@ -74,28 +77,43 @@ public class ParametersSetter {
         JsonElement valueElement = namedParamJsonObject.getValueElement();
         if (null == valueElement || valueElement.isJsonNull()) {
             Integer sqlType = DataTypeUtils.getSqlTypeByDataType(dataType);
+            LOGGER.debug("Dirigible sql type [{}] is mapped to [{}] for element [{}]", dataType, sqlType, parameterElement);
+
             preparedStatement.setNull(name, sqlType);
             return;
         }
 
-        ParamSetter paramSetter = getParamSetterForType(dataType);
-        paramSetter.setParam(valueElement, name, preparedStatement, dataType);
+        setNamedParamUsingSetter(preparedStatement, parameterElement, dataType, valueElement, name);
     }
 
-    private static ParamSetter getParamSetterForType(String dataType) {
+    private static void setNamedParamUsingSetter(NamedParameterStatement preparedStatement, JsonElement parameterElement, String dataType,
+            JsonElement valueElement, String name) throws SQLException {
+        try {
+            ParamSetter paramSetter = findParamSetterForType(dataType);
+            LOGGER.debug("Found param setter [{}] for dirigible type [{}] for element [{}]", paramSetter, dataType, parameterElement);
+
+            paramSetter.setParam(valueElement, name, preparedStatement, dataType);
+        } catch (IllegalArgumentException ex) {
+            String errMsg = "Failed to set named param with name [" + name + "] and type [" + dataType + "] for element: [" + valueElement
+                    + "]. Statement: " + preparedStatement;
+            throw new IllegalArgumentException(errMsg, ex);
+        }
+    }
+
+    private static ParamSetter findParamSetterForType(String dataType) {
         return paramSetters.stream()
                            .filter(ps -> ps.isApplicable(dataType))
                            .findFirst()
                            .orElseThrow(() -> new IllegalArgumentException("Missing param setter for 'type'[" + dataType + "]"));
     }
 
-    public static void setManyParameters(JsonElement parametersElement, PreparedStatement preparedStatement)
+    public static void setManyIndexedParameters(JsonElement parametersElement, PreparedStatement preparedStatement)
             throws IllegalArgumentException, SQLException {
         JsonArray parametersArray = getParametersArray(parametersElement);
 
         for (int paramsIdx = 0; paramsIdx < parametersArray.size(); paramsIdx++) {
             JsonElement parameters = parametersArray.get(paramsIdx);
-            setParameters(parameters, preparedStatement);
+            setIndexedParameters(parameters, preparedStatement);
             preparedStatement.addBatch();
         }
     }
@@ -103,14 +121,16 @@ public class ParametersSetter {
     private static JsonArray getParametersArray(JsonElement parametersElement) {
         if (!parametersElement.isJsonArray()) {
             throw new IllegalArgumentException(
-                    "Parameters must be provided as a JSON array of JSON arrays, e.g. [[1,\"John\",9876],[2,\"Mary\",1234]]");
+                    "Parameters must be provided as a JSON array of JSON arrays, e.g. [[1,\"John\",9876],[2,\"Mary\",1234]]. Parameters: "
+                            + parametersElement);
         }
         return parametersElement.getAsJsonArray();
     }
 
-    public static void setParameters(JsonElement parameters, PreparedStatement preparedStatement) throws SQLException {
+    public static void setIndexedParameters(JsonElement parameters, PreparedStatement preparedStatement) throws SQLException {
         if (!parameters.isJsonArray()) {
-            throw new IllegalArgumentException("Parameters must be provided as a JSON array, e.g. [1, 'John', 9876]");
+            throw new IllegalArgumentException("Parameters must be provided as a JSON array, e.g. [1, 'John', 9876]. Parameters ["
+                    + parameters + "]. Statement: " + preparedStatement);
         }
 
         JsonArray paramsArray = parameters.getAsJsonArray();
@@ -120,7 +140,8 @@ public class ParametersSetter {
 
         int paramsCount = paramsArray.size();
         if (sqlParametersCount != paramsCount) {
-            String errMsg = "Provided invalid parameters count of [" + paramsCount + "]. Expected parameters count: " + sqlParametersCount;
+            String errMsg = "Provided invalid parameters count of [" + paramsCount + "]. Expected parameters count [" + sqlParametersCount
+                    + "]. Statement: " + preparedStatement;
             throw new IllegalArgumentException(errMsg);
         }
 
@@ -128,11 +149,11 @@ public class ParametersSetter {
             int sqlParamIndex = idx + 1;
             JsonElement parameter = paramsArray.get(idx);
 
-            setParameter(preparedStatement, sqlParamIndex, parameter);
+            setIndexedParameter(preparedStatement, sqlParamIndex, parameter);
         }
     }
 
-    private static void setParameter(PreparedStatement preparedStatement, int sqlParamIndex, JsonElement parameterElement)
+    private static void setIndexedParameter(PreparedStatement preparedStatement, int sqlParamIndex, JsonElement parameterElement)
             throws IllegalArgumentException, SQLException {
 
         ParameterMetaData parameterMetaData = preparedStatement.getParameterMetaData();
@@ -143,31 +164,45 @@ public class ParametersSetter {
             return;
         }
 
-        String dirigibleSqlType = DataTypeUtils.getDatabaseTypeName(sqlType);
-        ParamSetter paramSetter = getParamSetterForType(dirigibleSqlType);
-        LOGGER.debug("Found param setter [{}] for sql type [{}] which is converted to dirigible type [{}] for element [{}]", paramSetter,
-                sqlType, dirigibleSqlType, parameterElement);
+        try {
+            String dirigibleSqlType = DataTypeUtils.getDatabaseTypeName(sqlType);
+            ParamSetter paramSetter = findParamSetterForType(dirigibleSqlType);
+            LOGGER.debug(
+                    "Found param setter [{}] for sql type [{}] which is converted to dirigible type [{}] for element [{}] at index [{}]",
+                    paramSetter, sqlType, dirigibleSqlType, parameterElement, sqlParamIndex);
 
-        if (parameterElement.isJsonPrimitive()) {
-            paramSetter.setParam(parameterElement, sqlParamIndex, preparedStatement, dirigibleSqlType);
-            return;
-        }
-
-        if (parameterElement.isJsonObject()) {
-            IndexedParamJsonObject paramJsonObject = IndexedParamJsonObject.fromJsonElement(parameterElement);
-
-            JsonElement valueElement = paramJsonObject.getValueElement();
-            if (null == valueElement || valueElement.isJsonNull()) {
-                preparedStatement.setNull(sqlParamIndex, sqlType);
+            if (parameterElement.isJsonPrimitive()) {
+                paramSetter.setParam(parameterElement, sqlParamIndex, preparedStatement, dirigibleSqlType);
                 return;
             }
 
-            paramSetter.setParam(valueElement, sqlParamIndex, preparedStatement, dirigibleSqlType);
+            if (parameterElement.isJsonObject()) {
+                setIndexedJsonObjectParam(preparedStatement, sqlParamIndex, parameterElement, sqlType, paramSetter, dirigibleSqlType);
+                return;
+            }
+        } catch (IllegalArgumentException ex) {
+            String errMsg = "Failed to set indexed param with index [" + sqlParamIndex + "] and sql type [" + sqlType + "] for element ["
+                    + parameterElement + "] Statement: " + preparedStatement;
+            throw new IllegalArgumentException(errMsg, ex);
+        }
+
+        String errMsg = "Parameter with index [" + sqlParamIndex + "] must be primitive or object. Parameter element [" + parameterElement
+                + "] Statement: " + preparedStatement;
+        throw new IllegalArgumentException(errMsg);
+
+    }
+
+    private static void setIndexedJsonObjectParam(PreparedStatement preparedStatement, int sqlParamIndex, JsonElement parameterElement,
+            int sqlType, ParamSetter paramSetter, String dirigibleSqlType) throws SQLException {
+        IndexedParamJsonObject paramJsonObject = IndexedParamJsonObject.fromJsonElement(parameterElement);
+
+        JsonElement valueElement = paramJsonObject.getValueElement();
+        if (null == valueElement || valueElement.isJsonNull()) {
+            preparedStatement.setNull(sqlParamIndex, sqlType);
             return;
         }
 
-        throw new IllegalArgumentException("Parameters must contain primitives or objects only. Parameter element: " + parameterElement);
-
+        paramSetter.setParam(valueElement, sqlParamIndex, preparedStatement, dirigibleSqlType);
     }
 
 }

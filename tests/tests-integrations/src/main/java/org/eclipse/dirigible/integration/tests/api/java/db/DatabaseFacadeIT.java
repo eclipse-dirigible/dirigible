@@ -780,7 +780,7 @@ class DatabaseFacadeIT extends IntegrationTest {
                 DatabaseFacade.insertMany(insertSql, paramsJson, null);
             });
 
-            assertThat(thrownException.getMessage()).isEqualTo("Provided invalid parameters count of [2]. Expected parameters count: 1");
+            assertThat(thrownException.getMessage()).contains("Provided invalid parameters count of [2]. Expected parameters count [1]");
         }
     }
 
