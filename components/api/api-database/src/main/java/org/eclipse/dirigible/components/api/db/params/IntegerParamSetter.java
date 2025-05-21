@@ -53,12 +53,10 @@ class IntegerParamSetter extends BaseParamSetter {
      * @param sourceParam the source param
      * @param paramName the param name
      * @param preparedStatement the prepared statement
-     * @param dataType the data type
      * @throws SQLException the SQL exception
      */
     @Override
-    public void setParam(JsonElement sourceParam, String paramName, NamedParameterStatement preparedStatement, String dataType)
-            throws SQLException {
+    public void setParam(JsonElement sourceParam, String paramName, NamedParameterStatement preparedStatement) throws SQLException {
         if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                         .isNumber()) {
             int value = sourceParam.getAsJsonPrimitive()
@@ -73,6 +71,6 @@ class IntegerParamSetter extends BaseParamSetter {
             preparedStatement.setInt(paramName, value);
             return;
         }
-        throwWrongValue(sourceParam, dataType);
+        throwWrongValue(sourceParam, paramName, preparedStatement);
     }
 }

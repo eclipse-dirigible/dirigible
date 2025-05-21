@@ -92,7 +92,7 @@ public class ParametersSetter {
             ParamSetter paramSetter = findParamSetterForType(dataType);
             LOGGER.debug("Found param setter [{}] for dirigible type [{}] for element [{}]", paramSetter, dataType, parameterElement);
 
-            paramSetter.setParam(valueElement, name, preparedStatement, dataType);
+            paramSetter.setParam(valueElement, name, preparedStatement);
         } catch (IllegalArgumentException ex) {
             String errMsg = "Failed to set named param with name [" + name + "] and type [" + dataType + "] for element: [" + valueElement
                     + "]. Statement: " + preparedStatement;

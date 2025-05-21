@@ -60,12 +60,10 @@ class TimeParamSetter extends BaseParamSetter {
      * @param sourceParam the source param
      * @param paramName the param name
      * @param preparedStatement the prepared statement
-     * @param dataType the data type
      * @throws SQLException the SQL exception
      */
     @Override
-    public void setParam(JsonElement sourceParam, String paramName, NamedParameterStatement preparedStatement, String dataType)
-            throws SQLException {
+    public void setParam(JsonElement sourceParam, String paramName, NamedParameterStatement preparedStatement) throws SQLException {
         if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                         .isNumber()) {
             Time value = new Time(sourceParam.getAsJsonPrimitive()
@@ -84,6 +82,6 @@ class TimeParamSetter extends BaseParamSetter {
             }
         }
 
-        throwWrongValue(sourceParam, dataType);
+        throwWrongValue(sourceParam, paramName, preparedStatement);
     }
 }
