@@ -34,9 +34,11 @@ Example:
 	
 ### List of Commands
 
-- [General](https://www.mongodb.com/docs/manual/reference/command/)
-- [Find](https://docs.mongodb.org/manual/reference/command/find/#dbcmd.find)
-- [Update](https://docs.mongodb.org/manual/reference/command/update/#dbcmd.update)
+- [General](https://www.mongodb.com/docs/manual/reference/command/nav-crud/)
+- [Find](https://www.mongodb.com/docs/manual/reference/command/find/)
+- [Insert](https://www.mongodb.com/docs/manual/reference/command/insert/)
+- [Update](https://www.mongodb.com/docs/manual/reference/command/update/)
+- [Delete](https://www.mongodb.com/docs/manual/reference/command/delete/)
 - [Operators](https://www.mongodb.com/docs/manual/reference/operator/query/)
 
 
@@ -66,11 +68,11 @@ Example:
 	
 ##### Find document(s)
 
-	‘{ find: "testCollection",filter: {"name": "foo"} }’
+	‘{find: "testCollection", filter: {"name": "foo"} }’
 	
 ##### Update document(s)
 
-	‘update: {"update":"testCollection",
+	‘{"update": "testCollection",
 	    	"updates":[
 	        {
 	            q:{"name":"foo"},
