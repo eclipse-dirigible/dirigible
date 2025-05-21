@@ -329,19 +329,6 @@ public class DatabaseFacade implements InitializingBean {
     }
 
     /**
-     * Executes named parameters SQL query.
-     *
-     * @param sql the sql
-     * @return the result of the query as JSON
-     * @throws Exception the exception
-     */
-    public static String queryNamed(String sql) throws Throwable {
-        // TODO: I guess this method is not needed since it doesn't support named params, it is the same
-        // like the one with query
-        return queryNamed(sql, null, null);
-    }
-
-    /**
      * Executes SQL insert.
      *
      * @param sql the insert statement to be executed

@@ -519,17 +519,6 @@ class DatabaseFacadeIT extends IntegrationTest {
         }
 
         @Test
-        void testQueryNamed() throws Throwable {
-            String selectSql = getDialect().select()
-                                           .from(TEST_TABLE)
-                                           .where(ID_COLUMN + " = 0")
-                                           .build();
-            String result = DatabaseFacade.queryNamed(selectSql);
-
-            assertPreparedResult(result);
-        }
-
-        @Test
         void testQueryNamedWithParams() throws Throwable {
             ISqlDialect dialect = getDialect();
             String selectSql = dialect.select()
