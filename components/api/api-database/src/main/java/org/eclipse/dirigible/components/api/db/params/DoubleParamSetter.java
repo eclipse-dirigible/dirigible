@@ -26,12 +26,10 @@ class DoubleParamSetter extends BaseParamSetter {
      * @param sourceParam the source param
      * @param paramIndex the param index
      * @param preparedStatement the prepared statement
-     * @param dataType the data type
      * @throws SQLException the SQL exception
      */
     @Override
-    public void setParam(JsonElement sourceParam, int paramIndex, PreparedStatement preparedStatement, String dataType)
-            throws SQLException {
+    public void setParam(JsonElement sourceParam, int paramIndex, PreparedStatement preparedStatement) throws SQLException {
         if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                         .isNumber()) {
             double value = sourceParam.getAsJsonPrimitive()
@@ -47,7 +45,7 @@ class DoubleParamSetter extends BaseParamSetter {
             preparedStatement.setDouble(paramIndex, value);
             return;
         }
-        throwWrongValue(sourceParam, dataType);
+        throwWrongValue(sourceParam, paramIndex, preparedStatement);
     }
 
     /**

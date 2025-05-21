@@ -28,12 +28,10 @@ class BlobParamSetter extends BaseParamSetter {
      * @param sourceParam the source param
      * @param paramIndex the param index
      * @param preparedStatement the prepared statement
-     * @param dataType the data type
      * @throws SQLException the SQL exception
      */
     @Override
-    public void setParam(JsonElement sourceParam, int paramIndex, PreparedStatement preparedStatement, String dataType)
-            throws SQLException {
+    public void setParam(JsonElement sourceParam, int paramIndex, PreparedStatement preparedStatement) throws SQLException {
         if (sourceParam.isJsonArray()) {
             byte[] bytes = BytesHelper.jsonToBytes(sourceParam.getAsJsonArray()
                                                               .toString());
@@ -41,7 +39,7 @@ class BlobParamSetter extends BaseParamSetter {
             return;
         }
 
-        throwWrongValue(sourceParam, dataType);
+        throwWrongValue(sourceParam, paramIndex, preparedStatement);
     }
 
     /**

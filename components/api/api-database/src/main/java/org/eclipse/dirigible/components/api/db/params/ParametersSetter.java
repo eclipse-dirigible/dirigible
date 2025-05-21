@@ -172,12 +172,12 @@ public class ParametersSetter {
                     paramSetter, sqlType, dirigibleSqlType, parameterElement, sqlParamIndex);
 
             if (parameterElement.isJsonPrimitive()) {
-                paramSetter.setParam(parameterElement, sqlParamIndex, preparedStatement, dirigibleSqlType);
+                paramSetter.setParam(parameterElement, sqlParamIndex, preparedStatement);
                 return;
             }
 
             if (parameterElement.isJsonObject()) {
-                setIndexedJsonObjectParam(preparedStatement, sqlParamIndex, parameterElement, sqlType, paramSetter, dirigibleSqlType);
+                setIndexedJsonObjectParam(preparedStatement, sqlParamIndex, parameterElement, sqlType, paramSetter);
                 return;
             }
         } catch (IllegalArgumentException ex) {
@@ -193,7 +193,7 @@ public class ParametersSetter {
     }
 
     private static void setIndexedJsonObjectParam(PreparedStatement preparedStatement, int sqlParamIndex, JsonElement parameterElement,
-            int sqlType, ParamSetter paramSetter, String dirigibleSqlType) throws SQLException {
+            int sqlType, ParamSetter paramSetter) throws SQLException {
         IndexedParamJsonObject paramJsonObject = IndexedParamJsonObject.fromJsonElement(parameterElement);
 
         JsonElement valueElement = paramJsonObject.getValueElement();
@@ -202,7 +202,7 @@ public class ParametersSetter {
             return;
         }
 
-        paramSetter.setParam(valueElement, sqlParamIndex, preparedStatement, dirigibleSqlType);
+        paramSetter.setParam(valueElement, sqlParamIndex, preparedStatement);
     }
 
 }
