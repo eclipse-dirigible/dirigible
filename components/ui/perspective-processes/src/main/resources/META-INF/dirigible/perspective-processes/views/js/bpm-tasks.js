@@ -10,6 +10,7 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const tasksView = angular.module('tasks', ['platformView', 'blimpKit']);
+tasksView.constant('Notifications', new NotificationHub());
 tasksView.constant('Dialogs', new DialogHub());
 tasksView.controller('TasksController', ($scope, $http, $window, Dialogs) => {
     $scope.tasksList = [];
@@ -77,11 +78,10 @@ tasksView.controller('TasksController', ($scope, $http, $window, Dialogs) => {
             data: requestBody,
             headers: { 'Content-Type': 'application/json' }
         }).then(() => {
-            Dialogs.showAlert({
+            Notifications.show({
                 title: 'Action confirmation',
-                message: "Task " + actionName + " successfully!",
-                type: AlertTypes.Success,
-                preformatted: false,
+                description: "Task " + actionName + " successfully!",
+                type: 'positive'
             });
             $scope.reload();
             // console.log('Successfully ' + actionName + ' task with id ' + taskId);

@@ -40,8 +40,8 @@ ideBpmProcessDefinitionsView.controller('IDEBpmProcessDefinitionsViewController'
                 if ($scope.definitionsList.length < response.data.length) {
                     Notifications.show({
                         type: 'information',
-                        title: 'User definitions',
-                        description: 'A new user task has been added.'
+                        title: 'Process definitions',
+                        description: 'A new process definition has been added.'
                     });
                 }
                 $scope.definitionsList = response.data;
