@@ -539,12 +539,25 @@ public class BpmProviderFlowable implements BpmProvider {
     }
 
     public List<HistoricVariableInstance> getProcessHistoricInstanceVariables(String processInstanceId) {
-        validateProcessInstanceId(processInstanceId);
+        validateHistoricProcessInstanceByProcessInstanceId(processInstanceId);
 
         return getProcessEngine().getHistoryService()
                                  .createHistoricVariableInstanceQuery()
                                  .processInstanceId(processInstanceId)
                                  .list();
+    }
+
+    private void validateHistoricProcessInstanceByProcessInstanceId(String processInstanceId) {
+        HistoricProcessInstance historicProcessInstance = getProcessEngine().getHistoryService()
+                                                                            .createHistoricProcessInstanceQuery()
+                                                                            .processInstanceId(processInstanceId)
+                                                                            .processInstanceTenantId(getTenantId())
+                                                                            .singleResult();
+
+        if (historicProcessInstance == null) {
+            throw new IllegalArgumentException("Historic p rocess instance for process instance id [" + processInstanceId
+                    + "] not found or does not belong to current tenant.");
+        }
     }
 
     public List<VariableInstance> getProcessInstanceVariables(String processInstanceId) {
@@ -567,9 +580,9 @@ public class BpmProviderFlowable implements BpmProvider {
     public Optional<byte[]> getProcessDefinitionImage(String processDefinitionKey) throws IOException {
         RepositoryService repositoryService = getProcessEngine().getRepositoryService();
 
-        // TODO: do we need to add tenant id here?
         ProcessDefinition process = repositoryService.createProcessDefinitionQuery()
                                                      .processDefinitionKey(processDefinitionKey)
+                                                     .processDefinitionTenantId(getTenantId())
                                                      .latestVersion()
                                                      .singleResult();
 
