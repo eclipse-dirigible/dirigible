@@ -9,8 +9,11 @@
  */
 package org.eclipse.dirigible.components.api.db;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonSyntaxException;
 import org.apache.commons.io.output.WriterOutputStream;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
+import org.eclipse.dirigible.components.api.db.params.ParametersSetter;
 import org.eclipse.dirigible.components.base.logging.LoggingExecutor;
 import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper;
 import org.eclipse.dirigible.components.data.management.helpers.DatabaseResultSetHelper;
@@ -34,8 +37,6 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.*;
-
-import static java.text.MessageFormat.format;
 
 /**
  * The Class DatabaseFacade.
@@ -133,10 +134,6 @@ public class DatabaseFacade implements InitializingBean {
      */
     public static String getMetadata(String datasourceName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
-        if (dataSource == null) {
-            String error = format("DataSource {0} not known.", datasourceName);
-            throw new IllegalArgumentException(error);
-        }
         return LoggingExecutor.executeWithException(dataSource, () -> DatabaseMetadataHelper.getMetadataAsJson(dataSource));
     }
 
@@ -147,15 +144,21 @@ public class DatabaseFacade implements InitializingBean {
      * @return the data source
      */
     private static DirigibleDataSource getDataSource(String datasourceName) {
-        return datasourceName == null || datasourceName.trim()
-                                                       .isEmpty()
-                || "DefaultDB".equals(datasourceName)
-                        ? DatabaseFacade.get()
-                                        .getDataSourcesManager()
-                                        .getDefaultDataSource()
-                        : DatabaseFacade.get()
-                                        .getDataSourcesManager()
-                                        .getDataSource(datasourceName);
+        boolean defaultDB = datasourceName == null || datasourceName.trim()
+                                                                    .isEmpty()
+                || "DefaultDB".equals(datasourceName);
+        DirigibleDataSource dataSource = defaultDB ? DatabaseFacade.get()
+                                                                   .getDataSourcesManager()
+                                                                   .getDefaultDataSource()
+                : DatabaseFacade.get()
+                                .getDataSourcesManager()
+                                .getDataSource(datasourceName);
+
+        if (dataSource == null) {
+            throw new IllegalArgumentException("DataSource [" + datasourceName + "] not known.");
+        }
+
+        return dataSource;
     }
 
     /**
@@ -166,13 +169,7 @@ public class DatabaseFacade implements InitializingBean {
      */
     public static String getMetadata() throws Throwable {
         DataSource dataSource = getDataSource(null);
-        return LoggingExecutor.executeWithException(dataSource, () -> {
-            if (dataSource == null) {
-                String error = format("No default DataSource has been configured.");
-                throw new IllegalArgumentException(error);
-            }
-            return DatabaseMetadataHelper.getMetadataAsJson(dataSource);
-        });
+        return LoggingExecutor.executeWithException(dataSource, () -> DatabaseMetadataHelper.getMetadataAsJson(dataSource));
     }
 
     /**
@@ -184,10 +181,6 @@ public class DatabaseFacade implements InitializingBean {
      */
     public static String getProductName(String datasourceName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
-        if (dataSource == null) {
-            String error = format("DataSource {0} not known.", datasourceName);
-            throw new IllegalArgumentException(error);
-        }
         return LoggingExecutor.executeWithException(dataSource, () -> DatabaseMetadataHelper.getProductName(dataSource));
     }
 
@@ -199,13 +192,7 @@ public class DatabaseFacade implements InitializingBean {
      */
     public static String getProductName() throws Throwable {
         DataSource dataSource = getDataSource(null);
-        return LoggingExecutor.executeWithException(dataSource, () -> {
-            if (dataSource == null) {
-                String error = format("No default DataSource has been configured.");
-                throw new IllegalArgumentException(error);
-            }
-            return DatabaseMetadataHelper.getProductName(dataSource);
-        });
+        return LoggingExecutor.executeWithException(dataSource, () -> DatabaseMetadataHelper.getProductName(dataSource));
     }
 
     // ============ Query ===========
@@ -235,21 +222,18 @@ public class DatabaseFacade implements InitializingBean {
         return query(sql, parameters, datasourceName, null);
     }
 
-    public static String query(String sql, String parameters, String datasourceName, String resultParametersJson) throws Throwable {
-        ResultParameters resultParameters =
-                null == resultParametersJson ? null : GsonHelper.fromJson(resultParametersJson, ResultParameters.class);
-
+    public static String query(String sql, String parametersJson, String datasourceName, String resultParametersJson) throws Throwable {
+        Optional<JsonElement> parameters = parseOptionalJson(parametersJson);
+        Optional<ResultParameters> resultParameters = getOptionalParam(resultParametersJson, ResultParameters.class);
         DataSource dataSource = getDataSource(datasourceName);
+
         return LoggingExecutor.executeWithException(dataSource, () -> {
-            if (dataSource == null) {
-                String error = format("DataSource {0} not known.", datasourceName);
-                throw new IllegalArgumentException(error);
-            }
+
             try (Connection connection = dataSource.getConnection()) {
                 try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
-                    if (parameters != null) {
-                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                        ParametersSetter.setParameters(parameters, statement);
+
+                    if (parameters.isPresent()) {
+                        ParametersSetter.setIndexedParameters(parameters.get(), preparedStatement);
                     }
                     ResultSet resultSet = preparedStatement.executeQuery();
                     StringWriter sw = new StringWriter();
@@ -262,7 +246,7 @@ public class DatabaseFacade implements InitializingBean {
                     } catch (IOException e) {
                         throw new Exception(e);
                     }
-                    DatabaseResultSetHelper.toJson(resultSet, false, false, output, Optional.ofNullable(resultParameters));
+                    DatabaseResultSetHelper.toJson(resultSet, false, false, output, resultParameters);
                     return sw.toString();
                 }
             } catch (Exception ex) {
@@ -270,6 +254,22 @@ public class DatabaseFacade implements InitializingBean {
                 throw ex;
             }
         });
+    }
+
+    private static <T> Optional<T> getOptionalParam(String json, Class<T> type) {
+        try {
+            return Optional.ofNullable(null == json ? null : GsonHelper.fromJson(json, type));
+        } catch (JsonSyntaxException ex) {
+            throw new IllegalArgumentException("Json: " + json + "] cannot be deserialized to " + type, ex);
+        }
+    }
+
+    private static Optional<JsonElement> parseOptionalJson(String json) {
+        try {
+            return Optional.ofNullable(null == json ? null : GsonHelper.parseJson(json));
+        } catch (JsonSyntaxException ex) {
+            throw new IllegalArgumentException("Invalid json: " + json, ex);
+        }
     }
 
     /**
@@ -299,23 +299,22 @@ public class DatabaseFacade implements InitializingBean {
      * Executes named parameters SQL query.
      *
      * @param sql the sql
-     * @param parameters the parameters
+     * @param parametersJson the parameters
      * @param datasourceName the datasource name
      * @return the result of the query as JSON
      * @throws Exception the exception
      */
-    public static String queryNamed(String sql, String parameters, String datasourceName) throws Throwable {
+    public static String queryNamed(String sql, String parametersJson, String datasourceName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
-        if (dataSource == null) {
-            String error = format("DataSource {0} not known.", datasourceName);
-            throw new IllegalArgumentException(error);
-        }
+        Optional<JsonElement> parameters = parseOptionalJson(parametersJson);
+
         return LoggingExecutor.executeWithException(dataSource, () -> {
+
             try (Connection connection = dataSource.getConnection()) {
                 try (NamedParameterStatement preparedStatement = new NamedParameterStatement(connection, sql)) {
-                    if (parameters != null) {
-                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                        ParametersSetter.setParameters(parameters, statement);
+
+                    if (parameters.isPresent()) {
+                        ParametersSetter.setNamedParameters(parameters.get(), preparedStatement);
                     }
                     ResultSet resultSet = preparedStatement.executeQuery();
                     StringWriter sw = new StringWriter();
@@ -332,39 +331,26 @@ public class DatabaseFacade implements InitializingBean {
                     return sw.toString();
                 }
             } catch (Exception ex) {
-                logger.error("Failed to execute query statement [{}] in data source [{}].", sql, datasourceName, ex);
+                logger.error("Failed to execute query statement [{}] in data source [{}].", sql, dataSource, ex);
                 throw ex;
             }
         });
     }
 
     /**
-     * Executes named parameters SQL query.
-     *
-     * @param sql the sql
-     * @return the result of the query as JSON
-     * @throws Exception the exception
-     */
-    public static String queryNamed(String sql) throws Throwable {
-        return queryNamed(sql, null, null);
-    }
-
-    /**
      * Executes SQL insert.
      *
      * @param sql the insert statement to be executed
-     * @param parameters statement parameters
+     * @param parametersJson statement parameters
      * @param datasourceName the datasource name
      * @return the generated IDs
      * @throws SQLException if an error occur
      * @throws IllegalArgumentException if the provided datasouce is not found
      * @throws RuntimeException if an error occur
      */
-    public static List<Map<String, Object>> insert(String sql, String parameters, String datasourceName) throws Throwable {
+    public static List<Map<String, Object>> insert(String sql, String parametersJson, String datasourceName) throws Throwable {
         DirigibleDataSource dataSource = getDataSource(datasourceName);
-        if (dataSource == null) {
-            throw new IllegalArgumentException("DataSource [" + datasourceName + "] not known.");
-        }
+        Optional<JsonElement> parameters = parseOptionalJson(parametersJson);
 
         return LoggingExecutor.executeWithException(dataSource, () -> {
 
@@ -380,9 +366,8 @@ public class DatabaseFacade implements InitializingBean {
             try (Connection connection = dataSource.getConnection()) {
                 try (PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
-                    if (parameters != null) {
-                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                        ParametersSetter.setParameters(parameters, statement);
+                    if (parameters.isPresent()) {
+                        ParametersSetter.setIndexedParameters(parameters.get(), preparedStatement);
                     }
 
                     preparedStatement.executeUpdate();
@@ -423,22 +408,24 @@ public class DatabaseFacade implements InitializingBean {
         }
     }
 
-    private static void insertWithoutResult(String sql, String parameters, Connection connection) throws SQLException {
+    private static void insertWithoutResult(String sql, Optional<JsonElement> parameters, Connection connection) throws SQLException {
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
-            if (parameters != null) {
-                IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                ParametersSetter.setParameters(parameters, statement);
+            if (parameters.isPresent()) {
+                ParametersSetter.setIndexedParameters(parameters.get(), preparedStatement);
             }
             preparedStatement.executeUpdate();
         }
     }
 
-    public static List<Map<String, Object>> insertMany(String sql, String parameters, String datasourceName) throws Throwable {
+    public static List<Map<String, Object>> insertMany(String sql, String parametersJson, String datasourceName) throws Throwable {
         DirigibleDataSource dataSource = getDataSource(datasourceName);
-        if (dataSource == null) {
-            throw new IllegalArgumentException("DataSource [" + datasourceName + "] not known.");
-        }
+        Optional<JsonElement> parameters = parseOptionalJson(parametersJson);
 
+        return insertMany(sql, parameters, dataSource);
+    }
+
+    static List<Map<String, Object>> insertMany(String sql, Optional<JsonElement> parameters, DirigibleDataSource dataSource)
+            throws Throwable {
         return LoggingExecutor.executeWithException(dataSource, () -> {
 
             if (DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.contains(dataSource.getName())) {
@@ -452,9 +439,10 @@ public class DatabaseFacade implements InitializingBean {
                 connection.setAutoCommit(false);
                 try (PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
-                    if (parameters != null) {
-                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                        ParametersSetter.setManyParameters(parameters, statement);
+                    if (parameters.isPresent()) {
+                        ParametersSetter.setManyIndexedParameters(parameters.get(), preparedStatement);
+                    } else {
+                        preparedStatement.addBatch();
                     }
 
                     preparedStatement.executeBatch();
@@ -472,24 +460,24 @@ public class DatabaseFacade implements InitializingBean {
                     return Collections.emptyList();
                 }
             } catch (SQLException | RuntimeException ex) {
-                logger.error("Failed to execute insert statement [{}] in data source [{}].", sql, datasourceName, ex);
+                logger.error("Failed to execute insert statement [{}] in data source [{}].", sql, dataSource, ex);
                 throw ex;
             }
         });
     }
 
-    private static void insertManyWithoutResult(String sql, String parameters, DirigibleDataSource dataSource) throws SQLException {
+    private static void insertManyWithoutResult(String sql, Optional<JsonElement> parameters, DirigibleDataSource dataSource)
+            throws SQLException {
         try (Connection connection = dataSource.getConnection()) {
             insertManyWithoutResult(sql, parameters, connection);
         }
     }
 
-    private static void insertManyWithoutResult(String sql, String parameters, Connection connection) throws SQLException {
+    private static void insertManyWithoutResult(String sql, Optional<JsonElement> parameters, Connection connection) throws SQLException {
         connection.setAutoCommit(false);
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
-            if (parameters != null) {
-                IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                ParametersSetter.setManyParameters(parameters, statement);
+            if (parameters.isPresent()) {
+                ParametersSetter.setManyIndexedParameters(parameters.get(), preparedStatement);
             }
             preparedStatement.executeBatch();
             connection.commit();
@@ -502,26 +490,25 @@ public class DatabaseFacade implements InitializingBean {
      * Executes named SQL insert.
      *
      * @param sql the insert statement to be executed
-     * @param parameters statement parameters
+     * @param parametersJson statement parameters
      * @param datasourceName the datasource name
      * @return the generated IDs
      * @throws SQLException if an error occur
      * @throws IllegalArgumentException if the provided datasouce is not found
      * @throws RuntimeException if an error occur
      */
-    public static List<Long> insertNamed(String sql, String parameters, String datasourceName) throws Throwable {
+    public static List<Long> insertNamed(String sql, String parametersJson, String datasourceName) throws Throwable {
+        Optional<JsonElement> parameters = parseOptionalJson(parametersJson);
         DataSource dataSource = getDataSource(datasourceName);
-        if (dataSource == null) {
-            throw new IllegalArgumentException("DataSource [" + datasourceName + "] not known.");
-        }
+
         return LoggingExecutor.executeWithException(dataSource, () -> {
+
             try (Connection connection = dataSource.getConnection();
                     NamedParameterStatement preparedStatement =
                             new NamedParameterStatement(connection, sql, Statement.RETURN_GENERATED_KEYS)) {
 
-                if (parameters != null) {
-                    IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                    ParametersSetter.setParameters(parameters, statement);
+                if (parameters.isPresent()) {
+                    ParametersSetter.setNamedParameters(parameters.get(), preparedStatement);
                 }
                 int updatedRows = preparedStatement.executeUpdate();
                 List<Long> generatedIds = new ArrayList<>(updatedRows);
@@ -557,24 +544,22 @@ public class DatabaseFacade implements InitializingBean {
      * Executes SQL update.
      *
      * @param sql the sql
-     * @param parameters the parameters
+     * @param parametersJson the parameters
      * @param datasourceName the datasource name
      * @return the number of the rows that has been changed
      * @throws Exception the exception
      */
-    public static int update(String sql, String parameters, String datasourceName) throws Throwable {
+    public static int update(String sql, String parametersJson, String datasourceName) throws Throwable {
+        Optional<JsonElement> parameters = parseOptionalJson(parametersJson);
         DataSource dataSource = getDataSource(datasourceName);
-        if (dataSource == null) {
-            String error = format("DataSource {0} not known.", datasourceName);
-            throw new IllegalArgumentException(error);
-        }
 
         return LoggingExecutor.executeWithException(dataSource, () -> {
+
             try (Connection connection = dataSource.getConnection()) {
                 try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
-                    if (parameters != null) {
-                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                        ParametersSetter.setParameters(parameters, statement);
+
+                    if (parameters.isPresent()) {
+                        ParametersSetter.setIndexedParameters(parameters.get(), preparedStatement);
                     }
                     return preparedStatement.executeUpdate();
                 }
@@ -583,7 +568,6 @@ public class DatabaseFacade implements InitializingBean {
                 throw ex;
             }
         });
-
     }
 
     /**
@@ -602,23 +586,32 @@ public class DatabaseFacade implements InitializingBean {
      *
      * @param sql the sql
      * @param parameters the parameters
+     * @return the number of the rows that has been changed
+     * @throws Exception the exception
+     */
+    public static int updateNamed(String sql, String parameters) throws Throwable {
+        return updateNamed(sql, parameters, null);
+    }
+
+    /**
+     * Executes named SQL update.
+     *
+     * @param sql the sql
+     * @param parametersJson the parameters
      * @param datasourceName the datasource name
      * @return the number of the rows that has been changed
      * @throws Exception the exception
      */
-    public static int updateNamed(String sql, String parameters, String datasourceName) throws Throwable {
+    public static int updateNamed(String sql, String parametersJson, String datasourceName) throws Throwable {
+        Optional<JsonElement> parameters = parseOptionalJson(parametersJson);
         DataSource dataSource = getDataSource(datasourceName);
-        if (dataSource == null) {
-            String error = format("DataSource {0} not known.", datasourceName);
-            throw new IllegalArgumentException(error);
-        }
 
         return LoggingExecutor.executeWithException(dataSource, () -> {
+
             try (Connection connection = dataSource.getConnection()) {
                 try (NamedParameterStatement preparedStatement = new NamedParameterStatement(connection, sql)) {
-                    if (parameters != null) {
-                        IndexedOrNamedStatement statement = new IndexedOrNamedStatement(preparedStatement);
-                        ParametersSetter.setParameters(parameters, statement);
+                    if (parameters.isPresent()) {
+                        ParametersSetter.setNamedParameters(parameters.get(), preparedStatement);
                     }
                     return preparedStatement.executeUpdate();
                 }
@@ -634,23 +627,11 @@ public class DatabaseFacade implements InitializingBean {
      * Executes named SQL update.
      *
      * @param sql the sql
-     * @param parameters the parameters
-     * @return the number of the rows that has been changed
-     * @throws Exception the exception
-     */
-    public static int updateNamed(String sql, String parameters) throws Throwable {
-        return update(sql, parameters, null);
-    }
-
-    /**
-     * Executes named SQL update.
-     *
-     * @param sql the sql
      * @return the number of the rows that has been changed
      * @throws Exception the exception
      */
     public static int updateNamed(String sql) throws Throwable {
-        return update(sql, null, null);
+        return updateNamed(sql, null, null);
     }
 
     /**
@@ -672,11 +653,9 @@ public class DatabaseFacade implements InitializingBean {
      */
     public static DirigibleConnection getConnection(String datasourceName) throws Throwable {
         DirigibleDataSource dataSource = getDataSource(datasourceName);
-        if (dataSource == null) {
-            String error = format("DataSource {0} not known.", datasourceName);
-            throw new IllegalArgumentException(error);
-        }
+
         return LoggingExecutor.executeWithException(dataSource, () -> {
+
             try {
                 return dataSource.getConnection();
             } catch (RuntimeException | SQLException ex) {
@@ -711,11 +690,9 @@ public class DatabaseFacade implements InitializingBean {
      */
     public static long nextval(String sequence, String datasourceName, String tableName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
-        if (dataSource == null) {
-            String error = format("DataSource {0} not known.", datasourceName);
-            throw new IllegalArgumentException(error);
-        }
+
         return LoggingExecutor.executeWithException(dataSource, () -> {
+
             try (Connection connection = dataSource.getConnection()) {
                 try {
                     return getNextVal(sequence, connection);
@@ -851,7 +828,7 @@ public class DatabaseFacade implements InitializingBean {
      * @throws SQLException the SQL exception
      */
     public static void createSequence(String sequence, Integer start) throws Throwable {
-        createSequence(sequence, null, null);
+        createSequence(sequence, start, null);
     }
 
     /**
@@ -864,12 +841,9 @@ public class DatabaseFacade implements InitializingBean {
      */
     public static void createSequence(String sequence, Integer start, String datasourceName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
-        if (dataSource == null) {
-            String error = format("DataSource {0} not known.", datasourceName);
-            throw new IllegalArgumentException(error);
-        }
 
         LoggingExecutor.executeNoResultWithException(dataSource, () -> {
+
             try (Connection connection = dataSource.getConnection()) {
                 createSequenceInternal(sequence, start, connection, null);
 
@@ -909,12 +883,9 @@ public class DatabaseFacade implements InitializingBean {
      */
     public static void dropSequence(String sequence, String datasourceName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
-        if (dataSource == null) {
-            String error = format("DataSource {0} not known.", datasourceName);
-            throw new IllegalArgumentException(error);
-        }
 
         LoggingExecutor.executeNoResultWithException(dataSource, () -> {
+
             try (Connection connection = dataSource.getConnection()) {
                 String sql = SqlFactory.getNative(connection)
                                        .drop()

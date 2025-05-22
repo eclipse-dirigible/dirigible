@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.database.sql;
 
-import static java.text.MessageFormat.format;
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
@@ -19,6 +18,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+
+import static java.text.MessageFormat.format;
 
 /**
  * The Class DataTypeUtils.
@@ -147,6 +148,8 @@ public class DataTypeUtils {
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.DECIMAL, DataType.DECIMAL);
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.BIT, DataType.BIT);
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.ARRAY, DataType.ARRAY);
+        DATABASE_TYPE_TO_DATA_TYPE.put(Types.TINYINT, DataType.TINYINT);
+        DATABASE_TYPE_TO_DATA_TYPE.put(Types.NUMERIC, DataType.NUMERIC);
 
         // chars
         STRING_TO_DATABASE_TYPE.put(VARCHAR, Types.VARCHAR);
@@ -308,13 +311,14 @@ public class DataTypeUtils {
      *
      * @param type the type
      * @return the sql type by data type
+     * @throws IllegalArgumentException if the type is not supported
      */
-    public static Integer getSqlTypeByDataType(String type) {
+    public static Integer getSqlTypeByDataType(String type) throws IllegalArgumentException {
         type = type.toUpperCase();
         if (STRING_TO_DATABASE_TYPE.containsKey(type)) {
             return STRING_TO_DATABASE_TYPE.get(type);
         }
-        throw new SqlException(format("Type {0} not supported", type));
+        throw new IllegalArgumentException("Type [" + type + "] not supported");
     }
 
     /**
@@ -334,12 +338,13 @@ public class DataTypeUtils {
      * @param type the type
      * @return the database type name
      */
-    public static String getDatabaseTypeName(Integer type) {
+    public static String getDatabaseTypeName(Integer type) throws IllegalArgumentException {
         if (isDatabaseTypeSupported(type)) {
             return DATABASE_TYPE_TO_DATA_TYPE.get(type)
                                              .toString();
         }
-        throw new SqlException(format("Type [{0}] not supported. Supported tpes [{1}]", type, DATABASE_TYPE_TO_DATA_TYPE));
+        String errorMessage = "Type [" + type + "] not supported. Supported types [" + DATABASE_TYPE_TO_DATA_TYPE + "]";
+        throw new IllegalArgumentException(errorMessage);
     }
 
     /**
@@ -583,5 +588,9 @@ public class DataTypeUtils {
      */
     public static boolean isArray(String dataType) {
         return DataType.ARRAY.isOfType(dataType);
+    }
+
+    public static boolean isNumeric(String dataType) {
+        return DataType.NUMERIC.isOfType(dataType);
     }
 }

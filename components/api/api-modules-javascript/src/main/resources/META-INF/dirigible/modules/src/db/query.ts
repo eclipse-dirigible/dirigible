@@ -17,7 +17,6 @@
 const DatabaseFacade = Java.type("org.eclipse.dirigible.components.api.db.DatabaseFacade");
 
 export interface QueryParameter {
-	readonly type: string;
 	readonly value: any;
 }
 

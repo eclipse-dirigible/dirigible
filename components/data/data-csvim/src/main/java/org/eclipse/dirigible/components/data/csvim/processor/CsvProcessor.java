@@ -9,16 +9,6 @@
  */
 package org.eclipse.dirigible.components.data.csvim.processor;
 
-import java.io.ByteArrayInputStream;
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Types;
-import java.util.Base64;
-import java.util.List;
-import java.util.stream.Collectors;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.dirigible.commons.api.helpers.DateTimeUtils;
@@ -38,6 +28,17 @@ import org.postgresql.util.PGobject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+
+import java.io.ByteArrayInputStream;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Types;
+import java.util.Base64;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * The Class CsvProcessor.
@@ -352,10 +353,9 @@ public class CsvProcessor {
      * @throws SQLException the SQL exception
      */
     protected void setValue(PreparedStatement preparedStatement, int i, String dataType, String value) throws SQLException {
-        if (logger.isTraceEnabled()) {
-            logger.trace("setValue -> i: " + i + ", dataType: " + dataType + ", value: " + value);
-        }
+        logger.trace("setValue -> i: {}, dataType: {}, value: {}", i, dataType, value);
 
+        // TODO consider to use org.eclipse.dirigible.components.api.db.params.ParametersSetter for reuse
         if (value == null) {
             preparedStatement.setNull(i, DataTypeUtils.getSqlTypeByDataType(dataType));
         } else if (Types.VARCHAR == DataTypeUtils.getSqlTypeByDataType(dataType)) {
