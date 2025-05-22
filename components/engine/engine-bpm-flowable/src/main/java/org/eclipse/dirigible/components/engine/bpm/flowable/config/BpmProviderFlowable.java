@@ -53,7 +53,7 @@ import java.io.InputStream;
 import java.util.*;
 
 /**
- * The Class BpmProviderFlowable.
+ * The Class BpmProviderFlowable. NOTE! - all methods in the class should be tenant aware
  */
 public class BpmProviderFlowable implements BpmProvider {
 
@@ -119,6 +119,7 @@ public class BpmProviderFlowable implements BpmProvider {
         if (getRepository().hasResource(repositoryPath)) {
             IResource resource = getRepository().getResource(repositoryPath);
             deployment = repositoryService.createDeployment()
+                                          .tenantId(getTenantId())
                                           .addBytes(location + EXTENSION_BPMN20_XML, resource.getContent())
                                           .deploy();
         } else {
@@ -214,14 +215,36 @@ public class BpmProviderFlowable implements BpmProvider {
         }
     }
 
+    private String getTenantId() {
+        Tenant currentTenant = tenantContext.getCurrentTenant();
+        logger.debug("Current tenant is [{}]", currentTenant);
+        return currentTenant.getId();
+    }
+
     /**
      * Undeploy process.
      *
      * @param deploymentId the deployment id
      */
     public void undeployProcess(String deploymentId) {
+        validateDeployment(deploymentId);
+
         RepositoryService repositoryService = getProcessEngine().getRepositoryService();
         repositoryService.deleteDeployment(deploymentId, true);
+    }
+
+    private void validateDeployment(String deploymentId) {
+        RepositoryService repositoryService = getProcessEngine().getRepositoryService();
+
+        Deployment deployment = repositoryService.createDeploymentQuery()
+                                                 .deploymentId(deploymentId)
+                                                 .deploymentTenantId(getTenantId())
+                                                 .singleResult();
+
+        if (deployment == null) {
+            throw new IllegalArgumentException("Deployment with id [" + deploymentId + "] not found or does not belong to current tenant.");
+        }
+
     }
 
     /**
@@ -242,40 +265,43 @@ public class BpmProviderFlowable implements BpmProvider {
             return processInstance.getId();
         } catch (Exception e) {
             logger.error("Failed to start process with key [{}]", key, e);
-            List<ProcessDefinition> processDefinitions = getProcessEngine().getRepositoryService()
-                                                                           .createProcessDefinitionQuery()
-                                                                           .list();
-            logger.error("Available process definitions:");
-            for (ProcessDefinition processDefinition : processDefinitions) {
-                logger.error("Deployment: [{}] with key: [{}] and name: [{}]", processDefinition.getDeploymentId(),
-                        processDefinition.getKey(), processDefinition.getName());
-            }
             return null;
         }
 
     }
 
-    private String getTenantId() {
-        Tenant currentTenant = tenantContext.getCurrentTenant();
-        logger.debug("Current tenant is [{}]", currentTenant);
-        return currentTenant.getId();
-    }
-
     /**
      * Delete process.
      *
-     * @param id the id
+     * @param processInstanceId the processInstanceId
      * @param reason the reason
      */
-    public void deleteProcess(String id, String reason) {
-        logger.debug("Deleting a BPMN process instance by id: [{}]", id);
+    public void deleteProcess(String processInstanceId, String reason) {
+        validateProcessInstanceId(processInstanceId);
+
+        logger.debug("Deleting a BPMN process instance by processInstanceId: [{}]", processInstanceId);
         try {
             getProcessEngine().getRuntimeService()
-                              .deleteProcessInstance(id, reason);
-            logger.info("Done deleting a BPMN process instance by id: [{}]", id);
+                              .deleteProcessInstance(processInstanceId, reason);
+            logger.info("Done deleting a BPMN process instance by processInstanceId: [{}]", processInstanceId);
         } catch (Exception e) {
-            logger.error("Failed to delete process with id [{}], reason [{}]", id, reason, e);
+            logger.error("Failed to delete process with processInstanceId [{}], reason [{}]", processInstanceId, reason, e);
         }
+    }
+
+    private void validateProcessInstanceId(String processInstanceId) {
+        RuntimeService runtimeService = getProcessEngine().getRuntimeService();
+
+        ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
+                                                        .processInstanceId(processInstanceId)
+                                                        .processInstanceTenantId(getTenantId())
+                                                        .singleResult();
+
+        if (processInstance == null) {
+            throw new IllegalArgumentException(
+                    "Process instance with id [" + processInstanceId + "] not found or does not belong to current tenant.");
+        }
+
     }
 
     /**
@@ -475,6 +501,7 @@ public class BpmProviderFlowable implements BpmProvider {
         return getProcessEngine().getRuntimeService()
                                  .createProcessInstanceQuery()
                                  .processInstanceId(processInstanceId)
+                                 .processInstanceTenantId(getTenantId())
                                  .singleResult();
     }
 
@@ -488,6 +515,7 @@ public class BpmProviderFlowable implements BpmProvider {
                                    .isEmpty()) {
             processDefinitionsQuery.processDefinitionKey(key.get());
         }
+        processDefinitionsQuery.processDefinitionTenantId(getTenantId());
 
         return processDefinitionsQuery.list();
     }
@@ -495,6 +523,7 @@ public class BpmProviderFlowable implements BpmProvider {
     public ProcessDefinition getProcessDefinitionByKey(String processDefinitionKey) {
         return getProcessEngine().getRepositoryService()
                                  .createProcessDefinitionQuery()
+                                 .processDefinitionTenantId(getTenantId())
                                  .processDefinitionKey(processDefinitionKey)
                                  .singleResult();
 
@@ -503,11 +532,14 @@ public class BpmProviderFlowable implements BpmProvider {
     public ProcessDefinition getProcessDefinitionById(String processDefinitionId) {
         return getProcessEngine().getRepositoryService()
                                  .createProcessDefinitionQuery()
+                                 .processDefinitionTenantId(getTenantId())
                                  .processDefinitionId(processDefinitionId)
                                  .singleResult();
     }
 
     public List<HistoricVariableInstance> getProcessHistoricInstanceVariables(String processInstanceId) {
+        validateProcessInstanceId(processInstanceId);
+
         return getProcessEngine().getHistoryService()
                                  .createHistoricVariableInstanceQuery()
                                  .processInstanceId(processInstanceId)
@@ -515,6 +547,8 @@ public class BpmProviderFlowable implements BpmProvider {
     }
 
     public List<VariableInstance> getProcessInstanceVariables(String processInstanceId) {
+        validateProcessInstanceId(processInstanceId);
+
         return getProcessEngine().getRuntimeService()
                                  .createVariableInstanceQuery()
                                  .processInstanceId(processInstanceId)
@@ -525,12 +559,14 @@ public class BpmProviderFlowable implements BpmProvider {
         return getProcessEngine().getManagementService()
                                  .createDeadLetterJobQuery()
                                  .processInstanceId(processInstanceId)
+                                 .jobTenantId(getTenantId())
                                  .list();
     }
 
     public Optional<byte[]> getProcessDefinitionImage(String processDefinitionKey) throws IOException {
         RepositoryService repositoryService = getProcessEngine().getRepositoryService();
 
+        // TODO: do we need to add tenant id here?
         ProcessDefinition process = repositoryService.createProcessDefinitionQuery()
                                                      .processDefinitionKey(processDefinitionKey)
                                                      .latestVersion()
@@ -550,6 +586,7 @@ public class BpmProviderFlowable implements BpmProvider {
         ProcessEngine processEngine = getProcessEngine();
 
         RepositoryService repositoryService = processEngine.getRepositoryService();
+
         ProcessEngineConfiguration processEngineConfiguration = processEngine.getProcessEngineConfiguration();
         RuntimeService runtimeService = processEngine.getRuntimeService();
 
@@ -605,6 +642,7 @@ public class BpmProviderFlowable implements BpmProvider {
                                                    .isEmpty()) {
             processInstanceQuery.processInstanceBusinessKeyLike("%" + businessKey.get() + "%");
         }
+        processInstanceQuery.processInstanceTenantId(getTenantId());
 
         return processInstanceQuery.list();
     }
@@ -622,6 +660,8 @@ public class BpmProviderFlowable implements BpmProvider {
                                                    .isEmpty()) {
             historicProcessInstanceQuery.processInstanceBusinessKeyLike("%" + businessKey.get() + "%");
         }
+        historicProcessInstanceQuery.processInstanceTenantId(getTenantId());
+
         return historicProcessInstanceQuery.finished()
                                            .list();
     }
@@ -630,6 +670,7 @@ public class BpmProviderFlowable implements BpmProvider {
         return getProcessEngine().getRepositoryService()
                                  .createDeployment()
                                  .key(deploymentKey)
+                                 .tenantId(getTenantId())
                                  .addBytes(resourceName, content)
                                  .deploy();
     }
@@ -638,6 +679,7 @@ public class BpmProviderFlowable implements BpmProvider {
         return getProcessEngine().getRepositoryService()
                                  .createProcessDefinitionQuery()
                                  .deploymentId(deploymentId)
+                                 .processDefinitionTenantId(getTenantId())
                                  .singleResult();
     }
 
@@ -645,10 +687,13 @@ public class BpmProviderFlowable implements BpmProvider {
         return getProcessEngine().getRepositoryService()
                                  .createDeploymentQuery()
                                  .deploymentKey(deploymentKey)
+                                 .deploymentTenantId(getTenantId())
                                  .list();
     }
 
     public void deleteDeployment(String deploymentId) {
+        validateDeployment(deploymentId);
+
         getProcessEngine().getRepositoryService()
                           .deleteDeployment(deploymentId, true);
     }
@@ -663,7 +708,7 @@ public class BpmProviderFlowable implements BpmProvider {
     public List<Task> findTasks(String processInstanceId, PrincipalType type) {
         if (UserFacade.getUserRoles()
                       .isEmpty()) {
-            return new ArrayList<Task>();
+            return new ArrayList<>();
         }
         TaskInfoQuery<TaskQuery, Task> taskQuery = prepareQuery(type);
         taskQuery.processInstanceId(processInstanceId);
@@ -671,15 +716,12 @@ public class BpmProviderFlowable implements BpmProvider {
     }
 
     private TaskInfoQuery<TaskQuery, Task> prepareQuery(PrincipalType type) {
+        TaskQuery taskQuery = getTaskService().createTaskQuery()
+                                              .taskTenantId(getTenantId());
         if (PrincipalType.CANDIDATE_GROUPS.equals(type)) {
-            return
-
-            getTaskService().createTaskQuery()
-                            // TODO add tenant id
-                            .taskCandidateGroupIn(UserFacade.getUserRoles());
+            return taskQuery.taskCandidateGroupIn(UserFacade.getUserRoles());
         } else if (PrincipalType.ASSIGNEE.equals(type)) {
-            return getTaskService().createTaskQuery()
-                                   .taskAssignee(UserFacade.getName());
+            return taskQuery.taskAssignee(UserFacade.getName());
         } else {
             throw new IllegalArgumentException("Unrecognised principal type: " + type);
         }
