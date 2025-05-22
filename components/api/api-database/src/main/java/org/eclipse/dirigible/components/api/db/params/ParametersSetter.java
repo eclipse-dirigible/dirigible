@@ -47,9 +47,8 @@ public class ParametersSetter {
 
     public static void setNamedParameters(JsonElement parameters, NamedParameterStatement preparedStatement) throws SQLException {
         if (!parameters.isJsonArray()) {
-            throw new IllegalArgumentException(
-                    "Parameters must be provided as a JSON array, e.g. [1, 'John', 9876]. Parameters [" + parameters + "]. Statement: "
-                            + preparedStatement);
+            throw new IllegalArgumentException("Parameters must be provided as a JSON array, e.g. [1, 'John', 9876]. Parameters ["
+                    + parameters + "]. Statement: " + preparedStatement);
         }
 
         for (JsonElement parameterElement : parameters.getAsJsonArray()) {
@@ -135,9 +134,8 @@ public class ParametersSetter {
 
     public static void setIndexedParameters(JsonElement parameters, PreparedStatement preparedStatement) throws SQLException {
         if (!parameters.isJsonArray()) {
-            throw new IllegalArgumentException(
-                    "Parameters must be provided as a JSON array, e.g. [1, 'John', 9876]. Parameters [" + parameters + "]. Statement: "
-                            + preparedStatement);
+            throw new IllegalArgumentException("Parameters must be provided as a JSON array, e.g. [1, 'John', 9876]. Parameters ["
+                    + parameters + "]. Statement: " + preparedStatement);
         }
 
         JsonArray paramsArray = parameters.getAsJsonArray();
