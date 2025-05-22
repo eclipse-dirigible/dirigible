@@ -218,10 +218,12 @@ public class DirigibleCallDelegate implements JavaDelegate {
         TaskState taskState = null;
         if (TracingFacade.isTracingEnabled()) {
             Map<String, String> input = TaskStateUtil.getVariables(execution.getVariables());
-            taskState = TracingFacade.taskStarted(TaskType.BPM, execution.getProcessInstanceBusinessKey() != null
-                    ? execution.getProcessInstanceBusinessKey()
-                    : execution.getProcessInstanceId(), execution.getCurrentFlowElement()
-                                                                 .getName(), input);
+            taskState = TracingFacade.taskStarted(TaskType.BPM,
+                    execution.getProcessInstanceBusinessKey() != null ? execution.getProcessInstanceBusinessKey()
+                            : execution.getProcessInstanceId(),
+                    execution.getCurrentFlowElement()
+                             .getName(),
+                    input);
             taskState.setDefinition(execution.getProcessDefinitionId());
             taskState.setInstance(execution.getProcessInstanceId());
             taskState.setTenant(execution.getTenantId());
@@ -293,9 +295,8 @@ public class DirigibleCallDelegate implements JavaDelegate {
             String executionId = execution.getId();
             String processInstanceId = execution.getProcessInstanceId();
             String processDefinitionId = execution.getProcessDefinitionId();
-            throw new IllegalStateException(
-                    "Missing tenant id for execution with id [" + executionId + "], process instance id [" + processInstanceId
-                            + "] and process definition id [" + processDefinitionId + "]");
+            throw new IllegalStateException("Missing tenant id for execution with id [" + executionId + "], process instance id ["
+                    + processInstanceId + "] and process definition id [" + processDefinitionId + "]");
         }
         return tenantId;
     }
