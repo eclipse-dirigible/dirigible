@@ -42,7 +42,9 @@ public class Workbench {
     }
 
     public void clickPublishAll() {
-        browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.TITLE, "Publish all");
+//        browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.TITLE, "Publish all");
+        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, "test.mjs");
+        browser.assertElementExistByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", "Publish");
     }
 
     public WelcomeView openWelcomeView() {

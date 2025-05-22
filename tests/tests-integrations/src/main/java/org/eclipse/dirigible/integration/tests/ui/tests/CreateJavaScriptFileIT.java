@@ -19,13 +19,17 @@ public class CreateJavaScriptFileIT extends UserInterfaceIntegrationTest {
         workbench.createNewProject(this.getClass()
                 .getSimpleName());
 
-        workbench.createCustomElementInProject(PROJECT_NAME, FILE_NAME, "File");
+        workbench.createCustomElementInProject(PROJECT_NAME, FILE_NAME, "JavaScript Service");
         workbench.openFile(FILE_NAME);
+        workbench.saveAll();
         workbench.clickPublishAll();
 
+        workbench.openFile(FILE_NAME);
         assertFileTabIsOpen(FILE_NAME);
         assertTextInPreview(INITIAL_CONTENT);
 
+        workbench.openFile(FILE_NAME);
+        assertFileTabIsOpen(FILE_NAME);
         workbench.addContentToFile(FILE_CONTENT);
         workbench.saveAll();
         workbench.clickPublishAll();
