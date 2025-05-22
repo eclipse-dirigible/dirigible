@@ -614,12 +614,11 @@ public class BpmProviderFlowable implements BpmProvider {
         if (processDefinition != null && processDefinition.hasGraphicalNotation()) {
             BpmnModel bpmnModel = repositoryService.getBpmnModel(processDefinition.getId());
             ProcessDiagramGenerator diagramGenerator = processEngineConfiguration.getProcessDiagramGenerator();
-            InputStream resource =
-                    diagramGenerator.generateDiagram(bpmnModel, "png", runtimeService.getActiveActivityIds(processInstance.getId()),
-                            Collections.emptyList(), processEngineConfiguration.getActivityFontName(),
-                            processEngineConfiguration.getLabelFontName(), processEngineConfiguration.getAnnotationFontName(),
-                            processEngineConfiguration.getClassLoader(), 1.0,
-                            processEngineConfiguration.isDrawSequenceFlowNameWithNoLabelDI());
+            InputStream resource = diagramGenerator.generateDiagram(bpmnModel, "png",
+                    runtimeService.getActiveActivityIds(processInstance.getId()), Collections.emptyList(),
+                    processEngineConfiguration.getActivityFontName(), processEngineConfiguration.getLabelFontName(),
+                    processEngineConfiguration.getAnnotationFontName(), processEngineConfiguration.getClassLoader(), 1.0,
+                    processEngineConfiguration.isDrawSequenceFlowNameWithNoLabelDI());
 
             try {
                 byte[] byteArray = IOUtils.toByteArray(resource);
