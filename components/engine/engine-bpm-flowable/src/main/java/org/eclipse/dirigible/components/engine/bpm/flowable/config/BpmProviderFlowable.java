@@ -261,7 +261,8 @@ public class BpmProviderFlowable implements BpmProvider {
         Map<String, Object> variables = GsonHelper.fromJson(parameters, HashMap.class);
         try {
             ProcessInstance processInstance = runtimeService.startProcessInstanceByKeyAndTenantId(key, variables, getTenantId());
-            logger.info("Started process instance with id [{}], key [{}]", processInstance.getId(), key);
+            logger.info("Started process instance with id [{}], key [{}] for tenant [{}]", processInstance.getId(), key,
+                    processInstance.getTenantId());
             return processInstance.getId();
         } catch (Exception e) {
             logger.error("Failed to start process with key [{}]", key, e);
@@ -600,11 +601,12 @@ public class BpmProviderFlowable implements BpmProvider {
         if (processDefinition != null && processDefinition.hasGraphicalNotation()) {
             BpmnModel bpmnModel = repositoryService.getBpmnModel(processDefinition.getId());
             ProcessDiagramGenerator diagramGenerator = processEngineConfiguration.getProcessDiagramGenerator();
-            InputStream resource = diagramGenerator.generateDiagram(bpmnModel, "png",
-                    runtimeService.getActiveActivityIds(processInstance.getId()), Collections.emptyList(),
-                    processEngineConfiguration.getActivityFontName(), processEngineConfiguration.getLabelFontName(),
-                    processEngineConfiguration.getAnnotationFontName(), processEngineConfiguration.getClassLoader(), 1.0,
-                    processEngineConfiguration.isDrawSequenceFlowNameWithNoLabelDI());
+            InputStream resource =
+                    diagramGenerator.generateDiagram(bpmnModel, "png", runtimeService.getActiveActivityIds(processInstance.getId()),
+                            Collections.emptyList(), processEngineConfiguration.getActivityFontName(),
+                            processEngineConfiguration.getLabelFontName(), processEngineConfiguration.getAnnotationFontName(),
+                            processEngineConfiguration.getClassLoader(), 1.0,
+                            processEngineConfiguration.isDrawSequenceFlowNameWithNoLabelDI());
 
             try {
                 byte[] byteArray = IOUtils.toByteArray(resource);

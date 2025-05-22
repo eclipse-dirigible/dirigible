@@ -13,7 +13,7 @@ import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.ArtefactService;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
-import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
+import org.eclipse.dirigible.components.base.synchronizer.MultitenantBaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.engine.bpm.flowable.domain.Bpmn;
@@ -36,7 +36,7 @@ import java.util.List;
  */
 @Component
 @Order(SynchronizersOrder.BPMN)
-public class BpmnSynchronizer extends BaseSynchronizer<Bpmn, Long> {
+public class BpmnSynchronizer extends MultitenantBaseSynchronizer<Bpmn, Long> {
 
     /** The Constant FILE_EXTENSION_BPMN. */
     public static final String FILE_EXTENSION_BPMN = ".bpmn";
@@ -91,16 +91,8 @@ public class BpmnSynchronizer extends BaseSynchronizer<Bpmn, Long> {
             }
             bpmn = getService().save(bpmn);
         } catch (Exception e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
-            if (logger.isErrorEnabled()) {
-                logger.error("bpmn: {}", bpmn);
-            }
-            if (logger.isErrorEnabled()) {
-                logger.error("content: {}", new String(content));
-            }
-            throw new ParseException(e.getMessage(), 0);
+            String errMsg = "Failed to parse bpmn [" + bpmn + "] due to error [" + e.getMessage() + "] with content: " + content;
+            throw new ParseException(errMsg, 0);
         }
         return List.of(bpmn);
     }
