@@ -20,6 +20,8 @@ import java.sql.ParameterMetaData;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -149,6 +151,12 @@ public class ParametersSetter {
                     + "]. Statement: " + preparedStatement;
             throw new IllegalArgumentException(errMsg);
         }
+        Map<Integer, Integer> paramTypes = new HashMap<>();
+        for (int idx = 1; idx <= sqlParametersCount; idx++) {
+            paramTypes.put(idx, paramsMetaData.getParameterType(idx));
+        }
+
+        LOGGER.info("!!! Prepared statement [{}] Parameters sql types by the driver: {}", preparedStatement, paramTypes);
 
         for (int idx = 0; idx < paramsCount; idx++) {
             int sqlParamIndex = idx + 1;

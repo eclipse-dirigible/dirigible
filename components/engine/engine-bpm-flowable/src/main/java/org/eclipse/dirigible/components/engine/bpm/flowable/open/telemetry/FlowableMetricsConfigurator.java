@@ -11,15 +11,13 @@ package org.eclipse.dirigible.components.engine.bpm.flowable.open.telemetry;
 
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.metrics.Meter;
-import org.eclipse.dirigible.components.engine.bpm.flowable.provider.BpmProviderFlowable;
+import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService;
 import org.flowable.spring.boot.actuate.endpoint.ProcessEngineEndpoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.stereotype.Component;
-
-import java.util.Date;
 
 /**
  * The Class FlowableMetricsConfigurator.
@@ -36,20 +34,12 @@ class FlowableMetricsConfigurator implements ApplicationListener<ApplicationRead
     /** The Constant METER_SCOPE_NAME. */
     private static final String METER_SCOPE_NAME = "dirigible_flowable";
 
-    /** The bpm provider flowable. */
-    private final BpmProviderFlowable bpmProviderFlowable;
-
+    private final BpmService bpmService;
     /** The open telemetry. */
     private final OpenTelemetry openTelemetry;
 
-    /**
-     * Instantiates a new flowable metrics configurator.
-     *
-     * @param bpmProviderFlowable the bpm provider flowable
-     * @param openTelemetry the open telemetry
-     */
-    FlowableMetricsConfigurator(BpmProviderFlowable bpmProviderFlowable, OpenTelemetry openTelemetry) {
-        this.bpmProviderFlowable = bpmProviderFlowable;
+    FlowableMetricsConfigurator(BpmService bpmService, OpenTelemetry openTelemetry) {
+        this.bpmService = bpmService;
         this.openTelemetry = openTelemetry;
     }
 
@@ -68,75 +58,36 @@ class FlowableMetricsConfigurator implements ApplicationListener<ApplicationRead
         meter.gaugeBuilder(METRIC_PREFIX + "processDefinitionCount")
              .setDescription("Total number of flowable process definitions")
              .ofLongs()
-             .buildWithCallback(measurement -> measurement.record(bpmProviderFlowable.getProcessEngine()
-                                                                                     .getRepositoryService()
-                                                                                     .createProcessDefinitionQuery()
-                                                                                     .count()));
+             .buildWithCallback(measurement -> measurement.record(bpmService.processDefinitionsCount()));
 
         meter.gaugeBuilder(METRIC_PREFIX + "runningProcessInstanceCount")
              .setDescription("Total number of flowable running process instances")
              .ofLongs()
-             .buildWithCallback(measurement -> measurement.record(bpmProviderFlowable.getProcessEngine()
-                                                                                     .getRuntimeService()
-                                                                                     .createProcessInstanceQuery()
-                                                                                     .count()));
+             .buildWithCallback(measurement -> measurement.record(bpmService.getProcessInstancesCount()));
 
         meter.gaugeBuilder(METRIC_PREFIX + "completedProcessInstanceCount")
              .setDescription("Total number of completed flowable process instances")
              .ofLongs()
-             .buildWithCallback(measurement -> measurement.record(bpmProviderFlowable.getProcessEngine()
-                                                                                     .getHistoryService()
-                                                                                     .createHistoricProcessInstanceQuery()
-                                                                                     .finished()
-                                                                                     .count()));
+             .buildWithCallback(measurement -> measurement.record(bpmService.getFinishedHistoricProcessInstancesCount()));
 
         meter.gaugeBuilder(METRIC_PREFIX + "openTaskCount")
              .setDescription("Total number of flowable open tasks")
              .ofLongs()
-             .buildWithCallback(measurement -> measurement.record(bpmProviderFlowable.getProcessEngine()
-                                                                                     .getTaskService()
-                                                                                     .createTaskQuery()
-                                                                                     .count()));
+             .buildWithCallback(measurement -> measurement.record(bpmService.getTasksCount()));
 
         meter.gaugeBuilder(METRIC_PREFIX + "completedTaskCount")
              .setDescription("Total number of flowable completed tasks")
              .ofLongs()
-             .buildWithCallback(measurement -> measurement.record(bpmProviderFlowable.getProcessEngine()
-                                                                                     .getHistoryService()
-                                                                                     .createHistoricTaskInstanceQuery()
-                                                                                     .finished()
-                                                                                     .count()));
+             .buildWithCallback(measurement -> measurement.record(bpmService.getTotalCompletedTasksCount()));
         meter.gaugeBuilder(METRIC_PREFIX + "completedTaskCountToday")
              .setDescription("Total number of flowable completed tasks for today")
              .ofLongs()
-             .buildWithCallback(measurement -> measurement.record(bpmProviderFlowable.getProcessEngine()
-                                                                                     .getHistoryService()
-                                                                                     .createHistoricTaskInstanceQuery()
-                                                                                     .finished()
-                                                                                     .taskCompletedAfter(new Date(System.currentTimeMillis()
-                                                                                             - secondsForDays(1)))
-                                                                                     .count()));
+             .buildWithCallback(measurement -> measurement.record(bpmService.getCompletedTasksForToday()));
 
         meter.gaugeBuilder(METRIC_PREFIX + "completedActivities")
              .setDescription("Total number of flowable completed activities")
              .ofLongs()
-             .buildWithCallback(measurement -> measurement.record(bpmProviderFlowable.getProcessEngine()
-                                                                                     .getHistoryService()
-                                                                                     .createHistoricActivityInstanceQuery()
-                                                                                     .finished()
-                                                                                     .count()));
-    }
-
-    /**
-     * Seconds for days.
-     *
-     * @param days the days
-     * @return the long
-     */
-    private long secondsForDays(int days) {
-        int hour = 60 * 60 * 1000;
-        int day = 24 * hour;
-        return (long) days * day;
+             .buildWithCallback(measurement -> measurement.record(bpmService.getCompletedActivities()));
     }
 
 }
