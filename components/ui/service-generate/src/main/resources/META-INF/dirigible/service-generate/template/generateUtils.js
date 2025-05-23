@@ -12,6 +12,20 @@
 import { Registry } from "sdk/platform";
 import { TemplateEngines as templateEngines } from "sdk/template";
 
+function getTranslations(model, namespace) {
+    let translations = {};
+    for (const [key, value] of Object.entries(model)) {
+        if ((key === 'label' || key === 'errorMessage') && value !== undefined && value !== null && value !== '') {
+            const translationId = `${namespace}:${value.replaceAll(' ', '').replaceAll('_', '').replaceAll('.', '').replaceAll(':', '')}`;
+            translations[translationId] = value;
+            model[key === 'errorMessage' ? 'errorTranslation' : 'translation'] = translationId;
+        } else if (typeof value === 'object') {
+            translations = { ...translations, ...getTranslations(value, namespace) };
+        }
+    }
+    return translations;
+}
+
 export function generateGeneric(model, parameters, templateSources) {
     const generatedFiles = []
     const templateParameters = {};
@@ -32,6 +46,11 @@ export function generateGeneric(model, parameters, templateSources) {
                 location: location,
                 content: content,
                 path: templateEngines.getMustacheEngine().generate(location, template.rename, parameters)
+            });
+        } else if (template.action === "translate") {
+            generatedFiles.push({
+                content: JSON.stringify({ ...JSON.parse(content), ...getTranslations(model, cleanTemplateParameters.projectName) }, null, 2),
+                path: template.path
             });
         } else {
             generatedFiles.push({

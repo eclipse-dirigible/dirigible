@@ -21,6 +21,11 @@ export function getTemplate(parameters) {
         extension: "form",
         sources: [
             {
+                location: "/template-form-builder-angularjs/ui/translations.json.template",
+                path: "translations/en-US/translations.json",
+                action: "translate",
+            },
+            {
                 location: "/template-form-builder-angularjs/ui/controller.js.template",
                 action: "generate",
                 rename: "gen/{{genFolderName}}/forms/{{fileName}}/controller.js",

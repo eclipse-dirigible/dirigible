@@ -9,8 +9,8 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const general = angular.module('general', ['ngCookies', 'blimpKit', 'platformView']);
-general.controller('GeneralController', ($scope, $http, $cookies, theming, ButtonStates) => {
+const general = angular.module('general', ['ngCookies', 'blimpKit', 'platformView', 'platformLocale']);
+general.controller('GeneralController', ($scope, $http, $cookies, theming, ButtonStates, LocaleService) => {
     const dialogHub = new DialogHub();
     const themingHub = new ThemingHub();
     const brandingInfo = getBrandingInfo();
@@ -30,16 +30,16 @@ general.controller('GeneralController', ($scope, $http, $cookies, theming, Butto
 
     $scope.resetAll = () => {
         dialogHub.showDialog({
-            title: `Reset ${brandingInfo.brand}`,
-            message: `This will clear all general settings, open tabs and cache.\n${brandingInfo.brand} will then reload.\nDo you wish to continue?`,
+            title: `${LocaleService.t('reset', 'Reset')} ${brandingInfo.brand}`,
+            message: LocaleService.t('dashboard:settings.resetMsg', { brand: brandingInfo.brand }),
             buttons: [
-                { id: 'yes', label: 'Yes', state: ButtonStates.Emphasized },
-                { id: 'no', label: 'No' }
+                { id: 'yes', label: LocaleService.t('yes', 'Yes'), state: ButtonStates.Emphasized },
+                { id: 'no', label: LocaleService.t('no', 'No') }
             ],
             closeButton: false
         }).then((buttonId) => {
             if (buttonId === 'yes') {
-                dialogHub.showBusyDialog('Resetting...');
+                dialogHub.showBusyDialog(`${LocaleService.t('dashboard:settings.resetting', 'Resetting')}...`);
                 localStorage.clear();
                 theming.reset();
                 $http.get('/services/js/platform-core/services/clear-cache.js').then(() => {
@@ -53,8 +53,8 @@ general.controller('GeneralController', ($scope, $http, $cookies, theming, Butto
                     console.error(error);
                     dialogHub.closeBusyDialog();
                     dialogHub.showAlert({
-                        title: 'Failed to reset',
-                        message: 'There was an error during the reset process. Please refresh manually.',
+                        title: LocaleService.t('dashboard:errMsg.resetTitle', 'Failed to reset'),
+                        message: LocaleService.t('dashboard:errMsg.reset', 'There was an error during the reset process. Please refresh manually.'),
                         type: AlertTypes.Error,
                         preformatted: false,
                     });
