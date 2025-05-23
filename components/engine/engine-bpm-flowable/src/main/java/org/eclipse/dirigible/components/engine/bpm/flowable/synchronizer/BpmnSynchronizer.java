@@ -190,7 +190,8 @@ public class BpmnSynchronizer extends MultitenantBaseSynchronizer<Bpmn, Long> {
             bpmn.setProcessDefinitionTenantId(processDefinition.getTenantId());
             bpmn.setProcessDefinitionCategory(processDefinition.getCategory());
             bpmn.setProcessDefinitionDescription(processDefinition.getDescription());
-            logger.info("BPMN [{}] has been deployed : id [{}], key: [{}]", bpmn, deployment.getId(), deployment.getKey());
+            logger.info("BPMN [{}] has been deployed : id [{}], key: [{}], tenant [{}]", bpmn, deployment.getId(), deployment.getKey(),
+                    deployment.getTenantId());
         } catch (RuntimeException ex) {
             String errorMessage = "Failed to deploy BPMN: " + bpmn;
             throw new IllegalStateException(errorMessage, ex);
@@ -206,7 +207,8 @@ public class BpmnSynchronizer extends MultitenantBaseSynchronizer<Bpmn, Long> {
         List<Deployment> deployments = bpmService.getDeploymentsByKey(bpmn.getLocation());
         for (Deployment deployment : deployments) {
             bpmService.deleteDeployment(deployment.getId());
-            logger.info("Deleted deployment: [{}] with key: [{}] on the Flowable BPMN Engine.", deployment.getId(), deployment.getKey());
+            logger.info("Deleted deployment: [{}] with key: [{}] for tenant [{}] on the Flowable BPMN Engine.", deployment.getId(),
+                    deployment.getKey(), deployment.getTenantId());
         }
 
     }
