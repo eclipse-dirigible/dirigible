@@ -101,8 +101,9 @@ public class GsonHelper {
      *
      * @param src the src
      * @return the json element
+     * @throws JsonSyntaxException in case of invalid json
      */
-    public static JsonElement parseJson(String src) {
+    public static JsonElement parseJson(String src) throws JsonSyntaxException {
         try {
             LOGGER.debug("Parsing:\n{}", src);
             return JsonParser.parseString(src);

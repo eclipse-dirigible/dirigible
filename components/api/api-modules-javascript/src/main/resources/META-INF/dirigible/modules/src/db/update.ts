@@ -13,7 +13,6 @@
 const DatabaseFacade = Java.type("org.eclipse.dirigible.components.api.db.DatabaseFacade");
 
 export interface UpdateParameter {
-	readonly type: string;
 	readonly value: any;
 }
 
