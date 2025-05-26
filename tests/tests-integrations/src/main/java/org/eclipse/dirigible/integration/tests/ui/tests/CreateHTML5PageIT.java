@@ -16,7 +16,7 @@ public class CreateHTML5PageIT extends UserInterfaceIntegrationTest {
     void test() {
         Workbench workbench = ide.openWorkbench();
         workbench.createNewProject(this.getClass()
-                .getSimpleName());
+                                       .getSimpleName());
 
         workbench.createCustomElementInProject(PROJECT_NAME, FILE_NAME, "HTML5 Page");
         workbench.openFile(FILE_NAME);
