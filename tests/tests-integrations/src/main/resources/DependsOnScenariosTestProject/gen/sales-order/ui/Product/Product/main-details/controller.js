@@ -15,6 +15,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 	}])
 	.controller('PageController', ($scope, $http, Extensions, EntityService) => {
 		const Dialogs = new DialogHub();
+		const Notifications = new NotificationHub();
 		$scope.entity = {};
 		$scope.forms = {
 			details: {},
@@ -82,10 +83,10 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			EntityService.create($scope.entity).then((response) => {
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.Product.Product.entityCreated', data: response.data });
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.Product.Product.clearDetails' , data: response.data });
-				Dialogs.showAlert({
+				Notifications.show({
 					title: 'Product',
-					message: 'Product successfully created',
-					type: AlertTypes.Success
+					description: 'Product successfully created',
+					type: 'positive'
 				});
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
@@ -102,10 +103,10 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			EntityService.update($scope.entity.Id, $scope.entity).then((response) => {
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.Product.Product.entityUpdated', data: response.data });
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.Product.Product.clearDetails', data: response.data });
-				Dialogs.showAlert({
+				Notifications.show({
 					title: 'Product',
-					message: 'Product successfully updated',
-					type: AlertTypes.Success
+					description: 'Product successfully updated',
+					type: 'positive'
 				});
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
