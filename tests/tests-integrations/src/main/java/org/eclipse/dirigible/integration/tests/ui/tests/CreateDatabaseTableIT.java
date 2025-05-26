@@ -19,7 +19,7 @@ public class CreateDatabaseTableIT extends UserInterfaceIntegrationTest {
     void test() {
         Workbench workbench = ide.openWorkbench();
         workbench.createNewProject(this.getClass()
-                .getSimpleName());
+                                       .getSimpleName());
 
         workbench.createCustomElementInProject(PROJECT_NAME, FILE_NAME, "Database Table");
         workbench.openFile(FILE_NAME);
@@ -34,7 +34,7 @@ public class CreateDatabaseTableIT extends UserInterfaceIntegrationTest {
         workbench.publishFile("j1_4_anchor");
 
         DatabasePerspective databasePerspective = ide.openDatabasePerspective();
-        expandSubviews("PUBLIC",databasePerspective);
+        expandSubviews("PUBLIC", databasePerspective);
 
         assertColumnExistsInDatabasePerspective();
     }
@@ -52,15 +52,15 @@ public class CreateDatabaseTableIT extends UserInterfaceIntegrationTest {
     }
 
     private void assertColumnExistsInDatabasePerspective() {
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.ANCHOR,"Name - ");
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.ANCHOR, "Name - ");
     }
 
     private void assertColumnExistsInWorkbench() {
-        browser.assertElementExistsByTypeAndText(HtmlElementType.TD,"Name");
+        browser.assertElementExistsByTypeAndText(HtmlElementType.TD, "Name");
     }
 
     private void assertDialogExists(String dialogLabelName) {
-        browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER2,dialogLabelName);
+        browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER2, dialogLabelName);
     }
 
     private void assertFileTabIsOpen(String fileName) {
