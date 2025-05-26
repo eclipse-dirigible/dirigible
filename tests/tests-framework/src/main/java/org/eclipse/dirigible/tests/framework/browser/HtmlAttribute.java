@@ -18,8 +18,7 @@ public enum HtmlAttribute {
     TITLE("title"), //
     LABEL("label"), //
     NGCLICK("ng-click"), //
-    GLYPH("glyph"),
-    STYLE("style");
+    GLYPH("glyph"), STYLE("style");
 
     private final String attribute;
 
