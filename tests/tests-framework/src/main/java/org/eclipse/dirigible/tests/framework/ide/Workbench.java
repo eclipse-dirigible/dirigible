@@ -107,12 +107,14 @@ public class Workbench {
     public void generateFormDefinition() {
 
         browser.rightClickOnElementById("j1_4_anchor");
-        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN,HtmlAttribute.CLASS,"fd-menu__title", "Generate");
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", "Generate");
 
-        browser.clickOnElementWithText(HtmlElementType.SPAN,"Templates");
-        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN,HtmlAttribute.CLASS,"fd-list__title", "AngularJS Generator from Form Model");
+        browser.clickOnElementWithText(HtmlElementType.SPAN, "Templates");
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title",
+                "AngularJS Generator from Form Model");
 
-        browser.clickOnElementByAttributeValue(HtmlElementType.BUTTON,HtmlAttribute.CLASS,"fd-button fd-button--emphasized fd-dialog__decisive-button");
+        browser.clickOnElementByAttributeValue(HtmlElementType.BUTTON, HtmlAttribute.CLASS,
+                "fd-button fd-button--emphasized fd-dialog__decisive-button");
     }
 
     public void openFormIndexHTML() {

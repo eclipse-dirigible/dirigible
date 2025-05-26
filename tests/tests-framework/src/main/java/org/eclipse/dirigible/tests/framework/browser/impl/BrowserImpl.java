@@ -462,7 +462,7 @@ class BrowserImpl implements Browser {
 
     private void doubleClickElement(SelenideElement element) {
         element.scrollIntoView(true)
-                .doubleClick();
+               .doubleClick();
     }
 
     private void clickElement(SelenideElement element) {

@@ -17,7 +17,7 @@ public class CreateFormDefinitionIT extends UserInterfaceIntegrationTest {
     void test() {
         Workbench workbench = ide.openWorkbench();
         workbench.createNewProject(this.getClass()
-                .getSimpleName());
+                                       .getSimpleName());
 
         workbench.createCustomElementInProject(PROJECT_NAME, FILE_NAME, "Form Definition");
         workbench.openFile(FILE_NAME);
@@ -43,10 +43,9 @@ public class CreateFormDefinitionIT extends UserInterfaceIntegrationTest {
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.PARAGRAPH, fileContent);
     }
 
-    private void assertFormIsGenerated()
-    {
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.ANCHOR,"test1.gen");
-        browser.assertElementExistByAttributePatternAndText(HtmlElementType.ANCHOR,HtmlAttribute.ID,"j1_2_anchor","gen");
+    private void assertFormIsGenerated() {
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.ANCHOR, "test1.gen");
+        browser.assertElementExistByAttributePatternAndText(HtmlElementType.ANCHOR, HtmlAttribute.ID, "j1_2_anchor", "gen");
     }
 
     private void assertFileTabIsOpen(String fileName) {
