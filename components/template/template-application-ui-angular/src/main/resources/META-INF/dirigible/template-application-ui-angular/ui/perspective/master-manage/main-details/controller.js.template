@@ -5,6 +5,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 	}])
 	.controller('PageController', ($scope, ${dollar}http, Extensions, EntityService) => {
 		const Dialogs = new DialogHub();
+		const Notifications = new NotificationHub();
 		$scope.entity = {};
 		$scope.forms = {
 			details: {},
@@ -151,10 +152,10 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			EntityService.create($scope.entity).then((response) => {
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityCreated', data: response.data });
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.clearDetails' , data: response.data });
-				Dialogs.showAlert({
+				Notifications.show({
 					title: '${name}',
-					message: '${name} successfully created',
-					type: AlertTypes.Success
+					description: '${name} successfully created',
+					type: 'positive'
 				});
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
@@ -176,10 +177,10 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			EntityService.update($scope.entity.${primaryKeysString}, $scope.entity).then((response) => {
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityUpdated', data: response.data });
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.clearDetails', data: response.data });
-				Dialogs.showAlert({
+				Notifications.show({
 					title: '${name}',
-					message: '${name} successfully updated',
-					type: AlertTypes.Success
+					description: '${name} successfully updated',
+					type: 'positive'
 				});
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
