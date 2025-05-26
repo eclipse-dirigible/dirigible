@@ -16,7 +16,7 @@ public class CreateBusinessProcessModelIT extends UserInterfaceIntegrationTest {
     void test() {
         Workbench workbench = ide.openWorkbench();
         workbench.createNewProject(this.getClass()
-                .getSimpleName());
+                                       .getSimpleName());
 
         workbench.createCustomElementInProject(PROJECT_NAME, FILE_NAME, "Business Process Model");
 
@@ -24,8 +24,8 @@ public class CreateBusinessProcessModelIT extends UserInterfaceIntegrationTest {
 
         assertFileTabIsOpen(FILE_NAME);
 
-        workbench.addContentToBpmnField(FIELD_CONTENT,"Process identifier :");
-        workbench.addContentToBpmnField(FIELD_CONTENT,"Name :");
+        workbench.addContentToBpmnField(FIELD_CONTENT, "Process identifier :");
+        workbench.addContentToBpmnField(FIELD_CONTENT, "Name :");
 
         workbench.saveAll();
         workbench.publishFile("j1_4_anchor");
@@ -39,9 +39,8 @@ public class CreateBusinessProcessModelIT extends UserInterfaceIntegrationTest {
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-icon-tab-bar__tag", fileName);
     }
 
-    private void assertProcessNotificationIsPresent()
-    {
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.PARAGRAPH,"A new user task has been added.");
+    private void assertProcessNotificationIsPresent() {
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.PARAGRAPH, "A new user task has been added.");
     }
 
 }
