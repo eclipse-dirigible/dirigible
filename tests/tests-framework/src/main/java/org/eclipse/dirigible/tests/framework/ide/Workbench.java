@@ -104,7 +104,7 @@ public class Workbench {
         browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_BUTTON_TEXT);
     }
 
-    public void createCustomElementInFolder(String fileName, String elementType,String folderId) {
+    public void createCustomElementInFolder(String fileName, String elementType, String folderId) {
         browser.rightClickOnElementById(folderId);
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", elementType);
 

@@ -6,8 +6,7 @@ import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.ide.Workbench;
 import org.junit.jupiter.api.Test;
 
-public class CreateNewFolderIT extends UserInterfaceIntegrationTest
-{
+public class CreateNewFolderIT extends UserInterfaceIntegrationTest {
 
     private static final String FOLDER_NAME = "folder1";
     private static final String FILE_NAME = "text1.txt";
@@ -19,14 +18,14 @@ public class CreateNewFolderIT extends UserInterfaceIntegrationTest
     void test() {
         Workbench workbench = ide.openWorkbench();
         workbench.createNewProject(this.getClass()
-                .getSimpleName());
+                                       .getSimpleName());
 
-        workbench.createCustomElementInProject(PROJECT_NAME,FOLDER_NAME,"Folder");
+        workbench.createCustomElementInProject(PROJECT_NAME, FOLDER_NAME, "Folder");
         assertFolderIsPresent(FOLDER_NAME);
 
 
 
-        workbench.createCustomElementInFolder(FILE_NAME,"File","j1_4_anchor");
+        workbench.createCustomElementInFolder(FILE_NAME, "File", "j1_4_anchor");
         workbench.openFile(FILE_NAME);
         assertFileTabIsOpen(FILE_NAME);
 
@@ -36,7 +35,7 @@ public class CreateNewFolderIT extends UserInterfaceIntegrationTest
     }
 
     private void assertFolderIsPresent(String folderName) {
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.ANCHOR,folderName);
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.ANCHOR, folderName);
     }
 
     private void assertTextIsPresent() {
