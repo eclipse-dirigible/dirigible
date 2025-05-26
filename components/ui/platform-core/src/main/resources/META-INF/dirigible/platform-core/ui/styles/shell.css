@@ -224,3 +224,9 @@ body {
     top: 0;
     z-index: 1;
 }
+
+.notification-popover .fd-notification__paragraph {
+    -webkit-line-clamp: none;
+    line-clamp: none;
+    max-height: none;
+}
