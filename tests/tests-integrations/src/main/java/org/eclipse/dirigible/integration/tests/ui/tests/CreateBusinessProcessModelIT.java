@@ -40,7 +40,7 @@ public class CreateBusinessProcessModelIT extends UserInterfaceIntegrationTest {
     }
 
     private void assertProcessNotificationIsPresent() {
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.PARAGRAPH, "A new user task has been added.");
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.PARAGRAPH, "A new process definition has been added.");
     }
 
 }
