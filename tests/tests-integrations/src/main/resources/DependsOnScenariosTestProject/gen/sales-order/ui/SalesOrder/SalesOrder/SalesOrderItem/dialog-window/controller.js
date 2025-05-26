@@ -15,6 +15,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 	}])
 	.controller('PageController', ($scope, $http, ViewParameters, EntityService) => {
 		const Dialogs = new DialogHub();
+		const Notifications = new NotificationHub();
 		$scope.entity = {};
 		$scope.forms = {
 			details: {},
@@ -41,10 +42,10 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			entity[$scope.selectedMainEntityKey] = $scope.selectedMainEntityId;
 			EntityService.create(entity).then((response) => {
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.SalesOrder.SalesOrderItem.entityCreated', data: response.data });
-				Dialogs.showAlert({
+				Notifications.show({
 					title: 'SalesOrderItem',
-					message: 'SalesOrderItem successfully created',
-					type: AlertTypes.Success
+					description: 'SalesOrderItem successfully created',
+					type: 'positive'
 				});
 				$scope.cancel();
 			}, (error) => {
@@ -64,10 +65,10 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			entity[$scope.selectedMainEntityKey] = $scope.selectedMainEntityId;
 			EntityService.update(id, entity).then((response) => {
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.SalesOrder.SalesOrderItem.entityUpdated', data: response.data });
-				Dialogs.showAlert({
+				Notifications.show({
 					title: 'SalesOrderItem',
-					message: 'SalesOrderItem successfully updated',
-					type: AlertTypes.Success
+					description: 'SalesOrderItem successfully updated',
+					type: 'positive'
 				});
 				$scope.cancel();
 			}, (error) => {

@@ -818,9 +818,8 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 			}
 		}
 		let nodeText = column.name + ' - <i style="font-size: smaller;">' + column.type;
-		if ((column.size !== undefined && column.size !== 0)
-			|| (column.length !== undefined && column.size !== 0)) {
-			nodeText += '(' + (column.size !== undefined ? column.size : (column.length !== undefined ? column.length : 'N/A')) + ')';
+		if ((column.size !== undefined && column.size !== 0) || (column.length !== undefined && column.size !== 0)) {
+			nodeText += '(' + (column.size !== undefined ? column.size : (column.length !== undefined ? column.length : 'N/A')) + (column.scale ? `,${column.scale})` : ')');
 		}
 		nodeText += '</i>';
 		let newNode = {
