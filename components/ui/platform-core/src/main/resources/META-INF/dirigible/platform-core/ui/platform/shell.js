@@ -386,6 +386,7 @@ if (window !== top) {
         replace: true,
         link: (scope) => {
             const notificationHub = new NotificationHub();
+            let to = 0;
             scope.notification = {
                 type: '',
                 title: '',
@@ -403,6 +404,13 @@ if (window !== top) {
                     title: data.title,
                     description: data.description,
                 });
+                if (to) clearTimeout(to);
+                to = setTimeout(() => {
+                    scope.$evalAsync(() => {
+                        scope.hide();
+                    });
+                }, 4000);
+                scope.clearTimeout = () => clearTimeout(to);
             });
             scope.hide = () => {
                 scope.notification.type = '';
@@ -410,7 +418,7 @@ if (window !== top) {
             scope.$on('$destroy', () => notificationHub.removeMessageListener(onNotificationListener));
         },
         template: `<div ng-if="notification.type" class="notification-overlay">
-            <bk-notification is-banner="true" style="width: 100%; max-width:33rem">
+            <bk-notification is-banner="true" style="width: 100%; max-width:33rem" ng-mouseenter="clearTimeout()" ng-mouseleave="hide()">
                 <div bk-notification-content>
                     <div bk-notification-header>
                         <span bk-notification-icon="{{notification.type}}"></span>
@@ -419,8 +427,7 @@ if (window !== top) {
                     <p bk-notification-paragraph="">{{notification.description}}</p>
                 </div>
                 <div bk-notification-actions>
-                    <bk-button aria-label="Close" state="transparent" glyph="sap-icon--decline" ng-click="hide()">
-                    </bk-button>
+                    <bk-button aria-label="Close" state="transparent" glyph="sap-icon--decline" ng-click="hide()"></bk-button>
                 </div>
             </bk-notification>
         </div>`,
