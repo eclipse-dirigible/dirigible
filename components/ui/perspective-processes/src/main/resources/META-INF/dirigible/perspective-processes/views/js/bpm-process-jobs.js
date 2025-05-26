@@ -31,7 +31,7 @@ ideBpmProcessJobsView.controller('IDEBpmProcessJobsViewController', ($scope, $ht
             title: job.exceptionMessage,
             message: job.exceptionStacktrace,
             type: AlertTypes.Error,
-            preformatted: false,
+            preformatted: true,
         });
     };
 

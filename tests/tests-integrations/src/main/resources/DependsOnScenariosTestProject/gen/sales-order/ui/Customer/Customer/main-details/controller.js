@@ -15,6 +15,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 	}])
 	.controller('PageController', ($scope, $http, Extensions, EntityService) => {
 		const Dialogs = new DialogHub();
+		const Notifications = new NotificationHub();
 		$scope.entity = {};
 		$scope.forms = {
 			details: {},
@@ -118,10 +119,10 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			EntityService.create($scope.entity).then((response) => {
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.Customer.Customer.entityCreated', data: response.data });
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.Customer.Customer.clearDetails' , data: response.data });
-				Dialogs.showAlert({
+				Notifications.show({
 					title: 'Customer',
-					message: 'Customer successfully created',
-					type: AlertTypes.Success
+					description: 'Customer successfully created',
+					type: 'positive'
 				});
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
@@ -138,10 +139,10 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			EntityService.update($scope.entity.Id, $scope.entity).then((response) => {
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.Customer.Customer.entityUpdated', data: response.data });
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.Customer.Customer.clearDetails', data: response.data });
-				Dialogs.showAlert({
+				Notifications.show({
 					title: 'Customer',
-					message: 'Customer successfully updated',
-					type: AlertTypes.Success
+					description: 'Customer successfully updated',
+					type: 'positive'
 				});
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
