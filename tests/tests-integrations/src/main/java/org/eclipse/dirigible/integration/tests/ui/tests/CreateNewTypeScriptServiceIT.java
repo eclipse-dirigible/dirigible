@@ -19,7 +19,7 @@ class CreateNewTypeScriptServiceIT extends UserInterfaceIntegrationTest {
     void test() {
         Workbench workbench = ide.openWorkbench();
         workbench.createNewProject(this.getClass()
-                .getSimpleName());
+                                       .getSimpleName());
         workbench.createCustomElementInProject(PROJECT_NAME, FILE_NAME, "TypeScript Service");
         workbench.openFile(FILE_NAME);
         assertFileTabIsOpen(FILE_NAME);
@@ -37,6 +37,5 @@ class CreateNewTypeScriptServiceIT extends UserInterfaceIntegrationTest {
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-icon-tab-bar__tag", fileName);
     }
 }
-
 
 
