@@ -112,9 +112,8 @@ public class Workbench {
         saveAll();
     }
 
-    public void openDialogFromButton(String buttonText)
-    {
-        browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.LABEL,buttonText);
+    public void openDialogFromButton(String buttonText) {
+        browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.LABEL, buttonText);
     }
 
 
