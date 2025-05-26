@@ -15,6 +15,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 	}])
 	.controller('PageController', ($scope, $http, ViewParameters, EntityService) => {
 		const Dialogs = new DialogHub();
+		const Notifications = new NotificationHub();
 		$scope.entity = {};
 		$scope.forms = {
 			details: {},
@@ -39,10 +40,10 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			entity[$scope.selectedMainEntityKey] = $scope.selectedMainEntityId;
 			EntityService.create(entity).then((response) => {
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.Country.Country.entityCreated', data: response.data });
-				Dialogs.showAlert({
+				Notifications.show({
 					title: 'Country',
-					message: 'Country successfully created',
-					type: AlertTypes.Success
+					description: 'Country successfully created',
+					type: 'positive'
 				});
 				$scope.cancel();
 			}, (error) => {
@@ -61,10 +62,10 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			EntityService.update(id, entity).then((response) => {
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.Country.Country.entityUpdated', data: response.data });
 				$scope.cancel();
-				Dialogs.showAlert({
+				Notifications.show({
 					title: 'Country',
-					message: 'Country successfully updated',
-					type: AlertTypes.Success
+					description: 'Country successfully updated',
+					type: 'positive'
 				});
 			}, (error) => {
 				const message = error.data ? error.data.message : '';

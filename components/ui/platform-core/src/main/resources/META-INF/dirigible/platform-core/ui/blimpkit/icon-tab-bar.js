@@ -165,6 +165,11 @@ blimpkit.directive('bkIconTabBar', function (classNames, $injector) {
     transclude: true,
     replace: true,
     template: '<ul role="tablist" class="fd-icon-tab-bar__header" style="overflow-x: visible" ng-transclude></ul>'
+})).directive('bkTabsScrollable', () => ({
+    restrict: 'E',
+    transclude: true,
+    replace: true,
+    template: '<div class="bk-icon-tab-bar-scrollable" tabindex="-1" ng-transclude></div>'
 })).directive('bkTabsOverflowable', ($timeout) => ({
     restrict: 'A',
     require: '^^bkIconTabBar',

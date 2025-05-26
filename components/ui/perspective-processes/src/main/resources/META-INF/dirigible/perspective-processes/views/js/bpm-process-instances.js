@@ -44,8 +44,8 @@ ideBpmProcessInstancesView.controller('IDEBpmProcessInstancesViewController', ($
                     if ($scope.instancesList.length < response.data.length) {
                         Notifications.show({
                             type: 'information',
-                            title: 'User instances',
-                            description: 'A new user task has been added.'
+                            title: 'Process instances',
+                            description: 'A new process instance has been started.'
                         });
                     }
 
@@ -82,12 +82,12 @@ ideBpmProcessInstancesView.controller('IDEBpmProcessInstancesViewController', ($
             data: requestBody,
             headers: { 'Content-Type': 'application/json' }
         }).then(() => {
-            Dialogs.showAlert({
+            Notifications.show({
                 title: 'Action confirmation',
-                message: actionName + " triggered successfully!",
-                type: AlertTypes.Success,
-                preformatted: false,
+                description: actionName + " triggered successfully!",
+                type: 'positive',
             });
+            
             $scope.reload();
         }).catch((error) => {
             console.error('Error making POST request:', error);
