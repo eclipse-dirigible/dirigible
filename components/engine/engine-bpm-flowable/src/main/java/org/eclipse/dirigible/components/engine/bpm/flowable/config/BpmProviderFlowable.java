@@ -50,6 +50,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import javax.sql.DataSource;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
@@ -801,5 +802,43 @@ public class BpmProviderFlowable implements BpmProvider {
                                  .createHistoricActivityInstanceQuery()
                                  .finished()
                                  .count();
+    }
+
+    public String getProcessDefinitionXmlById(String processDefinitionId) {
+        validateProcessDefinitionId(processDefinitionId);
+
+        ProcessEngine processEngine = getProcessEngine();
+        try {
+
+            InputStream processModel = processEngine.getRepositoryService()
+                                                    .getProcessModel(processDefinitionId);
+            return IOUtils.toString(processModel, StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new IllegalStateException("Error reading BPMN file for: " + processDefinitionId, ex);
+        }
+    }
+
+    private void validateProcessDefinitionId(String processDefinitionId) {
+        ProcessDefinition processDefinition = processEngine.getRepositoryService()
+                                                           .createProcessDefinitionQuery()
+                                                           .processDefinitionId(processDefinitionId)
+                                                           .processDefinitionTenantId(getTenantId())
+                                                           .singleResult();
+
+        if (processDefinition == null) {
+            throw new IllegalArgumentException(
+                    "Process definition with id [" + processDefinitionId + "] not found or does not belong to current tenant.");
+        }
+
+    }
+
+    public List<String> getProcessInstanceActiveActivityIds(String processInstanceId) {
+        ProcessEngine processEngine = getProcessEngine();
+        ProcessInstance processInstance = getProcessInstance(processInstanceId);
+        if (null == processInstance) {
+            return Collections.emptyList();
+        }
+        RuntimeService runtimeService = processEngine.getRuntimeService();
+        return runtimeService.getActiveActivityIds(processInstance.getId());
     }
 }

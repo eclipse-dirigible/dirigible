@@ -84,6 +84,17 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
     private WorkspaceService workspaceService;
 
     /**
+     * Gets the process definition xml.
+     *
+     * @param id the id
+     * @return the process definition xml
+     */
+    @GetMapping(value = "/bpm-processes/definition/bpmn")
+    public ResponseEntity<String> getProcessDefinitionXml(@RequestParam("id") Optional<String> id) {
+        return ResponseEntity.ok(bpmProviderFlowable.getProcessDefinitionXmlById(id.get()));
+    }
+
+    /**
      * Get the BPM model source.
      *
      * @param workspace the workspace
@@ -471,13 +482,8 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
         return new ResponseEntity<>(image.get(), responseHeaders, HttpStatus.OK);
     }
 
-    /**
-     * Gets the bpm provider flowable.
-     *
-     * @return the bpm provider flowable
-     */
-    public BpmProviderFlowable getBpmProviderFlowable() {
-        return bpmProviderFlowable;
+    @GetMapping(value = "/bpm-processes/instance/{id}/active")
+    public ResponseEntity<List<String>> getProcessInstanceActiveActivityIds(@PathVariable("id") String id) {
+        return ResponseEntity.ok(bpmService.getProcessInstanceActiveActivityIds(id));
     }
-
 }

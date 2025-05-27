@@ -75,6 +75,25 @@ public class BpmService {
     }
 
     /**
+     * Gets the process definition XML by id.
+     *
+     * @param processDefinitionId the id
+     * @return the process definition XML by id
+     */
+    public String getProcessDefinitionXmlById(String processDefinitionId) {
+        return getBpmProviderFlowable().getProcessDefinitionXmlById(processDefinitionId);
+    }
+
+    /**
+     * Gets the bpm provider flowable.
+     *
+     * @return the bpm provider flowable
+     */
+    public BpmProviderFlowable getBpmProviderFlowable() {
+        return bpmProviderFlowable;
+    }
+
+    /**
      * Gets the model.
      *
      * @param workspace the workspace
@@ -208,15 +227,6 @@ public class BpmService {
 
         return processDefinitionData;
 
-    }
-
-    /**
-     * Gets the bpm provider flowable.
-     *
-     * @return the bpm provider flowable
-     */
-    public BpmProviderFlowable getBpmProviderFlowable() {
-        return bpmProviderFlowable;
     }
 
     /**
@@ -411,5 +421,15 @@ public class BpmService {
 
     public long getCompletedActivities() {
         return bpmProviderFlowable.getCompletedActivities();
+    }
+
+    /**
+     * Gets the process instance active activity ids by instance id.
+     *
+     * @param processInstanceId the instance id
+     * @return the process instance active activity ids
+     */
+    public List<String> getProcessInstanceActiveActivityIds(String processInstanceId) {
+        return bpmProviderFlowable.getProcessInstanceActiveActivityIds(processInstanceId);
     }
 }
