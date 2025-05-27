@@ -1,0 +1,9 @@
+<schema>
+ <structures>
+  <structure name="EMPLOYEES" type="TABLE">
+    <column name="ID" type="INTEGER" primaryKey="true" identity="true"></column>
+    <column name="NAME" type="VARCHAR" length="30"></column>
+  </structure>
+ </structures>
+ <mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="2" style="table" vertex="1" parent="1"><Table name="EMPLOYEES" type="TABLE" as="value"/><mxGeometry x="130" y="110" width="200" height="80" as="geometry"><mxRectangle width="200" height="28" as="alternateBounds"/></mxGeometry></mxCell><mxCell id="3" vertex="1" connectable="0" parent="2"><Column name="ID" type="INTEGER" columnLength="0" primaryKey="true" autoIncrement="true" as="value"/><mxGeometry y="28" width="200" height="26" as="geometry"/></mxCell><mxCell id="4" vertex="1" connectable="0" parent="2"><Column name="NAME" columnLength="30" as="value"/><mxGeometry y="54" width="200" height="26" as="geometry"/></mxCell></root></mxGraphModel>
+</schema>

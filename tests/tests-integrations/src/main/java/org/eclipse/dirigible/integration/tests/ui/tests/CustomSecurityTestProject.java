@@ -50,7 +50,7 @@ class CustomSecurityTestProject extends BaseTestProject {
     }
 
     private void testAccessProtectedPageWithUserWithRole() {
-        securityUtil.createUser(EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD, EMPLOYEE_ROLE);
+        securityUtil.createUserInDefaultTenant(EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD, EMPLOYEE_ROLE);
 
         IDE ide = ideFactory.create(EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD);
         ide.openPath(PROTECTED_PAGE_PATH);
@@ -60,7 +60,7 @@ class CustomSecurityTestProject extends BaseTestProject {
     }
 
     private void testAccessProtectedPageWithUserWithoutRole() {
-        securityUtil.createUser(EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_PASSWORD, EMPLOYEE_MANAGER_ROLE);
+        securityUtil.createUserInDefaultTenant(EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_PASSWORD, EMPLOYEE_MANAGER_ROLE);
 
         IDE ide = ideFactory.create(EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_PASSWORD);
         ide.openPath(PROTECTED_PAGE_PATH);
