@@ -1,0 +1,33 @@
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="forms" ng-controller="FormController">
+
+	<head>
+		<meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+		<title config-title></title>
+		<script type="text/javascript" src="view.js"></script>
+		<script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+		<link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+		<script type="text/javascript" src="controller.js"></script>
+	</head>
+
+	<body class="bk-vbox">
+		<bk-fieldset class="fd-margin--tiny" ng-form="forms.form">
+			<bk-form-group>
+
+				<h1 bk-title header-size="1">Process employee registration</h1>
+				<div class=" bk-hbox bk-box--gap bk-box--items-stretch">
+				<div>
+					<bk-button class="bk-full-width" type="submit" ng-disabled="!forms.form.$valid" label="Approve" compact="false" state="positive" ng-click="onApproveClicked()"></bk-button>
+				</div>
+				<div>
+					<bk-button class="bk-full-width" type="submit" ng-disabled="!forms.form.$valid" label="Decline" compact="false" state="negative" ng-click="onDeclineClicked()"></bk-button>
+				</div>
+				</div>
+			</bk-form-group>
+		</bk-fieldset>
+		<theme></theme>
+	</body>
+
+</html>
