@@ -16,38 +16,40 @@ angular.module('locale', ['blimpKit', 'platformView', 'platformLocale']).control
         $scope.languages = LocaleService.getLanguages();
     });
     $scope.setLang = (lang) => {
-        $scope.language = lang;
-        try {
-            LocaleService.changeLanguage(lang);
-            dialogHub.showDialog({
-                title: LocaleService.t('settings-locale:langChanged', 'Language changed'),
-                message: LocaleService.t('settings-locale:langChangedReload', 'Changes will take effect after a refresh'),
-                buttons: [
-                    { id: 'ref', label: LocaleService.t('refresh', 'Refresh'), state: ButtonStates.Emphasized },
-                    { id: 'later', label: LocaleService.t('settings-locale:later', 'Later') }
-                ],
-                closeButton: false,
-            }).then((buttonId) => {
-                if (buttonId === 'ref') top.window.location.reload();
-            });
-        } catch (err) {
-            if (err.notRegistered) {
-                const message = LocaleService.t('settings-locale:errMsg.notRegistered', 'Please look at the console for more information');
-                console.error(message);
-                dialogHub.showAlert({
-                    title: LocaleService.t('settings-locale:errMsg.langChangeTitle', 'Unable to change language'),
-                    message: message,
-                    type: AlertTypes.Error,
-                    preformatted: false,
+        if (lang !== $scope.language) {
+            $scope.language = lang;
+            try {
+                LocaleService.changeLanguage(lang);
+                dialogHub.showDialog({
+                    title: LocaleService.t('settings-locale:langChanged', 'Language changed'),
+                    message: LocaleService.t('settings-locale:langChangedReload', 'Changes will take effect after a refresh'),
+                    buttons: [
+                        { id: 'ref', label: LocaleService.t('refresh', 'Refresh'), state: ButtonStates.Emphasized },
+                        { id: 'later', label: LocaleService.t('settings-locale:later', 'Later') }
+                    ],
+                    closeButton: false,
+                }).then((buttonId) => {
+                    if (buttonId === 'ref') top.window.location.reload();
                 });
-            } else {
-                console.error(err);
-                dialogHub.showAlert({
-                    title: LocaleService.t('settings-locale:errMsg.langChangeTitle', 'Unable to change language'),
-                    message: LocaleService.t('settings-locale:errMsg.langChange', 'Please look at the console for more information'),
-                    type: AlertTypes.Error,
-                    preformatted: false,
-                });
+            } catch (err) {
+                if (err.notRegistered) {
+                    const message = LocaleService.t('settings-locale:errMsg.notRegistered', 'Please look at the console for more information');
+                    console.error(message);
+                    dialogHub.showAlert({
+                        title: LocaleService.t('settings-locale:errMsg.langChangeTitle', 'Unable to change language'),
+                        message: message,
+                        type: AlertTypes.Error,
+                        preformatted: false,
+                    });
+                } else {
+                    console.error(err);
+                    dialogHub.showAlert({
+                        title: LocaleService.t('settings-locale:errMsg.langChangeTitle', 'Unable to change language'),
+                        message: LocaleService.t('settings-locale:errMsg.langChange', 'Please look at the console for more information'),
+                        type: AlertTypes.Error,
+                        preformatted: false,
+                    });
+                }
             }
         }
     };

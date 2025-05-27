@@ -28,7 +28,6 @@ angular.module('platformLocale', []).provider('LocaleService', function LocaleSe
                 i18next.init({
                     lng: savedLanguage,
                     load: 'currentOnly',
-                    fallbackLng: 'en-US',
                     debug: false,
                     defaultNS: 'common',
                     resources: response.data.translations

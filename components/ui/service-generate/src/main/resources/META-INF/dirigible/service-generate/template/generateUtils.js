@@ -12,15 +12,15 @@
 import { Registry } from "sdk/platform";
 import { TemplateEngines as templateEngines } from "sdk/template";
 
-function getTranslations(model, namespace) {
+function getTranslations(model) {
     let translations = {};
     for (const [key, value] of Object.entries(model)) {
         if ((key === 'label' || key === 'errorMessage') && value !== undefined && value !== null && value !== '') {
-            const translationId = `${namespace}:${value.replaceAll(' ', '').replaceAll('_', '').replaceAll('.', '').replaceAll(':', '')}`;
+            const translationId = `${value.replaceAll(' ', '').replaceAll('_', '').replaceAll('.', '').replaceAll(':', '')}`;
             translations[translationId] = value;
             model[key === 'errorMessage' ? 'errorTranslation' : 'translation'] = translationId;
         } else if (typeof value === 'object') {
-            translations = { ...translations, ...getTranslations(value, namespace) };
+            translations = { ...translations, ...getTranslations(value) };
         }
     }
     return translations;
@@ -49,7 +49,7 @@ export function generateGeneric(model, parameters, templateSources) {
             });
         } else if (template.action === "translate") {
             generatedFiles.push({
-                content: JSON.stringify({ ...JSON.parse(content), ...getTranslations(model, cleanTemplateParameters.projectName) }, null, 2),
+                content: JSON.stringify({ ...JSON.parse(content), ...getTranslations(model) }, null, 2),
                 path: template.path
             });
         } else {

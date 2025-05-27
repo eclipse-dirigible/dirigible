@@ -85,6 +85,7 @@ blimpkit.directive('bkFieldset', () => ({
     replace: true,
     scope: {
         state: '@?',
+        text: '@?',
         message: '<?',
         messageFixed: '<?',
     },
@@ -135,7 +136,7 @@ blimpkit.directive('bkFieldset', () => ({
     template: `<div class="fd-popover fd-form-input-message-group" tabindex="-1">
         <div class="fd-popover__control" aria-controls="{{ popoverId }}" aria-expanded="{{expanded}}" aria-haspopup="true" tabindex="-1" ng-transclude></div>
         <div id="{{ popoverId }}" class="fd-popover__body fd-popover__body--no-arrow fd-popover__body--input-message-group" aria-hidden="{{!expanded}}" ng-style="getStyle()">
-            <div class="fd-form-message" ng-class="getClasses()">{{message}}</div>
+            <div class="fd-form-message" ng-class="getClasses()">{{text || message}}</div>
         </div>
     </div>`,
 }));
