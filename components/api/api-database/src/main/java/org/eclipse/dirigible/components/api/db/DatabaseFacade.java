@@ -146,11 +146,11 @@ public class DatabaseFacade implements InitializingBean {
     private static DirigibleDataSource getDataSource(String datasourceName) {
         try {
             boolean defaultDB = datasourceName == null || datasourceName.trim()
-                                                                        .isEmpty() || "DefaultDB".equals(datasourceName);
-            DirigibleDataSource dataSource = defaultDB
-                    ? DatabaseFacade.get()
-                                    .getDataSourcesManager()
-                                    .getDefaultDataSource()
+                                                                        .isEmpty()
+                    || "DefaultDB".equals(datasourceName);
+            DirigibleDataSource dataSource = defaultDB ? DatabaseFacade.get()
+                                                                       .getDataSourcesManager()
+                                                                       .getDefaultDataSource()
                     : DatabaseFacade.get()
                                     .getDataSourcesManager()
                                     .getDataSource(datasourceName);
@@ -161,8 +161,8 @@ public class DatabaseFacade implements InitializingBean {
 
             return dataSource;
         } catch (RuntimeException ex) {
-            logger.error("Failed to get data source with name [{}]", datasourceName,
-                    ex);// log it here because the client may handle the exception and hide the details.
+            logger.error("Failed to get data source with name [{}]", datasourceName, ex);// log it here because the client may handle the
+                                                                                         // exception and hide the details.
             throw ex;
         }
     }
@@ -510,8 +510,8 @@ public class DatabaseFacade implements InitializingBean {
         return LoggingExecutor.executeWithException(dataSource, () -> {
 
             try (Connection connection = dataSource.getConnection();
-                    NamedParameterStatement preparedStatement = new NamedParameterStatement(connection, sql,
-                            Statement.RETURN_GENERATED_KEYS)) {
+                    NamedParameterStatement preparedStatement =
+                            new NamedParameterStatement(connection, sql, Statement.RETURN_GENERATED_KEYS)) {
 
                 if (parameters.isPresent()) {
                     ParametersSetter.setNamedParameters(parameters.get(), preparedStatement);
