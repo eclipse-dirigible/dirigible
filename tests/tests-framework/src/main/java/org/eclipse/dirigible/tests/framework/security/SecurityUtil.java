@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.tests.framework.security;
 
+import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.components.security.domain.Role;
 import org.eclipse.dirigible.components.security.service.RoleService;
 import org.eclipse.dirigible.components.tenants.domain.User;
@@ -30,15 +31,50 @@ public class SecurityUtil {
         this.roleService = roleService;
     }
 
-    public void createUser(String username, String password, String roleName) {
+    public void createUserInDefaultTenant(String username, String password, String roleName) {
+        User user = createUserInDefaultTenant(username, password);
+
+        Role role = roleService.findByName(roleName);
+        userService.assignUserRoles(user, role);
+    }
+
+    public User createUserInDefaultTenant(String username, String password) {
         DirigibleTestTenant defaultTenant = DirigibleTestTenant.createDefaultTenant();
 
         String defaultTenantId = tenantService.findBySubdomain(defaultTenant.getSubdomain())
                                               .get()
                                               .getId();
-        User user = userService.createNewUser(username, password, defaultTenantId);
+        return createUser(defaultTenantId, username, password);
+    }
+
+    public User createUser(String tenantId, String username, String password) {
+        return userService.createNewUser(username, password, tenantId);
+    }
+
+    public void createUser(String tenantId, String username, String password, String roleName) {
+        User user = createUser(tenantId, username, password);
 
         Role role = roleService.findByName(roleName);
         userService.assignUserRoles(user, role);
     }
+
+    public void assignAllSystemRolesToUser(String username, String tenantId) {
+        User user = userService.findUserByUsernameAndTenantId(username, tenantId)
+                               .orElseThrow(() -> new IllegalArgumentException(
+                                       "Missing user with username [" + username + "] for tenant with id: " + tenantId));
+
+        for (Roles role : Roles.values()) {
+            assignRoleToUser(username, tenantId, role.getRoleName());
+        }
+    }
+
+    public void assignRoleToUser(String username, String tenantId, String roleName) {
+        User user = userService.findUserByUsernameAndTenantId(username, tenantId)
+                               .orElseThrow(() -> new IllegalArgumentException(
+                                       "Missing user with username [" + username + "] for tenant with id: " + tenantId));
+
+        Role role = roleService.findByName(roleName);
+        userService.assignUserRoles(user, role);
+    }
+
 }

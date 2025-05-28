@@ -1,0 +1,39 @@
+{
+    "feeds": [],
+    "scripts": [],
+    "code": "let url = new URL(window.location);\nlet params = new URLSearchParams(url.search);\nlet taskId = params.get(\"taskId\");\n\n$scope.onApproveClicked = function () {\n    const url = `/services/ts/BpmnMultitenancyIT/ProcessService.ts/requests/${taskId}/approve`;\n    $http.put(url)\n        .then(function (response) {\n        if (response.status != 200) {\n            alert(`Unable to approve request: '${response.message}'`);\n            return;\n        }\n        $scope.entity = {};\n        alert(\"Request Approved\");\n    });\n};\n\n$scope.onDeclineClicked = function () {\n    const url = `/services/ts/BpmnMultitenancyIT/ProcessService.ts/requests/${taskId}/decline`;\n    $http.put(url)\n        .then(function (response) {\n        if (response.status != 200) {\n            alert(`Unable to decline request: '${response.message}'`);\n            return;\n        }\n        $scope.entity = {};\n        alert(\"Request Declined\");\n    });\n\n};\n\n",
+    "form": [
+        {
+            "controlId": "header",
+            "groupId": "fb-display",
+            "title": "Process employee registration",
+            "headerSize": 1
+        },
+        {
+            "controlId": "container-hbox",
+            "groupId": "fb-containers",
+            "children": [
+                {
+                    "controlId": "button",
+                    "groupId": "fb-controls",
+                    "label": "Approve",
+                    "type": "positive",
+                    "sizeToText": false,
+                    "isSubmit": true,
+                    "isCompact": false,
+                    "callback": "onApproveClicked()"
+                },
+                {
+                    "controlId": "button",
+                    "groupId": "fb-controls",
+                    "label": "Decline",
+                    "type": "negative",
+                    "sizeToText": false,
+                    "isSubmit": true,
+                    "isCompact": false,
+                    "callback": "onDeclineClicked()"
+                }
+            ]
+        }
+    ]
+}

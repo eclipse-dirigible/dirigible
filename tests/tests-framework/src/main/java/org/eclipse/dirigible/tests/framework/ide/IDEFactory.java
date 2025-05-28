@@ -48,4 +48,9 @@ public class IDEFactory {
         return new IDE(browser, username, password, restAssuredExecutor, workbenchFactory, databasePerspectiveFactory,
                 gitPerspectiveFactory);
     }
+
+    public IDE create(String host, String username, String password) {
+        return new IDE(browserFactory.createByHost(host), username, password, restAssuredExecutor, workbenchFactory,
+                databasePerspectiveFactory, gitPerspectiveFactory);
+    }
 }

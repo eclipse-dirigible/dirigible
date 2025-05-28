@@ -117,8 +117,8 @@
         <maven-license-plugin.version>5.0.0</maven-license-plugin.version>
 
         <!-- Spring -->
-        <spring.boot.version>3.4.5</spring.boot.version>
-        <spring.admin.version>3.4.6</spring.admin.version>
+        <spring.boot.version>3.5.0</spring.boot.version>
+        <spring.admin.version>3.4.7</spring.admin.version>
         <springdoc.version>2.8.8</springdoc.version>
 
         <!-- Webjars -->
@@ -132,7 +132,7 @@
         <!-- Commons -->
         <commons.io>2.19.0</commons.io>
         <commons.lang3>3.17.0</commons.lang3>
-        <commons.exec>1.4.0</commons.exec>
+        <commons.exec>1.5.0</commons.exec>
         <commons-csv.version>1.14.0</commons-csv.version>
 
         <apache-httpcomponents-httpmime.version>4.5.14</apache-httpcomponents-httpmime.version>
@@ -177,7 +177,7 @@
 
         <!-- JDBC -->
         <mongodb.version>3.12.14</mongodb.version>
-        <ngdbc.version>2.24.7</ngdbc.version>
+        <ngdbc.version>2.24.8</ngdbc.version>
         <snowflake.version>3.24.0</snowflake.version>
         <mysql.version>8.4.0</mysql.version>
 
@@ -910,14 +910,14 @@
             <dependency>
                 <groupId>org.junit.vintage</groupId>
                 <artifactId>junit-vintage-engine</artifactId>
-                <version>5.11.4</version>
+                <version>5.12.2</version>
                 <scope>test</scope>
             </dependency>
 
             <dependency>
                 <groupId>org.seleniumhq.selenium</groupId>
                 <artifactId>selenium-java</artifactId>
-                <version>4.32.0</version>
+                <version>4.33.0</version>
                 <scope>test</scope>
             </dependency>
             <dependency>

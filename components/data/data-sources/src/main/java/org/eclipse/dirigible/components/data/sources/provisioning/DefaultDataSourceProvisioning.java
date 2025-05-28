@@ -16,6 +16,7 @@ import org.eclipse.dirigible.components.base.tenant.TenantProvisioningException;
 import org.eclipse.dirigible.components.base.tenant.TenantProvisioningStep;
 import org.eclipse.dirigible.components.data.sources.config.DefaultDataSourceName;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
+import org.eclipse.dirigible.components.data.sources.domain.DataSourceProperty;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.sources.manager.TenantDataSourceNameManager;
 import org.eclipse.dirigible.components.data.sources.service.DataSourceService;
@@ -27,6 +28,7 @@ import org.springframework.stereotype.Component;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -149,6 +151,17 @@ class DefaultDataSourceProvisioning implements TenantProvisioningStep {
     }
 
     /**
+     * Gets the schema name.
+     *
+     * @param tenant the tenant
+     * @return the schema name
+     */
+    private String getSchemaName(Tenant tenant) {
+        return tenant.getId()
+                     .toUpperCase();
+    }
+
+    /**
      * Register data source.
      *
      * @param tenant the tenant
@@ -175,7 +188,8 @@ class DefaultDataSourceProvisioning implements TenantProvisioningStep {
         datasource.setPassword(password);
         datasource.setUrl(defaultDS.getUrl());
         datasource.setSchema(schema);
-        datasource.setProperties(defaultDS.getProperties());
+        List<DataSourceProperty> properties = copyProperties(defaultDS.getProperties(), datasource);
+        datasource.setProperties(properties);
 
         String name = tenantDataSourceNameManager.createName(tenant, defaultDS.getName());
         datasource.setName(name);
@@ -185,15 +199,22 @@ class DefaultDataSourceProvisioning implements TenantProvisioningStep {
         return dataSourceService.save(datasource);
     }
 
-    /**
-     * Gets the schema name.
-     *
-     * @param tenant the tenant
-     * @return the schema name
-     */
-    private String getSchemaName(Tenant tenant) {
-        return tenant.getId()
-                     .toUpperCase();
+    private List<DataSourceProperty> copyProperties(List<DataSourceProperty> properties, DataSource datasource) {
+        if (null == properties) {
+            return null;
+        }
+        return properties.stream()
+                         .map(p -> copyProperty(datasource, p))
+                         .toList();
+    }
+
+    private static DataSourceProperty copyProperty(DataSource datasource, DataSourceProperty p) {
+        DataSourceProperty copiedProperty = new DataSourceProperty();
+        copiedProperty.setName(p.getName());
+        copiedProperty.setValue(p.getValue());
+        copiedProperty.setDatasource(datasource);
+
+        return copiedProperty;
     }
 
 }
