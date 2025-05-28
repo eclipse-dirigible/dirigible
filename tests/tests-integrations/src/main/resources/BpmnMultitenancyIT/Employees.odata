@@ -1,0 +1,10 @@
+{
+    "namespace": "org.apache.olingo.odata2.BpmnMultitenancyIT",
+    "entities": [
+        {
+            "name": "Employee",
+            "alias": "Employees",
+            "table": "EMPLOYEES"
+        }
+    ]
+}

@@ -9,7 +9,7 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.config;
 
-import org.eclipse.dirigible.components.engine.bpm.flowable.provider.BpmProviderFlowable;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -79,9 +79,11 @@ class BpmProviderFlowableFactoryBean implements FactoryBean<BpmProviderFlowable>
         if (null == bpmProviderFlowable) {
             DataSource datasource = applicationContext.getBean("SystemDB", DataSource.class);
             IRepository repository = applicationContext.getBean(IRepository.class);
+            TenantContext tenantContext = applicationContext.getBean(TenantContext.class);
             PlatformTransactionManager dataSourceTransactionManager = applicationContext.getBean(PlatformTransactionManager.class);
 
-            bpmProviderFlowable = new BpmProviderFlowable(datasource, repository, dataSourceTransactionManager, applicationContext);
+            bpmProviderFlowable =
+                    new BpmProviderFlowable(datasource, repository, dataSourceTransactionManager, applicationContext, tenantContext);
         }
         return bpmProviderFlowable;
     }

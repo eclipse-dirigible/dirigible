@@ -32,7 +32,6 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 
 import static io.restassured.RestAssured.given;
 import static org.awaitility.Awaitility.await;
@@ -91,7 +90,7 @@ class MultitenancyITTestProject extends BaseMultitenantTestProject {
         LOGGER.info("Test project for tenant [{}] has been verified successfully!", tenant);
     }
 
-    void verifyHomePageAccessibleByTenant(DirigibleTestTenant tenant) {
+    private void verifyHomePageAccessibleByTenant(DirigibleTestTenant tenant) {
         Browser browser = browserFactory.createByHost(tenant.getHost());
         browser.openPath(UI_HOME_PATH);
 
@@ -272,16 +271,6 @@ class MultitenancyITTestProject extends BaseMultitenantTestProject {
                    .statusCode(200)
                    .body(equalTo(JsonHelper.toJson(documentContent)));
         });
-    }
-
-    private void wrapVerification(Consumer<DirigibleTestTenant> verification, DirigibleTestTenant tenant, String faildVerification) {
-
-        try {
-            verification.accept(tenant);
-        } catch (RuntimeException | Error ex) {
-            throw new AssertionError("Failed to verify test project for tenant [" + tenant + "]. Failed verification: " + faildVerification,
-                    ex);
-        }
     }
 
 }

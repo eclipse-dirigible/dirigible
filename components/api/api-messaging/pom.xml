@@ -1,58 +1,53 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-	<modelVersion>4.0.0</modelVersion>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
 
-	<parent>
-		<groupId>org.eclipse.dirigible</groupId>
-		<artifactId>dirigible-components-parent</artifactId>
-		<version>12.0.0-SNAPSHOT</version>
-		<relativePath>../../pom.xml</relativePath>
-	</parent>
+    <parent>
+        <groupId>org.eclipse.dirigible</groupId>
+        <artifactId>dirigible-components-parent</artifactId>
+        <version>12.0.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
 
-	<name>Components - API - Messaging</name>
-	<artifactId>dirigible-components-api-messaging</artifactId>
-	<packaging>jar</packaging>
+    <name>Components - API - Messaging</name>
+    <artifactId>dirigible-components-api-messaging</artifactId>
+    <packaging>jar</packaging>
 
-	<dependencies>
-		<!-- JS sources -->
-		<dependency>
-			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-api-modules-javascript</artifactId>
-		</dependency>
+    <dependencies>
+        <!-- JS sources -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-api-modules-javascript</artifactId>
+        </dependency>
 
-		<!-- Components -->
-		<dependency>
-			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-core-repository</artifactId>
-		</dependency>
+        <!-- Components -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-core-repository</artifactId>
+        </dependency>
 
-		<!-- Engines -->
-		<dependency>
-			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-engine-javascript</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-engine-listeners</artifactId>
-		</dependency>
+        <!-- Engines -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-engine-javascript</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-engine-listeners</artifactId>
+        </dependency>
 
-		<!-- Libraries -->
-		<dependency>
-			<groupId>junit</groupId>
-			<artifactId>junit</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.junit.vintage</groupId>
-			<artifactId>junit-vintage-engine</artifactId>
-			<scope>test</scope>
-		</dependency>
-	</dependencies>
+        <!-- Libraries -->
+        <dependency>
+            <groupId>org.junit.vintage</groupId>
+            <artifactId>junit-vintage-engine</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 
-	<properties>
-		<license.header.location>../../../licensing-header.txt</license.header.location>
-		<parent.pom.folder>../../../</parent.pom.folder>
-	</properties>
+    <properties>
+        <license.header.location>../../../licensing-header.txt</license.header.location>
+        <parent.pom.folder>../../../</parent.pom.folder>
+    </properties>
 
 </project>
