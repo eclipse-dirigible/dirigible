@@ -9,14 +9,11 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.delegate;
 
-import static org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActionData.Action.SKIP;
-import static org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService.DIRIGIBLE_BPM_INTERNAL_SKIP_STEP;
-
-import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.regex.Pattern;
-
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Scope;
+import jakarta.annotation.Nullable;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.open.telemetry.OpenTelemetryProvider;
 import org.eclipse.dirigible.components.tracing.TaskState;
 import org.eclipse.dirigible.components.tracing.TaskStateUtil;
@@ -33,10 +30,13 @@ import org.graalvm.polyglot.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.Tracer;
-import io.opentelemetry.context.Scope;
-import jakarta.annotation.Nullable;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Pattern;
+
+import static org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActionData.Action.SKIP;
+import static org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService.DIRIGIBLE_BPM_INTERNAL_SKIP_STEP;
 
 /**
  * The Class DirigibleCallDelegate.
@@ -48,17 +48,19 @@ public class DirigibleCallDelegate implements JavaDelegate {
 
     /** The js expression regex. */
     private static final Pattern JS_EXPRESSION_REGEX = Pattern.compile("(.*\\.(?:m?js|ts))(?:\\/(\\w*))?(?:\\/(\\w*))?");
-
+    private final TenantContext tenantContext;
     /**
      * The handler.
      */
     private FixedValue handler;
-
     /**
      * The type.
      */
     private FixedValue type;
 
+    DirigibleCallDelegate(TenantContext tenantContext) {
+        this.tenantContext = tenantContext;
+    }
 
     /**
      * The Class JSTask.
@@ -283,7 +285,27 @@ public class DirigibleCallDelegate implements JavaDelegate {
         if (handler == null) {
             throw new BpmnError("Handler cannot be null at the call delegate.");
         }
-        executeJSHandler(context);
+        String tenantId = getTenantId(execution);
+        executeJSHandlerInTenantContext(tenantId, context);
+    }
+
+    private static String getTenantId(DelegateExecution execution) {
+        String tenantId = execution.getTenantId();
+        if (null == tenantId) {
+            String executionId = execution.getId();
+            String processInstanceId = execution.getProcessInstanceId();
+            String processDefinitionId = execution.getProcessDefinitionId();
+            throw new IllegalStateException("Missing tenant id for execution with id [" + executionId + "], process instance id ["
+                    + processInstanceId + "] and process definition id [" + processDefinitionId + "]");
+        }
+        return tenantId;
+    }
+
+    private void executeJSHandlerInTenantContext(String tenantId, Map<Object, Object> context) {
+        tenantContext.execute(tenantId, () -> {
+            executeJSHandler(context);
+            return null;
+        });
     }
 
     /**
@@ -296,7 +318,9 @@ public class DirigibleCallDelegate implements JavaDelegate {
         JSTask task = JSTask.fromRepositoryPath(path);
 
         Span.current()
-            .setAttribute("handler", path.toString());
+            .setAttribute("handler", path.toString())
+            .setAttribute("tenantId", tenantContext.getCurrentTenant()
+                                                   .getId());
 
         try (DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner(context, false)) {
             Source source = runner.prepareSource(task.getSourceFilePath());
