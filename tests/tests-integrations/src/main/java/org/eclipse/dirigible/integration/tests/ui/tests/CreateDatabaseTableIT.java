@@ -1,12 +1,15 @@
 
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.database.DatabaseSystem;
 import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.ide.DatabasePerspective;
 import org.eclipse.dirigible.tests.framework.ide.Workbench;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 public class CreateDatabaseTableIT extends UserInterfaceIntegrationTest {
 
@@ -14,6 +17,9 @@ public class CreateDatabaseTableIT extends UserInterfaceIntegrationTest {
     private static final String FILE_NAME = "test1.table";
     private static final String BUTTON_TEXT = "Add";
     private static final String DIALOG_LABEL_NAME = "Add column";
+
+    @Autowired
+    private DataSourcesManager dataSourcesManager;
 
     @Test
     void test() {
@@ -31,12 +37,20 @@ public class CreateDatabaseTableIT extends UserInterfaceIntegrationTest {
         workbench.addContentToDbTableField();
         assertColumnExistsInWorkbench();
 
-        workbench.publishFile("j1_4_anchor");
+        workbench.publishAll(true);
+
+        String schema = getSchema();
 
         DatabasePerspective databasePerspective = ide.openDatabasePerspective();
-        expandSubviews("PUBLIC", databasePerspective);
+        expandSubviews(schema, databasePerspective);
 
         assertColumnExistsInDatabasePerspective();
+    }
+
+    private String getSchema() {
+        boolean postgreSQL = dataSourcesManager.getDefaultDataSource()
+                                               .isOfType(DatabaseSystem.POSTGRESQL);
+        return postgreSQL ? "public" : "PUBLIC";
     }
 
     private void expandSubviews(String schema, DatabasePerspective databasePerspective) {
