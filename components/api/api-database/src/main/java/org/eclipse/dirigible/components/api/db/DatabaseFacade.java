@@ -144,21 +144,27 @@ public class DatabaseFacade implements InitializingBean {
      * @return the data source
      */
     private static DirigibleDataSource getDataSource(String datasourceName) {
-        boolean defaultDB = datasourceName == null || datasourceName.trim()
-                                                                    .isEmpty()
-                || "DefaultDB".equals(datasourceName);
-        DirigibleDataSource dataSource = defaultDB ? DatabaseFacade.get()
-                                                                   .getDataSourcesManager()
-                                                                   .getDefaultDataSource()
-                : DatabaseFacade.get()
-                                .getDataSourcesManager()
-                                .getDataSource(datasourceName);
+        try {
+            boolean defaultDB = datasourceName == null || datasourceName.trim()
+                                                                        .isEmpty()
+                    || "DefaultDB".equals(datasourceName);
+            DirigibleDataSource dataSource = defaultDB ? DatabaseFacade.get()
+                                                                       .getDataSourcesManager()
+                                                                       .getDefaultDataSource()
+                    : DatabaseFacade.get()
+                                    .getDataSourcesManager()
+                                    .getDataSource(datasourceName);
 
-        if (dataSource == null) {
-            throw new IllegalArgumentException("DataSource [" + datasourceName + "] not known.");
+            if (dataSource == null) {
+                throw new IllegalArgumentException("DataSource [" + datasourceName + "] not known.");
+            }
+
+            return dataSource;
+        } catch (RuntimeException ex) {
+            logger.error("Failed to get data source with name [{}]", datasourceName, ex);// log it here because the client may handle the
+                                                                                         // exception and hide the details.
+            throw ex;
         }
-
-        return dataSource;
     }
 
     /**
@@ -659,9 +665,7 @@ public class DatabaseFacade implements InitializingBean {
             try {
                 return dataSource.getConnection();
             } catch (RuntimeException | SQLException ex) {
-                String errorMessage = "Failed to get connection from datasource: " + datasourceName;
-                logger.error(errorMessage, ex); // log it here because the client may handle the exception and hide the details.
-                throw new SQLException(errorMessage, ex);
+                throw new SQLException("Failed to get connection from datasource: " + datasourceName, ex);
             }
         });
     }

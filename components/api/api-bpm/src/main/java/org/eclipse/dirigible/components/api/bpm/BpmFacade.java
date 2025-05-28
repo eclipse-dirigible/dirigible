@@ -9,11 +9,12 @@
  */
 package org.eclipse.dirigible.components.api.bpm;
 
-import java.util.Map;
-import org.eclipse.dirigible.components.engine.bpm.flowable.provider.BpmProviderFlowable;
+import org.eclipse.dirigible.components.engine.bpm.flowable.config.BpmProviderFlowable;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import java.util.Map;
 
 /**
  * The Class BpmFacade.
