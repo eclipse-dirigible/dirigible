@@ -9,32 +9,19 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.eclipse.dirigible.tests.framework.browser.Browser;
-import org.eclipse.dirigible.tests.framework.browser.BrowserFactory;
-import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
 
-public class MultitenancyIT extends MultitenancyUserInterfaceIntegrationTest {
+public class BpmnMultitenancyIT extends MultitenancyUserInterfaceIntegrationTest {
 
     @Autowired
-    private MultitenancyITTestProject testProject;
-
-    @Autowired
-    private BrowserFactory browserFactory;
+    private BpmnMultitenancyTestProject testProject;
 
     @Test
-    void testOpenNotRegisteredTenant() {
-        Browser browser = browserFactory.createBySubdomain("unregistered-tenant");
-        browser.openPath("/index.html");
-        browser.assertElementExistsByTypeAndText(HtmlElementType.FD_MESSAGE_PAGE_TITLE, "Page Not Found");
-    }
-
-    @Test
-    void verifyTestProject() {
+    void testEmployeeRegistrationBpmProcessExecutesInTenantIsolation() {
         List<DirigibleTestTenant> tenants = provisionTenants();
 
         testProject.test(tenants);
