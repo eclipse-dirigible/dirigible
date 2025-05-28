@@ -29,7 +29,8 @@ public enum HtmlElementType {
     LI("li"), //
     UL("ul"), //
     TH("th"), //
-    TR("tr"), TD("td"); //
+    TR("tr"), //
+    TD("td"); //
 
     private final String type;
 
