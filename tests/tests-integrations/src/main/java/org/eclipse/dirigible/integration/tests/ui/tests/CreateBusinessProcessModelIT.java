@@ -28,7 +28,7 @@ public class CreateBusinessProcessModelIT extends UserInterfaceIntegrationTest {
         workbench.addContentToBpmnField(FIELD_CONTENT, "Name :");
 
         workbench.saveAll();
-        workbench.publishFile("j1_4_anchor");
+        workbench.publishAll(true);
 
         workbench.openProcessesWorkspacePerspective();
 
