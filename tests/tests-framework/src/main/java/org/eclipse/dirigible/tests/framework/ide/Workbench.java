@@ -113,11 +113,6 @@ public class Workbench {
         browser.clickOnElementByAttributeValue(HtmlElementType.BUTTON, HtmlAttribute.GLYPH, "sap-icon--save");
     }
 
-    public void publishFile(String fileAnchorId) {
-        browser.rightClickOnElementById(fileAnchorId);
-        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", "Publish");
-    }
-
     public void openProcessesWorkspacePerspective() {
         browser.clickOnElementById("perspective-bpm-workspace");
     }
