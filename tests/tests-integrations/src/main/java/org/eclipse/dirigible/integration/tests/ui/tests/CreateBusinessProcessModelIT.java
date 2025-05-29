@@ -32,16 +32,11 @@ public class CreateBusinessProcessModelIT extends UserInterfaceIntegrationTest {
         workbench.publishAll(true);
 
         BpmWorkspacePerspective bpmWorkspacePerspective = ide.openBpmPerspective();
-
-        assertProcessNotificationIsPresent();
+        bpmWorkspacePerspective.assertProcessNotificationIsPresent();
     }
 
     private void assertFileTabIsOpen(String fileName) {
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-icon-tab-bar__tag", fileName);
-    }
-
-    private void assertProcessNotificationIsPresent() {
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.PARAGRAPH, "A new process definition has been added.");
     }
 
 }
