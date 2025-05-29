@@ -3,6 +3,7 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
+import org.eclipse.dirigible.tests.framework.ide.BpmWorkspacePerspective;
 import org.eclipse.dirigible.tests.framework.ide.Workbench;
 import org.junit.jupiter.api.Test;
 
@@ -30,7 +31,7 @@ public class CreateBusinessProcessModelIT extends UserInterfaceIntegrationTest {
         workbench.saveAll();
         workbench.publishAll(true);
 
-        workbench.openProcessesWorkspacePerspective();
+        BpmWorkspacePerspective bpmWorkspacePerspective = ide.openBpmPerspective();
 
         assertProcessNotificationIsPresent();
     }
