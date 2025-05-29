@@ -214,12 +214,15 @@ jobs:
           path: tests/tests-integrations/build/reports/tests
 
   scan-image:
+    name: Scan Docker image using Docker Scout
     needs: [ build-deploy ]
     runs-on: ubuntu-latest
 
     steps:
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2.1.0
+      - name: Checkout # need to upload the report to GitHub Security tab
+        uses: actions/checkout@v4
+      - name: Log in Docker Hub # required dockerhub login for docker/scout-action
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_PASSWORD }}
@@ -227,26 +230,22 @@ jobs:
       - name: Docker Scout Quickview and CVEs
         uses: docker/scout-action@v1
         with:
+          registry-user: ${{ secrets.DOCKER_USER }}
+          registry-password: ${{ secrets.DOCKER_PASSWORD }}
           command: quickview,cves
           image: dirigiblelabs/dirigible:latest
-          sarif-file: sarif.output.json
+          sarif-file: sast_docker_scout_sarif.json
           summary: true
           only-fixed: false
 
-      - name: Docker Scout SBOM
-        uses: docker/scout-action@v1
+      - name: Upload Docker Scout SARIF file as artifact
+        uses: actions/upload-artifact@v4
         with:
-          command: sbom
-          image: dirigiblelabs/dirigible:latest
-          output: sbom.json
+          name: sast_docker_scout_sarif.json
+          path: sast_docker_scout_sarif.json
 
-      - name: Docker Scout Recommendations
-        uses: docker/scout-action@v1
-        with:
-          command: recommendations
-          image: dirigiblelabs/dirigible:latest
-
-      - name: Upload Docker Scout SARIF Report
+      - name: Upload Docker Scout SARIF Report to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
+        if: ${{ inputs.upload-scanned-sarif-report }}
         with:
-          sarif_file: sarif.output.json
+          sarif_file: sast_docker_scout_sarif.json
