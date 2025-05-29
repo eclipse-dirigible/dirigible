@@ -96,12 +96,16 @@ public class Workbench {
         return terminalFactory.create(browser);
     }
 
-    public void createCustomElementInProject(String projectName, String fileName, String elementType) {
-        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
+    public void createCustomElement(String fileName, String elementType) {
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", elementType);
 
         browser.enterTextInElementById(FILE_NAME_INPUT_ID, fileName);
         browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_BUTTON_TEXT);
+    }
+
+    public void createCustomElementInProject(String projectName, String fileName, String elementType) {
+        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
+        createCustomElement(fileName, elementType);
     }
 
     public void generateFormDefinition() {
@@ -118,12 +122,10 @@ public class Workbench {
     }
 
     public void openFormIndexHTML() {
-        browser.doubleClickOnElementById("j1_2_anchor");
-        browser.doubleClickOnElementById("j1_3_anchor");
-        browser.doubleClickOnElementById("j1_4_anchor");
-        browser.doubleClickOnElementById("j1_5_anchor");
+        for (int i = 2; i < 6; i++) {
+            browser.doubleClickOnElementById("j1_" + i + "_anchor");
+        }
         openFile("index.html");
-
     }
 
     public void addContentToFormIndexHtml(String fileContent) {
