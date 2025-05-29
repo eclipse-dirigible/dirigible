@@ -23,8 +23,6 @@ public class CreateNewFolderIT extends UserInterfaceIntegrationTest {
         workbench.createCustomElementInProject(PROJECT_NAME, FOLDER_NAME, "Folder");
         assertFolderIsPresent(FOLDER_NAME);
 
-
-
         workbench.createCustomElementInFolder(FILE_NAME, "File", "j1_4_anchor");
         workbench.openFile(FILE_NAME);
         assertFileTabIsOpen(FILE_NAME);
@@ -48,5 +46,3 @@ public class CreateNewFolderIT extends UserInterfaceIntegrationTest {
     }
 
 }
-
-
