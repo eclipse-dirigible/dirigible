@@ -102,12 +102,16 @@ public class Workbench {
         browser.type(content);
     }
 
-    public void createCustomElementInProject(String projectName, String fileName, String elementType) {
-        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
+    public void createCustomElement(String fileName, String elementType) {
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", elementType);
 
         browser.enterTextInElementById(FILE_NAME_INPUT_ID, fileName);
         browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_BUTTON_TEXT);
+    }
+
+    public void createCustomElementInProject(String projectName, String fileName, String elementType) {
+        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
+        createCustomElement(fileName, elementType);
     }
 
     public void saveAll() {
