@@ -3,10 +3,10 @@ name: "CodeQL Advanced [Push & PR]"
 on:
   push:
     branches:
-      - main
+      - master
   pull_request:
     branches:
-      - main
+      - master
   schedule:
     - cron: '32 20 * * 0'
 
