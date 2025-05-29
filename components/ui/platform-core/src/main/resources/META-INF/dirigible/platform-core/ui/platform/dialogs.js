@@ -166,7 +166,7 @@ angular.module('platformDialogs', ['blimpKit', 'platformView']).directive('dialo
                         }
                     }
                 } else {
-                    scope.$evalAsync(() => { 
+                    scope.$evalAsync(() => {
                         const window = scope.dialogWindows.pop();
                         dialogHub.triggerEvent(window.closeTopic);
                     });

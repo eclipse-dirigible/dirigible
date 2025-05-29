@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const documents = angular.module('documents', ['platformView', 'platformSplit', 'blimpKit', 'angularFileUpload']);
+const documents = angular.module('documents', ['platformView', 'platformSplit', 'blimpKit', 'angularFileUpload', 'platformLocale']);
 class HistoryStack {
 
     history = {
@@ -50,7 +50,7 @@ class HistoryStack {
         this.history.idx++;
     }
 }
-documents.controller('DocumentsController', ($scope, $http, $timeout, $element, $document, ButtonStates, FileUploader) => {
+documents.controller('DocumentsController', ($scope, $http, $timeout, $element, $document, ButtonStates, FileUploader, LocaleService) => {
     const dialogHub = new DialogHub();
     const notificationHub = new NotificationHub();
     const documentsApi = '/services/js/documents/api/documents.js';
@@ -161,20 +161,18 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
     $scope.getFilePreviewUrl = (item) => $scope.isDocument(item) ?
         `${$scope.previewPath}?path=${$scope.getFullPath(item.name)}` : 'about:blank';
 
-    $scope.getNoDataMessage = () => $scope.search.filterBy ? 'No items match your search.' : 'This folder is empty.';
-
     $scope.showNewFolderDialog = (value = '', errorMsg, excluded = []) => {
         dialogHub.showFormDialog({
-            title: 'New Folder',
+            title: LocaleService.t('documents:newFolder', 'New Folder'),
             form: {
                 'name': {
-                    label: 'Name',
+                    label: LocaleService.t('name', 'Name'),
                     controlType: 'input',
                     type: 'text',
                     inputRules: {
                         excluded: excluded,
                     },
-                    placeholder: 'Enter folder name...',
+                    placeholder: LocaleService.t('documents:enterFolName', 'Enter folder name...'),
                     submitOnEnter: true,
                     focus: true,
                     required: true,
@@ -182,8 +180,8 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
                     errorMsg: errorMsg,
                 },
             },
-            submitLabel: 'OK',
-            cancelLabel: 'Cancel'
+            submitLabel: LocaleService.t('ok', 'OK'),
+            cancelLabel: LocaleService.t('cancel', 'Cancel')
         }).then((form) => {
             if (form) {
                 $scope.$evalAsync(() => {
@@ -196,7 +194,7 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
                         $scope.$evalAsync(() => {
                             $scope.loading = false;
                         });
-                        const message = data.data['err'] && data.data.err.message ? data.data.err.message : 'Could not create folder. Check console for errors.';
+                        const message = data.data['err'] && data.data.err.message ? data.data.err.message : LocaleService.t('documents:errMsg.createFolder', 'Could not create folder. Check console for errors.');
                         $scope.showNewFolderDialog(form['name'], message, [form['name']]);
                     });
             }
@@ -217,10 +215,10 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
         const itemType = $scope.isDocument(item) ? 'file' : 'folder';
 
         dialogHub.showFormDialog({
-            title: `Rename ${itemType}`,
+            title: `${LocaleService.t('rename', 'Rename')} ${itemType}`,
             form: {
                 'name': {
-                    label: 'Name',
+                    label: LocaleService.t('name', 'Name'),
                     controlType: 'input',
                     type: 'text',
                     submitOnEnter: true,
@@ -229,8 +227,8 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
                     value: item.name,
                 },
             },
-            submitLabel: 'OK',
-            cancelLabel: 'Cancel'
+            submitLabel: LocaleService.t('ok', 'OK'),
+            cancelLabel: LocaleService.t('cancel', 'Cancel')
         }).then((form) => {
             if (form) {
                 $scope.$evalAsync(() => {
@@ -248,8 +246,8 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
                         $scope.loading = false;
                     });
                     dialogHub.showAlert({
-                        title: 'Rename failed',
-                        message: data.data['err'] && data.data.err.message ? data.data.err.message : `Could not rename '${form['name']}'. Check console for errors.`,
+                        title: LocaleService.t('documents:errMsg.renameTitle', 'Rename failed'),
+                        message: data.data['err'] && data.data.err.message ? data.data.err.message : LocaleService.t('documents:errMsg.rename', { name: form['name'] }),
                         type: AlertTypes.Error,
                         preformatted: false,
                     });
@@ -269,16 +267,16 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
             name: item.name
         }];
 
-        const title = $scope.isDocument(item) ? 'Delete file' : 'Delete folder';
-        const message = `Are you sure you want to delete '${item.name}'?\nIf you delete an item, it will be permanently lost.`;
+        const title = $scope.isDocument(item) ? LocaleService.t('documents:deleteActions.deleteFile', 'Delete file') : LocaleService.t('documents:deleteActions.deleteFolder', 'Delete folder');
+        const message = LocaleService.t('documents:deleteActions.deleteFile', { name: item.name });
 
         dialogHub.showDialog({
             title: title,
             message: message,
             preformatted: true,
             buttons: [
-                { id: 'del', label: 'Delete', state: ButtonStates.Negative },
-                { id: 'cancel', label: 'Cancel' }
+                { id: 'del', label: LocaleService.t('delete', 'Delete'), state: ButtonStates.Negative },
+                { id: 'cancel', label: LocaleService.t('cancel', 'Cancel') }
             ]
         }).then((buttonId) => {
             if (buttonId === 'del') deleteItems();
@@ -303,16 +301,16 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
         }
 
         const message = itemsToDelete.length < 10 ?
-            `Are you sure you want to delete the following items?\n\n${getItemList()}` :
-            `Are you sure you want to delete the ${itemsToDelete.length} selected items?`;
+            LocaleService.t('documents:deleteActions.deleteFollowing', { items: getItemList() }) :
+            LocaleService.t('documents:deleteActions.deleteSelected', { num: itemsToDelete.length });
 
         dialogHub.showDialog({
-            title: 'Delete items',
+            title: LocaleService.t('documents:deleteActions.deleteItems', 'Delete items'),
             message: message,
             preformatted: true,
             buttons: [
-                { id: 'del', label: 'Delete', state: ButtonStates.Negative },
-                { id: 'cancel', label: 'Cancel' }
+                { id: 'del', label: LocaleService.t('delete', 'Delete'), state: ButtonStates.Negative },
+                { id: 'cancel', label: LocaleService.t('cancel', 'Cancel') }
             ]
         }).then((buttonId) => {
             if (buttonId === 'del') deleteItems();
@@ -345,8 +343,8 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
                     $scope.loading = false;
                 });
                 dialogHub.showAlert({
-                    title: 'Failed to delete items',
-                    message: error.data.err.message ?? 'Could not delete file(s). Check console for errors.',
+                    title: LocaleService.t('documents:errMsg.deleteTitle', 'Failed to delete items'),
+                    message: error.data.err.message ?? LocaleService.t('documents:errMsg.delete', 'Could not delete file(s). Check console for errors.'),
                     type: AlertTypes.Error,
                     preformatted: false,
                 });
@@ -427,7 +425,7 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
                 }
             }, (error) => {
                 console.error(error);
-                notificationHub.show({ type: 'negative', title: 'Refresh failed', description: 'Could not refresh folder. Check console for errors.' });
+                notificationHub.show({ type: 'negative', title: LocaleService.t('documents:errMsg.refreshTitle', 'Refresh failed'), description: LocaleService.t('documents:errMsg.refresh', 'Could not refresh folder. Check console for errors.') });
                 $scope.$evalAsync(() => {
                     $scope.loading = false;
                 });
@@ -471,8 +469,8 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
                 setCurrentFolder(data.data);
             }, data => {
                 dialogHub.showAlert({
-                    title: 'Failed to open folder',
-                    message: data.data['err'] && data.data.err.message ? data.data.err.message : 'Could not open folder. Check console for errors.',
+                    title: LocaleService.t('documents:errMsg.openFolderTitle', 'Failed to open folder'),
+                    message: data.data['err'] && data.data.err.message ? data.data.err.message : LocaleService.t('documents:errMsg.openFolder', 'Could not open folder. Check console for errors.'),
                     type: AlertTypes.Error,
                     preformatted: false,
                 });
@@ -516,7 +514,7 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
         $scope.$evalAsync(() => {
             $scope.loading = false;
         });
-        notificationHub.show({ type: 'negative', title: 'Failed to upload item', description: response.err.message ?? 'Could not upload item. Check console for errors.' });
+        notificationHub.show({ type: 'negative', title: LocaleService.t('documents:errMsg.uploadTitle', 'Failed to upload item'), description: response.err.message ?? LocaleService.t('documents:errMsg.uploadTitle', 'Could not upload item. Check console for errors.') });
     };
     $scope.uploader.onCompleteAll = () => {
         refreshFolder();

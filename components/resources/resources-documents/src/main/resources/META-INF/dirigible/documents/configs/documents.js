@@ -10,8 +10,9 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const perspectiveData = {
-	id: 'documentsStorage',
-	label: 'Documents Storage',
+	id: 'documentStorage',
+	label: 'Document Storage',
+	translation: 'documents:documentStorage',
 	path: '/services/web/documents/index.html',
 	order: -1,
 	lazyLoad: true,

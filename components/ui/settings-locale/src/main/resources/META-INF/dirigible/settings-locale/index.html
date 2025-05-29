@@ -1,0 +1,60 @@
+<!--
+
+    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="locale" ng-controller="LocaleController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/settings-locale/configs/locale.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=view-js,locale-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="js/locale.js"></script>
+        <style>
+            .bk-hbox.bk-box--space-between.bk-box--items-center {
+                min-height: 2rem;
+            }
+
+        </style>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar has-title="true">
+            <bk-toolbar-title>{{'settings-locale:regionAndLang' | t}}</bk-toolbar-title>
+        </bk-toolbar>
+        <bk-scrollbar class="bk-center--horizontal bk-padding bk-box--items-start">
+            <div class="bk-vbox bk-box--gap-xl bk-full-width bk-restrict-width--sm">
+                <div class="bk-vbox bk-box--gap">
+                    <div class="bk-hbox bk-box--space-between bk-box--items-center">
+                        <span class="fd-text"><b>{{'language' | t:'Language'}}</b></span>
+                    </div>
+                    <bk-card card-type="list" aria-roledescription="language setting section">
+                        <bk-card-content aria-roledescription="Language list">
+                            <bk-list no-border="true">
+                                <bk-list-item interactive="true" ng-repeat="lang in languages track by lang.id" ng-click="setLang(lang.id)" selected="lang.id === language">
+                                    <bk-list-title>{{::lang.label}}</bk-list-title>
+                                    <bk-list-secondary ng-if="lang.secondary">{{::lang.secondary}}</bk-list-secondary>
+                                </bk-list-item>
+                            </bk-list>
+                        </bk-card-content>
+                    </bk-card>
+                </div>
+            </div>
+        </bk-scrollbar>
+        <theme></theme>
+    </body>
+
+</html>
