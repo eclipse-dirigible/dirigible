@@ -18,7 +18,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  release-artifacts:
     runs-on: ubuntu-latest
     steps:
 
@@ -115,13 +115,183 @@ jobs:
 
       #---------------Publish to Maven Central-----------------#
 
-      #----------------Publish GitHub Release------------------#
+      - name: "Git: Push Changes"
+        run: |
+          git checkout -B ${{ github.event.inputs.releaseVersion }}
+          git push --set-upstream origin ${{ github.event.inputs.releaseVersion }}
+          git checkout -B master
+          git push --set-upstream origin master
 
-      - name: Package WAR files
+      - name: Package fat JAR
         run: |
           zip --junk-paths application-all build/application/target/dirigible-application-${{ github.event.inputs.releaseVersion }}-executable.jar
 
-      - name: Create Release
+      - name: Upload fat JAR as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: application-all.zip
+          path: application-all.zip
+
+  sast-docker-scout-analyze:
+    if: ${{ inputs.code-scans }}
+    runs-on: ubuntu-latest
+    needs: release-artifacts
+    permissions:
+      security-events: write # Required to upload SARIF to GitHub Security tab
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in Docker Hub # required dockerhub login for docker/scout-action
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Docker Scout Quickview and CVEs
+
+        uses: docker/scout-action@v1
+        with:
+          registry-user: ${{ secrets.DOCKER_USER }}
+          registry-password: ${{ secrets.DOCKER_PASSWORD }}
+          command: quickview,cves
+          image: dirigiblelabs/dirigible:${{ github.event.inputs.releaseVersion }}
+          sarif-file: sast_docker_scout_sarif.json
+          summary: true
+          only-fixed: false
+
+      - name: Upload Docker Scout SARIF file as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast_docker_scout_sarif.json
+          path: sast_docker_scout_sarif.json
+
+      - name: Upload Docker Scout SARIF Report to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: ${{ inputs.upload-scanned-sarif-report }}
+        with:
+          sarif_file: sast_docker_scout_sarif.json
+
+  sast-codeql-analyze:
+    if: ${{ inputs.code-scans }}
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    needs: release-artifacts
+    permissions:
+      security-events: write # Required to upload SARIF to GitHub Security tab
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java-kotlin
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK Corretto 21
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'corretto'
+          java-version: '21'
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config: |
+            name: "Comprehensive Multi-language CodeQL Config"
+            query-filters:
+              - exclude:
+                  id: java/path-injection
+            queries:
+              - uses: security-and-quality
+
+      - name: Build Java/Kotlin project
+        if: matrix.language == 'java-kotlin'
+        run: mvn clean install -P quick-build
+
+      - name: Perform CodeQL Analysis for language ${{ matrix.language }}
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+          output: "sast_codeql_report_${{ matrix.language }}"
+          upload: always
+
+      - name: Upload CodeQL Analysis SARIF file as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast_codeql_sarif_${{ matrix.language }}
+          path: sast_codeql_report_${{ matrix.language }}
+
+      - name: Generate Security Report for CodeQL Analysis
+        uses: rsdmike/github-security-report-action@v3.0.4
+        with:
+          template: summary
+          token: ${{ secrets.GITHUB_TOKEN }}
+          sarifReportDir: "sast_codeql_report_${{ matrix.language }}"
+          outputDir: "security-reports"
+
+      - name: Upload Generated CodeQL Analysis Security Report as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast_codeql_report_${{ matrix.language }}
+          path: security-reports
+
+  github-release:
+    runs-on: ubuntu-latest
+    needs:
+      - sast-codeql-analyze
+      - sast-docker-scout-analyze
+    permissions:
+      packages: write
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create uploaded-artifacts folder
+        run: mkdir uploaded-artifacts
+
+      - name: Download Uploaded Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: uploaded-artifacts
+
+      - name: Display Downloaded Artifacts
+        run: ls -R uploaded-artifacts
+
+      - name: Create release files
+        run: mkdir release_files
+
+      - name: Copy report files due to naming collisions
+        if: ${{ inputs.code-scans }}
+        run: |
+          cp uploaded-artifacts/sast_codeql_report_java-kotlin/summary.pdf release_files/sast_codeql_report_java-kotlin.pdf
+          cp uploaded-artifacts/sast_codeql_sarif_java-kotlin/java.sarif release_files/sast_codeql_sarif_java-kotlin.sarif
+          
+          cp uploaded-artifacts/sast_codeql_report_javascript-typescript/summary.pdf release_files/sast_codeql_report_javascript-typescript.pdf
+          cp uploaded-artifacts/sast_codeql_sarif_javascript-typescript/javascript.sarif release_files/sast_codeql_sarif_javascript-typescript.sarif
+          
+          cp uploaded-artifacts/sast_docker_scout_sarif.json/sast_docker_scout_sarif.json release_files/sast_docker_scout_sarif.json
+          
+          cp uploaded-artifacts/application-all.zip release_files/application-all.zip
+
+      - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
@@ -131,7 +301,7 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            ./application-all.zip
+            release_files/**
           body: |
             ## Eclipse Dirigible - ${{ github.event.inputs.releaseVersion }}
             
@@ -175,19 +345,18 @@ jobs:
             
             For more information go to [https://www.dirigible.io/help/setup/](https://www.dirigible.io/help/setup/).
 
-      #----------------Publish GitHub Release------------------#
-
-      - name: "Git: Push Changes"
-        run: |
-          git checkout -B ${{ github.event.inputs.releaseVersion }}
-          git push --set-upstream origin ${{ github.event.inputs.releaseVersion }}
-          git checkout -B master
-          git push --set-upstream origin master
-
-      #----------------Publish Helm Release------------------#
+  helm-release:
+    runs-on: ubuntu-latest
+    needs: github-release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Helm tool installer
         uses: Azure/setup-helm@v4
+
       - name: Helm Charts Release - Checkout gh-pages
         run: |
           mkdir charts-temp
@@ -233,8 +402,4 @@ jobs:
           git add charts/
           git commit -m "Updates Helm Charts - Release ${{ github.event.inputs.releaseVersion }}"
           git push origin gh-pages
-          
-          git add .
-          git reset --hard
-          git checkout ${{ github.event.inputs.branch }}
-#----------------Publish Helm Release------------------#
+
