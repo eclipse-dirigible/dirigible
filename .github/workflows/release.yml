@@ -139,7 +139,7 @@ jobs:
           name: application-all
           path: application-all.zip
 
-  sast-docker-scout-analyze:
+  sast-docker-scout-scan:
     if: ${{ inputs.code-scans }}
     runs-on: ubuntu-latest
     needs: release-artifacts
@@ -180,7 +180,7 @@ jobs:
         with:
           sarif_file: sast_docker_scout_sarif.json
 
-  sast-codeql-analyze:
+  sast-codeql-scan:
     if: ${{ inputs.code-scans }}
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
@@ -260,10 +260,49 @@ jobs:
           name: sast_codeql_report_${{ matrix.language }}
           path: security-reports
 
+  dast-scan:
+    if: ${{ inputs.code-scans }}
+    name: Perform DAST testing using ZAP
+    needs: release-artifacts
+    runs-on: ubuntu-latest
+
+    services:
+      app:
+        image: dirigiblelabs/dirigible:${{ github.event.inputs.releaseVersion }}
+        ports:
+          - 8080:8080
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Wait for app to start
+        run: |
+          URL='http://localhost:8080/actuator/health/readiness'
+          for i in {1..30}; do
+            echo "Checking readiness at $URL... attempt $i"
+            if curl -f $URL; then
+              echo '----------------------'
+              echo "Application is ready."
+              break
+            fi
+            sleep 5
+          done
+
+      - name: Run OWASP ZAP Full Scan
+        uses: zaproxy/action-full-scan@v0.12.0
+        with:
+          target: 'http://localhost:8080'
+          cmd_options: '-T 10' # https://www.zaproxy.org/docs/docker/full-scan/
+          artifact_name: dast_zap_report # all results will be uploaded with an artifact with this name
+          allow_issue_writing: false # create an issue with the results
+          issue_title: '[DAST] ZAP Full Scan Report'
+
   wait-for-scans:
     needs:
-      - sast-codeql-analyze
-      - sast-docker-scout-analyze
+      - sast-codeql-scan
+      - sast-docker-scout-scan
+      - dast-scan
     runs-on: ubuntu-latest
     if: always() # Runs even if previous jobs were skipped or failed
     steps:

@@ -273,3 +273,41 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: sast_docker_scout_sarif.json
+
+  dast-scan:
+    name: Perform DAST testing using ZAP
+    needs: [ build-deploy ]
+    runs-on: ubuntu-latest
+
+    services:
+      app:
+        image: dirigiblelabs/dirigible:latest
+        ports:
+          - 8080:8080
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Wait for app to start
+        run: |
+          URL='http://localhost:8080/actuator/health/readiness'
+          for i in {1..30}; do
+            echo "Checking readiness at $URL... attempt $i"
+            if curl -f $URL; then
+              echo '----------------------'
+              echo "Application is ready."
+              break
+            fi
+            sleep 5
+          done
+
+      - name: Run OWASP ZAP Full Scan
+        uses: zaproxy/action-full-scan@v0.12.0
+        with:
+          target: 'http://localhost:8080'
+          cmd_options: '-T 10' # https://www.zaproxy.org/docs/docker/full-scan/
+          artifact_name: dast_zap_report # all results will be uploaded with an artifact with this name
+          allow_issue_writing: false # create an issue with the results
+          issue_title: '[DAST] ZAP Full Scan Report'
+
