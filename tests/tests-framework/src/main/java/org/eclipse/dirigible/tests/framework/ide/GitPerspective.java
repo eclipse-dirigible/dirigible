@@ -52,4 +52,3 @@ public class GitPerspective {
         browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER4, "Repository cloned");
     }
 }
-
