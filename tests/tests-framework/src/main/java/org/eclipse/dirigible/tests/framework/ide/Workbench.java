@@ -18,8 +18,9 @@ public class Workbench {
 
     public static final String PROJECTS_VIEW_ID = "pvtree";
     public static final String PROJECT_NAME_INPUT_ID = "pgfi1";
+    public static final String FILE_NAME_INPUT_ID = "fdti1";
     private static final String PROJECTS_CONTEXT_MENU_NEW_PROJECT = "New Project";
-    private static final String CREATE_PROJECT_BUTTON_TEXT = "Create";
+    private static final String CREATE_BUTTON_TEXT = "Create";
 
     private final Browser browser;
     private final WelcomeViewFactory welcomeViewFactory;
@@ -66,7 +67,7 @@ public class Workbench {
 
         browser.enterTextInElementById(PROJECT_NAME_INPUT_ID, projectName);
 
-        browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_PROJECT_BUTTON_TEXT);
+        browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_BUTTON_TEXT);
     }
 
     public void createFileInProject(String projectName, String newFileType) {
@@ -95,4 +96,50 @@ public class Workbench {
         return terminalFactory.create(browser);
     }
 
+    public void createCustomElement(String fileName, String elementType) {
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", elementType);
+
+        browser.enterTextInElementById(FILE_NAME_INPUT_ID, fileName);
+        browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_BUTTON_TEXT);
+    }
+
+    public void createCustomElementInProject(String projectName, String fileName, String elementType) {
+        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
+        createCustomElement(fileName, elementType);
+    }
+
+    public void generateFormDefinition() {
+
+        browser.rightClickOnElementById("j1_4_anchor");
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", "Generate");
+
+        browser.clickOnElementWithText(HtmlElementType.SPAN, "Templates");
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title",
+                "AngularJS Generator from Form Model");
+
+        browser.clickOnElementByAttributeValue(HtmlElementType.BUTTON, HtmlAttribute.CLASS,
+                "fd-button fd-button--emphasized fd-dialog__decisive-button");
+    }
+
+    public void openFormIndexHTML() {
+        for (int i = 2; i < 6; i++) {
+            browser.doubleClickOnElementById("j1_" + i + "_anchor");
+        }
+        openFile("index.html");
+    }
+
+    public void addContentToFormIndexHtml(String fileContent) {
+        browser.clickOnElementByAttributePattern(HtmlElementType.DIV, HtmlAttribute.STYLE, "top:306px;height:18px;");
+        browser.pressEnter();
+        browser.type(fileContent);
+    }
+
+    public void saveAll() {
+        browser.clickOnElementByAttributeValue(HtmlElementType.BUTTON, HtmlAttribute.GLYPH, "sap-icon--save");
+    }
+
+    public void publishFile(String fileAnchorId) {
+        browser.rightClickOnElementById(fileAnchorId);
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", "Publish");
+    }
 }
