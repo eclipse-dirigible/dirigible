@@ -26,7 +26,7 @@
 
     <body class="bk-vbox">
         <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
-        <table bk-table outer-borders="bottom" display-mode="compact" ng-show="!state.error && !state.isBusy">
+        <table bk-table outer-borders="bottom" display-mode="compact" ng-show="!state.error && !state.isBusy" interactive="false">
             <thead bk-table-header>
                 <tr bk-table-row></tr>
             </thead>

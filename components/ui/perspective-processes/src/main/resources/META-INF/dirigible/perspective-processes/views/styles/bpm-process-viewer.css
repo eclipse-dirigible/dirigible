@@ -1,0 +1,21 @@
+:root {
+    --fill_color: var(--sapField_Background, #fff);
+    --font_color: var(--sapField_TextColor, #303030);
+    --stroke_color: var(--sapField_TextColor, #303030);
+    --font: "72", "72full", Arial, Helvetica, sans-serif;
+}
+
+#bpmn-container {
+    box-sizing: border-box;
+    position: absolute;
+    height: calc(100% - var(--fdToolbar_Height, 2.75rem));
+    top: var(--fdToolbar_Height, 2.75rem);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+}
+
+.highlight>rect {
+    stroke: var(--sapSuccessBorderColor, #26a264) !important;
+}

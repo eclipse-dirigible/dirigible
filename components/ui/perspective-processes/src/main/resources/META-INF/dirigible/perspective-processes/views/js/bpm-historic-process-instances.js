@@ -17,6 +17,7 @@ ideBpmHistoricProcessInstancesView.controller('IDEBpmHistoricProcessInstancesVie
     $scope.searchField = { text: '' };
     $scope.displaySearch = false;
     $scope.selectedProcessDefinitionKey = null;
+    $scope.selectedId;
 
     setInterval(() => { $scope.fetchData() }, 5000);
 
@@ -24,11 +25,14 @@ ideBpmHistoricProcessInstancesView.controller('IDEBpmHistoricProcessInstancesVie
         $http.get('/services/bpm/bpm-processes/historic-instances', { params: { 'businessKey': $scope.searchField.text, 'definitionKey': $scope.selectedProcessDefinitionKey, 'limit': 100 } })
             .then((response) => {
                 $scope.instances = response.data;
+            }, (error) => {
+                console.error(error);
             });
     };
 
     $scope.selectionChanged = (instance) => {
-        Notifications.postMessage({ topic: 'bpm.historic.instance.selected', data: { instance: instance.id } });
+        $scope.selectedId = instance.id;
+        Notifications.postMessage({ topic: 'bpm.historic.instance.selected', data: { instance: instance.id, definition: instance.processDefinitionId } });
     };
 
     $scope.toggleSearch = () => {
@@ -39,6 +43,8 @@ ideBpmHistoricProcessInstancesView.controller('IDEBpmHistoricProcessInstancesVie
         $http.get('/services/bpm/bpm-processes/historic-instances', { params: { 'businessKey': $scope.searchField.text, 'definitionKey': $scope.selectedProcessDefinitionKey, 'limit': 100 } })
             .then((response) => {
                 $scope.instances = response.data;
+            }, (error) => {
+                console.error(error);
             });
     };
 

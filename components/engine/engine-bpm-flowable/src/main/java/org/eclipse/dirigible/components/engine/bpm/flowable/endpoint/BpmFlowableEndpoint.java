@@ -89,7 +89,7 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
      * @param id the id
      * @return the process definition xml
      */
-    @GetMapping(value = "/bpm-processes/definition/bpmn")
+    @GetMapping(value = "/bpm-processes/definition/bpmn", produces = "text/xml")
     public ResponseEntity<String> getProcessDefinitionXml(@RequestParam("id") Optional<String> id) {
         return ResponseEntity.ok(bpmProviderFlowable.getProcessDefinitionXmlById(id.get()));
     }

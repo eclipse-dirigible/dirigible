@@ -30,14 +30,11 @@
             <bk-toolbar-spacer></bk-toolbar-spacer>
             <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="reload()"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
-            <bk-button state="transparent" toggled="displaySearch" glyph="sap-icon--search" title="Toggle search" aria-label="Toggle search" ng-click="toggleSearch()">
-            </bk-button>
+            <bk-button state="transparent" toggled="displaySearch" glyph="sap-icon--search" title="Toggle search" aria-label="Toggle search" ng-click="toggleSearch()"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
-            <bk-button state="transparent" ng-disabled="selectedProcessInstanceId === null" glyph="sap-icon--restart" title="Retry" aria-label="Retry" ng-click="retry()">
-            </bk-button>
+            <bk-button state="transparent" ng-disabled="selectedProcessInstanceId === null" glyph="sap-icon--restart" title="Retry" aria-label="Retry" ng-click="retry()"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
-            <bk-button state="transparent" ng-disabled="selectedProcessInstanceId === null" glyph="sap-icon--process" title="Skip" aria-label="Skip" ng-click="skip()">
-            </bk-button>
+            <bk-button state="transparent" ng-disabled="selectedProcessInstanceId === null" glyph="sap-icon--process" title="Skip" aria-label="Skip" ng-click="skip()"></bk-button>
         </bk-toolbar>
         <bk-toolbar ng-if="displaySearch">
             <bk-input type="search" placeholder="Search by businessKey" ng-keyup="inputSearchKeyUp($event)" ng-model="searchField.text" bk-focus="true">
@@ -45,7 +42,7 @@
         </bk-toolbar>
         <bk-scrollbar class="bk-fill-parent">
             <table bk-table outer-borders="bottom" display-mode="compact">
-                <thead bk-table-header sticky="true">
+                <thead bk-table-header sticky="true" interactive="false">
                     <tr bk-table-row>
                         <!-- <th bk-table-header-cell content-type="checkbox">
                             <bk-checkbox id="cb-all" ng-model="selection.allSelected" ng-change="selectAllChanged()"></bk-checkbox>

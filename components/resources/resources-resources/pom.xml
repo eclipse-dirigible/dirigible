@@ -120,6 +120,11 @@
 			<artifactId>papaparse</artifactId>
 			<version>${papaparse.version}</version>
 		</dependency>
+		<dependency>
+			<groupId>org.webjars.npm</groupId>
+			<artifactId>bpmn-visualization</artifactId>
+			<version>${bpmn-visualization.version}</version>
+		</dependency>
     </dependencies>
     
     <build>
