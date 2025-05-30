@@ -246,20 +246,6 @@ jobs:
           name: sast_codeql_sarif_${{ matrix.language }}
           path: sast_codeql_report_${{ matrix.language }}
 
-      - name: Generate Security Report for CodeQL Analysis
-        uses: rsdmike/github-security-report-action@v3.0.4
-        with:
-          template: summary
-          token: ${{ secrets.GITHUB_TOKEN }}
-          sarifReportDir: "sast_codeql_report_${{ matrix.language }}"
-          outputDir: "security-reports"
-
-      - name: Upload Generated CodeQL Analysis Security Report as Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: sast_codeql_report_${{ matrix.language }}
-          path: security-reports
-
   dast-scan:
     if: ${{ inputs.code-scans }}
     name: Perform DAST testing using ZAP
@@ -336,10 +322,7 @@ jobs:
       - name: Copy report files due to naming collisions
         if: ${{ inputs.code-scans }}
         run: |
-          cp uploaded-artifacts/sast_codeql_report_java-kotlin/summary.pdf release_files/sast_codeql_report_java-kotlin.pdf
           cp uploaded-artifacts/sast_codeql_sarif_java-kotlin/java.sarif release_files/sast_codeql_sarif_java-kotlin.sarif
-          
-          cp uploaded-artifacts/sast_codeql_report_javascript-typescript/summary.pdf release_files/sast_codeql_report_javascript-typescript.pdf
           cp uploaded-artifacts/sast_codeql_sarif_javascript-typescript/javascript.sarif release_files/sast_codeql_sarif_javascript-typescript.sarif
           
           cp uploaded-artifacts/sast_docker_scout_sarif.json/sast_docker_scout_sarif.json release_files/sast_docker_scout_sarif.json
