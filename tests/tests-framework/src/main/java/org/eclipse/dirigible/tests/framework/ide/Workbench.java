@@ -118,7 +118,11 @@ public class Workbench {
     }
 
     public void addContentToHTMLFile(String fileContent) {
-        browser.clickOnElementByAttributePattern(HtmlElementType.DIV, HtmlAttribute.STYLE, "top:54px;height:18px;");
+        browser.clickOnElementByAttributePattern(HtmlElementType.DIV, HtmlAttribute.STYLE, "top:0px;height:18px;");
+
+        browser.pressArrowDown();
+        browser.pressArrowDown();
+        browser.pressArrowDown();
         browser.pressEnter();
 
         browser.type(fileContent);
