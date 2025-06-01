@@ -65,6 +65,12 @@ public class CreateDatabaseViewIT extends UserInterfaceIntegrationTest {
         assertColumnExistsInWorkbench();
     }
 
+    private String getViewName() {
+        boolean postgreSQL = dataSourcesManager.getDefaultDataSource()
+                                               .isOfType(DatabaseSystem.POSTGRESQL);
+        return postgreSQL ? "myview" : "MYVIEW";
+    }
+
     private String getSchema() {
         boolean postgreSQL = dataSourcesManager.getDefaultDataSource()
                                                .isOfType(DatabaseSystem.POSTGRESQL);
@@ -78,7 +84,7 @@ public class CreateDatabaseViewIT extends UserInterfaceIntegrationTest {
 
         databasePerspective.expandSubmenu("Views");
 
-        databasePerspective.expandSubmenu("MYVIEW");
+        databasePerspective.expandSubmenu(getViewName());
 
         databasePerspective.expandSubmenu("Columns");
     }
