@@ -308,6 +308,11 @@ class BrowserImpl implements Browser {
     }
 
     @Override
+    public void pressArrowDown() {
+        pressKey(Keys.ARROW_DOWN);
+    }
+
+    @Override
     public void pressKey(Keys key) {
         Selenide.actions()
                 .sendKeys(key)

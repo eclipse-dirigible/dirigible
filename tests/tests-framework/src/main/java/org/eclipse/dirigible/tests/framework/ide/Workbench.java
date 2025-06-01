@@ -130,7 +130,10 @@ public class Workbench {
 
     public void addContentToFormIndexHtml(String fileContent) {
         browser.clickOnElementByAttributePattern(HtmlElementType.DIV, HtmlAttribute.STYLE, "top:306px;height:18px;");
-        browser.pressEnter();
+        // browser.pressEnter();
+        for (int i = 1; i <= 18; i++) {
+            browser.pressArrowDown();
+        }
         browser.type(fileContent);
     }
 

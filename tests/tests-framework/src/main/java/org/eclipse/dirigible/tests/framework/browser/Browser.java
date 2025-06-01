@@ -126,4 +126,6 @@ public interface Browser {
     By constructCssSelectorByTypeAndAttribute(String elementType, String attribute, String attributePattern);
 
     void doubleClickOnElementById(String id);
+
+    void pressArrowDown();
 }
