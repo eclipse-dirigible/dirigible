@@ -9,10 +9,12 @@
  */
 package org.eclipse.dirigible.tests.framework.ide;
 
+import org.apache.commons.lang3.SystemUtils;
 import org.eclipse.dirigible.tests.framework.browser.Browser;
 import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.util.SynchronizationUtil;
+import org.openqa.selenium.Keys;
 
 public class Workbench {
 
@@ -128,12 +130,17 @@ public class Workbench {
         openFile("index.html");
     }
 
+    private void selectAll() {
+        if (SystemUtils.IS_OS_MAC)
+            browser.pressMultipleKeys(Keys.COMMAND, "a");
+        else
+            browser.pressMultipleKeys(Keys.CONTROL, "a");
+
+    }
+
     public void addContentToFormIndexHtml(String fileContent) {
-        browser.clickOnElementByAttributePattern(HtmlElementType.DIV, HtmlAttribute.STYLE, "top:306px;height:18px;");
-        // browser.pressEnter();
-        for (int i = 1; i <= 18; i++) {
-            browser.pressArrowDown();
-        }
+        browser.clickOnElementByAttributePattern(HtmlElementType.DIV, HtmlAttribute.CLASS, "view-lines monaco-mouse-cursor-text");
+        selectAll();
         browser.type(fileContent);
     }
 
