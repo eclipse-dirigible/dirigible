@@ -41,6 +41,7 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
+import org.eclipse.dirigible.components.api.http.client.HttpClientFile;
 import org.eclipse.dirigible.components.api.http.client.HttpClientHeader;
 import org.eclipse.dirigible.components.api.http.client.HttpClientParam;
 import org.eclipse.dirigible.components.api.http.client.HttpClientProxyUtils;
@@ -332,9 +333,11 @@ public class HttpClientFacade {
             return createPostBinaryRequest(url, httpClientRequestOptions);
         } else if (httpClientRequestOptions.getText() != null) {
             return createPostTextRequest(url, httpClientRequestOptions);
-        } else if (httpClientRequestOptions.getParams() != null) {
+        } else if (httpClientRequestOptions.getParams() != null && httpClientRequestOptions.getParams()
+                                                                                           .size() > 0) {
             return createPostFormRequest(url, httpClientRequestOptions);
-        } else if (httpClientRequestOptions.getFiles() != null) {
+        } else if (httpClientRequestOptions.getFiles() != null && httpClientRequestOptions.getFiles()
+                                                                                          .size() > 0) {
             return createPostFilesRequest(url, httpClientRequestOptions);
         }
         throw new IllegalArgumentException(
@@ -385,8 +388,7 @@ public class HttpClientFacade {
         ContentType contentType = shouldParseContentType ? ContentType.parse(contentTypeString) : ContentType.create(contentTypeString);
 
         EntityBuilder entityBuilder = EntityBuilder.create()
-                                                   .setBinary(httpClientRequestOptions.getText()
-                                                                                      .getBytes(StandardCharsets.UTF_8))
+                                                   .setText(httpClientRequestOptions.getText())
                                                    .setContentType(contentType);
         if (httpClientRequestOptions.isCharacterEncodingEnabled()) {
             entityBuilder.setContentEncoding(httpClientRequestOptions.getCharacterEncoding());
@@ -429,7 +431,7 @@ public class HttpClientFacade {
      * @throws IOException Signals that an I/O exception has occurred.
      */
     private static final HttpPost createPostFilesRequest(String url, HttpClientRequestOptions httpClientRequestOptions) throws IOException {
-        if (httpClientRequestOptions.getParams() == null) {
+        if (httpClientRequestOptions.getFiles() == null) {
             throw new IllegalArgumentException("The element [files] in [options] cannot be null for POST requests in [file] mode");
         }
         RequestConfig config = prepareConfig(httpClientRequestOptions);
@@ -437,9 +439,9 @@ public class HttpClientFacade {
         httpPost.setConfig(config);
         prepareHeaders(httpClientRequestOptions, httpPost);
         MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create();
-        for (String filePath : httpClientRequestOptions.getFiles()) {
-            File file = new File(filePath);
-            multipartEntityBuilder.addBinaryBody(file.getName(), file, ContentType.APPLICATION_OCTET_STREAM, file.getName());
+        for (HttpClientFile httpFile : httpClientRequestOptions.getFiles()) {
+            File file = new File(httpFile.getValue());
+            multipartEntityBuilder.addBinaryBody(httpFile.getName(), file, ContentType.APPLICATION_OCTET_STREAM, file.getName());
         }
         HttpEntity entity = multipartEntityBuilder.build();
         httpPost.setEntity(entity);
@@ -459,9 +461,11 @@ public class HttpClientFacade {
             return createPutBinaryRequest(url, httpClientRequestOptions);
         } else if (httpClientRequestOptions.getText() != null) {
             return createPutTextRequest(url, httpClientRequestOptions);
-        } else if (httpClientRequestOptions.getParams() != null) {
+        } else if (httpClientRequestOptions.getParams() != null && httpClientRequestOptions.getParams()
+                                                                                           .size() > 0) {
             return createPutFormRequest(url, httpClientRequestOptions);
-        } else if (httpClientRequestOptions.getFiles() != null) {
+        } else if (httpClientRequestOptions.getFiles() != null && httpClientRequestOptions.getFiles()
+                                                                                          .size() > 0) {
             return createPutFilesRequest(url, httpClientRequestOptions);
         }
         throw new IllegalArgumentException(
@@ -506,8 +510,7 @@ public class HttpClientFacade {
         httpPut.setConfig(config);
         prepareHeaders(httpClientRequestOptions, httpPut);
         EntityBuilder entityBuilder = EntityBuilder.create()
-                                                   .setBinary(httpClientRequestOptions.getText()
-                                                                                      .getBytes(StandardCharsets.UTF_8))
+                                                   .setText(httpClientRequestOptions.getText())
                                                    .setContentType(ContentType.create(httpClientRequestOptions.getContentType()));
         if (httpClientRequestOptions.isCharacterEncodingEnabled()) {
             entityBuilder.setContentEncoding(httpClientRequestOptions.getCharacterEncoding());
@@ -550,7 +553,7 @@ public class HttpClientFacade {
      * @throws IOException Signals that an I/O exception has occurred.
      */
     private static final HttpPut createPutFilesRequest(String url, HttpClientRequestOptions httpClientRequestOptions) throws IOException {
-        if (httpClientRequestOptions.getParams() == null) {
+        if (httpClientRequestOptions.getFiles() == null) {
             throw new IllegalArgumentException("The element [files] in [options] cannot be null for POST requests in [file] mode");
         }
         RequestConfig config = prepareConfig(httpClientRequestOptions);
@@ -558,9 +561,9 @@ public class HttpClientFacade {
         httpPut.setConfig(config);
         prepareHeaders(httpClientRequestOptions, httpPut);
         MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create();
-        for (String filePath : httpClientRequestOptions.getFiles()) {
-            File file = new File(filePath);
-            multipartEntityBuilder.addBinaryBody(file.getName(), file, ContentType.APPLICATION_OCTET_STREAM, file.getName());
+        for (HttpClientFile httpFile : httpClientRequestOptions.getFiles()) {
+            File file = new File(httpFile.getValue());
+            multipartEntityBuilder.addBinaryBody(httpFile.getName(), file, ContentType.APPLICATION_OCTET_STREAM, file.getName());
         }
         HttpEntity entity = multipartEntityBuilder.build();
         httpPut.setEntity(entity);
@@ -580,9 +583,11 @@ public class HttpClientFacade {
             return createPatchBinaryRequest(url, httpClientRequestOptions);
         } else if (httpClientRequestOptions.getText() != null) {
             return createPatchTextRequest(url, httpClientRequestOptions);
-        } else if (httpClientRequestOptions.getParams() != null) {
+        } else if (httpClientRequestOptions.getParams() != null && httpClientRequestOptions.getParams()
+                                                                                           .size() > 0) {
             return createPatchFormRequest(url, httpClientRequestOptions);
-        } else if (httpClientRequestOptions.getFiles() != null) {
+        } else if (httpClientRequestOptions.getFiles() != null && httpClientRequestOptions.getFiles()
+                                                                                          .size() > 0) {
             return createPatchFilesRequest(url, httpClientRequestOptions);
         }
         throw new IllegalArgumentException(
@@ -629,8 +634,7 @@ public class HttpClientFacade {
         httpPatch.setConfig(config);
         prepareHeaders(httpClientRequestOptions, httpPatch);
         EntityBuilder entityBuilder = EntityBuilder.create()
-                                                   .setBinary(httpClientRequestOptions.getText()
-                                                                                      .getBytes(StandardCharsets.UTF_8))
+                                                   .setText(httpClientRequestOptions.getText())
                                                    .setContentType(ContentType.create(httpClientRequestOptions.getContentType()));
         if (httpClientRequestOptions.isCharacterEncodingEnabled()) {
             entityBuilder.setContentEncoding(httpClientRequestOptions.getCharacterEncoding());
@@ -675,7 +679,7 @@ public class HttpClientFacade {
      */
     private static final HttpPatch createPatchFilesRequest(String url, HttpClientRequestOptions httpClientRequestOptions)
             throws IOException {
-        if (httpClientRequestOptions.getParams() == null) {
+        if (httpClientRequestOptions.getFiles() == null) {
             throw new IllegalArgumentException("The element [files] in [options] cannot be null for POST requests in [file] mode");
         }
         RequestConfig config = prepareConfig(httpClientRequestOptions);
@@ -683,9 +687,9 @@ public class HttpClientFacade {
         httpPatch.setConfig(config);
         prepareHeaders(httpClientRequestOptions, httpPatch);
         MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create();
-        for (String filePath : httpClientRequestOptions.getFiles()) {
-            File file = new File(filePath);
-            multipartEntityBuilder.addBinaryBody(file.getName(), file, ContentType.APPLICATION_OCTET_STREAM, file.getName());
+        for (HttpClientFile httpFile : httpClientRequestOptions.getFiles()) {
+            File file = new File(httpFile.getValue());
+            multipartEntityBuilder.addBinaryBody(httpFile.getName(), file, ContentType.APPLICATION_OCTET_STREAM, file.getName());
         }
         HttpEntity entity = multipartEntityBuilder.build();
         httpPatch.setEntity(entity);

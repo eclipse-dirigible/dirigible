@@ -30,11 +30,15 @@ tasksView.controller('TasksController', ($scope, $http, $window, Dialogs) => {
         $http.get('/services/bpm/bpm-processes/instance/' + processInstanceId + '/tasks?type=groups', { params: { 'limit': 100 } })
             .then((response) => {
                 $scope.tasksList = response.data;
+            }, (error) => {
+                console.error(error);
             });
 
         $http.get('/services/bpm/bpm-processes/instance/' + processInstanceId + '/tasks?type=assignee', { params: { 'limit': 100 } })
             .then((response) => {
                 $scope.tasksListAssignee = response.data;
+            }, (error) => {
+                console.error(error);
             });
     };
 

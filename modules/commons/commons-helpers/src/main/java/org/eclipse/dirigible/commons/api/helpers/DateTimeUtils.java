@@ -33,7 +33,9 @@ public class DateTimeUtils {
 
     /** The Constant dateFormatter. */
     public static final DateTimeFormatter dateFormatter =
-            new DateTimeFormatterBuilder().appendOptional(DateTimeFormatter.ofPattern("M/d/yyyy"))
+            new DateTimeFormatterBuilder().appendOptional(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                                          .appendOptional(DateTimeFormatter.ISO_INSTANT)
+                                          .appendOptional(DateTimeFormatter.ofPattern("M/d/yyyy"))
                                           .appendOptional(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
                                           .appendOptional(DateTimeFormatter.ofPattern("yyyyMMdd"))
                                           .appendOptional(DateTimeFormatter.ofPattern("MM/dd/yyyy"))
