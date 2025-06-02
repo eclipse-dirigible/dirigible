@@ -26,8 +26,6 @@ import org.springframework.context.annotation.ComponentScan;
 
 import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * The Class DBMetadataUtilTest.
@@ -54,41 +52,6 @@ public class ODataDatabaseMetadataUtilTest {
     /** The Constant COLUMN_TYPE_LABEL. */
     private static final String COLUMN_TYPE_LABEL = "TYPE_NAME";
 
-    /** The Constant SQL_TO_EDM_TYPE_MAP. */
-    private static final Map<String, String> SQL_TO_EDM_TYPE_MAP = new HashMap<>();
-
-    static {
-        SQL_TO_EDM_TYPE_MAP.put("TIME", "Edm.Time");
-        SQL_TO_EDM_TYPE_MAP.put("DATE", "Edm.DateTime");
-        SQL_TO_EDM_TYPE_MAP.put("SECONDDATE", "Edm.DateTime");
-        SQL_TO_EDM_TYPE_MAP.put("TIMESTAMP", "Edm.DateTime");
-        SQL_TO_EDM_TYPE_MAP.put("TINYINT", "Edm.Byte");
-        SQL_TO_EDM_TYPE_MAP.put("SMALLINT", "Edm.Int16");
-        SQL_TO_EDM_TYPE_MAP.put("INTEGER", "Edm.Int32");
-        SQL_TO_EDM_TYPE_MAP.put("INT4", "Edm.Int32");
-        SQL_TO_EDM_TYPE_MAP.put("BIGINT", "Edm.Int64");
-        SQL_TO_EDM_TYPE_MAP.put("SMALLDECIMAL", "Edm.Decimal");
-        SQL_TO_EDM_TYPE_MAP.put("DECIMAL", "Edm.Decimal");
-        SQL_TO_EDM_TYPE_MAP.put("REAL", "Edm.Single");
-        SQL_TO_EDM_TYPE_MAP.put("FLOAT", "Edm.Single");
-        SQL_TO_EDM_TYPE_MAP.put("DOUBLE", "Edm.Double");
-        SQL_TO_EDM_TYPE_MAP.put("VARCHAR", "Edm.String");
-        SQL_TO_EDM_TYPE_MAP.put("NVARCHAR", "Edm.String");
-        SQL_TO_EDM_TYPE_MAP.put("CHAR", "Edm.String");
-        SQL_TO_EDM_TYPE_MAP.put("NCHAR", "Edm.String");
-        SQL_TO_EDM_TYPE_MAP.put("BINARY", "Edm.Binary");
-        SQL_TO_EDM_TYPE_MAP.put("VARBINARY", "Edm.Binary");
-        SQL_TO_EDM_TYPE_MAP.put("BOOLEAN", "Edm.Boolean");
-        SQL_TO_EDM_TYPE_MAP.put("BYTE", "Edm.Byte");
-        SQL_TO_EDM_TYPE_MAP.put("BIT", "Edm.Byte");
-        SQL_TO_EDM_TYPE_MAP.put("BLOB", "Edm.String");
-        SQL_TO_EDM_TYPE_MAP.put("NCLOB", "Edm.String");
-        SQL_TO_EDM_TYPE_MAP.put("CLOB", "Edm.String");
-        SQL_TO_EDM_TYPE_MAP.put("TEXT", "Edm.String");
-        SQL_TO_EDM_TYPE_MAP.put("BINTEXT", "Edm.Binary");
-        SQL_TO_EDM_TYPE_MAP.put("ALPHANUM", "Edm.String");
-    }
-
     /** The connection. */
     @Mock
     private DirigibleConnection connection;
@@ -104,38 +67,6 @@ public class ODataDatabaseMetadataUtilTest {
     /** The datasources manager. */
     @Mock
     private DataSourcesManager datasourcesManager;
-
-    /**
-     * Sets the up.
-     *
-     * @throws SQLException the SQL exception
-     */
-    @BeforeEach
-    public void setUp() throws SQLException {
-        MockitoAnnotations.initMocks(this);
-        Mockito.when(datasourcesManager.getDefaultDataSource())
-               .thenReturn(dataSource);
-        Mockito.when(dataSource.getConnection())
-               .thenReturn(connection);
-        Mockito.when(connection.getCatalog())
-               .thenReturn(CATALOG);
-    }
-
-    /**
-     * Test get table metadata column type conversion.
-     */
-    // @Test
-    // public void testGetTableMetadata_columnTypeConversion(){
-    // SQL_TO_EDM_TYPE_MAP.forEach(this::testGetTableMetadata_columnTypeConversion);
-    // }
-
-    /**
-     * Test get table metadata column conversion not supported type.
-     */
-    // @Test
-    // public void testGetTableMetadata_columnConversionNotSupportedType(){
-    // testGetTableMetadata_columnTypeConversion("NotSupportedSQLType", null);
-    // }
 
 
     /**
@@ -217,6 +148,38 @@ public class ODataDatabaseMetadataUtilTest {
 
     @SpringBootApplication
     static class TestConfiguration {
+    }
+
+    /**
+     * Test get table metadata column type conversion.
+     */
+    // @Test
+    // public void testGetTableMetadata_columnTypeConversion(){
+    // SQL_TO_EDM_TYPE_MAP.forEach(this::testGetTableMetadata_columnTypeConversion);
+    // }
+
+    /**
+     * Test get table metadata column conversion not supported type.
+     */
+    // @Test
+    // public void testGetTableMetadata_columnConversionNotSupportedType(){
+    // testGetTableMetadata_columnTypeConversion("NotSupportedSQLType", null);
+    // }
+
+    /**
+     * Sets the up.
+     *
+     * @throws SQLException the SQL exception
+     */
+    @BeforeEach
+    public void setUp() throws SQLException {
+        MockitoAnnotations.initMocks(this);
+        Mockito.when(datasourcesManager.getDefaultDataSource())
+               .thenReturn(dataSource);
+        Mockito.when(dataSource.getConnection())
+               .thenReturn(connection);
+        Mockito.when(connection.getCatalog())
+               .thenReturn(CATALOG);
     }
 
 }
