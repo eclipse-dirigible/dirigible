@@ -16,12 +16,10 @@ ideBpmProcessContextView.controller('IDEBpmProcessContextViewController', ($scop
     $scope.currentProcessInstanceId = null;
     $scope.selectedVariable = null;
     $scope.disableModificationButtons = false;
-    $scope.servicePath = '/services/bpm/bpm-processes/instance/'
+    let servicePath = '/services/bpm/bpm-processes/instance/';
 
     $scope.selectionChanged = (variable) => {
-        $scope.variablesList.forEach(variable => variable.selected = false);
         $scope.selectedVariable = variable;
-        $scope.selectedVariable.selected = true;
     };
 
     $scope.reload = () => {
@@ -30,10 +28,14 @@ ideBpmProcessContextView.controller('IDEBpmProcessContextViewController', ($scop
     };
 
     $scope.fetchData = (processInstanceId) => {
-        $http.get($scope.servicePath + processInstanceId + '/variables', { params: { 'limit': 100 } })
-            .then((response) => {
-                $scope.variablesList = response.data;
-            });
+        $http.get(
+            servicePath + processInstanceId + '/variables',
+            { params: { 'limit': 100 } }
+        ).then((response) => {
+            $scope.variablesList = response.data;
+        }, (error) => {
+            console.error(error);
+        });
     };
 
     $scope.upsertProcessVariable = (processInstanceId, varName, varValue) => {
@@ -133,10 +135,10 @@ ideBpmProcessContextView.controller('IDEBpmProcessContextViewController', ($scop
         topic: 'bpm.instance.selected',
         handler: (data) => {
             const processInstanceId = data.instance;
+            servicePath = '/services/bpm/bpm-processes/instance/';
             $scope.$evalAsync(() => {
                 $scope.currentProcessInstanceId = processInstanceId;
                 $scope.disableModificationButtons = false;
-                $scope.servicePath = '/services/bpm/bpm-processes/instance/';
             });
             $scope.fetchData(processInstanceId);
         }
@@ -145,10 +147,11 @@ ideBpmProcessContextView.controller('IDEBpmProcessContextViewController', ($scop
     Dialogs.addMessageListener({
         topic: 'bpm.historic.instance.selected', handler: (data) => {
             const processInstanceId = data.instance;
+            servicePath = '/services/bpm/bpm-processes/historic-instances/';
             $scope.$evalAsync(() => {
                 $scope.currentProcessInstanceId = processInstanceId;
                 $scope.disableModificationButtons = true;
-                $scope.servicePath = '/services/bpm/bpm-processes/historic-instances/';
+
             });
             $scope.fetchData(processInstanceId);
         }

@@ -176,8 +176,8 @@ public class RegistryAccessor {
      */
     private String createResourcePath(String root, String module, String extension) {
         StringBuilder buff = new StringBuilder().append(root);
-        if (!Character.toString(module.charAt(0))
-                      .equals(IRepository.SEPARATOR)) {
+        if (module.length() == 0 || !Character.toString(module.charAt(0))
+                                              .equals(IRepository.SEPARATOR)) {
             buff.append(IRepository.SEPARATOR);
         }
         buff.append(module);

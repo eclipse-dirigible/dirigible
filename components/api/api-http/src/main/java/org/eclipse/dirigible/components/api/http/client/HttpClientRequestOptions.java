@@ -13,7 +13,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-
 import com.google.gson.JsonObject;
 
 /**
@@ -82,7 +81,7 @@ public class HttpClientRequestOptions {
 
     /** The files. */
     // file content for POST and PUT
-    private String[] files;
+    private List<HttpClientFile> files = new ArrayList<HttpClientFile>();
 
     /** The character encoding. */
     // encoding for POST
@@ -441,8 +440,8 @@ public class HttpClientRequestOptions {
      *
      * @return the files
      */
-    public String[] getFiles() {
-        return files.clone();
+    public List<HttpClientFile> getFiles() {
+        return files;
     }
 
     /**
@@ -450,7 +449,7 @@ public class HttpClientRequestOptions {
      *
      * @param files the new files
      */
-    public void setFiles(String[] files) {
+    public void setFiles(List<HttpClientFile> files) {
         this.files = files;
     }
 

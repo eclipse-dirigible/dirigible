@@ -48,8 +48,9 @@ ideBpmProcessInstancesView.controller('IDEBpmProcessInstancesViewController', ($
                             description: 'A new process instance has been started.'
                         });
                     }
-
                     $scope.instancesList = response.data;
+                }, (error) => {
+                    console.error(error);
                 });
         }, 5000);
 
@@ -87,7 +88,6 @@ ideBpmProcessInstancesView.controller('IDEBpmProcessInstancesViewController', ($
                 description: actionName + " triggered successfully!",
                 type: 'positive',
             });
-            
             $scope.reload();
         }).catch((error) => {
             console.error('Error making POST request:', error);
@@ -100,11 +100,11 @@ ideBpmProcessInstancesView.controller('IDEBpmProcessInstancesViewController', ($
         });
     }
 
-    $scope.selectAllChanged = () => {
-        for (let instance of $scope.instancesList) {
-            instance.selected = $scope.selectAll;
-        }
-    };
+    // $scope.selectAllChanged = () => {
+    //     for (let instance of $scope.instancesList) {
+    //         instance.selected = $scope.selectAll;
+    //     }
+    // };
 
     $scope.selectionChanged = (instance) => {
         $scope.selectAll = $scope.instancesList.every(x => x.selected = false);
@@ -146,6 +146,8 @@ ideBpmProcessInstancesView.controller('IDEBpmProcessInstancesViewController', ($
         $http.get('/services/bpm/bpm-processes/instances', { params: { 'businessKey': $scope.searchField.text, 'key': $scope.selectedProcessDefinitionKey, 'limit': 100 } })
             .then((response) => {
                 $scope.instancesList = response.data;
+            }, (error) => {
+                console.error(error);
             });
     };
 
@@ -182,6 +184,5 @@ ideBpmProcessInstancesView.controller('IDEBpmProcessInstancesViewController', ($
             if (instance.selected) ret.push(instance.id);
             return ret;
         }, []);
-    }
-
+    };
 });

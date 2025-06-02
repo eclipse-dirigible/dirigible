@@ -40,7 +40,7 @@ jobs:
           distribution: 'corretto'
           java-version: '21'
           architecture: x64
-          
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -78,17 +78,3 @@ jobs:
         with:
           name: sast_codeql_sarif_${{ matrix.language }}
           path: sast_codeql_report_${{ matrix.language }}
-
-      - name: Generate Security Report for CodeQL Analysis
-        uses: rsdmike/github-security-report-action@v3.0.4
-        with:
-          template: summary
-          token: ${{ secrets.GITHUB_TOKEN }}
-          sarifReportDir: "sast_codeql_report_${{ matrix.language }}"
-          outputDir: "security-reports"
-
-      - name: Upload Generated CodeQL Analysis Security Report as Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: sast_codeql_report_${{ matrix.language }}
-          path: security-reports

@@ -112,7 +112,7 @@
         <maven-jacoco-plugin.version>0.8.13</maven-jacoco-plugin.version>
         <maven-spotbugs-plugin.version>4.9.3.0</maven-spotbugs-plugin.version>
         <maven-formatter-plugin.version>2.26.0</maven-formatter-plugin.version>
-        <maven-exec-plugin.version>3.5.0</maven-exec-plugin.version>
+        <maven-exec-plugin.version>3.5.1</maven-exec-plugin.version>
         <maven-git-commit-id-plugin.version>4.9.10</maven-git-commit-id-plugin.version>
         <maven-license-plugin.version>5.0.0</maven-license-plugin.version>
 
@@ -215,10 +215,11 @@
         <fontawesome.version>4.7.0</fontawesome.version>
         <ag-grid.version>27.1.0</ag-grid.version>
         <papaparse.version>5.3.2</papaparse.version>
+        <bpmn-visualization.version>0.46.0</bpmn-visualization.version>
 
         <!-- Tests -->
         <testcontainers.version>1.21.0</testcontainers.version>
-        <selenide.version>7.9.2</selenide.version>
+        <selenide.version>7.9.3</selenide.version>
 
         <profile.content.phase>none</profile.content.phase>
 
@@ -910,7 +911,7 @@
             <dependency>
                 <groupId>org.junit.vintage</groupId>
                 <artifactId>junit-vintage-engine</artifactId>
-                <version>5.12.2</version>
+                <version>5.13.0</version>
                 <scope>test</scope>
             </dependency>
 
