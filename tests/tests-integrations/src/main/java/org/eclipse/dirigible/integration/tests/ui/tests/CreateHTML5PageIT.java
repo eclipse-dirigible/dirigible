@@ -10,7 +10,8 @@ public class CreateHTML5PageIT extends UserInterfaceIntegrationTest {
     private static final String FILE_NAME = "test1.html";
     private static final String PROJECT_NAME = "CreateHTML5PageIT";
     private static final String PREVIEW_ID = "preview";
-    private static final String FILE_CONTENT = "<p>Hello World!</p>";
+    private static final String FILE_CONTENT =
+            "<!DOCTYPE html>\n" + "<head>\n" + "</head>\n" + "<body>\n" + "    <p>Hello World!</p>\n" + "</body>\n" + "</html>";
 
     @Test
     void test() {
