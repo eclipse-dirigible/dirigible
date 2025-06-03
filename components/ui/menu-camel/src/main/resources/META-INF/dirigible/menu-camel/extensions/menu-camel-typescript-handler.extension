@@ -1,5 +1,0 @@
-{
-    "module": "menu-camel/templates/camel-route.js",
-    "extensionPoint": "platform-templates-menu",
-    "description": "Dirigible Java Script Component Extension"
-}
