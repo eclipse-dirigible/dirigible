@@ -10,11 +10,16 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 export function getTemplate() {
-    const fileContent = '';
+    const fileContent = `
+import { IntegrationMessage } from "sdk/integrations"
+
+export function onMessage(message: IntegrationMessage) {
+    return message;
+}`;
 	return {
-		name: 'camel-route',
-		label: 'Camel - Route',
-		extension: 'camel',
+		name: 'route-step-handler',
+		label: 'Route Step Handler',
+		extension: 'ts',
 		data: fileContent
 	};
 };

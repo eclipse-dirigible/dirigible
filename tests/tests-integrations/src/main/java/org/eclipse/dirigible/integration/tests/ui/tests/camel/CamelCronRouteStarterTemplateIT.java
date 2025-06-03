@@ -24,7 +24,7 @@ import static org.awaitility.Awaitility.await;
 
 public class CamelCronRouteStarterTemplateIT extends UserInterfaceIntegrationTest {
 
-    private static final String TEMPLATE_TITLE = "Camel Cron Route Project Starter";
+    private static final String TEMPLATE_TITLE = "Cron Route Project Starter";
     private static final String TEST_PROJECT = CamelCronRouteStarterTemplateIT.class.getSimpleName();
 
     private LogsAsserter camelRouteLogAsserter;
