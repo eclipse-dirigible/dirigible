@@ -14,9 +14,12 @@ public class CreateDatabaseViewIT extends UserInterfaceIntegrationTest {
 
     private static final String PROJECT_NAME = "CreateDatabaseViewIT";
     private static final String TABLE_FILE_NAME = "test1.table";
+    private static final String TABLE_NAME = "MYTABLE";
     private static final String DB_VIEW_FILE_NAME = "test1.view";
     private static final String BUTTON_TEXT = "Add";
     private static final String DIALOG_LABEL_NAME = "Add column";
+    private static final String FILE_CONTENT = "{\n" + "\"name\": \"MYVIEW\",\n" + "\"type\": \"VIEW\",\n"
+            + "\"query\": \"SELECT * FROM MYTABLE\",\n" + "\"dependencies\": []\n";
 
     @Autowired
     private DataSourcesManager dataSourcesManager;
@@ -27,13 +30,13 @@ public class CreateDatabaseViewIT extends UserInterfaceIntegrationTest {
         workbench.createNewProject(this.getClass()
                                        .getSimpleName());
 
-        createTable(workbench);
+        createTable(workbench, TABLE_FILE_NAME, TABLE_NAME);
 
         workbench.createCustomElementInProject(PROJECT_NAME, DB_VIEW_FILE_NAME, "Database View");
         workbench.openFile(DB_VIEW_FILE_NAME);
         assertFileTabIsOpen(DB_VIEW_FILE_NAME);
 
-        removeDependencies();
+        addContentToFileWithCodeEditor(workbench);
 
         workbench.saveAll();
         workbench.publishAll(true);
@@ -46,29 +49,31 @@ public class CreateDatabaseViewIT extends UserInterfaceIntegrationTest {
         assertColumnExistsInDatabasePerspective();
     }
 
+    private void addContentToFileWithCodeEditor(Workbench workbench) {
+        browser.rightClickOnElementById("j1_5_anchor");
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", "Open With");
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", "Code Editor");
 
-    private void removeDependencies() {
-        browser.clickOnElementByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.GLYPH, "sap-icon--delete", "");
-        browser.clickOnElementByAttributeValue(HtmlElementType.BUTTON, HtmlAttribute.LABEL, "Delete");
-        browser.clickOnElementByAttributeValue(HtmlElementType.BUTTON, HtmlAttribute.LABEL, "Save");
+        browser.clickOnElementByAttributePattern(HtmlElementType.DIV, HtmlAttribute.CLASS, "view-lines monaco-mouse-cursor-text");
+        workbench.selectAll();
+        browser.type(FILE_CONTENT);
     }
 
-    private void createTable(Workbench workbench) {
-        workbench.createCustomElementInProject(PROJECT_NAME, TABLE_FILE_NAME, "Database Table");
-        workbench.openFile(TABLE_FILE_NAME);
-        assertFileTabIsOpen(TABLE_FILE_NAME);
+    private void createTable(Workbench workbench, String tableFileName, String tableName) {
+        workbench.createCustomElementInProject(PROJECT_NAME, tableFileName, "Database Table");
+        workbench.openFile(tableFileName);
+
+        browser.clickOnElementById("idName");
+        workbench.selectAll();
+        browser.type(tableName);
+
+        assertFileTabIsOpen(tableFileName);
 
         workbench.openDialogFromButton(BUTTON_TEXT);
         assertDialogExists(DIALOG_LABEL_NAME);
 
         workbench.addContentToDbTableField();
         assertColumnExistsInWorkbench();
-    }
-
-    private String getViewName() {
-        boolean postgreSQL = dataSourcesManager.getDefaultDataSource()
-                                               .isOfType(DatabaseSystem.POSTGRESQL);
-        return postgreSQL ? "myview" : "MYVIEW";
     }
 
     private String getSchema() {
@@ -84,7 +89,7 @@ public class CreateDatabaseViewIT extends UserInterfaceIntegrationTest {
 
         databasePerspective.expandSubmenu("Views");
 
-        databasePerspective.expandSubmenu(getViewName());
+        databasePerspective.expandSubmenu("MYVIEW");
 
         databasePerspective.expandSubmenu("Columns");
     }

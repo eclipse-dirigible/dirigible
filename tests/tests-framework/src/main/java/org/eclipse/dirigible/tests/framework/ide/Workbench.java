@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.tests.framework.ide;
 
+import org.apache.commons.lang3.SystemUtils;
 import org.eclipse.dirigible.tests.framework.browser.Browser;
 import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
@@ -124,4 +125,11 @@ public class Workbench {
         saveAll();
     }
 
+    public void selectAll() {
+        if (SystemUtils.IS_OS_MAC)
+            browser.pressMultipleKeys(Keys.COMMAND, "a");
+        else
+            browser.pressMultipleKeys(Keys.CONTROL, "a");
+
+    }
 }
