@@ -1,0 +1,5 @@
+{
+	"extensionPoint": "ide-template",
+	"module": "template-camel-http-route/template.js",
+	"description": "Camel Http Route Project Template"
+}

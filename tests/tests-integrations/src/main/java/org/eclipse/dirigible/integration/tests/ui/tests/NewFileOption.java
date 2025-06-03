@@ -11,6 +11,8 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 enum NewFileOption {
+    CAMEL_TS_HANDLER("Camel - TypeScript Handler", "camel-typescript-handler.ts"), //
+    CAMEL_ROUTE("Camel - Route", "camel-route.camel"), //
     ENTITY_DATA_MODEL("Entity Data Model", "edm.edm"), //
     JAVASCRIPT_SERVICE("JavaScript Service", "javascript-esm.mjs"), //
     TYPESCRIPT_SERVICE("TypeScript Service", "typescript.ts"), //
