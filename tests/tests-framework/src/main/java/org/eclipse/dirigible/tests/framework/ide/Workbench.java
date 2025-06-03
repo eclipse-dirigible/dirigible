@@ -139,7 +139,7 @@ public class Workbench {
     }
 
     public void addContentToFormIndexHtml(String fileContent) {
-        browser.clickOnElementByAttributePattern(HtmlElementType.DIV, HtmlAttribute.CLASS, "view-lines monaco-mouse-cursor-text");
+        browser.clickOnElementWithText(HtmlElementType.SPAN, "<!DOCTYPE");
         selectAll();
         browser.type(fileContent);
     }
