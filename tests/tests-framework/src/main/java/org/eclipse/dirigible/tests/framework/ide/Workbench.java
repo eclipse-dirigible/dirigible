@@ -130,7 +130,7 @@ public class Workbench {
         openFile("index.html");
     }
 
-    private void selectAll() {
+    public void selectAll() {
         if (SystemUtils.IS_OS_MAC)
             browser.pressMultipleKeys(Keys.COMMAND, "a");
         else
