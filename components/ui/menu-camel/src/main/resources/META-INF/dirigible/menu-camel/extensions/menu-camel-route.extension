@@ -1,0 +1,5 @@
+{
+    "module": "menu-camel/templates/camel-type-script-handler.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "Dirigible Java Script Component Extension"
+}

@@ -1,7 +1,7 @@
 export function getTemplate() {
 	return {
-		name: "Http Route Project Starter",
-		description: "Apache Camel Http Route Project Starter Template",
+		name: "Camel Http Route Project Starter",
+		description: "Camel Http Route Project Starter Template",
 		sources: [{
 			location: "/template-camel-http-route/http-route.camel.template",
 			action: "generate",

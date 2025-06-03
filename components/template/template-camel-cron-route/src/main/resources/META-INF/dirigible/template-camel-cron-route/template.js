@@ -1,7 +1,7 @@
 export function getTemplate() {
 	return {
-		name: "Cron Route Project Starter",
-		description: "Apache Camel Cron Route Project Starter Template",
+		name: "Camel Cron Route Project Starter",
+		description: "Camel Cron Route Project Starter Template",
 		sources: [{
 			location: "/template-camel-cron-route/cron-route.camel.template",
 			action: "generate",
