@@ -15,8 +15,11 @@
     <packaging>jar</packaging>
 
     <properties>
-        <license.header.location>../licensing-header.txt</license.header.location>
-        <parent.pom.folder>../</parent.pom.folder>
+        <profile.content.phase>generate-sources</profile.content.phase>
+        <content.repository.name>template-camel</content.repository.name>
+        <content.project.name>template-camel</content.project.name>
+
+        <license.header.location>../generation-header.txt</license.header.location>
     </properties>
 
     <dependencies>
