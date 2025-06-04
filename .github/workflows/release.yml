@@ -284,12 +284,20 @@ jobs:
           allow_issue_writing: false # create an issue with the results
           issue_title: '[DAST] ZAP Full Scan Report'
 
-  generate-git-security-report:
+  wait-for-scans:
     if: always() # Runs even if previous jobs were skipped or failed
     needs:
       - sast-codeql-scan
       - sast-docker-scout-scan
       - dast-scan
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Proceeding to next job"
+
+  generate-git-security-report:
+    if: ${{ inputs.code-scans }}
+    needs:
+      - wait-for-scans
     runs-on: ubuntu-latest
     permissions:
       security-events: read
