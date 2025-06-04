@@ -9,10 +9,12 @@
  */
 package org.eclipse.dirigible.tests.framework.ide;
 
+import org.apache.commons.lang3.SystemUtils;
 import org.eclipse.dirigible.tests.framework.browser.Browser;
 import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.util.SynchronizationUtil;
+import org.openqa.selenium.Keys;
 
 public class Workbench {
 
@@ -20,108 +22,90 @@ public class Workbench {
     public static final String PROJECT_NAME_INPUT_ID = "pgfi1";
     private static final String PROJECTS_CONTEXT_MENU_NEW_PROJECT = "New Project";
     private static final String CREATE_BUTTON_TEXT = "Create";
-    public static final String FILE_NAME_INPUT_ID = "fdti1";
-
+    private static final String FILE_NAME_INPUT_ID = "fdti1";
     private final Browser browser;
     private final WelcomeViewFactory welcomeViewFactory;
     private final TerminalFactory terminalFactory;
-
     protected Workbench(Browser browser, WelcomeViewFactory welcomeViewFactory, TerminalFactory terminalFactory) {
         this.browser = browser;
         this.welcomeViewFactory = welcomeViewFactory;
         this.terminalFactory = terminalFactory;
     }
-
+    public void saveAll() {
+        browser.clickOnElementByAttributeValue(HtmlElementType.BUTTON, HtmlAttribute.GLYPH, "sap-icon--save");
+    }
     public void publishAll(boolean waitForSynchronizationExecution) {
         clickPublishAll();
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Published all projects in");
-
         if (waitForSynchronizationExecution) {
             SynchronizationUtil.waitForSynchronizationExecution();
         }
     }
-
     public void clickPublishAll() {
         browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.TITLE, "Publish all");
     }
-
     public WelcomeView openWelcomeView() {
         focusOnOpenedFile("Welcome");
         return welcomeViewFactory.create(browser);
     }
-
     public WelcomeView focusOnOpenedFile(String fileName) {
         browser.clickOnElementContainingText(HtmlElementType.ANCHOR, fileName);
         return welcomeViewFactory.create(browser);
     }
-
     public FormView getFormView() {
         return new FormView(browser);
     }
-
     public void createNewProject(String projectName) {
         browser.rightClickOnElementById(PROJECTS_VIEW_ID);
-
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.ROLE, "menuitem",
                 PROJECTS_CONTEXT_MENU_NEW_PROJECT);
-
         browser.enterTextInElementById(PROJECT_NAME_INPUT_ID, projectName);
-
         browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_BUTTON_TEXT);
     }
-
     public void createFileInProject(String projectName, String newFileType) {
         expandProject(projectName);
         browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
-
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", newFileType);
-        browser.clickOnElementWithText(HtmlElementType.BUTTON, "CREATE_BUTTON_TEXT");
+        browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_BUTTON_TEXT);
     }
-
     public void expandProject(String projectName) {
         browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
     }
-
     public void openFile(String projectName, String fileName) {
         expandProject(projectName);
         openFile(fileName);
     }
-
     public void openFile(String fileName) {
         browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, fileName);
     }
-
     public Terminal openTerminal() {
         browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Terminal");
         return terminalFactory.create(browser);
     }
-
-    public void addContentToFile(String content) {
-        browser.clickOnElementWithExactClass(HtmlElementType.DIV, "view-line");
-
-        browser.type(content);
-    }
-
     public void createCustomElement(String fileName, String elementType) {
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", elementType);
-
         browser.enterTextInElementById(FILE_NAME_INPUT_ID, fileName);
         browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_BUTTON_TEXT);
     }
-
     public void createCustomElementInProject(String projectName, String fileName, String elementType) {
         browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
         createCustomElement(fileName, elementType);
     }
-
     public void publishFile(String fileAnchorId) {
         browser.rightClickOnElementById(fileAnchorId);
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", "Publish");
     }
-
-    public void saveAll() {
-        browser.clickOnElementByAttributeValue(HtmlElementType.BUTTON, HtmlAttribute.GLYPH, "sap-icon--save");
+    public void selectAll() {
+        if (SystemUtils.IS_OS_MAC)
+            browser.pressMultipleKeys(Keys.COMMAND, "a");
+        else
+            browser.pressMultipleKeys(Keys.CONTROL, "a");
     }
-
+    public void addContentToJsFile(String fileContent)
+    {
+        browser.clickOnElementByAttributePattern(HtmlElementType.DIV,HtmlAttribute.CLASS, "view-lines monaco-mouse-cursor-text");
+        selectAll();
+        browser.type(fileContent);
+    }
 }
 
