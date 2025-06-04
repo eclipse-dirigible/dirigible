@@ -69,13 +69,9 @@ public abstract class BaseTestProject implements TestProject {
         return edmView;
     }
 
-    public String getProjectResourcesFolder() {
-        return projectResourcesFolder;
-    }
-
-    protected void generateForms(String projectName, String... formFileNames) {
+    protected void generateForms(String... formFileNames) {
         Workbench workbench = ide.openWorkbench();
-        workbench.expandProject(projectName);
+        workbench.expandProject(getProjectResourcesFolder());
 
         for (String formFileName : formFileNames) {
             workbench.openFile(formFileName);
@@ -85,6 +81,10 @@ public abstract class BaseTestProject implements TestProject {
             ide.assertStatusBarMessage("Generated from model '" + formFileName + "'");
 
         }
+    }
+
+    public String getProjectResourcesFolder() {
+        return projectResourcesFolder;
     }
 
     @Override

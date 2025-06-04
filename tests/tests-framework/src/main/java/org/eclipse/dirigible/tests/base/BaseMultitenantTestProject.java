@@ -14,12 +14,12 @@ import org.eclipse.dirigible.tests.framework.ide.IDE;
 import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 public abstract class BaseMultitenantTestProject extends BaseTestProject implements TestProject, MultitenantTestProject {
 
     protected BaseMultitenantTestProject(String projectResourcesFolder, IDE ide, ProjectUtil projectUtil, EdmView edmView) {
         super(projectResourcesFolder, ide, projectUtil, edmView);
-
     }
 
     @Override
@@ -34,6 +34,15 @@ public abstract class BaseMultitenantTestProject extends BaseTestProject impleme
     @Override
     public final void verify() {
         verify(DirigibleTestTenant.createDefaultTenant());
+    }
+
+    protected void wrapVerification(Consumer<DirigibleTestTenant> verification, DirigibleTestTenant tenant, String failedVerification) {
+        try {
+            verification.accept(tenant);
+        } catch (RuntimeException | Error ex) {
+            throw new AssertionError("Failed to verify test project [" + getProjectResourcesFolder() + "] for tenant [" + tenant
+                    + "]. Failed verification: " + failedVerification, ex);
+        }
     }
 
 }

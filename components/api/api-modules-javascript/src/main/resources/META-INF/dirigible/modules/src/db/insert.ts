@@ -13,7 +13,6 @@
 const DatabaseFacade = Java.type("org.eclipse.dirigible.components.api.db.DatabaseFacade");
 
 export interface InsertParameter {
-	readonly type: string;
 	readonly value: any;
 }
 

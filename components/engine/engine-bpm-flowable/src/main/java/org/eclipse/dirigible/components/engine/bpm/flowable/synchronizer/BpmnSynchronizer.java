@@ -13,14 +13,12 @@ import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.ArtefactService;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
-import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
+import org.eclipse.dirigible.components.base.synchronizer.MultitenantBaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.engine.bpm.flowable.domain.Bpmn;
-import org.eclipse.dirigible.components.engine.bpm.flowable.provider.BpmProviderFlowable;
+import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmnService;
-import org.flowable.engine.ProcessEngine;
-import org.flowable.engine.RepositoryService;
 import org.flowable.engine.repository.Deployment;
 import org.flowable.engine.repository.ProcessDefinition;
 import org.slf4j.Logger;
@@ -33,14 +31,12 @@ import java.nio.file.Paths;
 import java.text.ParseException;
 import java.util.List;
 
-import static java.text.MessageFormat.format;
-
 /**
  * The Class BpmnSynchronizer.
  */
 @Component
 @Order(SynchronizersOrder.BPMN)
-public class BpmnSynchronizer extends BaseSynchronizer<Bpmn, Long> {
+public class BpmnSynchronizer extends MultitenantBaseSynchronizer<Bpmn, Long> {
 
     /** The Constant FILE_EXTENSION_BPMN. */
     public static final String FILE_EXTENSION_BPMN = ".bpmn";
@@ -48,23 +44,15 @@ public class BpmnSynchronizer extends BaseSynchronizer<Bpmn, Long> {
     private static final Logger logger = LoggerFactory.getLogger(BpmnSynchronizer.class);
     /** The bpmn service. */
     private final BpmnService bpmnService;
-
-    /** The bpmn service. */
-    private final BpmProviderFlowable bpmProviderFlowable;
+    private final BpmService bpmService;
 
     /** The synchronization callback. */
     private SynchronizerCallback callback;
 
-    /**
-     * Instantiates a new bpmn synchronizer.
-     *
-     * @param bpmnService the bpmn service
-     * @param bpmProviderFlowable the bpm provider flowable
-     */
     @Autowired
-    public BpmnSynchronizer(BpmnService bpmnService, BpmProviderFlowable bpmProviderFlowable) {
+    public BpmnSynchronizer(BpmnService bpmnService, BpmService bpmService) {
         this.bpmnService = bpmnService;
-        this.bpmProviderFlowable = bpmProviderFlowable;
+        this.bpmService = bpmService;
     }
 
     /**
@@ -103,16 +91,8 @@ public class BpmnSynchronizer extends BaseSynchronizer<Bpmn, Long> {
             }
             bpmn = getService().save(bpmn);
         } catch (Exception e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
-            if (logger.isErrorEnabled()) {
-                logger.error("bpmn: {}", bpmn);
-            }
-            if (logger.isErrorEnabled()) {
-                logger.error("content: {}", new String(content));
-            }
-            throw new ParseException(e.getMessage(), 0);
+            String errMsg = "Failed to parse bpmn [" + bpmn + "] due to error [" + e.getMessage() + "] with content: " + content;
+            throw new ParseException(errMsg, 0);
         }
         return List.of(bpmn);
     }
@@ -199,17 +179,8 @@ public class BpmnSynchronizer extends BaseSynchronizer<Bpmn, Long> {
 
     private void deployProcess(Bpmn bpmn) {
         try {
-            ProcessEngine processEngine = bpmProviderFlowable.getProcessEngine();
-            RepositoryService repositoryService = processEngine.getRepositoryService();
-
-            Deployment deployment = repositoryService.createDeployment()
-                                                     .key(bpmn.getLocation())
-                                                     .addBytes(bpmn.getLocation(), bpmn.getContent())
-                                                     .deploy();
-
-            ProcessDefinition processDefinition = repositoryService.createProcessDefinitionQuery()
-                                                                   .deploymentId(deployment.getId())
-                                                                   .singleResult();
+            Deployment deployment = bpmService.deployProcess(bpmn.getLocation(), bpmn.getLocation(), bpmn.getContent());
+            ProcessDefinition processDefinition = bpmService.getProcessDefinitionByDeploymentId(deployment.getId());
 
             bpmn.setDeploymentId(processDefinition.getDeploymentId());
             bpmn.setProcessDefinitionId(processDefinition.getId());
@@ -219,7 +190,8 @@ public class BpmnSynchronizer extends BaseSynchronizer<Bpmn, Long> {
             bpmn.setProcessDefinitionTenantId(processDefinition.getTenantId());
             bpmn.setProcessDefinitionCategory(processDefinition.getCategory());
             bpmn.setProcessDefinitionDescription(processDefinition.getDescription());
-            logger.info("BPMN [{}] has been deployed : id [{}], key: [{}]", bpmn, deployment.getId(), deployment.getKey());
+            logger.info("BPMN [{}] has been deployed : id [{}], key: [{}], tenant [{}]", bpmn, deployment.getId(), deployment.getKey(),
+                    deployment.getTenantId());
         } catch (RuntimeException ex) {
             String errorMessage = "Failed to deploy BPMN: " + bpmn;
             throw new IllegalStateException(errorMessage, ex);
@@ -232,25 +204,11 @@ public class BpmnSynchronizer extends BaseSynchronizer<Bpmn, Long> {
      * @param bpmn the bpmn
      */
     private void removeFromProcessEngine(Bpmn bpmn) {
-
-        ProcessEngine processEngine = bpmProviderFlowable.getProcessEngine();
-        RepositoryService repositoryService = processEngine.getRepositoryService();
-
-        List<Deployment> deployments = repositoryService.createDeploymentQuery()
-                                                        .list();
+        List<Deployment> deployments = bpmService.getDeploymentsByKey(bpmn.getLocation());
         for (Deployment deployment : deployments) {
-            if (logger.isTraceEnabled()) {
-                logger.trace(format("Deployment: [{0}] with key: [{1}]", deployment.getId(), deployment.getKey()));
-            }
-            if (bpmn.getLocation()
-                    .equals(deployment.getKey())) {
-                repositoryService.deleteDeployment(deployment.getId(), true);
-                if (logger.isInfoEnabled()) {
-                    logger.info(format("Deleted deployment: [{0}] with key: [{1}] on the Flowable BPMN Engine.", deployment.getId(),
-                            deployment.getKey()));
-                }
-                break;
-            }
+            bpmService.deleteDeployment(deployment.getId());
+            logger.info("Deleted deployment: [{}] with key: [{}] for tenant [{}] on the Flowable BPMN Engine.", deployment.getId(),
+                    deployment.getKey(), deployment.getTenantId());
         }
 
     }

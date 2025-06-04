@@ -9,20 +9,9 @@
  */
 package org.eclipse.dirigible.components.tenants.domain;
 
+import jakarta.persistence.*;
 import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.eclipse.dirigible.components.security.domain.Role;
-
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
-import jakarta.persistence.Transient;
-import jakarta.persistence.UniqueConstraint;
 
 /**
  * The Class User.
@@ -178,4 +167,12 @@ public class User extends Artefact {
         return "User [id=" + id + ", tenant=" + tenant + ", username=" + username + "]";
     }
 
+    public void updateKey() {
+        if ((this.type == null) || (this.location == null) || (this.name == null)) {
+            throw new IllegalArgumentException(
+                    String.format("Attempt to generate an artefact key by type=[%s], location=[%s], name=[%s]", type, location, name));
+        }
+        String tenantId = this.tenant != null ? tenant.getId() : null;
+        this.key = this.type + KEY_SEPARATOR + this.location + KEY_SEPARATOR + this.name + KEY_SEPARATOR + tenantId;
+    }
 }

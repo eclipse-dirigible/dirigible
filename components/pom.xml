@@ -265,6 +265,7 @@
         <module>ui/ext-documents-content-type-ms</module>
 
         <module>ui/menu-bpm</module>
+        <module>ui/menu-camel</module>
         <module>ui/menu-database</module>
         <module>ui/menu-entity</module>
         <module>ui/menu-extensions</module>
@@ -306,6 +307,9 @@
         <module>template/template-application-ui-angular</module>
         <module>template/template-bookstore</module>
         <module>template/template-bpm</module>
+        <module>template/template-camel</module>
+        <module>template/template-camel-cron-route</module>
+        <module>template/template-camel-http-route</module>
         <module>template/template-database-access</module>
         <module>template/template-database-table</module>
         <module>template/template-database-view</module>
@@ -1499,6 +1503,11 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-menu-camel</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-menu-database</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -1781,6 +1790,21 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-template-bpm</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-template-camel</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-template-camel-cron-route</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-template-camel-http-route</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

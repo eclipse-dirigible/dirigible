@@ -14,9 +14,12 @@ import org.assertj.db.type.AssertDbConnection;
 import org.assertj.db.type.AssertDbConnectionFactory;
 import org.assertj.db.type.Table;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.database.sql.ISqlDialect;
+import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
+import java.sql.SQLException;
 
 @Component
 public class DBAsserter {
@@ -27,24 +30,39 @@ public class DBAsserter {
     }
 
     public void assertRowCount(String tableName, int expectedRowCount) {
-        DataSource dataSource = dataSourcesManager.getDefaultDataSource();
-        AssertDbConnection connection = AssertDbConnectionFactory.of(dataSource)
-                                                                 .create();
-
-        Table table = connection.table(tableName)
-                                .build();
+        Table table = getDefaultDbTable(tableName);
 
         Assertions.assertThat(table)
                   .hasNumberOfRows(expectedRowCount);
     }
 
-    public void assertRowHasColumnWithValue(String tableName, int rowIndex, String columnName, Object expectedValue) {
+    public Table getDefaultDbTable(String tableName) {
+        AssertDbConnection connection = getDefaultDbAssertDbConnection();
         DataSource dataSource = dataSourcesManager.getDefaultDataSource();
-        AssertDbConnection connection = AssertDbConnectionFactory.of(dataSource)
-                                                                 .create();
+        ISqlDialect dialect = getDefaultDbDialect(dataSource);
+        char escapeSymbol = dialect.getEscapeSymbol();
+        String escapedTableName = escapeSymbol + tableName + escapeSymbol;
 
-        Table table = connection.table(tableName)
-                                .build();
+        return connection.table(escapedTableName)
+                         .build();
+    }
+
+    private ISqlDialect getDefaultDbDialect(DataSource dataSource) {
+        try {
+            return SqlDialectFactory.getDialect(dataSource);
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to create dialect for " + dataSource, e);
+        }
+    }
+
+    public AssertDbConnection getDefaultDbAssertDbConnection() {
+        DataSource dataSource = dataSourcesManager.getDefaultDataSource();
+        return AssertDbConnectionFactory.of(dataSource)
+                                        .create();
+    }
+
+    public void assertRowHasColumnWithValue(String tableName, int rowIndex, String columnName, Object expectedValue) {
+        Table table = getDefaultDbTable(tableName);
 
         Assertions.assertThat(table)
                   .row(rowIndex)
@@ -53,12 +71,7 @@ public class DBAsserter {
     }
 
     public void assertTableHasColumn(String tableName, String columnName) {
-        DataSource dataSource = dataSourcesManager.getDefaultDataSource();
-        AssertDbConnection connection = AssertDbConnectionFactory.of(dataSource)
-                                                                 .create();
-
-        Table table = connection.table(tableName)
-                                .build();
+        Table table = getDefaultDbTable(tableName);
 
         Assertions.assertThat(table)
                   .column(columnName);

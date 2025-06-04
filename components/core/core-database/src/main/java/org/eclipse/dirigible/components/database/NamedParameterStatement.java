@@ -10,17 +10,8 @@
 package org.eclipse.dirigible.components.database;
 
 import java.io.InputStream;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Timestamp;
-import java.util.Calendar;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.sql.*;
+import java.util.*;
 
 /**
  * This class wraps around a PreparedStatement and allows the programmer to set parameters by name
@@ -64,19 +55,6 @@ public class NamedParameterStatement implements AutoCloseable {
     public NamedParameterStatement(Connection connection, String query) throws SQLException {
         String parsedQuery = parse(query);
         statement = connection.prepareStatement(parsedQuery);
-    }
-
-    /**
-     * Instantiates a new named parameter statement.
-     *
-     * @param connection the connection
-     * @param query the query
-     * @param returnGeneratedKeys the return generated keys
-     * @throws SQLException the SQL exception
-     */
-    public NamedParameterStatement(Connection connection, String query, int returnGeneratedKeys) throws SQLException {
-        String parsedQuery = parse(query);
-        statement = connection.prepareStatement(parsedQuery, returnGeneratedKeys);
     }
 
     /**
@@ -150,18 +128,16 @@ public class NamedParameterStatement implements AutoCloseable {
     }
 
     /**
-     * Returns the indexes for a parameter.
+     * Instantiates a new named parameter statement.
      *
-     * @param name parameter name
-     * @return parameter indexes
-     * @throws IllegalArgumentException if the parameter does not exist
+     * @param connection the connection
+     * @param query the query
+     * @param returnGeneratedKeys the return generated keys
+     * @throws SQLException the SQL exception
      */
-    private int[] getIndexes(String name) {
-        int[] indexes = indexMap.get(name);
-        if (indexes == null) {
-            throw new IllegalArgumentException("Parameter not found: " + name);
-        }
-        return indexes;
+    public NamedParameterStatement(Connection connection, String query, int returnGeneratedKeys) throws SQLException {
+        String parsedQuery = parse(query);
+        statement = connection.prepareStatement(parsedQuery, returnGeneratedKeys);
     }
 
     /**
@@ -178,6 +154,21 @@ public class NamedParameterStatement implements AutoCloseable {
         for (int i = 0; i < indexes.length; i++) {
             statement.setObject(indexes[i], value);
         }
+    }
+
+    /**
+     * Returns the indexes for a parameter.
+     *
+     * @param name parameter name
+     * @return parameter indexes
+     * @throws IllegalArgumentException if the parameter does not exist
+     */
+    private int[] getIndexes(String name) {
+        int[] indexes = indexMap.get(name);
+        if (indexes == null) {
+            throw new IllegalArgumentException("Parameter not found: " + name);
+        }
+        return indexes;
     }
 
     /**
@@ -406,7 +397,6 @@ public class NamedParameterStatement implements AutoCloseable {
         }
     }
 
-
     /**
      * Sets the null.
      *
@@ -506,4 +496,29 @@ public class NamedParameterStatement implements AutoCloseable {
         return statement.getGeneratedKeys();
     }
 
+    @Override
+    public String toString() {
+        return "NamedParameterStatement{" + "statement=" + statement + ", indexMap=" + toString(indexMap) + '}';
+    }
+
+    private static String toString(Map<String, int[]> map) {
+        if (null == map) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("{");
+        Iterator<Map.Entry<String, int[]>> iterator = map.entrySet()
+                                                         .iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, int[]> entry = iterator.next();
+            sb.append(entry.getKey())
+              .append("=")
+              .append(Arrays.toString(entry.getValue()));
+            if (iterator.hasNext()) {
+                sb.append(", ");
+            }
+        }
+        sb.append("}");
+        return sb.toString();
+    }
 }

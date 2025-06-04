@@ -1,0 +1,8 @@
+{
+  "fileName": "approve-employee-registration",
+  "genFolderName": "approve-employee-registration",
+  "projectName": "BpmnMultitenancyIT",
+  "workspaceName": "workspace",
+  "filePath": "approve-employee-registration.form",
+  "templateId": "template-form-builder-angularjs/template/template.js"
+}

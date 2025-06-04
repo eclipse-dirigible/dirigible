@@ -9,6 +9,30 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
+:root {
+  --font_color: #303030;
+  --stroke_color: #303030;
+  --entity-header-color: #fff;
+  --entity-color: #3584e4;
+  --dependent-color: #2a6ab6;
+  --report-color: #26a269;
+  --report-font-color: #fff;
+  --filter-color: #e97119;
+  --filter-font-color: #fff;
+  --setting-color: #708090;
+  --setting-font-color: #fff;
+  --copied-color: #5d36ff;
+  --projection-color: #a100c2;
+  --extension-color: #046c7a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --font_color: #fafafa;
+    --stroke_color: #fafafa;
+  }
+}
+
 body {
   background-color: var(--sapBackgroundColor, #f7f7f7) !important;
   color: var(--sapTextColor, #303030) !important;
@@ -109,13 +133,13 @@ td.mxPopupMenuIcon>i.sap-icon {
 }
 
 @media only screen and (min-width: 853px) {
-  .dsmSmallScreen {
+  .edmSmallScreen {
     display: none;
   }
 }
 
 @media only screen and (max-width: 852px) {
-  .dsmBigScreen {
+  .edmBigScreen {
     display: none;
   }
 }

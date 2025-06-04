@@ -33,7 +33,9 @@ public class DateTimeUtils {
 
     /** The Constant dateFormatter. */
     public static final DateTimeFormatter dateFormatter =
-            new DateTimeFormatterBuilder().appendOptional(DateTimeFormatter.ofPattern("M/d/yyyy"))
+            new DateTimeFormatterBuilder().appendOptional(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                                          .appendOptional(DateTimeFormatter.ISO_INSTANT)
+                                          .appendOptional(DateTimeFormatter.ofPattern("M/d/yyyy"))
                                           .appendOptional(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
                                           .appendOptional(DateTimeFormatter.ofPattern("yyyyMMdd"))
                                           .appendOptional(DateTimeFormatter.ofPattern("MM/dd/yyyy"))
@@ -47,11 +49,20 @@ public class DateTimeUtils {
             DateTimeFormatter.ofPattern("[HH:mm:ss.SSSSSS]" + "[yyyy-MM-dd]" + "[HH:mm:ss[.SSS][ Z]]", Locale.ENGLISH);
 
     /** The Constant datetimeFormatter. */
-    private static final DateTimeFormatter datetimeFormatter = DateTimeFormatter.ofPattern(
-            "[yyyy/MM/dd HH:mm:ss.SSSSSS]" + "[yyyy-MM-dd HH:mm:ss.SSSSSS]" + "[yyyy-MM-dd HH:mm:ss.SSSSS]" + "[yyyy-MM-dd HH:mm:ss.SSSS]"
-                    + "[yyyy-MM-dd HH:mm:ss.SSS]" + "[yyyy-MM-dd HH:mm:ss.SS]" + "[yyyy-MM-dd HH:mm:ss.S]"
-                    + "[yyyy/MM/dd HH:mm:ss[.SSS][ Z]]" + "[yyyy-MM-dd HH:mm:ss[.SSS][ Z]]" + "[dd[ ]MMM[ ]yyyy:HH:mm:ss.SSS[ Z]]",
-            Locale.ENGLISH);
+    private static final DateTimeFormatter datetimeFormatter =
+            new DateTimeFormatterBuilder().appendOptional(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+                                          .appendOptional(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss.SSSSSS"))
+                                          .appendOptional(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS"))
+                                          .appendOptional(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSS"))
+                                          .appendOptional(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSS"))
+                                          .appendOptional(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"))
+                                          .appendOptional(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SS"))
+                                          .appendOptional(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.S"))
+                                          .appendOptional(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss[.SSS][ Z]"))
+                                          .appendOptional(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss[.SSS][ Z]"))
+                                          .appendOptional(DateTimeFormatter.ofPattern("dd[ ]MMM[ ]yyyy:HH:mm:ss.SSS[ Z]", Locale.ENGLISH))
+                                          .toFormatter(Locale.ENGLISH);
+
     private static final Logger LOGGER = LoggerFactory.getLogger(DateTimeUtils.class);
 
     /**
