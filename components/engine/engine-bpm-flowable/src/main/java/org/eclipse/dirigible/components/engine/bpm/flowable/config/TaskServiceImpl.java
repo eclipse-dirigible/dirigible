@@ -373,7 +373,7 @@ class TaskServiceImpl implements TaskService {
             Map<String, Object> transientVariables) {
         flowableArtefactsValidator.validateTask(taskId);
 
-        flowableTaskService.completeTaskWithForm(taskId, formDefinitionId, outcome, variables);
+        flowableTaskService.completeTaskWithForm(taskId, formDefinitionId, outcome, variables, transientVariables);
     }
 
     @Override
@@ -381,7 +381,7 @@ class TaskServiceImpl implements TaskService {
             Map<String, Object> transientVariables) {
         flowableArtefactsValidator.validateTask(taskId);
 
-        flowableTaskService.completeTaskWithForm(taskId, formDefinitionId, outcome, userId, variables);
+        flowableTaskService.completeTaskWithForm(taskId, formDefinitionId, outcome, userId, variables, transientVariables);
     }
 
     @Override
@@ -397,7 +397,7 @@ class TaskServiceImpl implements TaskService {
             boolean localScope) {
         flowableArtefactsValidator.validateTask(taskId);
 
-        flowableTaskService.completeTaskWithForm(taskId, formDefinitionId, outcome, userId, variables);
+        flowableTaskService.completeTaskWithForm(taskId, formDefinitionId, outcome, userId, variables, localScope);
     }
 
     @Override
