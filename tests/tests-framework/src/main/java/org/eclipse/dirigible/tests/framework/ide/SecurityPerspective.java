@@ -17,6 +17,6 @@ public class SecurityPerspective {
     public void assertRoleIsPresent(String roleName, String roleDescription) {
         browser.clickOnElementWithText(HtmlElementType.SPAN, "Roles");
         browser.assertElementExistsByTypeAndText(HtmlElementType.TD, roleName);
-        browser.assertElementExistsByTypeAndText(HtmlElementType.TD, roleName);
+        browser.assertElementExistsByTypeAndText(HtmlElementType.TD, roleDescription);
     }
 }
