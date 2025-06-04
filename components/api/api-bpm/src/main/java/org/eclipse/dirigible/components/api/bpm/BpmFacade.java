@@ -27,12 +27,6 @@ public class BpmFacade implements InitializingBean {
 
     private final BpmProviderFlowable bpmProviderFlowable;
 
-    /**
-     * Instantiates a new database facade.
-     *
-     * @param databaseDefinitionService the database definition service
-     * @param dataSourcesManager the data sources manager
-     */
     @Autowired
     private BpmFacade(BpmProviderFlowable bpmProviderFlowable) {
         this.bpmProviderFlowable = bpmProviderFlowable;
@@ -40,11 +34,9 @@ public class BpmFacade implements InitializingBean {
 
     /**
      * After properties set.
-     *
-     * @throws Exception the exception
      */
     @Override
-    public void afterPropertiesSet() throws Exception {
+    public void afterPropertiesSet() {
         INSTANCE = this;
     }
 
@@ -53,7 +45,7 @@ public class BpmFacade implements InitializingBean {
      *
      * @return the BPM engine object
      */
-    public static final BpmProviderFlowable getEngine() {
+    public static BpmProviderFlowable getEngine() {
         return BpmFacade.get()
                         .getBpmProviderFlowable();
     }
@@ -171,6 +163,7 @@ public class BpmFacade implements InitializingBean {
     public static String getTasks() {
         return BpmFacade.get()
                         .getBpmProviderFlowable()
+                        .getTaskService()
                         .getTasks();
     }
 
@@ -184,6 +177,7 @@ public class BpmFacade implements InitializingBean {
     public static Object getTaskVariable(String taskId, String variableName) {
         return BpmFacade.get()
                         .getBpmProviderFlowable()
+                        .getTaskService()
                         .getTaskVariable(taskId, variableName);
     }
 
@@ -196,6 +190,7 @@ public class BpmFacade implements InitializingBean {
     public static Map<String, Object> getTaskVariables(String taskId) {
         return BpmFacade.get()
                         .getBpmProviderFlowable()
+                        .getTaskService()
                         .getTaskVariables(taskId);
     }
 
@@ -209,6 +204,7 @@ public class BpmFacade implements InitializingBean {
     public static void setTaskVariable(String taskId, String variableName, Object variable) {
         BpmFacade.get()
                  .getBpmProviderFlowable()
+                 .getTaskService()
                  .setTaskVariable(taskId, variableName, variable);
     }
 
@@ -221,6 +217,7 @@ public class BpmFacade implements InitializingBean {
     public static void setTaskVariables(String taskId, Map<String, Object> variables) {
         BpmFacade.get()
                  .getBpmProviderFlowable()
+                 .getTaskService()
                  .setTaskVariables(taskId, variables);
     }
 
@@ -233,6 +230,7 @@ public class BpmFacade implements InitializingBean {
     public static void completeTask(String taskId, String variables) {
         BpmFacade.get()
                  .getBpmProviderFlowable()
+                 .getTaskService()
                  .completeTask(taskId, variables);
     }
 

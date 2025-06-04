@@ -1,0 +1,30 @@
+- route:
+    id: route-539d
+    description: Cron route starter
+    nodePrefixId: route-d3f
+    from:
+      id: from-0543
+      description: Cron - every 10 seconds
+      uri: cron
+      parameters:
+        schedule: 0/10 * * ? * *
+        name: CronRouteTrigger
+      steps:
+        - log:
+            id: log-d711
+            description: Log execution started
+            message: Executing cron route with body [${body}]...
+            loggingLevel: INFO
+            logName: CronRouteLogger
+        - to:
+            id: to-1a81
+            description: TypeScript handler
+            uri: dirigible-java-script
+            parameters:
+              javaScriptPath: ${projectName}/handler.ts
+        - log:
+            id: log-13c5
+            description: Log execution completed
+            message: 'Execution completed! Body: ${body}'
+            loggingLevel: INFO
+            logName: CronRouteLogger
