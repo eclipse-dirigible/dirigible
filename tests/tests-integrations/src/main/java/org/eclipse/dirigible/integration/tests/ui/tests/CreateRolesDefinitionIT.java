@@ -11,7 +11,7 @@ public class CreateRolesDefinitionIT extends UserInterfaceIntegrationTest {
 
     private static final String PROJECT_NAME = "CreateRolesDefinitionIT";
     private static final String FILE_NAME = "test1.roles";
-    private static final String ROLE_NAME = "test1";
+    private static final String ROLE_NAME = "test";
     private static final String ROLE_DESCRIPTION = "Test role";
 
     @Test
