@@ -230,6 +230,10 @@
             <artifactId>spring-boot-admin-starter-client</artifactId>
             <version>${spring.admin.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-core-base</artifactId>
+        </dependency>
     </dependencies>
 
     <dependencyManagement>
