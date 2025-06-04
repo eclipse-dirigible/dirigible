@@ -18,9 +18,9 @@ public class Workbench {
 
     public static final String PROJECTS_VIEW_ID = "pvtree";
     public static final String PROJECT_NAME_INPUT_ID = "pgfi1";
-    public static final String FILE_NAME_INPUT_ID = "fdti1";
     private static final String PROJECTS_CONTEXT_MENU_NEW_PROJECT = "New Project";
     private static final String CREATE_BUTTON_TEXT = "Create";
+    public static final String FILE_NAME_INPUT_ID = "fdti1";
 
     private final Browser browser;
     private final WelcomeViewFactory welcomeViewFactory;
@@ -42,9 +42,7 @@ public class Workbench {
     }
 
     public void clickPublishAll() {
-//        browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.TITLE, "Publish all");
-        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, "test.mjs");
-        browser.assertElementExistByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", "Publish");
+        browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.TITLE, "Publish all");
     }
 
     public WelcomeView openWelcomeView() {
@@ -104,12 +102,21 @@ public class Workbench {
         browser.type(content);
     }
 
-    public void createCustomElementInProject(String projectName, String fileName, String elementType) {
-        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
+    public void createCustomElement(String fileName, String elementType) {
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", elementType);
 
         browser.enterTextInElementById(FILE_NAME_INPUT_ID, fileName);
         browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_BUTTON_TEXT);
+    }
+
+    public void createCustomElementInProject(String projectName, String fileName, String elementType) {
+        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
+        createCustomElement(fileName, elementType);
+    }
+
+    public void publishFile(String fileAnchorId) {
+        browser.rightClickOnElementById(fileAnchorId);
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", "Publish");
     }
 
     public void saveAll() {
