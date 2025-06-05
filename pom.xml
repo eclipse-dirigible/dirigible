@@ -214,7 +214,7 @@
         <angularjs.version>1.8.2</angularjs.version>
         <fontawesome.version>4.7.0</fontawesome.version>
         <ag-grid.version>27.1.0</ag-grid.version>
-        <papaparse.version>5.3.2</papaparse.version>
+        <papaparse.version>5.5.3</papaparse.version>
         <bpmn-visualization.version>0.46.0</bpmn-visualization.version>
 
         <!-- Tests -->
