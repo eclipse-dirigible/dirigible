@@ -115,6 +115,8 @@ public interface Browser {
 
     void switchToLatestTab();
 
+    void pressArrowDown();
+
     void pressEnter();
 
     void pressKey(Keys key);
