@@ -92,7 +92,6 @@ class BrowserImpl implements Browser {
         String url = createAppUrl(path);
         LOGGER.info("Opening path [{}] using URL [{}]", path, url);
         Selenide.open(url);
-        // maximizeBrowser();
     }
 
     private String createAppUrl(String path) {
@@ -107,7 +106,8 @@ class BrowserImpl implements Browser {
         return protocol + "://" + host + ":" + port + absolutePath;
     }
 
-    private void maximizeBrowser() {
+    @Override
+    public void maximizeBrowser() {
         WebDriverRunner.getWebDriver()
                        .manage()
                        .window()
