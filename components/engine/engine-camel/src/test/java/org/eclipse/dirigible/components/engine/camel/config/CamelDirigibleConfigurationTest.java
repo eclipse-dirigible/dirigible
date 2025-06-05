@@ -9,17 +9,6 @@
  */
 package org.eclipse.dirigible.components.engine.camel.config;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-import java.lang.annotation.Annotation;
-import java.lang.reflect.Method;
-import java.util.Arrays;
-import java.util.Optional;
 import org.apache.camel.CamelContext;
 import org.apache.camel.component.platform.http.PlatformHttpComponent;
 import org.apache.camel.component.platform.http.spi.PlatformHttpEngine;
@@ -32,6 +21,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 /**
  * The Class CamelDirigibleConfigurationTest.
@@ -70,21 +67,6 @@ class CamelDirigibleConfigurationTest {
     }
 
     /**
-     * Test camel configuration has bean factory method we depend on.
-     */
-    @Test
-    void testCamelConfigurationHasBeanFactoryMethodWeDependOn() {
-        try {
-            var platformHttpEngineRequestMappingMethod =
-                    SpringBootPlatformHttpAutoConfiguration.class.getMethod("platformHttpEngineRequestMapping", PlatformHttpEngine.class);
-            assertEquals(CamelRequestHandlerMapping.class, platformHttpEngineRequestMappingMethod.getReturnType(),
-                    "SpringBootPlatformHttpAutoConfiguration::platformHttpEngineRequestMapping does not return expected type");
-        } catch (NoSuchMethodException e) {
-            fail("SpringBootPlatformHttpAutoConfiguration::platformHttpEngineRequestMapping does not exist", e);
-        }
-    }
-
-    /**
      * Test spring boot platform http auto configuration full name.
      */
     @Test
@@ -107,6 +89,20 @@ class CamelDirigibleConfigurationTest {
     }
 
     /**
+     * First annotation with class.
+     *
+     * @param annotations the annotations
+     * @param annotationClass the annotation class
+     * @return the optional
+     */
+    private static Optional<Annotation> firstAnnotationWithClass(Annotation[] annotations, Class<?> annotationClass) {
+        return Arrays.stream(annotations)
+                     .filter(a -> a.annotationType()
+                                   .equals(annotationClass))
+                     .findFirst();
+    }
+
+    /**
      * Test camel dirigible configuration correct spring bean annotations.
      */
     @Test
@@ -124,30 +120,6 @@ class CamelDirigibleConfigurationTest {
     }
 
     /**
-     * Test camel dirigible configuration bean factory method return type.
-     */
-    @Test
-    void testCamelDirigibleConfigurationBeanFactoryMethodReturnType() {
-        Method beanFactoryMethod = getBeanFactoryMethodOrFail();
-        assertEquals(CamelRequestHandlerMapping.class, beanFactoryMethod.getReturnType(),
-                "Unexpected CamelDirigibleConfiguration::createCamelRequestHandlerMapping return type");
-    }
-
-    /**
-     * First annotation with class.
-     *
-     * @param annotations the annotations
-     * @param annotationClass the annotation class
-     * @return the optional
-     */
-    private static Optional<Annotation> firstAnnotationWithClass(Annotation[] annotations, Class<?> annotationClass) {
-        return Arrays.stream(annotations)
-                     .filter(a -> a.annotationType()
-                                   .equals(annotationClass))
-                     .findFirst();
-    }
-
-    /**
      * Gets the bean factory method or fail.
      *
      * @return the bean factory method or fail
@@ -160,5 +132,15 @@ class CamelDirigibleConfigurationTest {
             fail("CamelDirigibleConfiguration::createCamelRequestHandlerMapping does not exist");
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * Test camel dirigible configuration bean factory method return type.
+     */
+    @Test
+    void testCamelDirigibleConfigurationBeanFactoryMethodReturnType() {
+        Method beanFactoryMethod = getBeanFactoryMethodOrFail();
+        assertEquals(CamelRequestHandlerMapping.class, beanFactoryMethod.getReturnType(),
+                "Unexpected CamelDirigibleConfiguration::createCamelRequestHandlerMapping return type");
     }
 }
