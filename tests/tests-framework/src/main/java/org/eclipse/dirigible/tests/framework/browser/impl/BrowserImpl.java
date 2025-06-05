@@ -83,6 +83,7 @@ class BrowserImpl implements Browser {
         Configuration.headless = IntegrationTest.isHeadlessExecution();
         Configuration.browser = "chrome";
         Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
+        Configuration.browserSize = "1920x1080";
     }
 
     @Override
@@ -292,8 +293,7 @@ class BrowserImpl implements Browser {
                 .window(Selenide.webdriver()
                                 .object()
                                 .getWindowHandles()
-                                .size()
-                        - 1);
+                                .size() - 1);
     }
 
     @Override
