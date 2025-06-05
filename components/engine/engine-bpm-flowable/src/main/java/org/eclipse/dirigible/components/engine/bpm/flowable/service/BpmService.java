@@ -336,23 +336,28 @@ public class BpmService {
     }
 
     public List<IdentityLink> getTaskIdentityLinks(String taskId) {
-        return bpmProviderFlowable.getTaskIdentityLinks(taskId);
+        return bpmProviderFlowable.getTaskService()
+                                  .getTaskIdentityLinks(taskId);
     }
 
     public Map<String, Object> getTaskVariables(String taskId) {
-        return bpmProviderFlowable.getTaskVariables(taskId);
+        return bpmProviderFlowable.getTaskService()
+                                  .getTaskVariables(taskId);
     }
 
     public void claimTask(String taskId, String userId) {
-        bpmProviderFlowable.claimTask(taskId, userId);
+        bpmProviderFlowable.getTaskService()
+                           .claimTask(taskId, userId);
     }
 
     public void unclaimTask(String taskId) {
-        bpmProviderFlowable.unclaimTask(taskId);
+        bpmProviderFlowable.getTaskService()
+                           .unclaimTask(taskId);
     }
 
     public void completeTask(String taskId, Map<String, Object> variables) {
-        bpmProviderFlowable.completeTask(taskId, variables);
+        bpmProviderFlowable.getTaskService()
+                           .completeTask(taskId, variables);
     }
 
     public List<HistoricVariableInstance> getProcessHistoricInstanceVariables(String processInstanceId) {
@@ -388,11 +393,13 @@ public class BpmService {
     }
 
     public List<Task> findTasks(String processInstanceId, PrincipalType type) {
-        return bpmProviderFlowable.findTasks(processInstanceId, type);
+        return bpmProviderFlowable.getTaskService()
+                                  .findTasks(processInstanceId, type);
     }
 
     public List<Task> findTasks(PrincipalType type) {
-        return bpmProviderFlowable.findTasks(type);
+        return bpmProviderFlowable.getTaskService()
+                                  .findTasks(type);
     }
 
     public long processDefinitionsCount() {
@@ -408,7 +415,8 @@ public class BpmService {
     }
 
     public long getTasksCount() {
-        return bpmProviderFlowable.getTasksCount();
+        return bpmProviderFlowable.getTaskService()
+                                  .getTasksCount();
     }
 
     public long getTotalCompletedTasksCount() {
