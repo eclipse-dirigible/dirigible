@@ -46,7 +46,7 @@ public class RepositorySearcher {
     public static final String DIRIGIBLE_REPOSITORY_SEARCH_ROOT_FOLDER_IS_ABSOLUTE = "DIRIGIBLE_REPOSITORY_SEARCH_ROOT_FOLDER_IS_ABSOLUTE";
     /** The Constant DIRIGIBLE_REPOSITORY_SEARCH_INDEX_LOCATION. */
     public static final String DIRIGIBLE_REPOSITORY_SEARCH_INDEX_LOCATION = "DIRIGIBLE_REPOSITORY_SEARCH_INDEX_LOCATION"; //$NON-NLS-1$
-    //$NON-NLS-1$
+    // $NON-NLS-1$
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(RepositorySearcher.class);
     /** The Constant CURRENT_DIR. */
@@ -214,7 +214,8 @@ public class RepositorySearcher {
                                                    .getModifiedAt())) {
                         add(path, resource.getContent(), resource.getInformation()
                                                                  .getModifiedAt()
-                                                                 .getTime(), null);
+                                                                 .getTime(),
+                                null);
                     }
                 }
             }
