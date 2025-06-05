@@ -21,7 +21,7 @@ public class CreateFormDefinitionIT extends UserInterfaceIntegrationTest {
             + "\t\t<link type=\"text/css\" rel=\"stylesheet\" href=\"/services/js/platform-core/services/loader.js?id=view-css\" />\n"
             + "\t\t<script type=\"text/javascript\" src=\"controller.js\"></script>\n" + "\t</head>\n" + "\n"
             + "\t<body class=\"bk-vbox\">\n" + "\t\t<bk-fieldset class=\"fd-margin--tiny\" ng-form=\"forms.form\">\n"
-            + "\t\t\t<bk-form-group>\n" + "\t\t\t\t<p>Hello World!</p>\n" + "\t\t\t</bk-form-group>\n" + "\t\t</bk-fieldset>\n"
+            + "\t\t\t<bk-form-group>\n" + "\t\t\t<p>Hello World!</p>\n" + "\t\t\t</bk-form-group>\n" + "\t\t</bk-fieldset>\n"
             + "\t\t<theme></theme>\n" + "\t</body>\n" + "\n" + "</html>";
 
     @Test
