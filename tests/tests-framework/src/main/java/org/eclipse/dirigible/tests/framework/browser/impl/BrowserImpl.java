@@ -82,7 +82,8 @@ class BrowserImpl implements Browser {
     private static void configureSelenide() {
         Configuration.headless = IntegrationTest.isHeadlessExecution();
         Configuration.browser = "chrome";
-        Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*");
+        Configuration.browserCapabilities = new ChromeOptions().addArguments("--remote-allow-origins=*")
+                                                               .addArguments("--window-size=1920,1080");
         Configuration.browserSize = "1920x1080";
     }
 
@@ -91,7 +92,7 @@ class BrowserImpl implements Browser {
         String url = createAppUrl(path);
         LOGGER.info("Opening path [{}] using URL [{}]", path, url);
         Selenide.open(url);
-        maximizeBrowser();
+        // maximizeBrowser();
     }
 
     private String createAppUrl(String path) {
