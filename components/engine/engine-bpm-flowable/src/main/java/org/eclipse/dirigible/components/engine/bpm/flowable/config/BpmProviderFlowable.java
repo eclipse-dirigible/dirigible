@@ -1,0 +1,509 @@
+/*
+ * Copyright (c) 2025 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
+ */
+package org.eclipse.dirigible.components.engine.bpm.flowable.config;
+
+import org.apache.commons.io.IOUtils;
+import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
+import org.eclipse.dirigible.components.base.tenant.Tenant;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
+import org.eclipse.dirigible.components.engine.bpm.BpmProvider;
+import org.eclipse.dirigible.components.engine.bpm.flowable.TaskService;
+import org.eclipse.dirigible.repository.api.IRepository;
+import org.eclipse.dirigible.repository.api.IRepositoryStructure;
+import org.eclipse.dirigible.repository.api.IResource;
+import org.flowable.bpmn.model.BpmnModel;
+import org.flowable.engine.ProcessEngine;
+import org.flowable.engine.ProcessEngineConfiguration;
+import org.flowable.engine.RepositoryService;
+import org.flowable.engine.RuntimeService;
+import org.flowable.engine.history.HistoricProcessInstance;
+import org.flowable.engine.history.HistoricProcessInstanceQuery;
+import org.flowable.engine.repository.Deployment;
+import org.flowable.engine.repository.ProcessDefinition;
+import org.flowable.engine.repository.ProcessDefinitionQuery;
+import org.flowable.engine.runtime.ProcessInstance;
+import org.flowable.engine.runtime.ProcessInstanceQuery;
+import org.flowable.image.ProcessDiagramGenerator;
+import org.flowable.job.api.Job;
+import org.flowable.variable.api.history.HistoricVariableInstance;
+import org.flowable.variable.api.persistence.entity.VariableInstance;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
+/**
+ * The Class BpmProviderFlowable. NOTE! - all methods in the class should be tenant aware
+ */
+@Component
+public class BpmProviderFlowable implements BpmProvider {
+
+    /** The Constant EXTENSION_BPMN20_XML. */
+    private static final String EXTENSION_BPMN20_XML = "bpmn20.xml";
+
+    /** The Constant LOGGER. */
+    private static final Logger LOGGER = LoggerFactory.getLogger(BpmProviderFlowable.class);
+
+    /** The repository. */
+    private final IRepository repository;
+    private final TenantContext tenantContext;
+    private final FlowableArtefactsValidator flowableArtefactsValidator;
+    /** The process engine. */
+    private final ProcessEngine processEngine;
+
+    public BpmProviderFlowable(IRepository repository, TenantContext tenantContext, FlowableArtefactsValidator flowableArtefactsValidator,
+            ProcessEngine processEngine) {
+        this.repository = repository;
+        this.tenantContext = tenantContext;
+        this.flowableArtefactsValidator = flowableArtefactsValidator;
+        this.processEngine = processEngine;
+    }
+
+    /**
+     * Deploy process.
+     *
+     * @param location the location
+     * @return the string
+     */
+    public String deployProcess(String location) {
+        LOGGER.debug("Deploying a BPMN process from location: [{}]", location);
+        RepositoryService repositoryService = processEngine.getRepositoryService();
+        Deployment deployment;
+        if (!location.startsWith(IRepositoryStructure.SEPARATOR))
+            location = IRepositoryStructure.SEPARATOR + location;
+        String repositoryPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + location;
+        if (getRepository().hasResource(repositoryPath)) {
+            IResource resource = getRepository().getResource(repositoryPath);
+            deployment = repositoryService.createDeployment()
+                                          .tenantId(getTenantId())
+                                          .addBytes(location + EXTENSION_BPMN20_XML, resource.getContent())
+                                          .deploy();
+        } else {
+            try (InputStream in = BpmProviderFlowable.class.getResourceAsStream("/META-INF/dirigible" + location)) {
+                if (in != null) {
+                    try {
+                        byte[] bytes = IOUtils.toByteArray(in);
+                        deployment = repositoryService.createDeployment()
+                                                      .addBytes(location + EXTENSION_BPMN20_XML, bytes)
+                                                      .deploy();
+                    } catch (IOException e) {
+                        throw new IllegalArgumentException(e);
+                    }
+                } else {
+                    throw new IllegalArgumentException("No BPMN resource found at location: " + location);
+                }
+            } catch (IOException e) {
+                throw new IllegalArgumentException("Error closing the BPMN resource at location: " + location, e);
+            }
+        }
+        LOGGER.info("Process deployed with deployment id: [{}] and process key: [{}]", deployment.getId(), deployment.getKey());
+        LOGGER.debug("Done deploying a BPMN process from location: [{}]", location);
+        return deployment.getId();
+    }
+
+    /**
+     * Gets the repository.
+     *
+     * @return the repository
+     */
+    public IRepository getRepository() {
+        return repository;
+    }
+
+    /**
+     * Gets the process engine.
+     *
+     * @return the process engine
+     */
+
+    private String getTenantId() {
+        Tenant currentTenant = tenantContext.getCurrentTenant();
+        LOGGER.debug("Current tenant is [{}]", currentTenant);
+        return currentTenant.getId();
+    }
+
+    /**
+     * Undeploy process.
+     *
+     * @param deploymentId the deployment id
+     */
+    public void undeployProcess(String deploymentId) {
+        flowableArtefactsValidator.validateDeployment(deploymentId);
+
+        RepositoryService repositoryService = processEngine.getRepositoryService();
+        repositoryService.deleteDeployment(deploymentId, true);
+    }
+
+    /**
+     * Start process.
+     *
+     * @param key the key
+     * @param parameters the parameters
+     * @return the string
+     */
+    public String startProcess(String key, String parameters) {
+        LOGGER.info("Starting a BPMN process by key: [{}]", key);
+        RuntimeService runtimeService = processEngine.getRuntimeService();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> variables = GsonHelper.fromJson(parameters, HashMap.class);
+        try {
+            ProcessInstance processInstance = runtimeService.startProcessInstanceByKeyAndTenantId(key, variables, getTenantId());
+            LOGGER.info("Started process instance with id [{}], key [{}] for tenant [{}]", processInstance.getId(), key,
+                    processInstance.getTenantId());
+            return processInstance.getId();
+        } catch (Exception e) {
+            LOGGER.error("Failed to start process with key [{}]", key, e);
+            return null;
+        }
+
+    }
+
+    /**
+     * Delete process.
+     *
+     * @param processInstanceId the processInstanceId
+     * @param reason the reason
+     */
+    public void deleteProcess(String processInstanceId, String reason) {
+        flowableArtefactsValidator.validateProcessInstanceId(processInstanceId);
+
+        LOGGER.debug("Deleting a BPMN process instance by processInstanceId: [{}]", processInstanceId);
+        try {
+            processEngine.getRuntimeService()
+                         .deleteProcessInstance(processInstanceId, reason);
+            LOGGER.info("Done deleting a BPMN process instance by processInstanceId: [{}]", processInstanceId);
+        } catch (Exception e) {
+            LOGGER.error("Failed to delete process with processInstanceId [{}], reason [{}]", processInstanceId, reason, e);
+        }
+    }
+
+    public TaskService getTaskService() {
+        FlowableArtefactsValidator validator = new FlowableArtefactsValidator(processEngine, tenantContext);
+
+        return new TaskServiceImpl(processEngine.getTaskService(), tenantContext, validator);
+    }
+
+    /**
+     * Gets the variable.
+     *
+     * @param executionId the execution id
+     * @param variableName the variable name
+     * @return the variable
+     */
+    public Object getVariable(String executionId, String variableName) {
+        flowableArtefactsValidator.validateExecutionId(executionId);
+
+        RuntimeService runtimeService = processEngine.getRuntimeService();
+        return runtimeService.getVariable(executionId, variableName);
+    }
+
+    public Map<String, Object> getVariables(String executionId) {
+        flowableArtefactsValidator.validateExecutionId(executionId);
+
+        RuntimeService runtimeService = processEngine.getRuntimeService();
+        return runtimeService.getVariables(executionId);
+    }
+
+    /**
+     * Sets the variable.
+     *
+     * @param executionId the execution id
+     * @param variableName the variable name
+     * @param value the value
+     */
+    public void setVariable(String executionId, String variableName, Object value) {
+        flowableArtefactsValidator.validateExecutionId(executionId);
+
+        RuntimeService runtimeService = processEngine.getRuntimeService();
+        runtimeService.setVariable(executionId, variableName, value);
+    }
+
+    /**
+     * Removes the variable.
+     *
+     * @param executionId the execution id
+     * @param variableName the variable name
+     */
+    public void removeVariable(String executionId, String variableName) {
+        flowableArtefactsValidator.validateExecutionId(executionId);
+
+        RuntimeService runtimeService = processEngine.getRuntimeService();
+        runtimeService.removeVariable(executionId, variableName);
+    }
+
+    public List<ProcessDefinition> getProcessDefinitions(Optional<String> key) {
+        ProcessDefinitionQuery processDefinitionsQuery = processEngine.getRepositoryService()
+                                                                      .createProcessDefinitionQuery();
+        processDefinitionsQuery.processDefinitionTenantId(getTenantId());
+        if (key.isPresent() && !key.get()
+                                   .isEmpty()) {
+            processDefinitionsQuery.processDefinitionKey(key.get());
+        }
+        processDefinitionsQuery.processDefinitionTenantId(getTenantId());
+
+        return processDefinitionsQuery.list();
+    }
+
+    public ProcessDefinition getProcessDefinitionByKey(String processDefinitionKey) {
+        return processEngine.getRepositoryService()
+                            .createProcessDefinitionQuery()
+                            .processDefinitionTenantId(getTenantId())
+                            .processDefinitionKey(processDefinitionKey)
+                            .singleResult();
+
+    }
+
+    public ProcessDefinition getProcessDefinitionById(String processDefinitionId) {
+        return processEngine.getRepositoryService()
+                            .createProcessDefinitionQuery()
+                            .processDefinitionTenantId(getTenantId())
+                            .processDefinitionId(processDefinitionId)
+                            .singleResult();
+    }
+
+    public List<HistoricVariableInstance> getProcessHistoricInstanceVariables(String processInstanceId) {
+        flowableArtefactsValidator.validateHistoricProcessInstanceByProcessInstanceId(processInstanceId);
+
+        return processEngine.getHistoryService()
+                            .createHistoricVariableInstanceQuery()
+                            .processInstanceId(processInstanceId)
+                            .list();
+    }
+
+    public List<VariableInstance> getProcessInstanceVariables(String processInstanceId) {
+        flowableArtefactsValidator.validateProcessInstanceId(processInstanceId);
+
+        return processEngine.getRuntimeService()
+                            .createVariableInstanceQuery()
+                            .processInstanceId(processInstanceId)
+                            .list();
+    }
+
+    public List<Job> getDeadLetterJobs(String processInstanceId) {
+        return processEngine.getManagementService()
+                            .createDeadLetterJobQuery()
+                            .processInstanceId(processInstanceId)
+                            .jobTenantId(getTenantId())
+                            .list();
+    }
+
+    public Optional<byte[]> getProcessDefinitionImage(String processDefinitionKey) throws IOException {
+        RepositoryService repositoryService = processEngine.getRepositoryService();
+
+        ProcessDefinition process = repositoryService.createProcessDefinitionQuery()
+                                                     .processDefinitionKey(processDefinitionKey)
+                                                     .processDefinitionTenantId(getTenantId())
+                                                     .latestVersion()
+                                                     .singleResult();
+
+        if (process == null) {
+            return Optional.empty();
+        }
+        String deploymentId = process.getDeploymentId();
+        String diagramResourceName = process.getDiagramResourceName();
+
+        return Optional.of(repositoryService.getResourceAsStream(deploymentId, diagramResourceName)
+                                            .readAllBytes());
+    }
+
+    public Optional<byte[]> getProcessInstanceImage(String processInstanceId) {
+        RepositoryService repositoryService = processEngine.getRepositoryService();
+
+        ProcessEngineConfiguration processEngineConfiguration = processEngine.getProcessEngineConfiguration();
+        RuntimeService runtimeService = processEngine.getRuntimeService();
+
+        ProcessInstance processInstance = getProcessInstance(processInstanceId);
+
+        if (processInstance == null) {
+            return Optional.empty();
+        }
+        ProcessDefinition processDefinition = repositoryService.getProcessDefinition(processInstance.getProcessDefinitionId());
+
+        if (processDefinition != null && processDefinition.hasGraphicalNotation()) {
+            BpmnModel bpmnModel = repositoryService.getBpmnModel(processDefinition.getId());
+            ProcessDiagramGenerator diagramGenerator = processEngineConfiguration.getProcessDiagramGenerator();
+            InputStream resource = diagramGenerator.generateDiagram(bpmnModel, "png",
+                    runtimeService.getActiveActivityIds(processInstance.getId()), Collections.emptyList(),
+                    processEngineConfiguration.getActivityFontName(), processEngineConfiguration.getLabelFontName(),
+                    processEngineConfiguration.getAnnotationFontName(), processEngineConfiguration.getClassLoader(), 1.0,
+                    processEngineConfiguration.isDrawSequenceFlowNameWithNoLabelDI());
+
+            try {
+                byte[] byteArray = IOUtils.toByteArray(resource);
+                return Optional.of(byteArray);
+            } catch (Exception e) {
+                throw new IllegalArgumentException("Error exporting diagram", e);
+            }
+
+        } else {
+            throw new IllegalArgumentException("Process instance with id '" + processInstanceId + "' has no graphical notation defined.");
+        }
+    }
+
+    public ProcessInstance getProcessInstance(String processInstanceId) {
+        return processEngine.getRuntimeService()
+                            .createProcessInstanceQuery()
+                            .processInstanceId(processInstanceId)
+                            .processInstanceTenantId(getTenantId())
+                            .singleResult();
+    }
+
+    public void retryDeadLetterJob(String jobId, int retries) {
+        processEngine.getManagementService()
+                     .moveDeadLetterJobToExecutableJob(jobId, retries);
+    }
+
+    public void addProcessInstanceVariable(String processInstanceId, String key, String value) {
+        processEngine.getRuntimeService()
+                     .setVariable(processInstanceId, key, value);
+    }
+
+    public List<ProcessInstance> getProcessInstances(Optional<String> key, Optional<String> businessKey) {
+        ProcessInstanceQuery processInstanceQuery = processEngine.getRuntimeService()
+                                                                 .createProcessInstanceQuery();
+
+        if (key.isPresent() && !key.get()
+                                   .isEmpty()) {
+            processInstanceQuery.processDefinitionKey(key.get());
+        }
+
+        if (businessKey.isPresent() && !businessKey.get()
+                                                   .isEmpty()) {
+            processInstanceQuery.processInstanceBusinessKeyLike("%" + businessKey.get() + "%");
+        }
+        processInstanceQuery.processInstanceTenantId(getTenantId());
+
+        return processInstanceQuery.list();
+    }
+
+    public List<HistoricProcessInstance> getCompletedProcessInstances(Optional<String> definitionKey, Optional<String> businessKey) {
+        HistoricProcessInstanceQuery historicProcessInstanceQuery = processEngine.getHistoryService()
+                                                                                 .createHistoricProcessInstanceQuery();
+
+        if (definitionKey.isPresent() && !definitionKey.get()
+                                                       .isEmpty()) {
+            historicProcessInstanceQuery.processDefinitionKey(definitionKey.get());
+        }
+
+        if (businessKey.isPresent() && !businessKey.get()
+                                                   .isEmpty()) {
+            historicProcessInstanceQuery.processInstanceBusinessKeyLike("%" + businessKey.get() + "%");
+        }
+        historicProcessInstanceQuery.processInstanceTenantId(getTenantId());
+
+        return historicProcessInstanceQuery.finished()
+                                           .list();
+    }
+
+    public Deployment deployProcess(String deploymentKey, String resourceName, byte[] content) {
+        return processEngine.getRepositoryService()
+                            .createDeployment()
+                            .key(deploymentKey)
+                            .tenantId(getTenantId())
+                            .addBytes(resourceName, content)
+                            .deploy();
+    }
+
+    public ProcessDefinition getProcessDefinitionByDeploymentId(String deploymentId) {
+        return processEngine.getRepositoryService()
+                            .createProcessDefinitionQuery()
+                            .deploymentId(deploymentId)
+                            .processDefinitionTenantId(getTenantId())
+                            .singleResult();
+    }
+
+    public List<Deployment> getDeploymentsByKey(String deploymentKey) {
+        return processEngine.getRepositoryService()
+                            .createDeploymentQuery()
+                            .deploymentKey(deploymentKey)
+                            .deploymentTenantId(getTenantId())
+                            .list();
+    }
+
+    public void deleteDeployment(String deploymentId) {
+        flowableArtefactsValidator.validateDeployment(deploymentId);
+
+        processEngine.getRepositoryService()
+                     .deleteDeployment(deploymentId, true);
+    }
+
+    public long processDefinitionsCount() {
+        return processEngine.getRepositoryService()
+                            .createProcessDefinitionQuery()
+                            .count();
+    }
+
+    public long getProcessInstancesCount() {
+        return processEngine.getRuntimeService()
+                            .createProcessInstanceQuery()
+                            .count();
+    }
+
+    public long getFinishedHistoricProcessInstancesCount() {
+        return processEngine.getHistoryService()
+                            .createHistoricProcessInstanceQuery()
+                            .finished()
+                            .count();
+    }
+
+    public long getTotalCompletedTasksCount() {
+        return processEngine.getHistoryService()
+                            .createHistoricTaskInstanceQuery()
+                            .finished()
+                            .count();
+    }
+
+    public long getCompletedTasksForToday() {
+        return processEngine.getHistoryService()
+                            .createHistoricTaskInstanceQuery()
+                            .finished()
+                            .taskCompletedAfter(new Date(System.currentTimeMillis() - secondsForDays(1)))
+                            .count();
+    }
+
+    private long secondsForDays(int days) {
+        int hour = 60 * 60 * 1000;
+        int day = 24 * hour;
+        return (long) days * day;
+    }
+
+    public long getCompletedActivities() {
+        return processEngine.getHistoryService()
+                            .createHistoricActivityInstanceQuery()
+                            .finished()
+                            .count();
+    }
+
+    public String getProcessDefinitionXmlById(String processDefinitionId) {
+        flowableArtefactsValidator.validateProcessDefinitionId(processDefinitionId);
+
+        try {
+
+            InputStream processModel = processEngine.getRepositoryService()
+                                                    .getProcessModel(processDefinitionId);
+            return IOUtils.toString(processModel, StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new IllegalStateException("Error reading BPMN file for: " + processDefinitionId, ex);
+        }
+    }
+
+    public List<String> getProcessInstanceActiveActivityIds(String processInstanceId) {
+        ProcessInstance processInstance = getProcessInstance(processInstanceId);
+        if (null == processInstance) {
+            return Collections.emptyList();
+        }
+        RuntimeService runtimeService = processEngine.getRuntimeService();
+        return runtimeService.getActiveActivityIds(processInstance.getId());
+    }
+}

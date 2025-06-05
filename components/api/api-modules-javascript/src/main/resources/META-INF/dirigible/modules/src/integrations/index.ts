@@ -7,6 +7,10 @@ export interface HeadersMap {
     [key: string]: string | string[];
 }
 
+export interface ExchangeProperties {
+    [key: string]: string | string[];
+}
+
 export interface IntegrationMessage {
 
     constructor(message: any);
@@ -30,8 +34,8 @@ export interface IntegrationMessage {
 
 export class Integrations {
 
-    public static invokeRoute(routeId: string, payload: any, headers: HeadersMap) {
-        return invoker.invokeRoute(routeId, payload, headers);
+    public static invokeRoute(routeId: string, payload: any, headers: HeadersMap, exchangeProperties: ExchangeProperties) {
+        return invoker.invokeRoute(routeId, payload, headers, exchangeProperties);
     }
 
     public static getInvokingRouteMessage(): IntegrationMessage {

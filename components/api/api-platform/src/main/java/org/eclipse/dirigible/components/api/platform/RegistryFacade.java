@@ -119,10 +119,23 @@ public class RegistryFacade {
      * @param path the path
      * @return the string
      */
-    private static String toRepositoryPath(String path) {
+    public static String toRepositoryPath(String path) {
         return new RepositoryPath().append(IRepositoryStructure.PATH_REGISTRY_PUBLIC)
                                    .append(path)
                                    .build();
+    }
+
+    /**
+     * To registry path.
+     *
+     * @param path the path
+     * @return the string
+     */
+    public static String toRegistryPath(String path) {
+        if (path.startsWith(IRepositoryStructure.PATH_REGISTRY_PUBLIC)) {
+            return path.substring(IRepositoryStructure.PATH_REGISTRY_PUBLIC.length());
+        }
+        return path;
     }
 
     /**
@@ -131,7 +144,7 @@ public class RegistryFacade {
      * @param path the path
      * @return the string
      */
-    private static String toResourcePath(String path) {
+    public static String toResourcePath(String path) {
         if (!path.startsWith(IRepositoryStructure.SEPARATOR)) {
             return IRepositoryStructure.SEPARATOR + path;
         }

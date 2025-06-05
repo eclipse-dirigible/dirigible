@@ -1,9 +1,21 @@
+/*
+ * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v2.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ */
 angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 	.config(["EntityServiceProvider", (EntityServiceProvider) => {
 		EntityServiceProvider.baseUrl = '/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/SalesOrder/SalesOrderService.ts';
 	}])
 	.controller('PageController', ($scope, $http, Extensions, EntityService) => {
 		const Dialogs = new DialogHub();
+		const Notifications = new NotificationHub();
 		$scope.entity = {};
 		$scope.forms = {
 			details: {},
@@ -77,10 +89,10 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			EntityService.create($scope.entity).then((response) => {
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.SalesOrder.SalesOrder.entityCreated', data: response.data });
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.SalesOrder.SalesOrder.clearDetails' , data: response.data });
-				Dialogs.showAlert({
+				Notifications.show({
 					title: 'SalesOrder',
-					message: 'SalesOrder successfully created',
-					type: AlertTypes.Success
+					description: 'SalesOrder successfully created',
+					type: 'positive'
 				});
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
@@ -97,10 +109,10 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			EntityService.update($scope.entity.Id, $scope.entity).then((response) => {
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.SalesOrder.SalesOrder.entityUpdated', data: response.data });
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.SalesOrder.SalesOrder.clearDetails', data: response.data });
-				Dialogs.showAlert({
+				Notifications.show({
 					title: 'SalesOrder',
-					message: 'SalesOrder successfully updated',
-					type: AlertTypes.Success
+					description: 'SalesOrder successfully updated',
+					type: 'positive'
 				});
 			}, (error) => {
 				const message = error.data ? error.data.message : '';

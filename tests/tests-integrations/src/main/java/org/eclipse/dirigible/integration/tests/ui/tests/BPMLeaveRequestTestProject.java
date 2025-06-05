@@ -56,7 +56,7 @@ abstract class BPMLeaveRequestTestProject extends BaseTestProject {
     @Override
     public void configure() {
         copyToWorkspace();
-        generateForms(getProjectResourcesFolder(), PROCESS_LEAVE_REQUEST_FORM_FILENAME, SUBMIT_LEAVE_REQUEST_FORM_FILENAME);
+        generateForms(PROCESS_LEAVE_REQUEST_FORM_FILENAME, SUBMIT_LEAVE_REQUEST_FORM_FILENAME);
 
         publish();
         getIde().close();
@@ -65,8 +65,8 @@ abstract class BPMLeaveRequestTestProject extends BaseTestProject {
     }
 
     private void createTestUsers() {
-        securityUtil.createUser(EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD, "employee");
-        securityUtil.createUser(EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_PASSWORD, "employee-manager");
+        securityUtil.createUserInDefaultTenant(EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD, "employee");
+        securityUtil.createUserInDefaultTenant(EMPLOYEE_MANAGER_USERNAME, EMPLOYEE_MANAGER_PASSWORD, "employee-manager");
     }
 
     @Override
@@ -138,7 +138,7 @@ abstract class BPMLeaveRequestTestProject extends BaseTestProject {
     protected abstract boolean shouldApproveRequest();
 
     private void claimRequest(IDE managerIDE) {
-        managerIDE.openPath("/services/web/inbox/");
+        managerIDE.openInbox();
 
         Browser browser = managerIDE.getBrowser();
         browser.clickOnElementContainingText(HtmlElementType.TR, "Process request");

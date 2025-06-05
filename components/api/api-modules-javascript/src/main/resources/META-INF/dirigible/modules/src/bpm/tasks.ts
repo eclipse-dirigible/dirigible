@@ -48,7 +48,7 @@ export class Tasks {
 	}
 
 	public static getTaskService(): TaskService {
-		return new TaskService(BpmFacade.getEngine().getProcessEngine().getTaskService());
+		return new TaskService(BpmFacade.getBpmProviderFlowable().getTaskService());
 	}
 }
 
@@ -82,15 +82,6 @@ export class TaskService {
 	 */
 	public createTaskBuilder(): TaskBuilder {
 		return this.taskService.createTaskBuilder();
-	}
-
-	/**
-	 * Create a completion builder for the task
-	 *
-	 * @return task completion builder
-	 */
-	public createTaskCompletionBuilder(): TaskCompletionBuilder {
-		return this.taskService.createTaskCompletionBuilder();
 	}
 
 	/**
@@ -568,20 +559,6 @@ export class TaskService {
 	 */
 	public setDueDate(taskId: string, dueDate: Date): void {
 		this.taskService.setDueDate(taskId, dueDate);
-	}
-
-	/**
-	 * Returns a new {@link TaskQuery} that can be used to dynamically query tasks.
-	 */
-	public createTaskQuery(): TaskQuery {
-		return this.taskService.createTaskQuery();
-	}
-
-	/**
-	 * Returns a new {@link NativeQuery} for tasks.
-	 */
-	public createNativeTaskQuery(): NativeTaskQuery {
-		return this.taskService.createNativeTaskQuery();
 	}
 
 	/**
@@ -1477,74 +1454,6 @@ export interface TaskBuilder {
 	 */
 	scopeType(scopeType: string): TaskBuilder;
 	getScopeType(): string;
-}
-
-/**
- * This builder is an alternative to using any of the complete methods on the TaskService.
- *
- */
-export interface TaskCompletionBuilder {
-
-	/**
-	 * Sets variables that are added on the instance level.
-	 */
-	variables(variables: Map<string, any>): TaskCompletionBuilder;
-
-	/**
-	 * Sets task-local variables instead of instance-level variables.
-	 */
-	variablesLocal(variablesLocal: Map<string, any>): TaskCompletionBuilder;
-
-	/**
-	 * Sets non-persisted instance variables.
-	 */
-	transientVariables(transientVariables: Map<string, any>): TaskCompletionBuilder;
-
-	/**
-	 * Sets non-persisted task-local variables.
-	 */
-	transientVariablesLocal(transientVariablesLocal: Map<string, any>): TaskCompletionBuilder;
-
-	/**
-	 * Sets one instance-level variable.
-	 */
-	variable(variableName: string, variableValue: any): TaskCompletionBuilder;
-
-	/**
-	 * Sets one task-local variables instead of instance-level variables.
-	 */
-	variableLocal(variableName: string, variableValue: any): TaskCompletionBuilder;
-
-	/**
-	 * Sets one non-persisted instance variables.
-	 */
-	transientVariable(variableName: string, variableValue: any): TaskCompletionBuilder;
-
-	/**
-	 * Sets one non-persisted instance variables.
-	 */
-	transientVariableLocal(variableName: string, variableValue: any): TaskCompletionBuilder;
-
-	/**
-	 * Sets the id of the task which is completed.
-	 */
-	taskId(id: string): TaskCompletionBuilder;
-
-	/**
-	 * Sets a form definition id. Only needed when there's a form associated with the task.
-	 */
-	formDefinitionId(formDefinitionId: string): TaskCompletionBuilder;
-
-	/**
-	 * Sets an outcome for the form.
-	 */
-	outcome(outcome: string): TaskCompletionBuilder;
-
-	/**
-	 * Completes the task.
-	 */
-	complete(): void;
-
 }
 
 export interface FormInfo {
@@ -2944,66 +2853,6 @@ export interface TaskInfoQuery<T, V extends TaskInfo> extends Query<T, V> {
 	orderByCategory(): T;
 
 }
-
-export interface TaskQuery extends TaskInfoQuery<TaskQuery, Task> {
-
-	/** Only select tasks with the given {@link DelegationState}. */
-	taskDelegationState(delegationState: DelegationState): TaskQuery;
-
-	/**
-	 * Select tasks that has been claimed or assigned to user or waiting to claim by user (candidate user or groups). You can invoke {@link TaskInfoQuery#taskCandidateGroupIn(Collection)} to include tasks that can be
-	 * claimed by a user in the given groups while set property <strong>dbIdentityUsed</strong> to <strong>false</strong> in process engine configuration or using custom session factory of
-	 * GroupIdentityManager.
-	 */
-	taskCandidateOrAssigned(userIdForCandidateAndAssignee: string): TaskQuery;
-
-	/** Only select tasks that have no parent (i.e. do not select subtasks). */
-	excludeSubtasks(): TaskQuery;
-
-	/**
-	 * Only selects tasks which are suspended, because its process instance was suspended.
-	 */
-	suspended(): TaskQuery;
-
-	/**
-	 * Only selects tasks which are active (ie. not suspended)
-	 */
-	active(): TaskQuery;
-}
-
-
-export interface NativeTaskQuery {
-
-	/**
-	 * Hand in the SQL statement you want to execute. BEWARE: if you need a count you have to hand in a count() statement yourself, otherwise the result will be treated as lost of Flowable entities.
-	 * 
-	 * If you need paging you have to insert the pagination code yourself. We skipped doing this for you as this is done really different on some databases (especially MS-SQL / DB2)
-	 */
-	sql(selectClause: string): NativeTaskQuery;
-
-	/**
-	 * Add parameter to be replaced in query for index, e.g. :param1, :myParam, ...
-	 */
-	parameter(name: string, value: any): NativeTaskQuery;
-
-	/** Executes the query and returns the number of results */
-	count(): number;
-
-	/**
-	 * Executes the query and returns the resulting entity or null if no entity matches the query criteria.
-	 * 
-	 * @throws FlowableException
-	 *             when the query results in more than one entities.
-	 */
-	singleResult(): any;
-
-	/** Executes the query and get a list of entities as the result. */
-	list(): any[];
-
-	/** Executes the query and get a list of entities as the result. */
-	listPage(firstResult: number, maxResults: number): any[];
-}
-
 
 function parseValue(value: any) {
 	try {

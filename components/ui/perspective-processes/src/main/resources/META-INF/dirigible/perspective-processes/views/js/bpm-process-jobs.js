@@ -23,6 +23,8 @@ ideBpmProcessJobsView.controller('IDEBpmProcessJobsViewController', ($scope, $ht
         $http.get('/services/bpm/bpm-processes/instance/' + processInstanceId + '/jobs', { params: { 'limit': 100 } })
             .then((response) => {
                 $scope.jobsList = response.data;
+            }, (error) => {
+                console.error(error);
             });
     };
 
@@ -31,7 +33,7 @@ ideBpmProcessJobsView.controller('IDEBpmProcessJobsViewController', ($scope, $ht
             title: job.exceptionMessage,
             message: job.exceptionStacktrace,
             type: AlertTypes.Error,
-            preformatted: false,
+            preformatted: true,
         });
     };
 

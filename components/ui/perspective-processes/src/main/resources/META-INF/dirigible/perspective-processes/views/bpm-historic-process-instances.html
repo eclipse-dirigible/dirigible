@@ -37,7 +37,7 @@
         </bk-toolbar>
         <bk-scrollbar class="bk-fill-parent">
             <table bk-table outer-borders="bottom" display-mode="compact">
-                <thead bk-table-header sticky="true">
+                <thead bk-table-header sticky="true" interactive="false">
                     <tr bk-table-row>
                         <th bk-table-header-cell>Id</th>
                         <th bk-table-header-cell>Business Key</th>
@@ -47,7 +47,7 @@
                     </tr>
                 </thead>
                 <tbody bk-table-body>
-                    <tr bk-table-row ng-repeat="next in instances track by next.id" activable="true" hoverable="true" selected="next.selected" ng-click="selectionChanged(next)">
+                    <tr bk-table-row ng-repeat="next in instances track by next.id" activable="true" hoverable="true" selected="selectedId === next.id" ng-click="selectionChanged(next)">
                         <td bk-table-cell>{{next.id}}</td>
                         <td bk-table-cell>{{next.businessKey}}</td>
                         <td bk-table-cell>{{next.processDefinitionId}}</td>

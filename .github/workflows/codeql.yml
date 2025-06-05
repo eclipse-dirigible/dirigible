@@ -1,0 +1,80 @@
+name: "CodeQL Advanced [Push & PR]"
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  schedule:
+    - cron: '32 20 * * 0'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sast-codeql-analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write # Required to upload SARIF to GitHub Security tab
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java-kotlin
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK Corretto 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '21'
+          architecture: x64
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config: |
+            name: "Comprehensive Multi-language CodeQL Config"
+            query-filters:
+              - exclude:
+                  id: java/path-injection
+            queries:
+              - uses: security-and-quality
+
+      - name: Build Java/Kotlin project
+        if: matrix.language == 'java-kotlin'
+        run: mvn clean install -P quick-build
+
+      - name: Perform CodeQL Analysis for language ${{ matrix.language }}
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+          output: "sast_codeql_report_${{ matrix.language }}"
+          upload: always
+
+      - name: Upload CodeQL Analysis SARIF file as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast_codeql_sarif_${{ matrix.language }}
+          path: sast_codeql_report_${{ matrix.language }}

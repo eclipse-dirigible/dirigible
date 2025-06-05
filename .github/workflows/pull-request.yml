@@ -17,11 +17,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Set up JDK Corretto 21
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
-          java-version: 21
+          java-version: '21'
+          architecture: x64
+
       - name: Validate Java code formatting
         run: mvn -T 1C formatter:validate
 
@@ -34,25 +37,29 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
+
       - name: Set up JDK Corretto 21
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
-          java-version: 21
+          java-version: '21'
+          architecture: x64
+
       - name: Install NodeJS
         uses: actions/setup-node@v4
         with:
           node-version: 18
-      - name: Install esbuild
-        run: npm i -g esbuild
-      - name: Install TypeScript compiler
-        run: npm i -g typescript
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
+
       - name: Maven Build
         run: mvn clean install -P unit-tests -U
 
@@ -62,31 +69,36 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
+
       - name: Set up JDK Corretto 21
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
-          java-version: 21
+          java-version: '21'
+          architecture: x64
+
       - name: Install NodeJS
         uses: actions/setup-node@v4
         with:
           node-version: 18
-      - name: Install esbuild
-        run: npm i -g esbuild
-      - name: Install TypeScript compiler
-        run: npm i -g typescript
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
+
       - name: Install ttyd (prebuilt)
         run: |
           sudo apt update
           sudo apt install -y ttyd
       - name: Verify ttyd installation
         run: ttyd --version
+
       - name: Integration tests
         run: mvn clean install -P integration-tests
 
@@ -96,6 +108,7 @@ jobs:
         run: |
           TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
           echo "ARTIFACT_NAME=selenide-screenshots-${TIMESTAMP}.zip" >> $GITHUB_ENV
+
       - name: Upload selenide screenshots
         uses: actions/upload-artifact@v4
         if: always()
@@ -128,31 +141,37 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
+
       - name: Set up JDK Corretto 21
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
-          java-version: 21
+          java-version: '21'
+          architecture: x64
+
       - name: Install NodeJS
         uses: actions/setup-node@v4
         with:
           node-version: 18
-      - name: Install esbuild
-        run: npm i -g esbuild
-      - name: Install TypeScript compiler
-        run: npm i -g typescript
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
+
       - name: Install ttyd (prebuilt)
         run: |
           sudo apt update
           sudo apt install -y ttyd
+
       - name: Verify ttyd installation
         run: ttyd --version
+
       - name: Integration tests
         run: mvn clean install -P integration-tests
         env:
@@ -167,6 +186,7 @@ jobs:
         run: |
           TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
           echo "ARTIFACT_NAME=selenide-screenshots-${TIMESTAMP}.zip" >> $GITHUB_ENV
+
       - name: Upload selenide screenshots
         uses: actions/upload-artifact@v4
         if: always()

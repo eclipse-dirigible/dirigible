@@ -30,7 +30,7 @@ export class Repository {
 		return new Resource(resourceInstance);
 	}
 
-	public static pdateResource(path: string, content: string): Resource {
+	public static updateResource(path: string, content: string): Resource {
 		const resourceInstance = RepositoryFacade.updateResource(path, content);
 		return new Resource(resourceInstance);
 	}

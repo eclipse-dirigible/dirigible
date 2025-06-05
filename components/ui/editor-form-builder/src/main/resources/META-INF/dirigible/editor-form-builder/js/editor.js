@@ -596,7 +596,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     description: 'Combobox selection',
                     template: `<div class="fb-control-wrapper" ng-click="showProps($event)" data-id="{{id}}"><bk-form-item horizontal="props.horizontal.value">
                         <bk-form-label colon="true" ng-required="props.required.value" for="{{props.id.value}}">{{ props.label.value }}</bk-form-label>
-                        <bk-combobox-input compact="props.isCompact.value" dropdown-items="[{text: 'combo',value: 'combo'}]" ng-required="props.required.value" placeholder="{{props.placeholder.value}}" btn-aria-label="show/hide {{ props.label.value }} options" list-aria-label="{{ props.label.value }} options"></bk-combobox-input>
+                        <bk-combobox-input compact="props.isCompact.value" filter="{{props.filter.value}}" dropdown-items="[{text: 'combo',value: 'combo'}]" ng-required="props.required.value" placeholder="{{props.placeholder.value}}" btn-aria-label="show/hide {{ props.label.value }} options" list-aria-label="{{ props.label.value }} options"></bk-combobox-input>
                     </bk-form-item></div>`,
                     props: {
                         id: {
@@ -629,6 +629,25 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                             value: '',
                             placeholder: 'Input placeholder',
                         },
+                        filter: {
+                            type: 'dropdown',
+                            label: 'Filter type',
+                            value: '',
+                            items: [
+                                {
+                                    label: 'Starts With',
+                                    value: '',
+                                },
+                                {
+                                    label: 'Contains',
+                                    value: 'Contains',
+                                },
+                                {
+                                    label: 'Contains Each',
+                                    value: 'ContainsEach',
+                                },
+                            ]
+                        },
                         model: {
                             type: 'text',
                             label: 'Model',
@@ -657,8 +676,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                         <bk-form-label colon="true" ng-required="props.required.value" for="{{props.id.value}}">{{ props.label.value }}</bk-form-label>
                         <bk-select placeholder="{{props.placeholder.value}}" label-id="{{ props.id.value }}" compact="props.isCompact.value"
                             ng-required="props.required.value" ng-model="props.staticOptions.defaultValue" dropdown-fixed="true">
-                            <bk-option text="{{ menuItem.label }}" value="menuItem.value" ng-repeat="menuItem in props.staticOptions.value track by $index">
-                            </bk-option>
+                            <bk-option text="{{ menuItem.label }}" value="menuItem.value" ng-repeat="menuItem in props.staticOptions.value track by $index"></bk-option>
                         </bk-select>
                     </bk-form-item></div>`,
                     props: {

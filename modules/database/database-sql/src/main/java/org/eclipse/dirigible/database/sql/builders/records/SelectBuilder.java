@@ -9,12 +9,13 @@
  */
 package org.eclipse.dirigible.database.sql.builders.records;
 
-import java.util.ArrayList;
-import java.util.List;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.builders.AbstractQuerySqlBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The Select Builder.
@@ -25,25 +26,25 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
     private static final Logger logger = LoggerFactory.getLogger(SelectBuilder.class);
 
     /** The columns. */
-    private final List<String> columns = new ArrayList<String>();
+    private final List<String> columns = new ArrayList<>();
 
     /** The tables. */
-    private final List<String> tables = new ArrayList<String>();
+    private final List<String> tables = new ArrayList<>();
 
     /** The joins. */
-    private final List<String> joins = new ArrayList<String>();
+    private final List<String> joins = new ArrayList<>();
 
     /** The wheres. */
-    private final List<String> wheres = new ArrayList<String>();
+    private final List<String> wheres = new ArrayList<>();
 
     /** The orders. */
-    private final List<String> orders = new ArrayList<String>();
+    private final List<String> orders = new ArrayList<>();
 
     /** The groups. */
-    private final List<String> groups = new ArrayList<String>();
+    private final List<String> groups = new ArrayList<>();
 
     /** The unions. */
-    private final List<String> unions = new ArrayList<String>();
+    private final List<String> unions = new ArrayList<>();
 
     /** The distinct. */
     private boolean distinct = false;
@@ -78,9 +79,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      * @return the select builder
      */
     public SelectBuilder distinct() {
-        if (logger.isTraceEnabled()) {
-            logger.trace("distinct");
-        }
+        logger.trace("distinct");
         this.distinct = true;
         return this;
     }
@@ -91,9 +90,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      * @return the select builder
      */
     public SelectBuilder forUpdate() {
-        if (logger.isTraceEnabled()) {
-            logger.trace("forUpdate");
-        }
+        logger.trace("forUpdate");
         this.forUpdate = true;
         return this;
     }
@@ -105,9 +102,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      * @return the select builder
      */
     public SelectBuilder column(String column) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("column: " + column);
-        }
+        logger.trace("column: [{}]", column);
         this.columns.add(column);
         return this;
     }
@@ -119,9 +114,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      * @return the select builder
      */
     public SelectBuilder from(String table) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("from: " + table);
-        }
+        logger.trace("from: [{}]", table);
         return from(table, null);
     }
 
@@ -133,9 +126,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      * @return the select builder
      */
     public SelectBuilder from(String table, String alias) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("from: " + table + ", alias: " + alias);
-        }
+        logger.trace("from: [{}], alias: [{}]", table, alias);
         StringBuilder snippet = new StringBuilder();
         snippet.append(encapsulate(table));
         if (alias != null) {
@@ -155,9 +146,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      * @return the select builder
      */
     public SelectBuilder schema(String schema) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("schema: " + schema);
-        }
+        logger.trace("schema: {}", schema);
         this.schema = schema;
         return this;
     }
@@ -170,9 +159,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      * @return the select builder
      */
     public SelectBuilder join(String table, String on) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("join: " + table + ", on: " + on);
-        }
+        logger.trace("join: {}, on: {}", table, on);
         return join(table, on, null);
     }
 
@@ -185,155 +172,8 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      * @return the select builder
      */
     public SelectBuilder join(String table, String on, String alias) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("join: " + table + ", on: " + on + ", alias: " + alias);
-        }
+        logger.trace("join: {}, on: {}, alias: {}", table, on, alias);
         return genericJoin(KEYWORD_INNER, table, on, alias);
-    }
-
-    /**
-     * Inner join.
-     *
-     * @param table the table
-     * @param on the on
-     * @return the select builder
-     */
-    public SelectBuilder innerJoin(String table, String on) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("innerJoin: " + table + ", on: " + on);
-        }
-        return innerJoin(table, on, null);
-    }
-
-    /**
-     * Inner join.
-     *
-     * @param table the table
-     * @param on the on
-     * @param alias the alias
-     * @return the select builder
-     */
-    public SelectBuilder innerJoin(String table, String on, String alias) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("innerJoin: " + table + ", on: " + on + ", alias: " + alias);
-        }
-        return genericJoin(KEYWORD_INNER, table, on, alias);
-    }
-
-    /**
-     * Outer join.
-     *
-     * @param table the table
-     * @param on the on
-     * @return the select builder
-     */
-    public SelectBuilder outerJoin(String table, String on) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("outerJoin: " + table + ", on: " + on);
-        }
-        return outerJoin(table, on, null);
-    }
-
-    /**
-     * Outer join.
-     *
-     * @param table the table
-     * @param on the on
-     * @param alias the alias
-     * @return the select builder
-     */
-    public SelectBuilder outerJoin(String table, String on, String alias) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("outerJoin: " + table + ", on: " + on + ", alias: " + alias);
-        }
-        return genericJoin(KEYWORD_OUTER, table, on, alias);
-    }
-
-    /**
-     * Left join.
-     *
-     * @param table the table
-     * @param on the on
-     * @return the select builder
-     */
-    public SelectBuilder leftJoin(String table, String on) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("leftJoin: " + table + ", on: " + on);
-        }
-        return leftJoin(table, on, null);
-    }
-
-    /**
-     * Left join.
-     *
-     * @param table the table
-     * @param on the on
-     * @param alias the alias
-     * @return the select builder
-     */
-    public SelectBuilder leftJoin(String table, String on, String alias) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("leftJoin: " + table + ", on: " + on + ", alias: " + alias);
-        }
-        return genericJoin(KEYWORD_LEFT, table, on, alias);
-    }
-
-    /**
-     * Right join.
-     *
-     * @param table the table
-     * @param on the on
-     * @return the select builder
-     */
-    public SelectBuilder rightJoin(String table, String on) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("rightJoin: " + table + ", on: " + on);
-        }
-        return rightJoin(table, on, null);
-    }
-
-    /**
-     * Right join.
-     *
-     * @param table the table
-     * @param on the on
-     * @param alias the alias
-     * @return the select builder
-     */
-    public SelectBuilder rightJoin(String table, String on, String alias) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("rightJoin: " + table + ", on: " + on + ", alias: " + alias);
-        }
-        return genericJoin(KEYWORD_RIGHT, table, on, alias);
-    }
-
-    /**
-     * Full join.
-     *
-     * @param table the table
-     * @param on the on
-     * @return the select builder
-     */
-    public SelectBuilder fullJoin(String table, String on) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("fullJoin: " + table + ", on: " + on);
-        }
-        return fullJoin(table, on, null);
-    }
-
-    /**
-     * Full join.
-     *
-     * @param table the table
-     * @param on the on
-     * @param alias the alias
-     * @return the select builder
-     */
-    public SelectBuilder fullJoin(String table, String on, String alias) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("fullJoin: " + table + ", on: " + on + ", alias: " + alias);
-        }
-        return genericJoin(KEYWORD_FULL, table, on, alias);
     }
 
     /**
@@ -346,9 +186,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      * @return the select builder
      */
     public SelectBuilder genericJoin(String type, String table, String on, String alias) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("genericJoin: " + type + ", table: " + table + ", on: " + on + ", alias: " + alias);
-        }
+        logger.trace("genericJoin: {}, table: {}, on: {}, alias: {}", type, table, on, alias);
         StringBuilder snippet = new StringBuilder();
         String schemaName = encapsulate(schema, true);
         String tableName = encapsulate(table, true);
@@ -383,15 +221,138 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
     }
 
     /**
+     * Inner join.
+     *
+     * @param table the table
+     * @param on the on
+     * @return the select builder
+     */
+    public SelectBuilder innerJoin(String table, String on) {
+        logger.trace("innerJoin: {}, on: {}", table, on);
+        return innerJoin(table, on, null);
+    }
+
+    /**
+     * Inner join.
+     *
+     * @param table the table
+     * @param on the on
+     * @param alias the alias
+     * @return the select builder
+     */
+    public SelectBuilder innerJoin(String table, String on, String alias) {
+        logger.trace("innerJoin: {}, on: {}, alias: {}", table, on, alias);
+        return genericJoin(KEYWORD_INNER, table, on, alias);
+    }
+
+    /**
+     * Outer join.
+     *
+     * @param table the table
+     * @param on the on
+     * @return the select builder
+     */
+    public SelectBuilder outerJoin(String table, String on) {
+        logger.trace("outerJoin: {}, on: {}", table, on);
+        return outerJoin(table, on, null);
+    }
+
+    /**
+     * Outer join.
+     *
+     * @param table the table
+     * @param on the on
+     * @param alias the alias
+     * @return the select builder
+     */
+    public SelectBuilder outerJoin(String table, String on, String alias) {
+        logger.trace("outerJoin: {}, on: {}, alias: {}", table, on, alias);
+        return genericJoin(KEYWORD_OUTER, table, on, alias);
+    }
+
+    /**
+     * Left join.
+     *
+     * @param table the table
+     * @param on the on
+     * @return the select builder
+     */
+    public SelectBuilder leftJoin(String table, String on) {
+        logger.trace("leftJoin: {}, on: {}", table, on);
+        return leftJoin(table, on, null);
+    }
+
+    /**
+     * Left join.
+     *
+     * @param table the table
+     * @param on the on
+     * @param alias the alias
+     * @return the select builder
+     */
+    public SelectBuilder leftJoin(String table, String on, String alias) {
+        logger.trace("leftJoin: {}, on: {}, alias: {}", table, on, alias);
+        return genericJoin(KEYWORD_LEFT, table, on, alias);
+    }
+
+    /**
+     * Right join.
+     *
+     * @param table the table
+     * @param on the on
+     * @return the select builder
+     */
+    public SelectBuilder rightJoin(String table, String on) {
+        logger.trace("rightJoin: {}, on: {}", table, on);
+        return rightJoin(table, on, null);
+    }
+
+    /**
+     * Right join.
+     *
+     * @param table the table
+     * @param on the on
+     * @param alias the alias
+     * @return the select builder
+     */
+    public SelectBuilder rightJoin(String table, String on, String alias) {
+        logger.trace("rightJoin: {}, on: {}, alias: {}", table, on, alias);
+        return genericJoin(KEYWORD_RIGHT, table, on, alias);
+    }
+
+    /**
+     * Full join.
+     *
+     * @param table the table
+     * @param on the on
+     * @return the select builder
+     */
+    public SelectBuilder fullJoin(String table, String on) {
+        logger.trace("fullJoin: {}, on: {}", table, on);
+        return fullJoin(table, on, null);
+    }
+
+    /**
+     * Full join.
+     *
+     * @param table the table
+     * @param on the on
+     * @param alias the alias
+     * @return the select builder
+     */
+    public SelectBuilder fullJoin(String table, String on, String alias) {
+        logger.trace("fullJoin: {}, on: {}, alias: {}", table, on, alias);
+        return genericJoin(KEYWORD_FULL, table, on, alias);
+    }
+
+    /**
      * Where.
      *
      * @param condition the condition
      * @return the select builder
      */
     public SelectBuilder where(String condition) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("where: " + condition);
-        }
+        logger.trace("where: {}", condition);
         this.wheres.add(OPEN + condition + CLOSE);
         return this;
     }
@@ -403,9 +364,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      * @return the select builder
      */
     public SelectBuilder order(String column) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("order: " + column);
-        }
+        logger.trace("order: {}", column);
         String columnName = encapsulate(column);
         return order(columnName, true);
     }
@@ -418,9 +377,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      * @return the select builder
      */
     public SelectBuilder order(String column, boolean asc) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("order: " + column + ", asc: " + asc);
-        }
+        logger.trace("order: {}, asc: {}", column, asc);
         String columnName = encapsulate(column);
         if (asc) {
             this.orders.add(columnName + SPACE + KEYWORD_ASC);
@@ -438,9 +395,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      * @return the select builder
      */
     public SelectBuilder group(String column) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("group: " + column);
-        }
+        logger.trace("group: {}", column);
         this.groups.add(column);
         return this;
     }
@@ -451,12 +406,9 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      * @param limit the limit
      * @return the select builder
      */
-    public SelectBuilder limit(int limit) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("limit: " + limit);
-        }
-        this.limit = limit;
-        return this;
+    public SelectBuilder limit(Double limit) {
+        logger.trace("limit: {}", limit);
+        return limit(limit.intValue());
     }
 
     /**
@@ -465,24 +417,9 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      * @param limit the limit
      * @return the select builder
      */
-    public SelectBuilder limit(Double limit) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("limit: " + limit);
-        }
-        return limit(limit.intValue());
-    }
-
-    /**
-     * Offset.
-     *
-     * @param offset the offset
-     * @return the select builder
-     */
-    public SelectBuilder offset(int offset) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("offset: " + offset);
-        }
-        this.offset = offset;
+    public SelectBuilder limit(int limit) {
+        logger.trace("limit: {}", limit);
+        this.limit = limit;
         return this;
     }
 
@@ -493,10 +430,20 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      * @return the select builder
      */
     public SelectBuilder offset(Double offset) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("offset: " + offset);
-        }
+        logger.trace("offset: {}", offset);
         return offset(offset.intValue());
+    }
+
+    /**
+     * Offset.
+     *
+     * @param offset the offset
+     * @return the select builder
+     */
+    public SelectBuilder offset(int offset) {
+        logger.trace("offset: {}", offset);
+        this.offset = offset;
+        return this;
     }
 
     /**
@@ -506,9 +453,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      * @return the select builder
      */
     public SelectBuilder having(String having) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("having: " + having);
-        }
+        logger.trace("having: {}", having);
         this.having = having;
         return this;
     }
@@ -520,9 +465,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
      * @return the select builder
      */
     public SelectBuilder union(String select) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("union: " + select);
-        }
+        logger.trace("union: {}", select);
         this.unions.add(select);
         return this;
     }
@@ -574,9 +517,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
 
         String generated = sql.toString();
 
-        if (logger.isTraceEnabled()) {
-            logger.trace("generated: " + generated);
-        }
+        logger.trace("generated: {}", generated);
 
         return generated;
     }
@@ -593,6 +534,20 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
                .append(SPACE)
                .append(traverseUnions());
         }
+    }
+
+    /**
+     * Traverse unions.
+     *
+     * @return the string
+     */
+    protected String traverseUnions() {
+        StringBuilder snippet = new StringBuilder();
+        for (String unionSQL : this.unions) {
+            snippet.append(unionSQL)
+                   .append(SPACE);
+        }
+        return snippet.substring(0, snippet.length() - 1);
     }
 
     /**
@@ -624,6 +579,22 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
     }
 
     /**
+     * Traverse groups.
+     *
+     * @return the string
+     */
+    protected String traverseGroups() {
+        StringBuilder snippet = new StringBuilder();
+        for (String group : this.groups) {
+            String groupName = encapsulate(group);
+            snippet.append(groupName)
+                   .append(COMMA)
+                   .append(SPACE);
+        }
+        return snippet.substring(0, snippet.length() - 2);
+    }
+
+    /**
      * Generate joins.
      *
      * @param sql the sql
@@ -636,6 +607,20 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
     }
 
     /**
+     * Traverse joins.
+     *
+     * @return the string
+     */
+    protected String traverseJoins() {
+        StringBuilder snippet = new StringBuilder();
+        for (String join : this.joins) {
+            snippet.append(join)
+                   .append(SPACE);
+        }
+        return snippet.substring(0, snippet.length() - 1);
+    }
+
+    /**
      * Generate tables.
      *
      * @param sql the sql
@@ -645,59 +630,6 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
            .append(KEYWORD_FROM)
            .append(SPACE)
            .append(traverseTables());
-    }
-
-    /**
-     * Generate columns.
-     *
-     * @param sql the sql
-     */
-    protected void generateColumns(StringBuilder sql) {
-        sql.append(SPACE)
-           .append(traverseColumns());
-    }
-
-    /**
-     * Generate distinct.
-     *
-     * @param sql the sql
-     */
-    protected void generateDistinct(StringBuilder sql) {
-        if (distinct) {
-            sql.append(SPACE)
-               .append(KEYWORD_DISTINCT);
-        }
-    }
-
-    /**
-     * Generate for update.
-     *
-     * @param sql the sql
-     */
-    protected void generateForUpdate(StringBuilder sql) {
-        if (forUpdate) {
-            sql.append(SPACE)
-               .append(KEYWORD_FOR_UPDATE);
-        }
-    }
-
-    /**
-     * Traverse columns.
-     *
-     * @return the string
-     */
-    protected String traverseColumns() {
-        if (!this.columns.isEmpty()) {
-            StringBuilder snippet = new StringBuilder();
-            for (String column : this.columns) {
-                String columnName = encapsulate(column);
-                snippet.append(columnName)
-                       .append(COMMA)
-                       .append(SPACE);
-            }
-            return snippet.substring(0, snippet.length() - 2);
-        }
-        return STAR;
     }
 
     /**
@@ -726,47 +658,56 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
     }
 
     /**
-     * Traverse joins.
+     * Generate columns.
      *
-     * @return the string
+     * @param sql the sql
      */
-    protected String traverseJoins() {
-        StringBuilder snippet = new StringBuilder();
-        for (String join : this.joins) {
-            snippet.append(join)
-                   .append(SPACE);
-        }
-        return snippet.substring(0, snippet.length() - 1);
+    protected void generateColumns(StringBuilder sql) {
+        sql.append(SPACE)
+           .append(traverseColumns());
     }
 
     /**
-     * Traverse groups.
+     * Traverse columns.
      *
      * @return the string
      */
-    protected String traverseGroups() {
-        StringBuilder snippet = new StringBuilder();
-        for (String group : this.groups) {
-            String groupName = encapsulate(group);
-            snippet.append(groupName)
-                   .append(COMMA)
-                   .append(SPACE);
+    protected String traverseColumns() {
+        if (!this.columns.isEmpty()) {
+            StringBuilder snippet = new StringBuilder();
+            for (String column : this.columns) {
+                String columnName = encapsulate(column);
+                snippet.append(columnName)
+                       .append(COMMA)
+                       .append(SPACE);
+            }
+            return snippet.substring(0, snippet.length() - 2);
         }
-        return snippet.substring(0, snippet.length() - 2);
+        return STAR;
     }
 
     /**
-     * Traverse unions.
+     * Generate distinct.
      *
-     * @return the string
+     * @param sql the sql
      */
-    protected String traverseUnions() {
-        StringBuilder snippet = new StringBuilder();
-        for (String unionSQL : this.unions) {
-            snippet.append(unionSQL)
-                   .append(SPACE);
+    protected void generateDistinct(StringBuilder sql) {
+        if (distinct) {
+            sql.append(SPACE)
+               .append(KEYWORD_DISTINCT);
         }
-        return snippet.substring(0, snippet.length() - 1);
+    }
+
+    /**
+     * Generate for update.
+     *
+     * @param sql the sql
+     */
+    protected void generateForUpdate(StringBuilder sql) {
+        if (forUpdate) {
+            sql.append(SPACE)
+               .append(KEYWORD_FOR_UPDATE);
+        }
     }
 
     /**

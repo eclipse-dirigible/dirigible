@@ -12,11 +12,44 @@ package org.eclipse.dirigible.commons.api.helpers;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Date;
+import java.sql.Time;
+import java.sql.Timestamp;
 import java.util.Calendar;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class DateTimeUtilsTest {
+
+    @Test
+    void testOptionallyParseDateTime() {
+        Optional<Timestamp> timestamp = DateTimeUtils.optionallyParseDateTime("2025/10/20 23:11:22.000000");
+        assertThat(timestamp).isNotEmpty();
+
+        Optional<Timestamp> timestamp2 = DateTimeUtils.optionallyParseDateTime("invalid timestamp");
+        assertThat(timestamp2).isEmpty();
+    }
+
+    @Test
+    void testOptionallyParseDate() {
+        Optional<Date> date = DateTimeUtils.optionallyParseDate("20250114");
+        assertThat(date).isNotEmpty();
+
+        Optional<Date> date2 = DateTimeUtils.optionallyParseDate("invalid date");
+        assertThat(date2).isEmpty();
+
+        Optional<Date> date3 = DateTimeUtils.optionallyParseDate("2025-07-02T00:00:00.000Z");
+        assertThat(date3).isNotEmpty();
+    }
+
+    @Test
+    void testOptionallyParseTime() {
+        Optional<Time> time = DateTimeUtils.optionallyParseTime("23:11:22.000000");
+        assertThat(time).isNotEmpty();
+
+        Optional<Time> time2 = DateTimeUtils.optionallyParseTime("invalid time");
+        assertThat(time2).isEmpty();
+    }
 
     @Test
     void testParseDate() {
