@@ -42,19 +42,22 @@ public class IDE {
     private final WorkbenchFactory workbenchFactory;
     private final DatabasePerspectiveFactory databasePerspectiveFactory;
     private final GitPerspectiveFactory gitPerspectiveFactory;
+    private final OperationsPerspectiveFactory operationsPerspectiveFactory;
 
     @Autowired
     IDE(Browser browser, RestAssuredExecutor restAssuredExecutor, WorkbenchFactory workbenchFactory,
-            DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory) {
+            DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory,
+            OperationsPerspectiveFactory operationsPerspectiveFactory) {
         this(browser, DirigibleTestTenant.createDefaultTenant()
                                          .getUsername(),
                 DirigibleTestTenant.createDefaultTenant()
                                    .getPassword(),
-                restAssuredExecutor, workbenchFactory, databasePerspectiveFactory, gitPerspectiveFactory);
+                restAssuredExecutor, workbenchFactory, databasePerspectiveFactory, gitPerspectiveFactory, operationsPerspectiveFactory);
     }
 
     IDE(Browser browser, String username, String password, RestAssuredExecutor restAssuredExecutor, WorkbenchFactory workbenchFactory,
-            DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory) {
+            DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory,
+            OperationsPerspectiveFactory operationsPerspectiveFactory) {
         this.browser = browser;
         this.restAssuredExecutor = restAssuredExecutor;
         this.username = username;
@@ -62,6 +65,7 @@ public class IDE {
         this.workbenchFactory = workbenchFactory;
         this.databasePerspectiveFactory = databasePerspectiveFactory;
         this.gitPerspectiveFactory = gitPerspectiveFactory;
+        this.operationsPerspectiveFactory = operationsPerspectiveFactory;
     }
 
     public Browser getBrowser() {
@@ -94,6 +98,14 @@ public class IDE {
         browser.clickOnElementById("perspective-database");
 
         return databasePerspectiveFactory.create(browser);
+    }
+
+    public OperationsPerspective openOperationsPerspective() {
+        openHomePage();
+
+        browser.clickOnElementById("perspective-operations");
+
+        return operationsPerspectiveFactory.create(browser);
     }
 
     public void openHomePage() {
