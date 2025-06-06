@@ -15,7 +15,7 @@ public class OperationsPerspective {
     }
 
     public void assertExtensionPointIsPresent(String extensionPointFileName, String extensionFileName) {
-        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, "test1");
+        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, "CreateExtensionPointIT");
         browser.assertElementExistsByTypeAndText(HtmlElementType.ANCHOR, extensionPointFileName);
         browser.assertElementExistsByTypeAndText(HtmlElementType.ANCHOR, extensionFileName);
     }
