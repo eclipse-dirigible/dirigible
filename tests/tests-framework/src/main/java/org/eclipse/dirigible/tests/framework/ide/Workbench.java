@@ -9,10 +9,12 @@
  */
 package org.eclipse.dirigible.tests.framework.ide;
 
+import org.apache.commons.lang3.SystemUtils;
 import org.eclipse.dirigible.tests.framework.browser.Browser;
 import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.util.SynchronizationUtil;
+import org.openqa.selenium.Keys;
 
 public class Workbench {
 
@@ -114,6 +116,20 @@ public class Workbench {
 
     public void saveAll() {
         browser.clickOnElementByAttributeValue(HtmlElementType.BUTTON, HtmlAttribute.GLYPH, "sap-icon--save");
+    }
+
+    public void selectAll() {
+        if (SystemUtils.IS_OS_MAC)
+            browser.pressMultipleKeys(Keys.COMMAND, "a");
+        else
+            browser.pressMultipleKeys(Keys.CONTROL, "a");
+    }
+
+
+    public void addContentToField(String fieldId, String fieldContent) {
+        browser.clickOnElementById(fieldId);
+        selectAll();
+        browser.type(fieldContent);
     }
 
 }

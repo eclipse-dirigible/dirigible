@@ -27,11 +27,8 @@ public class CreateRolesDefinitionIT extends UserInterfaceIntegrationTest {
 
         workbench.openDialogFromButton("Add");
 
-        browser.clickOnElementById("reriName");
-        browser.type(ROLE_NAME);
-
-        browser.clickOnElementById("reriRoles");
-        browser.type(ROLE_DESCRIPTION);
+        workbench.addContentToField("reriName", ROLE_NAME);
+        workbench.addContentToField("reriRoles", ROLE_DESCRIPTION);
 
         browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.LABEL, "Add");
         workbench.saveAll();
