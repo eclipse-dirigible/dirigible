@@ -15,6 +15,7 @@ public class CreateExtensionPointIT extends UserInterfaceIntegrationTest {
     private static final String EXTENSION_POINT_FILE_NAME = "test1.extensionpoint";
     private static final String JS_FILE_NAME = "test1.mjs";
     private static final String EXTENSION_FILE_NAME = "test1.extension";
+    private static final String EXTENSION_POINT_NAME = "test1";
 
     @Test
     void test() {
@@ -28,7 +29,7 @@ public class CreateExtensionPointIT extends UserInterfaceIntegrationTest {
 
         browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.ID, "idName");
         workbench.selectAll();
-        browser.type("test1");
+        browser.type(EXTENSION_POINT_NAME);
 
         workbench.saveAll();
         workbench.publishAll(true);
@@ -43,11 +44,9 @@ public class CreateExtensionPointIT extends UserInterfaceIntegrationTest {
         assertFileTabIsOpen(EXTENSION_FILE_NAME);
 
         browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.GLYPH, "sap-icon--navigation-down-arrow");
-        browser.clickOnElementWithText(HtmlElementType.SPAN, "test1");
+        browser.clickOnElementWithText(HtmlElementType.SPAN, EXTENSION_POINT_NAME);
 
-        browser.clickOnElementById("idModule");
-        workbench.selectAll();
-        browser.type("/CreateExtensionPointIT/test1.mjs");
+        workbench.addContentToField("idModule", "/CreateExtensionPointIT/test1.mjs");
 
         workbench.saveAll();
         workbench.publishAll(true);

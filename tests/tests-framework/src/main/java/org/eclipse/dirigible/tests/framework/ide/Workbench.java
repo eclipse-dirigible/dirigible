@@ -120,4 +120,10 @@ public class Workbench {
         browser.clickOnElementByAttributeValue(HtmlElementType.BUTTON, HtmlAttribute.GLYPH, "sap-icon--save");
     }
 
+    public void addContentToField(String fieldId, String fieldContent) {
+        browser.clickOnElementById(fieldId);
+        selectAll();
+        browser.type(fieldContent);
+    }
+
 }
