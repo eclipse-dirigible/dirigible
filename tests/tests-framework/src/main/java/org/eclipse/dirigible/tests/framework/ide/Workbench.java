@@ -125,5 +125,4 @@ public class Workbench {
         selectAll();
         browser.type(fieldContent);
     }
-
 }
