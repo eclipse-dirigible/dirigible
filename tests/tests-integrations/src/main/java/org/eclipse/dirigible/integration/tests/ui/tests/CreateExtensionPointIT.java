@@ -7,8 +7,6 @@ import org.eclipse.dirigible.tests.framework.ide.OperationsPerspective;
 import org.eclipse.dirigible.tests.framework.ide.Workbench;
 import org.junit.jupiter.api.Test;
 
-
-
 public class CreateExtensionPointIT extends UserInterfaceIntegrationTest {
 
     private static final String PROJECT_NAME = "CreateExtensionPointIT";
