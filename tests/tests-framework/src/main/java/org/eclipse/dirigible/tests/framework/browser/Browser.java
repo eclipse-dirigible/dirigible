@@ -28,6 +28,8 @@ public interface Browser {
 
     void enterTextInElementByAttributePattern(String elementType, String attribute, String pattern, String text);
 
+    void maximizeBrowser();
+
     void enterTextInElementById(String elementId, String text);
 
     void assertElementExistsByTypeAndText(HtmlElementType elementType, String text);

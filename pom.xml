@@ -118,7 +118,7 @@
 
         <!-- Spring -->
         <spring.boot.version>3.5.0</spring.boot.version>
-        <spring.admin.version>3.4.7</spring.admin.version>
+        <spring.admin.version>3.5.0</spring.admin.version>
         <springdoc.version>2.8.8</springdoc.version>
 
         <!-- Webjars -->
@@ -143,7 +143,7 @@
         <jaxb.version>2.3.1</jaxb.version>
 
         <!-- Lucene -->
-        <lucene.version>9.12.0</lucene.version>
+        <lucene.version>10.2.1</lucene.version>
 
         <!-- Chemistry -->
         <chemistry.version>1.1.0</chemistry.version>
@@ -160,13 +160,13 @@
         <activemq.version>6.1.0</activemq.version>
 
         <!-- Camel -->
-        <camel.version>4.10.2</camel.version>
+        <camel.version>4.12.0</camel.version>
 
         <!-- Velocity -->
         <velocity.version>2.4</velocity.version>
 
         <!-- JGit -->
-        <jgit.version>6.10.0.202406032230-r</jgit.version>
+        <jgit.version>7.2.0.202503040940-r</jgit.version>
 
         <!-- Flowable -->
         <flowable.version>7.1.0</flowable.version>
@@ -178,18 +178,18 @@
         <!-- JDBC -->
         <mongodb.version>3.12.14</mongodb.version>
         <ngdbc.version>2.24.8</ngdbc.version>
-        <snowflake.version>3.24.1</snowflake.version>
+        <snowflake.version>3.24.2</snowflake.version>
         <mysql.version>8.4.0</mysql.version>
 
         <!-- QLDB -->
         <qldb.driver.version>2.3.1</qldb.driver.version>
-        <qldb.sdk.version>1.12.783</qldb.sdk.version>
+        <qldb.sdk.version>1.12.785</qldb.sdk.version>
 
         <!-- jETCD -->
         <jetcd.core.version>0.8.5</jetcd.core.version>
 
         <!-- Various -->
-        <c3p0.version>0.11.0-pre2</c3p0.version>
+        <c3p0.version>0.11.1</c3p0.version>
         <guava.version>33.4.8-jre</guava.version>
         <icu4j.version>77.1</icu4j.version>
         <classgraph.version>4.8.179</classgraph.version>
@@ -218,7 +218,7 @@
         <bpmn-visualization.version>0.46.0</bpmn-visualization.version>
 
         <!-- Tests -->
-        <testcontainers.version>1.21.0</testcontainers.version>
+        <testcontainers.version>1.21.1</testcontainers.version>
         <selenide.version>7.9.3</selenide.version>
 
         <profile.content.phase>none</profile.content.phase>
