@@ -14,6 +14,8 @@
     --font_color: var(--sapField_TextColor, #303030);
     --stroke_color: var(--sapField_TextColor, #303030);
     --font: "72", "72full", Arial, Helvetica, sans-serif;
+    --badgePositive: var(--sapPositiveColor, #26a264);
+    --badgeNegative: var(--sapNegativeTextColor, #e01b24);
 }
 
 #bpmn-container {
@@ -27,6 +29,20 @@
     overflow: hidden;
 }
 
-.highlight>rect {
-    stroke: var(--sapSuccessBorderColor, #26a264) !important;
+#bpmn-container .clickable {
+    cursor: pointer;
+}
+
+#bpmn-container .highlight>rect {
+    stroke: var(--sapHighlightColor, #fecc04) !important;
+}
+
+#bpmn-container .overlay-badge {
+    font-weight: bold;
+    text-shadow: -1px -1px 0 #0000001A, 1px -1px 0 #0000001A, -1px 1px 0 #0000001A, 1px 1px 0 #0000001A;
+}
+
+#bpmn-container .overlay-badge rect {
+    stroke-width: 0.5rem;
+    rx: 0.25rem;
 }

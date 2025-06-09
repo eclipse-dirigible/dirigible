@@ -483,7 +483,12 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
     }
 
     @GetMapping(value = "/bpm-processes/instance/{id}/active")
-    public ResponseEntity<List<String>> getProcessInstanceActiveActivityIds(@PathVariable("id") String id) {
+    public ResponseEntity<Map<String, ActivityStatusData>> getProcessInstanceActiveActivityIds(@PathVariable("id") String id) {
         return ResponseEntity.ok(bpmService.getProcessInstanceActiveActivityIds(id));
+    }
+
+    @GetMapping(value = "/bpm-processes/definition/{id}/active")
+    public ResponseEntity<Map<String, ActivityStatusData>> getProcessDefinitionActiveActivityIds(@PathVariable("id") String id) {
+        return ResponseEntity.ok(bpmService.getProcessDefinitionActiveActivityIds(id));
     }
 }

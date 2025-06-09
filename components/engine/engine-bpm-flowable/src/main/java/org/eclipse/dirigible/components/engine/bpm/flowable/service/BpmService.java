@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.engine.bpm.flowable.config.BpmProviderFlowable;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActivityStatusData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessDefinitionData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessInstanceData;
 import org.eclipse.dirigible.components.ide.workspace.domain.File;
@@ -437,7 +438,17 @@ public class BpmService {
      * @param processInstanceId the instance id
      * @return the process instance active activity ids
      */
-    public List<String> getProcessInstanceActiveActivityIds(String processInstanceId) {
+    public Map<String, ActivityStatusData> getProcessInstanceActiveActivityIds(String processInstanceId) {
         return bpmProviderFlowable.getProcessInstanceActiveActivityIds(processInstanceId);
+    }
+
+    /**
+     * Gets the process definition active activity ids by definition id.
+     *
+     * @param processDefinitionId the definition id
+     * @return the process definition active activity ids
+     */
+    public Map<String, ActivityStatusData> getProcessDefinitionActiveActivityIds(String processDefinitionId) {
+        return bpmProviderFlowable.getProcessDefinitionActiveActivityIds(processDefinitionId);
     }
 }

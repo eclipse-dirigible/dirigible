@@ -11,87 +11,35 @@
     SPDX-License-Identifier: EPL-2.0
 
 -->
-<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="bpm-process-viewer" ng-controller="BpmProcessViewerController">
 
-    <head>
-        <meta charset="UTF-8" />
-        <title>Process Viewer</title>
-        <script src="https://cdn.jsdelivr.net/npm/bpmn-visualization@0.46.0/dist/bpmn-visualization.min.js"></script>
-        <style>
-            #bpmn-container {
-                height: 600px;
-                border: 0px;
-                margin-top: 20px;
-            }
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+    <title config-title></title>
+    <script type="text/javascript" src="/services/web/perspective-processes/configs/bpm-process-viewer.js"></script>
+    <script src="/webjars/bpmn-visualization/dist/bpmn-visualization.min.js"></script>
+    <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+    <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+    <link type="text/css" rel="stylesheet" href="/services/web/perspective-processes/views/styles/bpm-process-viewer.css" />
+    <script type="text/javascript" src="/services/web/perspective-processes/views/js/bpm-process-viewer.js"></script>
+  </head>
 
-        </style>
-    </head>
+  <body class="bk-vbox">
+    <bk-toolbar id="toolbarContainer" ng-show="!state.isBusy">
+      <bk-toolbar-spacer></bk-toolbar-spacer>
+      <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="refresh()" ng-disabled="!processId"></bk-button>
+      <bk-toolbar-separator></bk-toolbar-separator>
+      <bk-button state="transparent" glyph="sap-icon--zoom-in" aria-label="Zoom in" title="Zoom in" ng-click="zoomIn()" ng-disabled="!processId"></bk-button>
+      <bk-button state="transparent" glyph="sap-icon--zoom-out" aria-label="Zoom out" title="Zoom out" ng-click="zoomOut()" ng-disabled="!processId"></bk-button>
+      <bk-button state="transparent" icon-path="/services/web/resources/images/actual-size.svg" aria-label="Actual size" title="Actual size" ng-click="actualSize()" ng-disabled="!processId"></bk-button>
+      <bk-button state="transparent" glyph="sap-icon--full-screen" aria-label="Fit to screen" title="Fit" ng-click="fit()" ng-disabled="!processId"></bk-button>
+    </bk-toolbar>
+    <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="!state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
+    <div id="bpmn-container" class="bk-fill-parent" style="visibility: {{ (!state.isBusy && processId) ? 'visible' : 'hidden' }}"></div>
+    <theme></theme>
+  </body>
 
-    <body>
-        <div id="bpmn-container"></div>
-
-        <script>
-            const bpmnVisualization = new window.bpmnvisu.BpmnVisualization({
-      container: 'bpmn-container',
-    });
-
-    function getQueryParam(param) {
-      const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get(param);
-    }
-
-    function loadBpmnFromApi(processId, instanceId) {
-      const endpoint = `/services/bpm/bpm-processes/definition/bpmn?id=${encodeURIComponent(processId)}`;
-      fetch(endpoint)
-        .then(response => {
-          if (!response.ok) {
-            throw new Error(`Failed to fetch BPMN XML for process definition id: ${processId}`);
-          }
-          return response.text();
-        })
-        .then(bpmnXml => {
-          bpmnVisualization.load(bpmnXml);
-          if (instanceId) {
-            const activeEndpoint = `/services/bpm/bpm-processes/instance/${encodeURIComponent(instanceId)}/active`;
-            fetch(activeEndpoint)
-                    .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`Failed to fetch active activities for process instance: ${instanceId}`);
-                    }
-                    return response.text();
-                    })
-                    .then(activities => {
-                        JSON.parse(activities).forEach((activity) => bpmnVisualization.bpmnElementsRegistry.addCssClasses(activity, ['highlight']))
-                    })
-          }
-        })
-        .catch(error => {
-          console.error('Error loading BPMN:', error);
-        });
-    }
-
-    // Load on DOMContentLoaded
-    document.addEventListener('DOMContentLoaded', () => {
-      const processId = getQueryParam('definitionId');
-      const instanceId = getQueryParam('instanceId');
-      if (processId) {
-        loadBpmnFromApi(processId, instanceId);
-      } else {
-        console.warn('No `id` parameter provided in URL.');
-      }
-    });
-
-    // Highlight style definition
-    const style = document.createElement('style');
-    style.textContent = `
-      .highlight > rect {
-        fill: #d9ead3 !important;
-        stroke: #6aa84f !important;
-        stroke-width: 3;
-      }
-    `;
-    document.head.appendChild(style);
-        </script>
-    </body>
 </html>

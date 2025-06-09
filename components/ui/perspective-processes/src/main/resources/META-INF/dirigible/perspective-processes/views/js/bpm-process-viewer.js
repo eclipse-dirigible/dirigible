@@ -10,17 +10,15 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const bpmProcessViewer = angular.module('bpm-process-viewer', ['platformView', 'blimpKit']);
-bpmProcessViewer.constant('MessageHub', new MessageHubApi());
-bpmProcessViewer.controller('BpmProcessViewerController', ($scope, $http, MessageHub) => {
+bpmProcessViewer.constant('Dialogs', new DialogHub());
+bpmProcessViewer.controller('BpmProcessViewerController', ($scope, $http, Dialogs) => {
     $scope.state = {
         isBusy: false,
-        error: false,
         busyText: 'Loading...',
     };
 
     $scope.processId = '';
     let instanceId = '';
-    const activities = [];
 
     const bpmnVisualization = new bpmnvisu.BpmnVisualization({ container: 'bpmn-container', navigation: { enabled: true } });
     let style = bpmnVisualization.graph.getStylesheet().getDefaultVertexStyle();
@@ -45,13 +43,10 @@ bpmProcessViewer.controller('BpmProcessViewerController', ($scope, $http, Messag
         if (historic) endpoint = `/services/bpm/bpm-processes/historic-instances/${instanceId}/variables`;
         else endpoint = `/services/bpm/bpm-processes/instance/${instanceId}/active`;
         $http.get(endpoint).then((response) => {
-            if (historic) {
-                // TODO
-            } else {
-                activities.forEach((activity) => bpmnVisualization.bpmnElementsRegistry.removeCssClasses(activity, ['highlight']));
-                activities.length = 0;
-                activities.push(...response.data);
-                activities.forEach((activity) => bpmnVisualization.bpmnElementsRegistry.addCssClasses(activity, ['highlight']));
+            if (!historic) {
+                for (const [key, value] of Object.entries(response.data)) {
+                    setBadges(key, getBadgeConfig(value));
+                }
             }
         }, (error) => {
             console.error(`Failed to fetch active activities for process instance: ${instanceId}`, error);
@@ -76,19 +71,78 @@ bpmProcessViewer.controller('BpmProcessViewerController', ($scope, $http, Messag
     function loadBpmnFromApi() {
         $http.get(`/services/bpm/bpm-processes/definition/bpmn?id=${$scope.processId}`).then((response) => {
             bpmnVisualization.load(prepareXmlString(response.data), { fit: { type: bpmnvisu.FitType.None, margin: 16 } });
-            if (instanceId) {
-                loadActivities();
-            } else {
-                $scope.$evalAsync(() => {
-                    $scope.state.isBusy = false;
-                });
-            }
+            // makeClickable();
+            loadBadges();
+            if (instanceId) loadActivities();
+            else $scope.$evalAsync(() => {
+                $scope.state.isBusy = false;
+            });
         }, (error) => {
             console.error(`Failed to fetch active activities for process instance: ${instanceId}`, error);
             $scope.$evalAsync(() => {
                 $scope.state.isBusy = false;
             });
         });
+    }
+
+    // function makeClickable() {
+    //     const elements = bpmnVisualization.bpmnElementsRegistry.getElementsByKinds([
+    //         bpmnvisu.ShapeBpmnElementKind.TASK,
+    //         bpmnvisu.ShapeBpmnElementKind.TASK_USER,
+    //         bpmnvisu.ShapeBpmnElementKind.TASK_MANUAL,
+    //         bpmnvisu.ShapeBpmnElementKind.TASK_SERVICE
+    //     ]);
+    //     for (let e = 0; e < elements.length; e++) {
+    //         bpmnVisualization.bpmnElementsRegistry.addCssClasses(elements[e].bpmnSemantic.id, ['clickable']);
+    //         elements[e].htmlElement.onclick = () => {
+    //             bpmnVisualization.bpmnElementsRegistry.toggleCssClasses(elements[e].bpmnSemantic.id, ['highlight']);
+    //         };
+    //     }
+    // }
+
+    function loadBadges(hideBusy = false) {
+        $http.get(`/services/bpm/bpm-processes/definition/${$scope.processId}/active`).then((response) => {
+            for (const [key, value] of Object.entries(response.data)) {
+                setBadges(key, getBadgeConfig(value));
+            }
+        }, (error) => {
+            console.error(`Failed to fetch badge data for definition: ${$scope.processId}`, error);
+        }).finally(() => {
+            if (hideBusy) $scope.$evalAsync(() => {
+                $scope.state.isBusy = false;
+            })
+        });
+    }
+
+    function getBadgeConfig(data) {
+        let badges = [];
+        if (data.negative) {
+            badges.push({
+                position: 'bottom-right',
+                label: data.negative.toString(),
+                style: {
+                    font: { color: 'var(--font_color)', size: 14 },
+                    fill: { color: 'var(--badgeNegative)' },
+                    stroke: { color: 'var(--badgeNegative)' }
+                }
+            });
+        }
+        if (data.positive) {
+            badges.push({
+                position: 'bottom-left',
+                label: data.positive.toString(),
+                style: {
+                    font: { color: 'var(--font_color)', size: 14 },
+                    fill: { color: 'var(--badgePositive)' },
+                    stroke: { color: 'var(--badgePositive)' }
+                }
+            });
+        }
+        return badges;
+    }
+
+    function setBadges(id, badges) {
+        bpmnVisualization.bpmnElementsRegistry.addOverlays(id, badges);
     }
 
     $scope.zoomIn = () => bpmnVisualization.navigation.graph.zoomIn();
@@ -99,54 +153,73 @@ bpmProcessViewer.controller('BpmProcessViewerController', ($scope, $http, Messag
 
     $scope.fit = () => bpmnVisualization.navigation.fit({ type: bpmnvisu.FitType.Center, margin: 16 });
 
-    MessageHub.addMessageListener({
-        topic: 'bpm.diagram.definition',
+    $scope.refresh = () => {
+        $scope.state.isBusy = true;
+        loadBpmnFromApi();
+    };
+
+    let defIntervalId = setInterval(() => {
+        if (!$scope.processId) Dialogs.triggerEvent('bpm.process.instances.get-definition');
+        else cancelInterval();
+    }, 300);
+
+    function cancelInterval() {
+        defIntervalId = clearInterval(defIntervalId);
+    }
+
+    Dialogs.addMessageListener({
+        topic: 'bpm.definition.selected',
         handler: (data) => {
-            $scope.$evalAsync(() => {
-                $scope.state.isBusy = true;
-                if (!data.hasOwnProperty('definition')) {
-                    $scope.state.error = true;
-                    $scope.errorMessage = 'The \'definition\' parameter is missing.';
+            if (data.noData) cancelInterval();
+            else $scope.$evalAsync(() => {
+                if (!data.hasOwnProperty('id')) {
+                    console.error('The definition \'id\' parameter is missing.');
+                    Dialogs.showAlert({
+                        title: 'Missing data',
+                        message: 'Process definition id is missing from event!',
+                        type: AlertTypes.Error,
+                        preformatted: false,
+                    });
                 } else {
-                    $scope.processId = data.definition;
-                    instanceId = '';
-                    $scope.state.error = false;
-                    loadBpmnFromApi();
+                    if (defIntervalId) cancelInterval();
+                    if ($scope.processId !== data.id) {
+                        $scope.state.isBusy = true;
+                        $scope.processId = data.id;
+                        instanceId = '';
+                        loadBpmnFromApi();
+                    }
                 }
             });
         }
     });
 
-    MessageHub.addMessageListener({
+    Dialogs.addMessageListener({
         topic: 'bpm.diagram.instance',
         handler: (data) => {
             if ($scope.processId) $scope.$evalAsync(() => {
                 $scope.state.isBusy = true;
-                if (!data.hasOwnProperty('instance')) {
-                    $scope.state.error = true;
-                    $scope.errorMessage = 'The \'instance\' parameter is missing.';
+                if (data.deselect) {
+                    loadBadges(true);
                 } else {
-                    instanceId = data.instance;
-                    $scope.state.error = false;
-                    loadActivities();
+                    if (!data.hasOwnProperty('instance')) {
+                        console.error('The \'instance\' parameter is missing.');
+                    } else {
+                        instanceId = data.instance;
+                        loadActivities();
+                    }
                 }
             });
         }
     });
 
-    MessageHub.addMessageListener({
+    Dialogs.addMessageListener({
         topic: 'bpm.historic.instance.selected',
         handler: (data) => {
-            if ($scope.processId === data.definition) $scope.$evalAsync(() => {
+            $scope.$evalAsync(() => {
+                $scope.processId === data.definition
                 $scope.state.isBusy = true;
-                if (!data.hasOwnProperty('instance')) {
-                    $scope.state.error = true;
-                    $scope.errorMessage = 'The \'instance\' parameter is missing.';
-                } else {
-                    instanceId = data.instance;
-                    $scope.state.error = false;
-                    loadActivities(true);
-                }
+                instanceId = '';
+                loadBpmnFromApi();
             });
         }
     });

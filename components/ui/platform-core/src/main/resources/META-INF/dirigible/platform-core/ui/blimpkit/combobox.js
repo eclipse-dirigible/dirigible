@@ -62,7 +62,7 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
 
                     if (!scope.multiSelect) {
                         const selectedItem = scope.dropdownItems.find(x => x.value === selectedValue);
-                        scope.search.term = selectedItem ? selectedItem.text : '';
+                        scope.search.term = selectedItem ? selectedItem.text.toString() : '';
                         scope.clearFilter();
                     } else {
                         if (selectedValue === undefined) {
@@ -126,16 +126,16 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
                 scope.filterValues();
 
                 if (!scope.multiSelect) {
-                    const item = scope.dropdownItems.find(x => x.text.toLowerCase() === scope.search.term.toLowerCase());
+                    const item = scope.dropdownItems.find(x => x.text.toString().toLowerCase() === scope.search.term.toLowerCase());
                     scope.selectedValue = item ? item.value : null;
                 }
             };
 
-            const filterStartsWith = (x) => x.text.toLowerCase().startsWith(scope.search.term.toLowerCase());
-            const filterContains = (x) => x.text.toLowerCase().includes(scope.search.term.toLowerCase());
+            const filterStartsWith = (x) => x.text.toString().toLowerCase().startsWith(scope.search.term.toLowerCase());
+            const filterContains = (x) => x.text.toString().toLowerCase().includes(scope.search.term.toLowerCase());
             const filterContainsEach = (x) => {
                 const terms = scope.search.term.toLowerCase().split(' ');
-                const label = x.text.toLowerCase();
+                const label = x.text.toString().toLowerCase();
                 if (terms.every(term => label.includes(term))) return true;
                 return false;
             };
@@ -214,7 +214,7 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
                         scope.selectedValue.push(item.value);
                 } else {
                     scope.selectedValue = item.value;
-                    scope.search.term = item.text;
+                    scope.search.term = item.text.toString();
                     scope.clearFilter();
                 }
 
@@ -303,7 +303,7 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
             <div class="fd-popover__control" ng-attr-disabled="{{isDisabled === true}}" ng-attr-aria-disabled="{{isDisabled === true}}" aria-expanded="{{ isBodyExpanded() }}" aria-haspopup="{{isReadonly ? 'false' : 'true'}}" aria-controls="{{ bodyId }}" ng-readonly="isReadonly">
                 <bk-input-group ng-if="!isReadonly" compact="compact" class="fd-input-group--control" state="{{ state }}" is-disabled="isDisabled">
                     <bk-tokenizer ng-if="multiSelect">
-                        <bk-token ng-repeat="item in getSelectedItems()" close-clicked="onTokenClick(item)" label="{{item.text}}" close-aria-label="unselect option: {{item.text}}" tabindex="0"></bk-token>
+                        <bk-token ng-repeat="item in getSelectedItems() track by item.value" close-clicked="onTokenClick(item)" label="{{item.text}}" close-aria-label="unselect option: {{item.text}}" tabindex="0"></bk-token>
                         <bk-token-indicator></bk-token-indicator>
                         <bk-input ng-attr-id="{{ inputId }}" type="text" autocomplete="off" placeholder="{{ placeholder }}" ng-focus="openDropdown()" ng-change="onInputChange()" ng-model="search.term" ng-keydown="onSearchKeyDown($event)"></bk-input>
                     </bk-tokenizer>
@@ -318,14 +318,14 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
                 <div class="fd-popover__wrapper" bk-scrollbar style="max-height:{{ maxBodyHeight || defaultHeight }}px;">
                     <bk-list-message ng-if="message" type="{{ state }}">{{ message }}</bk-list-message>
                     <bk-list class="{{getListClasses()}}" dropdown-mode="true" compact="compact" has-message="!!message" aria-label="{{listAriaLabel}}">
-                        <bk-list-item ng-repeat="item in filteredDropdownItems" role="option" tabindex="0" selected="isSelected(item)" ng-click="onItemClick(item)">
+                        <bk-list-item ng-repeat="item in filteredDropdownItems track by item.value" role="option" tabindex="0" selected="isSelected(item)" ng-click="onItemClick(item)">
                             <bk-list-form-item ng-if="multiSelect">
                                 <bk-checkbox id="{{getCheckboxId(item.value)}}" compact="compact" ng-checked="isSelected(item)"></bk-checkbox>
                                 <bk-checkbox-label empty="true" compact="compact" for="{{getCheckboxId(item.value)}}" ng-click="$event.preventDefault()" tabindex="-1"></bk-checkbox-label>
                             </bk-list-form-item>
                             <bk-list-icon ng-if="item.glyph || item.svg" glyph="{{item.glyph}}" svg-path="{{item.svg}}"></bk-list-icon>
                             <bk-list-title>
-                                <span ng-if="search.term && shouldRenderHighlightedText(item.text)" class="fd-list__bold">{{ getHighlightedText(item.text) }}</span>{{ getLabel(item.text) }}
+                                <span ng-if="search.term && shouldRenderHighlightedText(item.text.toString())" class="fd-list__bold">{{ getHighlightedText(item.text.toString()) }}</span>{{ getLabel(item.text.toString()) }}
                             </bk-list-title>
                             <bk-list-seconday ng-if="item.secondaryText">{{ item.secondaryText }}</bk-list-seconday>
                         </bk-list-item>
