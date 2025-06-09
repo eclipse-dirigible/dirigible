@@ -25,9 +25,7 @@ public class CreateExtensionPointIT extends UserInterfaceIntegrationTest {
         workbench.openFile(EXTENSION_POINT_FILE_NAME);
         assertFileTabIsOpen(EXTENSION_POINT_FILE_NAME);
 
-        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.ID, "idName");
-        workbench.selectAll();
-        browser.type(EXTENSION_POINT_NAME);
+        addExtensionPointName(workbench);
 
         workbench.saveAll();
         workbench.publishAll(true);
@@ -41,16 +39,27 @@ public class CreateExtensionPointIT extends UserInterfaceIntegrationTest {
         browser.doubleClickOnElementById("j1_6_anchor");
         assertFileTabIsOpen(EXTENSION_FILE_NAME);
 
-        browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.GLYPH, "sap-icon--navigation-down-arrow");
-        browser.clickOnElementWithText(HtmlElementType.SPAN, EXTENSION_POINT_NAME);
-
-        workbench.addContentToField("idModule", "/CreateExtensionPointIT/test1.mjs");
+        configureExtensionFields(workbench);
 
         workbench.saveAll();
         workbench.publishAll(true);
 
         OperationsPerspective operationsPerspective = ide.openOperationsPerspective();
         operationsPerspective.assertExtensionPointIsPresent(EXTENSION_POINT_FILE_NAME, EXTENSION_FILE_NAME);
+    }
+
+    private void configureExtensionFields(Workbench workbench) {
+        browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.GLYPH, "sap-icon--navigation-down-arrow");
+        browser.clickOnElementWithText(HtmlElementType.SPAN, EXTENSION_POINT_NAME);
+
+        workbench.addContentToField("idModule", "/CreateExtensionPointIT/test1.mjs");
+
+    }
+
+    private void addExtensionPointName(Workbench workbench) {
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.ID, "idName");
+        workbench.selectAll();
+        browser.type(EXTENSION_POINT_NAME);
     }
 
     private void assertFileTabIsOpen(String fileName) {
