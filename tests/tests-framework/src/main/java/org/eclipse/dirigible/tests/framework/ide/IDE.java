@@ -88,13 +88,17 @@ public class IDE {
         browser.assertElementExistsByTypeAndText(HtmlElementType.SPAN, expectedMessage);
     }
 
-    public void openPath(String path) {
-        openPath(path, false);
+    public DatabasePerspective openDatabasePerspective() {
+        openHomePage();
+
+        browser.clickOnElementById("perspective-database");
+
+        return databasePerspectiveFactory.create(browser);
     }
 
-    public void openPath(String path, boolean forceLogin) {
-        browser.openPath(path);
-        login(forceLogin);
+    public void openHomePage() {
+        browser.openPath(ROOT_PATH);
+        login(false);
     }
 
     public void login(boolean forceLogin) {
@@ -111,19 +115,6 @@ public class IDE {
     private boolean isLoginPageOpened() {
         String pageTitle = browser.getPageTitle();
         return LOGIN_PAGE_TITLE.equals(pageTitle);
-    }
-
-    public DatabasePerspective openDatabasePerspective() {
-        openHomePage();
-
-        browser.clickOnElementById("perspective-database");
-
-        return databasePerspectiveFactory.create(browser);
-    }
-
-    public void openHomePage() {
-        browser.openPath(ROOT_PATH);
-        login(false);
     }
 
     public GitPerspective openGitPerspective() {
@@ -171,5 +162,18 @@ public class IDE {
     public void close() {
         browser.clearCookies();
         browser.close();
+    }
+
+    public void openInbox() {
+        openPath("/services/web/inbox/");
+    }
+
+    public void openPath(String path) {
+        openPath(path, false);
+    }
+
+    public void openPath(String path, boolean forceLogin) {
+        browser.openPath(path);
+        login(forceLogin);
     }
 }

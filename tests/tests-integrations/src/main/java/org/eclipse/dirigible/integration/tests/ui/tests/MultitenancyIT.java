@@ -9,30 +9,22 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.eclipse.dirigible.commons.config.DirigibleConfig;
-import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.browser.Browser;
 import org.eclipse.dirigible.tests.framework.browser.BrowserFactory;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
 
-public class MultitenancyIT extends UserInterfaceIntegrationTest {
+public class MultitenancyIT extends MultitenancyUserInterfaceIntegrationTest {
 
     @Autowired
     private MultitenancyITTestProject testProject;
 
     @Autowired
     private BrowserFactory browserFactory;
-
-    @BeforeAll
-    public static void setUp() {
-        DirigibleConfig.MULTI_TENANT_MODE_ENABLED.setBooleanValue(true);
-    }
 
     @Test
     void testOpenNotRegisteredTenant() {
@@ -43,22 +35,9 @@ public class MultitenancyIT extends UserInterfaceIntegrationTest {
 
     @Test
     void verifyTestProject() {
-        List<DirigibleTestTenant> tenants = createTenants();
-        waitForTenantsProvisioning(tenants);
+        List<DirigibleTestTenant> tenants = provisionTenants();
 
         testProject.test(tenants);
-    }
-
-    private List<DirigibleTestTenant> createTenants() {
-        DirigibleTestTenant defaultTenant = DirigibleTestTenant.createDefaultTenant();
-        DirigibleTestTenant tenant1 = new DirigibleTestTenant("test-tenant-1");
-        DirigibleTestTenant tenant2 = new DirigibleTestTenant("test-tenant-2");
-
-        List<DirigibleTestTenant> tenants = List.of(defaultTenant, tenant1, tenant2);
-
-        createTenants(tenants);
-
-        return tenants;
     }
 
 }

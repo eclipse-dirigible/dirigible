@@ -37,6 +37,9 @@ class DateTimeUtilsTest {
 
         Optional<Date> date2 = DateTimeUtils.optionallyParseDate("invalid date");
         assertThat(date2).isEmpty();
+
+        Optional<Date> date3 = DateTimeUtils.optionallyParseDate("2025-07-02T00:00:00.000Z");
+        assertThat(date3).isNotEmpty();
     }
 
     @Test

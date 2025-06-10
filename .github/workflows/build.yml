@@ -30,38 +30,45 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
+
       - name: Set up JDK Corretto 21
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
           java-version: '21'
           architecture: x64
+
       - name: Install NodeJS
         uses: actions/setup-node@v4
         with:
           node-version: 18
-      - name: Install esbuild
-        run: npm i -g esbuild
-      - name: Install TypeScript compiler
-        run: npm i -g typescript
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
+
       - name: Setup Docker Buildx
         run: |
           docker buildx create --name dirigible-builder
           docker buildx use dirigible-builder
+
       - name: Maven Build
         run: mvn clean install -P quick-build
+
       - name: Docker Login
         run: docker login -u ${{secrets.DOCKER_USER}} -p ${{secrets.DOCKER_PASSWORD}}
+
       - name: Push Dirigible image to Docker Hub
         run: |
           cd build/application
           docker buildx build --push --tag dirigiblelabs/dirigible -o type=image --platform=linux/arm64,linux/amd64 .
+
   tests:
     runs-on: ${{ matrix.os }}-latest
     strategy:
@@ -71,26 +78,29 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
+
       - name: Set up JDK Corretto 21
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
           java-version: '21'
           architecture: x64
+
       - name: Install NodeJS
         uses: actions/setup-node@v4
         with:
           node-version: 18
-      - name: Install esbuild
-        run: npm i -g esbuild
-      - name: Install TypeScript compiler
-        run: npm i -g typescript
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
+
       - name: Maven Build
         run: mvn clean install -P unit-tests
 
@@ -100,31 +110,37 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
+
       - name: Set up JDK Corretto 21
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
-          java-version: 21
+          java-version: '21'
+          architecture: x64
+
       - name: Install NodeJS
         uses: actions/setup-node@v4
         with:
           node-version: 18
-      - name: Install esbuild
-        run: npm i -g esbuild
-      - name: Install TypeScript compiler
-        run: npm i -g typescript
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
+
       - name: Install ttyd (prebuilt)
         run: |
           sudo apt update
           sudo apt install -y ttyd
+
       - name: Verify ttyd installation
         run: ttyd --version
+
       - name: Integration tests
         run: mvn clean install -P integration-tests
 
@@ -134,6 +150,7 @@ jobs:
         run: |
           TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
           echo "ARTIFACT_NAME=selenide-screenshots-${TIMESTAMP}.zip" >> $GITHUB_ENV
+
       - name: Upload selenide screenshots
         uses: actions/upload-artifact@v4
         if: always()
@@ -166,31 +183,37 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
+
       - name: Set up JDK Corretto 21
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
-          java-version: 21
+          java-version: '21'
+          architecture: x64
+
       - name: Install NodeJS
         uses: actions/setup-node@v4
         with:
           node-version: 18
-      - name: Install esbuild
-        run: npm i -g esbuild
-      - name: Install TypeScript compiler
-        run: npm i -g typescript
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
+
       - name: Install ttyd (prebuilt)
         run: |
           sudo apt update
           sudo apt install -y ttyd
+
       - name: Verify ttyd installation
         run: ttyd --version
+
       - name: Integration tests
         run: mvn clean install -P integration-tests
         env:
@@ -205,6 +228,7 @@ jobs:
         run: |
           TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
           echo "ARTIFACT_NAME=selenide-screenshots-${TIMESTAMP}.zip" >> $GITHUB_ENV
+
       - name: Upload selenide screenshots
         uses: actions/upload-artifact@v4
         if: always()
@@ -214,12 +238,16 @@ jobs:
           path: tests/tests-integrations/build/reports/tests
 
   scan-image:
+    name: Scan Docker image using Docker Scout
     needs: [ build-deploy ]
     runs-on: ubuntu-latest
 
     steps:
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2.1.0
+      - name: Checkout # need to upload the report to GitHub Security tab
+        uses: actions/checkout@v4
+
+      - name: Log in Docker Hub # required dockerhub login for docker/scout-action
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_PASSWORD }}
@@ -227,26 +255,59 @@ jobs:
       - name: Docker Scout Quickview and CVEs
         uses: docker/scout-action@v1
         with:
+          registry-user: ${{ secrets.DOCKER_USER }}
+          registry-password: ${{ secrets.DOCKER_PASSWORD }}
           command: quickview,cves
           image: dirigiblelabs/dirigible:latest
-          sarif-file: sarif.output.json
+          sarif-file: sast_docker_scout_sarif.json
           summary: true
           only-fixed: false
 
-      - name: Docker Scout SBOM
-        uses: docker/scout-action@v1
+      - name: Upload Docker Scout SARIF file as artifact
+        uses: actions/upload-artifact@v4
         with:
-          command: sbom
-          image: dirigiblelabs/dirigible:latest
-          output: sbom.json
+          name: sast_docker_scout_sarif.json
+          path: sast_docker_scout_sarif.json
 
-      - name: Docker Scout Recommendations
-        uses: docker/scout-action@v1
-        with:
-          command: recommendations
-          image: dirigiblelabs/dirigible:latest
-
-      - name: Upload Docker Scout SARIF Report
+      - name: Upload Docker Scout SARIF Report to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: sarif.output.json
+          sarif_file: sast_docker_scout_sarif.json
+
+  dast-scan:
+    name: Perform DAST testing using ZAP
+    needs: [ build-deploy ]
+    runs-on: ubuntu-latest
+
+    services:
+      app:
+        image: dirigiblelabs/dirigible:latest
+        ports:
+          - 8080:8080
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Wait for app to start
+        run: |
+          URL='http://localhost:8080/actuator/health/readiness'
+          for i in {1..30}; do
+            echo "Checking readiness at $URL... attempt $i"
+            if curl -f $URL; then
+              echo '----------------------'
+              echo "Application is ready."
+              break
+            fi
+            sleep 5
+          done
+
+      - name: Run OWASP ZAP Full Scan
+        uses: zaproxy/action-full-scan@v0.12.0
+        with:
+          target: 'http://localhost:8080'
+          cmd_options: '-T 10' # https://www.zaproxy.org/docs/docker/full-scan/
+          artifact_name: dast_zap_report # all results will be uploaded with an artifact with this name
+          allow_issue_writing: false # create an issue with the results
+          issue_title: '[DAST] ZAP Full Scan Report'
+

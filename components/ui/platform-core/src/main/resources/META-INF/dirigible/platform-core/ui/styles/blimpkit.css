@@ -150,6 +150,11 @@ ng-transclude:empty {
   height: 100%;
 }
 
+.fd-button .bk-icon--svg svg {
+  color: var(--fdButtonColor);
+  fill: var(--fdButtonColor);
+}
+
 .bk-icon--svg svg {
   box-sizing: border-box;
   color: var(--sapTextColor, #303030);

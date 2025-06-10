@@ -52,7 +52,6 @@ public class HttpSecurityURIConfigurator {
             "/services/web/theme-blimpkit/**", //
             "/services/js/platform-core/**", //
             "/services/js/resources-core/**", //
-            "/services/integrations/**", //
             "/actuator/health/liveness", //
             "/actuator/health/readiness", //
             "/actuator/health"};
@@ -60,6 +59,7 @@ public class HttpSecurityURIConfigurator {
     /** The Constant AUTHENTICATED_PATTERNS. */
     private static final String[] AUTHENTICATED_PATTERNS = { //
             "/services/**", //
+            "/services/integrations/**", //
             "/websockets/**", //
             "/api-docs/swagger-config", //
             "/api-docs/**", //

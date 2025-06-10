@@ -26,6 +26,11 @@ export interface HttpClientParam {
     value: string;
 }
 
+export interface HttpClientFile {
+    name: string;
+    value: string;
+}
+
 export interface HttpClientRequestOptions {
     expectContinueEnabled?: boolean;
     proxyHost?: string;
@@ -45,7 +50,7 @@ export interface HttpClientRequestOptions {
     sslTrustAllEnabled?: boolean;
     data?: any[];
     text?: string;
-    files?: string[];
+    files?: HttpClientFile[];
     characterEncoding?: string;
     characterEncodingEnabled?: boolean;
     contentType?: string;

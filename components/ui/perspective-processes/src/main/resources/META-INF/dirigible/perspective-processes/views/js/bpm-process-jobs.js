@@ -23,6 +23,8 @@ ideBpmProcessJobsView.controller('IDEBpmProcessJobsViewController', ($scope, $ht
         $http.get('/services/bpm/bpm-processes/instance/' + processInstanceId + '/jobs', { params: { 'limit': 100 } })
             .then((response) => {
                 $scope.jobsList = response.data;
+            }, (error) => {
+                console.error(error);
             });
     };
 
@@ -38,8 +40,14 @@ ideBpmProcessJobsView.controller('IDEBpmProcessJobsViewController', ($scope, $ht
     Dialogs.addMessageListener({
         topic: 'bpm.instance.selected',
         handler: (data) => {
-            const processInstanceId = data.instance;
-            $scope.fetchData(processInstanceId);
+            if (data.deselect) {
+                $scope.$evalAsync(() => {
+                    $scope.jobsList.length = 0;
+                    $scope.currentProcessInstanceId = null;
+                });
+            } else {
+                $scope.fetchData(data.instance);
+            }
         }
     });
 });

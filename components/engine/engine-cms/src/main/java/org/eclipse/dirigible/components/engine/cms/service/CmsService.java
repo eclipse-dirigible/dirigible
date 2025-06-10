@@ -14,7 +14,6 @@ import java.nio.charset.StandardCharsets;
 
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.commons.api.helpers.ContentTypeHelper;
-import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.ResourcesCache;
 import org.eclipse.dirigible.commons.config.ResourcesCache.Cache;
 import org.eclipse.dirigible.components.engine.cms.CmisDocument;
@@ -29,7 +28,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.context.annotation.RequestScope;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -48,47 +46,22 @@ public class CmsService {
     /** The Constant WEB_CACHE. */
     private static final Cache WEB_CACHE = ResourcesCache.getWebCache();
 
-    /** The Constant INDEX_HTML. */
-    private static final String INDEX_HTML = "index.html";
-
     /** The request. */
     @Autowired
     private HttpServletRequest request;
 
     /**
-     * Gets the resource.
+     * Gets the document by path.
      *
      * @param path the path
-     * @return the resource
+     * @return the document by path
      */
-    public ResponseEntity getResource(@PathVariable("path") String path) {
-        if (path.trim()
-                .isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Listing of web folders is forbidden.");
-        } else if (path.trim()
-                       .endsWith("/")) {
-            return getResourceByPath(path + INDEX_HTML);
-        }
-        ResponseEntity resourceResponse = getResourceByPath(path);
-        if (!Configuration.isProductiveIFrameEnabled()) {
-            resourceResponse.getHeaders()
-                            .add("X-Frame-Options", "Deny");
-        }
-        return resourceResponse;
-    }
-
-    /**
-     * Gets the resource by path.
-     *
-     * @param path the path
-     * @return the resource by path
-     */
-    private ResponseEntity getResourceByPath(String path) {
+    public ResponseEntity getDocumentByPath(String path) {
         if (isCached(path)) {
             return sendResourceNotModified();
         }
 
-        String errorMessage = "Resource not found or cannot be loaded: " + path;
+        String errorMessage = "Document not found or cannot be loaded: " + path;
         CmisObject cmisObject;
         try {
             cmisObject = CmisSessionFactory.getSession()
@@ -108,11 +81,66 @@ public class CmsService {
                 throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, errorMessage);
             }
             if (content == null) {
-                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Requested resource not found.");
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Requested document not found.");
             }
             return sendResource(path, ContentTypeHelper.isBinary(contentType), content, contentType);
         }
-        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Requested resource not found.");
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Requested document not found.");
+    }
+
+    /**
+     * Gets the document by path.
+     *
+     * @param path the path
+     * @return the document by path
+     */
+    public byte[] getDocument(String path) {
+        String errorMessage = "Document not found or cannot be loaded: " + path;
+        CmisObject cmisObject;
+        try {
+            cmisObject = CmisSessionFactory.getSession()
+                                           .getObjectByPath(path);
+        } catch (IOException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, errorMessage);
+        }
+        ObjectType type = cmisObject.getType();
+        if (ObjectType.DOCUMENT.equals(type) && cmisObject instanceof CmisDocument) {
+            String contentType = ContentTypeHelper.getContentType(ContentTypeHelper.getExtension(path));
+            byte[] content;
+            try {
+                content = IOUtils.toByteArray(((CmisDocument) cmisObject).getContentStream()
+                                                                         .getInputStream());
+            } catch (IOException e) {
+                logger.error(e.getMessage(), e);
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, errorMessage);
+            }
+            if (content == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Requested document not found.");
+            }
+            return content;
+        }
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Requested document not found.");
+    }
+
+    /**
+     * Checks existance of the resource by path.
+     *
+     * @param path the path
+     * @return the true if exists and false otherwise
+     */
+    public boolean existDocument(String path) {
+        CmisObject cmisObject;
+        try {
+            cmisObject = CmisSessionFactory.getSession()
+                                           .getObjectByPath(path);
+        } catch (IOException e) {
+            return false;
+        }
+        ObjectType type = cmisObject.getType();
+        if (ObjectType.DOCUMENT.equals(type) && cmisObject instanceof CmisDocument) {
+            return true;
+        }
+        return false;
     }
 
     /**

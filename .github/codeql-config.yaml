@@ -1,4 +1,0 @@
-query-filters:
-    - exclude:
-        id: 
-          - java/path-injection

@@ -1,0 +1,36 @@
+{
+    "schema": {
+        "structures": [
+            {
+                "name": "EMPLOYEES",
+                "type": "TABLE",
+                "columns": [
+                    {
+                        "name": "ID",
+                        "type": "INTEGER",
+                        "length": 0,
+                        "nullable": true,
+                        "primaryKey": "true",
+                        "identity": "true",
+                        "unique": false,
+                        "defaultValue": null,
+                        "precision": null,
+                        "scale": null
+                    },
+                    {
+                        "name": "NAME",
+                        "type": "VARCHAR",
+                        "length": "30",
+                        "nullable": true,
+                        "primaryKey": false,
+                        "identity": false,
+                        "unique": false,
+                        "defaultValue": null,
+                        "precision": null,
+                        "scale": null
+                    }
+                ]
+            }
+        ]
+    }
+}

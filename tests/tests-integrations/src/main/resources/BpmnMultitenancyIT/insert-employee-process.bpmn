@@ -1,0 +1,62 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:flowable="http://flowable.org/bpmn" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" typeLanguage="http://www.w3.org/2001/XMLSchema" expressionLanguage="http://www.w3.org/1999/XPath" targetNamespace="http://www.flowable.org/processdef" exporter="Flowable Open Source Modeler" exporterVersion="6.8.1">
+  <process id="bpmn-multitenancy-it" name="BpmnMultitenancyIT Process" isExecutable="true">
+    <startEvent id="start-event"/>
+    <endEvent id="end-event"/>
+    <userTask id="process-request" name="Process request" flowable:candidateGroups="employee-manager" flowable:formKey="/services/web/BpmnMultitenancyIT/gen/approve-employee-registration/forms/approve-employee-registration/index.html"/>
+    <sequenceFlow id="sid-EC1DFE1D-DDF3-4731-8104-266E1434AA40" sourceRef="process-request" targetRef="sid-8DB88F3F-76D9-4497-AAB1-895550B8919F"/>
+    <serviceTask id="insert-emplyee" name="Insert an employee" flowable:async="true" flowable:delegateExpression="${JSTask}">
+      <extensionElements>
+        <flowable:field name="handler">
+          <flowable:string><![CDATA[BpmnMultitenancyIT/insert-an-employee-task.ts]]></flowable:string>
+        </flowable:field>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="sid-A534B3ED-FA79-4DCD-A87D-6B842DC913E4" sourceRef="insert-emplyee" targetRef="end-event"/>
+    <exclusiveGateway id="sid-8DB88F3F-76D9-4497-AAB1-895550B8919F" flowable:async="true" default="declined-flow"/>
+    <sequenceFlow id="sid-797626AE-B2F6-4C00-ABEE-FB30ADC177E4" sourceRef="start-event" targetRef="process-request"/>
+    <sequenceFlow id="approved-flow" sourceRef="sid-8DB88F3F-76D9-4497-AAB1-895550B8919F" targetRef="insert-emplyee">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${requestApproved}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="declined-flow" sourceRef="sid-8DB88F3F-76D9-4497-AAB1-895550B8919F" targetRef="end-event"/>
+  </process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_bpmn-multitenancy-it">
+    <bpmndi:BPMNPlane bpmnElement="bpmn-multitenancy-it" id="BPMNPlane_bpmn-multitenancy-it">
+      <bpmndi:BPMNShape bpmnElement="start-event" id="BPMNShape_start-event">
+        <omgdc:Bounds height="30.0" width="30.0" x="44.999999329447746" y="114.99999749660495"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="end-event" id="BPMNShape_end-event">
+        <omgdc:Bounds height="28.0" width="28.0" x="525.0000187023127" y="238.0000050276522"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="process-request" id="BPMNShape_process-request">
+        <omgdc:Bounds height="79.99999999999999" width="100.0" x="148.00000579682307" y="89.9999986588955"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="insert-emplyee" id="BPMNShape_insert-emplyee">
+        <omgdc:Bounds height="80.00000000000001" width="100.0" x="312.00004607601954" y="127.00000198456395"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="sid-8DB88F3F-76D9-4497-AAB1-895550B8919F" id="BPMNShape_sid-8DB88F3F-76D9-4497-AAB1-895550B8919F">
+        <omgdc:Bounds height="39.99999999999997" width="40.0" x="178.0000138136478" y="232.0000021958895"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge bpmnElement="sid-797626AE-B2F6-4C00-ABEE-FB30ADC177E4" id="BPMNEdge_sid-797626AE-B2F6-4C00-ABEE-FB30ADC177E4" flowable:sourceDockerX="15.0" flowable:sourceDockerY="15.0" flowable:targetDockerX="50.0" flowable:targetDockerY="39.99999999999999">
+        <omgdi:waypoint x="74.94999836978597" y="129.99999762251974"/>
+        <omgdi:waypoint x="148.0000048718561" y="129.99999823777574"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="sid-EC1DFE1D-DDF3-4731-8104-266E1434AA40" id="BPMNEdge_sid-EC1DFE1D-DDF3-4731-8104-266E1434AA40" flowable:sourceDockerX="50.0" flowable:sourceDockerY="39.99999999999999" flowable:targetDockerX="20.0" flowable:targetDockerY="19.999999999999986">
+        <omgdi:waypoint x="198.00000842200453" y="169.94999865889548"/>
+        <omgdi:waypoint x="198.00001249941434" y="232.0000021958895"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="sid-A534B3ED-FA79-4DCD-A87D-6B842DC913E4" id="BPMNEdge_sid-A534B3ED-FA79-4DCD-A87D-6B842DC913E4" flowable:sourceDockerX="50.0" flowable:sourceDockerY="40.00000000000001" flowable:targetDockerX="14.0" flowable:targetDockerY="14.0">
+        <omgdi:waypoint x="411.95004607601953" y="190.98729468865085"/>
+        <omgdi:waypoint x="526.3674844615693" y="245.9380540127377"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="declined-flow" id="BPMNEdge_declined-flow" flowable:sourceDockerX="20.0" flowable:sourceDockerY="19.999999999999986" flowable:targetDockerX="14.0" flowable:targetDockerY="14.0">
+        <omgdi:waypoint x="217.94708928573493" y="252.00000236156004"/>
+        <omgdi:waypoint x="525.0000184915682" y="252.00000491139215"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="approved-flow" id="BPMNEdge_approved-flow" flowable:sourceDockerX="20.0" flowable:sourceDockerY="19.999999999999986" flowable:targetDockerX="50.0" flowable:targetDockerY="40.00000000000001">
+        <omgdi:waypoint x="211.13977372102823" y="245.17269383236112"/>
+        <omgdi:waypoint x="312.00004607601954" y="192.88871646824919"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

@@ -11,6 +11,14 @@ on:
         description: Snapshot Version
         required: true
         default: 12.0.0-SNAPSHOT
+      code-scans:
+        description: Perform SAST and DAST code scans
+        type: boolean
+        default: true
+      upload-scanned-sarif-report:
+        description: Upload SAST and DAST code scans to Github Security
+        type: boolean
+        default: true
 
 run-name: 'version set to ${{ github.event.inputs.releaseVersion }} for release'
 
@@ -18,7 +26,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  release-artifacts:
     runs-on: ubuntu-latest
     steps:
 
@@ -50,10 +58,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 18
-      - name: Install esbuild
-        run: npm i -g esbuild
-      - name: Install TypeScript compiler
-        run: npm i -g typescript
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -115,13 +122,244 @@ jobs:
 
       #---------------Publish to Maven Central-----------------#
 
-      #----------------Publish GitHub Release------------------#
+      - name: "Git: Push Changes"
+        run: |
+          git checkout -B ${{ github.event.inputs.releaseVersion }}
+          git push --set-upstream origin ${{ github.event.inputs.releaseVersion }}
+          git checkout -B master
+          git push --set-upstream origin master
 
-      - name: Package WAR files
+      - name: Package fat JAR
         run: |
           zip --junk-paths application-all build/application/target/dirigible-application-${{ github.event.inputs.releaseVersion }}-executable.jar
 
-      - name: Create Release
+      - name: Upload fat JAR as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: application-all
+          path: application-all.zip
+
+  sast-docker-scout-scan:
+    if: ${{ inputs.code-scans }}
+    runs-on: ubuntu-latest
+    needs: release-artifacts
+    permissions:
+      security-events: write # Required to upload SARIF to GitHub Security tab
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in Docker Hub # required dockerhub login for docker/scout-action
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Docker Scout Quickview and CVEs
+
+        uses: docker/scout-action@v1
+        with:
+          registry-user: ${{ secrets.DOCKER_USER }}
+          registry-password: ${{ secrets.DOCKER_PASSWORD }}
+          command: quickview,cves
+          image: dirigiblelabs/dirigible:${{ github.event.inputs.releaseVersion }}
+          sarif-file: sast_docker_scout_sarif.json
+          summary: true
+          only-fixed: false
+
+      - name: Upload Docker Scout SARIF file as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast_docker_scout_sarif.json
+          path: sast_docker_scout_sarif.json
+
+      - name: Upload Docker Scout SARIF Report to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: ${{ inputs.upload-scanned-sarif-report }}
+        with:
+          sarif_file: sast_docker_scout_sarif.json
+
+  sast-codeql-scan:
+    if: ${{ inputs.code-scans }}
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    needs: release-artifacts
+    permissions:
+      security-events: write # Required to upload SARIF to GitHub Security tab
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java-kotlin
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK Corretto 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '21'
+          architecture: x64
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config: |
+            name: "Comprehensive Multi-language CodeQL Config"
+            query-filters:
+              - exclude:
+                  id: java/path-injection
+            queries:
+              - uses: security-and-quality
+
+      - name: Build Java/Kotlin project
+        if: matrix.language == 'java-kotlin'
+        run: mvn clean install -P quick-build
+
+      - name: Perform CodeQL Analysis for language ${{ matrix.language }}
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+          output: "sast_codeql_report_${{ matrix.language }}"
+          upload: always
+
+      - name: Upload CodeQL Analysis SARIF file as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast_codeql_sarif_${{ matrix.language }}
+          path: sast_codeql_report_${{ matrix.language }}
+
+  dast-scan:
+    if: ${{ inputs.code-scans }}
+    name: Perform DAST testing using ZAP
+    needs: release-artifacts
+    runs-on: ubuntu-latest
+
+    services:
+      app:
+        image: dirigiblelabs/dirigible:${{ github.event.inputs.releaseVersion }}
+        ports:
+          - 8080:8080
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Wait for app to start
+        run: |
+          URL='http://localhost:8080/actuator/health/readiness'
+          for i in {1..30}; do
+            echo "Checking readiness at $URL... attempt $i"
+            if curl -f $URL; then
+              echo '----------------------'
+              echo "Application is ready."
+              break
+            fi
+            sleep 5
+          done
+
+      - name: Run OWASP ZAP Full Scan
+        uses: zaproxy/action-full-scan@v0.12.0
+        with:
+          target: 'http://localhost:8080'
+          cmd_options: '-T 10' # https://www.zaproxy.org/docs/docker/full-scan/
+          artifact_name: dast_zap_report # all results will be uploaded with an artifact with this name
+          allow_issue_writing: false # create an issue with the results
+          issue_title: '[DAST] ZAP Full Scan Report'
+
+  wait-for-scans:
+    if: always() # Runs even if previous jobs were skipped or failed
+    needs:
+      - sast-codeql-scan
+      - sast-docker-scout-scan
+      - dast-scan
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Proceeding to next job"
+
+  generate-git-security-report:
+    if: ${{ inputs.code-scans }}
+    needs:
+      - wait-for-scans
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: read
+
+    steps:
+      - name: Create dummy reports folder
+        run: mkdir reports
+
+      - name: Generate GitHub Security Report
+        uses: rsdmike/github-security-report-action@v3.0.4
+        with:
+          template: summary
+          token: ${{ secrets.GITHUB_TOKEN }}
+          sarifReportDir: "reports"
+          outputDir: "security-report"
+
+      - name: Upload Generated GitHub Security Report as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: security_report
+          path: security-report
+
+  github-release:
+    if: ${{ always() && !failure() && !cancelled() }} #  run only if all prior jobs succeeded or were skipped, but not if one failed
+    runs-on: ubuntu-latest
+    needs: generate-git-security-report
+    permissions:
+      packages: write
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create uploaded-artifacts folder
+        run: mkdir uploaded-artifacts
+
+      - name: Download Uploaded Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: uploaded-artifacts
+
+      - name: Display Downloaded Artifacts
+        run: ls -R uploaded-artifacts
+
+      - name: Create release files
+        run: mkdir release_files
+
+      - name: Copy report files due to naming collisions
+        if: ${{ inputs.code-scans }}
+        run: |
+          cp uploaded-artifacts/security_report/summary.pdf release_files/security-report.pdf
+          
+          cp uploaded-artifacts/sast_codeql_sarif_java-kotlin/java.sarif release_files/sast_codeql_sarif_java-kotlin.sarif
+          cp uploaded-artifacts/sast_codeql_sarif_javascript-typescript/javascript.sarif release_files/sast_codeql_sarif_javascript-typescript.sarif
+          
+          cp uploaded-artifacts/sast_docker_scout_sarif.json/sast_docker_scout_sarif.json release_files/sast_docker_scout_sarif.json
+          
+          cp uploaded-artifacts/dast_zap_report/report_html.html release_files/dast_zap_report.html
+          
+          cp uploaded-artifacts/application-all/application-all.zip release_files/application-all.zip
+
+      - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
@@ -131,7 +369,7 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            ./application-all.zip
+            release_files/**
           body: |
             ## Eclipse Dirigible - ${{ github.event.inputs.releaseVersion }}
             
@@ -175,19 +413,18 @@ jobs:
             
             For more information go to [https://www.dirigible.io/help/setup/](https://www.dirigible.io/help/setup/).
 
-      #----------------Publish GitHub Release------------------#
-
-      - name: "Git: Push Changes"
-        run: |
-          git checkout -B ${{ github.event.inputs.releaseVersion }}
-          git push --set-upstream origin ${{ github.event.inputs.releaseVersion }}
-          git checkout -B master
-          git push --set-upstream origin master
-
-      #----------------Publish Helm Release------------------#
+  helm-release:
+    runs-on: ubuntu-latest
+    needs: github-release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Helm tool installer
         uses: Azure/setup-helm@v4
+
       - name: Helm Charts Release - Checkout gh-pages
         run: |
           mkdir charts-temp
@@ -233,8 +470,4 @@ jobs:
           git add charts/
           git commit -m "Updates Helm Charts - Release ${{ github.event.inputs.releaseVersion }}"
           git push origin gh-pages
-          
-          git add .
-          git reset --hard
-          git checkout ${{ github.event.inputs.branch }}
-#----------------Publish Helm Release------------------#
+

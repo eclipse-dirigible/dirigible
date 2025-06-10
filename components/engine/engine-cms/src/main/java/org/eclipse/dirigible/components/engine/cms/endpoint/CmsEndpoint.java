@@ -9,14 +9,17 @@
  */
 package org.eclipse.dirigible.components.engine.cms.endpoint;
 
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.engine.cms.service.CmsService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * The Class CmsEndpoint.
@@ -24,6 +27,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping({BaseEndpoint.PREFIX_ENDPOINT_SECURED + "cms", BaseEndpoint.PREFIX_ENDPOINT_PUBLIC + "cms"})
 public class CmsEndpoint extends BaseEndpoint {
+
+    /** The Constant INDEX_HTML. */
+    private static final String INDEX_HTML = "index.html";
 
     /** The cms service. */
     private final CmsService cmsService;
@@ -46,7 +52,19 @@ public class CmsEndpoint extends BaseEndpoint {
      */
     @GetMapping("/{*path}")
     public ResponseEntity get(@PathVariable("path") String path) {
-        return cmsService.getResource(path);
+        if (path.trim()
+                .isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Listing of web folders is forbidden.");
+        } else if (path.trim()
+                       .endsWith("/")) {
+            return cmsService.getDocumentByPath(path + INDEX_HTML);
+        }
+        ResponseEntity resourceResponse = cmsService.getDocumentByPath(path);
+        if (!Configuration.isProductiveIFrameEnabled()) {
+            resourceResponse.getHeaders()
+                            .add("X-Frame-Options", "Deny");
+        }
+        return resourceResponse;
     }
 
 }
