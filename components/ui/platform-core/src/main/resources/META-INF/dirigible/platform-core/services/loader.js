@@ -12,7 +12,7 @@
 import { request, response } from 'sdk/http';
 import { registry } from 'sdk/platform';
 import { uuid } from 'sdk/utils';
-import { getBrandingJs, getKeyPrefix } from '/platform-branding/branding.mjs';
+import { getBrandingJs, getKeyPrefix, getAnalyticsLink } from '/platform-branding/branding.mjs';
 
 const COOKIE_PREFIX = `${getKeyPrefix()}.ljs.`;
 
@@ -67,18 +67,18 @@ function processScriptRequest(scriptIds) {
     for (let i = 0; i < ids.length; i++) {
         const scriptList = getScriptList(ids[i]);
         if (scriptList) {
-            scriptList.forEach(function (script) {
+            scriptList.forEach((script) => {
                 if (typeof script === 'string') {
                     let text = registry.getText(script);
                     if (text !== null) {
-						if (text.includes('//# sourceMappingURL=')) {
-	                        text = text.replace('//# sourceMappingURL=', `//# sourceMappingURL=/webjars${script.slice(0, script.lastIndexOf('/') + 1)}`);
-	                        text += '\n';
-	                    }
-	                    responseContent += text;
-					} else {
-						console.error("Cannot load the script: " + script);	
-					}
+                        if (text.includes('//# sourceMappingURL=')) {
+                            text = text.replace('//# sourceMappingURL=', `//# sourceMappingURL=/webjars${script.slice(0, script.lastIndexOf('/') + 1)}`);
+                            text += '\n';
+                        }
+                        responseContent += text;
+                    } else {
+                        console.error("Cannot load the script: " + script);
+                    }
                 } else {
                     responseContent += script() + '\n';
                 }
@@ -190,11 +190,14 @@ function getScriptList(scriptId) {
                 '/platform-core/ui/platform/layout.js',
             ];
         case 'shell-js':
-            return [
+            const shell = [
                 ...baseJs,
                 cookies,
                 '/platform-core/ui/platform/shell.js',
+                getAnalyticsLink(),
             ];
+            if (!shell[shell.length - 1]) shell.pop();
+            return shell;
         case 'file-upload-js':
             return [
                 '/es5-shim/4.6.7/es5-shim.min.js',
