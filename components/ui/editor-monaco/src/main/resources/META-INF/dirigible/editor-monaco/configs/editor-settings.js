@@ -12,7 +12,7 @@
 const viewData = {
     id: 'monacoSettings',
     label: 'Code Editor',
-    order: 2,
+    order: 4,
     glyph: 'sap-icon--source-code',
     path: '/services/web/editor-monaco/settings/editor.html',
 };

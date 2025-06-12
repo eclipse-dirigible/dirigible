@@ -1,0 +1,24 @@
+{
+    "general": "General",
+    "resetAll": "$t(reset) all",
+    "theme": "Theme",
+    "dashboard": "Dashboard",
+    "reports": "Reports",
+    "metrics": "Metrics",
+    "performance": "Performance",
+    "statistics": "Statistics",
+    "errMsg": {
+        "genericTitle": "Dashboard encountered an error!",
+        "widgetList": "Failed to load widget list",
+        "reportLoadTitle": "Failed to load reports",
+        "reportLoad": "There was an error while trying to load the reports list.",
+        "settingLoadTitle": "Failed to load settings",
+        "settingLoad": "There was an error while trying to load the settings list.",
+        "resetTitle": "Failed to reset",
+        "reset": "There was an error during the reset process. Please refresh manually."
+    },
+    "settings": {
+        "resetMsg": "This will clear all general settings, open tabs and cache.\n{{brand}} will then reload.\nDo you wish to continue?",
+        "resetting": "Resetting"
+    }
+}

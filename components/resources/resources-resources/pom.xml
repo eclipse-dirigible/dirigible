@@ -125,6 +125,11 @@
 			<artifactId>bpmn-visualization</artifactId>
 			<version>${bpmn-visualization.version}</version>
 		</dependency>
+		<dependency>
+            <groupId>org.webjars.npm</groupId>
+            <artifactId>i18next</artifactId>
+            <version>${i18next.version}</version>
+        </dependency>
     </dependencies>
     
     <build>

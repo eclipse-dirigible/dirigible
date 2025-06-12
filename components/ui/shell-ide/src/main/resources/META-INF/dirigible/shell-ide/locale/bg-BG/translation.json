@@ -1,0 +1,11 @@
+{
+    "windowMenu": "Прозорец",
+    "shells": "Фасади",
+    "perspectives": "Перспективи",
+    "views": "Изгледи",
+    "notificationsNum": "Известия ({{num}})",
+    "noNotifications": "Няма известия",
+    "clearAll": "Изчисти всичко",
+    "username": "Потребител",
+    "logout": "Изход"
+}
