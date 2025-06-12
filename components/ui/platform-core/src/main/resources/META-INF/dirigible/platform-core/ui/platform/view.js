@@ -13,6 +13,9 @@ if (typeof viewData === 'undefined' && typeof perspectiveData === 'undefined' &&
     console.error('You must provide one of the following: "viewData", "perspectiveData", "editorData", "shellData"');
 } else angular.module('platformView', ['platformExtensions', 'platformTheming'])
     .constant('clientOS', { isMac: () => navigator.userAgent.includes('Mac') })
+    .config(($sceDelegateProvider) => {
+        $sceDelegateProvider.resourceUrlWhitelist(['self', 'https://www.googletagmanager.com/gtag/js**']);
+    })
     .factory('baseHttpInterceptor', () => {
         let csrfToken = null;
         return {
@@ -182,4 +185,19 @@ if (typeof viewData === 'undefined' && typeof perspectiveData === 'undefined' &&
             } else throw Error('configTitle: missing view data');
         },
         template: '{{::label}}'
+    })).directive('analytics', ($window) => ({
+        restrict: 'E',
+        replace: true,
+        transclude: false,
+        link: (scope) => {
+            scope.gtag = getBrandingInfo().analytics;
+            if (scope.gtag) {
+                scope.link = `https://www.googletagmanager.com/gtag/js?id=${scope.gtag}`;
+                $window.dataLayer = $window.dataLayer || [];
+                function gtag() { dataLayer.push(arguments); }
+                gtag('js', new Date());
+                gtag('config', scope.gtag);
+            }
+        },
+        template: '<script ng-if="::gtag" async ng-src="{{ ::link }}"></script>'
     }));
