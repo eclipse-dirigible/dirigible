@@ -9,6 +9,16 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.config;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
@@ -39,12 +49,6 @@ import org.flowable.variable.api.persistence.entity.VariableInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * The Class BpmProviderFlowable. NOTE! - all methods in the class should be tenant aware
@@ -155,13 +159,14 @@ public class BpmProviderFlowable implements BpmProvider {
      * @param parameters the parameters
      * @return the string
      */
-    public String startProcess(String key, String parameters) {
+    public String startProcess(String key, String businessKey, String parameters) {
         LOGGER.info("Starting a BPMN process by key: [{}]", key);
         RuntimeService runtimeService = processEngine.getRuntimeService();
         @SuppressWarnings("unchecked")
         Map<String, Object> variables = GsonHelper.fromJson(parameters, HashMap.class);
         try {
-            ProcessInstance processInstance = runtimeService.startProcessInstanceByKeyAndTenantId(key, variables, getTenantId());
+            ProcessInstance processInstance =
+                    runtimeService.startProcessInstanceByKeyAndTenantId(key, businessKey, variables, getTenantId());
             LOGGER.info("Started process instance with id [{}], key [{}] for tenant [{}]", processInstance.getId(), key,
                     processInstance.getTenantId());
             return processInstance.getId();

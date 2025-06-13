@@ -9,12 +9,11 @@
  */
 package org.eclipse.dirigible.components.api.bpm;
 
+import java.util.Map;
 import org.eclipse.dirigible.components.engine.bpm.flowable.config.BpmProviderFlowable;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-
-import java.util.Map;
 
 /**
  * The Class BpmFacade.
@@ -90,13 +89,14 @@ public class BpmFacade implements InitializingBean {
      * Starts a BPMN process by its key and initial parameters.
      *
      * @param key the BPMN id of the process
+     * @param businessKey the business key of the process
      * @param parameters the serialized in JSON process initial parameters
      * @return the process instance id
      */
-    public static String startProcess(String key, String parameters) {
+    public static String startProcess(String key, String businessKey, String parameters) {
         return BpmFacade.get()
                         .getBpmProviderFlowable()
-                        .startProcess(key, parameters);
+                        .startProcess(key, businessKey, parameters);
     }
 
     /**

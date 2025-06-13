@@ -17,8 +17,8 @@ const BpmFacade = Java.type("org.eclipse.dirigible.components.api.bpm.BpmFacade"
 
 export class Process {
 
-	public static start(key: string, parameters: { [key: string]: any } = {}): string {
-		return BpmFacade.startProcess(key, JSON.stringify(parameters));
+	public static start(key: string, businessKey: string = '', parameters: { [key: string]: any } = {}): string {
+		return BpmFacade.startProcess(key, businessKey, JSON.stringify(parameters));
 	}
 
 	public static getVariable(processInstanceId: string, variableName: string): any {
