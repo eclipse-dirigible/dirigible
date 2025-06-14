@@ -14,7 +14,7 @@ class ProcessService {
             "toDate": parameters.toDate,
             "fromDate": parameters.fromDate
         };
-        const processInstanceId = process.start(processKey, processParams);
+        const processInstanceId = process.start(processKey, 'business-key-leave-request', processParams);
 
         response.setStatus(response.ACCEPTED);
         return {
