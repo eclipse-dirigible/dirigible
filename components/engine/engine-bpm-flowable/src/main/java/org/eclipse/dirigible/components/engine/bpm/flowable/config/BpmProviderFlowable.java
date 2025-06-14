@@ -178,6 +178,45 @@ public class BpmProviderFlowable implements BpmProvider {
     }
 
     /**
+     * Sets the process instance name.
+     *
+     * @param processInstanceId the process instance id
+     * @param name the name
+     */
+    public void setProcessInstanceName(String processInstanceId, String name) {
+        flowableArtefactsValidator.validateExecutionId(processInstanceId);
+
+        RuntimeService runtimeService = processEngine.getRuntimeService();
+        runtimeService.setProcessInstanceName(processInstanceId, name);
+    }
+
+    /**
+     * Updates the business key.
+     *
+     * @param processInstanceId the process instance id
+     * @param businessKey the business key
+     */
+    public void updateBusinessKey(String processInstanceId, String businessKey) {
+        flowableArtefactsValidator.validateExecutionId(processInstanceId);
+
+        RuntimeService runtimeService = processEngine.getRuntimeService();
+        runtimeService.updateBusinessKey(processInstanceId, businessKey);
+    }
+
+    /**
+     * Updates the business status.
+     *
+     * @param processInstanceId the process instance id
+     * @param businessStatus the business status
+     */
+    public void updateBusinessStatus(String processInstanceId, String businessStatus) {
+        flowableArtefactsValidator.validateExecutionId(processInstanceId);
+
+        RuntimeService runtimeService = processEngine.getRuntimeService();
+        runtimeService.updateBusinessStatus(processInstanceId, businessStatus);
+    }
+
+    /**
      * Delete process.
      *
      * @param processInstanceId the processInstanceId

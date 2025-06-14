@@ -21,6 +21,18 @@ export class Process {
 		return BpmFacade.startProcess(key, businessKey, JSON.stringify(parameters));
 	}
 
+	public static setProcessInstanceName(processInstanceId: string, name: string): void {
+		BpmFacade.setProcessInstanceName(processInstanceId, name);
+	}
+
+	public static updateBusinessKey(processInstanceId: string, businessKey: string): void {
+		BpmFacade.updateBusinessKey(processInstanceId, businessKey);
+	}
+
+	public static updateBusinessStatus(processInstanceId: string, businessStatus: string): void {
+		BpmFacade.updateBusinessStatus(processInstanceId, businessStatus);
+	}
+
 	public static getVariable(processInstanceId: string, variableName: string): any {
 		return BpmFacade.getVariable(processInstanceId, variableName);
 	}

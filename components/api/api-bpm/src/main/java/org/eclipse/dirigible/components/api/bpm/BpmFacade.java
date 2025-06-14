@@ -100,6 +100,42 @@ public class BpmFacade implements InitializingBean {
     }
 
     /**
+     * Sets the process instance name.
+     *
+     * @param processInstanceId the process instance id
+     * @param name the name
+     */
+    public static void setProcessInstanceName(String processInstanceId, String name) {
+        BpmFacade.get()
+                 .getBpmProviderFlowable()
+                 .setProcessInstanceName(processInstanceId, name);
+    }
+
+    /**
+     * Updates the business key.
+     *
+     * @param processInstanceId the process instance id
+     * @param businessKey the business key
+     */
+    public static void updateBusinessKey(String processInstanceId, String businessKey) {
+        BpmFacade.get()
+                 .getBpmProviderFlowable()
+                 .updateBusinessKey(processInstanceId, businessKey);
+    }
+
+    /**
+     * Updates the business status.
+     *
+     * @param processInstanceId the process instance id
+     * @param businessStatus the business status
+     */
+    public static void updateBusinessStatus(String processInstanceId, String businessStatus) {
+        BpmFacade.get()
+                 .getBpmProviderFlowable()
+                 .updateBusinessStatus(processInstanceId, businessStatus);
+    }
+
+    /**
      * Delete a BPMN process by its id.
      *
      * @param id the id
