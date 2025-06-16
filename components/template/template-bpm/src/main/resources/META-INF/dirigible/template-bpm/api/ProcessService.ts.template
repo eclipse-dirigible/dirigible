@@ -8,7 +8,7 @@ class ProcessService {
     public startProcess(parameters: any) {
         const processKey = '${processId}';
         const params = parameters ? parameters : {};
-        const processInstanceId = process.start(processKey, params);
+        const processInstanceId = process.start(processKey, "BPM-Project-Starter", params);
 
         response.setStatus(response.ACCEPTED);
         return {
