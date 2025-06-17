@@ -114,8 +114,38 @@ function createExecuteAction() {
             } else {
                 dialogHub.showAlert({
                     type: AlertTypes.Warning,
-                    title: 'No SQL command selected',
-                    message: 'You must select the command you want to execute.\nUse Ctrl+A (or Cmd+A) if you want to execute everything in the SQL command view.',
+                    title: 'No statement is selected',
+                    message: 'You must select the command you want to execute.\nUse Ctrl+A (or Cmd+A) if you want to execute everything in the Statements view.',
+                    preformatted: true,
+                });
+                themingHub.postMessage({ topic: "database.sql.error", data: "No text selected for execution." });
+            }
+        },
+    };
+}
+
+function createExportAction() {
+    return {
+        // An unique identifier of the contributed action.
+        id: "dirigible-sql-export",
+
+        // A label of the action that will be presented to the user.
+        label: "Export",
+
+        // An optional array of keybindings for the action.
+        keybindings: [monaco.KeyCode.F10],
+
+        // Method that will be executed when the action is triggered.
+        // @param editor The editor instance is passed in as a convinience
+        run: function (editor) {
+            const sqlCommand = editor.getModel().getValueInRange(editor.getSelection());
+            if (sqlCommand.length > 0) {
+                themingHub.postMessage({ topic: "database.sql.export", data: sqlCommand });
+            } else {
+                dialogHub.showAlert({
+                    type: AlertTypes.Warning,
+                    title: 'No statement is selected',
+                    message: 'You must select the command you want to execute.\nUse Ctrl+A (or Cmd+A) if you want to execute everything in the Statements view.',
                     preformatted: true,
                 });
                 themingHub.postMessage({ topic: "database.sql.error", data: "No text selected for execution." });
@@ -136,6 +166,13 @@ function createExecuteAction() {
                 topic: "database.sql.run",
                 handler: () => {
                     const executionObject = createExecuteAction();
+                    executionObject.run(_editor);
+                }
+            });
+			themingHub.addMessageListener({
+                topic: "database.sql.exporting",
+                handler: () => {
+                    const executionObject = createExportAction();
                     executionObject.run(_editor);
                 }
             });

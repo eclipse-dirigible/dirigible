@@ -119,7 +119,7 @@
         <!-- Spring -->
         <spring.boot.version>3.5.0</spring.boot.version>
         <spring.admin.version>3.5.0</spring.admin.version>
-        <springdoc.version>2.8.8</springdoc.version>
+        <springdoc.version>2.8.9</springdoc.version>
 
         <!-- Webjars -->
         <webjars.bootstrap.version>5.3.5</webjars.bootstrap.version>
@@ -166,7 +166,7 @@
         <velocity.version>2.4</velocity.version>
 
         <!-- JGit -->
-        <jgit.version>7.2.0.202503040940-r</jgit.version>
+        <jgit.version>7.3.0.202506031305-r</jgit.version>
 
         <!-- Flowable -->
         <flowable.version>7.1.0</flowable.version>
@@ -183,7 +183,7 @@
 
         <!-- QLDB -->
         <qldb.driver.version>2.3.1</qldb.driver.version>
-        <qldb.sdk.version>1.12.785</qldb.sdk.version>
+        <qldb.sdk.version>1.12.787</qldb.sdk.version>
 
         <!-- jETCD -->
         <jetcd.core.version>0.8.5</jetcd.core.version>
@@ -914,7 +914,7 @@
             <dependency>
                 <groupId>org.junit.vintage</groupId>
                 <artifactId>junit-vintage-engine</artifactId>
-                <version>5.13.0</version>
+                <version>5.13.1</version>
                 <scope>test</scope>
             </dependency>
 

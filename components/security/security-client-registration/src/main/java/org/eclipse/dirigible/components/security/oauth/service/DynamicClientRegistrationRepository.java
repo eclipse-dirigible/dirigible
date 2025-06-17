@@ -9,14 +9,19 @@
  */
 package org.eclipse.dirigible.components.security.oauth.service;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.StringTokenizer;
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.security.oauth.client.CognitoDefaultTenantProperties;
 import org.eclipse.dirigible.components.security.oauth.client.KeycloakDefaultTenantProperties;
 import org.eclipse.dirigible.components.security.oauth.domain.ClientRegistration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.stereotype.Component;
@@ -25,16 +30,22 @@ import org.springframework.stereotype.Component;
 public class DynamicClientRegistrationRepository
         implements ClientRegistrationRepository, Iterable<org.springframework.security.oauth2.client.registration.ClientRegistration> {
 
+    private static final Logger logger = LoggerFactory.getLogger(DynamicClientRegistrationRepository.class);
     private static final Map<String, org.springframework.security.oauth2.client.registration.ClientRegistration> REGISTRATIONS =
             new HashMap<>();
 
     private final ClientRegistrationService service;
-    private final Optional<ClientRegistration> cognitoRegistration;
-    private final Optional<ClientRegistration> keycloakRegistration;
+    private final List<ClientRegistration> clientRegistrations = new ArrayList<>();;
 
     public DynamicClientRegistrationRepository(ClientRegistrationService service, CognitoDefaultTenantProperties cognitoClient,
             KeycloakDefaultTenantProperties keycloakClient) {
         this.service = service;
+        registerCognitoClient(cognitoClient);
+        registerKeycloakClient(keycloakClient);
+        registerCustomClients();
+    }
+
+    private void registerCognitoClient(CognitoDefaultTenantProperties cognitoClient) {
         if (cognitoClient.hasAllProperties()) {
             ClientRegistration cognitoClientRegistration = new ClientRegistration(cognitoClient.getClientName(), "cognito", "",
                     cognitoClient.getClientId(), cognitoClient.getClientSecret(), cognitoClient.getRedirectUri(),
@@ -43,10 +54,11 @@ public class DynamicClientRegistrationRepository
                     cognitoClient.getJwkSetUri(), cognitoClient.getUserNameAttribute());
             cognitoClientRegistration.setId("default-tenant");
             cognitoClientRegistration.updateKey();
-            cognitoRegistration = Optional.of(cognitoClientRegistration);
-        } else {
-            this.cognitoRegistration = Optional.empty();
+            clientRegistrations.add(cognitoClientRegistration);
         }
+    }
+
+    private void registerKeycloakClient(KeycloakDefaultTenantProperties keycloakClient) {
         if (keycloakClient.hasAllProperties()) {
             ClientRegistration keycloakClientRegistration = new ClientRegistration(keycloakClient.getClientName(), "keycloak", "",
                     keycloakClient.getClientId(), keycloakClient.getClientSecret(), keycloakClient.getRedirectUri(),
@@ -55,20 +67,28 @@ public class DynamicClientRegistrationRepository
                     keycloakClient.getJwkSetUri(), keycloakClient.getUserNameAttribute());
             keycloakClientRegistration.setId("default-tenant");
             keycloakClientRegistration.updateKey();
-            keycloakRegistration = Optional.of(keycloakClientRegistration);
-        } else {
-            this.keycloakRegistration = Optional.empty();
+            clientRegistrations.add(keycloakClientRegistration);
+        }
+    }
+
+    private void registerCustomClients() {
+        String customOAuthClientsLists = Configuration.get("DIRIGIBLE_OAUTH_CUSTOM_CLIENTS");
+        if ((customOAuthClientsLists != null) && !"".equals(customOAuthClientsLists)) {
+            logger.trace("Custom OAuth clients list: [{}]", customOAuthClientsLists);
+            StringTokenizer tokens = new StringTokenizer(customOAuthClientsLists, ",");
+            while (tokens.hasMoreTokens()) {
+                String name = tokens.nextToken();
+                clientRegistrations.add(createOAuthClientRegistration(name));
+            }
         }
     }
 
     @Override
     public Iterator<org.springframework.security.oauth2.client.registration.ClientRegistration> iterator() {
-        if (cognitoRegistration.isPresent()) {
-            this.save(cognitoRegistration.get());
-        }
-        if (keycloakRegistration.isPresent()) {
-            this.save(keycloakRegistration.get());
-        }
+        clientRegistrations.forEach(next -> {
+            logger.info("Initializing a custom OAuth client with name [{}]", next.getName());
+            this.save(next);
+        });
         service.getAll()
                .stream()
                .map((ClientRegistration registration) -> toClientRegistration(registration))
@@ -136,4 +156,39 @@ public class DynamicClientRegistrationRepository
                                                                                          .build();
     }
 
+    private ClientRegistration createOAuthClientRegistration(String name) {
+        String clientId = getRequiredParameter(name, "CLIENT_ID");
+        String clientSecret = getRequiredParameter(name, "CLIENT_SECRET");
+        String redirectUri = getRequiredParameter(name, "REDIRECT_URI");
+        String grantType = getRequiredParameter(name, "GRANT_TYPE");
+        String scope = getRequiredParameter(name, "SCOPE");
+        String tokenUri = getRequiredParameter(name, "TOKEN_URI");
+        String authorizationUri = getRequiredParameter(name, "AUTHORIZATION_URI");
+        String userInfoUri = getRequiredParameter(name, "USER_INFO_URI");
+        String issuerUri = getRequiredParameter(name, "ISSUER_URI");
+        String jwkSetUri = getRequiredParameter(name, "JWK_SET_URI");
+        String userNameAttribute = getRequiredParameter(name, "USER_NAME_ATTRIBUTE");
+
+        ClientRegistration clientRegistration = new ClientRegistration(name, name, "", clientId, clientSecret, redirectUri, grantType,
+                scope, tokenUri, authorizationUri, userInfoUri, issuerUri, jwkSetUri, userNameAttribute);
+        clientRegistration.setId(name);
+        clientRegistration.updateKey();
+
+        return clientRegistration;
+    }
+
+    private String getRequiredParameter(String clientRegistrationName, String suffix) {
+        String configName = createConfigName(clientRegistrationName, suffix);
+        String value = Configuration.get(configName);
+        if (null == value || value.trim()
+                                  .isEmpty()) {
+            throw new IllegalArgumentException("Missing required configuration parameter [" + configName + "] for data source ["
+                    + clientRegistrationName + "]. The value is: " + value);
+        }
+        return value;
+    }
+
+    private String createConfigName(String clientRegistrationName, String suffix) {
+        return clientRegistrationName + "_" + suffix;
+    }
 }

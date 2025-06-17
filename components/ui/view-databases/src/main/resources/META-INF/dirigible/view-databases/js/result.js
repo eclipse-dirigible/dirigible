@@ -365,6 +365,76 @@ resultView.controller('DatabaseResultController', ($scope, $http, Dialogs, Statu
         }
     }
 
+    function triggerDownload(result) {
+        const blob = new Blob([result.data], {
+            type: "application/octet-stream",
+        });
+        const contentDisposition = result.headers('Content-Disposition');
+        let fileName = 'downloaded-file';
+
+        if (contentDisposition) {
+            const match = contentDisposition.match(/filename="?([^"]+)"?/i);
+            if (match) {
+                fileName = match[1];
+            }
+        }
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.click();
+        window.URL.revokeObjectURL(url);
+    }
+
+    function exportQuery(command) {
+        Layout.openView({ id: 'result' });
+        $scope.state.error = false;
+        $scope.showProgress();
+        const url = '/services/data/export/' + selectedDatabase.name;
+        const sql = command.trim().toLowerCase();
+        if (sql.startsWith('select')) {
+            $http({
+                method: 'POST',
+                url: url,
+                data: command,
+                headers: {
+                    'Content-Type': 'text/plain',
+                    'X-Requested-With': 'Fetch',
+                }
+            }).then((result) => {
+                cleanScope();
+                triggerDownload(result);
+                $scope.hideProgress();
+            }, (reject) => {
+                cleanScope();
+                $scope.state.error = true;
+                $scope.errorMessage = reject.data.message;
+                console.error(reject);
+                $scope.hideProgress();
+            });
+        } else if (sql.startsWith('query: ')) {
+            $http({
+                method: 'POST',
+                url: url,
+                data: command.substring(7).trim(),
+                headers: {
+                    'Content-Type': 'text/plain',
+                    'X-Requested-With': 'Fetch',
+                }
+            }).then((result) => {
+                cleanScope();
+                triggerDownload(result);
+                $scope.hideProgress();
+            }, (reject) => {
+                cleanScope();
+                $scope.state.error = true;
+                $scope.errorMessage = reject.data.message;
+                console.error(reject);
+                $scope.hideProgress();
+            });
+        }
+    }
+
     function showContent(data) {
         $scope.schemaName = data.schemaName;
         $scope.tableName = data.tableName;
@@ -412,6 +482,15 @@ resultView.controller('DatabaseResultController', ($scope, $http, Dialogs, Statu
         handler: (data) => {
             $scope.$evalAsync(() => {
                 executeQuery(data);
+            });
+        }
+    });
+
+    const exportListener = Dialogs.addMessageListener({
+        topic: 'database.sql.export',
+        handler: (data) => {
+            $scope.$evalAsync(() => {
+                exportQuery(data);
             });
         }
     });
@@ -622,6 +701,7 @@ resultView.controller('DatabaseResultController', ($scope, $http, Dialogs, Statu
         Dialogs.removeMessageListener(datasourceChangedListener);
         Dialogs.removeMessageListener(showContentListener);
         Dialogs.removeMessageListener(executeListener);
+        Dialogs.removeMessageListener(exportListener);
         Dialogs.removeMessageListener(importArtifactListener);
         Dialogs.removeMessageListener(importSqlListener);
         Dialogs.removeMessageListener(exportArtifactListener);

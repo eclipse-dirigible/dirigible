@@ -17,6 +17,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper;
 import org.eclipse.dirigible.components.data.management.service.DatabaseExecutionService;
@@ -31,6 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -78,7 +80,7 @@ public class DatabaseExportService {
         DirigibleDataSource dataSource = datasourceManager.getDataSource(datasource);
         if (dataSource != null) {
             String structureName = "\"" + schema + "\".\"" + structure + "\"";
-            String sql = "SELECT * FROM " + structureName;
+            String sql = null;
             try (Connection connection = dataSource.getConnection()) {
                 ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
                 sql = dialect.allQuery(structureName);
@@ -102,14 +104,38 @@ public class DatabaseExportService {
     }
 
     /**
-     * Export structure.
+     * Export statement.
      *
      * @param datasource the datasource
-     * @param schema the schema
-     * @param structure the structure
+     * @param statement the statement
+     * @param output the output
+     */
+    public void exportStatement(String datasource, String statement, OutputStream output) {
+        DirigibleDataSource dataSource = datasourceManager.getDataSource(datasource);
+        if (dataSource != null) {
+            try (Connection connection = dataSource.getConnection()) {
+                ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
+                if (dataSource.getDatabaseSystem()
+                              .isMongoDB()) {
+                    dialect.exportData(connection, statement, output);
+                    return;
+                }
+            } catch (Exception e) {
+                logger.error(e.getMessage(), e);
+            }
+
+            databaseExecutionService.executeStatement(dataSource, statement, true, false, true, false, output);
+        }
+
+    }
+
+    /**
+     * Get structure type by datasource.
+     *
+     * @param datasource the datasource
      * @return the string
      */
-    public String structureExportType(String datasource, String schema, String structure) {
+    public String structureExportType(String datasource) {
         DirigibleDataSource dataSource = datasourceManager.getDataSource(datasource);
         if (dataSource != null) {
             String productName = null;

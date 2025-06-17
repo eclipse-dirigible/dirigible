@@ -1028,6 +1028,10 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 	$scope.runSQL = () => {
 		MessageHub.triggerEvent('database.sql.run');
 	};
+	
+	$scope.exportSQL = () => {
+			MessageHub.triggerEvent('database.sql.exporting');
+		};
 
 	MessageHub.addMessageListener({
 		topic: 'view-db-explorer.refresh',
