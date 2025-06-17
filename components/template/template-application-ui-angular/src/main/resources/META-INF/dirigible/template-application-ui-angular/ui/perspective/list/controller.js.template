@@ -1,9 +1,9 @@
 #set($dollar = '$')
-angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'])
 	.config(['EntityServiceProvider', (EntityServiceProvider) => {
 		EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts';
 	}])
-	.controller('PageController', (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end EntityService, Extensions) => {
+	.controller('PageController', (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end EntityService, Extensions, LocaleService) => {
 		const Dialogs = new DialogHub();
 		$scope.dataPage = 1;
 		$scope.dataCount = 0;
@@ -18,7 +18,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		$scope.triggerPageAction = (action) => {
 			Dialogs.showWindow({
 				hasHeader: true,
-        		title: action.label,
+        		title: LocaleService.t(action.translation, action.label),
 				path: action.path,
 				maxWidth: action.maxWidth,
 				maxHeight: action.maxHeight,
@@ -29,7 +29,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		$scope.triggerEntityAction = (action) => {
 			Dialogs.showWindow({
 				hasHeader: true,
-        		title: action.label,
+        		title: LocaleService.t(action.translation, action.label),
 				path: action.path,
 				params: {
 					id: $scope.entity.${primaryKeysString}
@@ -92,7 +92,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 					const message = error.data ? error.data.message : '';
 					Dialogs.showAlert({
 						title: '${name}',
-						message: `Unable to list/filter ${name}: '${message}'`,
+						message: LocaleService.t('$projectName:messages.error.unableToLF', { name: '${name}', message: message }),
 						type: AlertTypes.Error
 					});
 					console.error('EntityService:', error);
@@ -101,7 +101,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				const message = error.data ? error.data.message : '';
 				Dialogs.showAlert({
 					title: '${name}',
-					message: `Unable to count ${name}: '${message}'`,
+					message: LocaleService.t('$projectName:messages.error.unableToCount', { name: '${name}', message: message }),
 					type: AlertTypes.Error
 				});
 				console.error('EntityService:', error);
@@ -167,7 +167,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			const message = error.data ? error.data.message : '';
 			Dialogs.showAlert({
 				title: '${property.name}',
-				message: `Unable to load data: '${message}'`,
+				message: LocaleService.t('$projectName:messages.error.unableToLoad', { message: message }),
 				type: AlertTypes.Error
 			});
 		});

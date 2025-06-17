@@ -50,7 +50,7 @@
                 ng-disabled="!isDeleteItemsButtonEnabled()"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
             <a bk-button glyph="sap-icon--download-from-cloud" state="transparent" aria-label="{{'documents:downloadZip' | t:'Download zip'}}" title="{{'documents:downloadZip' | t:'Download zip'}}"
-                href="{{ downloadZipPath }}?path={{ folder.path }}"></a>
+                ng-href="{{ downloadZipPath }}?path={{ folder.path }}"></a>
             <bk-popover>
                 <bk-popover-control>
                     <bk-button is-menu="true" glyph="sap-icon--upload-to-cloud" aria-label="{{'documents:uploadFile' | t:{count: 1}:'Upload file'}}" title="{{'documents:uploadFile' | t:{count: 1}:'Upload file'}}" state="transparent">

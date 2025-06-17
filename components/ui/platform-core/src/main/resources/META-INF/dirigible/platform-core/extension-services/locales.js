@@ -67,7 +67,7 @@ try {
 				for (let j = 0; j < jsons.length; j++) {
 					const translationPath = `/${modules[p]}/translations/${lang}/${jsons[j]}`;
 					if (translationPath !== commonPath) {
-						responseContent.translations[lang][modules[p]] = JSON.parse(registry.getText(translationPath))
+						responseContent.translations[lang][modules[p]] = JSON.parse(registry.getText(translationPath));
 					}
 				}
 			}

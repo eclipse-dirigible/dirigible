@@ -30,6 +30,9 @@ angular.module('platformLocale', []).provider('LocaleService', function LocaleSe
                     load: 'currentOnly',
                     debug: false,
                     defaultNS: 'common',
+                    interpolation: {
+                        skipOnVariables: false
+                    },
                     resources: response.data.translations
                 }).then((_, err) => {
                     if (err) console.error(err);
@@ -63,11 +66,11 @@ angular.module('platformLocale', []).provider('LocaleService', function LocaleSe
             },
         };
     }];
-}).filter('t', (LocaleService) => {
+}).filter('t', ['LocaleService', (LocaleService) => {
     function filter(key, options, fallback) {
         const keyOptions = angular.isDefined(options) ? options : fallback;
         return LocaleService.t(key ?? '', keyOptions);
     }
     filter.$stateful = true;
     return filter;
-});
+}]);

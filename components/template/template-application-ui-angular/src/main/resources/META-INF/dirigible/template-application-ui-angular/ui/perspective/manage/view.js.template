@@ -6,6 +6,7 @@
 const viewData = {
     id: '${name}',
     label: '${name}',
+    translation: '$projectName:t.$dataName',
     region: 'center',
 #if($type == 'SETTING')
     lazyLoad: true,

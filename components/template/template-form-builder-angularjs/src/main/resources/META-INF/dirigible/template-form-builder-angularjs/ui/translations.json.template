@@ -1,1 +1,6 @@
-{}
+{
+    "aria": {
+        "showHide": "show/hide",
+        "options": "options"
+    }
+}

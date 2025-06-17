@@ -1,10 +1,23 @@
 #set($dollar = '$')
-angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'])
 	.config(['EntityServiceProvider', (EntityServiceProvider) => {
 		EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts';
 	}])
-	.controller('PageController', ($scope,#if($hasDropdowns) ${dollar}http,#end EntityService, Extensions, ButtonStates) => {
+	.controller('PageController', ($scope,#if($hasDropdowns) ${dollar}http,#end EntityService, Extensions, LocaleService, ButtonStates) => {
 		const Dialogs = new DialogHub();
+		let translated = {
+			yes: '',
+			no: '',
+			deleteConfirm: '',
+			deleteTitle: ''
+		}
+
+		LocaleService.onInit(() => {
+			translated.yes = LocaleService.t('$projectName:defaults.yes');
+			translated.no = LocaleService.t('$projectName:defaults.no');
+			translated.deleteTitle = LocaleService.t('$projectName:defaults.deleteTitle', { name: '${name}' });
+			translated.deleteConfirm = LocaleService.t('$projectName:messages.deleteConfirm', { name: '${name}' });
+		});
 		//-----------------Custom Actions-------------------//
 		Extensions.getWindows(['${projectName}-custom-action']).then((response) => {
 			$scope.pageActions = response.data.filter(e => e.perspective === '${perspectiveName}' && e.view === '${name}' && (e.type === 'page' || e.type === undefined));
@@ -14,7 +27,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		$scope.triggerPageAction = (action) => {
 			Dialogs.showWindow({
 				hasHeader: true,
-        		title: action.label,
+        		title: LocaleService.t(action.translation, action.label),
 				path: action.path,
 				params: {
 					selectedMainEntityKey: '${masterEntityId}',
@@ -29,7 +42,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		$scope.triggerEntityAction = (action) => {
 			Dialogs.showWindow({
 				hasHeader: true,
-        		title: action.label,
+        		title: LocaleService.t(action.translation, action.label),
 				path: action.path,
 				params: {
 					id: $scope.entity.${primaryKeysString},
@@ -121,7 +134,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 					const message = error.data ? error.data.message : '';
 					Dialogs.showAlert({
 						title: '${name}',
-						message: `Unable to list/filter ${name}: '${message}'`,
+						message: LocaleService.t('$projectName:messages.error.unableToLF', { name: '${name}', message: message }),
 						type: AlertTypes.Error
 					});
 					console.error('EntityService:', error);
@@ -130,7 +143,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				const message = error.data ? error.data.message : '';
 				Dialogs.showAlert({
 					title: '${name}',
-					message: `Unable to count ${name}: '${message}'`,
+					message: LocaleService.t('$projectName:messages.error.unableToCount', { name: '${name}', message: message }),
 					type: AlertTypes.Error
 				});
 				console.error('EntityService:', error);
@@ -218,15 +231,15 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		$scope.deleteEntity = (entity) => {
 			let id = entity.${primaryKeysString};
 			Dialogs.showDialog({
-				title: 'Delete ${name}?',
-				message: `Are you sure you want to delete ${name}? This action cannot be undone.`,
+				title: translated.deleteTitle,
+				message: translated.deleteConfirm,
 				buttons: [{
 					id: 'delete-btn-yes',
 					state: ButtonStates.Emphasized,
-					label: 'Yes',
+					label: translated.yes,
 				}, {
 					id: 'delete-btn-no',
-					label: 'No',
+					label: translated.no,
 				}],
 				closeButton: false
 			}).then((buttonId) => {
@@ -238,7 +251,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 						const message = error.data ? error.data.message : '';
 						Dialogs.showAlert({
 							title: '${name}',
-							message: `Unable to delete ${name}: '${message}'`,
+							message: LocaleService.t('$projectName:messages.error.unableToDelete', { name: '${name}', message: message }),
 							type: AlertTypes.Error,
 						});
 						console.error('EntityService:', error);
@@ -268,7 +281,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			const message = error.data ? error.data.message : '';
 			Dialogs.showAlert({
 				title: '${property.name}',
-				message: `Unable to load data: '${message}'`,
+				message: LocaleService.t('$projectName:messages.error.unableToLoad', { message: message }),
 				type: AlertTypes.Error
 			});
 		});
