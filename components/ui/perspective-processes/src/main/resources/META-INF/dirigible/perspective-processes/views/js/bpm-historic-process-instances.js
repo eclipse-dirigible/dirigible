@@ -28,6 +28,20 @@ historicProcessInstances.controller('BpmHistoricProcessInstancesView', ($scope, 
             });
     };
 
+    $scope.getRelativeTime = (dateTimeString) => {
+        return formatRelativeTime(new Date(dateTimeString));
+    };
+
+    $scope.openDialog = (instance) => {
+        Dialogs.showWindow({
+            id: 'bpm-historic-process-instances-details',
+            params: {
+                instance: instance,
+            },
+            closeButton: true,
+        });
+    };
+
     $scope.selectionChanged = (instance) => {
         if ($scope.selectedId === instance.id) {
             Dialogs.postMessage({ topic: 'bpm.historic.instance.selected', data: { deselect: true } });

@@ -28,12 +28,17 @@ ideBpmProcessJobsView.controller('IDEBpmProcessJobsViewController', ($scope, $ht
             });
     };
 
+    $scope.getRelativeTime = (dateTimeString) => {
+        return formatRelativeTime(new Date(dateTimeString));
+    };
+
     $scope.openDialog = (job) => {
-        Dialogs.showAlert({
-            title: job.exceptionMessage,
-            message: job.exceptionStacktrace,
-            type: AlertTypes.Error,
-            preformatted: true,
+        Dialogs.showWindow({
+            id: 'bpm-process-jobs-details',
+            params: {
+                job: job,
+            },
+            closeButton: true,
         });
     };
 

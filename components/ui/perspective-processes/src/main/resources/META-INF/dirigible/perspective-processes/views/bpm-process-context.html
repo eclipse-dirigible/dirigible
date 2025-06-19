@@ -37,20 +37,21 @@
             <table bk-table outer-borders="bottom" display-mode="compact">
                 <thead bk-table-header sticky="true" interactive="false">
                     <tr bk-table-row>
-                        <th bk-table-header-cell>Id</th>
-                        <th bk-table-header-cell>Process Instance Id</th>
                         <th bk-table-header-cell>Name</th>
                         <th bk-table-header-cell>Type</th>
                         <th bk-table-header-cell>Value</th>
+                        <th bk-table-header-cell>Details</th>
                     </tr>
                 </thead>
                 <tbody bk-table-body>
                     <tr bk-table-row ng-repeat="next in variablesList track by next.id" hoverable="true" activable="true" selected="selectedVariable.id === next.id" ng-click="selectionChanged(next)">
-                        <td bk-table-cell>{{next.id}}</td>
-                        <td bk-table-cell>{{next.processInstanceId}}</td>
                         <td bk-table-cell>{{next.name}}</td>
                         <td bk-table-cell>{{next.typeName ? next.typeName : next.variableTypeName}}</td>
-                        <td bk-table-cell>{{next.value}}</td>
+                        <td bk-table-cell class="bk-text--ellipsis" style="max-width: 25rem; overflow: hidden; white-space: nowrap;">{{next.value}}
+                        </td>
+                        <td bk-table-cell>
+                            <bk-button compact="true" state="transparent" label="Show" glyph="sap-icon--show" title="Show" aria-label="Show" ng-click="openDialog(next)"></bk-button>
+                        </td>
                     </tr>
                     <tr ng-if="variablesList.length === 0" bk-table-row>
                         <td bk-table-cell no-data="true">No variables have been detected.</td>

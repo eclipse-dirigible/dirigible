@@ -33,8 +33,19 @@ ideBpmProcessContextView.controller('IDEBpmProcessContextViewController', ($scop
             { params: { 'limit': 100 } }
         ).then((response) => {
             $scope.variablesList = response.data;
+            $scope.variablesList.sort((a, b) => a.name < b.name ? -1 : 1);
         }, (error) => {
             console.error(error);
+        });
+    };
+
+    $scope.openDialog = (variable) => {
+        Dialogs.showWindow({
+            id: 'bpm-process-context-details',
+            params: {
+                variable: variable,
+            },
+            closeButton: true,
         });
     };
 
@@ -74,8 +85,9 @@ ideBpmProcessContextView.controller('IDEBpmProcessContextViewController', ($scop
                     required: true
                 },
                 'prcvb': {
-                    label: 'Name',
-                    controlType: 'input',
+                    label: 'Value',
+                    controlType: 'textarea',
+                    rows: 6,
                     type: 'text',
                     placeholder: 'Variable value',
                     submitOnEnter: true,
@@ -105,7 +117,8 @@ ideBpmProcessContextView.controller('IDEBpmProcessContextViewController', ($scop
             form: {
                 'prcvb': {
                     label: 'Name',
-                    controlType: 'input',
+                    controlType: 'textarea',
+                    rows: 6,
                     type: 'text',
                     placeholder: 'Value',
                     value: `${$scope.selectedVariable.value}`,
