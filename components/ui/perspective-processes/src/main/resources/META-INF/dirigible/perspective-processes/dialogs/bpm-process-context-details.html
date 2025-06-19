@@ -25,49 +25,50 @@
     </head>
 
     <body class="bk-vbox">
-        <bk-fieldset class="fd-margin--tiny">
+        <bk-fieldset class="bk-padding-top-bottom--tiny fd-padding-begin-end--sm">
             <bk-form-group>
-                <bk-form-item class="fd-padding-begin-end--tiny">
+                <bk-form-item>
                     <bk-form-label colon="true">Id</bk-form-label>
-                    <bk-input type="text" value="{{variable.id}}" ng-readonly="true"></bk-input>
+                    <bk-input type="text" value="{{::params.variable.id}}" ng-readonly="true"></bk-input>
                 </bk-form-item>
-                <bk-form-item class="fd-padding-begin-end--tiny">
+                <bk-form-item>
                     <bk-form-label colon="true">Process Instance Id</bk-form-label>
-                    <bk-input type="text" value="{{variable.processInstanceId}}" ng-readonly="true"></bk-input>
+                    <bk-input type="text" value="{{::params.variable.processInstanceId}}" ng-readonly="true"></bk-input>
                 </bk-form-item>
-                <bk-form-item class="fd-padding-begin-end--tiny">
+                <bk-form-item>
                     <bk-form-label colon="true">Name</bk-form-label>
-                    <bk-input type="text" value="{{variable.name}}" ng-readonly="true"></bk-input>
+                    <bk-input type="text" value="{{::params.variable.name}}" ng-readonly="true"></bk-input>
                 </bk-form-item>
-                <bk-form-item class="fd-padding-begin-end--tiny">
+                <bk-form-item>
                     <bk-form-label colon="true">Type</bk-form-label>
-                    <bk-input type="text" value="{{variable.typeName ? variable.typeName : variable.variableTypeName}}" ng-readonly="true"></bk-input>
+                    <bk-input type="text" value="{{params.variable.typeName ? params.variable.typeName : params.variable.variableTypeName}}" ng-readonly="true"></bk-input>
                 </bk-form-item>
-                <bk-form-item class="fd-padding-begin-end--tiny">
+                <bk-form-item>
                     <bk-form-label colon="true">Value</bk-form-label>
-                    <bk-textarea rows="9" ng-readonly="true">{{variable.value}}</bk-textarea>
+                    <bk-textarea fd-scrollbar rows="9" ng-readonly="true">{{params.variable.value}}</bk-textarea>
                 </bk-form-item>
             </bk-form-group>
         </bk-fieldset>
 
         <script type="text/javascript">
             angular.module('contextDetails', ['platformView', 'blimpKit']).controller('ContextDetailsController', ($scope, ViewParameters) => {
-                $scope.dataParameters = ViewParameters.get();
-                if ($scope.dataParameters.hasOwnProperty('variable')) {
-                    $scope.variable = $scope.dataParameters.variable;
+                $scope.params = ViewParameters.get();
+                if ($scope.params.hasOwnProperty('variable')) {
                     try {
-                        if (typeof $scope.variable.value === 'object') {
-                            if (Array.isArray($scope.variable.value)) {
-                                $scope.variable.value = $scope.variable.value.map(e => JSON.parse(e));
+                        if (typeof $scope.params.variable.value === 'object') {
+                            if (Array.isArray($scope.params.variable.value)) {
+                                $scope.params.variable.value = $scope.params.variable.value.map(e => JSON.parse(e));
                             }
-                            $scope.variable.value = JSON.stringify($scope.variable.value, null, 4);
+                            $scope.params.variable.value = JSON.stringify($scope.params.variable.value, null, 4);
                         } else {
-                            $scope.variable.value = JSON.parse($scope.variable.value);
-                            $scope.variable.value = JSON.stringify($scope.variable.value, null, 4);
+                            $scope.params.variable.value = JSON.parse($scope.params.variable.value);
+                            $scope.params.variable.value = JSON.stringify($scope.params.variable.value, null, 4);
                         }
                     } catch (e) {
                         // Not a JSON - do nothing
                     }
+                } else {
+                    console.error('contextDetails: Variable parameter missing');
                 }
             });
         </script>

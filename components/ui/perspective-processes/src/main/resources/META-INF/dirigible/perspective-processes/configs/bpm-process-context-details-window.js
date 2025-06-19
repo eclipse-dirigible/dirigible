@@ -14,7 +14,7 @@ const viewData = {
     label: 'Process Context Details',
     path: '/services/web/perspective-processes/dialogs/bpm-process-context-details.html',
     maxWidth: '400px',
-    maxHeight: '600px'
+    maxHeight: '574px'
 };
 if (typeof exports !== 'undefined') {
     exports.getView = () => viewData;

@@ -49,8 +49,8 @@
                         <td bk-table-cell>{{next.typeName ? next.typeName : next.variableTypeName}}</td>
                         <td bk-table-cell class="bk-text--ellipsis" style="max-width: 25rem; overflow: hidden; white-space: nowrap;">{{next.value}}
                         </td>
-                        <td bk-table-cell>
-                            <bk-button compact="true" state="transparent" label="Show" glyph="sap-icon--show" title="Show" aria-label="Show" ng-click="openDialog(next)"></bk-button>
+                        <td bk-table-cell fit-content="true">
+                            <bk-button state="transparent" label="Show" glyph="sap-icon--show" title="Show details" aria-label="Show details" ng-click="openDialog(next)"></bk-button>
                         </td>
                     </tr>
                     <tr ng-if="variablesList.length === 0" bk-table-row>

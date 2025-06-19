@@ -13,6 +13,7 @@ const viewData = {
     id: 'bpm-process-jobs-details',
     label: 'Process Jobs Details',
     path: '/services/web/perspective-processes/dialogs/bpm-process-jobs-details.html',
+    maxHeight: '680px'
 };
 if (typeof exports !== 'undefined') {
     exports.getView = () => viewData;

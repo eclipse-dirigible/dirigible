@@ -26,71 +26,71 @@
     </head>
 
     <body class="bk-vbox">
-        <bk-fieldset class="fd-margin--tiny">
+        <bk-fieldset ng-if="::params.job" class="bk-padding-top-bottom--tiny fd-padding-begin-end--sm">
             <bk-form-group>
-                <bk-form-item>
-                    <div class="bk-hbox">
-                        <div class="bk-stretch fd-padding-begin-end--tiny">
-                            <bk-form-label colon="true">Id</bk-form-label>
-                            <bk-input type="text" value="{{job.id}}" ng-readonly="true"></bk-input>
-                        </div>
-                        <div class="bk-stretch fd-padding-begin-end--tiny">
-                            <bk-form-label colon="true">Process Instance Id</bk-form-label>
-                            <bk-input type="text" value="{{job.processInstanceId}}" ng-readonly="true"></bk-input>
-                        </div>
-                        <div class="bk-stretch fd-padding-begin-end--tiny">
-                            <bk-form-label colon="true">Execution Id</bk-form-label>
-                            <bk-input type="text" value="{{job.executionId}}" ng-readonly="true"></bk-input>
-                        </div>
-                        <div class="bk-stretch fd-padding-begin-end--tiny">
-                            <bk-form-label colon="true">Correlation Id</bk-form-label>
-                            <bk-input type="text" value="{{job.correlationId}}" ng-readonly="true"></bk-input>
-                        </div>
+                <bk-form-item class="bk-hbox bk-box--gap">
+                    <div class="bk-stretch">
+                        <bk-form-label colon="true">Id</bk-form-label>
+                        <bk-input type="text" value="{{::params.job.id}}" ng-readonly="true"></bk-input>
+                    </div>
+                    <div class="bk-stretch">
+                        <bk-form-label colon="true">Process Instance Id</bk-form-label>
+                        <bk-input type="text" value="{{::params.job.processInstanceId}}" ng-readonly="true"></bk-input>
+                    </div>
+                    <div class="bk-stretch">
+                        <bk-form-label colon="true">Execution Id</bk-form-label>
+                        <bk-input type="text" value="{{::params.job.executionId}}" ng-readonly="true"></bk-input>
+                    </div>
+                    <div class="bk-stretch">
+                        <bk-form-label colon="true">Correlation Id</bk-form-label>
+                        <bk-input type="text" value="{{::params.job.correlationId}}" ng-readonly="true"></bk-input>
                     </div>
                 </bk-form-item>
-                <bk-form-item class="fd-padding-begin-end--tiny">
+                <bk-form-item>
                     <bk-form-label colon="true">Exception Message</bk-form-label>
-                    <bk-textarea rows="6" ng-readonly="true">{{job.exceptionMessage}}</bk-textarea>
+                    <bk-textarea rows="6" ng-readonly="true">{{::params.job.exceptionMessage}}</bk-textarea>
                 </bk-form-item>
-                <bk-form-item>
-                    <div class="bk-hbox">
-                        <div class="bk-stretch fd-padding-begin-end--tiny">
-                            <bk-form-label colon="true">Element Name</bk-form-label>
-                            <bk-input type="text" value="{{job.elementName}}" ng-readonly="true"></bk-input>
-                        </div>
-                        <div class="bk-stretch fd-padding-begin-end--tiny">
-                            <bk-form-label colon="true">Element Id</bk-form-label>
-                            <bk-input type="text" value="{{job.elementId}}" ng-readonly="true"></bk-input>
-                        </div>
+                <bk-form-item class="bk-hbox bk-box--gap">
+                    <div class="bk-stretch">
+                        <bk-form-label colon="true">Element Name</bk-form-label>
+                        <bk-input type="text" value="{{::params.job.elementName}}" ng-readonly="true"></bk-input>
+                    </div>
+                    <div class="bk-stretch">
+                        <bk-form-label colon="true">Element Id</bk-form-label>
+                        <bk-input type="text" value="{{::params.job.elementId}}" ng-readonly="true"></bk-input>
                     </div>
                 </bk-form-item>
-                <bk-form-item class="fd-padding-begin-end--tiny">
-                    <bk-form-label colon="true">Exception Stacktrace</bk-form-label>
-                    <bk-textarea rows="9" ng-readonly="true">{{job.exceptionStacktrace}}</bk-textarea>
-                </bk-form-item>
                 <bk-form-item>
-                    <div class="bk-hbox">
-                        <div class="bk-stretch fd-padding-begin-end--tiny">
-                            <bk-form-label colon="true">Relative Time</bk-form-label>
-                            <bk-input type="text" value="{{getRelativeTime(job.createTime)}}" ng-readonly="true"></bk-input>
-                        </div>
-                        <div class="bk-stretch fd-padding-begin-end--tiny">
-                            <bk-form-label colon="true">Create Time</bk-form-label>
-                            <bk-input type="text" value="{{job.createTime | date:'medium'}}" ng-readonly="true"></bk-input>
-                        </div>
+                    <bk-form-label colon="true">Exception Stacktrace</bk-form-label>
+                    <bk-textarea fd-scrollbar rows="9" ng-readonly="true">{{params.job.exceptionStacktrace}}</bk-textarea>
+                </bk-form-item>
+                <bk-form-item class="bk-hbox bk-box--gap">
+                    <div class="bk-stretch">
+                        <bk-form-label colon="true">Relative Time</bk-form-label>
+                        <bk-input type="text" value="{{getRelativeTime(params.job.createTime)}}" ng-readonly="true"></bk-input>
+                    </div>
+                    <div class="bk-stretch">
+                        <bk-form-label colon="true">Create Time</bk-form-label>
+                        <bk-input type="text" value="{{::params.job.createTime | date:'medium'}}" ng-readonly="true"></bk-input>
                     </div>
                 </bk-form-item>
             </bk-form-group>
         </bk-fieldset>
 
+        <bk-message-page ng-if="::!params.job" glyph="sap-icon--error">
+            <bk-message-page-title>The job parameter is missing!</bk-message-page-title>
+        </bk-message-page>
+
         <script type="text/javascript">
             angular.module('jobsDetails', ['platformView', 'blimpKit']).controller('JobsDetailsController', ($scope, ViewParameters) => {
-                $scope.dataParameters = ViewParameters.get();
-                if ($scope.dataParameters.hasOwnProperty('job')) {
-                    $scope.job = $scope.dataParameters.job;
-                    $scope.job.exceptionStacktrace = $scope.job.exceptionStacktrace.replace($scope.job.exceptionMessage, '');
-                    $scope.job.exceptionStacktrace = $scope.job.exceptionStacktrace.replaceAll('	', '');
-                    $scope.job.exceptionStacktrace = $scope.job.exceptionStacktrace.trim();
+                $scope.params = ViewParameters.get();
+                if ($scope.params.hasOwnProperty('job')) {
+                    console.log(typeof $scope.params.job.createTime);
+                    $scope.params.job.exceptionStacktrace = $scope.params.job.exceptionStacktrace.replace($scope.params.job.exceptionMessage, '');
+                    $scope.params.job.exceptionStacktrace = $scope.params.job.exceptionStacktrace.replaceAll('	', '');
+                    $scope.params.job.exceptionStacktrace = $scope.params.job.exceptionStacktrace.trim();
+                } else {
+                    console.error('jobDetails: Job parameter missing');
                 }
 
                 $scope.getRelativeTime = (dateTimeString) => {
