@@ -39,14 +39,11 @@ export function getBrandingJs() {
     },
     logo: '${Configurations.get(BRANDING_LOGO, BRANDING_LOGO_DEFAULT)}',
 	theme: '${Configurations.get(BRANDING_THEME, BRANDING_THEME_DEFAULT)}',
-    prefix: '${Configurations.get(BRANDING_PREFIX, BRANDING_PREFIX_DEFAULT)}'
+    prefix: '${Configurations.get(BRANDING_PREFIX, BRANDING_PREFIX_DEFAULT)}',
+    analytics: '${Configurations.get(BRANDING_ANALYTICS, '')}',
 };`;
 }
 
 export function getKeyPrefix() {
     return Configurations.get(BRANDING_PREFIX, BRANDING_PREFIX_DEFAULT);
-}
-
-export function getAnalyticsLink() {
-    return Configurations.get(BRANDING_ANALYTICS, '');
 }
