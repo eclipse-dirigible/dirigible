@@ -21,6 +21,7 @@
         <title config-title></title>
         <script type="text/javascript" src="/services/web/perspective-processes/configs/bpm-process-context-details-window.js"></script>
         <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <script type="text/javascript" src="/services/web/perspective-processes/js/variable-utils.js"></script>
         <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
     </head>
 
@@ -54,19 +55,7 @@
             angular.module('contextDetails', ['platformView', 'blimpKit']).controller('ContextDetailsController', ($scope, ViewParameters) => {
                 $scope.params = ViewParameters.get();
                 if ($scope.params.hasOwnProperty('variable')) {
-                    try {
-                        if (typeof $scope.params.variable.value === 'object') {
-                            if (Array.isArray($scope.params.variable.value)) {
-                                $scope.params.variable.value = $scope.params.variable.value.map(e => JSON.parse(e));
-                            }
-                            $scope.params.variable.value = JSON.stringify($scope.params.variable.value, null, 4);
-                        } else {
-                            $scope.params.variable.value = JSON.parse($scope.params.variable.value);
-                            $scope.params.variable.value = JSON.stringify($scope.params.variable.value, null, 4);
-                        }
-                    } catch (e) {
-                        // Not a JSON - do nothing
-                    }
+                    $scope.params.variable.value = stringifyValue($scope.params.variable.value);
                 } else {
                     console.error('contextDetails: Variable parameter missing');
                 }

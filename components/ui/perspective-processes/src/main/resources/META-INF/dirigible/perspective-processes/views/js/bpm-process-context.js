@@ -25,6 +25,7 @@ ideBpmProcessContextView.controller('IDEBpmProcessContextViewController', ($scop
     $scope.reload = () => {
         // console.log("Reloading data for current process instance id: " + $scope.currentProcessInstanceId)
         $scope.fetchData($scope.currentProcessInstanceId);
+        $scope.selectedVariable = null;
     };
 
     $scope.fetchData = (processInstanceId) => {
@@ -121,7 +122,7 @@ ideBpmProcessContextView.controller('IDEBpmProcessContextViewController', ($scop
                     rows: 6,
                     type: 'text',
                     placeholder: 'Value',
-                    value: `${$scope.selectedVariable.value}`,
+                    value: `${stringifyValue($scope.selectedVariable.value)}`,
                     submitOnEnter: true,
                     focus: true,
                     required: true

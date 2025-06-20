@@ -146,6 +146,7 @@ processInstances.controller('BpmProcessInstancesView', ($scope, $http, Notificat
                 });
             }
         }
+        $scope.definitionVersions.sort((a, b) => b.label - a.label);
         if ($scope.definitionVersions.length) {
             $scope.selected.definitionId = $scope.definitionVersions[0].id;
             $scope.selected.definitionVersion = $scope.definitionVersions[0].label;
