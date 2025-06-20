@@ -14,7 +14,7 @@ import { extensions } from "sdk/extensions";
 import { uuid } from "sdk/utils";
 
 const allThemes = [];
-const extensionPoints = (request.getParameter('extensionPoints') || 'platform-themes').split(',');
+const extensionPoints = request.getParameterValues('extensionPoints') ?? ['platform-themes'];
 
 function sortThemes(a, b) {
 	if (a.order !== undefined && b.order !== undefined) {

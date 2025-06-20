@@ -1,5 +1,0 @@
-{
-    "extensionPoint": "platform-templates",
-    "module": "template-extension-perspective/template.js",
-    "description": "Extension Perspective Template"
-}

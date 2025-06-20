@@ -6,6 +6,7 @@
 const viewData = {
     id: '${name}-filter',
     label: '${name} Filter',
+    translation: '$projectName:t.$dataName',
     path: '/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${name}/dialog-filter/index.html',
     perspectiveName: '${perspectiveName}'
 };

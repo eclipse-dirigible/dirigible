@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-angular.module('app', ['platformView', 'blimpKit']).controller('ApplicationController', ($scope, $http, $window) => {
+angular.module('app', ['platformView', 'blimpKit', 'platformLocale']).controller('ApplicationController', ($scope, $http, $window, LocaleService) => {
     const Dialogs = new DialogHub();
     $scope.tasksList = [];
     $scope.tasksListAssignee = [];
@@ -53,14 +53,14 @@ angular.module('app', ['platformView', 'blimpKit']).controller('ApplicationContr
     };
 
     $scope.claimTask = () => {
-        $scope.executeAction($scope.selectedClaimTask.id, { 'action': 'CLAIM' }, 'claimed', () => { $scope.selectedClaimTask = null });
+        $scope.executeAction($scope.selectedClaimTask.id, { 'action': 'CLAIM' }, true, () => { $scope.selectedClaimTask = null });
     };
 
     $scope.unclaimTask = () => {
-        $scope.executeAction($scope.selectedUnclaimTask.id, { 'action': 'UNCLAIM' }, 'unclaimed', () => { $scope.selectedUnclaimTask = null });
+        $scope.executeAction($scope.selectedUnclaimTask.id, { 'action': 'UNCLAIM' }, false, () => { $scope.selectedUnclaimTask = null });
     };
 
-    $scope.executeAction = (taskId, requestBody, actionName, clearCallback) => {
+    $scope.executeAction = (taskId, requestBody, claimed, clearCallback) => {
         const apiUrl = '/services/inbox/tasks/' + taskId;
 
         $http({
@@ -72,8 +72,8 @@ angular.module('app', ['platformView', 'blimpKit']).controller('ApplicationContr
             }
         }).then(() => {
             Dialogs.showAlert({
-                title: "Action confirmation",
-                message: `Task ${actionName} successfully`,
+                title: LocaleService.t('inbox:actionConfirm', 'Action confirmation'),
+                message: LocaleService.t(claimed ? 'inbox:actionClaimSuccess' : 'inbox:actionUnclaimSuccess', 'Task claimed successfully'),
                 type: AlertTypes.Success
             });
             $scope.reload();
@@ -81,13 +81,11 @@ angular.module('app', ['platformView', 'blimpKit']).controller('ApplicationContr
             clearCallback()
         }).catch((error) => {
             Dialogs.showAlert({
-                title: "Action failed",
-                message: `Failed to ${actionName} task ${error.message}`,
+                title: LocaleService.t('inbox:errMsg.actionTitle', 'Action failed'),
+                message: LocaleService.t(claimed ? 'inbox:errMsg.actionClaim' : 'inbox:errMsg.actionUnclaim', { name: error.message }),
                 type: AlertTypes.Error
             });
             console.error('Error making POST request:', error);
         });
     }
-
-    $scope.getNoDataMessage = () => 'No tasks found.';
 });

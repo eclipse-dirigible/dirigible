@@ -1,11 +1,14 @@
 #set($dollar = '$')
-angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'])
 	.config(['EntityServiceProvider', (EntityServiceProvider) => {
 		EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts';
 	}])
-	.controller('PageController', ($scope, ${dollar}http, ViewParameters, EntityService) => {
+	.controller('PageController', ($scope, ${dollar}http, ViewParameters, LocaleService, EntityService) => {
 		const Dialogs = new DialogHub();
 		const Notifications = new NotificationHub();
+		let description = '';
+		let propertySuccessfullyCreated = '${name} successfully created';
+		let propertySuccessfullyUpdated = '${name} successfully updated';
 		$scope.entity = {};
 		$scope.forms = {
 			details: {},
@@ -16,6 +19,15 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			update: 'Update ${name}'
 		};
 		$scope.action = 'select';
+
+		LocaleService.onInit(() => {
+			description = LocaleService.t('$projectName:defaults.description');
+			$scope.formHeaders.select = LocaleService.t('$projectName:defaults.formHeadSelect', { name: '${name}' });
+			$scope.formHeaders.create = LocaleService.t('$projectName:defaults.formHeadCreate', { name: '${name}' });
+			$scope.formHeaders.create = LocaleService.t('$projectName:defaults.formHeadUpdate', { name: '${name}' });
+			propertySuccessfullyCreated = LocaleService.t('$projectName:messages.propertySuccessfullyCreated', { name: '${name}' });
+			propertySuccessfullyUpdated = LocaleService.t('$projectName:messages.propertySuccessfullyUpdated', { name: '${name}' });
+		});
 
 		let params = ViewParameters.get();
 		if (Object.keys(params).length) {
@@ -61,7 +73,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityCreated', data: response.data });
 				Notifications.show({
 					title: '${name}',
-					description: '${name} successfully created',
+					description: propertySuccessfullyCreated,
 					type: 'positive'
 				});
 				$scope.cancel();
@@ -69,7 +81,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				const message = error.data ? error.data.message : '';
 				Dialogs.showAlert({
 					title: '${name}',
-					message: `Unable to create ${name}: '${message}'`,
+					message: LocaleService.t('$projectName:messages.error.unableToCreate', { name: '${name}', message: message }),
 					type: AlertTypes.Error
 				});
 				console.error('EntityService:', error);
@@ -91,7 +103,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityUpdated', data: response.data });
 				Notifications.show({
 					title: '${name}',
-					description: '${name} successfully updated',
+					description: propertySuccessfullyUpdated,
 					type: 'positive'
 				});
 				$scope.cancel();
@@ -99,7 +111,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				const message = error.data ? error.data.message : '';
 				Dialogs.showAlert({
 					title: '${name}',
-					message: `Unable to update ${name}: '${message}'`,
+					message: LocaleService.t('$projectName:messages.error.unableToUpdate', { name: '${name}', message: message }),
 					type: AlertTypes.Error
 				});
 				console.error('EntityService:', error);
@@ -156,7 +168,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 #end
 		$scope.alert = (message) => {
 			if (message) Dialogs.showAlert({
-				title: 'Description',
+				title: description,
 				message: message,
 				type: AlertTypes.Information,
 				preformatted: true,

@@ -6,6 +6,7 @@
 const viewData = {
     id: '${name}Report',
     label: '${name} Report',
+    translation: '$projectName:t.$dataName',
     region: 'center',
     lazyLoad: true,
 	autoFocusTab: false,

@@ -12,6 +12,7 @@
 const perspectiveData = {
 	id: 'processInbox',
 	label: 'Process Inbox',
+	translation: 'inbox:processInbox',
 	path: '/services/web/inbox/index.html',
 	order: -2,
 	lazyLoad: true,

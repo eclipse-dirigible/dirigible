@@ -20,7 +20,7 @@
 		<link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
 		<title config-title></title>
 		<script type="text/javascript" src="/services/web/shell-ide/configs/general.js"></script>
-		<script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=view-js,cookies"></script>
+		<script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=view-js,cookies-js"></script>
 		<link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
 		<script type="text/javascript" src="js/general.js"></script>
 		<style>
@@ -44,7 +44,7 @@
 						<span class="fd-text"><b>Theme</b></span>
 					</div>
 					<bk-card card-type="list" aria-roledescription="theme setting section">
-						<bk-card-content aria-roledescription="Card content">
+						<bk-card-content aria-roledescription="theme setting list">
 							<bk-list no-border="true">
 								<bk-list-item interactive="true" ng-repeat="theme in themes track by theme.id" ng-click="setTheme(theme.id, theme.name)" selected="theme.id === currentTheme.id">
 									<bk-list-icon glyph="{{ theme.id === currentTheme.id ? 'sap-icon--accept' : 'sap-icon' }}"></bk-list-icon>
@@ -60,7 +60,7 @@
 						<span class="fd-text"><b>Editors</b></span>
 					</div>
 					<bk-card card-type="list" aria-roledescription="editors setting section">
-						<bk-card-content aria-roledescription="Card content">
+						<bk-card-content aria-roledescription="editors setting list">
 							<bk-list>
 								<bk-list-item interactive="false" class="bk-no-border--bottom">
 									<bk-list-title id="arl">Auto-Reveal Active File</bk-list-title>
