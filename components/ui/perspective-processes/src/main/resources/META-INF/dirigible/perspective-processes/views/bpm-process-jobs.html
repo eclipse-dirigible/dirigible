@@ -42,7 +42,7 @@
                         <td bk-table-cell>{{getRelativeTime(next.createTime)}}</td>
                         <td bk-table-cell class="bk-text--ellipsis" style="max-width: 25rem; overflow: hidden; white-space: nowrap;">{{next.exceptionMessage}}</td>
                         <td bk-table-cell fit-content="true">
-                            <bk-button state="transparent" label="Show" glyph="sap-icon--show" title="Show details" aria-label="Show details" ng-click="openDialog(next)"></bk-button>
+                            <bk-button state="transparent" glyph="sap-icon--show" title="Show details" aria-label="Show details" ng-click="openDialog(next)"></bk-button>
                         </td>
                     </tr>
                     <tr ng-if="jobsList.length === 0" bk-table-row>

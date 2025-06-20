@@ -19,6 +19,7 @@ bpmProcessViewer.controller('BpmProcessViewerController', ($scope, $http, Dialog
 
     $scope.processId = '';
     let instanceId = '';
+    const badgeIds = [];
 
     const bpmnVisualization = new bpmnvisu.BpmnVisualization({ container: 'bpmn-container', navigation: { enabled: true } });
     let style = bpmnVisualization.graph.getStylesheet().getDefaultVertexStyle();
@@ -44,6 +45,7 @@ bpmProcessViewer.controller('BpmProcessViewerController', ($scope, $http, Dialog
         else endpoint = `/services/bpm/bpm-processes/instance/${instanceId}/active`;
         $http.get(endpoint).then((response) => {
             if (!historic) {
+                clearBadges();
                 for (const [key, value] of Object.entries(response.data)) {
                     setBadges(key, getBadgeConfig(value));
                 }
@@ -102,6 +104,7 @@ bpmProcessViewer.controller('BpmProcessViewerController', ($scope, $http, Dialog
 
     function loadBadges(hideBusy = false) {
         $http.get(`/services/bpm/bpm-processes/definition/${$scope.processId}/active`).then((response) => {
+            clearBadges();
             for (const [key, value] of Object.entries(response.data)) {
                 setBadges(key, getBadgeConfig(value));
             }
@@ -141,7 +144,14 @@ bpmProcessViewer.controller('BpmProcessViewerController', ($scope, $http, Dialog
         return badges;
     }
 
+    function clearBadges() {
+        for (let i = 0; i < badgeIds.length; i++) {
+            bpmnVisualization.bpmnElementsRegistry.removeAllOverlays(badgeIds[i]);
+        }
+    }
+
     function setBadges(id, badges) {
+        badgeIds.push(id);
         bpmnVisualization.bpmnElementsRegistry.addOverlays(id, badges);
     }
 

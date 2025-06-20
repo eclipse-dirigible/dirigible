@@ -26,70 +26,74 @@
     </head>
 
     <body class="bk-vbox">
-        <bk-fieldset class="fd-margin--tiny">
+        <bk-fieldset ng-if="::params.instance" class="bk-padding-top-bottom--tiny fd-padding-begin-end--sm">
             <bk-form-group>
                 <bk-form-item>
-                    <div class="bk-hbox">
-                        <div class="bk-stretch fd-padding-begin-end--tiny">
+                    <div class="bk-hbox bk-box--gap">
+                        <div class="bk-stretch">
                             <bk-form-label colon="true">Id</bk-form-label>
                             <bk-input type="text" value="{{::params.instance.id}}" ng-readonly="true"></bk-input>
                         </div>
-                        <div class="bk-stretch fd-padding-begin-end--tiny">
+                        <div class="bk-stretch">
                             <bk-form-label colon="true">Process Instance Id</bk-form-label>
                             <bk-input type="text" value="{{::params.instance.processInstanceId}}" ng-readonly="true"></bk-input>
                         </div>
-                        <div class="bk-stretch fd-padding-begin-end--tiny">
+                        <div class="bk-stretch">
                             <bk-form-label colon="true">Reference Id</bk-form-label>
                             <bk-input type="text" value="{{::params.instance.referenceId}}" ng-readonly="true"></bk-input>
                         </div>
-                        <div class="bk-stretch fd-padding-begin-end--tiny">
+                        <div class="bk-stretch">
                             <bk-form-label colon="true">Callback Id</bk-form-label>
                             <bk-input type="text" value="{{::params.instance.callbackId}}" ng-readonly="true"></bk-input>
                         </div>
                     </div>
                 </bk-form-item>
                 <bk-form-item>
-                    <div class="bk-hbox">
-                        <div class="bk-stretch fd-padding-begin-end--tiny">
+                    <div class="bk-hbox bk-box--gap">
+                        <div class="bk-stretch">
                             <bk-form-label colon="true">Business Key</bk-form-label>
                             <bk-input type="text" value="{{::params.instance.businessKey}}" ng-readonly="true"></bk-input>
                         </div>
-                        <div class="bk-stretch fd-padding-begin-end--tiny">
+                        <div class="bk-stretch">
                             <bk-form-label colon="true">Business Status</bk-form-label>
                             <bk-input type="text" value="{{::params.instance.businessStatus}}" ng-readonly="true"></bk-input>
                         </div>
                     </div>
                 </bk-form-item>
-                <bk-form-item class="fd-padding-begin-end--tiny">
+                <bk-form-item>
                     <bk-form-label colon="true">Name</bk-form-label>
                     <bk-input type="text" value="{{::params.instance.name}}" ng-readonly="true"></bk-input>
                 </bk-form-item>
                 <bk-form-item>
-                    <div class="bk-hbox">
-                        <div class="bk-stretch fd-padding-begin-end--tiny">
+                    <div class="bk-hbox bk-box--gap">
+                        <div class="bk-stretch">
                             <bk-form-label colon="true">Process Definition Name</bk-form-label>
                             <bk-input type="text" value="{{::params.instance.processDefinitionName}}" ng-readonly="true"></bk-input>
                         </div>
-                        <div class="bk-stretch fd-padding-begin-end--tiny">
+                        <div class="bk-stretch">
                             <bk-form-label colon="true">Process Definition Version</bk-form-label>
                             <bk-input type="text" value="{{::params.instance.processDefinitionVersion}}" ng-readonly="true"></bk-input>
                         </div>
-                        <div class="bk-stretch fd-padding-begin-end--tiny">
+                        <div class="bk-stretch">
                             <bk-form-label colon="true">Process Definition Key</bk-form-label>
                             <bk-input type="text" value="{{::params.instance.processDefinitionKey}}" ng-readonly="true"></bk-input>
                         </div>
-                        <div class="bk-stretch fd-padding-begin-end--tiny">
+                        <div class="bk-stretch">
                             <bk-form-label colon="true">Process Definition Id</bk-form-label>
                             <bk-input type="text" value="{{::params.instance.processDefinitionId}}" ng-readonly="true"></bk-input>
                         </div>
                     </div>
                 </bk-form-item>
-                <bk-form-item class="fd-padding-begin-end--tiny">
+                <bk-form-item>
                     <bk-form-label colon="true">Start Time</bk-form-label>
-                    <bk-input type="text" value="{{params.instance.startTime | date:'medium'}} ({{getRelativeTime(params.instance.startTime)}})" ng-readonly="true"></bk-input>
+                    <bk-input type="text" value="{{::params.instance.startTime | date:'medium'}} ({{getRelativeTime(params.instance.startTime)}})" ng-readonly="true"></bk-input>
                 </bk-form-item>
             </bk-form-group>
         </bk-fieldset>
+
+        <bk-message-page ng-if="::!params.instance" glyph="sap-icon--error">
+            <bk-message-page-title>The instance parameter is missing!</bk-message-page-title>
+        </bk-message-page>
 
         <script type="text/javascript">
             angular.module('instancesDetails', ['platformView', 'blimpKit']).controller('InstancesDetailsController', ($scope, ViewParameters) => {

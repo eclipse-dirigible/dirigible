@@ -43,7 +43,7 @@
                         <th bk-table-header-cell>Id</th>
                         <th bk-table-header-cell>Business Key</th>
                         <th bk-table-header-cell>End Time</th>
-                        <th bk-table-header-cell>Details</th>
+                        <th bk-table-header-cell></th>
                     </tr>
                 </thead>
                 <tbody bk-table-body>
@@ -51,8 +51,8 @@
                         <td bk-table-cell>{{next.id}}</td>
                         <td bk-table-cell class="bk-text--ellipsis" style="max-width: 5rem; overflow: hidden; white-space: nowrap;">{{next.businessKey}}</td>
                         <td bk-table-cell>{{getRelativeTime(next.endTime)}}</td>
-                        <td bk-table-cell>
-                            <bk-button compact="true" state="transparent" label="Show" glyph="sap-icon--show" title="Show" aria-label="Show" ng-click="openDialog(next)"></bk-button>
+                        <td bk-table-cell fit-content="true">
+                            <bk-button compact="true" state="transparent" glyph="sap-icon--show" title="Show details" aria-label="Show details" ng-click="openDialog(next)"></bk-button>
                         </td>
                     </tr>
                     <tr ng-if="instances.length === 0" bk-table-row>

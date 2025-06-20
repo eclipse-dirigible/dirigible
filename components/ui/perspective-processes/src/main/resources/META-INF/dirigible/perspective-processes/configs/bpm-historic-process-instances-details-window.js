@@ -13,7 +13,7 @@ const viewData = {
     id: 'bpm-historic-process-instances-details',
     label: 'Historic Process Instances Details',
     path: '/services/web/perspective-processes/dialogs/bpm-historic-process-instances-details.html',
-    maxHeight: '680px'
+    maxHeight: '470px'
 };
 if (typeof exports !== 'undefined') {
     exports.getView = () => viewData;
