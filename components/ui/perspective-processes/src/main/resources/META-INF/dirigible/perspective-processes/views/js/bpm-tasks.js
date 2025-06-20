@@ -12,7 +12,7 @@
 const tasksView = angular.module('tasks', ['platformView', 'blimpKit']);
 tasksView.constant('Notifications', new NotificationHub());
 tasksView.constant('Dialogs', new DialogHub());
-tasksView.controller('TasksController', ($scope, $http, $window, Dialogs) => {
+tasksView.controller('TasksController', ($scope, $http, $window, Dialogs, Notifications) => {
     $scope.state = {
         loadingGroups: false,
         loadingAssignee: false,

@@ -26,25 +26,33 @@
     </head>
 
     <body class="bk-vbox">
-        <bk-fieldset class="bk-padding-top-bottom--tiny fd-padding-begin-end--sm">
+        <bk-fieldset class="fd-margin--tiny">
             <bk-form-group>
-                <bk-form-item>
+                <bk-form-item class="fd-padding-begin-end--tiny">
                     <bk-form-label colon="true">Id</bk-form-label>
                     <bk-input type="text" value="{{::params.variable.id}}" ng-readonly="true"></bk-input>
                 </bk-form-item>
                 <bk-form-item>
-                    <bk-form-label colon="true">Process Instance Id</bk-form-label>
-                    <bk-input type="text" value="{{::params.variable.processInstanceId}}" ng-readonly="true"></bk-input>
+                    <div class="bk-hbox">
+                        <div class="bk-stretch fd-padding-begin-end--tiny">
+                            <bk-form-label colon="true">Process Instance Id</bk-form-label>
+                            <bk-input type="text" value="{{::params.variable.processInstanceId}}" ng-readonly="true"></bk-input>
+                        </div>
+                        <div class="bk-stretch fd-padding-begin-end--tiny">
+                            <bk-form-label colon="true">Execution Id</bk-form-label>
+                            <bk-input type="text" value="{{::params.variable.executionId}}" ng-readonly="true"></bk-input>
+                        </div>
+                    </div>
                 </bk-form-item>
-                <bk-form-item>
+                <bk-form-item class="fd-padding-begin-end--tiny">
                     <bk-form-label colon="true">Name</bk-form-label>
                     <bk-input type="text" value="{{::params.variable.name}}" ng-readonly="true"></bk-input>
                 </bk-form-item>
-                <bk-form-item>
+                <bk-form-item class="fd-padding-begin-end--tiny">
                     <bk-form-label colon="true">Type</bk-form-label>
                     <bk-input type="text" value="{{params.variable.typeName ? params.variable.typeName : params.variable.variableTypeName}}" ng-readonly="true"></bk-input>
                 </bk-form-item>
-                <bk-form-item>
+                <bk-form-item class="fd-padding-begin-end--tiny">
                     <bk-form-label colon="true">Value</bk-form-label>
                     <bk-textarea fd-scrollbar rows="9" ng-readonly="true">{{params.variable.value}}</bk-textarea>
                 </bk-form-item>

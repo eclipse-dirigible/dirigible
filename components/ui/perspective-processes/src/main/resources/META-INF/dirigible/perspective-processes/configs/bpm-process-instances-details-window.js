@@ -10,9 +10,9 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const viewData = {
-    id: 'bpm-historic-process-instances-details',
-    label: 'Historic Process Instances Details',
-    path: '/services/web/perspective-processes/dialogs/bpm-historic-process-instances-details.html',
+    id: 'bpm-process-instances-details',
+    label: 'Process Instances Details',
+    path: '/services/web/perspective-processes/dialogs/bpm-process-instances-details.html',
     maxHeight: '680px'
 };
 if (typeof exports !== 'undefined') {

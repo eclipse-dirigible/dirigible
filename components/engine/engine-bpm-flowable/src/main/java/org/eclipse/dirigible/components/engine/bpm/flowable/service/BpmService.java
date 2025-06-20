@@ -9,11 +9,13 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import static java.text.MessageFormat.format;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.engine.bpm.flowable.config.BpmProviderFlowable;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActivityStatusData;
@@ -38,15 +40,11 @@ import org.flowable.variable.api.history.HistoricVariableInstance;
 import org.flowable.variable.api.persistence.entity.VariableInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
-import static java.text.MessageFormat.format;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 /**
  * Processing the BPM UI Service incoming requests.
@@ -276,13 +274,30 @@ public class BpmService {
         processInstanceData.setBusinessStatus(processInstance.getBusinessStatus());
         processInstanceData.setDeploymentId(processInstance.getDeploymentId());
         processInstanceData.setId(processInstance.getId());
+        processInstanceData.setProcessInstanceId(processInstance.getProcessInstanceId());
         processInstanceData.setName(processInstance.getName());
         processInstanceData.setProcessDefinitionId(processInstance.getProcessDefinitionId());
         processInstanceData.setProcessDefinitionKey(processInstance.getProcessDefinitionKey());
         processInstanceData.setProcessDefinitionName(processInstance.getProcessDefinitionName());
         processInstanceData.setProcessDefinitionVersion(processInstance.getProcessDefinitionVersion());
         processInstanceData.setTenantId(processInstance.getTenantId());
+        processInstanceData.setStartTime(processInstance.getStartTime());
+        processInstanceData.setReferenceId(processInstance.getReferenceId());
+        processInstanceData.setCallbackId(processInstance.getCallbackId());
+        processInstanceData.setActivityId(processInstance.getActivityId());
         return processInstanceData;
+    }
+
+    /**
+     * Start process instance.
+     *
+     * @param processDefinitionKey the process definition key
+     * @param businessKey the business key
+     * @param parameters the parameters
+     * @return the process instance id
+     */
+    public String startProcess(String processDefinitionKey, String businessKey, String parameters) {
+        return bpmProviderFlowable.startProcess(processDefinitionKey, businessKey, parameters);
     }
 
     /**
@@ -336,6 +351,16 @@ public class BpmService {
         bpmProviderFlowable.addProcessInstanceVariable(processInstanceId, key, value);
     }
 
+    /**
+     * Remove variable from the execution context.
+     *
+     * @param executionId the execution id
+     * @param variableName variable name
+     */
+    public void removeVariable(String executionId, String variableName) {
+        bpmProviderFlowable.removeVariable(executionId, variableName);
+    }
+
     public List<IdentityLink> getTaskIdentityLinks(String taskId) {
         return bpmProviderFlowable.getTaskService()
                                   .getTaskIdentityLinks(taskId);
@@ -365,8 +390,8 @@ public class BpmService {
         return bpmProviderFlowable.getProcessHistoricInstanceVariables(processInstanceId);
     }
 
-    public List<VariableInstance> getProcessInstanceVariables(String processInstanceId) {
-        return bpmProviderFlowable.getProcessInstanceVariables(processInstanceId);
+    public List<VariableInstance> getProcessInstanceVariables(String processInstanceId, Optional<String> variableName) {
+        return bpmProviderFlowable.getProcessInstanceVariables(processInstanceId, variableName);
     }
 
     public Optional<byte[]> getProcessDefinitionImage(String processDefinitionKey) throws IOException {
