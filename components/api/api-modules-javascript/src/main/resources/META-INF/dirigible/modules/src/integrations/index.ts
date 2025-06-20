@@ -17,6 +17,12 @@ export interface IntegrationMessage {
 
     getBody(): any;
 
+    getExchangeProperty(propertyName: string): any;
+
+    setExchangeProperty(propertyName: string, propertyValue: any): void;
+
+    getExchangeProperties(): Record<string, any>;
+
     getBodyAsString(): string;
 
     setBody(body: any): void;
