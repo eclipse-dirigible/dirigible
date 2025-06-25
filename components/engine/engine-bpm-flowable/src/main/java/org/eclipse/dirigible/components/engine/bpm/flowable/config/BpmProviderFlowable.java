@@ -46,6 +46,7 @@ import org.flowable.image.ProcessDiagramGenerator;
 import org.flowable.job.api.Job;
 import org.flowable.variable.api.history.HistoricVariableInstance;
 import org.flowable.variable.api.persistence.entity.VariableInstance;
+import org.flowable.variable.api.runtime.VariableInstanceQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -156,8 +157,9 @@ public class BpmProviderFlowable implements BpmProvider {
      * Start process.
      *
      * @param key the key
+     * @param businessKey the business key
      * @param parameters the parameters
-     * @return the string
+     * @return the process instance id
      */
     public String startProcess(String key, String businessKey, String parameters) {
         LOGGER.info("Starting a BPMN process by key: [{}]", key);
@@ -328,13 +330,17 @@ public class BpmProviderFlowable implements BpmProvider {
                             .list();
     }
 
-    public List<VariableInstance> getProcessInstanceVariables(String processInstanceId) {
+    public List<VariableInstance> getProcessInstanceVariables(String processInstanceId, Optional<String> variableName) {
         flowableArtefactsValidator.validateProcessInstanceId(processInstanceId);
 
-        return processEngine.getRuntimeService()
-                            .createVariableInstanceQuery()
-                            .processInstanceId(processInstanceId)
-                            .list();
+        VariableInstanceQuery processInstanceQuery = processEngine.getRuntimeService()
+                                                                  .createVariableInstanceQuery();
+        if (variableName.isPresent() && !variableName.get()
+                                                     .isEmpty()) {
+            processInstanceQuery.variableNameLike("%" + variableName.get() + "%");
+        }
+        return processInstanceQuery.processInstanceId(processInstanceId)
+                                   .list();
     }
 
     public List<Job> getDeadLetterJobs(String processInstanceId) {

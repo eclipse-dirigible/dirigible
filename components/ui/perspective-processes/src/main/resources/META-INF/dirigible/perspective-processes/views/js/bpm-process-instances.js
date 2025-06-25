@@ -134,6 +134,91 @@ processInstances.controller('BpmProcessInstancesView', ($scope, $http, Notificat
         getDefinitions();
     };
 
+    $scope.getRelativeTime = (dateTimeString) => {
+        return formatRelativeTime(new Date(dateTimeString));
+    };
+
+    $scope.start = () => {
+        Dialogs.showFormDialog({
+            title: `Start process [${JSON.stringify($scope.selected.definitionKey)}]`,
+            form: {
+                'businessKey': {
+                    label: 'Business Key',
+                    controlType: 'input',
+                    rows: 9,
+                    type: 'text',
+                    placeholder: 'Business Key',
+                    value: ``,
+                    submitOnEnter: true,
+                    focus: true,
+                    required: false
+                },
+                'parameters': {
+                    label: 'Parameters',
+                    controlType: 'textarea',
+                    rows: 9,
+                    type: 'text',
+                    placeholder: `${JSON.stringify({ param1: 'value1', param2: true, paramsArray: [1, 2, 3] }, null, 4)}`,
+                    value: ``,
+                    submitOnEnter: true,
+                    focus: true,
+                    required: false
+                },
+            },
+            submitLabel: 'Start',
+            cancelLabel: 'Cancel'
+        }).then((form) => {
+            if (form) {
+                $scope.startProcess($scope.selected.definitionKey, form['businessKey'], form['parameters']);
+            }
+        }, (error) => {
+            console.error(error);
+            Dialogs.showAlert({
+                title: 'Start process error',
+                message: 'There was an error while starting new process.\nPlease look at the console for more information.',
+                type: AlertTypes.Error,
+                preformatted: false,
+            });
+        });
+    };
+
+    $scope.startProcess = (processDefinitionKey, businessKey, parameters) => {
+        const apiUrl = '/services/bpm/bpm-processes/instance';
+        const requestBody = {
+            processDefinitionKey: processDefinitionKey,
+            businessKey: businessKey,
+            parameters: parameters
+        };
+
+        $http({
+            method: 'POST',
+            url: apiUrl,
+            data: requestBody,
+            headers: { 'Content-Type': 'application/json' }
+        }).then(() => {
+            // console.log('Successfully modified variable with name [' + varName + '] and value [' + varValue + ']');
+            $scope.reload();
+        }).catch((error) => {
+            console.error('Error making POST request:', error);
+            Dialogs.showAlert({
+                title: 'Request error',
+                message: 'Please look at the console for more information',
+                type: AlertTypes.Error,
+                preformatted: false,
+            });
+        });
+    };
+
+    $scope.openDialog = (instance) => {
+        Dialogs.showWindow({
+            id: 'bpm-process-instances-details',
+            params: {
+                instance: instance,
+            },
+            closeButton: true,
+        });
+    };
+
     $scope.definitionSelected = (initialLoad = false) => {
         $scope.definitionVersions.length = 0;
         $scope.selected.instanceId = null;
@@ -146,6 +231,7 @@ processInstances.controller('BpmProcessInstancesView', ($scope, $http, Notificat
                 });
             }
         }
+        $scope.definitionVersions.sort((a, b) => b.label - a.label);
         if ($scope.definitionVersions.length) {
             $scope.selected.definitionId = $scope.definitionVersions[0].id;
             $scope.selected.definitionVersion = $scope.definitionVersions[0].label;

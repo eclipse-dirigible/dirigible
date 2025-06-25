@@ -23,6 +23,7 @@
         <script type="text/javascript" src="/services/web/perspective-processes/configs/bpm-historic-process-instances-view.js"></script>
         <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
         <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="/services/web/perspective-processes/js/time-utils.js"></script>
         <script type="text/javascript" src="/services/web/perspective-processes/views/js/bpm-historic-process-instances.js"></script>
     </head>
 
@@ -33,7 +34,7 @@
             <bk-button toggled="displaySearch" state="transparent" glyph="sap-icon--search" title="Toggle search" aria-label="Toggle search" ng-click="toggleSearch()"></bk-button>
         </bk-toolbar>
         <bk-toolbar ng-if="displaySearch">
-            <bk-input type="search" placeholder="Search by businessKey" ng-keyup="inputSearchKeyUp($event)" ng-model="searchField.text" bk-focus="true"></bk-input>
+            <bk-input type="search" placeholder="Search by business key" ng-keyup="inputSearchKeyUp($event)" ng-model="searchField.text" bk-focus="true"></bk-input>
         </bk-toolbar>
         <bk-scrollbar class="bk-fill-parent">
             <table bk-table outer-borders="bottom" display-mode="compact">
@@ -41,18 +42,18 @@
                     <tr bk-table-row>
                         <th bk-table-header-cell>Id</th>
                         <th bk-table-header-cell>Business Key</th>
-                        <th bk-table-header-cell>Definition Id</th>
-                        <th bk-table-header-cell>Start Time</th>
                         <th bk-table-header-cell>End Time</th>
+                        <th bk-table-header-cell></th>
                     </tr>
                 </thead>
                 <tbody bk-table-body>
                     <tr bk-table-row ng-repeat="next in instances track by next.id" activable="true" hoverable="true" selected="selectedId === next.id" ng-click="selectionChanged(next)">
                         <td bk-table-cell>{{next.id}}</td>
-                        <td bk-table-cell>{{next.businessKey}}</td>
-                        <td bk-table-cell>{{next.processDefinitionId}}</td>
-                        <td bk-table-cell>{{next.startTime | date:'medium'}}</td>
-                        <td bk-table-cell>{{next.endTime | date:'medium'}}</td>
+                        <td bk-table-cell class="bk-text--ellipsis" style="max-width: 5rem; overflow: hidden; white-space: nowrap;">{{next.businessKey}}</td>
+                        <td bk-table-cell>{{getRelativeTime(next.endTime)}}</td>
+                        <td bk-table-cell fit-content="true">
+                            <bk-button compact="true" state="transparent" glyph="sap-icon--show" title="Show details" aria-label="Show details" ng-click="openDialog(next)"></bk-button>
+                        </td>
                     </tr>
                     <tr ng-if="instances.length === 0" bk-table-row>
                         <td bk-table-cell no-data="true">No historic instances have been found.</td>

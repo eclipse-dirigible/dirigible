@@ -65,7 +65,7 @@ welcome.controller('WelcomeController', ($scope, $http, WorkspaceService, Templa
                 controlType: 'input',
                 type: 'text',
                 label: template.parameters[i].label,
-                require: true,
+                required: template.parameters[i].required === true,
             };
         }
         return form;

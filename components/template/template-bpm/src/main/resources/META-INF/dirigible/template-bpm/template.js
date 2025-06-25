@@ -42,8 +42,9 @@ export function getTemplate() {
         }],
 		parameters: [{
 			name: "processId",
-			label: "Process Identifier"
+			label: "Process Identifier",
+			required: true
 		}],
-		"order": 35
+		order: 35
 	};
 };
