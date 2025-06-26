@@ -160,7 +160,7 @@ public class LogFacade {
             Object[] args = getMessageArgs(loggerName, level, message, logArguments, errorJson);
             logger.error(message, args);
         } else {
-            LOGGER.warn("Logging using logger [{}] for message [{}] will be skipped since the level is [{}]", loggerName, message, level);
+            LOGGER.debug("Logging using logger [{}] for message [{}] will be skipped. Log level level [{}].", loggerName, message, level);
         }
     }
 
