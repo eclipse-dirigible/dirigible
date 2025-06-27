@@ -33,20 +33,15 @@ public class GitPerspective {
 
     public void cloneRepository(String repositoryUrl, Optional<String> user, Optional<String> pass, Optional<String> branch,
             long waitForCloneMillis) {
-        browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.TITLE, "Clone");
+        asyncCloneRepository(repositoryUrl, user, pass, branch);
 
-        browser.enterTextInElementById("curli", repositoryUrl);
+        SleepUtil.sleepMillis(waitForCloneMillis);
 
-        user.ifPresent(u -> browser.enterTextInElementById("cuni", u));
-        pass.ifPresent(p -> browser.enterTextInElementById("cpwi", p));
-        branch.ifPresent(b -> browser.enterTextInElementById("cbi", b));
+        assertClonedRepository();
+    }
 
-        browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.LABEL, "Clone");
-
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.DIV, "Cloning...");
-
-        SleepUtil.sleepMillis(waitForCloneMillis); // wait for clone command to complete
-        browser.assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType.DIV, "Cloning...");
+    private void assertClonedRepository() {
+        browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER4, "Repository cloned");
     }
 
     /**
@@ -80,10 +75,4 @@ public class GitPerspective {
     public void asyncCloneRepository(String repositoryUrl, String user, String password) {
         cloneRepository(repositoryUrl, Optional.of(user), Optional.of(password), Optional.empty());
     }
-
-    private void assertClonedRepository() {
-        browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER4, "Repository cloned");
-    }
-
 }
-
