@@ -73,7 +73,7 @@ blimpkit.directive('bkPanel', () => ({
             hint: '@',
         },
         link: (scope, _element, _attrs, panelCtrl) => {
-            if (!scope.hint) console.error('bk-panel-expand: You must provide a value for the "hint" attribute');
+            if (!angular.isDefined(scope.hint)) console.error('bk-panel-expand: You must provide a value for the "hint" attribute');
             scope.isFixed = () => panelCtrl.isFixed();
             scope.isCompact = () => panelCtrl.isCompact();
             scope.isExpanded = () => panelCtrl.isExpanded();

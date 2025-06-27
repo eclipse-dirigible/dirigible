@@ -13,7 +13,9 @@ const shellData = {
     id: 'dashboardShell',
     path: '/services/web/dashboard/index.html',
     label: 'Dashboard',
-    translation: 'dashboard:dashboard'
+    translation: {
+        key: 'dashboard:dashboard',
+    },
 };
 if (typeof exports !== 'undefined') {
     exports.getShell = () => shellData;

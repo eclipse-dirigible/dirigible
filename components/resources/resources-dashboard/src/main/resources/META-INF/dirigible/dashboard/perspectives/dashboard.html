@@ -20,7 +20,7 @@
         <title config-title></title>
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
         <script type="text/javascript" src="/services/web/dashboard/configs/dashboard-perspective.js"></script>
-        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=view-js,locale-js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
         <script type="text/javascript" src="/webjars/chart.js/dist/chart.umd.js"></script>
         <script type="text/javascript" src="/services/web/dashboard/js/dashboard-controller.js"></script>
         <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
@@ -64,7 +64,7 @@
                     <div class="fd-row">
                         <div class="widget-sm fd-col fd-col--6 fd-col-md--3 fd-col-lg--3 fd-col-xl--3" ng-repeat="widget in smallWidgets track by widget.id">
                             <bk-tile is-container="true" class="tile-fill-parent">
-                                <iframe loading="lazy" title="{{widget.translation | t:widget.label}}" ng-src="{{::widget.path}}" data-parameters="{{::widget.params}}"></iframe>
+                                <iframe loading="lazy" title="{{widget.translation.key | t:widget.translation.options:widget.label}}" ng-src="{{::widget.path}}" data-parameters="{{::widget.params}}"></iframe>
                             </bk-tile>
                         </div>
                     </div>
@@ -79,7 +79,7 @@
                     <div class="fd-row">
                         <div class="widget-m fd-col fd-col--6 fd-col-md--3 fd-col-lg--3 fd-col-xl--3" ng-repeat="widget in mediumWidgets track by widget.id">
                             <bk-tile is-container="true" class="tile-fill-parent">
-                                <iframe loading="lazy" title="{{widget.translation | t:widget.label}}" ng-src="{{::widget.path}}" data-parameters="{{::widget.params}}"></iframe>
+                                <iframe loading="lazy" title="{{widget.translation.key | t:widget.translation.options:widget.label}}" ng-src="{{::widget.path}}" data-parameters="{{::widget.params}}"></iframe>
                             </bk-tile>
                         </div>
                     </div>
@@ -94,7 +94,7 @@
                     <div class="fd-row">
                         <div class="widget-lg fd-col fd-col--6 fd-col-md--3 fd-col-lg--3 fd-col-xl--3" ng-repeat="widget in largeWidgets track by widget.id">
                             <bk-tile is-container="true" class="tile-fill-parent">
-                                <iframe loading="lazy" title="{{widget.translation | t:widget.label}}" ng-src="{{::widget.path}}" data-parameters="{{::widget.params}}"></iframe>
+                                <iframe loading="lazy" title="{{widget.translation.key | t:widget.translation.options:widget.label}}" ng-src="{{::widget.path}}" data-parameters="{{::widget.params}}"></iframe>
                             </bk-tile>
                         </div>
                     </div>

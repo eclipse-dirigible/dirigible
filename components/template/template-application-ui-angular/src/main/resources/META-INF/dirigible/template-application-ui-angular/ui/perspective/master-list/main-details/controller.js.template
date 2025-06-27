@@ -11,7 +11,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale']).controlle
 	$scope.triggerEntityAction = (action) => {
 		Dialogs.showWindow({
 			hasHeader: true,
-			title: LocaleService.t(action.translation, action.label),
+			title: LocaleService.t(action.translation.key, action.translation.options, action.label),
 			path: action.path,
 			params: {
 				id: $scope.entity.${primaryKeysString}

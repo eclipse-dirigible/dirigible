@@ -7,7 +7,7 @@
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
         <title config-title></title>
         <script type="text/javascript" src="view.js"></script>
-        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=view-js,locale-js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
 		<script type="text/javascript" src="/services/web/dashboard/services/entity.js"></script>
         <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
         <script type="text/javascript" src="controller.js"></script>
@@ -19,7 +19,7 @@
 #if($parameters && $parameters.size() > 0)
 			<bk-button compact="true" state="transparent" label="{{ '$projectName:defaults.filter' | t }}" ng-click="openFilter()"></bk-button>
 #end
-			<bk-button ng-repeat="action in pageActions track by $index" compact="true" state="transparent" label="{{'action.translation' | t:'action.label'}}" ng-click="triggerPageAction(action)"></bk-button>
+			<bk-button ng-repeat="action in pageActions track by $index" compact="true" state="transparent" label="{{action.translation.key | t:action.translation.options:action.label}}" ng-click="triggerPageAction(action)"></bk-button>
 			<bk-toolbar-spacer></bk-toolbar-spacer>
 		</bk-toolbar>
 

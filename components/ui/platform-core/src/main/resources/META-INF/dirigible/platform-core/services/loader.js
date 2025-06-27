@@ -95,6 +95,7 @@ function processScriptRequest(scriptIds) {
 function getScriptList(scriptId) {
     const baseJs = [
         '/jquery/3.7.1/jquery.min.js',
+        '/i18next/25.0.2/dist/umd/i18next.min.js',
         '/angularjs/1.8.2/angular.min.js',
         '/angularjs/1.8.2/angular-resource.min.js',
         '/angular-aria/1.8.2/angular-aria.min.js',
@@ -161,8 +162,8 @@ function getScriptList(scriptId) {
         '/platform-core/ui/blimpkit/upload-collection.js',
         '/platform-core/ui/blimpkit/vertical-navigation.js',
         '/platform-core/ui/blimpkit/wizard.js',
+        '/platform-core/ui/platform/locale.js',
     ];
-    const locale = ['/i18next/25.0.2/dist/umd/i18next.min.js', '/platform-core/ui/platform/locale.js'];
     const cookies = '/angularjs/1.8.2/angular-cookies.min.js';
     const editorsService = '/platform-core/ui/platform/editors.js';
     const viewCss = [
@@ -193,7 +194,6 @@ function getScriptList(scriptId) {
         case 'shell-js':
             const shell = [
                 ...baseJs,
-                ...locale,
                 cookies,
                 '/platform-core/ui/platform/shell.js',
                 getAnalyticsLink(),
@@ -229,8 +229,6 @@ function getScriptList(scriptId) {
             return [editorsService];
         case 'sortable-js':
             return ['/sortablejs/1.15.2/Sortable.min.js'];
-        case 'locale-js':
-            return locale;
     }
 }
 

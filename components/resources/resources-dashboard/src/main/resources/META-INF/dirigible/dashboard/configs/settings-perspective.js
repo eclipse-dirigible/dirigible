@@ -12,7 +12,9 @@
 const perspectiveData = {
 	id: 'Settings',
 	label: 'Settings',
-	translation: 'settings',
+	translation: {
+		key: 'dashboard:settings.settings',
+	},
 	path: '/services/web/dashboard/perspectives/settings.html',
 	order: 20,
 	icon: '/services/web/dashboard/images/settings.svg',

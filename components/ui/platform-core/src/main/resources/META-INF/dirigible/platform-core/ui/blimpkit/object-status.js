@@ -95,7 +95,7 @@ blimpkit.directive('bkObjectStatus', (classNames) => ({
             }
 
             if (indication && (indication < 1 || indication > 8)) {
-                console.error(`bk-object-status error: 'indication' must be a number between 1 and 8 inclusive`);
+                console.error(`bk-object-status error: 'indication' must be a number between 1 and 8 (inclusive)`);
                 return;
             }
 

@@ -12,7 +12,9 @@
 const viewData = {
     id: 'localeSettings',
     label: 'Region & Language',
-    translation: 'settings-locale:regionAndLang',
+    translation: {
+        key: 'settings-locale:regionAndLang',
+    },
     order: 2,
     glyph: 'sap-icon--translate',
     path: '/services/web/settings-locale/index.html',

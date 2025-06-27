@@ -18,6 +18,7 @@
         "reset": "There was an error during the reset process. Please refresh manually."
     },
     "settings": {
+        "settings": "Settings",
         "resetMsg": "This will clear all general settings, open tabs and cache.\n{{brand}} will then reload.\nDo you wish to continue?",
         "resetting": "Resetting"
     }

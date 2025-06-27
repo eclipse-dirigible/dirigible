@@ -51,6 +51,9 @@ blimpkit.constant('ButtonStates', {
                     post: function (scope, _element, attrs, ctrl) {
                         if (!scope.label && (scope.glyph || scope.iconPath) && !Object.prototype.hasOwnProperty.call(attrs, 'ariaLabel'))
                             console.error('bk-button error: Icon-only buttons must have the "aria-label" attribute');
+                        if (angular.isDefined(scope.disabledFocusable) && !angular.isDefined(scope.instructions)) {
+                            console.error('bk-button error: when using the "focusable disabled" state, you must provide a description using the "instructions" attribute.');
+                        }
                         scope.getArrowClass = () => classNames({
                             'sap-icon--slim-arrow-down': !scope.arrowDirection || scope.arrowDirection === 'down',
                             'sap-icon--slim-arrow-up': scope.arrowDirection === 'up',
@@ -62,9 +65,6 @@ blimpkit.constant('ButtonStates', {
                             'bk-icon--svg sap-icon': !scope.glyph && scope.iconPath,
                         });
                         scope.getClasses = () => {
-                            if (scope.disabledFocusable === true && (!scope.instructions || scope.instructions === '')) {
-                                console.error('bk-button error: when using the "focusable disabled" state, you must provide a description using the "instructions" attribute.');
-                            }
                             if (ctrl) ctrl.setButtonAddon(true);
                             return classNames('fd-button', {
                                 'fd-button--menu': scope.isMenu === true,

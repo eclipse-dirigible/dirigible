@@ -15,8 +15,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 		LocaleService.onInit(() => {
 			translated.yes = LocaleService.t('$projectName:defaults.yes');
 			translated.no = LocaleService.t('$projectName:defaults.no');
-			translated.deleteTitle = LocaleService.t('$projectName:defaults.deleteTitle', { name: '${name}' });
-			translated.deleteConfirm = LocaleService.t('$projectName:messages.deleteConfirm', { name: '${name}' });
+			translated.deleteTitle = LocaleService.t('$projectName:defaults.deleteTitle', { name: '$t($projectName:t.${dataName})' });
+			translated.deleteConfirm = LocaleService.t('$projectName:messages.deleteConfirm', { name: '$t($projectName:t.${dataName})' });
 		});
 		//-----------------Custom Actions-------------------//
 		Extensions.getWindows(['${projectName}-custom-action']).then((response) => {
@@ -27,7 +27,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 		$scope.triggerPageAction = (action) => {
 			Dialogs.showWindow({
 				hasHeader: true,
-        		title: LocaleService.t(action.translation, action.label),
+        		title: LocaleService.t(action.translation.key, action.translation.options, action.label),
 				path: action.path,
 				params: {
 					selectedMainEntityKey: '${masterEntityId}',
@@ -42,7 +42,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 		$scope.triggerEntityAction = (action) => {
 			Dialogs.showWindow({
 				hasHeader: true,
-        		title: LocaleService.t(action.translation, action.label),
+        		title: LocaleService.t(action.translation.key, action.translation.options, action.label),
 				path: action.path,
 				params: {
 					id: $scope.entity.${primaryKeysString},
@@ -133,8 +133,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 				}, (error) => {
 					const message = error.data ? error.data.message : '';
 					Dialogs.showAlert({
-						title: '${name}',
-						message: LocaleService.t('$projectName:messages.error.unableToLF', { name: '${name}', message: message }),
+						title: LocaleService.t('$projectName:t.${dataName}'),
+						message: LocaleService.t('$projectName:messages.error.unableToLF', { name: '$t($projectName:t.${dataName})', message: message }),
 						type: AlertTypes.Error
 					});
 					console.error('EntityService:', error);
@@ -142,8 +142,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
 				Dialogs.showAlert({
-					title: '${name}',
-					message: LocaleService.t('$projectName:messages.error.unableToCount', { name: '${name}', message: message }),
+					title: LocaleService.t('$projectName:t.${dataName}'),
+					message: LocaleService.t('$projectName:messages.error.unableToCount', { name: '$t($projectName:t.${dataName})', message: message }),
 					type: AlertTypes.Error
 				});
 				console.error('EntityService:', error);
@@ -250,8 +250,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 					}, (error) => {
 						const message = error.data ? error.data.message : '';
 						Dialogs.showAlert({
-							title: '${name}',
-							message: LocaleService.t('$projectName:messages.error.unableToDelete', { name: '${name}', message: message }),
+							title: LocaleService.t('$projectName:t.${dataName}'),
+							message: LocaleService.t('$projectName:messages.error.unableToDelete', { name: '$t($projectName:t.${dataName})', message: message }),
 							type: AlertTypes.Error,
 						});
 						console.error('EntityService:', error);

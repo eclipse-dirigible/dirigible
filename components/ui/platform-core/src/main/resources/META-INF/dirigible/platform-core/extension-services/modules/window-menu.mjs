@@ -23,17 +23,23 @@ export async function getWindowMenu(perspectiveExtPoints = [], viewExtPoints = [
 		label: 'Window',
 		items: [
 			{
-				translation: 'shells',
+				translation: {
+					key: 'common:shells',
+				},
 				label: 'Shells',
 				items: [],
 			},
 			{
-				translation: 'perspectives',
+				translation: {
+					key: 'common:perspectives',
+				},
 				label: 'Perspectives',
 				items: [],
 			},
 			{
-				translation: 'views',
+				translation: {
+					key: 'common:views',
+				},
 				label: 'Views',
 				items: [],
 			},

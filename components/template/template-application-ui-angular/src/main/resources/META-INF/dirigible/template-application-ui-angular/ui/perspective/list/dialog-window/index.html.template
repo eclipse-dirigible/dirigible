@@ -7,7 +7,7 @@
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
         <title config-title></title>
         <script type="text/javascript" src="view.js"></script>
-        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=view-js,locale-js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
         <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
         <script type="text/javascript" src="controller.js"></script>
     </head>
@@ -15,7 +15,7 @@
     <body class="bk-vbox">
         <bk-scrollbar class="bk-full-height">
             <bk-fieldset class="fd-padding-begin-end--sm" ng-form="formFieldset">
-                <bk-form-group label="{{ '$projectName:defaults.formHeadSelect' | t:{'name':'${name}'} }}" name="entityForm" transclude-classes="fd-container fd-form-layout-grid-container">
+                <bk-form-group label="{{ '$projectName:defaults.formHeadSelect' | t:{'name':'$t($projectName:t.${dataName})'} }}" name="entityForm" transclude-classes="fd-container fd-form-layout-grid-container">
 #foreach ($property in $properties)
 #if(!$property.dataAutoIncrement)
 #if($property.widgetType == "DROPDOWN")

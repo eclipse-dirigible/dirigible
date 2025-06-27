@@ -41,6 +41,7 @@
         "to": "To {{text}}",
         "from": "From {{text}}",
         "filter": "Filter",
+        "print": "Print",
         "reset": "Reset",
         "create": "Create",
         "edit": "Edit",
@@ -59,5 +60,6 @@
         "deleteTitle": "Delete {{name}}?",
         "loadMore": "Load More..."
     },
+    "extName": "{{content}}",
     "t": {}
 }

@@ -7,7 +7,7 @@
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
         <title config-title></title>
         <script type="text/javascript" src="view.js"></script>
-        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=view-js,locale-js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
 		<script type="text/javascript" src="/services/web/dashboard/services/entity.js"></script>
         <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
         <script type="text/javascript" src="controller.js"></script>
@@ -27,7 +27,7 @@
 				<bk-popover-body align="bottom-right">
 					<bk-menu aria-label="{{ '$projectName:aria.headerMenu' | t }}" no-backdrop="true" no-shadow="true">
 						<bk-menu-item title="{{ '$projectName:defaults.filter' | t }}" ng-click="openFilter()"></bk-menu-item>
-						<bk-menu-item ng-repeat="action in pageActions track by $index" title="{{'action.translation' | t:'action.label'}}" ng-click="triggerPageAction(action)"></bk-menu-item>
+						<bk-menu-item ng-repeat="action in pageActions track by $index" title="{{action.translation.key | t:action.translation.options:action.label}}" ng-click="triggerPageAction(action)"></bk-menu-item>
 					</bk-menu>
 				</bk-popover-body>
 			</bk-popover>

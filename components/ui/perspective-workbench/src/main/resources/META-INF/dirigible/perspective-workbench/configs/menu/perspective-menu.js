@@ -18,16 +18,22 @@ exports.getMenu = () => ({
 	items: [
 		{
 			label: 'File',
-			translation: 'perspective-workbench:file',
+			translation: {
+				key: 'perspective-workbench:file',
+			},
 			items: [
 				{
 					label: 'New',
-					translation: 'common:new',
+					translation: {
+						key: 'common:new',
+					},
 					order: 1,
 					items: [
 						{
 							label: 'Project',
-							translation: 'perspective-workbench:project',
+							translation: {
+								key: 'perspective-workbench:project',
+							},
 							order: 1,
 							action: 'event',
 							data: {
@@ -38,7 +44,9 @@ exports.getMenu = () => ({
 				},
 				{
 					label: 'Save All',
-					translation: 'perspective-workbench:saveAll',
+					translation: {
+						key: 'perspective-workbench:saveAll',
+					},
 					order: 2,
 					action: 'event',
 					data: {
@@ -48,7 +56,9 @@ exports.getMenu = () => ({
 				},
 				{
 					label: 'Publish All',
-					translation: 'perspective-workbench:publishAll',
+					translation: {
+						key: 'perspective-workbench:publishAll',
+					},
 					order: 3,
 					action: 'event',
 					data: {
@@ -57,7 +67,9 @@ exports.getMenu = () => ({
 				},
 				{
 					label: 'Unpublish All',
-					translation: 'perspective-workbench:unpublishAll',
+					translation: {
+						key: 'perspective-workbench:unpublishAll',
+					},
 					order: 4,
 					action: 'event',
 					data: {
@@ -67,7 +79,9 @@ exports.getMenu = () => ({
 				},
 				{
 					label: 'Export All',
-					translation: 'perspective-workbench:exportAll',
+					translation: {
+						key: 'perspective-workbench:exportAll',
+					},
 					order: 5,
 					action: 'event',
 					data: {

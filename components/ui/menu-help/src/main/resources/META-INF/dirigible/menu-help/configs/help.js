@@ -17,35 +17,45 @@ exports.getMenu = () => ({
 		label: 'Help',
 		items: [
 			{
-				translation: 'menu-help:portal',
+				translation: {
+					key: 'menu-help:portal',
+				},
 				label: 'Help Portal',
 				action: 'open',
 				link: 'https://www.dirigible.io/help/',
 				separator: false
 			},
 			{
-				translation: 'menu-help:support',
+				translation: {
+					key: 'menu-help:support',
+				},
 				label: 'Contact Support',
 				action: 'open',
 				link: 'https://github.com/eclipse-dirigible/dirigible/issues',
 				separator: false
 			},
 			{
-				translation: 'menu-help:feature',
+				translation: {
+					key: 'menu-help:feature',
+				},
 				label: 'Suggest a Feature',
 				action: 'open',
 				link: 'https://github.com/eclipse-dirigible/dirigible/issues/new?assignees=&labels=&template=feature_request.md&title=[New%20Feature]',
 				separator: false
 			},
 			{
-				translation: 'menu-help:whatsNew',
+				translation: {
+					key: 'menu-help:whatsNew',
+				},
 				label: 'What\'s New',
 				action: 'open',
 				link: 'https://x.com/dirigible_io',
 				separator: false
 			},
 			{
-				translation: 'menu-help:updates',
+				translation: {
+					key: 'menu-help:updates',
+				},
 				label: 'Check for Updates',
 				action: 'open',
 				link: 'http://download.dirigible.io/',
@@ -53,7 +63,9 @@ exports.getMenu = () => ({
 			},
 			{
 				id: 'about',
-				translation: 'menu-help:about',
+				translation: {
+					key: 'menu-help:about',
+				},
 				label: 'About',
 				action: 'openWindow',
 				separator: false

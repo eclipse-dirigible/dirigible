@@ -12,7 +12,9 @@
 const perspectiveData = {
 	id: 'documentStorage',
 	label: 'Document Storage',
-	translation: 'documents:documentStorage',
+	translation: {
+		key: 'documents:documentStorage',
+	},
 	path: '/services/web/documents/index.html',
 	order: -1,
 	lazyLoad: true,

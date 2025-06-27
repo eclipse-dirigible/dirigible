@@ -7,7 +7,7 @@
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
         <title config-title></title>
         <script type="text/javascript" src="view.js"></script>
-        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=view-js,locale-js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
 		<script type="text/javascript" src="/services/web/dashboard/services/entity.js"></script>
         <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
         <script type="text/javascript" src="controller.js"></script>
@@ -21,7 +21,7 @@
 		<bk-toolbar has-title="true" ng-hide="data == null">
 			<bk-toolbar-title>{{'$projectName:defaults.items' | t}} <span bk-object-status text="{{dataCount}}" inverted="true"></bk-toolbar-title>
 			<bk-button compact="true" state="transparent" label="{{ '$projectName:defaults.filter' | t }}" ng-click="openFilter()"></bk-button>
-			<bk-button ng-repeat="action in pageActions track by $index" compact="true" state="transparent" label="{{'action.translation' | t:'action.label'}}" ng-click="triggerPageAction(action)"></bk-button>
+			<bk-button ng-repeat="action in pageActions track by $index" compact="true" state="transparent" label="{{action.translation.key | t:action.translation.options:action.label}}" ng-click="triggerPageAction(action)"></bk-button>
 			<bk-toolbar-spacer></bk-toolbar-spacer>
 			<bk-button compact="true" state="emphasized" label="{{'$projectName:defaults.create' | t}}" ng-click="createEntity()" ng-disabled="selectedMainEntityId == null"></bk-button>
 		</bk-toolbar>
@@ -101,7 +101,7 @@
 								</bk-popover-control>
 								<bk-popover-body align="bottom-right">
 									<bk-menu aria-label="{{'$projectName:aria.tableRowMenu' | t}}" no-backdrop="true" no-shadow="true">
-										<bk-menu-item ng-repeat="action in entityActions" title="{{'action.translation' | t:'action.label'}}" ng-click="triggerEntityAction(action)"></bk-menu-item>
+										<bk-menu-item ng-repeat="action in entityActions" title="{{action.translation.key | t:action.translation.options:action.label}}" ng-click="triggerEntityAction(action)"></bk-menu-item>
 										<bk-menu-item title="{{ '$projectName:defaults.viewDetails' | t }}" ng-click="openDetails(next)"></bk-menu-item>
 										<bk-menu-item title="{{ '$projectName:defaults.edit' | t }}" ng-click="updateEntity(next)"></bk-menu-item>
 										<bk-menu-item title="{{ '$projectName:defaults.delete' | t }}" ng-click="deleteEntity(next)"></bk-menu-item>

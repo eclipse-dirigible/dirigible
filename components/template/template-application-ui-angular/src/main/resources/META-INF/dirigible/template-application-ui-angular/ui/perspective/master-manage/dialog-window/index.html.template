@@ -7,7 +7,7 @@
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
         <title config-title></title>
         <script type="text/javascript" src="view.js"></script>
-        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=view-js,locale-js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
 		<script type="text/javascript" src="/services/web/dashboard/services/entity.js"></script>
         <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
         <script type="text/javascript" src="controller.js"></script>
@@ -294,7 +294,7 @@
 						</div>
 						<div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:messages.error.pattern' | t:{'rule':'${property.inputRule}'}}}">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
 	#end
 								<bk-textarea id="id${property.name}"
 									name="${property.name}"
@@ -339,7 +339,7 @@
 						</div>
                         <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:messages.error.pattern' | t:{'rule':'${property.inputRule}'}}}">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -383,7 +383,7 @@
 						</div>
                         <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:messages.error.pattern' | t:{'rule':'${property.inputRule}'}}}">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -427,7 +427,7 @@
 						</div>
                         <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:messages.error.pattern' | t:{'rule':'${property.inputRule}'}}}">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -468,7 +468,7 @@
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:messages.error.pattern' | t:{'rule':'${property.inputRule}'}}}">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"

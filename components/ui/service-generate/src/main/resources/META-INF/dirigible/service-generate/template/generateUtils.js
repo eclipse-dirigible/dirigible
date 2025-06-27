@@ -17,7 +17,7 @@ function getTranslations(model) {
     for (const [key, value] of Object.entries(model)) {
         if ((key === 'label' || key === 'errorMessage') && value !== undefined && value !== null && value !== '') {
             const translationId = `${value.replaceAll(' ', '').replaceAll('_', '').replaceAll('.', '').replaceAll(':', '')}`;
-            translations.t[translationId] = value;
+            translations[translationId] = value;
             model[key === 'errorMessage' ? 'errorTranslation' : 'translation'] = translationId;
         } else if (typeof value === 'object') {
             translations = { ...translations, ...getTranslations(value) };
@@ -48,8 +48,10 @@ export function generateGeneric(model, parameters, templateSources) {
                 path: templateEngines.getMustacheEngine().generate(location, template.rename, parameters)
             });
         } else if (template.action === "translate") {
+            let translations = JSON.parse(content);
+            translations.t = { ...getTranslations(model) };
             generatedFiles.push({
-                content: JSON.stringify({ ...JSON.parse(content), ...getTranslations(model) }, null, 2),
+                content: JSON.stringify(translations, null, 2),
                 path: template.path
             });
         } else {

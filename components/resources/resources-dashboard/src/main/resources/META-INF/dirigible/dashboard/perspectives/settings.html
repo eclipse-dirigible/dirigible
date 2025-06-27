@@ -20,7 +20,7 @@
         <title config-title></title>
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
         <script type="text/javascript" src="/services/web/dashboard/configs/settings-perspective.js"></script>
-        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=perspective-js,locale-js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=perspective-js"></script>
         <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=perspective-css" />
         <script type="text/javascript" src="/services/web/dashboard/js/settings-controller.js"></script>
     </head>
@@ -41,12 +41,13 @@
                 </bk-toolbar>
                 <bk-list bk-scrollbar class="bk-full-height">
                     <bk-list-item interactive="true" ng-repeat="setting in settings track by setting.id" ng-hide="setting.hide" ng-click="switchSetting(setting.id)" selected="setting.id === activeId">
-                        <bk-list-title>{{setting.translation | t:setting.label}}</bk-list-title>
+                        <bk-list-title>{{setting.translation.key | t:setting.translation.options:setting.label}}</bk-list-title>
                     </bk-list-item>
                 </bk-list>
             </split-pane>
             <split-pane size="80" min-size="0">
-                <iframe ng-repeat="setting in settings track by setting.id" ng-show="setting.id === activeId" title="{{setting.translation | t:setting.label}}" ng-src="{{::setting.path}}" loading="lazy"></iframe>
+                <iframe ng-repeat="setting in settings track by setting.id" ng-show="setting.id === activeId" title="{{setting.translation.key | t:setting.translation.options:setting.label}}" ng-src="{{::setting.path}}"
+                    loading="lazy"></iframe>
             </split-pane>
         </split>
         <theme></theme>

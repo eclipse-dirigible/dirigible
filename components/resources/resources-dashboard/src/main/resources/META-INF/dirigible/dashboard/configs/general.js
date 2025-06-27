@@ -12,7 +12,9 @@
 const viewData = {
     id: 'generalDashboardSettings',
     label: 'General',
-    translation: 'dashboard:general',
+    translation: {
+        key: 'dashboard:general',
+    },
     order: -1,
     glyph: 'sap-icon--customize',
     path: '/services/web/dashboard/settings/general.html',

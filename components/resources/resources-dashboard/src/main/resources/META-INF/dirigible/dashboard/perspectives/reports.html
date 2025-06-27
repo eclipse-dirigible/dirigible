@@ -20,7 +20,7 @@
         <title config-title></title>
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
         <script type="text/javascript" src="/services/web/dashboard/configs/reports-perspective.js"></script>
-        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=perspective-js,locale-js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=perspective-js"></script>
         <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=perspective-css" />
         <script type="text/javascript" src="/services/web/dashboard/js/reports-controller.js"></script>
     </head>
@@ -39,12 +39,12 @@
                 </bk-toolbar>
                 <bk-list bk-scrollbar class="bk-full-height">
                     <bk-list-item interactive="true" ng-repeat="report in reports track by report.id" ng-hide="report.hide" ng-click="switchReport(report.id)" selected="report.id === activeId">
-                        <bk-list-title>{{report.translation | t:report.label}}</bk-list-title>
+                        <bk-list-title>{{report.translation.key | t:report.translation.options:report.label}}</bk-list-title>
                     </bk-list-item>
                 </bk-list>
             </split-pane>
             <split-pane size="80" min-size="0">
-                <iframe ng-repeat="report in reports track by report.id" ng-show="report.id === activeId" title="{{report.translation | t:report.label}}" ng-src="{{::report.path}}" loading="lazy"></iframe>
+                <iframe ng-repeat="report in reports track by report.id" ng-show="report.id === activeId" title="{{report.translation.key | t:report.translation.options:report.label}}" ng-src="{{::report.path}}" loading="lazy"></iframe>
             </split-pane>
         </split>
         <theme></theme>
