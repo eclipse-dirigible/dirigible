@@ -43,7 +43,6 @@ public class GitPerspective {
 
         browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.LABEL, "Clone");
 
-        SleepUtil.sleepMillis(200); // wait to start the cloning
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.DIV, "Cloning...");
 
         SleepUtil.sleepMillis(waitForCloneMillis); // wait for clone command to complete
