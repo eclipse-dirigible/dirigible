@@ -65,14 +65,14 @@ public class GitPerspective {
     }
 
     public void asyncCloneRepository(String repositoryUrl) {
-        cloneRepository(repositoryUrl, Optional.empty(), Optional.empty(), Optional.empty());
+        asyncCloneRepository(repositoryUrl, Optional.empty(), Optional.empty(), Optional.empty());
     }
 
     public void asyncCloneRepository(String repositoryUrl, String branch) {
-        cloneRepository(repositoryUrl, Optional.empty(), Optional.empty(), Optional.of(branch));
+        asyncCloneRepository(repositoryUrl, Optional.empty(), Optional.empty(), Optional.of(branch));
     }
 
     public void asyncCloneRepository(String repositoryUrl, String user, String password) {
-        cloneRepository(repositoryUrl, Optional.of(user), Optional.of(password), Optional.empty());
+        asyncCloneRepository(repositoryUrl, Optional.of(user), Optional.of(password), Optional.empty());
     }
 }
