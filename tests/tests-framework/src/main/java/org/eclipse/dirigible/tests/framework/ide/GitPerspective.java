@@ -43,13 +43,48 @@ public class GitPerspective {
 
         browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.LABEL, "Clone");
 
-        SleepUtil.sleepMillis(waitForCloneMillis);
+        SleepUtil.sleepMillis(200); // wait to start the cloning
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.DIV, "Cloning...");
 
-        assertClonedRepository();
+        SleepUtil.sleepMillis(waitForCloneMillis); // wait for clone command to complete
+        browser.assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType.DIV, "Cloning...");
+    }
+
+    /**
+     * Trigger clone of a repository
+     *
+     * @param repositoryUrl repo URL
+     * @param user user
+     * @param pass password
+     * @param branch branch
+     */
+    public void asyncCloneRepository(String repositoryUrl, Optional<String> user, Optional<String> pass, Optional<String> branch) {
+        browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.TITLE, "Clone");
+
+        browser.enterTextInElementById("curli", repositoryUrl);
+
+        user.ifPresent(u -> browser.enterTextInElementById("cuni", u));
+        pass.ifPresent(p -> browser.enterTextInElementById("cpwi", p));
+        branch.ifPresent(b -> browser.enterTextInElementById("cbi", b));
+
+        browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.LABEL, "Clone");
+    }
+
+    public void asyncCloneRepository(String repositoryUrl) {
+        cloneRepository(repositoryUrl, Optional.empty(), Optional.empty(), Optional.empty());
+    }
+
+    public void asyncCloneRepository(String repositoryUrl, String branch) {
+        cloneRepository(repositoryUrl, Optional.empty(), Optional.empty(), Optional.of(branch));
+    }
+
+    public void asyncCloneRepository(String repositoryUrl, String user, String password) {
+        cloneRepository(repositoryUrl, Optional.of(user), Optional.of(password), Optional.empty());
     }
 
     private void assertClonedRepository() {
         browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER4, "Repository cloned");
     }
+
 }
 
