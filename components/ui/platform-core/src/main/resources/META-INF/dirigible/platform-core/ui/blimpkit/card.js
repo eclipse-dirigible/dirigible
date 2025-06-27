@@ -91,7 +91,7 @@ blimpkit.directive('bkCard', (classNames, uuid) => ({
         const statuses = ['negative', 'critical', 'positive', 'informative'];
 
         scope.getStatusClasses = () => {
-            if (scope.interactive && !scope.description) console.error('bk-card-header: you must provide a description when the header is interactive.');
+            if (scope.interactive && !angular.isDefined(scope.description)) console.error('bk-card-header: you must provide a description when the header is interactive.');
             return classNames('fd-object-status', {
                 [`fd-object-status--${scope.statusType}`]: scope.statusType && statuses.includes(scope.statusType),
                 'fd-card__counter': scope.isCounter === true

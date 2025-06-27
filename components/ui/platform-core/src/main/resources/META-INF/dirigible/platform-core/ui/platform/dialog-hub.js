@@ -94,7 +94,7 @@ class DialogHub extends MessageHubApi {
                 subheader: subheader,
                 message: message,
                 preformatted: preformatted,
-                buttons: buttons || [{ id: 'close', label: 'Close', type: undefined }],
+                buttons: buttons || [{ id: 'close', label: 'Close', state: undefined }],
                 closeButton: closeButton,
                 topic: callbackTopic,
             }

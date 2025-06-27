@@ -20,7 +20,7 @@
 		<link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
 		<title config-title></title>
 		<script type="text/javascript" src="/services/web/dashboard/configs/general.js"></script>
-		<script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=view-js,cookies"></script>
+		<script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=view-js,cookies-js"></script>
 		<link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
 		<script type="text/javascript" src="js/general.js"></script>
 		<style>
@@ -33,18 +33,18 @@
 
 	<body class="bk-vbox">
 		<bk-toolbar has-title="true">
-			<bk-toolbar-title>General</bk-toolbar-title>
+			<bk-toolbar-title>{{'dashboard:general' | t:'General'}}</bk-toolbar-title>
 			<bk-toolbar-spacer></bk-toolbar-spacer>
-			<bk-button label="Reset all" state="negative" title="Reset all" aria-label="reset all settings button" ng-click="resetAll()"></bk-button>
+			<bk-button label="{{'dashboard:resetAll' | t:'Reset All'}}" state="negative" title="{{'dashboard:resetAll' | t:'Reset All'}}" aria-label="reset all settings button" ng-click="resetAll()"></bk-button>
 		</bk-toolbar>
 		<bk-scrollbar class="bk-center--horizontal bk-padding bk-box--items-start">
 			<div class="bk-vbox bk-box--gap-xl bk-full-width bk-restrict-width--sm">
 				<div class="bk-vbox bk-box--gap">
 					<div class="bk-hbox bk-box--space-between bk-box--items-center">
-						<span class="fd-text"><b>Theme</b></span>
+						<span class="fd-text"><b>{{'dashboard:theme' | t:'Theme'}}</b></span>
 					</div>
 					<bk-card card-type="list" aria-roledescription="theme setting section">
-						<bk-card-content aria-roledescription="Card content">
+						<bk-card-content aria-roledescription="theme setting list">
 							<bk-list no-border="true">
 								<bk-list-item interactive="true" ng-repeat="theme in themes track by theme.id" ng-click="setTheme(theme.id, theme.name)" selected="theme.id === currentTheme.id">
 									<bk-list-icon glyph="{{ theme.id === currentTheme.id ? 'sap-icon--accept' : 'sap-icon' }}"></bk-list-icon>

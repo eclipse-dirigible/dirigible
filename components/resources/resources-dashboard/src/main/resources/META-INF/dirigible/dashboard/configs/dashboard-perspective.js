@@ -12,6 +12,9 @@
 const perspectiveData = {
     id: 'dashboard',
     label: 'Dashboard',
+    translation: {
+        key: 'dashboard:dashboard',
+    },
     path: '/services/web/dashboard/perspectives/dashboard.html',
     order: -3,
     lazyLoad: true,

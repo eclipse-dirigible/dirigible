@@ -26,7 +26,7 @@ blimpkit.directive('bkProductSwitch', (classNames, $injector, ButtonStates) => {
             noArrow: '<?',
         },
         link: function (scope) {
-            if (!scope.btnAriaLabel)
+            if (!angular.isDefined(scope.btnAriaLabel))
                 console.error('bk-product-switch error: Must have the "btn-aria-label" attribute');
             scope.getClasses = () => classNames('fd-product-switch__body', {
                 'fd-product-switch__body--col-3': scope.size === 'medium',
@@ -35,13 +35,10 @@ blimpkit.directive('bkProductSwitch', (classNames, $injector, ButtonStates) => {
         },
         template: `<div class="fd-product-switch"><bk-popover>
             <bk-popover-control>
-                <bk-button state="{{ state || '${ButtonStates.Transparent}' }}" glyph="sap-icon--grid" aria-label="{{btnAriaLabel}}">
-                </bk-button>
+                <bk-button state="{{ state || '${ButtonStates.Transparent}' }}" glyph="sap-icon--grid" aria-label="{{btnAriaLabel}}"></bk-button>
             </bk-popover-control>
             <bk-popover-body align="{{ align || 'bottom-right' }}" no-arrow="noArrow">
-                <div ng-class="getClasses()">
-                    <ul class="fd-product-switch__list" ng-transclude></ul>
-                </div>
+                <div ng-class="getClasses()"><ul class="fd-product-switch__list" ng-transclude></ul></div>
             </bk-popover-body>
         </bk-popover></div`
     }

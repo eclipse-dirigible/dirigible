@@ -11,7 +11,7 @@
  */
 if (typeof viewData === 'undefined' && typeof perspectiveData === 'undefined' && typeof editorData === 'undefined' && typeof shellData === 'undefined') {
     console.error('You must provide one of the following: "viewData", "perspectiveData", "editorData", "shellData"');
-} else angular.module('platformView', ['platformExtensions', 'platformTheming'])
+} else angular.module('platformView', ['platformExtensions', 'platformTheming', 'platformLocale'])
     .constant('clientOS', { isMac: () => navigator.userAgent.includes('Mac') })
     .factory('baseHttpInterceptor', () => {
         let csrfToken = null;
@@ -75,64 +75,60 @@ if (typeof viewData === 'undefined' && typeof perspectiveData === 'undefined' &&
         };
     }).factory('ViewParameters', () => ({
         get: getViewParameters
-    })).directive('embeddedView', function (Views) {
-        /**
-         * viewId: String - ID of the view you want to show.
-         * params: JSON - JSON object containing extra parameters/data.
-         * type: String - Type of the view. Available options - 'view' (default), 'subview'.
-         */
-        return {
-            restrict: 'E',
-            transclude: false,
-            replace: true,
-            scope: {
-                viewId: '@',
-                params: '<?',
-                type: '@?',
-            },
-            link: function (scope) {
-                if (scope.params !== undefined && !(typeof scope.params === 'object' && !Array.isArray(scope.params) && scope.params !== null))
-                    throw Error("embeddedView: params must be an object");
-                const types = ['view', 'subview'];
-                if (scope.type !== undefined && !types.includes(scope.type))
-                    throw Error(`embeddedView: wrong view type. Available options - ${types.join(', ')}`);
+    })).directive('embeddedView', (Views, LocaleService) => ({
+        restrict: 'E',
+        transclude: false,
+        replace: true,
+        scope: {
+            viewId: '@', // String - ID of the view you want to show.
+            params: '<?', // JSON - JSON object containing extra parameters/data.
+            type: '@?', // String - Type of the view. Available options - 'view' (default), 'subview'.
+        },
+        link: function (scope) {
+            if (scope.params !== undefined && !(typeof scope.params === 'object' && !Array.isArray(scope.params) && scope.params !== null))
+                throw Error("embeddedView: params must be an object");
+            const types = ['view', 'subview'];
+            if (scope.type !== undefined && !types.includes(scope.type))
+                throw Error(`embeddedView: wrong view type. Available options - ${types.join(', ')}`);
 
-                function getStandardParams() {
-                    if (typeof perspectiveData !== 'undefined') return {
-                        container: 'perspective',
-                        perspectiveId: perspectiveData.id,
-                    }
-                    if (typeof shellData !== 'undefined') return {
-                        container: 'shell',
-                        shellId: shellData.id,
-                    }
-                    return {
-                        container: 'view',
-                    };
+            function getStandardParams() {
+                if (typeof perspectiveData !== 'undefined') return {
+                    container: 'perspective',
+                    perspectiveId: perspectiveData.id,
                 }
+                if (typeof shellData !== 'undefined') return {
+                    container: 'shell',
+                    shellId: shellData.id,
+                }
+                return {
+                    container: 'view',
+                };
+            }
 
-                function setView(viewConfig) {
-                    if (viewConfig) {
-                        scope.$evalAsync(() => {
-                            scope.view = viewConfig;
-                            scope.view.params = JSON.stringify({
-                                ...viewConfig.params,
-                                ...scope.params,
-                                ...getStandardParams(),
-                            });
-                            scope.viewLabel = scope.view.label;
+            function setView(viewConfig) {
+                if (viewConfig) {
+                    scope.$evalAsync(() => {
+                        scope.view = viewConfig;
+                        scope.view.params = JSON.stringify({
+                            ...viewConfig.params,
+                            ...scope.params,
+                            ...getStandardParams(),
                         });
-                    } else {
-                        throw Error(`embeddedView: ${scope.type ?? types[0]} with id '${scope.viewId}' not found`);
-                    }
+                        if (scope.view.translation) LocaleService.onInit(() => {
+                            scope.viewLabel = LocaleService.t(scope.view.translation.key, scope.view.translation.options, scope.view.label);
+                        });
+                        else scope.viewLabel = scope.view.label;
+                    });
+                } else {
+                    throw Error(`embeddedView: ${scope.type ?? types[0]} with id '${scope.viewId}' not found`);
                 }
+            }
 
-                if (scope.type === types[1]) Views.getSubviews(scope.viewId).then(setView);
-                else Views.getViews(scope.viewId).then(setView);
-            },
-            template: `<iframe title="{{::view.label}}" loading="{{::view.lazyLoad ? 'lazy' : 'eager'}}" ng-src="{{::view.path}}" data-parameters="{{::view.params}}"></iframe>`
-        }
-    }).directive('configIcons', () => ({
+            if (scope.type === types[1]) Views.getSubviews(scope.viewId).then(setView);
+            else Views.getViews(scope.viewId).then(setView);
+        },
+        template: `<iframe title="{{::viewLabel}}" loading="{{::view.lazyLoad ? 'lazy' : 'eager'}}" ng-src="{{::view.path}}" data-parameters="{{::view.params}}"></iframe>`
+    })).directive('configIcons', () => ({
         restrict: 'A',
         transclude: false,
         replace: true,
@@ -150,13 +146,16 @@ if (typeof viewData === 'undefined' && typeof perspectiveData === 'undefined' &&
             scope.name = getBrandingInfo().name;
         },
         template: '{{perspective || "Loading..."}} | {{::name}}'
-    })).directive('configTitle', ($window) => ({
+    })).directive('configTitle', ($window, LocaleService) => ({
         restrict: 'A',
         transclude: false,
         replace: false,
         link: (scope) => {
             if (typeof viewData !== 'undefined') {
-                scope.label = viewData.label;
+                if (viewData.translation) LocaleService.onInit(() => {
+                    scope.label = LocaleService.t(viewData.translation.key, viewData.translation.options, viewData.label);
+                });
+                else scope.label = viewData.label;
                 if (viewData.autoFocusTab !== false) {
                     const layoutHub = new LayoutHub();
                     const onFocus = () => layoutHub.focusView({ id: viewData.id });
@@ -166,9 +165,15 @@ if (typeof viewData === 'undefined' && typeof perspectiveData === 'undefined' &&
                     });
                 }
             } else if (typeof perspectiveData !== 'undefined') {
-                scope.label = perspectiveData.label;
+                if (perspectiveData.translation) LocaleService.onInit(() => {
+                    scope.label = LocaleService.t(perspectiveData.translation.key, perspectiveData.translation.options, perspectiveData.label);
+                });
+                else scope.label = perspectiveData.label;
             } else if (typeof editorData !== 'undefined') {
-                scope.label = editorData.label;
+                if (editorData.translation) LocaleService.onInit(() => {
+                    scope.label = LocaleService.t(editorData.translation.key, editorData.translation.options, editorData.label);
+                });
+                else scope.label = editorData.label;
                 if ($window.frameElement && $window.frameElement.hasAttribute('tab-id')) {
                     const layoutHub = new LayoutHub();
                     const tabId = $window.frameElement.getAttribute('tab-id');

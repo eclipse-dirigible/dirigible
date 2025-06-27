@@ -33,26 +33,29 @@
 
     <body class="bk-vbox">
         <bk-toolbar has-title="false">
-            <span>All the user tasks on this instance, for your role, are listed below</span>
+            <span>{{'inbox:userTasksListed' | t:'All the user tasks on this instance, for your role, are listed below'}}</span>
             <bk-toolbar-spacer></bk-toolbar-spacer>
-            <bk-button state="transparent" compact="true" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="reload()"></bk-button>
-            <bk-button state="emphasized" compact="true" ng-disabled="selectedClaimTask === null" label="Claim" title="Claim" aria-label="Claim" ng-click="claimTask()"></bk-button>
-            <bk-button state="negative" compact="true" ng-disabled="selectedUnclaimTask === null" label="Unclaim" title="unclaim" aria-label="Unclaim" ng-click="unclaimTask()"></bk-button>
+            <bk-button state="transparent" compact="true" glyph="sap-icon--refresh" title="{{'refresh' | t:'Refresh'}}" aria-label="{{'refresh' | t:'Refresh'}}" ng-click="reload()"></bk-button>
+            <bk-button state="emphasized" compact="true" ng-disabled="selectedClaimTask === null" label="{{'inbox:claim' | t:'Claim'}}" title="{{'inbox:claim' | t:'Claim'}}" aria-label="{{'inbox:claim' | t:'Claim'}}" ng-click="claimTask()">
+            </bk-button>
+            <bk-button state="negative" compact="true" ng-disabled="selectedUnclaimTask === null" label="{{'inbox:unclaim' | t:'Unclaim'}}" title="{{'inbox:unclaim' | t:'Unclaim'}}" aria-label="{{'inbox:unclaim' | t:'Unclaim'}}"
+                ng-click="unclaimTask()">
+            </bk-button>
         </bk-toolbar>
         <div class="fd-margin-begin--sm bk-padding-top-bottom--tiny">
-            <h6 bk-title wrap="true" header-size="6"><b>Candidate tasks</b></h6>
+            <h6 bk-title wrap="true" header-size="6"><b>{{'inbox:candidateTasks' | t:'Candidate tasks'}}</b></h6>
         </div>
         <bk-scrollbar class="bk-fill-parent bk-border--bottom">
             <table bk-table outer-borders="horizontal" display-mode="compact">
                 <thead bk-table-header sticky="true">
                     <tr bk-table-row>
-                        <th bk-table-header-cell>Task Id</th>
-                        <th bk-table-header-cell>Task Name</th>
-                        <th bk-table-header-cell>Assignee</th>
-                        <th bk-table-header-cell>Candidate Users</th>
-                        <th bk-table-header-cell>Candidate Groups</th>
-                        <th bk-table-header-cell>Process Instance Id</th>
-                        <th bk-table-header-cell>Create Time</th>
+                        <th bk-table-header-cell>{{'inbox:taskId' | t:'Task Id'}}</th>
+                        <th bk-table-header-cell>{{'inbox:taskName' | t:'Task Name'}}</th>
+                        <th bk-table-header-cell>{{'inbox:assignee' | t:'Assignee'}}</th>
+                        <th bk-table-header-cell>{{'inbox:candidateUsers' | t:'Candidate Users'}}</th>
+                        <th bk-table-header-cell>{{'inbox:candidateGroups' | t:'Candidate Groups'}}</th>
+                        <th bk-table-header-cell>{{'inbox:processInstanceId' | t:'Process Instance Id'}}</th>
+                        <th bk-table-header-cell>{{'inbox:createTime' | t:'Create Time'}}</th>
                     </tr>
                 </thead>
                 <tbody bk-table-body>
@@ -66,26 +69,26 @@
                         <td bk-table-cell>{{next.createTime}}</td>
                     </tr>
                     <tr ng-if="tasksList.length === 0" bk-table-row>
-                        <td bk-table-cell no-data="true">{{getNoDataMessage()}}</td>
+                        <td bk-table-cell no-data="true">{{'inbox:noTasks' | t:'No tasks found.'}}</td>
                     </tr>
                 </tbody>
             </table>
         </bk-scrollbar>
         <div class="fd-margin-begin--sm bk-padding-top-bottom--tiny">
-            <h6 bk-title wrap="true" header-size="6"><b>Assigned tasks</b></h6>
+            <h6 bk-title wrap="true" header-size="6"><b>{{'inbox:assignedTasks' | t:'Assigned tasks'}}</b></h6>
         </div>
         <bk-scrollbar class="bk-fill-parent">
             <table bk-table outer-borders="horizontal" display-mode="compact">
                 <thead bk-table-header sticky="true">
                     <tr bk-table-row>
-                        <th bk-table-header-cell>Task Id</th>
-                        <th bk-table-header-cell>Task Name</th>
-                        <th bk-table-header-cell>Assignee</th>
-                        <th bk-table-header-cell>Candidate Users</th>
-                        <th bk-table-header-cell>Candidate Groups</th>
-                        <th bk-table-header-cell>Process Instance Id</th>
-                        <th bk-table-header-cell>Create Time</th>
-                        <th bk-table-header-cell>Form Key</th>
+                        <th bk-table-header-cell>{{'inbox:taskId' | t:'Task Id'}}</th>
+                        <th bk-table-header-cell>{{'inbox:taskName' | t:'Task Name'}}</th>
+                        <th bk-table-header-cell>{{'inbox:assignee' | t:'Assignee'}}</th>
+                        <th bk-table-header-cell>{{'inbox:candidateUsers' | t:'Candidate Users'}}</th>
+                        <th bk-table-header-cell>{{'inbox:candidateGroups' | t:'Candidate Groups'}}</th>
+                        <th bk-table-header-cell>{{'inbox:processInstanceId' | t:'Process Instance Id'}}</th>
+                        <th bk-table-header-cell>{{'inbox:createTime' | t:'Create Time'}}</th>
+                        <th bk-table-header-cell>{{'inbox:formKey' | t:'Form Key'}}</th>
                     </tr>
                 </thead>
                 <tbody bk-table-body>
@@ -98,10 +101,13 @@
                         <td bk-table-cell>{{next.processInstanceId}}</td>
                         <td bk-table-cell>{{next.createTime}}</td>
                         <td bk-table-cell>
-                            <bk-button state="emphasized" label="Open Form" title="Open Form" aria-label="Open Form" ng-click="openForm(next.formKey + '?taskId=' + next.id)"></bk-button>
+                            <bk-button state="emphasized" label="{{'inbox:openForm' | t:'Open Form'}}" title="{{'inbox:openForm' | t:'Open Form'}}" aria-label="{{'inbox:openForm' | t:'Open Form'}}"
+                                ng-click="openForm(next.formKey + '?taskId=' + next.id)">
+                            </bk-button>
+                        </td>
                     </tr>
                     <tr ng-if="tasksListAssignee.length === 0" bk-table-row>
-                        <td bk-table-cell no-data="true">{{getNoDataMessage()}}</td>
+                        <td bk-table-cell no-data="true">{{'inbox:noTasks' | t:'No tasks found.'}}</td>
                     </tr>
                 </tbody>
             </table>

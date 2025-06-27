@@ -22,6 +22,6 @@ function setETag() {
 
 response.setContentType('application/json');
 setETag();
-response.println(JSON.stringify(await getShells((request.getParameter('extensionPoints') || 'platform-shells').split(','))));
+response.println(JSON.stringify(await getShells(request.getParameterValues('extensionPoints') ?? ['platform-shells'])));
 response.flush();
 response.close();

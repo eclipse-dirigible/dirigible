@@ -10,11 +10,11 @@
 #set($hasDropdowns = true)
 #end
 #end
-angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'])
 	.config(['EntityServiceProvider', (EntityServiceProvider) => {
 		EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts';
 	}])
-	.controller('PageController', (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end, EntityService) => {
+	.controller('PageController', (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end, EntityService, LocaleService) => {
 		const Dialogs = new DialogHub();
 
 		$scope.filter = {};
@@ -58,12 +58,12 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 					$scope.data = response.data;
 				}, (error) => {
 					const message = error.data ? error.data.message : '';
-					Dialogs.showAlert({ title: '${name}', message: `Unable to list ${name}: '${message}'`, type: AlertTypes.Error });
+					Dialogs.showAlert({ title: LocaleService.t('$projectName:t.${dataName}'), message: LocaleService.t('$projectName:messages.error.unableToLF', { name: '$t($projectName:t.${dataName})', message: message }), type: AlertTypes.Error });
 					console.error('EntityService:', error);
 				});
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
-				Dialogs.showAlertError({ title: '${name}', message: `Unable to count ${name}: '${message}'`, type: AlertTypes.Error });
+				Dialogs.showAlertError({ title: LocaleService.t('$projectName:t.${dataName}'), message: LocaleService.t('$projectName:messages.error.unableToCount', { name: '$t($projectName:t.${dataName})', message: message }), type: AlertTypes.Error });
 				console.error('EntityService:', error);
 			});
 		};
@@ -135,7 +135,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			const message = error.data ? error.data.message : '';
 			Dialogs.showAlert({
 				title: '${property.name}',
-				message: `Unable to load data: '${message}'`,
+				message: LocaleService.t('$projectName:messages.error.unableToLoad', { message: message }),
 				type: AlertTypes.Error
 			});
 		});
@@ -154,7 +154,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			const message = error.data ? error.data.message : '';
 			Dialogs.showAlert({
 				title: '${property.name}',
-				message: `Unable to load data: '${message}'`,
+				message: LocaleService.t('$projectName:messages.error.unableToLoad', { message: message }),
 				type: AlertTypes.Error
 			});
 		});
@@ -173,7 +173,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			const message = error.data ? error.data.message : '';
 			Dialogs.showAlert({
 				title: '${property.name}',
-				message: `Unable to load data: '${message}'`,
+				message: LocaleService.t('$projectName:messages.error.unableToLoad', { message: message }),
 				type: AlertTypes.Error
 			});
 		});
