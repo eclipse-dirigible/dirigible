@@ -218,7 +218,7 @@
         <bpmn-visualization.version>0.46.0</bpmn-visualization.version>
 
         <!-- Tests -->
-        <testcontainers.version>1.21.1</testcontainers.version>
+        <testcontainers.version>1.21.3</testcontainers.version>
         <selenide.version>7.9.3</selenide.version>
 
         <profile.content.phase>none</profile.content.phase>
