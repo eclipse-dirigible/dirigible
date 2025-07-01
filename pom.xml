@@ -110,7 +110,7 @@
         <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
         <maven-gpg-plugin.version>3.2.7</maven-gpg-plugin.version>
         <maven-jacoco-plugin.version>0.8.13</maven-jacoco-plugin.version>
-        <maven-spotbugs-plugin.version>4.9.3.0</maven-spotbugs-plugin.version>
+        <maven-spotbugs-plugin.version>4.9.3.1</maven-spotbugs-plugin.version>
         <maven-formatter-plugin.version>2.26.0</maven-formatter-plugin.version>
         <maven-exec-plugin.version>3.5.1</maven-exec-plugin.version>
         <maven-git-commit-id-plugin.version>4.9.10</maven-git-commit-id-plugin.version>
@@ -189,10 +189,10 @@
         <jetcd.core.version>0.8.5</jetcd.core.version>
 
         <!-- Various -->
-        <c3p0.version>0.11.1</c3p0.version>
+        <c3p0.version>0.11.2</c3p0.version>
         <guava.version>33.4.8-jre</guava.version>
         <icu4j.version>77.1</icu4j.version>
-        <classgraph.version>4.8.179</classgraph.version>
+        <classgraph.version>4.8.180</classgraph.version>
         <logcaptor.version>2.11.0</logcaptor.version>
 
         <!-- UI -->
@@ -914,7 +914,7 @@
             <dependency>
                 <groupId>org.junit.vintage</groupId>
                 <artifactId>junit-vintage-engine</artifactId>
-                <version>5.13.1</version>
+                <version>5.13.2</version>
                 <scope>test</scope>
             </dependency>
 

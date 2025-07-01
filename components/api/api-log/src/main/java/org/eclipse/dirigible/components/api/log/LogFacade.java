@@ -9,23 +9,20 @@
  */
 package org.eclipse.dirigible.components.api.log;
 
-import java.io.IOException;
-import java.util.Arrays;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
-
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.type.ArrayType;
 import com.fasterxml.jackson.databind.type.TypeFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+import java.util.Arrays;
 
 /**
  * The Class LogFacade.
- *
  */
 @Component
 public class LogFacade {
@@ -33,8 +30,7 @@ public class LogFacade {
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(LogFacade.class);
 
-    /** The Constant APP_LOGGER_NAME_PREFX. */
-    private static final String APP_LOGGER_NAME_PREFX = "app";
+    private static final String APP_LOGGER_NAME_PREFIX = "app";
 
     /** The Constant APP_LOGGER_NAME_SEPARATOR. */
     private static final String APP_LOGGER_NAME_SEPARATOR = ".";
@@ -46,107 +42,6 @@ public class LogFacade {
     private static final ArrayType objectArrayType = TypeFactory.defaultInstance()
                                                                 .constructArrayType(Object.class);
 
-    /**
-     * Gets the logger.
-     *
-     * @param loggerName the logger name
-     * @return Logger
-     */
-    public static final Logger getLogger(final String loggerName) {
-        /*
-         * logger names are implicitly prefixed with 'app.' to derive from the applications root logger
-         * configuration for severity and appenders. Null arguments for logger name will be treated as
-         * reference to the 'app' logger
-         */
-        String appLoggerName = loggerName;
-        if (appLoggerName == null) {
-            appLoggerName = APP_LOGGER_NAME_PREFX;
-        } else {
-            appLoggerName = APP_LOGGER_NAME_PREFX + APP_LOGGER_NAME_SEPARATOR + appLoggerName;
-        }
-
-        final Logger logger = LoggerFactory.getLogger(appLoggerName);
-
-        return logger;
-    }
-
-    /**
-     * Sets the logging level.
-     *
-     * @param loggerName the logger name
-     * @param level the level
-     */
-    public static final void setLevel(String loggerName, String level) {
-
-        final org.slf4j.Logger logger = getLogger(loggerName);
-
-        if (!(logger instanceof ch.qos.logback.classic.Logger)) {
-            if (LOGGER.isErrorEnabled()) {
-                LOGGER.error("Logger with name {} is not of type " + ch.qos.logback.classic.Logger.class.getName(), loggerName);
-            }
-            return;
-        }
-
-        ch.qos.logback.classic.Logger logbackLogger = (ch.qos.logback.classic.Logger) logger;
-        logbackLogger.setLevel(ch.qos.logback.classic.Level.valueOf(level));
-    }
-
-    /**
-     * Log.
-     *
-     * @param loggerName the logger name
-     * @param level the level
-     * @param message the message
-     * @param logArguments the log arguments
-     * @param errorJson the error json
-     * @throws IOException Signals that an I/O exception has occurred.
-     */
-    public static final void log(String loggerName, String level, String message, String logArguments, String errorJson)
-            throws IOException {
-
-        final Logger logger = getLogger(loggerName);
-
-        Object[] args = null;
-        if (logArguments != null) {
-            try {
-                args = om.readValue(logArguments, objectArrayType);
-                if (args.length < 1) {
-                    args = null;
-                }
-            } catch (IOException e) {
-                if (LOGGER.isErrorEnabled()) {
-                    LOGGER.error("Cannot parse log arguments[" + logArguments + "] for logger[" + loggerName + "]", e);
-                }
-            }
-        }
-        // https://www.slf4j.org/faq.html#paramException
-        if (errorJson != null) {
-            Exception ex = toException(errorJson);
-            if (args == null) {
-                args = new Object[] {ex};
-            } else {
-                args = Arrays.copyOf(args, args.length + 1);
-                args[args.length - 1] = ex;
-            }
-        }
-
-        if (ch.qos.logback.classic.Level.DEBUG.toString()
-                                              .equalsIgnoreCase(level)) {
-            logger.debug(message, args);
-        } else if (ch.qos.logback.classic.Level.TRACE.toString()
-                                                     .equalsIgnoreCase(level)) {
-            logger.trace(message, args);
-        } else if (ch.qos.logback.classic.Level.INFO.toString()
-                                                    .equalsIgnoreCase(level)) {
-            logger.info(message, args);
-        } else if (ch.qos.logback.classic.Level.WARN.toString()
-                                                    .equalsIgnoreCase(level)) {
-            logger.warn(message, args);
-        } else if (ch.qos.logback.classic.Level.ERROR.toString()
-                                                     .equalsIgnoreCase(level)) {
-            logger.error(message, args);
-        }
-    }
 
     /**
      * The Class ErrorObject.
@@ -161,6 +56,7 @@ public class LogFacade {
         @JsonProperty("stack")
         public StackTraceEl[] stack;
     }
+
 
     /**
      * The Class StackTraceEl.
@@ -185,17 +81,126 @@ public class LogFacade {
     }
 
     /**
+     * Sets the logging level.
+     *
+     * @param loggerName the logger name
+     * @param level the level
+     */
+    public static void setLevel(String loggerName, String level) {
+
+        final org.slf4j.Logger logger = getLogger(loggerName);
+
+        if (!(logger instanceof ch.qos.logback.classic.Logger logbackLogger)) {
+            LOGGER.error("Logger with name {} is not of type {}", loggerName, ch.qos.logback.classic.Logger.class.getName());
+            return;
+        }
+
+        logbackLogger.setLevel(ch.qos.logback.classic.Level.valueOf(level));
+    }
+
+    /**
+     * Gets the logger.
+     *
+     * @param loggerName the logger name
+     * @return Logger
+     */
+    public static Logger getLogger(final String loggerName) {
+        /*
+         * logger names are implicitly prefixed with 'app.' to derive from the applications root logger
+         * configuration for severity and appenders. Null arguments for logger name will be treated as
+         * reference to the 'app' logger
+         */
+        String appLoggerName = loggerName;
+        if (appLoggerName == null) {
+            appLoggerName = APP_LOGGER_NAME_PREFIX;
+        } else {
+            appLoggerName = APP_LOGGER_NAME_PREFIX + APP_LOGGER_NAME_SEPARATOR + appLoggerName;
+        }
+
+        return LoggerFactory.getLogger(appLoggerName);
+    }
+
+    /**
+     * Log.
+     *
+     * @param loggerName the logger name
+     * @param level the level
+     * @param message the message
+     * @param logArguments the log arguments
+     * @param errorJson the error json
+     * @throws IOException Signals that an I/O exception has occurred.
+     */
+    public static void log(String loggerName, String level, String message, String logArguments, String errorJson) throws IOException {
+
+        final Logger logger = getLogger(loggerName);
+
+        if (ch.qos.logback.classic.Level.DEBUG.toString()
+                                              .equalsIgnoreCase(level)
+                && logger.isDebugEnabled()) {
+            Object[] args = getMessageArgs(loggerName, level, message, logArguments, errorJson);
+            logger.debug(message, args);
+        } else if (ch.qos.logback.classic.Level.TRACE.toString()
+                                                     .equalsIgnoreCase(level)
+                && logger.isTraceEnabled()) {
+            Object[] args = getMessageArgs(loggerName, level, message, logArguments, errorJson);
+            logger.trace(message, args);
+        } else if (ch.qos.logback.classic.Level.INFO.toString()
+                                                    .equalsIgnoreCase(level)
+                && logger.isInfoEnabled()) {
+            Object[] args = getMessageArgs(loggerName, level, message, logArguments, errorJson);
+            logger.info(message, args);
+        } else if (ch.qos.logback.classic.Level.WARN.toString()
+                                                    .equalsIgnoreCase(level)
+                && logger.isWarnEnabled()) {
+            Object[] args = getMessageArgs(loggerName, level, message, logArguments, errorJson);
+            logger.warn(message, args);
+        } else if (ch.qos.logback.classic.Level.ERROR.toString()
+                                                     .equalsIgnoreCase(level)
+                && logger.isErrorEnabled()) {
+            Object[] args = getMessageArgs(loggerName, level, message, logArguments, errorJson);
+            logger.error(message, args);
+        } else {
+            LOGGER.debug("Logging using logger [{}] for message [{}] will be skipped. Log level level [{}].", loggerName, message, level);
+        }
+    }
+
+    private static Object[] getMessageArgs(String loggerName, String level, String message, String logArguments, String errorJson)
+            throws IOException {
+        Object[] args = null;
+        if (logArguments != null) {
+            try {
+                args = om.readValue(logArguments, objectArrayType);
+                if (args.length < 1) {
+                    args = null;
+                }
+            } catch (IOException e) {
+                LOGGER.error("Cannot parse log arguments for logger [{}] for message [{}] at level [{}]", loggerName, message, level, e);
+            }
+        }
+        // https://www.slf4j.org/faq.html#paramException
+        if (errorJson != null) {
+            Exception ex = toException(errorJson);
+            if (args == null) {
+                args = new Object[] {ex};
+            } else {
+                args = Arrays.copyOf(args, args.length + 1);
+                args[args.length - 1] = ex;
+            }
+        }
+        return args;
+    }
+
+    /**
      * Creates a JSServiceException from JSON.
      *
      * @param errorJson the error json
      * @return the JS service exception
-     * @throws JsonParseException the json parse exception
      * @throws JsonMappingException the json mapping exception
      * @throws IOException Signals that an I/O exception has occurred.
      */
-    private static Exception toException(String errorJson) throws JsonParseException, JsonMappingException, IOException {
+    private static Exception toException(String errorJson) throws JsonMappingException, IOException {
 
-        Exception ex = null;
+        Exception ex;
 
         if (errorJson != null) {
 

@@ -181,6 +181,9 @@ public class ColumnMetadata {
         this.scale = scale;
     }
 
-
-
+    @Override
+    public String toString() {
+        return "ColumnMetadata{" + "name='" + name + '\'' + ", type='" + type + '\'' + ", size=" + size + ", nullable=" + nullable
+                + ", key=" + key + ", kind='" + kind + '\'' + ", scale=" + scale + '}';
+    }
 }
