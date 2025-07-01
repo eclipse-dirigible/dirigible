@@ -6,11 +6,11 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 	.controller('PageController', ($scope,#if($hasDropdowns) ${dollar}http,#end EntityService, Extensions, LocaleService, ButtonStates) => {
 		const Dialogs = new DialogHub();
 		let translated = {
-			yes: '',
-			no: '',
-			deleteConfirm: '',
-			deleteTitle: ''
-		}
+			yes: 'Yes',
+			no: 'No',
+			deleteConfirm: 'Are you sure you want to delete ${name}? This action cannot be undone.',
+			deleteTitle: 'Delete ${name}?'
+		};
 
 		LocaleService.onInit(() => {
 			translated.yes = LocaleService.t('$projectName:defaults.yes');

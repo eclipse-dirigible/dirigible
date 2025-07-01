@@ -95,7 +95,7 @@ function processScriptRequest(scriptIds) {
 function getScriptList(scriptId) {
     const baseJs = [
         '/jquery/3.7.1/jquery.min.js',
-        '/i18next/25.0.2/dist/umd/i18next.min.js',
+        '/i18next/25.3.0/dist/umd/i18next.min.js',
         '/angularjs/1.8.2/angular.min.js',
         '/angularjs/1.8.2/angular-resource.min.js',
         '/angular-aria/1.8.2/angular-aria.min.js',

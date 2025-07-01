@@ -6,7 +6,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 	.controller('PageController', ($scope, ${dollar}http, Extensions, LocaleService, EntityService) => {
 		const Dialogs = new DialogHub();
 		const Notifications = new NotificationHub();
-		let description = '';
+		let description = 'Description';
 		let propertySuccessfullyCreated = '${name} successfully created';
 		let propertySuccessfullyUpdated = '${name} successfully updated';
 		$scope.entity = {};

@@ -73,12 +73,12 @@ angular.module('app', ['platformView', 'blimpKit', 'platformLocale']).controller
         }).then(() => {
             Dialogs.showAlert({
                 title: LocaleService.t('inbox:actionConfirm', 'Action confirmation'),
-                message: LocaleService.t(claimed ? 'inbox:actionClaimSuccess' : 'inbox:actionUnclaimSuccess', 'Task claimed successfully'),
+                message: LocaleService.t(claimed ? 'inbox:actionClaimSuccess' : 'inbox:actionUnclaimSuccess', claimed ? 'Task claimed successfully' : 'Task unclaimed successfully'),
                 type: AlertTypes.Success
             });
             $scope.reload();
             console.log('Successfully ' + actionName + ' task with id ' + taskId);
-            clearCallback()
+            clearCallback();
         }).catch((error) => {
             Dialogs.showAlert({
                 title: LocaleService.t('inbox:errMsg.actionTitle', 'Action failed'),
@@ -87,5 +87,5 @@ angular.module('app', ['platformView', 'blimpKit', 'platformLocale']).controller
             });
             console.error('Error making POST request:', error);
         });
-    }
+    };
 });

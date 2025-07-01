@@ -1,7 +1,7 @@
 #set($dollar = '$')
 angular.module('page', ['blimpKit', 'platformView', 'platformLocale']).controller('PageController', ($scope, ViewParameters, LocaleService) => {
 	const Dialogs = new DialogHub();
-	let description = '';
+	let description = 'Description';
 	$scope.entity = {};
 	$scope.forms = {
 		details: {},

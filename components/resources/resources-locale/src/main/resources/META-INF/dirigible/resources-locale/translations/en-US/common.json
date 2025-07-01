@@ -1,4 +1,17 @@
 {
+    "aria": {
+        "headerMenu": "header menu",
+        "headerMainMenuBtn": "main menu button",
+        "headerMenuBtn": "menu button",
+        "headerMenuWindow": "header menu window",
+        "headerMenuHelp": "header menu help",
+        "windowMenuDdBtn": "window menu dropdown button",
+        "helpMenuDdBtn": "help menu dropdown button",
+        "ntfListButton": "notification list button",
+        "delNtf": "delete notification",
+        "usrMenuBtn": "user menu button",
+        "usrMenu": "user menu"
+    },
     "yes": "Yes",
     "no": "No",
     "cancel": "Cancel",

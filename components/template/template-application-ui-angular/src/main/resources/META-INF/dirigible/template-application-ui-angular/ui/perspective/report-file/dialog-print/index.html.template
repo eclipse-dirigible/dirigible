@@ -15,7 +15,7 @@
 
     <body>
 		<bk-toolbar has-title="true">
-			<bk-toolbar-title>{{'$projectName:defaults.reportTitle' | t:{'name':'$name'}}}</bk-toolbar-title>
+			<bk-toolbar-title>{{ '$projectName:defaults.reportTitle' | t:{'name':'$name'} }}</bk-toolbar-title>
 		</bk-toolbar>
         <bk-scrollbar ng-hide="data == null">
             <table bk-table display-mode="compact" inner-borders="top" outer-borders="none">

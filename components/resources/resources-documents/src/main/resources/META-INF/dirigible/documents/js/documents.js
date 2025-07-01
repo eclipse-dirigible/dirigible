@@ -86,7 +86,7 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
 
     $scope.loading = false;
     $scope.canPreview = true;
-    $scope.downloadPath = '/services/js/documents/api/documents.js/download'
+    $scope.downloadPath = '/services/js/documents/api/documents.js/download';
     $scope.previewPath = '/services/js/documents/api/documents.js/preview';
     $scope.downloadZipPath = zipApi;
     $scope.selection = {
@@ -400,7 +400,7 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
     $scope.showUploadFileDialog = (args) => {
         $('#fileUpload').click();
         $scope.unpackZips = args && args.unpackZip;
-    }
+    };
 
     function getFolder(folderPath) {
         let requestUrl = documentsApi;

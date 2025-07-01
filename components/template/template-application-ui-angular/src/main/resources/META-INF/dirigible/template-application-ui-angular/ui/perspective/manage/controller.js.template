@@ -6,11 +6,11 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 	.controller('PageController', (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end EntityService, Extensions, LocaleService, ButtonStates) => {
 		const Dialogs = new DialogHub();
 		let translated = {
-			yes: '',
-			no: '',
-			deleteConfirm: '',
-			deleteTitle: ''
-		}
+			yes: 'Yes',
+			no: 'No',
+			deleteConfirm: 'Are you sure you want to delete ${name}? This action cannot be undone.',
+			deleteTitle: 'Delete ${name}?'
+		};
 
 		LocaleService.onInit(() => {
 			translated.yes = LocaleService.t('$projectName:defaults.yes');
@@ -109,6 +109,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 #end
 					$scope.data = response.data;
 				}, (error) => {
+					const message = error.data ? error.data.message : '';
 					Dialogs.showAlert({
 						title: LocaleService.t('$projectName:t.${dataName}'),
 						message: LocaleService.t('$projectName:messages.error.unableToLF', { name: '$t($projectName:t.${dataName})', message: message }),
@@ -117,6 +118,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 					console.error('EntityService:', error);
 				});
 			}, (error) => {
+				const message = error.data ? error.data.message : '';
 				Dialogs.showAlert({
 					title: LocaleService.t('$projectName:t.${dataName}'),
 					message: LocaleService.t('$projectName:messages.error.unableToCount', { name: '$t($projectName:t.${dataName})', message: message }),
