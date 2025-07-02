@@ -19,7 +19,9 @@ export async function getWindowMenu(perspectiveExtPoints = [], viewExtPoints = [
 	const shells = await getShells(shellExtPoints);
 
 	const menu = {
-		translation: 'window',
+		translation: {
+			key: 'common:window',
+		},
 		label: 'Window',
 		items: [
 			{

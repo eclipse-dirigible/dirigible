@@ -13,7 +13,9 @@ exports.getMenu = () => ({
 	systemMenu: true,
 	id: 'help',
 	menu: {
-		translation: 'help',
+		translation: {
+			key: 'common:help',
+		},
 		label: 'Help',
 		items: [
 			{

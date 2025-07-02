@@ -337,13 +337,13 @@ if (window !== top) {
         },
         template: `<div class="main-container" no-statusbar="{{::noStatusbar}}">
             <bk-vertical-nav class="sidebar" condensed="condensed" can-scroll="true">
-                <bk-vertical-nav-main-section aria-label="perspective navigation">
-                    <bk-list aria-label="{{'perspectiveList' | t:'Perspective list'}}" ng-if="!condensed">
+                <bk-vertical-nav-main-section aria-label="{{'aria.perspectiveNav' | t:'perspective navigation'}}">
+                    <bk-list aria-label="{{'aria.perspectiveList' | t:'Perspective list'}}" ng-if="!condensed">
                         <bk-list-navigation-group-header ng-repeat-start="navItem in config.perspectives track by navItem.id" ng-if="navItem.items && navItem.items.length && (navItem.headerLabel || navItem.headerTranslation)">{{navItem.headerTranslation.key | t:navItem.headerLabel}}</bk-list-navigation-group-header>
                         <bk-list-navigation-item ng-if="navItem.items && navItem.items.length" expandable="true" ng-click="navItem.expanded = !navItem.expanded" is-expanded="navItem.expanded">
                             <bk-list-navigation-item-icon icon-size="lg" svg-path="{{getIcon(navItem.icon)}}"></bk-list-navigation-item-icon>
                             <span bk-list-navigation-item-text>{{navItem.translation.key | t:navItem.translation.options:navItem.label}}</span>
-                            <bk-list-navigation-item-arrow aria-label="expand perspective group" is-expanded="navItem.expanded"></bk-list-navigation-item-arrow>
+                            <bk-list-navigation-item-arrow aria-label="{{'aria.expandPerGrp' | t:'expand perspective group'}}" is-expanded="navItem.expanded"></bk-list-navigation-item-arrow>
                             <bk-list>
                                 <bk-list-navigation-item ng-repeat="navGroupItem in navItem.items track by navGroupItem.id" ng-click="$event.stopPropagation();switchPerspective(navGroupItem.id, navGroupItem.label, navGroupItem.translation)">
                                     <span bk-list-navigation-item-text>{{navGroupItem.translation.key | t:navGroupItem.translation.options:navGroupItem.label}}</span>
@@ -359,7 +359,7 @@ if (window !== top) {
                             <bk-list-navigation-item-indicator ng-if="navItem.id === activeId"></bk-list-navigation-item-indicator>
                         </bk-list-navigation-item>
                     </bk-list>
-                    <bk-list aria-label="Perspective list" ng-if="condensed">
+                    <bk-list aria-label="{{'aria.perspectiveList' | t:'Perspective list'}}" ng-if="condensed">
                         <bk-list-navigation-item ng-repeat-start="navItem in config.perspectives track by navItem.id" ng-if="!navItem.items" indicated="navItem.id === activeId" ng-click="switchPerspective(navItem.id, navItem.label, navItem.translation)" title="{{::navItem.label}}" id="perspective-{{::navItem.id}}">
                             <bk-list-navigation-item-icon icon-size="lg" svg-path="{{getIcon(navItem.icon)}}"></bk-list-navigation-item-icon>
                             <span bk-list-navigation-item-text>{{navItem.translation.key | t:navItem.translation.options:navItem.label}}</span>
@@ -372,7 +372,7 @@ if (window !== top) {
                         </bk-list-navigation-item>
                     </bk-list>
                 </bk-vertical-nav-main-section>
-                <bk-vertical-nav-utility-section ng-if="config.utilities.length" aria-label="utility navigation">
+                <bk-vertical-nav-utility-section ng-if="config.utilities.length" aria-label="{{'aria.utilityNav' | t:'utility navigation'}}">
                     <bk-list>
                         <bk-list-navigation-item ng-repeat="navItem in config.utilities track by navItem.id" ng-click="switchPerspective(navItem.id, navItem.label, navItem.translation)" title="{{navItem.translation.key | t:navItem.translation.options:navItem.label}}">
                             <bk-list-navigation-item-icon icon-size="lg" svg-path="{{getIcon(navItem.icon)}}"></bk-list-navigation-item-icon>
@@ -432,7 +432,7 @@ if (window !== top) {
                     <p bk-notification-paragraph="">{{notification.description}}</p>
                 </div>
                 <div bk-notification-actions>
-                    <bk-button aria-label="Close" state="transparent" glyph="sap-icon--decline" ng-click="hide()"></bk-button>
+                    <bk-button aria-label="{{'close' | t:'Close'}}" state="transparent" glyph="sap-icon--decline" ng-click="hide()"></bk-button>
                 </div>
             </bk-notification>
         </div>`,

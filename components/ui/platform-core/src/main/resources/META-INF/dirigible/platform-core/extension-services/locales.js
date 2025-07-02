@@ -14,9 +14,7 @@ import { extensions } from 'sdk/extensions';
 import { registry } from 'sdk/platform';
 import { uuid } from 'sdk/utils';
 
-let commonPath = '';
-const allLocales = [];
-const lang = request.getParameter('translations');
+const langs = request.getParameterValues('translations');
 const namespaces = request.getParameterValues('namespaces');
 const extensionPoints = request.getParameterValues('extensionPoints') ?? ['platform-locales'];
 
@@ -40,6 +38,33 @@ function setETag() {
 	response.setHeader('Cache-Control', `public, must-revalidate, max-age=${maxAge}`);
 }
 
+function getTranslations(lang, commonPath) {
+	let translations = {};
+	const root = registry.getRoot();
+	const modules = root.getDirectoriesNames();
+	translations['common'] = JSON.parse(registry.getText(commonPath));
+	for (let p = 0; p < modules.length; p++) {
+		if (namespaces && !namespaces.includes(modules[p])) continue;
+		const langDir = root.getDirectory(`${modules[p]}/translations/${lang}`);
+		if (langDir.exists()) {
+			const jsons = langDir.getArtefactsNames();
+			for (let j = 0; j < jsons.length; j++) {
+				const translationPath = `/${modules[p]}/translations/${lang}/${jsons[j]}`;
+				if (translationPath !== commonPath) {
+					translations[modules[p]] = JSON.parse(registry.getText(translationPath));
+				}
+			}
+		}
+	}
+	return translations;
+}
+
+const allLocales = [];
+let responseContent = {
+	locales: allLocales,
+	translations: {}
+};
+
 try {
 	for (let i = 0; i < extensionPoints.length; i++) {
 		// @ts-ignore
@@ -47,32 +72,19 @@ try {
 		for (let e = 0; e < extensionList.length; e++) {
 			const locale = extensionList[e].getLocale();
 			allLocales.push(locale);
-			if (locale.id === lang) commonPath = locale.common;
 		}
 	}
 	allLocales.sort(sort);
-	let responseContent = {
-		locales: allLocales,
-		translations: lang ? { [lang]: {} } : undefined
-	};
-	if (lang && allLocales.some((locale) => locale.id === lang)) {
-		const root = registry.getRoot();
-		const modules = root.getDirectoriesNames();
-		responseContent.translations[lang]['common'] = JSON.parse(registry.getText(commonPath));
-		for (let p = 0; p < modules.length; p++) {
-			if (namespaces && !namespaces.includes(modules[p])) continue;
-			const langDir = root.getDirectory(`${modules[p]}/translations/${lang}`);
-			if (langDir.exists()) {
-				const jsons = langDir.getArtefactsNames();
-				for (let j = 0; j < jsons.length; j++) {
-					const translationPath = `/${modules[p]}/translations/${lang}/${jsons[j]}`;
-					if (translationPath !== commonPath) {
-						responseContent.translations[lang][modules[p]] = JSON.parse(registry.getText(translationPath));
-					}
-				}
-			}
+	if (langs && langs.every((lng) => allLocales.some((locale) => locale.id === lng))) {
+		for (let l = 0; l < langs.length; l++) {
+			const locale = allLocales.find((locale) => locale.id === langs[l]);
+			responseContent.translations[locale.id] = getTranslations(locale.id, locale.common);
 		}
-	} else throw Error(`Language '${lang}' is not registered`);
+	} else if (langs === null) {
+		for (let l = 0; l < allLocales.length; l++) {
+			responseContent.translations[allLocales[l].id] = getTranslations(allLocales[l].id, allLocales[l].common);
+		}
+	} else throw Error(`Language(s) '${langs}' not registered`);
 	response.setContentType('application/json');
 	response.println(JSON.stringify(responseContent));
 	setETag();
