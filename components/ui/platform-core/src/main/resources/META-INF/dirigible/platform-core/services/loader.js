@@ -95,6 +95,7 @@ function processScriptRequest(scriptIds) {
 function getScriptList(scriptId) {
     const baseJs = [
         '/jquery/3.7.1/jquery.min.js',
+        '/i18next/25.3.0/dist/umd/i18next.min.js',
         '/angularjs/1.8.2/angular.min.js',
         '/angularjs/1.8.2/angular-resource.min.js',
         '/angular-aria/1.8.2/angular-aria.min.js',
@@ -161,6 +162,7 @@ function getScriptList(scriptId) {
         '/platform-core/ui/blimpkit/upload-collection.js',
         '/platform-core/ui/blimpkit/vertical-navigation.js',
         '/platform-core/ui/blimpkit/wizard.js',
+        '/platform-core/ui/platform/locale.js',
     ];
     const cookies = '/angularjs/1.8.2/angular-cookies.min.js';
     const editorsService = '/platform-core/ui/platform/editors.js';
@@ -217,7 +219,7 @@ function getScriptList(scriptId) {
             return ['/editor-monaco/embeddable/editor.js', '/monaco-editor/0.40.0/min/vs/loader.js', '/monaco-editor/0.40.0/min/vs/editor/editor.main.nls.js', '/monaco-editor/0.40.0/min/vs/editor/editor.main.js'];
         case 'code-editor-css':
             return ['/editor-monaco/css/embeddable.css', '/monaco-editor/0.40.0/min/vs/editor/editor.main.css'];
-        case 'cookies':
+        case 'cookies-js':
             return [cookies];
         case 'jstree-js':
             return ['/jstree/3.3.12/jstree.min.js', '/platform-core/ui/jstree/indicator.plugin.js'];

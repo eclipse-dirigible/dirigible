@@ -28,7 +28,7 @@ blimpkit.directive('bkStepInput', (classNames) => ({
         ngRequired: '<?',
     },
     link: (scope, element, attrs, ngModel) => {
-        if (!scope.inputId)
+        if (!angular.isDefined(scope.inputId))
             console.error('bk-step-input error: You must provide an ID using the "input-id" attribute');
         const states = {
             'error': 'error',

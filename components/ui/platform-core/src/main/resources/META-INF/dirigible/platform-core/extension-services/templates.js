@@ -15,7 +15,7 @@ import { request, response, rs } from "sdk/http";
 import { uuid } from "sdk/utils";
 
 const templates = [];
-const extensionPoints = (request.getParameter('extensionPoints') || 'platform-templates').split(',');
+const extensionPoints = request.getParameterValues('extensionPoints') ?? ['platform-templates'];
 let templateExtensions = [];
 for (let i = 0; i < extensionPoints.length; i++) {
 	// @ts-ignore

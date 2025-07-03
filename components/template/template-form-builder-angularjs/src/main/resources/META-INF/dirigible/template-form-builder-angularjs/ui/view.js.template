@@ -6,6 +6,12 @@
 const viewData = {
 	id: '$projectName-form',
 	label: '$projectName Form',
+	translation: {
+		key: '$projectName:default.viewName',
+		options: {
+			name: '$projectName',
+		}
+	},
 	region: 'bottom',
 	lazyLoad: false,
 	autoFocusTab: false,

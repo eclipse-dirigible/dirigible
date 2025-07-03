@@ -6,8 +6,14 @@
 exports.getPerspectiveGroup = () => ({
 	id: '${navId}',
 	label: '${navLabel}',
+	translation: {
+        key: '$projectName:t.${navId}',
+    },
 #if($navHeader)
 	header: '${navHeader}',
+	headerTranslation: {
+        key: '$projectName:t.${navId}nheader',
+    },
 #end
 	expanded: ${navExpanded},
 	order: ${navOrder},

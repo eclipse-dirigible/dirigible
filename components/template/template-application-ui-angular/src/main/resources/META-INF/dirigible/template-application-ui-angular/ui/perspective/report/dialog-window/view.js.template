@@ -6,6 +6,12 @@
 const viewData = {
     id: '${name}-Report-details',
     label: '${name} Report',
+    translation: {
+        key: '$projectName:reportTitle',
+        options: {
+            name: '$t($projectName:t.$dataName)',
+        }
+    },
     path: '/services/web/${projectName}/gen/${genFolderName}/ui/Reports/${name}/dialog-window/index.html',
     perspectiveName: 'Reports'
 };

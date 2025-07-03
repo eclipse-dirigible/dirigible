@@ -227,7 +227,7 @@
         <ag-grid.version>27.1.0</ag-grid.version>
         <papaparse.version>5.3.2</papaparse.version>
         <bpmn-visualization.version>0.46.0</bpmn-visualization.version>
-
+        <i18next.version>25.3.0</i18next.version>
         <!-- Tests -->
         <testcontainers.version>1.21.1</testcontainers.version>
         <selenide.version>7.9.3</selenide.version>
@@ -518,6 +518,9 @@
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/resources-core/ui/**
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/resources-locale/**
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/platform-core/ui/**

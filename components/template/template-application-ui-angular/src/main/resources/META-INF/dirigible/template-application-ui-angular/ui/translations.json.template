@@ -1,0 +1,65 @@
+{
+    "aria": {
+        "showHide": "show/hide {{name}} options",
+        "options": "{{name}} options",
+        "tableRowMenu": "Table Row Menu",
+        "tableRowMenuBtn": "Table Row Menu Button",
+        "headerMenu": "Header Menu",
+        "headerMenuBtn": "Header Menu Button",
+        "addEntity": "add entity",
+        "editEntity": "edit entity",
+        "deleteEntity": "delete entity"
+    },
+    "state": {
+        "busy": "Loading..."
+    },
+    "messages": {
+        "error" : {
+            "incorrectInput": "Incorrect Input",
+            "loading": "Encounterd an error while loading",
+            "unableToCreate": "Unable to create {{name}}: '{{message}}'",
+            "unableToUpdate": "Unable to update {{name}}: '{{message}}'",
+            "unableToDelete": "Unable to delete {{name}}: '{{message}}'",
+            "unableToLoad": "Unable to load data: '{{message}}'",
+            "unableToLF": "Unable to list/filter {{name}}: '{{message}}'",
+            "unableToCount": "Unable to count {{name}}: '{{message}}'",
+            "pattern": "The value doesn't match the required pattern: {{rule}}"
+        },
+        "propertySuccessfullyCreated": "{{name}} successfully created",
+        "propertySuccessfullyUpdated": "{{name}} successfully updated",
+        "inputSearch": "Search {{name}}...",
+        "inputEnter": "Enter {{name}}...",
+        "noData": "No data available.",
+        "deleteConfirm": "Are you sure you want to delete {{name}}? This action cannot be undone.",
+        "detailSelectRecord": "Select a record to get a list of it's details."
+    },
+    "defaults": {
+        "yes": "Yes",
+        "no": "No",
+        "add": "Add",
+        "refresh": "Refresh",
+        "to": "To {{text}}",
+        "from": "From {{text}}",
+        "filter": "Filter",
+        "print": "Print",
+        "reset": "Reset",
+        "create": "Create",
+        "edit": "Edit",
+        "update": "Update",
+        "delete": "Delete",
+        "cancel": "Cancel",
+        "items": "Items",
+        "description": "Description",
+        "formGrpFilter": "{{name}} Filter",
+        "formHeadSelect": "{{name}} Details",
+        "formHeadCreate": "Create {{name}}",
+        "formHeadUpdate": "Update {{name}}",
+        "reportTitle": "{{name}} Report",
+        "reportFilter": "Report Filter",
+        "viewDetails": "View Details",
+        "deleteTitle": "Delete {{name}}?",
+        "loadMore": "Load More..."
+    },
+    "extName": "{{content}}",
+    "t": {}
+}
