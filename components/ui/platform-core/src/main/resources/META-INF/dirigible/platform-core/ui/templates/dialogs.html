@@ -15,11 +15,11 @@
     <!-- Window -->
     <bk-dialog ng-repeat="window in dialogWindows track by window.id" visible="true" window-width="{{window.width}}" window-height="{{window.height}}" window-max-width="{{window.maxWidth}}" window-max-height="{{window.maxHeight}}"
         window-min-width="{{window.minWidth}}" window-min-height="{{window.minHeight}}">
-        <bk-dialog-header ng-if="window.hasHeader" header="{{window.header}}" title="{{window.label}}" subheader="{{window.subheader}}">
+        <bk-dialog-header ng-if="window.hasHeader" header="{{window.header}}" title="{{window.translation.key | t:window.translation.options:window.label}}" subheader="{{window.subheader}}">
             <bk-button ng-if="window.closeButton" glyph="sap-icon--decline" aria-label="Close dialog window" round="true" compact="true" ng-click="closeDialogWindow()"></bk-button>
         </bk-dialog-header>
         <bk-dialog-body style="padding:0 !important">
-            <iframe title="{{window.label}}" ng-src="{{ window.path }}" data-parameters="{{ window.params }}"></iframe>
+            <iframe title="{{window.translation.key | t:window.translation.options:window.label}}" ng-src="{{ window.path }}" data-parameters="{{ window.params }}"></iframe>
         </bk-dialog-body>
     </bk-dialog>
     <!-- Dialog -->

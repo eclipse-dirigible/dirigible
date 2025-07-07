@@ -48,5 +48,6 @@
     "refresh": "Refresh",
     "settings": "Настройки",
     "reset": "Нулиране",
-    "about": "About"
+    "about": "About",
+    "status": "Status"
 }

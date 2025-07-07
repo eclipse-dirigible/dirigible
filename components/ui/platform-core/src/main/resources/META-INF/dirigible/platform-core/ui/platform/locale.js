@@ -23,10 +23,14 @@ angular.module('platformLocale', []).provider('LocaleService', function LocaleSe
             savedLanguage = this.defaultLanguage;
         }
         if (window === top) {
-            Extensions.getLocales(savedLanguage, this.namespaces).then((response) => {
+            Extensions.getTranslations({
+                langs: savedLanguage !== this.defaultLanguage ? [savedLanguage, this.defaultLanguage] : savedLanguage,
+                namespaces: this.namespaces
+            }).then((response) => {
                 i18next['locales'] = response.data.locales;
                 i18next.init({
                     lng: savedLanguage,
+                    fallbackLng: this.defaultLanguage,
                     load: 'currentOnly',
                     debug: false,
                     defaultNS: 'common',

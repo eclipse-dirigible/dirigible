@@ -1,0 +1,55 @@
+<!--
+
+    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="translation" ng-controller="TranslationController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="configs/translation-view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script src="js/translation.js" type="text/javascript"></script>
+        <style>
+            td[nesting-level="2"] {
+                padding-inline-start: .5rem !important;
+            }
+
+        </style>
+    </head>
+
+    <body class="bk-vbox" bk-scrollbar>
+        <table display-mode="compact" bk-table bk-table-group outer-borders="bottom">
+            <thead bk-table-header sticky="true" interactive="false">
+                <tr bk-table-row>
+                    <th bk-table-header-cell>Key</th>
+                    <th bk-table-header-cell ng-repeat="lang in langs track by lang.id">{{::lang.label}}</th>
+                </tr>
+            </thead>
+            <tbody bk-table-body>
+                <tr bk-table-row ng-repeat-start="(namespace, translationList) in translations track by namespace">
+                    <td bk-table-group-cell nesting-level="1" expanded="true">{{::namespace}}</td>
+                </tr>
+                <tr bk-table-row ng-repeat-end ng-repeat="translation in translationList track by translation.tkey">
+                    <td bk-table-cell nesting-level="2" fit-content="true">{{::translation.tkey}}</td>
+                    <td bk-table-cell ng-repeat="lang in langs track by lang.id">{{::translation[lang.id]}}</td>
+                </tr>
+            </tbody>
+        </table>
+        <theme></theme>
+    </body>
+
+</html>

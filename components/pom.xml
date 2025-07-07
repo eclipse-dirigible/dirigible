@@ -223,6 +223,7 @@
         <module>ui/view-databases</module>
         <module>ui/view-sql</module>
         <module>ui/view-transfer</module>
+        <module>ui/view-translation</module>
         <module>ui/view-artefacts</module>
         <module>ui/view-configurations</module>
         <module>ui/view-data-structures</module>
@@ -1295,6 +1296,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-view-transfer</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-view-translation</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

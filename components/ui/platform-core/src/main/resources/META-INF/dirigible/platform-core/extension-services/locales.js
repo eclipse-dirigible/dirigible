@@ -14,7 +14,7 @@ import { extensions } from 'sdk/extensions';
 import { registry } from 'sdk/platform';
 import { uuid } from 'sdk/utils';
 
-const langs = request.getParameterValues('translations');
+const langs = request.getParameterValues('langs');
 const namespaces = request.getParameterValues('namespaces');
 const extensionPoints = request.getParameterValues('extensionPoints') ?? ['platform-locales'];
 

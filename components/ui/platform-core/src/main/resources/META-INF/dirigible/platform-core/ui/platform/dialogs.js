@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-angular.module('platformDialogs', ['blimpKit', 'platformView']).directive('dialogs', (Extensions) => ({
+angular.module('platformDialogs', ['blimpKit', 'platformView', 'platformLocale']).directive('dialogs', (Extensions) => ({
     restrict: 'E',
     replace: true,
     transclude: false,

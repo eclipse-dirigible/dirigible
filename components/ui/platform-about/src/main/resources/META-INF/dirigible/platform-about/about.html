@@ -28,44 +28,44 @@
     <body bk-scrollbar>
         <bk-panel expanded="true" ng-if="version">
             <bk-panel-header>
-                <bk-panel-expand hint="expand panel version content"></bk-panel-expand>
-                <h4 bk-panel-title>General</h4>
+                <bk-panel-expand hint="{{'platform-about:aria.verGen' | t:'expand/collapse version panel'}}"></bk-panel-expand>
+                <h4 bk-panel-title>{{'platform-about:general' | t:'General'}}</h4>
             </bk-panel-header>
-            <bk-panel-content aria-label="Panel Content">
+            <bk-panel-content aria-label="{{'platform-about:aria.panCont' | t:'Panel Content'}}">
                 <table bk-table fixed="true" display-mode="compact" class="bk-list-border--top">
                     <tbody bk-table-body>
                         <tr bk-table-row>
-                            <td bk-table-cell><strong>Name</strong></td>
+                            <td bk-table-cell><strong>{{'name' | t:'Name'}}</strong></td>
                             <td bk-table-cell>{{::branding.name}}</td>
                         </tr>
                         <tr bk-table-row>
-                            <td bk-table-cell><strong>Brand</strong></td>
+                            <td bk-table-cell><strong>{{'platform-about:brand' | t:'Brand'}}</strong></td>
                             <td bk-table-cell>{{::branding.brand}}</td>
                         </tr>
-                        <tr bk-table-row>
-                            <td bk-table-cell><strong>Version</strong></td>
+                        <tr bk-table-row ng-if="version.productVersion !== '${project.version}'">
+                            <td bk-table-cell><strong>{{'platform-about:version' | t:'Version'}}</strong></td>
                             <td bk-table-cell>{{::version.productVersion}}</td>
                         </tr>
-                        <tr bk-table-row>
-                            <td bk-table-cell><strong>Commit Id</strong></td>
+                        <tr bk-table-row ng-if="version.productCommitId !== '${git.commit.id}'">
+                            <td bk-table-cell><strong>{{'platform-about:commitId' | t:'Commit Id'}}</strong></td>
                             <td bk-table-cell>
                                 <a style="color:inherit" href="{{::version.productRepository}}/commit/{{::version.productCommitId}}" target="_blank" rel="noopener noreferrer">{{::version.productCommitId}}</a>
                             </td>
                         </tr>
                         <tr bk-table-row>
-                            <td bk-table-cell><strong>Type</strong></td>
+                            <td bk-table-cell><strong>{{'platform-about:type' | t:'Type'}}</strong></td>
                             <td bk-table-cell>{{::version.productType}}</td>
                         </tr>
                         <tr bk-table-row>
-                            <td bk-table-cell><strong>Instance</strong></td>
+                            <td bk-table-cell><strong>{{'platform-about:instance' | t:'Instance'}}</strong></td>
                             <td bk-table-cell>{{::version.instanceName}}</td>
                         </tr>
                         <tr bk-table-row>
-                            <td bk-table-cell><strong>Repository</strong></td>
+                            <td bk-table-cell><strong>{{'platform-about:repository' | t:'Repository'}}</strong></td>
                             <td bk-table-cell>{{::version.repositoryProvider}}</td>
                         </tr>
                         <tr bk-table-row>
-                            <td bk-table-cell><strong>Database</strong></td>
+                            <td bk-table-cell><strong>{{'platform-about:database' | t:'Database'}}</strong></td>
                             <td bk-table-cell>{{::version.databaseProvider}}</td>
                         </tr>
                     </tbody>
@@ -75,14 +75,14 @@
 
         <bk-panel expanded="true">
             <bk-panel-header>
-                <bk-panel-expand hint="expand panel version content"></bk-panel-expand>
+                <bk-panel-expand hint="{{'platform-about:aria.verUi' | t:'expand/collapse ui library panel'}}"></bk-panel-expand>
                 <h4 bk-panel-title>BlimpKit</h4>
             </bk-panel-header>
-            <bk-panel-content aria-label="Panel Content">
+            <bk-panel-content aria-label="{{'platform-about:aria.panCont' | t:'Panel Content'}}">
                 <table bk-table fixed="true" display-mode="compact" class="bk-list-border--top">
                     <tbody bk-table-body>
                         <tr bk-table-row>
-                            <td bk-table-cell><strong>Version</strong></td>
+                            <td bk-table-cell><strong>{{'platform-about:version' | t:'Version'}}</strong></td>
                             <td bk-table-cell>{{::blimpKitVersion}}</td>
                         </tr>
                     </tbody>
@@ -92,10 +92,10 @@
 
         <bk-panel expanded="true">
             <bk-panel-header>
-                <bk-panel-expand hint="expand panel engines content"></bk-panel-expand>
-                <h4 bk-panel-title>Engines</h4>
+                <bk-panel-expand hint="{{'platform-about:aria.verEng' | t:'expand/collapse engines panel'}}"></bk-panel-expand>
+                <h4 bk-panel-title>{{'platform-about:engines' | t:'Engines'}}</h4>
             </bk-panel-header>
-            <bk-panel-content aria-label="Panel Content">
+            <bk-panel-content aria-label="{{'platform-about:aria.panCont' | t:'Panel Content'}}">
                 <table bk-table fixed="true" display-mode="compact" class="bk-list-border--top">
                     <tbody bk-table-body>
                         <tr bk-table-row ng-repeat="engine in version.engines">
@@ -108,15 +108,15 @@
 
         <bk-panel expanded="true">
             <bk-panel-header>
-                <bk-panel-expand hint="expand panel synchronizers content"></bk-panel-expand>
-                <h4 bk-panel-title>Synchronizers</h4>
+                <bk-panel-expand hint="{{'platform-about:aria.verSync' | t:'expand/collapse synchronizers panel'}}"></bk-panel-expand>
+                <h4 bk-panel-title>{{'platform-about:synchronizers' | t:'Synchronizers'}}</h4>
             </bk-panel-header>
-            <bk-panel-content aria-label="Panel Content">
+            <bk-panel-content aria-label="{{'platform-about:aria.panCont' | t:'Panel Content'}}">
                 <table bk-table fixed="true" display-mode="compact">
                     <thead bk-table-header interactive="false">
                         <tr bk-table-row>
-                            <th bk-table-header-cell>Synchronizer</th>
-                            <th bk-table-header-cell>Status</th>
+                            <th bk-table-header-cell>{{'platform-about:synchronizer' | t:'Synchronizer'}}</th>
+                            <th bk-table-header-cell>{{'status' | t:'Status'}}</th>
                         </tr>
                     </thead>
                     <tbody bk-table-body>
