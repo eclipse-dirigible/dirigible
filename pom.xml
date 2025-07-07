@@ -90,6 +90,17 @@
         <url>http://www.eclipse.org</url>
     </organization>
 
+    <developers>
+        <developer>
+            <id>office</id>
+            <name>Office</name>
+            <email>office@codbex.com</email>
+            <url>https://github.com/codbex</url>
+            <organization>codbex</organization>
+            <organizationUrl>https://www.codbex.com</organizationUrl>
+        </developer>
+    </developers>
+
     <properties>
         <project.title>Eclipse Dirigible</project.title>
 
@@ -619,6 +630,16 @@
             <build>
                 <plugins>
                     <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.8.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>ossrh</publishingServerId>
+                            <autoPublish>true</autoPublish>
+                        </configuration>
+                    </plugin>
+                    <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-source-plugin</artifactId>
                         <executions>
@@ -781,7 +802,7 @@
     <pluginRepositories>
         <pluginRepository>
             <id>sonatype-public-repository</id>
-            <url>https://oss.sonatype.org/content/groups/public</url>
+            <url>https://ossrh-staging-api.central.sonatype.com/content/groups/public</url>
             <snapshots>
                 <enabled>false</enabled>
             </snapshots>
@@ -794,11 +815,11 @@
     <distributionManagement>
         <snapshotRepository>
             <id>ossrh</id>
-            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+            <url>https://ossrh-staging-api.central.sonatype.com/content/repositories/snapshots</url>
         </snapshotRepository>
         <repository>
             <id>ossrh</id>
-            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2</url>
+            <url>https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2</url>
         </repository>
     </distributionManagement>
 
