@@ -342,5 +342,14 @@ processInstances.controller('BpmProcessInstancesView', ($scope, $http, Notificat
         }
     });
 
+    Dialogs.addMessageListener({
+        topic: 'bpm.historic.instance.selected',
+        handler: () => {
+            $scope.$evalAsync(() => {
+                $scope.selected.instanceId = null;
+            });
+        }
+    });
+
     getDefinitions(true);
 });

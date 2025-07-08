@@ -55,4 +55,18 @@ ideBpmProcessJobsView.controller('IDEBpmProcessJobsViewController', ($scope, $ht
             }
         }
     });
+
+    Dialogs.addMessageListener({
+        topic: 'bpm.historic.instance.selected',
+        handler: (data) => {
+            if (data.deselect) {
+                $scope.$evalAsync(() => {
+                    $scope.jobsList.length = 0;
+                    $scope.currentProcessInstanceId = null;
+                });
+            } else {
+                $scope.fetchData(data.instance);
+            }
+        }
+    });
 });
