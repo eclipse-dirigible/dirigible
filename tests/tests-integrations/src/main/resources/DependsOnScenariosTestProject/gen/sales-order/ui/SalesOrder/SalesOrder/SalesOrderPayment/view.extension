@@ -1,5 +1,0 @@
-{
-    "module": "DependsOnScenariosTestProject/gen/sales-order/ui/SalesOrder/SalesOrder/SalesOrderPayment/view.js",
-    "extensionPoint": "application-views",
-    "description": "DependsOnScenariosTestProject - Application View - Details"
-}

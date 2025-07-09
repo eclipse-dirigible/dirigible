@@ -37,6 +37,7 @@ class DependsOnScenariosTestProject extends BaseTestProject {
     @Override
     public void configure() {
         copyToWorkspace();
+        generateEDM("sales-order.edm");
         publish();
     }
 

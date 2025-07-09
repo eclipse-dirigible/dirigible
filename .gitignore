@@ -13,6 +13,7 @@ build/application/dirigible
 !/build
 **/build/reports
 **/logs
+**/gen
 
 # files
 .DS_Store
