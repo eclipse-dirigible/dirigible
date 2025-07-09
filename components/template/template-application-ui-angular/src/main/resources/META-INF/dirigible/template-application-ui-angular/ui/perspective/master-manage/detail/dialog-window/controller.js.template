@@ -141,12 +141,10 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 							}
 						}
 					}).then((response) => {
-						${dollar}scope.options${property.name} = response.data.map(e => {
-							return {
-								value: e.${property.widgetDropDownKey},
-								text: e.${property.widgetDropDownValue}
-							}
-						});
+						${dollar}scope.options${property.name} = response.data.map(e => ({
+							value: e.${property.widgetDropDownKey},
+							text: e.${property.widgetDropDownValue}
+						}));
 						if ($scope.action !== 'select' && newValue !== oldValue) {
 							if (${dollar}scope.options${property.name}.length == 1) {
 								$scope.entity.${property.name} = ${dollar}scope.options${property.name}[0].value;

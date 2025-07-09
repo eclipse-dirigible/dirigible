@@ -117,10 +117,10 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 		$scope.options${property.name} = [];
 		
 		${dollar}http.get('${property.widgetDropdownUrl}').then((response) => {
-			${dollar}scope.options${property.name} = response.data.map(e => {
+			${dollar}scope.options${property.name} = response.data.map(e => ({
 				value: e.${property.widgetDropDownKey},
 				text: e.${property.widgetDropDownValue}
-			});
+			}));
 		}, (error) => {
 			console.error(error);
 			const message = error.data ? error.data.message : '';

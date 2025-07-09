@@ -1,21 +1,13 @@
-/*
- * Copyright (c) 2010-2025 Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
-angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'])
 	.config(["EntityServiceProvider", (EntityServiceProvider) => {
 		EntityServiceProvider.baseUrl = '/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Product/ProductService.ts';
 	}])
-	.controller('PageController', ($scope, $http, Extensions, EntityService) => {
+	.controller('PageController', ($scope, $http, Extensions, LocaleService, EntityService) => {
 		const Dialogs = new DialogHub();
 		const Notifications = new NotificationHub();
+		let description = 'Description';
+		let propertySuccessfullyCreated = 'Product successfully created';
+		let propertySuccessfullyUpdated = 'Product successfully updated';
 		$scope.entity = {};
 		$scope.forms = {
 			details: {},
@@ -27,6 +19,15 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		};
 		$scope.action = 'select';
 
+		LocaleService.onInit(() => {
+			description = LocaleService.t('DependsOnScenariosTestProject:defaults.description');
+			$scope.formHeaders.select = LocaleService.t('DependsOnScenariosTestProject:defaults.formHeadSelect', { name: '$t(DependsOnScenariosTestProject:t.PRODUCT)' });
+			$scope.formHeaders.create = LocaleService.t('DependsOnScenariosTestProject:defaults.formHeadCreate', { name: '$t(DependsOnScenariosTestProject:t.PRODUCT)' });
+			$scope.formHeaders.update = LocaleService.t('DependsOnScenariosTestProject:defaults.formHeadUpdate', { name: '$t(DependsOnScenariosTestProject:t.PRODUCT)' });
+			propertySuccessfullyCreated = LocaleService.t('DependsOnScenariosTestProject:messages.propertySuccessfullyCreated', { name: '$t(DependsOnScenariosTestProject:t.PRODUCT)' });
+			propertySuccessfullyUpdated = LocaleService.t('DependsOnScenariosTestProject:messages.propertySuccessfullyUpdated', { name: '$t(DependsOnScenariosTestProject:t.PRODUCT)' });
+		});
+
 		//-----------------Custom Actions-------------------//
 		Extensions.getWindows(['DependsOnScenariosTestProject-custom-action']).then((response) => {
 			$scope.entityActions = response.data.filter(e => e.perspective === 'Product' && e.view === 'Product' && e.type === 'entity');
@@ -35,7 +36,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		$scope.triggerEntityAction = (action) => {
 			Dialogs.showWindow({
 				hasHeader: true,
-        		title: action.label,
+        		title: LocaleService.t(action.translation.key, action.translation.options, action.label),
 				path: action.path,
 				params: {
 					id: $scope.entity.Id
@@ -84,15 +85,15 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.Product.Product.entityCreated', data: response.data });
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.Product.Product.clearDetails' , data: response.data });
 				Notifications.show({
-					title: 'Product',
-					description: 'Product successfully created',
+					title: LocaleService.t('DependsOnScenariosTestProject:t.PRODUCT'),
+					description: propertySuccessfullyCreated,
 					type: 'positive'
 				});
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
 				Dialogs.showAlert({
-					title: 'Product',
-					message: `Unable to create Product: '${message}'`,
+					title: LocaleService.t('DependsOnScenariosTestProject:t.PRODUCT'),
+					message: LocaleService.t('DependsOnScenariosTestProject:messages.error.unableToCreate', { name: '$t(DependsOnScenariosTestProject:t.PRODUCT)', message: message }),
 					type: AlertTypes.Error
 				});
 				console.error('EntityService:', error);
@@ -104,15 +105,15 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.Product.Product.entityUpdated', data: response.data });
 				Dialogs.postMessage({ topic: 'DependsOnScenariosTestProject.Product.Product.clearDetails', data: response.data });
 				Notifications.show({
-					title: 'Product',
-					description: 'Product successfully updated',
+					title: LocaleService.t('DependsOnScenariosTestProject:t.PRODUCT'),
+					description: propertySuccessfullyUpdated,
 					type: 'positive'
 				});
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
 				Dialogs.showAlert({
-					title: 'Product',
-					message: `Unable to create Product: '${message}'`,
+					title: LocaleService.t('DependsOnScenariosTestProject:t.PRODUCT'),
+					message: LocaleService.t('DependsOnScenariosTestProject:messages.error.unableToCreate', { name: '$t(DependsOnScenariosTestProject:t.PRODUCT)', message: message }),
 					type: AlertTypes.Error
 				});
 				console.error('EntityService:', error);
@@ -126,7 +127,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		//-----------------Dialogs-------------------//
 		$scope.alert = (message) => {
 			if (message) Dialogs.showAlert({
-				title: 'Description',
+				title: description,
 				message: message,
 				type: AlertTypes.Information,
 				preformatted: true,
@@ -162,7 +163,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				const message = error.data ? error.data.message : '';
 				Dialogs.showAlert({
 					title: 'UoM',
-					message: `Unable to load data: '${message}'`,
+					message: LocaleService.t('DependsOnScenariosTestProject:messages.error.unableToLoad', { message: message }),
 					type: AlertTypes.Error
 				});
 			});

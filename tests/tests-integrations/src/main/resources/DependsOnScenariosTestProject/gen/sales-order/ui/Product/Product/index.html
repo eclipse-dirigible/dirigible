@@ -1,16 +1,3 @@
-<!--
-
-    Copyright (c) 2010-2025 Eclipse Dirigible contributors
-
-    All rights reserved. This program and the accompanying materials
-    are made available under the terms of the Eclipse Public License v2.0
-    which accompanies this distribution, and is available at
-    http://www.eclipse.org/legal/epl-v20.html
-
-    SPDX-FileCopyrightText: Eclipse Dirigible contributors
-    SPDX-License-Identifier: EPL-2.0
-
--->
 <!DOCTYPE HTML>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
 
@@ -28,19 +15,19 @@
 
 	<body class="bk-vbox">
 		<bk-toolbar has-title="true">
-			<bk-toolbar-title>Items <span bk-object-status text="{{dataCount}}" inverted="true"></bk-toolbar-title>
+			<bk-toolbar-title>{{'DependsOnScenariosTestProject:defaults.items' | t}} <span bk-object-status text="{{dataCount}}" inverted="true"></bk-toolbar-title>
 			<bk-toolbar-spacer></bk-toolbar-spacer>
-			<bk-button compact="true" state="transparent" glyph="sap-icon--add" aria-label="add entity" ng-disabled="action == 'update'" ng-click="createEntity()"></bk-button>
-			<bk-button compact="true" state="transparent" glyph="sap-icon--edit" aria-label="edit entity" ng-disabled="selectedEntity == null" ng-click="updateEntity()"></bk-button>
-			<bk-button compact="true" state="transparent" glyph="sap-icon--delete" aria-label="delete entity" ng-disabled="selectedEntity == null || action == 'update'" ng-click="deleteEntity()"></bk-button>
+			<bk-button compact="true" state="transparent" glyph="sap-icon--add" aria-label="{{ 'DependsOnScenariosTestProject:aria.addEntity' | t }}" ng-disabled="action == 'update'" ng-click="createEntity()"></bk-button>
+			<bk-button compact="true" state="transparent" glyph="sap-icon--edit" aria-label="{{ 'DependsOnScenariosTestProject:aria.editEntity' | t }}" ng-disabled="selectedEntity == null" ng-click="updateEntity()"></bk-button>
+			<bk-button compact="true" state="transparent" glyph="sap-icon--delete" aria-label="{{ 'DependsOnScenariosTestProject:aria.deleteEntity' | t }}" ng-disabled="selectedEntity == null || action == 'update'" ng-click="deleteEntity()"></bk-button>
 			<bk-popover>
 				<bk-popover-control>
-					<bk-button compact="true" glyph="sap-icon--overflow" state="transparent" aria-label="toolbar menu button"></bk-button>
+					<bk-button compact="true" glyph="sap-icon--overflow" state="transparent" aria-label="{{ 'DependsOnScenariosTestProject:aria.headerMenuBtn' | t }}"></bk-button>
 				</bk-popover-control>
 				<bk-popover-body align="bottom-right">
-					<bk-menu aria-label="Header Menu" no-backdrop="true" no-shadow="true">
-						<bk-menu-item title="Filter" ng-click="openFilter()"></bk-menu-item>
-						<bk-menu-item ng-repeat="action in pageActions track by $index" title="{{action.label}}" ng-click="triggerPageAction(action)"></bk-menu-item>
+					<bk-menu aria-label="{{ 'DependsOnScenariosTestProject:aria.headerMenu' | t }}" no-backdrop="true" no-shadow="true">
+						<bk-menu-item title="{{ 'DependsOnScenariosTestProject:defaults.filter' | t }}" ng-click="openFilter()"></bk-menu-item>
+						<bk-menu-item ng-repeat="action in pageActions track by $index" title="{{action.translation.key | t:action.translation.options:action.label}}" ng-click="triggerPageAction(action)"></bk-menu-item>
 					</bk-menu>
 				</bk-popover-body>
 			</bk-popover>
@@ -62,7 +49,7 @@
 				</bk-list-item>
 			</bk-list>
 			<bk-list-action-item ng-show="dataPage <= dataPages && dataCount > dataLimit" ng-click="loadPage()">
-				Load More ...
+				{{ 'DependsOnScenariosTestProject:defaults.loadMore' | t }}
 			</bk-list-action-item>
 		</bk-scrollbar>
 		<theme></theme>

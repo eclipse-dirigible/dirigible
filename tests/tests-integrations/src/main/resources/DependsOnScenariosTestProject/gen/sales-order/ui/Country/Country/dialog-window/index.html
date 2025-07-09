@@ -1,16 +1,3 @@
-<!--
-
-    Copyright (c) 2010-2025 Eclipse Dirigible contributors
-
-    All rights reserved. This program and the accompanying materials
-    are made available under the terms of the Eclipse Public License v2.0
-    which accompanies this distribution, and is available at
-    http://www.eclipse.org/legal/epl-v20.html
-
-    SPDX-FileCopyrightText: Eclipse Dirigible contributors
-    SPDX-License-Identifier: EPL-2.0
-
--->
 <!DOCTYPE HTML>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
 
@@ -34,10 +21,10 @@
                 <bk-form-group label="{{formHeaders[action]}}" name="entityForm" transclude-classes="fd-container fd-form-layout-grid-container">
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="idName" ng-required="false" colon="true">Name</bk-form-label>
+                        	<bk-form-label for="idName" ng-required="false" colon="true">{{ 'DependsOnScenariosTestProject:t.COUNTRY_NAME' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col  fd-col-md--8 ">
-							<bk-form-input-message state="{{ forms.details['Name'].$valid ? '' : 'error' }}" message="'The value doesn\'t match the required pattern: '">
+							<bk-form-input-message state="{{ forms.details['Name'].$valid ? '' : 'error' }}" text="{{ 'DependsOnScenariosTestProject:messages.error.pattern' | t:{'rule':''} }}">
 								<bk-input id="idName"
 	                                name="Name"
 	                                state="{{ forms.details['Name'].$valid ? '' : 'error' }}"
@@ -47,7 +34,7 @@
 									ng-maxlength="100.0"
 	                                input-rules="{ patterns: [''] }"
 	                                type="text"
-	                                placeholder="Enter Name">
+	                                placeholder="{{ 'DependsOnScenariosTestProject:messages.inputEnter' | t:{'name':'$t(DependsOnScenariosTestProject:t.COUNTRY_NAME)'} }}">
 	                            </bk-input>
 							</bk-form-input-message>
 	                    </div>
@@ -59,10 +46,11 @@
 		<bk-bar bar-design="footer" compact="true" ng-show="action !== 'select'">
 			<bk-bar-right>
 				<bk-bar-element>
-					<bk-button label="{{action === 'create' ? 'Create' : 'Update'}}" state="emphasized" ng-click="action === 'create' ? create() : update()" ng-disabled="!forms.details.$valid"></bk-button>
+					<bk-button ng-if="action === 'create'" label="{{'DependsOnScenariosTestProject:defaults.create' | t}}" state="emphasized" ng-click="create()" ng-disabled="!forms.details.$valid"></bk-button>
+					<bk-button ng-if="action !== 'create'" label="{{'DependsOnScenariosTestProject:defaults.update' | t}}" state="emphasized" ng-click="update()" ng-disabled="!forms.details.$valid"></bk-button>
 				</bk-bar-element>
 				<bk-bar-element>
-					<bk-button label="Cancel" ng-click="cancel()"></bk-button>
+					<bk-button label="{{ 'DependsOnScenariosTestProject:defaults.cancel' | t }}" ng-click="cancel()"></bk-button>
 				</bk-bar-element>
 			</bk-bar-right>
 		</bk-bar>

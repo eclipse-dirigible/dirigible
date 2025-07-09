@@ -1,20 +1,22 @@
-/*
- * Copyright (c) 2010-2025 Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
-angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'])
 	.config(['EntityServiceProvider', (EntityServiceProvider) => {
 		EntityServiceProvider.baseUrl = '/services/ts/DependsOnScenariosTestProject/gen/sales-order/api/Customer/CustomerService.ts';
 	}])
-	.controller('PageController', ($scope, $http, EntityService, Extensions, ButtonStates) => {
+	.controller('PageController', ($scope, $http, EntityService, Extensions, LocaleService, ButtonStates) => {
 		const Dialogs = new DialogHub();
+		let translated = {
+			yes: 'Yes',
+			no: 'No',
+			deleteConfirm: 'Are you sure you want to delete Customer? This action cannot be undone.',
+			deleteTitle: 'Delete Customer?'
+		};
+
+		LocaleService.onInit(() => {
+			translated.yes = LocaleService.t('DependsOnScenariosTestProject:defaults.yes');
+			translated.no = LocaleService.t('DependsOnScenariosTestProject:defaults.no');
+			translated.deleteTitle = LocaleService.t('DependsOnScenariosTestProject:defaults.deleteTitle', { name: '$t(DependsOnScenariosTestProject:t.CUSTOMER)' });
+			translated.deleteConfirm = LocaleService.t('DependsOnScenariosTestProject:messages.deleteConfirm', { name: '$t(DependsOnScenariosTestProject:t.CUSTOMER)' });
+		});
 		$scope.dataPage = 1;
 		$scope.dataCount = 0;
 		$scope.dataOffset = 0;
@@ -29,7 +31,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		$scope.triggerPageAction = (action) => {
 			Dialogs.showWindow({
 				hasHeader: true,
-        		title: action.label,
+        		title: LocaleService.t(action.translation.key, action.translation.options, action.label),
 				path: action.path,
 				maxWidth: action.maxWidth,
 				maxHeight: action.maxHeight,
@@ -103,8 +105,8 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 				}, (error) => {
 					const message = error.data ? error.data.message : '';
 					Dialogs.showAlert({
-						title: 'Customer',
-						message: `Unable to list/filter Customer: '${message}'`,
+						title: LocaleService.t('DependsOnScenariosTestProject:t.CUSTOMER'),
+						message: LocaleService.t('DependsOnScenariosTestProject:messages.error.unableToLF', { name: '$t(DependsOnScenariosTestProject:t.CUSTOMER)', message: message }),
 						type: AlertTypes.Error
 					});
 					console.error('EntityService:', error);
@@ -112,8 +114,8 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
 				Dialogs.showAlert({
-					title: 'Customer',
-					message: `Unable to count Customer: '${message}'`,
+					title: LocaleService.t('DependsOnScenariosTestProject:t.CUSTOMER'),
+					message: LocaleService.t('DependsOnScenariosTestProject:messages.error.unableToCount', { name: '$t(DependsOnScenariosTestProject:t.CUSTOMER)', message: message }),
 					type: AlertTypes.Error
 				});
 				console.error('EntityService:', error);
@@ -154,15 +156,15 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 		$scope.deleteEntity = () => {
 			let id = $scope.selectedEntity.Id;
 			Dialogs.showDialog({
-				title: 'Delete Customer?',
-				message: `Are you sure you want to delete Customer? This action cannot be undone.`,
+				title: translated.deleteTitle,
+				message: translated.deleteConfirm,
 				buttons: [{
 					id: 'delete-btn-yes',
 					state: ButtonStates.Emphasized,
-					label: 'Yes',
+					label: translated.yes,
 				}, {
 					id: 'delete-btn-no',
-					label: 'No',
+					label: translated.no,
 				}],
 				closeButton: false
 			}).then((buttonId) => {
@@ -174,8 +176,8 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 					}, (error) => {
 						const message = error.data ? error.data.message : '';
 						Dialogs.showAlert({
-							title: 'Customer',
-							message: `Unable to delete Customer: '${message}'`,
+							title: LocaleService.t('DependsOnScenariosTestProject:t.CUSTOMER'),
+							message: LocaleService.t('DependsOnScenariosTestProject:messages.error.unableToDelete', { name: '$t(DependsOnScenariosTestProject:t.CUSTOMER)', message: message }),
 							type: AlertTypes.Error
 						});
 						console.error('EntityService:', error);
@@ -210,7 +212,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			const message = error.data ? error.data.message : '';
 			Dialogs.showAlert({
 				title: 'Country',
-				message: `Unable to load data: '${message}'`,
+				message: LocaleService.t('DependsOnScenariosTestProject:messages.error.unableToLoad', { message: message }),
 				type: AlertTypes.Error
 			});
 		});
@@ -225,7 +227,7 @@ angular.module('page', ['blimpKit', 'platformView', 'EntityService'])
 			const message = error.data ? error.data.message : '';
 			Dialogs.showAlert({
 				title: 'City',
-				message: `Unable to load data: '${message}'`,
+				message: LocaleService.t('DependsOnScenariosTestProject:messages.error.unableToLoad', { message: message }),
 				type: AlertTypes.Error
 			});
 		});
