@@ -9,6 +9,10 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
+:root {
+  --font_color: var(--sapField_TextColor, #303030);
+}
+
 body {
   background-color: var(--sapBackgroundColor, #f7f7f7) !important;
   color: var(--sapTextColor, #303030) !important;
