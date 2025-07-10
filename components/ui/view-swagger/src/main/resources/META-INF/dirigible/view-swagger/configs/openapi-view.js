@@ -15,7 +15,7 @@ const viewData = {
 	region: 'center',
 	lazyLoad: true,
 	autoFocusTab: false,
-	link: '/services/web/view-swagger/ui/index.html'
+	path: '/services/web/view-swagger/ui/index.html'
 };
 if (typeof exports !== 'undefined') {
 	exports.getView = () => viewData;
