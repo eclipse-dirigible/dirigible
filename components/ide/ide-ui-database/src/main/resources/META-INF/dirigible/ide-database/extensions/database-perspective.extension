@@ -1,5 +1,0 @@
-{
-    "module": "ide-database/services/database-perspective.js",
-    "extensionPoint": "ide-perspective",
-    "description": "Database Perspective"
-}

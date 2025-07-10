@@ -4,6 +4,6 @@ import { response } from "sdk/http";
 
 var sql = 'select * from DIRIGIBLE_EXTENSIONS where EXTENSION_EXTENSIONPOINT_NAME = ?';
 
-var resultset = query.execute(sql, ['ide-template'], "SystemDB");
+var resultset = query.execute(sql, ['platform-templates'], "SystemDB");
 
 response.println(JSON.stringify(resultset));

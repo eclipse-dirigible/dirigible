@@ -14,11 +14,6 @@
     <packaging>jar</packaging>
     
     <dependencies>
-    	<dependency>
-		    <groupId>org.webjars.bower</groupId>
-		    <artifactId>fontawesome</artifactId>
-		    <version>${fontawesome.version}</version>
-		</dependency>
 		<dependency>
 		    <groupId>org.webjars</groupId>
 		    <artifactId>angularjs</artifactId>
@@ -35,11 +30,6 @@
 			<version>${es5-shim.version}</version>
 		</dependency>
 		<dependency>
-		    <groupId>org.webjars</groupId>
-		    <artifactId>bootstrap</artifactId>
-		    <version>${webjars.bootstrap.version}</version>
-		</dependency>
-		<dependency>
 			<groupId>org.webjars</groupId>
 			<artifactId>webjars-locator-core</artifactId>
 			<version>${webjars.locator.core.version}</version>
@@ -53,11 +43,6 @@
 		    <groupId>org.webjars</groupId>
 		    <artifactId>jquery</artifactId>
 		    <version>${jquery.version}</version>
-		</dependency>
-		<dependency>
-		    <groupId>org.webjars</groupId>
-		    <artifactId>jquery-ui</artifactId>
-		    <version>${jquery-ui.version}</version>
 		</dependency>
 		<dependency>
 		    <groupId>org.webjars</groupId>

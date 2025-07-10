@@ -1,5 +1,0 @@
-{
-    "module": "ide-about/services/about-window.js",
-    "extensionPoint": "ide-dialog-window",
-    "description": "About dialog window"
-}

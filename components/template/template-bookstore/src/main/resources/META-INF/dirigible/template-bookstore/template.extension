@@ -1,5 +1,0 @@
-{
-    "extensionPoint": "platform-templates",
-    "module": "template-bookstore/template.js",
-    "description": "Bookstore Template"
-}

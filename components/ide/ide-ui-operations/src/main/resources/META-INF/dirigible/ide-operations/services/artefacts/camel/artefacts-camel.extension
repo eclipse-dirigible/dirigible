@@ -1,5 +1,0 @@
-{
-    "module": "ide-operations/services/artefacts/camel/artefacts-camel.mjs",
-    "extensionPoint": "ide-operations-artefacts",
-    "description": "Camel Artefacts Extension"
-}

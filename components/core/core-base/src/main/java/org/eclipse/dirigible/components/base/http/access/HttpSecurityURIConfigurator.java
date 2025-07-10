@@ -46,12 +46,10 @@ public class HttpSecurityURIConfigurator {
             "/services/core/version/**", //
             "/services/core/healthcheck/**", //
             "/services/web/resources/**", //
-            "/services/web/resources-core/**", //
             "/services/web/resources-locale/**", //
             "/services/web/platform-core/**", //
-            "/services/web/theme-blimpkit/**", //
+            "/services/web/theme-*/**", //
             "/services/js/platform-core/**", //
-            "/services/js/resources-core/**", //
             "/actuator/health/liveness", //
             "/actuator/health/readiness", //
             "/actuator/health"};

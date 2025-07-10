@@ -314,7 +314,8 @@ if (window !== top) {
                 }
 
                 const showPerspectiveListener = Shell.onShowPerspective((data) => {
-                    const label = getPerspectiveLabel(data.id, scope.config.perspectives);
+                    let label = getPerspectiveLabel(data.id, scope.config.perspectives);
+                    if (!label) label = getPerspectiveLabel(data.id, scope.config.utilities);
                     if (label) {
                         scope.$evalAsync(() => {
                             shellState.perspective = {

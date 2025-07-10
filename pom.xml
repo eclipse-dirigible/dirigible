@@ -133,7 +133,6 @@
         <springdoc.version>2.8.9</springdoc.version>
 
         <!-- Webjars -->
-        <webjars.bootstrap.version>5.3.5</webjars.bootstrap.version>
         <webjars.locator.version>0.52</webjars.locator.version>
         <webjars.locator.core.version>0.59</webjars.locator.core.version>
 
@@ -207,7 +206,6 @@
         <logcaptor.version>2.11.0</logcaptor.version>
 
         <!-- UI -->
-        <jquery-ui.version>1.13.0</jquery-ui.version>
         <sap-theming__theming-base-content.version>11.18.2</sap-theming__theming-base-content.version>
         <chart.js.version>4.4.3</chart.js.version>
         <sortablejs.version>1.15.2</sortablejs.version>
@@ -223,7 +221,6 @@
         <es5-shim.version>4.6.7</es5-shim.version>
         <angular-file-upload.version>2.6.1</angular-file-upload.version>
         <angularjs.version>1.8.2</angularjs.version>
-        <fontawesome.version>4.7.0</fontawesome.version>
         <ag-grid.version>27.1.0</ag-grid.version>
         <papaparse.version>5.3.2</papaparse.version>
         <bpmn-visualization.version>0.46.0</bpmn-visualization.version>
@@ -499,34 +496,22 @@
                                     **/src/main/resources/META-INF/dirigible/font-dirigible/**
                                 </exclude>
                                 <exclude>
-                                    **/src/main/resources/META-INF/dirigible/ide-bpm/**
-                                </exclude>
-                                <exclude>
                                     **/src/main/resources/META-INF/dirigible/editor-bpm/**
-                                </exclude>
-                                <exclude>
-                                    **/src/main/resources/META-INF/dirigible/ide-monaco/**
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/editor-monaco/**
                                 </exclude>
                                 <exclude>
-                                    **/src/main/resources/META-INF/dirigible/ide-swagger/**
+                                    **/src/main/resources/META-INF/dirigible/view-swagger/**
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/editor-swagger/**
-                                </exclude>
-                                <exclude>
-                                    **/src/main/resources/META-INF/dirigible/resources-core/ui/**
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/resources-locale/**
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/platform-core/ui/**
-                                </exclude>
-                                <exclude>
-                                    **/src/main/resources/META-INF/dirigible/ide-terminal/js/**
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/view-terminal/js/**
@@ -539,9 +524,6 @@
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/utils/jsonpath.js
-                                </exclude>
-                                <exclude>
-                                    **/src/main/resources/META-INF/dirigible/ide-designer/designer/**
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/editor-designer/designer/**

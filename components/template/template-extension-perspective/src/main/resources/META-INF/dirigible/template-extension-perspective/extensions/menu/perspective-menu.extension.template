@@ -1,5 +1,0 @@
-{
-    "module": "{{projectName}}/services/menu/{{fileName}}.js",
-    "extensionPoint": "ide-{{fileName}}-menu",
-    "description": "{{fileName}} Menu"
-}
