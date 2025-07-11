@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-blimpkit.directive('bkIconTabBar', function (classNames, $injector) {
+blimpkit.directive('bkIconTabBar', function (classNames, $injector, $timeout) {
     if (!$injector.has('bkPopoverDirective') || !$injector.has('bkButtonDirective')) {
         console.error('bk-icon-tab-bar requires the bk-button and bk-popover widgets to be loaded.');
         return {};
@@ -38,6 +38,8 @@ blimpkit.directive('bkIconTabBar', function (classNames, $injector) {
             $scope.updateLastSelectedTabId = true;
             $scope.tabList = [];
             $scope.eventCallbacks = [];
+            const scrollToTab = {};
+            let scrollable = false;
 
             const fireEvent = function (c) {
                 $scope.eventCallbacks.forEach(c);
@@ -69,23 +71,34 @@ blimpkit.directive('bkIconTabBar', function (classNames, $injector) {
                 'is-compact': $scope.compact && !$scope.iconOnly && !$scope.hasIcons,
             });
 
-            this.addIconTab = function (tabId, tabCallbacks) {
+            this.addTab = function (tabId, tabCallbacks, scrollIntoView) {
                 if ((!angular.isDefined($scope.selectedTabId) || $scope.selectedTabId === null) && $scope.tabList.length === 0) {
                     $scope.selectedTabId = tabId;
                 }
 
                 $scope.tabList.push(tabId);
 
+                if (scrollable) {
+                    scrollToTab[tabId] = scrollIntoView;
+                    if (tabId === $scope.selectedTabId) {
+                        $timeout(() => {
+                            scrollIntoView();
+                        }, 0);
+                    }
+                }
+
                 fireEvent(c => c.tabAdded(tabId, tabCallbacks));
             };
 
-            this.removeIconTab = function (tabId) {
+            this.removeTab = function (tabId) {
                 this.onTabClose(tabId);
 
                 const tabIndex = $scope.tabList.indexOf(tabId);
                 if (tabIndex >= 0) {
                     $scope.tabList.splice(tabIndex, 1);
                 }
+
+                if (scrollable) delete scrollToTab[tabId];
 
                 fireEvent(c => c.tabRemoved(tabId));
             };
@@ -141,6 +154,10 @@ blimpkit.directive('bkIconTabBar', function (classNames, $injector) {
                 }
             };
 
+            this.setScrollable = function () {
+                scrollable = true;
+            };
+
             const selectedWatch = $scope.$watch('selectedTabId', function (newSelectedTabId, oldSelectedTabId) {
                 if (newSelectedTabId !== oldSelectedTabId) {
                     if ($scope.updateLastSelectedTabId) {
@@ -151,6 +168,9 @@ blimpkit.directive('bkIconTabBar', function (classNames, $injector) {
                     }
 
                     fireEvent(c => c.tabSelected(newSelectedTabId));
+                }
+                if (scrollToTab[newSelectedTabId]) {
+                    scrollToTab[newSelectedTabId]();
                 }
             });
 
@@ -168,7 +188,11 @@ blimpkit.directive('bkIconTabBar', function (classNames, $injector) {
 })).directive('bkTabsScrollable', () => ({
     restrict: 'E',
     transclude: true,
+    require: '^^bkIconTabBar',
     replace: true,
+    link: (_scope, _element, _attr, tabBarCtrl) => {
+        tabBarCtrl.setScrollable();
+    },
     template: '<div class="bk-icon-tab-bar-scrollable" tabindex="-1" ng-transclude></div>'
 })).directive('bkTabsOverflowable', ($timeout) => ({
     restrict: 'A',
@@ -263,10 +287,16 @@ blimpkit.directive('bkIconTabBar', function (classNames, $injector) {
         isHidden: '=?'
     },
     link: {
-        pre: function (scope, _element, _attr, tabBarCtrl) {
-            tabBarCtrl.addIconTab(scope.tabId, {
+        pre: function (scope, element, _attr, tabBarCtrl) {
+            tabBarCtrl.addTab(scope.tabId, {
                 setTabHidden: (isHidden) => {
                     scope.isHidden = isHidden;
+                },
+            }, () => {
+                const parent = element[0].parentElement.getBoundingClientRect();
+                const tab = element[0].getBoundingClientRect();
+                if (tab.left < parent.left || tab.right > parent.right) {
+                    element[0].parentElement.scroll((element[0].parentElement.clientWidth - (element[0].offsetLeft + element[0].offsetWidth)) * -1, 0);
                 }
             });
 
@@ -293,7 +323,7 @@ blimpkit.directive('bkIconTabBar', function (classNames, $injector) {
             };
 
             scope.$on('$destroy', function () {
-                tabBarCtrl.removeIconTab(scope.tabId);
+                tabBarCtrl.removeTab(scope.tabId);
             });
         }
     },

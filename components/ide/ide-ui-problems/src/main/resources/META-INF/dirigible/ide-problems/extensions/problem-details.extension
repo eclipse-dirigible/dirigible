@@ -1,5 +1,0 @@
-{
-    "module": "ide-problems/services/problem-details-window.js",
-    "extensionPoint": "ide-dialog-window",
-    "description": "Problem details window"
-}

@@ -15,7 +15,7 @@
     <body class="bk-vbox">
         <bk-scrollbar class="bk-full-height">
             <bk-fieldset class="fd-padding-begin-end--sm" ng-form="formFieldset">
-                <bk-form-group label="${name} Details" name="entityForm" transclude-classes="fd-container fd-form-layout-grid-container">
+                <bk-form-group label="{{ '$projectName:defaults.formHeadSelect' | t:{'name':'$t($projectName:t.${dataName})'} }}" name="entityForm" transclude-classes="fd-container fd-form-layout-grid-container">
 #foreach ($column in $columns)
 #if($column.typeTypescript == 'boolean')
                     <bk-form-item class="fd-row">
@@ -36,7 +36,7 @@
 								name="${column.alias}"
 								ng-model="entity['${column.alias}']"
 								is-readonly="true"
-								placeholder="Enter ${column.alias}">
+								placeholder="{{ '$projectName:messages.inputEnter' | t:{'name':'${column.alias}'} }}">
 							</bk-step-input>
 	                    </div>
                     </bk-form-item>
@@ -93,7 +93,7 @@
 	                            ng-model="entity['${column.alias}']"
 	                            ng-readonly="true"
 	                            type="text"
-	                            placeholder="Enter ${column.alias}">
+								placeholder="{{ '$projectName:messages.inputEnter' | t:{'name':'${column.alias}'} }}">
 	                        </bk-input>
 	                    </div>
                     </bk-form-item>

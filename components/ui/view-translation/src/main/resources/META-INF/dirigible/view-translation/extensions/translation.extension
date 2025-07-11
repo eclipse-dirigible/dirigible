@@ -1,0 +1,5 @@
+{
+    "module": "view-translation/configs/translation-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Translation View"
+}

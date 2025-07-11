@@ -9,17 +9,16 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { getHelpMenu } from './modules/help-menu.mjs';
 import { getWindowMenu } from './modules/window-menu.mjs'
 import { request, response } from 'sdk/http';
 import { extensions } from 'sdk/extensions';
 import { uuid } from 'sdk/utils';
 
 let mainmenu = [];
-const extensionPoints = (request.getParameter('extensionPoints') || 'platform-menus').split(',');
-const perspectiveExtPoints = (request.getParameter('perspectiveExtPoints') || 'platform-perspectives').split(',');
-const viewExtPoints = (request.getParameter('viewExtPoints') || 'platform-views').split(',');
-const shellExtPoints = (request.getParameter('shellExtPoints') || 'platform-shells').split(',');
+const extensionPoints = request.getParameterValues('extensionPoints') ?? ['platform-menus'];
+const perspectiveExtPoints = request.getParameterValues('perspectiveExtPoints') ?? ['platform-perspectives'];
+const viewExtPoints = request.getParameterValues('viewExtPoints') ?? ['platform-views'];
+const shellExtPoints = request.getParameterValues('shellExtPoints') ?? ['platform-shells'];
 
 let menuExtensions = [];
 for (let i = 0; i < extensionPoints.length; i++) {
@@ -36,13 +35,17 @@ function setETag() {
 	response.setHeader('Cache-Control', `public, must-revalidate, max-age=${maxAge}`);
 }
 
+let helpMenu;
+
 for (let i = 0; i < menuExtensions?.length; i++) {
 	const menu = menuExtensions[i].getMenu();
-	mainmenu.push(menu);
+	if (menu.systemMenu && menu.id === 'help') {
+		helpMenu = menu;
+	} else mainmenu.push(menu);
 }
 // System menus
 mainmenu.push(await getWindowMenu(perspectiveExtPoints, viewExtPoints, shellExtPoints));
-mainmenu.push(getHelpMenu());
+mainmenu.push(helpMenu);
 
 response.setContentType('application/json');
 setETag();

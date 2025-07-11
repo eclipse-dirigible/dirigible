@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-angular.module('about', ['blimpKit', 'platformView']).controller('AboutController', ($scope, $http) => {
+angular.module('about', ['blimpKit', 'platformView', 'platformLocale']).controller('AboutController', ($scope, $http) => {
     $scope.branding = getBrandingInfo();
     $scope.blimpKitVersion = angular.module('blimpKit').info().version;
     $scope.jobs = [];

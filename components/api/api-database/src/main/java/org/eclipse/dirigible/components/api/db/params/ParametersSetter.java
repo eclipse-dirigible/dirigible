@@ -11,15 +11,24 @@ package org.eclipse.dirigible.components.api.db.params;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import net.sf.jsqlparser.expression.operators.relational.ExpressionList;
+import net.sf.jsqlparser.schema.Column;
+import net.sf.jsqlparser.schema.Table;
+import net.sf.jsqlparser.statement.insert.Insert;
+import org.eclipse.dirigible.components.api.db.SqlParser;
+import org.eclipse.dirigible.components.data.management.domain.ColumnMetadata;
+import org.eclipse.dirigible.components.data.management.domain.TableMetadata;
+import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper;
+import org.eclipse.dirigible.components.database.DatabaseSystem;
 import org.eclipse.dirigible.components.database.NamedParameterStatement;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
+import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.ParameterMetaData;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Types;
+import java.sql.*;
+import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -112,18 +121,101 @@ public class ParametersSetter {
                            .orElseThrow(() -> new IllegalArgumentException("Missing param setter for 'type'[" + dataType + "]"));
     }
 
-    public static void setManyIndexedParameters(JsonElement parametersElement, PreparedStatement preparedStatement)
-            throws IllegalArgumentException, SQLException {
-        JsonArray parametersArray = getParametersArray(parametersElement);
+    /**
+     * Workaround for https://github.com/snowflakedb/snowflake-jdbc/issues/2186 Remove this method and
+     * its usage once the issue is resolved.
+     *
+     * @param insertSql insert SQL
+     * @param parametersElement
+     * @param preparedStatement
+     * @throws SQLException
+     */
+    public static void setManyIndexedParametersForInsert(String insertSql, JsonElement parametersElement,
+            PreparedStatement preparedStatement) throws SQLException {
+        LOGGER.debug("Setting many indexed parameters for Snowflake prepared statement [{}]. Sql [{}]", preparedStatement, insertSql);
 
-        for (int paramsIdx = 0; paramsIdx < parametersArray.size(); paramsIdx++) {
-            JsonElement parameters = parametersArray.get(paramsIdx);
-            setIndexedParameters(parameters, preparedStatement);
+        Insert insertStatement = SqlParser.parseInsert(insertSql);
+        ExpressionList<Column> insertColumns = insertStatement.getColumns();
+        boolean userSpecifiedColumns = null != insertColumns;
+
+        TableMetadata tableMetadata = getTableMetadata(preparedStatement.getConnection(), insertStatement);
+
+        char snowflakeEscapeSymbol = SqlDialectFactory.getDialect(DatabaseSystem.SNOWFLAKE)
+                                                      .getEscapeSymbol();
+        List<ColumnMetadata> columnsMetadata = tableMetadata.getColumns();
+
+        JsonArray parametersArrays = getParametersArrays(parametersElement);
+
+        for (JsonElement paramsArrayElement : parametersArrays) {
+            JsonArray paramsArray = toParamsArray(paramsArrayElement, preparedStatement);
+
+            if (userSpecifiedColumns) {
+                for (int paramsIdx = 0; paramsIdx < insertColumns.size(); paramsIdx++) {
+                    Column inserColumn = insertColumns.get(paramsIdx);
+                    String insertColumnName = inserColumn.getColumnName();
+                    String unescapedInsertColumnName = insertColumnName.replaceAll(String.valueOf(snowflakeEscapeSymbol), "");
+                    ColumnMetadata columnMetadata = findColumnMetadataByName(columnsMetadata, unescapedInsertColumnName);
+
+                    int sqlParamIndex = paramsIdx + 1;
+                    JsonElement parameter = paramsArray.get(paramsIdx);
+
+                    String dirigibleSqlType = columnMetadata.getType();
+                    int sqlType = DataTypeUtils.getSqlTypeByDataType(dirigibleSqlType);
+
+                    setIndexedParameter(preparedStatement, sqlParamIndex, parameter, sqlType);
+                }
+            } else {
+                if (columnsMetadata.size() != paramsArray.size()) {
+                    throw new IllegalArgumentException(
+                            "Mismatch parameters count [" + paramsArray.size() + "]. Table columns [" + columnsMetadata.size() + "]");
+                }
+
+                for (int idx = 0; idx < columnsMetadata.size(); idx++) {
+                    ColumnMetadata columnMetadata = columnsMetadata.get(idx);
+
+                    int sqlParamIndex = idx + 1;
+                    JsonElement parameter = paramsArray.get(idx);
+
+                    String dirigibleSqlType = columnMetadata.getType();
+                    int sqlType = DataTypeUtils.getSqlTypeByDataType(dirigibleSqlType);
+
+                    setIndexedParameter(preparedStatement, sqlParamIndex, parameter, sqlType);
+                }
+            }
             preparedStatement.addBatch();
         }
     }
 
-    private static JsonArray getParametersArray(JsonElement parametersElement) {
+    private static ColumnMetadata findColumnMetadataByName(List<ColumnMetadata> columnsMetadata, String columnName) {
+        return columnsMetadata.stream()
+                              .filter(cm -> Objects.equals(columnName, cm.getName()))
+                              .findFirst()
+                              .orElseThrow(() -> new ParametersSetterException(
+                                      "Failed to find column metadata for column [" + columnName + "] in columns: " + columnsMetadata));
+    }
+
+    private static TableMetadata getTableMetadata(Connection connection, Insert insertStatement) {
+        Table table = insertStatement.getTable();
+        String schema = table.getSchemaName();
+        String tableName = table.getName();
+
+        try {
+            TableMetadata tableMetadata = DatabaseMetadataHelper.describeTable(connection, null, schema, tableName);
+            if (null != tableMetadata) {
+                return tableMetadata;
+            }
+            String message = "Missing table metadata for table [" + tableName + "] in schema [" + schema
+                    + "]. Details extracted from insert statement: " + insertStatement;
+            throw new ParametersSetterException(message);
+
+        } catch (SQLException ex) {
+            String message = "Failed to get metadata for table [" + tableName + "] in schema [" + schema
+                    + "]. Details extracted from insert statement: " + insertStatement;
+            throw new ParametersSetterException(message, ex);
+        }
+    }
+
+    private static JsonArray getParametersArrays(JsonElement parametersElement) {
         if (!parametersElement.isJsonArray()) {
             throw new IllegalArgumentException(
                     "Parameters must be provided as a JSON array of JSON arrays, e.g. [[1,\"John\",9876],[2,\"Mary\",1234]]. Parameters: "
@@ -132,37 +224,8 @@ public class ParametersSetter {
         return parametersElement.getAsJsonArray();
     }
 
-    public static void setIndexedParameters(JsonElement parameters, PreparedStatement preparedStatement) throws SQLException {
-        if (!parameters.isJsonArray()) {
-            throw new IllegalArgumentException("Parameters must be provided as a JSON array, e.g. [1, 'John', 9876]. Parameters ["
-                    + parameters + "]. Statement: " + preparedStatement);
-        }
-
-        JsonArray paramsArray = parameters.getAsJsonArray();
-
-        ParameterMetaData paramsMetaData = preparedStatement.getParameterMetaData();
-        int sqlParametersCount = paramsMetaData.getParameterCount();
-
-        int paramsCount = paramsArray.size();
-        if (sqlParametersCount != paramsCount) {
-            String errMsg = "Provided invalid parameters count of [" + paramsCount + "]. Expected parameters count [" + sqlParametersCount
-                    + "]. Statement: " + preparedStatement;
-            throw new IllegalArgumentException(errMsg);
-        }
-
-        for (int idx = 0; idx < paramsCount; idx++) {
-            int sqlParamIndex = idx + 1;
-            JsonElement parameter = paramsArray.get(idx);
-
-            setIndexedParameter(preparedStatement, sqlParamIndex, parameter);
-        }
-    }
-
-    private static void setIndexedParameter(PreparedStatement preparedStatement, int sqlParamIndex, JsonElement parameterElement)
-            throws IllegalArgumentException, SQLException {
-
-        ParameterMetaData parameterMetaData = preparedStatement.getParameterMetaData();
-        int sqlType = parameterMetaData.getParameterType(sqlParamIndex);
+    private static void setIndexedParameter(PreparedStatement preparedStatement, int sqlParamIndex, JsonElement parameterElement,
+            int sqlType) throws IllegalArgumentException, SQLException {
 
         if (Types.NULL == sqlType || parameterElement.isJsonNull()) {
             preparedStatement.setNull(sqlParamIndex, sqlType);
@@ -194,7 +257,6 @@ public class ParametersSetter {
         String errMsg = "Parameter with index [" + sqlParamIndex + "] must be primitive or object. Parameter element [" + parameterElement
                 + "] Statement: " + preparedStatement;
         throw new IllegalArgumentException(errMsg);
-
     }
 
     private static void setIndexedJsonObjectParam(PreparedStatement preparedStatement, int sqlParamIndex, JsonElement parameterElement,
@@ -208,6 +270,55 @@ public class ParametersSetter {
         }
 
         paramSetter.setParam(valueElement, sqlParamIndex, preparedStatement);
+    }
+
+    private static JsonArray toParamsArray(JsonElement paramsArrayJsonElement, PreparedStatement preparedStatement) {
+        if (!paramsArrayJsonElement.isJsonArray()) {
+            throw new IllegalArgumentException("Parameters must be provided as a JSON array, e.g. [1, 'John', 9876]. Parameters ["
+                    + paramsArrayJsonElement + "]. Statement: " + preparedStatement);
+        }
+
+        return paramsArrayJsonElement.getAsJsonArray();
+    }
+
+    public static void setManyIndexedParameters(JsonElement parametersElement, PreparedStatement preparedStatement)
+            throws IllegalArgumentException, SQLException {
+        JsonArray parametersArrays = getParametersArrays(parametersElement);
+
+        for (JsonElement parameters : parametersArrays) {
+            setIndexedParameters(parameters, preparedStatement);
+            preparedStatement.addBatch();
+        }
+    }
+
+    public static void setIndexedParameters(JsonElement parameters, PreparedStatement preparedStatement) throws SQLException {
+        JsonArray paramsArray = toParamsArray(parameters, preparedStatement);
+
+        ParameterMetaData paramsMetaData = preparedStatement.getParameterMetaData();
+        int sqlParametersCount = paramsMetaData.getParameterCount();
+
+        int paramsCount = paramsArray.size();
+        if (sqlParametersCount != paramsCount) {
+            String errMsg = "Provided invalid parameters count of [" + paramsCount + "]. Expected parameters count [" + sqlParametersCount
+                    + "]. Statement: " + preparedStatement;
+            throw new IllegalArgumentException(errMsg);
+        }
+
+        for (int idx = 0; idx < paramsCount; idx++) {
+            int sqlParamIndex = idx + 1;
+            JsonElement parameter = paramsArray.get(idx);
+
+            setIndexedParameter(preparedStatement, sqlParamIndex, parameter);
+        }
+    }
+
+    private static void setIndexedParameter(PreparedStatement preparedStatement, int sqlParamIndex, JsonElement parameterElement)
+            throws IllegalArgumentException, SQLException {
+
+        ParameterMetaData parameterMetaData = preparedStatement.getParameterMetaData();
+        int sqlType = parameterMetaData.getParameterType(sqlParamIndex);
+
+        setIndexedParameter(preparedStatement, sqlParamIndex, parameterElement, sqlType);
     }
 
 }

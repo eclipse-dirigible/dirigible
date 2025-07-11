@@ -1,5 +1,0 @@
-{
-    "module": "ide-entity/services/details-window.js",
-    "extensionPoint": "ide-dialog-window",
-    "description": "EDM details dialog window"
-}

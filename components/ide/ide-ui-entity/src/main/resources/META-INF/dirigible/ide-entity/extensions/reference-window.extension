@@ -1,5 +1,0 @@
-{
-    "module": "ide-entity/services/reference-window.js",
-    "extensionPoint": "ide-dialog-window",
-    "description": "EDM reference dialog window"
-}

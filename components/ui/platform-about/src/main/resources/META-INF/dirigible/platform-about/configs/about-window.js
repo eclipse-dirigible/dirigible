@@ -12,6 +12,9 @@
 const viewData = {
     id: 'about',
     label: 'About',
+    translation: {
+        key: 'common:about',
+    },
     path: '/services/web/platform-about/about.html',
 };
 if (typeof exports !== 'undefined') {

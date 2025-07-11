@@ -74,6 +74,7 @@ historicProcessInstances.controller('BpmHistoricProcessInstancesView', ($scope, 
                 if (defIntervalId) cancelIntervalDef();
                 clearInterval(refreshIntervalId);
                 $scope.$evalAsync(() => {
+                    $scope.selectedId = null;
                     $scope.selectedProcessDefinitionKey = data.key;
                     $scope.fetchData();
                     refreshIntervalId = setInterval(() => { $scope.fetchData() }, 5000);
@@ -87,6 +88,15 @@ historicProcessInstances.controller('BpmHistoricProcessInstancesView', ($scope, 
                 });
             }
 
+        }
+    });
+
+    Dialogs.addMessageListener({
+        topic: 'bpm.instance.selected',
+        handler: () => {
+            $scope.$evalAsync(() => {
+                $scope.selectedId = null;
+            });
         }
     });
 

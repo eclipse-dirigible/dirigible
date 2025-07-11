@@ -11,21 +11,22 @@
  */
 // @ts-nocheck
 if (!top.hasOwnProperty('PlatformExtPoints')) top.PlatformExtPoints = {
-    perspectives: ["platform-perspectives"],
-    shells: ["platform-shells"],
-    views: ["platform-views"],
-    subviews: ["platform-subviews"],
-    editors: ["platform-editors"],
-    menus: ["platform-menus"],
-    windows: ["platform-windows"],
-    themes: ["platform-themes"],
-    settings: ["platform-settings"],
+    perspectives: ['platform-perspectives'],
+    shells: ['platform-shells'],
+    views: ['platform-views'],
+    subviews: ['platform-subviews'],
+    editors: ['platform-editors'],
+    menus: ['platform-menus'],
+    windows: ['platform-windows'],
+    themes: ['platform-themes'],
+    settings: ['platform-settings'],
+    locales: ['platform-locales'],
 };
 function getExtPoints() {
     if (top.hasOwnProperty('PlatformExtPoints')) return top.PlatformExtPoints;
-    throw Error("PlatformExtPoints is not set!");
+    throw Error('PlatformExtPoints is not set!');
 }
-function setExtPoints({ perspectives, shells, views, subviews, editors, menus, windows, themes, settings } = {}) {
+function setExtPoints({ perspectives, shells, views, subviews, editors, menus, windows, themes, settings, locales } = {}) {
     if (perspectives) top.PlatformExtPoints.perspectives = perspectives;
     if (shells) top.PlatformExtPoints.shells = shells;
     if (views) top.PlatformExtPoints.views = views;
@@ -35,19 +36,21 @@ function setExtPoints({ perspectives, shells, views, subviews, editors, menus, w
     if (windows) top.PlatformExtPoints.windows = windows;
     if (themes) top.PlatformExtPoints.themes = themes;
     if (settings) top.PlatformExtPoints.settings = settings;
+    if (locales) top.PlatformExtPoints.locales = locales;
 }
-function addExtPoints({ perspective, shell, view, subview, editor, menu, window, theme, setting } = {}) {
+function addExtPoints({ perspective, shell, view, subview, editor, menu, window, theme, setting, locale } = {}) {
     if (perspective && !top.PlatformExtPoints.perspectives.includes(perspective)) top.PlatformExtPoints.perspectives.push(perspective);
-    if (shell && !top.PlatformExtPoints.perspectives.includes(shell)) top.PlatformExtPoints.shells.push(shell);
-    if (view && !top.PlatformExtPoints.perspectives.includes(view)) top.PlatformExtPoints.views.push(view);
-    if (subview && !top.PlatformExtPoints.perspectives.includes(subview)) top.PlatformExtPoints.subviews.push(subview);
-    if (editor && !top.PlatformExtPoints.perspectives.includes(editor)) top.PlatformExtPoints.editors.push(editor);
-    if (menu && !top.PlatformExtPoints.perspectives.includes(menu)) top.PlatformExtPoints.menus.push(menu);
-    if (window && !top.PlatformExtPoints.perspectives.includes(window)) top.PlatformExtPoints.windows.push(window);
-    if (theme && !top.PlatformExtPoints.perspectives.includes(theme)) top.PlatformExtPoints.themes.push(theme);
-    if (setting && !top.PlatformExtPoints.perspectives.includes(setting)) top.PlatformExtPoints.settings.push(setting);
+    if (shell && !top.PlatformExtPoints.shells.includes(shell)) top.PlatformExtPoints.shells.push(shell);
+    if (view && !top.PlatformExtPoints.views.includes(view)) top.PlatformExtPoints.views.push(view);
+    if (subview && !top.PlatformExtPoints.subviews.includes(subview)) top.PlatformExtPoints.subviews.push(subview);
+    if (editor && !top.PlatformExtPoints.editors.includes(editor)) top.PlatformExtPoints.editors.push(editor);
+    if (menu && !top.PlatformExtPoints.menus.includes(menu)) top.PlatformExtPoints.menus.push(menu);
+    if (window && !top.PlatformExtPoints.windows.includes(window)) top.PlatformExtPoints.windows.push(window);
+    if (theme && !top.PlatformExtPoints.themes.includes(theme)) top.PlatformExtPoints.themes.push(theme);
+    if (setting && !top.PlatformExtPoints.settings.includes(setting)) top.PlatformExtPoints.settings.push(setting);
+    if (locale && !top.PlatformExtPoints.locales.includes(locale)) top.PlatformExtPoints.locales.push(locale);
 }
-function removeExtPoints({ perspective, shell, view, subview, editor, menu, window, theme, setting } = {}) {
+function removeExtPoints({ perspective, shell, view, subview, editor, menu, window, theme, setting, locale } = {}) {
     if (perspective && top.PlatformExtPoints.perspectives.includes(perspective)) top.PlatformExtPoints.perspectives.splice(top.PlatformExtPoints.perspectives.indexOf(perspective), 1);
     if (shell && top.PlatformExtPoints.shells.includes(shell)) top.PlatformExtPoints.shells.splice(top.PlatformExtPoints.shells.indexOf(shell), 1);
     if (view && top.PlatformExtPoints.views.includes(view)) top.PlatformExtPoints.views.splice(top.PlatformExtPoints.views.indexOf(view), 1);
@@ -57,6 +60,7 @@ function removeExtPoints({ perspective, shell, view, subview, editor, menu, wind
     if (window && top.PlatformExtPoints.windows.includes(window)) top.PlatformExtPoints.windows.splice(top.PlatformExtPoints.windows.indexOf(window), 1);
     if (theme && top.PlatformExtPoints.themes.includes(theme)) top.PlatformExtPoints.themes.splice(top.PlatformExtPoints.themes.indexOf(theme), 1);
     if (setting && top.PlatformExtPoints.settings.includes(setting)) top.PlatformExtPoints.settings.splice(top.PlatformExtPoints.settings.indexOf(setting), 1);
+    if (locale && top.PlatformExtPoints.locales.includes(locale)) top.PlatformExtPoints.locales.splice(top.PlatformExtPoints.locales.indexOf(locale), 1);
 }
 angular.module('platformExtensions', []).factory('Extensions', ($http) => ({
     getViews: (exPoints = top.PlatformExtPoints.views) => {
@@ -85,5 +89,8 @@ angular.module('platformExtensions', []).factory('Extensions', ($http) => ({
     },
     getThemes: (exPoints = top.PlatformExtPoints.themes) => {
         return $http.get('/services/js/platform-core/extension-services/themes.js', { params: { extensionPoints: exPoints } });
+    },
+    getTranslations: ({ langs, namespaces, exPoints = top.PlatformExtPoints.locales } = {}) => {
+        return $http.get('/services/js/platform-core/extension-services/locales.js', { params: { extensionPoints: exPoints, langs: langs, namespaces: namespaces } });
     },
 }));

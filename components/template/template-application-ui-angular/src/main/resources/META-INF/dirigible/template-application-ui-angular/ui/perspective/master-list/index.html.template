@@ -15,22 +15,22 @@
 
 	<body class="bk-vbox">
 		<bk-toolbar has-title="true">
-			<bk-toolbar-title>Items <span bk-object-status text="{{dataCount}}" inverted="true"></bk-toolbar-title>
+			<bk-toolbar-title>{{'$projectName:defaults.items' | t}} <span bk-object-status text="{{dataCount}}" inverted="true"></bk-toolbar-title>
 			<bk-toolbar-spacer></bk-toolbar-spacer>
 			<bk-popover>
 				<bk-popover-control>
-					<bk-button compact="true" glyph="sap-icon--overflow" state="transparent" aria-label="Header Menu Button"></bk-button>
+					<bk-button compact="true" glyph="sap-icon--overflow" state="transparent" aria-label="{{ '$projectName:aria.headerMenuBtn' | t }}"></bk-button>
 				</bk-popover-control>
 				<bk-popover-body align="bottom-right">
-					<bk-menu aria-label="Header Menu" no-backdrop="true" no-shadow="true">
-						<bk-menu-item title="Filter" ng-click="openFilter()"></bk-menu-item>
-						<bk-menu-item ng-repeat="action in pageActions track by $index" title="{{action.label}}" ng-click="triggerPageAction(action)"></bk-menu-item>
+					<bk-menu aria-label="{{ '$projectName:aria.headerMenu' | t }}" no-backdrop="true" no-shadow="true">
+						<bk-menu-item title="{{ '$projectName:defaults.filter' | t }}" ng-click="openFilter()"></bk-menu-item>
+						<bk-menu-item ng-repeat="action in pageActions track by $index" title="{{action.translation.key | t:action.translation.options:action.label}}" ng-click="triggerPageAction(action)"></bk-menu-item>
 					</bk-menu>
 				</bk-popover-body>
 			</bk-popover>
 		</bk-toolbar>
 		<bk-scrollbar>
-			<bk-list list-type="navigation-indication" byline="true" state="disabled">
+			<bk-list list-type="navigation-indication" byline="true">
 				<bk-list-item ng-repeat="next in data track by $index">
 					<bk-list-link navigation-indicator="true" selected="next.${primaryKeysString} === selectedEntity.${primaryKeysString}"
 						navigated="next.${primaryKeysString} === selectedEntity.${primaryKeysString}" ng-click="selectEntity(next)">
@@ -76,7 +76,7 @@
 				</bk-list-item>
 			</bk-list>
 			<bk-list-action-item ng-show="dataPage <= dataPages && dataCount > dataLimit" ng-click="loadPage()">
-				Load More ...
+				{{ '$projectName:defaults.loadMore' | t }}
 			</bk-list-action-item>
 		</bk-scrollbar>
 		<theme></theme>

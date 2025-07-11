@@ -242,12 +242,12 @@ public class CsvProcessor {
     private void insertCsvWithHeader(CsvRecord csvRecord, List<ColumnMetadata> tableColumns, PreparedStatement statement)
             throws SQLException {
         for (int i = 0; i < tableColumns.size(); i++) {
-            String columnName = tableColumns.get(i)
-                                            .getName();
-            String columnType = tableColumns.get(i)
-                                            .getType();
+            ColumnMetadata columnMetadata = tableColumns.get(i);
+            String columnName = columnMetadata.getName();
+            String columnType = columnMetadata.getType();
             String value = csvRecord.getCsvValueForColumn(columnName);
-            setPreparedStatementValue(csvRecord.isDistinguishEmptyFromNull(), statement, i + 1, value, columnType);
+            int paramIdx = i + 1;
+            setPreparedStatementValue(csvRecord.isDistinguishEmptyFromNull(), statement, paramIdx, value, columnType);
         }
     }
 
@@ -330,96 +330,96 @@ public class CsvProcessor {
      *
      * @param distinguishEmptyFromNull the distinguish empty from null
      * @param statement the statement
-     * @param i the i
+     * @param paramIdx the paramIdx
      * @param value the value
      * @param columnType the column type
      * @throws SQLException the SQL exception
      */
-    private void setPreparedStatementValue(Boolean distinguishEmptyFromNull, PreparedStatement statement, int i, String value,
+    private void setPreparedStatementValue(Boolean distinguishEmptyFromNull, PreparedStatement statement, int paramIdx, String value,
             String columnType) throws SQLException {
         if (StringUtils.isEmpty(value)) {
             value = distinguishEmptyFromNull ? "" : null;
         }
-        setValue(statement, i, columnType, value);
+        setValue(statement, paramIdx, columnType, value);
     }
 
     /**
      * Sets the value.
      *
      * @param preparedStatement the prepared statement
-     * @param i the i
+     * @param paramIdx the paramIdx
      * @param dataType the data type
      * @param value the value
      * @throws SQLException the SQL exception
      */
-    protected void setValue(PreparedStatement preparedStatement, int i, String dataType, String value) throws SQLException {
-        logger.trace("setValue -> i: {}, dataType: {}, value: {}", i, dataType, value);
+    protected void setValue(PreparedStatement preparedStatement, int paramIdx, String dataType, String value) throws SQLException {
+        logger.trace("setValue -> paramIdx: {}, dataType: {}, value: {}", paramIdx, dataType, value);
 
         // TODO consider to use org.eclipse.dirigible.components.api.db.params.ParametersSetter for reuse
         if (value == null) {
-            preparedStatement.setNull(i, DataTypeUtils.getSqlTypeByDataType(dataType));
+            preparedStatement.setNull(paramIdx, DataTypeUtils.getSqlTypeByDataType(dataType));
         } else if (Types.VARCHAR == DataTypeUtils.getSqlTypeByDataType(dataType)) {
-            preparedStatement.setString(i, sanitize(value));
+            preparedStatement.setString(paramIdx, sanitize(value));
         } else if (Types.NVARCHAR == DataTypeUtils.getSqlTypeByDataType(dataType)) {
-            preparedStatement.setString(i, sanitize(value));
+            preparedStatement.setString(paramIdx, sanitize(value));
         } else if (Types.CHAR == DataTypeUtils.getSqlTypeByDataType(dataType)) {
-            preparedStatement.setString(i, sanitize(value));
+            preparedStatement.setString(paramIdx, sanitize(value));
         } else if (Types.DATE == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             if (value.equals("")) {
-                preparedStatement.setNull(i, DataTypeUtils.getSqlTypeByDataType(dataType));
+                preparedStatement.setNull(paramIdx, DataTypeUtils.getSqlTypeByDataType(dataType));
             } else {
-                preparedStatement.setDate(i, DateTimeUtils.parseDate(value));
+                preparedStatement.setDate(paramIdx, DateTimeUtils.parseDate(value));
             }
         } else if (Types.TIME == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             if (value.equals("")) {
-                preparedStatement.setNull(i, DataTypeUtils.getSqlTypeByDataType(dataType));
+                preparedStatement.setNull(paramIdx, DataTypeUtils.getSqlTypeByDataType(dataType));
             } else {
-                preparedStatement.setTime(i, DateTimeUtils.parseTime(value));
+                preparedStatement.setTime(paramIdx, DateTimeUtils.parseTime(value));
             }
         } else if (Types.TIMESTAMP == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             if (value.equals("")) {
-                preparedStatement.setNull(i, DataTypeUtils.getSqlTypeByDataType(dataType));
+                preparedStatement.setNull(paramIdx, DataTypeUtils.getSqlTypeByDataType(dataType));
             } else {
-                preparedStatement.setTimestamp(i, DateTimeUtils.parseDateTime(value));
+                preparedStatement.setTimestamp(paramIdx, DateTimeUtils.parseDateTime(value));
             }
         } else if (Types.INTEGER == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             value = numberize(value);
-            preparedStatement.setInt(i, parseInt(value));
+            preparedStatement.setInt(paramIdx, parseInt(value));
         } else if (Types.TINYINT == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             value = numberize(value);
-            preparedStatement.setByte(i, parseByte(value));
+            preparedStatement.setByte(paramIdx, parseByte(value));
         } else if (Types.SMALLINT == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             value = numberize(value);
-            preparedStatement.setShort(i, parseShort(value));
+            preparedStatement.setShort(paramIdx, parseShort(value));
         } else if (Types.BIGINT == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             value = numberize(value);
-            preparedStatement.setLong(i, createBigInteger(value).longValueExact());
+            preparedStatement.setLong(paramIdx, createBigInteger(value).longValueExact());
         } else if (Types.REAL == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             value = numberize(value);
-            preparedStatement.setFloat(i, parseFloat(value));
+            preparedStatement.setFloat(paramIdx, parseFloat(value));
         } else if (Types.DOUBLE == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             value = numberize(value);
-            preparedStatement.setDouble(i, parseDouble(value));
+            preparedStatement.setDouble(paramIdx, parseDouble(value));
         } else if (Types.BOOLEAN == DataTypeUtils.getSqlTypeByDataType(dataType)
                 || Types.BIT == DataTypeUtils.getSqlTypeByDataType(dataType)) {
-            preparedStatement.setBoolean(i, parseBoolean(value));
+            preparedStatement.setBoolean(paramIdx, parseBoolean(value));
         } else if (Types.DECIMAL == DataTypeUtils.getSqlTypeByDataType(dataType)
                 || Types.NUMERIC == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             value = numberize(value);
-            preparedStatement.setBigDecimal(i, createBigDecimal(value));
+            preparedStatement.setBigDecimal(paramIdx, createBigDecimal(value));
         } else if (Types.NCLOB == DataTypeUtils.getSqlTypeByDataType(dataType)) {
-            preparedStatement.setString(i, sanitize(value));
+            preparedStatement.setString(paramIdx, sanitize(value));
         } else if (Types.BLOB == DataTypeUtils.getSqlTypeByDataType(dataType)
                 || Types.BINARY == DataTypeUtils.getSqlTypeByDataType(dataType)
                 || Types.LONGVARBINARY == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             byte[] bytes = Base64.getDecoder()
                                  .decode(value);
-            preparedStatement.setBinaryStream(i, new ByteArrayInputStream(bytes), bytes.length);
+            preparedStatement.setBinaryStream(paramIdx, new ByteArrayInputStream(bytes), bytes.length);
         } else if (Types.CLOB == DataTypeUtils.getSqlTypeByDataType(dataType)
                 || Types.LONGVARCHAR == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             byte[] bytes = Base64.getDecoder()
                                  .decode(value);
-            preparedStatement.setAsciiStream(i, new ByteArrayInputStream(bytes), bytes.length);
+            preparedStatement.setAsciiStream(paramIdx, new ByteArrayInputStream(bytes), bytes.length);
         } else if (Types.OTHER == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             if (SqlDialectFactory.getDialect(preparedStatement.getConnection()) instanceof PostgresSqlDialect) {
                 if (!value.trim()
@@ -427,9 +427,9 @@ public class CsvProcessor {
                     PGobject pgobject = new PGobject();
                     pgobject.setType(dataType);
                     pgobject.setValue(value);
-                    preparedStatement.setObject(i, pgobject);
+                    preparedStatement.setObject(paramIdx, pgobject);
                 } else {
-                    preparedStatement.setNull(i, DataTypeUtils.getSqlTypeByDataType(dataType));
+                    preparedStatement.setNull(paramIdx, DataTypeUtils.getSqlTypeByDataType(dataType));
                 }
             }
         } else {

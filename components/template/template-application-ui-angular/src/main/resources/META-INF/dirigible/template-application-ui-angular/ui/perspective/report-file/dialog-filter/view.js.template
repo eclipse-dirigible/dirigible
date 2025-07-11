@@ -6,6 +6,12 @@
 const viewData = {
     id: "${name}-Report-filter",
     label: "${name} Report Filter",
+    translation: {
+        key: '$projectName:extName',
+        options: {
+            content: '$t($projectName:t.$dataName) $t($projectName:defaults.reportFilter)',
+        }
+    },
     path: "/services/web/${projectName}/gen/${genFolderName}/ui/Reports/${name}/dialog-filter/index.html",
     perspectiveName: "Reports"
 };

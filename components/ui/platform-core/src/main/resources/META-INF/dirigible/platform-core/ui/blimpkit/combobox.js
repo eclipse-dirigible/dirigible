@@ -35,7 +35,7 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
         },
         link: function (scope, element, _attrs, ngModel) {
             scope.defaultHeight = 16;
-            if (!scope.btnAriaLabel || !scope.listAriaLabel) {
+            if (!angular.isDefined(scope.btnAriaLabel) || !angular.isDefined(scope.listAriaLabel)) {
                 console.error('bk-combobox-input error: Provide the "btn-aria-label" and "list-aria-label" attributes');
             }
             let collectionWatch;

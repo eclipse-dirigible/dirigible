@@ -15,10 +15,6 @@
 
     <dependencies>
     	
-    	<dependency>
-			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-resources-core</artifactId>
-		</dependency>
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-resources-dev-tools</artifactId>
@@ -38,18 +34,6 @@
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-resources-theme-high-contrast</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-resources-theme-quartz-dark</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-resources-theme-quartz-light</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-resources-themes</artifactId>
 		</dependency>
     	
     </dependencies>

@@ -33,15 +33,7 @@ public class GitPerspective {
 
     public void cloneRepository(String repositoryUrl, Optional<String> user, Optional<String> pass, Optional<String> branch,
             long waitForCloneMillis) {
-        browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.TITLE, "Clone");
-
-        browser.enterTextInElementById("curli", repositoryUrl);
-
-        user.ifPresent(u -> browser.enterTextInElementById("cuni", u));
-        pass.ifPresent(p -> browser.enterTextInElementById("cpwi", p));
-        branch.ifPresent(b -> browser.enterTextInElementById("cbi", b));
-
-        browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.LABEL, "Clone");
+        asyncCloneRepository(repositoryUrl, user, pass, branch);
 
         SleepUtil.sleepMillis(waitForCloneMillis);
 
@@ -51,5 +43,36 @@ public class GitPerspective {
     private void assertClonedRepository() {
         browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER4, "Repository cloned");
     }
-}
 
+    /**
+     * Trigger clone of a repository
+     *
+     * @param repositoryUrl repo URL
+     * @param user user
+     * @param pass password
+     * @param branch branch
+     */
+    public void asyncCloneRepository(String repositoryUrl, Optional<String> user, Optional<String> pass, Optional<String> branch) {
+        browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.TITLE, "Clone");
+
+        browser.enterTextInElementById("curli", repositoryUrl);
+
+        user.ifPresent(u -> browser.enterTextInElementById("cuni", u));
+        pass.ifPresent(p -> browser.enterTextInElementById("cpwi", p));
+        branch.ifPresent(b -> browser.enterTextInElementById("cbi", b));
+
+        browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.LABEL, "Clone");
+    }
+
+    public void asyncCloneRepository(String repositoryUrl) {
+        asyncCloneRepository(repositoryUrl, Optional.empty(), Optional.empty(), Optional.empty());
+    }
+
+    public void asyncCloneRepository(String repositoryUrl, String branch) {
+        asyncCloneRepository(repositoryUrl, Optional.empty(), Optional.empty(), Optional.of(branch));
+    }
+
+    public void asyncCloneRepository(String repositoryUrl, String user, String password) {
+        asyncCloneRepository(repositoryUrl, Optional.of(user), Optional.of(password), Optional.empty());
+    }
+}

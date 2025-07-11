@@ -24,7 +24,7 @@
 #if($property.widgetType == "DROPDOWN")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 	                        <bk-combobox-input input-id="id${property.name}"
@@ -43,8 +43,8 @@
 	                            is-readonly="action === 'select'"
 	#end
 	                            dropdown-items="options${property.name}"
-	                            placeholder="Search ${property.widgetLabel} ..."
-								btn-aria-label="show/hide ${property.name} options" list-aria-label="${property.name} options">
+	                            placeholder="{{ '$projectName:messages.inputSearch' | t:{'name':'$t($projectName:t.$property.dataName)'} }}"
+								btn-aria-label="{{ '$projectName:aria.showHide' | t:{'name':'${property.name}'} }}" list-aria-label="{{ '$projectName:aria.options' | t:{'name':'${property.name}'} }}">
 	                        </bk-combobox-input>
 	#if($property.description)
 	                        <span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
@@ -67,7 +67,7 @@
 	#end
 	                            ng-model="entity.${property.name}">
 	                        </bk-checkbox>
-                        	<bk-checkbox-label for="id${property.name}" ng-required="${property.isRequiredProperty}">${property.widgetLabel}</bk-checkbox-label>
+                        	<bk-checkbox-label for="id${property.name}" ng-required="${property.isRequiredProperty}">{{ '$projectName:t.$property.dataName' | t }}</bk-checkbox-label>
                         </div>
 	#if($property.description)
                         <div class="fd-col fd-col--full">
@@ -78,13 +78,11 @@
 #elseif($property.widgetType == "COLOR")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
-	#else
-							<bk-form-input-message>
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:messages.error.incorrectInput' | t}}">
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -99,9 +97,11 @@
 	                                ng-readonly="action === 'select'"
 	#end
 	                                type="color"
-	                                placeholder="Enter ${property.widgetLabel}">
+	                                placeholder="{{ '$projectName:messages.inputEnter' | t:{'name':'$t($projectName:t.$property.dataName)'} }}">
 	                            </bk-input>
+	#if(!$property.isCalculatedProperty)
 							</bk-form-input-message>
+	#end
 	#if($property.description)
 	                        <span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
 	#end
@@ -110,7 +110,7 @@
 #elseif($property.widgetType == "NUMBER")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
 	                        <bk-step-input input-id="id${property.name}"
@@ -125,7 +125,7 @@
 	#else
 								is-readonly="action === 'select'"
 	#end
-								placeholder="Enter ${property.widgetLabel}">
+								placeholder="{{ '$projectName:messages.inputEnter' | t:{'name':'$t($projectName:t.$property.dataName)'} }}">
 							</bk-step-input>
 	#if($property.description)
 							<span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
@@ -135,10 +135,10 @@
 #elseif($property.widgetType == "MONTH")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:messages.error.incorrectInput' | t}}">
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	#if(!$property.isCalculatedProperty)
@@ -162,13 +162,11 @@
 #elseif($property.widgetType == "WEEK")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
-	#else
-							<bk-form-input-message>
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:messages.error.incorrectInput' | t}}">
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -184,7 +182,9 @@
 	#end
 	                                type="week">
 	                            </bk-input>
+	#if(!$property.isCalculatedProperty)
 							</bk-form-input-message>
+	#end
 	#if($property.description)
 	                        <span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
 	#end
@@ -193,13 +193,11 @@
 #elseif($property.widgetType == "TIME")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
-	#else
-							<bk-form-input-message>
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:messages.error.incorrectInput' | t}}">
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -215,7 +213,9 @@
 	#end
 	                                type="time">
 	                            </bk-input>
+	#if(!$property.isCalculatedProperty)
 							</bk-form-input-message>
+	#end
 	#if($property.description)
 	                        <span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
 	#end
@@ -224,13 +224,11 @@
 #elseif($property.widgetType == "DATETIME-LOCAL")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--3 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
-	#else
-							<bk-form-input-message>
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:messages.error.incorrectInput' | t}}">
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -246,7 +244,9 @@
 	#end
 	                                type="datetime-local">
 	                            </bk-input>
+	#if(!$property.isCalculatedProperty)
 							</bk-form-input-message>
+	#end
 	#if($property.description)
 	                        <span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
 	#end
@@ -255,13 +255,11 @@
 #elseif($property.widgetType == "DATE")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
-	#else
-							<bk-form-input-message>
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:messages.error.incorrectInput' | t}}">
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -277,7 +275,9 @@
 	#end
 	                                type="date">
 	                            </bk-input>
+	#if(!$property.isCalculatedProperty)
 							</bk-form-input-message>
+	#end
 	#if($property.description)
 	                        <span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
 	#end
@@ -286,13 +286,11 @@
 #elseif($property.widgetType == "TEXTAREA")
 					<bk-form-item class="fd-row">
 						<div class="fd-col fd-col-md--2">
-							<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
+							<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
 						</div>
 						<div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn\'t match the required pattern: ${property.inputRule}'">
-	#else
-							<bk-form-input-message>
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
 	#end
 								<bk-textarea id="id${property.name}"
 									name="${property.name}"
@@ -315,9 +313,11 @@
 	#if(!$property.isCalculatedProperty)
 									input-rules="{ patterns: ['${property.inputRule}'] }"
 	#end
-									placeholder="Enter ${property.widgetLabel}">
+									placeholder="{{ '$projectName:messages.inputEnter' | t:{'name':'$t($projectName:t.$property.dataName)'} }}">
 								</bk-textarea>
+	#if(!$property.isCalculatedProperty)
 							</bk-form-input-message>
+	#end
 						</div>
 	#if($property.description)
 						<div class="fd-col fd-col--full">
@@ -328,16 +328,14 @@
 #elseif($property.widgetType == "TEL")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
                         </div>
 						<div ng-show="action === 'select'" style="margin: 4px 0px; padding: 0px 10px" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
 							<bk-link href="tel:{{entity.${property.name}}}">{{entity.${property.name}}}</bk-link>
 						</div>
                         <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn\'t match the required pattern: ${property.inputRule}'">
-	#else
-							<bk-form-input-message>
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -361,9 +359,11 @@
 	                                input-rules="{ patterns:#if($property.inputRule == "")['^[0-9]{0,14}$']#else ['${property.inputRule}']#end }"
 	#end
 	                                type="tel"
-	                                placeholder="Enter ${property.widgetLabel}">
+	                                placeholder="{{ '$projectName:messages.inputEnter' | t:{'name':'$t($projectName:t.$property.dataName)'} }}">
 	                            </bk-input>
+	#if(!$property.isCalculatedProperty)
 							</bk-form-input-message>
+	#end
 	#if($property.description)
 	                        <span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
 	#end
@@ -372,16 +372,14 @@
 #elseif($property.widgetType == "URL")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
                         </div>
 						<div ng-show="action === 'select'" style="margin: 4px 0px; padding: 0px 10px" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 							<bk-link href="{{entity.${property.name}}}" target="_blank">{{entity.${property.name}}}</bk-link>
 						</div>
                         <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn\'t match the required pattern: ${property.inputRule}'">
-	#else
-							<bk-form-input-message>
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -405,9 +403,11 @@
 	                                input-rules="{ patterns: ['${property.inputRule}'] }"
 	#end
 	                                type="url"
-	                                placeholder="Enter ${property.widgetLabel}">
+	                                placeholder="{{ '$projectName:messages.inputEnter' | t:{'name':'$t($projectName:t.$property.dataName)'} }}">
 	                            </bk-input>
+	#if(!$property.isCalculatedProperty)
 							</bk-form-input-message>
+	#end
 	#if($property.description)
 	                        <span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
 	#end
@@ -416,16 +416,14 @@
 #elseif($property.widgetType == "EMAIL")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
                         </div>
 						<div ng-show="action === 'select'" style="margin: 4px 0px; padding: 0px 10px" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 							<bk-link href="mailto:{{entity.${property.name}}}">{{entity.${property.name}}}</bk-link>
 						</div>
                         <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn\'t match the required pattern: ${property.inputRule}'">
-	#else
-							<bk-form-input-message>
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -449,9 +447,11 @@
 	                                input-rules="{ patterns: ['${property.inputRule}'] }"
 	#end
 	                                type="email"
-	                                placeholder="Enter ${property.widgetLabel}">
+	                                placeholder="{{ '$projectName:messages.inputEnter' | t:{'name':'$t($projectName:t.$property.dataName)'} }}">
 	                            </bk-input>
+	#if(!$property.isCalculatedProperty)
 							</bk-form-input-message>
+	#end
 	#if($property.description)
 	                        <span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
 	#end
@@ -460,13 +460,11 @@
 #else
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'The value doesn\'t match the required pattern: ${property.inputRule}'">
-	#else
-							<bk-form-input-message>
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -490,9 +488,11 @@
 	                                input-rules="{ patterns: ['${property.inputRule}'] }"
 	#end
 	                                type="text"
-	                                placeholder="Enter ${property.widgetLabel}">
+	                                placeholder="{{ '$projectName:messages.inputEnter' | t:{'name':'$t($projectName:t.$property.dataName)'} }}">
 	                            </bk-input>
+	#if(!$property.isCalculatedProperty)
 							</bk-form-input-message>
+	#end
 	#if($property.description)
 	                        <span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
 	#end
@@ -508,10 +508,11 @@
 		<bk-bar bar-design="footer" compact="true" ng-show="action !== 'select'">
 			<bk-bar-right>
 				<bk-bar-element>
-					<bk-button label="{{action === 'create' ? 'Create' : 'Update'}}" state="emphasized" ng-click="action === 'create' ? create() : update()" ng-disabled="!forms.details.$valid"></bk-button>
+					<bk-button ng-if="action === 'create'" label="{{'$projectName:defaults.create' | t}}" state="emphasized" ng-click="create()" ng-disabled="!forms.details.$valid"></bk-button>
+					<bk-button ng-if="action !== 'create'" label="{{'$projectName:defaults.update' | t}}" state="emphasized" ng-click="update()" ng-disabled="!forms.details.$valid"></bk-button>
 				</bk-bar-element>
 				<bk-bar-element>
-					<bk-button label="Cancel" ng-click="cancel()"></bk-button>
+					<bk-button label="{{ '$projectName:defaults.cancel' | t }}" ng-click="cancel()"></bk-button>
 				</bk-bar-element>
 			</bk-bar-right>
 		</bk-bar>

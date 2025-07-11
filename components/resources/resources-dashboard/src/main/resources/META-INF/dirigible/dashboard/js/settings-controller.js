@@ -9,8 +9,8 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const settings = angular.module('settings', ['platformView', 'platformSplit', 'blimpKit']);
-settings.controller('SettingsController', ($scope, Extensions) => {
+const settings = angular.module('settings', ['platformView', 'platformSplit', 'blimpKit', 'platformLocale']);
+settings.controller('SettingsController', ($scope, Extensions, LocaleService) => {
     const Dialog = new DialogHub();
     $scope.search = { text: '' };
     $scope.settings = [];
@@ -50,8 +50,8 @@ settings.controller('SettingsController', ($scope, Extensions) => {
     }, (error) => {
         console.log(error);
         Dialog.showAlert({
-            title: 'Failed to load settings',
-            message: 'There was an error while trying to load the settings list.',
+            title: LocaleService.t('dashboard:errMsg.reportLoadTitle', 'Failed to load settings'),
+            message: LocaleService.t('dashboard:errMsg.reportLoad', 'There was an error while trying to load the settings list.'),
             type: AlertTypes.Error,
             preformatted: false,
         });

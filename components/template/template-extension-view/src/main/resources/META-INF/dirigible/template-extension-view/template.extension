@@ -1,5 +1,0 @@
-{
-	"extensionPoint": "ide-template",
-	"module": "template-extension-view/template.js",
-	"description": "Extension View Template"
-}

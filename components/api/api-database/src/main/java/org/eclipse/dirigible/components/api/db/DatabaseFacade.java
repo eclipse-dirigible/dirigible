@@ -20,10 +20,7 @@ import org.eclipse.dirigible.components.data.management.helpers.DatabaseResultSe
 import org.eclipse.dirigible.components.data.management.helpers.ResultParameters;
 import org.eclipse.dirigible.components.data.management.service.DatabaseDefinitionService;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
-import org.eclipse.dirigible.components.database.DatabaseParameters;
-import org.eclipse.dirigible.components.database.DirigibleConnection;
-import org.eclipse.dirigible.components.database.DirigibleDataSource;
-import org.eclipse.dirigible.components.database.NamedParameterStatement;
+import org.eclipse.dirigible.components.database.*;
 import org.eclipse.dirigible.database.persistence.processors.identity.PersistenceNextValueIdentityProcessor;
 import org.eclipse.dirigible.database.sql.SqlFactory;
 import org.slf4j.Logger;
@@ -162,7 +159,7 @@ public class DatabaseFacade implements InitializingBean {
             return dataSource;
         } catch (RuntimeException ex) {
             logger.error("Failed to get data source with name [{}]", datasourceName, ex);// log it here because the client may handle the
-                                                                                         // exception and hide the details.
+            // exception and hide the details.
             throw ex;
         }
     }
@@ -441,12 +438,16 @@ public class DatabaseFacade implements InitializingBean {
                 return Collections.emptyList();
             }
 
-            try (Connection connection = dataSource.getConnection()) {
+            try (DirigibleConnection connection = dataSource.getConnection()) {
                 connection.setAutoCommit(false);
                 try (PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
                     if (parameters.isPresent()) {
-                        ParametersSetter.setManyIndexedParameters(parameters.get(), preparedStatement);
+                        if (connection.isOfType(DatabaseSystem.SNOWFLAKE)) {
+                            ParametersSetter.setManyIndexedParametersForInsert(sql, parameters.get(), preparedStatement);
+                        } else {
+                            ParametersSetter.setManyIndexedParameters(parameters.get(), preparedStatement);
+                        }
                     } else {
                         preparedStatement.addBatch();
                     }
@@ -474,16 +475,21 @@ public class DatabaseFacade implements InitializingBean {
 
     private static void insertManyWithoutResult(String sql, Optional<JsonElement> parameters, DirigibleDataSource dataSource)
             throws SQLException {
-        try (Connection connection = dataSource.getConnection()) {
+        try (DirigibleConnection connection = dataSource.getConnection()) {
             insertManyWithoutResult(sql, parameters, connection);
         }
     }
 
-    private static void insertManyWithoutResult(String sql, Optional<JsonElement> parameters, Connection connection) throws SQLException {
+    private static void insertManyWithoutResult(String sql, Optional<JsonElement> parameters, DirigibleConnection connection)
+            throws SQLException {
         connection.setAutoCommit(false);
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
             if (parameters.isPresent()) {
-                ParametersSetter.setManyIndexedParameters(parameters.get(), preparedStatement);
+                if (connection.isOfType(DatabaseSystem.SNOWFLAKE)) {
+                    ParametersSetter.setManyIndexedParametersForInsert(sql, parameters.get(), preparedStatement);
+                } else {
+                    ParametersSetter.setManyIndexedParameters(parameters.get(), preparedStatement);
+                }
             }
             preparedStatement.executeBatch();
             connection.commit();

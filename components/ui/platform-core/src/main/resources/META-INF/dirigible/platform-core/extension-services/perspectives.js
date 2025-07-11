@@ -23,6 +23,6 @@ function setETag() {
 
 setETag();
 response.setContentType('application/json');
-response.println(JSON.stringify(await getPerspectives((request.getParameter('extensionPoints') || 'platform-perspectives').split(','))));
+response.println(JSON.stringify(await getPerspectives(request.getParameterValues('extensionPoints') ?? ['platform-perspectives'])));
 response.flush();
 response.close();

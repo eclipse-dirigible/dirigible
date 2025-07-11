@@ -12,6 +12,20 @@
 import { Registry } from "sdk/platform";
 import { TemplateEngines as templateEngines } from "sdk/template";
 
+function getTranslations(model) {
+    let translations = {};
+    for (const [key, value] of Object.entries(model)) {
+        if ((key === 'label' || key === 'errorMessage') && value !== undefined && value !== null && value !== '') {
+            const translationId = `${value.replaceAll(' ', '').replaceAll('_', '').replaceAll('.', '').replaceAll(':', '')}`;
+            translations[translationId] = value;
+            model[key === 'errorMessage' ? 'errorTranslation' : 'translation'] = translationId;
+        } else if (typeof value === 'object') {
+            translations = { ...translations, ...getTranslations(value) };
+        }
+    }
+    return translations;
+}
+
 export function generateGeneric(model, parameters, templateSources) {
     const generatedFiles = []
     const templateParameters = {};
@@ -32,6 +46,13 @@ export function generateGeneric(model, parameters, templateSources) {
                 location: location,
                 content: content,
                 path: templateEngines.getMustacheEngine().generate(location, template.rename, parameters)
+            });
+        } else if (template.action === "translate") {
+            let translations = JSON.parse(content);
+            translations.t = { ...getTranslations(model) };
+            generatedFiles.push({
+                content: JSON.stringify(translations, null, 2),
+                path: template.path
             });
         } else {
             generatedFiles.push({
@@ -176,6 +197,75 @@ export function generateFiles(model, parameters, templateSources) {
                     });
                     break;
             }
+        } else if (template.action === "translate") {
+            const translations = JSON.parse(content) ?? { t: {} };
+
+            function properties(props) {
+                for (let p = 0; p < props.length; p++) {
+                    if (props[p].dataName) {
+                        if (props[p].perspectiveHeader) {
+                            translations.t[`${props[p].perspectiveName}pheader`] = props[p].perspectiveHeader;
+                        }
+                        if (props[p].perspectiveLabel) {
+                            translations.t[props[p].dataName] = props[p].perspectiveLabel;
+                        } else if (props[p].widgetLabel) {
+                            translations.t[props[p].dataName] = props[p].widgetLabel;
+                        } else if (props[p].name) {
+                            translations.t[props[p].dataName] = props[p].name;
+                        }
+                    }
+                    if (props[p].masterProperties) {
+                        masterProperties(props[p].masterProperties);
+                    }
+                }
+            }
+
+            function masterProperties(mp) {
+                if (mp.title && mp.title.dataName) {
+                    if (mp.title.widgetLabel) {
+                        translations.t[mp.title.dataName] = mp.title.widgetLabel;
+                    } else if (mp.title.name) {
+                        translations.t[mp.title.dataName] = mp.title.name;
+                    }
+                }
+                if (mp.properties) {
+                    properties(mp.properties);
+                }
+            }
+
+            if (model.entities) {
+                for (let i = 0; i < model.entities.length; i++) {
+                    if (model.entities[i].dataName && model.entities[i].name) {
+                        translations.t[model.entities[i].dataName] = model.entities[i].name;
+                    }
+                    if (model.entities[i].properties) {
+                        properties(model.entities[i].properties);
+                    }
+                    if (model.entities[i].masterProperties) {
+                        masterProperties(model.entities[i].masterProperties);
+                    }
+                }
+            }
+            if (model.perspectives) {
+                for (let i = 0; i < model.perspectives.length; i++) {
+                    if (model.perspectives[i].header) {
+                        translations.t[`${model.perspectives[i].name}pheader`] = model.perspectives[i].label;
+                    }
+                    translations.t[model.perspectives[i].name] = model.perspectives[i].label;
+                }
+            }
+            if (model.navigations) {
+                for (let i = 0; i < model.navigations.length; i++) {
+                    if (model.navigations[i].header) {
+                        translations.t[`${model.navigations[i].id}nheader`] = model.navigations[i].header;
+                    }
+                    translations.t[model.navigations[i].id] = model.navigations[i].label;
+                }
+            }
+            generatedFiles.push({
+                content: JSON.stringify(translations, null, 2),
+                path: template.path
+            });
         }
     }
     return generatedFiles;

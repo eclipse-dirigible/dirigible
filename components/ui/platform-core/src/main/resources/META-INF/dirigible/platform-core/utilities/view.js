@@ -64,3 +64,10 @@ function getViewParameters({ vframe = window, attribute = 'data-parameters' } = 
     }
     return {};
 }
+function getConfigData() {
+    if (typeof viewData !== 'undefined') return viewData;
+    else if (typeof perspectiveData !== 'undefined') return perspectiveData;
+    else if (typeof editorData !== 'undefined') return editorData;
+    else if (typeof shellData !== 'undefined') return shellData;
+    else throw new Error('Config data is missing');
+}

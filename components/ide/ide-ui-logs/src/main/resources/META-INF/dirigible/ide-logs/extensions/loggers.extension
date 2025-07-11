@@ -1,5 +1,0 @@
-{
-    "module": "ide-logs/services/loggers-view.js",
-    "extensionPoint": "ide-view",
-    "description": "Loggers View"
-}

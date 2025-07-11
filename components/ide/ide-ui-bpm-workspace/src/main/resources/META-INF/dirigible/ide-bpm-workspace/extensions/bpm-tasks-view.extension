@@ -1,5 +1,0 @@
-{
-    "module":"ide-bpm-workspace/services/bpm-tasks-view.js",
-    "extensionPoint":"ide-view",
-    "description":"User Tasks"
-}
