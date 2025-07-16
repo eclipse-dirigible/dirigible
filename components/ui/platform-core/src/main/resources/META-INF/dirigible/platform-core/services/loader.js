@@ -12,7 +12,7 @@
 import { request, response } from 'sdk/http';
 import { registry } from 'sdk/platform';
 import { uuid } from 'sdk/utils';
-import { getBrandingJs, getKeyPrefix, getAnalyticsLink } from '/platform-branding/branding.mjs';
+import { getBrandingJs, getKeyPrefix } from '/platform-branding/branding.mjs';
 
 const COOKIE_PREFIX = `${getKeyPrefix()}.ljs.`;
 
@@ -192,14 +192,11 @@ function getScriptList(scriptId) {
                 '/platform-core/ui/platform/layout.js',
             ];
         case 'shell-js':
-            const shell = [
+            return [
                 ...baseJs,
                 cookies,
                 '/platform-core/ui/platform/shell.js',
-                getAnalyticsLink(),
             ];
-            if (!shell[shell.length - 1]) shell.pop();
-            return shell;
         case 'file-upload-js':
             return [
                 '/es5-shim/4.6.7/es5-shim.min.js',
