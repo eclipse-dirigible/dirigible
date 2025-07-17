@@ -9,25 +9,12 @@
  */
 package org.eclipse.dirigible.components.data.csvim.processor;
 
-import static org.eclipse.dirigible.components.api.platform.RepositoryFacade.getResource;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.stream.Collectors;
-import javax.sql.DataSource;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.data.csvim.domain.CsvFile;
 import org.eclipse.dirigible.components.data.csvim.domain.CsvRecord;
 import org.eclipse.dirigible.components.data.csvim.synchronizer.CsvimProcessingException;
@@ -47,6 +34,22 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import javax.sql.DataSource;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
+
+import static org.eclipse.dirigible.components.api.platform.RepositoryFacade.getResource;
+
 /**
  * The Class CsvimProcessor.
  */
@@ -57,16 +60,6 @@ public class CsvimProcessor {
      * The Constant logger.
      */
     private static final Logger logger = LoggerFactory.getLogger(CsvimProcessor.class);
-
-    /**
-     * The Constant DIRIGIBLE_CSV_DATA_BATCH_SIZE.
-     */
-    private static final String DIRIGIBLE_CSV_DATA_BATCH_SIZE = "DIRIGIBLE_CSV_DATA_BATCH_SIZE";
-
-    /**
-     * The Constant DIRIGIBLE_CSV_DATA_BATCH_SIZE_DEFAULT.
-     */
-    private static final int DIRIGIBLE_CSV_DATA_BATCH_SIZE_DEFAULT = 100;
 
     /**
      * The Constant MODULE.
@@ -383,7 +376,7 @@ public class CsvimProcessor {
      * @return the csv data batch size
      */
     private int getCsvDataBatchSize() {
-        return Configuration.getAsInt(DIRIGIBLE_CSV_DATA_BATCH_SIZE, DIRIGIBLE_CSV_DATA_BATCH_SIZE_DEFAULT);
+        return DirigibleConfig.CSV_DATA_BATCH_SIZE.getIntValue();
     }
 
     /**
