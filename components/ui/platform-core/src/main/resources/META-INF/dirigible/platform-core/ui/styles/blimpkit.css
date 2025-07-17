@@ -859,6 +859,8 @@ ng-transclude:empty {
 }
 
 .bk-icon-tab-bar__item--buttons {
+  display: flex;
+  align-items: center;
   white-space: nowrap;
 }
 

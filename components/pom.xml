@@ -218,6 +218,7 @@
         <module>resources/resources-resources</module>
         <module>resources/resources-theme-blimpkit</module>
         <module>resources/resources-theme-classic</module>
+        <module>resources/resources-theme-mystic</module>
         <module>resources/resources-theme-high-contrast</module>
         <module>resources/resources-dashboard</module>
         <module>resources/resources-inbox</module>
@@ -1279,6 +1280,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-resources-theme-classic</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-theme-mystic</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

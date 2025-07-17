@@ -1,0 +1,17 @@
+# folders
+dist/
+.settings/
+target/
+derby/
+dirigible_local/
+
+# files
+.DS_Store
+.project
+.classpath
+*.bak
+*.class
+*.jar
+derby.log
+/bin/
+/target/
