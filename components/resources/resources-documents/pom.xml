@@ -1,21 +1,34 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-	<modelVersion>4.0.0</modelVersion>
-	
-	<parent>
-		<groupId>org.eclipse.dirigible</groupId>
-		<artifactId>dirigible-components-parent</artifactId>
-		<version>13.0.0-SNAPSHOT</version>
-		<relativePath>../../pom.xml</relativePath>
-	</parent>
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    
+    <parent>
+        <groupId>org.eclipse.dirigible</groupId>
+        <artifactId>dirigible-components-parent</artifactId>
+        <version>13.0.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
 
-	<name>Components - Resources - Documents</name>
-	<artifactId>dirigible-components-resources-documents</artifactId>
+    <name>Components - Resources - Documents</name>
+    <artifactId>dirigible-components-resources-documents</artifactId>
     <packaging>jar</packaging>
 
-	<properties>
-		<license.header.location>../../../licensing-header.txt</license.header.location>
-		<parent.pom.folder>../../../</parent.pom.folder>
-	</properties>
+    <dependencies>
+        <dependency>
+            <groupId>org.webjars.npm</groupId>
+            <artifactId>angular-file-upload</artifactId>
+            <version>${angular-file-upload.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.webjars.npm</groupId>
+            <artifactId>es5-shim</artifactId>
+            <version>${es5-shim.version}</version>
+        </dependency>
+    </dependencies>
+
+    <properties>
+        <license.header.location>../../../licensing-header.txt</license.header.location>
+        <parent.pom.folder>../../../</parent.pom.folder>
+    </properties>
 
 </project>

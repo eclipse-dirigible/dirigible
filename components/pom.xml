@@ -119,13 +119,9 @@
         <module>api/api-pdf</module>
         <module>api/api-junit</module>
 
-        <!-- Platform -->
-        <module>ui/platform-core</module>
-        <module>ui/platform-branding</module>
-        <module>ui/platform-about</module>
+        <!-- Platform UI -->
+        <module>ui/window-about</module>
         <module>ui/perspective-settings</module>
-
-        <!-- Platform IDE -->
         <module>ui/shell-ide</module>
         <module>ui/perspective-workbench</module>
         <module>ui/perspective-git</module>
@@ -212,14 +208,16 @@
         <module>ui/menu-help</module>
 
         <!-- Resources -->
+        <module>resources/platform-core</module>
+        <module>resources/platform-branding</module>
         <module>resources/resources-dev-tools</module>
         <module>resources/resources-flowable-libs</module>
         <module>resources/resources-mxgraph</module>
         <module>resources/resources-resources</module>
         <module>resources/resources-theme-blimpkit</module>
         <module>resources/resources-theme-classic</module>
-        <module>resources/resources-theme-mystic</module>
         <module>resources/resources-theme-high-contrast</module>
+        <module>resources/resources-theme-mystic</module>
         <module>resources/resources-dashboard</module>
         <module>resources/resources-inbox</module>
         <module>resources/resources-documents</module>
@@ -267,6 +265,7 @@
         <module>group/group-engines</module>
         <module>group/group-ide</module>
         <module>group/group-resources-core</module>
+        <module>group/group-resources-dev</module>
         <module>group/group-resources</module>
         <module>group/group-ui</module>
         <module>group/group-templates</module>
@@ -454,7 +453,19 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-group-resources</artifactId>
+                <artifactId>dirigible-components-group-resources-ui</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-group-resources-dev</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-group-resources-core</artifactId>
                 <version>${project.version}</version>
                 <type>pom</type>
             </dependency>
@@ -722,17 +733,7 @@
 
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-ui-platform-core</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-ui-platform-branding</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-ui-platform-about</artifactId>
+                <artifactId>dirigible-components-ui-window-about</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -1163,12 +1164,7 @@
                 <version>${project.version}</version>
             </dependency>
 
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-group-resources-core</artifactId>
-                <version>${project.version}</version>
-                <type>pom</type>
-            </dependency>
+            <!-- Resources Core -->
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-resources-flowable-libs</artifactId>
@@ -1177,6 +1173,40 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-resources-mxgraph</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-karavan-libs</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Resources Dev -->
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-dev-tools</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Resources -->
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-platform-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-platform-branding</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-resources</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-locale</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -1196,12 +1226,22 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-resources-karavan-libs</artifactId>
+                <artifactId>dirigible-components-resources-theme-blimpkit</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-resources-locale</artifactId>
+                <artifactId>dirigible-components-resources-theme-classic</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-theme-high-contrast</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-theme-mystic</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -1259,52 +1299,6 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-api-cache</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-resources-dev-tools</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-resources-resources</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-resources-theme-blimpkit</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-resources-theme-classic</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-resources-theme-mystic</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-resources-theme-high-contrast</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-ui-core</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-ui-about</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-ui-branding</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

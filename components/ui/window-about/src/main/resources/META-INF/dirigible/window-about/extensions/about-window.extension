@@ -1,0 +1,5 @@
+{
+    "module": "window-about/configs/about-window.js",
+    "extensionPoint": "platform-windows",
+    "description": "About window"
+}

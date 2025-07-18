@@ -17,15 +17,7 @@
 
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-ui-platform-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-ui-platform-branding</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-ui-platform-about</artifactId>
+            <artifactId>dirigible-components-ui-window-about</artifactId>
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
@@ -72,10 +64,10 @@
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-ui-perspective-processes</artifactId>
         </dependency>
-		<dependency>
-			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-ui-settings-locale</artifactId>
-		</dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ui-settings-locale</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-ui-view-welcome</artifactId>
@@ -363,10 +355,10 @@
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-ui-menu-csv</artifactId>
         </dependency>
-		<dependency>
-			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-ui-menu-help</artifactId>
-		</dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ui-menu-help</artifactId>
+        </dependency>
 
     </dependencies>
 
