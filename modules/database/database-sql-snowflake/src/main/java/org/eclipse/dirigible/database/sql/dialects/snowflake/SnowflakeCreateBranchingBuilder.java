@@ -34,7 +34,7 @@ public class SnowflakeCreateBranchingBuilder extends CreateBranchingBuilder {
      */
     @Override
     public SnowflakeCreateTableBuilder table(String table) {
-        return new SnowflakeCreateTableBuilder(this.getDialect(), table, ISqlDialect.KEYWORD_HYBRID);
+        return new SnowflakeCreateTableBuilder(this.getDialect(), table);
     }
 
     /**

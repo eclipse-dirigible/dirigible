@@ -27,8 +27,16 @@ public class SnowflakeCreateTableBuilder extends CreateTableBuilder<SnowflakeCre
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(SnowflakeCreateTableBuilder.class);
 
+    // empty type means permanent as described here
+    // https://docs.snowflake.com/en/sql-reference/sql/create-table
+    private static final String DEFAULT_TABLE_TYPE = "";
+
     /** The table type. */
-    private String tableType = "";
+    private final String tableType;
+
+    public SnowflakeCreateTableBuilder(ISqlDialect dialect, String table) {
+        this(dialect, table, DEFAULT_TABLE_TYPE);
+    }
 
     /**
      * Instantiates a new h 2 create table builder.
@@ -110,22 +118,22 @@ public class SnowflakeCreateTableBuilder extends CreateTableBuilder<SnowflakeCre
     @Override
     protected void generateTable(StringBuilder sql) {
         String tableName = encapsulate(this.getTable(), true);
-        String tableType = Configuration.get("SNOWFLAKE_DEFAULT_TABLE_TYPE", KEYWORD_HYBRID);
+        String determinedTableType = Configuration.get("SNOWFLAKE_DEFAULT_TABLE_TYPE", DEFAULT_TABLE_TYPE);
 
         if (this.tableType.equalsIgnoreCase(KEYWORD_HYBRID)) {
-            tableType = KEYWORD_HYBRID;
+            determinedTableType = KEYWORD_HYBRID;
         } else if (this.tableType.equalsIgnoreCase(KEYWORD_DYNAMIC)) {
-            tableType = KEYWORD_DYNAMIC;
+            determinedTableType = KEYWORD_DYNAMIC;
         } else if (this.tableType.equalsIgnoreCase(KEYWORD_EVENT)) {
-            tableType = KEYWORD_EVENT;
+            determinedTableType = KEYWORD_EVENT;
         } else if (this.tableType.equalsIgnoreCase(KEYWORD_EXTERNAL)) {
-            tableType = KEYWORD_EXTERNAL;
+            determinedTableType = KEYWORD_EXTERNAL;
         } else if (this.tableType.equalsIgnoreCase(KEYWORD_ICEBERG)) {
-            tableType = KEYWORD_ICEBERG;
+            determinedTableType = KEYWORD_ICEBERG;
         }
 
         sql.append(SPACE)
-           .append(tableType)
+           .append(determinedTableType)
            .append(SPACE)
            .append(KEYWORD_TABLE)
            .append(SPACE)
