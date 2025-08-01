@@ -38,6 +38,7 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.text.NumberFormat;
 import java.text.ParseException;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
@@ -511,7 +512,7 @@ public class CsvProcessor {
                 }
             }
             throw new IllegalArgumentException(
-                    "Unable to parse [" + input + "] to big decimal using the default locale and  " + COMMON_LOCALES, ex);
+                    "Unable to parse [" + input + "] to big decimal using the default locale and  " + Arrays.toString(COMMON_LOCALES), ex);
         }
     }
 
