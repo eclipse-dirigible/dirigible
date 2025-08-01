@@ -22,8 +22,16 @@ import java.util.regex.Pattern;
  */
 public abstract class AbstractSqlBuilder implements ISqlBuilder {
 
+    /**
+     * The Regex find the content between single quotes.
+     */
+    private static final Pattern contentBetweenSingleQuotes = Pattern.compile("'([^']*?)'");
     /** The dialect. */
     private final ISqlDialect dialect;
+    /** The column pattern. */
+    private final Pattern columnPattern = Pattern.compile("^(?![0-9]*$)[a-zA-Z0-9_#$]+$");
+    /** The numeric pattern. */
+    private final Pattern numericPattern = Pattern.compile("-?\\d+(\\.\\d+)?");
 
     /**
      * Instantiates a new abstract sql builder.
@@ -32,15 +40,6 @@ public abstract class AbstractSqlBuilder implements ISqlBuilder {
      */
     protected AbstractSqlBuilder(ISqlDialect dialect) {
         this.dialect = dialect;
-    }
-
-    /**
-     * Gets the dialect.
-     *
-     * @return the dialect
-     */
-    protected ISqlDialect getDialect() {
-        return dialect;
     }
 
     /**
@@ -97,9 +96,6 @@ public abstract class AbstractSqlBuilder implements ISqlBuilder {
         return name;
     }
 
-    /** The column pattern. */
-    private final Pattern columnPattern = Pattern.compile("^(?![0-9]*$)[a-zA-Z0-9_#$]+$");
-
     /**
      * Gets the escape symbol.
      *
@@ -107,6 +103,15 @@ public abstract class AbstractSqlBuilder implements ISqlBuilder {
      */
     public char getEscapeSymbol() {
         return getDialect().getEscapeSymbol();
+    }
+
+    /**
+     * Gets the dialect.
+     *
+     * @return the dialect
+     */
+    protected ISqlDialect getDialect() {
+        return dialect;
     }
 
     /**
@@ -135,16 +140,6 @@ public abstract class AbstractSqlBuilder implements ISqlBuilder {
     }
 
     /**
-     * Encapsulate where.
-     *
-     * @param where the where
-     * @return the string
-     */
-    protected String encapsulateWhere(String where) {
-        return encapsulateMany(where, getEscapeSymbol());
-    }
-
-    /**
      * Encapsulate many.
      *
      * @param line the line
@@ -153,7 +148,7 @@ public abstract class AbstractSqlBuilder implements ISqlBuilder {
      */
     protected String encapsulateMany(String line, char escapeChar) {
         String lineWithoughContentBetweenSingleQuotes = String.join("", line.split(contentBetweenSingleQuotes.toString()));
-        String regex = "([^a-zA-Z0-9_#$::']+)'*\\1*";
+        String regex = "([^a-zA-Z0-9_#$::'/]+)'*\\1*";
         String[] words = lineWithoughContentBetweenSingleQuotes.split(regex);
         Set<String> wordsSet = new HashSet<>(Arrays.asList(words));
         Set<Set> functionsNames = getDialect().getFunctionsNames();
@@ -167,14 +162,6 @@ public abstract class AbstractSqlBuilder implements ISqlBuilder {
         }
         return line;
     }
-
-    /**
-     * The Regex find the content between single quotes.
-     */
-    private final Pattern contentBetweenSingleQuotes = Pattern.compile("'([^']*?)'");
-
-    /** The numeric pattern. */
-    private final Pattern numericPattern = Pattern.compile("-?\\d+(\\.\\d+)?");
 
     /**
      * Check whether the string is a number.
@@ -201,5 +188,15 @@ public abstract class AbstractSqlBuilder implements ISqlBuilder {
             return false;
         }
         return s.startsWith("'") || s.endsWith("'");
+    }
+
+    /**
+     * Encapsulate where.
+     *
+     * @param where the where
+     * @return the string
+     */
+    protected String encapsulateWhere(String where) {
+        return encapsulateMany(where, getEscapeSymbol());
     }
 }
