@@ -9,36 +9,40 @@
  */
 package org.eclipse.dirigible.components.data.csvim.domain;
 
-import java.util.List;
-
 import org.apache.commons.csv.CSVRecord;
 import org.eclipse.dirigible.components.data.management.domain.ColumnMetadata;
 import org.eclipse.dirigible.components.data.management.domain.TableMetadata;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.List;
 
 /**
  * The Class CsvRecord.
  */
 public class CsvRecord {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(CsvRecord.class);
+
     /**
      * The csv record.
      */
-    private CSVRecord csvRecord;
+    private final CSVRecord csvRecord;
 
     /**
      * The table metadata model.
      */
-    private TableMetadata table;
+    private final TableMetadata table;
 
     /**
      * The header names.
      */
-    private List<String> headerNames;
+    private final List<String> headerNames;
 
     /**
      * The distinguish empty from null.
      */
-    private boolean distinguishEmptyFromNull;
+    private final boolean distinguishEmptyFromNull;
 
     /**
      * The pk column name.
@@ -66,6 +70,21 @@ public class CsvRecord {
     }
 
     /**
+     * Gets the csv record pk value.
+     *
+     * @return the csv record pk value
+     */
+    public String getCsvRecordPkValue() {
+        if (csvRecordPkValue == null && headerNames.size() > 0) {
+            csvRecordPkValue = getCsvValueForColumn(getPkColumnName());
+        } else if (csvRecordPkValue == null) {
+            csvRecordPkValue = csvRecord.get(0);
+        }
+
+        return csvRecordPkValue;
+    }
+
+    /**
      * Gets the csv value for column.
      *
      * @param columnName the column name
@@ -77,6 +96,13 @@ public class CsvRecord {
             if (csvValueIndex == -1) {
                 return null;
             }
+
+            if (!csvRecord.isSet(csvValueIndex)) {
+                LOGGER.debug("Missing value with index [{}] for column [{}] in csv record {}. Will return null.", csvValueIndex, columnName,
+                        csvRecord);
+                return null;
+            }
+
             return csvRecord.get(csvValueIndex);
         }
 
@@ -99,21 +125,6 @@ public class CsvRecord {
         }
 
         return pkColumnName;
-    }
-
-    /**
-     * Gets the csv record pk value.
-     *
-     * @return the csv record pk value
-     */
-    public String getCsvRecordPkValue() {
-        if (csvRecordPkValue == null && headerNames.size() > 0) {
-            csvRecordPkValue = getCsvValueForColumn(getPkColumnName());
-        } else if (csvRecordPkValue == null) {
-            csvRecordPkValue = csvRecord.get(0);
-        }
-
-        return csvRecordPkValue;
     }
 
     /**

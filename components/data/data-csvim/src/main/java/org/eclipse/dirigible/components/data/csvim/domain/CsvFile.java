@@ -65,6 +65,10 @@ public class CsvFile extends Artefact {
     @Expose
     private Boolean header;
 
+    @Column(name = "CSV_FILE_TRIM", columnDefinition = "BOOLEAN")
+    @Expose
+    private Boolean trim;
+
     /**
      * The use header names.
      */
@@ -108,7 +112,6 @@ public class CsvFile extends Artefact {
     @Column(name = "CSV_FILE_UPSERT", columnDefinition = "boolean", nullable = false)
     @Expose
     private Boolean upsert = true; // default true
-
     /**
      * The csvim.
      */
@@ -189,6 +192,14 @@ public class CsvFile extends Artefact {
      */
     public CsvFile() {
 
+    }
+
+    public Boolean getTrim() {
+        return trim;
+    }
+
+    public void setTrim(Boolean trim) {
+        this.trim = trim;
     }
 
     /**

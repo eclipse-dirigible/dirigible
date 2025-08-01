@@ -128,7 +128,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
     public SelectBuilder from(String table, String alias) {
         logger.trace("from: [{}], alias: [{}]", table, alias);
         StringBuilder snippet = new StringBuilder();
-        snippet.append(encapsulate(table));
+        snippet.append(encapsulate(table, true));
         if (alias != null) {
             snippet.append(SPACE)
                    .append(KEYWORD_AS)

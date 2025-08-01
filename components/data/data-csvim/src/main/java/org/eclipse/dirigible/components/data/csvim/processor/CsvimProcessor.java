@@ -137,8 +137,7 @@ public class CsvimProcessor {
      *
      * @param csvFile the csv file
      * @param content the content
-     * @param dataSourceName the dataSourceName, if a null is passed, the default DataSource will be
-     *        used
+     * @param dataSourceName the dataSourceName, if a null is passed, the default DataSource will be used
      * @throws Exception the exception
      */
     public void process(CsvFile csvFile, InputStream content, String dataSourceName) throws Exception {
@@ -306,10 +305,10 @@ public class CsvimProcessor {
      */
     private CSVFormat createCSVFormat(CsvFile csvFile) throws Exception {
         if (csvFile.getDelimField() != null && (!csvFile.getDelimField()
-                                                        .equals(",")
-                && !csvFile.getDelimField()
-                           .equals(";"))) {
-            String errorMessage = "Only ';' or ',' characters are supported as delimiters for CSV files.";
+                                                        .equals(",") && !csvFile.getDelimField()
+                                                                                .equals(";") && !csvFile.getDelimField()
+                                                                                                        .equals("\t"))) {
+            String errorMessage = "Only ';', ',' or tab characters are supported as delimiters for CSV files.";
             CsvimUtils.logProcessorErrors(errorMessage, ERROR_TYPE_PROCESSOR, csvFile.getFile(), CsvFile.ARTEFACT_TYPE, MODULE);
             throw new Exception(errorMessage);
         }
@@ -320,10 +319,12 @@ public class CsvimProcessor {
             throw new Exception(errorMessage);
         }
 
-        char delimiter = Objects.isNull(csvFile.getDelimField()) ? ','
+        char delimiter = Objects.isNull(csvFile.getDelimField())
+                ? ','
                 : csvFile.getDelimField()
                          .charAt(0);
-        char quote = Objects.isNull(csvFile.getDelimEnclosing()) ? '"'
+        char quote = Objects.isNull(csvFile.getDelimEnclosing())
+                ? '"'
                 : csvFile.getDelimEnclosing()
                          .charAt(0);
         CSVFormat csvFormat = CSVFormat.newFormat(delimiter)
@@ -334,6 +335,10 @@ public class CsvimProcessor {
         boolean useHeader = !Objects.isNull(csvFile.getHeader()) && csvFile.getHeader();
         if (useHeader) {
             csvFormat = csvFormat.withFirstRecordAsHeader();
+        }
+        boolean trim = !Objects.isNull(csvFile.getTrim()) && csvFile.getTrim();
+        if (trim) {
+            csvFormat = csvFormat.withTrim(trim);
         }
 
         return csvFormat;
@@ -509,7 +514,7 @@ public class CsvimProcessor {
         boolean exists = false;
         SelectBuilder selectBuilder = new SelectBuilder(SqlFactory.deriveDialect(connection));
         String sql = selectBuilder.distinct()
-                                  .column("1 " + pkNameForCSVRecord)
+                                  .column("1")
                                   .from(tableName)
                                   .schema(schema)
                                   .where(pkNameForCSVRecord + " = ?")

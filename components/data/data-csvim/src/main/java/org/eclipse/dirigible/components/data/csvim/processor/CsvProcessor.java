@@ -36,8 +36,11 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.text.NumberFormat;
+import java.text.ParseException;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 /**
@@ -60,6 +63,7 @@ public class CsvProcessor {
      * The Constant logger.
      */
     private static final Logger logger = LoggerFactory.getLogger(CsvProcessor.class);
+    private static final Locale[] COMMON_LOCALES = {Locale.GERMANY};
 
     /**
      * Insert.
@@ -406,7 +410,7 @@ public class CsvProcessor {
         } else if (Types.DECIMAL == DataTypeUtils.getSqlTypeByDataType(dataType)
                 || Types.NUMERIC == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             value = numberize(value);
-            preparedStatement.setBigDecimal(paramIdx, createBigDecimal(value));
+            preparedStatement.setBigDecimal(paramIdx, parseBigDecimal(value));
         } else if (Types.NCLOB == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             preparedStatement.setString(paramIdx, sanitize(value));
         } else if (Types.BLOB == DataTypeUtils.getSqlTypeByDataType(dataType)
@@ -455,8 +459,10 @@ public class CsvProcessor {
 
     private static int parseInt(String value) {
         try {
-            return Integer.parseInt(value);
-        } catch (NumberFormatException ex) {
+            // use BigDecimal to support values in format like 30.000
+            BigDecimal bd = new BigDecimal(value);
+            return bd.intValueExact();
+        } catch (ArithmeticException | IllegalArgumentException ex) {
             throw new IllegalArgumentException("Failed to parse [" + value + "] to integer", ex);
         }
     }
@@ -489,11 +495,23 @@ public class CsvProcessor {
         return Boolean.parseBoolean(value);
     }
 
-    private static BigDecimal createBigDecimal(String value) {
+    private static BigDecimal parseBigDecimal(String input) {
         try {
-            return new BigDecimal(value);
+            // try with default US-style number format
+            return new BigDecimal(input);
         } catch (NumberFormatException ex) {
-            throw new IllegalArgumentException("Failed to create big decimal from  [" + value + "]", ex);
+            for (Locale locale : COMMON_LOCALES) {
+                try {
+                    NumberFormat nf = NumberFormat.getInstance(locale);
+                    Number parsed = nf.parse(input);
+                    return new BigDecimal(parsed.toString());
+                } catch (ParseException parseEx) {
+                    logger.debug("Failed to parse [{}] as big decimal using locale [{}]", locale, parseEx);
+                    // Try next locale
+                }
+            }
+            throw new IllegalArgumentException(
+                    "Unable to parse [" + input + "] to big decimal using the default locale and  " + COMMON_LOCALES, ex);
         }
     }
 
