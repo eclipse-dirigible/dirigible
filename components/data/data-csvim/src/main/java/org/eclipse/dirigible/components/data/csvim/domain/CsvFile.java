@@ -14,8 +14,10 @@ import jakarta.persistence.*;
 import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.util.Set;
+import java.util.*;
 
 /**
  * The Class CsvFile.
@@ -28,7 +30,7 @@ public class CsvFile extends Artefact {
      * The Constant ARTEFACT_TYPE.
      */
     public static final String ARTEFACT_TYPE = "csvfile";
-
+    private static final Logger LOGGER = LoggerFactory.getLogger(CsvFile.class);
     /**
      * The id.
      */
@@ -36,78 +38,69 @@ public class CsvFile extends Artefact {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "CSV_FILE_ID", nullable = false)
     private Long id;
-
     /**
      * The table.
      */
     @Column(name = "CSV_FILE_TABLE", columnDefinition = "VARCHAR", nullable = false)
     @Expose
     private String table;
-
     /**
      * The schema.
      */
     @Column(name = "CSV_FILE_SCHEMA", columnDefinition = "VARCHAR", nullable = false)
     @Expose
     private String schema;
-
+    @Column(name = "CSV_FILE_LOCALE", columnDefinition = "VARCHAR", nullable = true)
+    @Expose
+    private String locale;
     /**
      * The file.
      */
     @Column(name = "CSV_FILE_FILE", columnDefinition = "VARCHAR", nullable = false)
     @Expose
     private String file;
-
     /**
      * The header.
      */
     @Column(name = "CSV_FILE_HEADER", columnDefinition = "BOOLEAN")
     @Expose
     private Boolean header;
-
     @Column(name = "CSV_FILE_TRIM", columnDefinition = "BOOLEAN")
     @Expose
     private Boolean trim;
-
     /**
      * The use header names.
      */
     @Column(name = "CSV_FILE_USE_HEADER_NAMES", columnDefinition = "BOOLEAN")
     @Expose
     private Boolean useHeaderNames;
-
     /**
      * The delim field.
      */
     @Column(name = "CSV_FILE_DELIM_FIELD", columnDefinition = "VARCHAR")
     @Expose
     private String delimField;
-
     /**
      * The delim enclosing.
      */
     @Column(name = "CSV_FILE_DELIM_ENCLOSING", columnDefinition = "VARCHAR")
     @Expose
     private String delimEnclosing;
-
     /**
      * The imported.
      */
     @Column(name = "CSV_FILE_IMPORTED", columnDefinition = "BOOLEAN", nullable = false)
     private boolean imported;
-
     /** The sequence. */
     @Column(name = "CSV_FILE_SEQUENCE", columnDefinition = "VARCHAR")
     @Expose
     private String sequence;
-
     /**
      * The distinguish empty from null.
      */
     @Column(name = "CSV_FILE_DISTINGUISH_EMPTY_FROM_NULL", columnDefinition = "BOOLEAN")
     @Expose
     private Boolean distinguishEmptyFromNull;
-
     /** The upsert. */
     @Column(name = "CSV_FILE_UPSERT", columnDefinition = "boolean", nullable = false)
     @Expose
@@ -192,6 +185,14 @@ public class CsvFile extends Artefact {
      */
     public CsvFile() {
 
+    }
+
+    public String getLocale() {
+        return locale;
+    }
+
+    public void setLocale(String locale) {
+        this.locale = locale;
     }
 
     public Boolean getTrim() {
@@ -436,5 +437,30 @@ public class CsvFile extends Artefact {
 
     public void setImported(boolean imported) {
         this.imported = imported;
+    }
+
+    public Optional<Locale> getParsedLocale() {
+        if (locale == null) {
+            return Optional.empty();
+        }
+        if (!hasValidLocaleConfigured()) {
+            throw new IllegalStateException("CSV file " + this + " has invalid locale value " + locale);
+        }
+        Locale parsedLocale = Locale.forLanguageTag(locale);
+        return Optional.of(parsedLocale);
+    }
+
+    public boolean hasValidLocaleConfigured() {
+        if (locale == null) {
+            LOGGER.debug("{} has no locale", this);
+            return false;
+        }
+        Locale parsedLocale = Locale.forLanguageTag(locale);
+        return Arrays.stream(Locale.getAvailableLocales())
+                     .anyMatch(availableLocale -> Objects.equals(availableLocale, parsedLocale));
+    }
+
+    public boolean hasConfiguredLocale() {
+        return locale != null;
     }
 }

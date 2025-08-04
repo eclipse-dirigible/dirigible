@@ -400,7 +400,7 @@ public class CsvimProcessor {
         try {
             List<CsvRecord> csvRecords = recordsToProcess.stream()
                                                          .map(e -> new CsvRecord(e, tableModel, headerNames,
-                                                                 csvFile.getDistinguishEmptyFromNull()))
+                                                                 csvFile.getDistinguishEmptyFromNull(), csvFile.getParsedLocale()))
                                                          .collect(Collectors.toList());
             csvProcessor.insert(connection, schema, tableModel, csvRecords, headerNames, csvFile);
         } catch (Exception e) {
@@ -429,7 +429,7 @@ public class CsvimProcessor {
         try {
             List<CsvRecord> csvRecords = recordsToProcess.stream()
                                                          .map(e -> new CsvRecord(e, tableModel, headerNames,
-                                                                 csvFile.getDistinguishEmptyFromNull()))
+                                                                 csvFile.getDistinguishEmptyFromNull(), csvFile.getParsedLocale()))
                                                          .collect(Collectors.toList());
             csvProcessor.update(connection, schema, tableModel, csvRecords, headerNames, pkName, csvFile);
         } catch (SQLException e) {

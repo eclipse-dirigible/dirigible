@@ -114,6 +114,7 @@ public class CsvimSynchronizer extends MultitenantBaseSynchronizer<Csvim, Long> 
     @Override
     protected List<Csvim> parseImpl(String location, byte[] content) throws ParseException {
         Csvim csvim = JsonHelper.fromJson(new String(content, StandardCharsets.UTF_8), Csvim.class);
+        validateCSVFiles(csvim);
         Configuration.configureObject(csvim);
         csvim.setLocation(location);
         csvim.setName(FilenameUtils.getBaseName(location));
@@ -149,6 +150,15 @@ public class CsvimSynchronizer extends MultitenantBaseSynchronizer<Csvim, Long> 
         } catch (Exception e) {
             logger.error("Failed to save CSVIM [{}], content: [{}]", csvim, new String(content), e);
             throw new ParseException(e.getMessage(), 0);
+        }
+    }
+
+    private void validateCSVFiles(Csvim csvim) throws ParseException {
+        List<CsvFile> csvFiles = csvim.getFiles();
+        for (CsvFile csvFile : csvFiles) {
+            if (csvFile.hasConfiguredLocale() && !csvFile.hasValidLocaleConfigured()) {
+                throw new ParseException("CSV file " + csvFile + " in CSVIM " + csvim + " has invalid locale: " + csvFile.getLocale(), 0);
+            }
         }
     }
 

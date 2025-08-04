@@ -38,10 +38,10 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.text.NumberFormat;
 import java.text.ParseException;
-import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -64,7 +64,6 @@ public class CsvProcessor {
      * The Constant logger.
      */
     private static final Logger logger = LoggerFactory.getLogger(CsvProcessor.class);
-    private static final Locale[] COMMON_LOCALES = {Locale.GERMANY};
 
     /**
      * Insert.
@@ -252,7 +251,8 @@ public class CsvProcessor {
             String columnType = columnMetadata.getType();
             String value = csvRecord.getCsvValueForColumn(columnName);
             int paramIdx = i + 1;
-            setPreparedStatementValue(csvRecord.isDistinguishEmptyFromNull(), statement, paramIdx, value, columnType);
+            setPreparedStatementValue(csvRecord.isDistinguishEmptyFromNull(), statement, paramIdx, value, columnType,
+                    csvRecord.getLocale());
         }
     }
 
@@ -273,7 +273,7 @@ public class CsvProcessor {
             String columnType = tableColumns.get(i)
                                             .getType();
 
-            setPreparedStatementValue(csvRecord.isDistinguishEmptyFromNull(), statement, i + 1, value, columnType);
+            setPreparedStatementValue(csvRecord.isDistinguishEmptyFromNull(), statement, i + 1, value, columnType, csvRecord.getLocale());
         }
     }
 
@@ -296,14 +296,14 @@ public class CsvProcessor {
             String columnType = tableColumns.get(i)
                                             .getType();
 
-            setPreparedStatementValue(csvRecord.isDistinguishEmptyFromNull(), statement, i, value, columnType);
+            setPreparedStatementValue(csvRecord.isDistinguishEmptyFromNull(), statement, i, value, columnType, csvRecord.getLocale());
         }
 
         String pkColumnType = tableColumns.get(0)
                                           .getType();
         int lastStatementPlaceholderIndex = existingCsvRecord.size();
 
-        setValue(statement, lastStatementPlaceholderIndex, pkColumnType, csvRecord.getCsvRecordPkValue());
+        setValue(statement, lastStatementPlaceholderIndex, pkColumnType, csvRecord.getCsvRecordPkValue(), csvRecord.getLocale());
     }
 
     /**
@@ -321,13 +321,13 @@ public class CsvProcessor {
             String value = existingCsvRecord.get(i);
             String columnType = tableColumns.get(i)
                                             .getType();
-            setPreparedStatementValue(csvRecord.isDistinguishEmptyFromNull(), statement, i, value, columnType);
+            setPreparedStatementValue(csvRecord.isDistinguishEmptyFromNull(), statement, i, value, columnType, csvRecord.getLocale());
         }
 
         String pkColumnType = tableColumns.get(0)
                                           .getType();
         int lastStatementPlaceholderIndex = existingCsvRecord.size();
-        setValue(statement, lastStatementPlaceholderIndex, pkColumnType, existingCsvRecord.get(0));
+        setValue(statement, lastStatementPlaceholderIndex, pkColumnType, existingCsvRecord.get(0), csvRecord.getLocale());
     }
 
     /**
@@ -341,11 +341,11 @@ public class CsvProcessor {
      * @throws SQLException the SQL exception
      */
     private void setPreparedStatementValue(Boolean distinguishEmptyFromNull, PreparedStatement statement, int paramIdx, String value,
-            String columnType) throws SQLException {
+            String columnType, Optional<Locale> locale) throws SQLException {
         if (StringUtils.isEmpty(value)) {
             value = distinguishEmptyFromNull ? "" : null;
         }
-        setValue(statement, paramIdx, columnType, value);
+        setValue(statement, paramIdx, columnType, value, locale);
     }
 
     /**
@@ -357,7 +357,8 @@ public class CsvProcessor {
      * @param value the value
      * @throws SQLException the SQL exception
      */
-    protected void setValue(PreparedStatement preparedStatement, int paramIdx, String dataType, String value) throws SQLException {
+    protected void setValue(PreparedStatement preparedStatement, int paramIdx, String dataType, String value, Optional<Locale> locale)
+            throws SQLException {
         logger.trace("setValue -> paramIdx: {}, dataType: {}, value: {}", paramIdx, dataType, value);
 
         // TODO consider to use org.eclipse.dirigible.components.api.db.params.ParametersSetter for reuse
@@ -388,30 +389,30 @@ public class CsvProcessor {
                 preparedStatement.setTimestamp(paramIdx, DateTimeUtils.parseDateTime(value));
             }
         } else if (Types.INTEGER == DataTypeUtils.getSqlTypeByDataType(dataType)) {
-            value = numberize(value);
+            value = numberize(value, locale);
             preparedStatement.setInt(paramIdx, parseInt(value));
         } else if (Types.TINYINT == DataTypeUtils.getSqlTypeByDataType(dataType)) {
-            value = numberize(value);
+            value = numberize(value, locale);
             preparedStatement.setByte(paramIdx, parseByte(value));
         } else if (Types.SMALLINT == DataTypeUtils.getSqlTypeByDataType(dataType)) {
-            value = numberize(value);
+            value = numberize(value, locale);
             preparedStatement.setShort(paramIdx, parseShort(value));
         } else if (Types.BIGINT == DataTypeUtils.getSqlTypeByDataType(dataType)) {
-            value = numberize(value);
+            value = numberize(value, locale);
             preparedStatement.setLong(paramIdx, createBigInteger(value).longValueExact());
         } else if (Types.REAL == DataTypeUtils.getSqlTypeByDataType(dataType)) {
-            value = numberize(value);
+            value = numberize(value, locale);
             preparedStatement.setFloat(paramIdx, parseFloat(value));
         } else if (Types.DOUBLE == DataTypeUtils.getSqlTypeByDataType(dataType)) {
-            value = numberize(value);
+            value = numberize(value, locale);
             preparedStatement.setDouble(paramIdx, parseDouble(value));
         } else if (Types.BOOLEAN == DataTypeUtils.getSqlTypeByDataType(dataType)
                 || Types.BIT == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             preparedStatement.setBoolean(paramIdx, parseBoolean(value));
         } else if (Types.DECIMAL == DataTypeUtils.getSqlTypeByDataType(dataType)
                 || Types.NUMERIC == DataTypeUtils.getSqlTypeByDataType(dataType)) {
-            value = numberize(value);
-            preparedStatement.setBigDecimal(paramIdx, parseBigDecimal(value));
+            value = numberize(value, locale);
+            preparedStatement.setBigDecimal(paramIdx, parseBigDecimal(value, locale));
         } else if (Types.NCLOB == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             preparedStatement.setString(paramIdx, sanitize(value));
         } else if (Types.BLOB == DataTypeUtils.getSqlTypeByDataType(dataType)
@@ -496,24 +497,18 @@ public class CsvProcessor {
         return Boolean.parseBoolean(value);
     }
 
-    private static BigDecimal parseBigDecimal(String input) {
+    private static BigDecimal parseBigDecimal(String input, Optional<Locale> locale) {
         try {
-            // try with default US-style number format
             return new BigDecimal(input);
         } catch (NumberFormatException ex) {
-            for (Locale locale : COMMON_LOCALES) {
-                try {
-                    NumberFormat nf = NumberFormat.getInstance(locale);
-                    Number parsed = nf.parse(input);
-                    return new BigDecimal(parsed.toString());
-                } catch (ParseException parseEx) {
-                    logger.debug("Failed to parse [{}] as big decimal using locale [{}]", locale, parseEx);
-                    // Try next locale
-                }
-            }
-            throw new IllegalArgumentException(
-                    "Unable to parse [" + input + "] to big decimal using the default locale and  " + Arrays.toString(COMMON_LOCALES), ex);
+            throw new IllegalArgumentException("Unable to parse [" + input + "] to big decimal", ex);
         }
+    }
+
+    private String formatLocalizedNumber(String number, Optional<Locale> locale) throws ParseException {
+        NumberFormat nf = NumberFormat.getInstance(locale.get());
+        Number parsed = nf.parse(number);
+        return parsed.toString();
     }
 
     /**
@@ -532,16 +527,18 @@ public class CsvProcessor {
         return value != null ? value.trim() : null;
     }
 
-    /**
-     * Numberize.
-     *
-     * @param value the value
-     * @return the string
-     */
-    private String numberize(String value) {
+    private String numberize(String value, Optional<Locale> locale) {
         if (StringUtils.isEmpty(value)) {
             value = "0";
         }
-        return value;
+
+        if (locale.isEmpty()) {
+            return value;
+        }
+        try {
+            return formatLocalizedNumber(value, locale);
+        } catch (ParseException ex) {
+            throw new IllegalArgumentException("Failed to format provided number [" + value + "] using locale [" + locale + "]", ex);
+        }
     }
 }

@@ -16,6 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 
 /**
  * The Class CsvRecord.
@@ -43,12 +45,11 @@ public class CsvRecord {
      * The distinguish empty from null.
      */
     private final boolean distinguishEmptyFromNull;
-
+    private final Optional<Locale> locale;
     /**
      * The pk column name.
      */
     private String pkColumnName;
-
     /**
      * The csv record pk value.
      */
@@ -63,10 +64,20 @@ public class CsvRecord {
      * @param distinguishEmptyFromNull the distinguish empty from null
      */
     public CsvRecord(CSVRecord csvRecord, TableMetadata table, List<String> headerNames, boolean distinguishEmptyFromNull) {
+        this(csvRecord, table, headerNames, distinguishEmptyFromNull, Optional.empty());
+    }
+
+    public CsvRecord(CSVRecord csvRecord, TableMetadata table, List<String> headerNames, boolean distinguishEmptyFromNull,
+            Optional<Locale> locale) {
         this.csvRecord = csvRecord;
         this.table = table;
         this.headerNames = headerNames;
         this.distinguishEmptyFromNull = distinguishEmptyFromNull;
+        this.locale = locale;
+    }
+
+    public Optional<Locale> getLocale() {
+        return locale;
     }
 
     /**
