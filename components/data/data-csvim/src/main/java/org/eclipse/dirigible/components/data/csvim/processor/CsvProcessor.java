@@ -412,7 +412,7 @@ public class CsvProcessor {
         } else if (Types.DECIMAL == DataTypeUtils.getSqlTypeByDataType(dataType)
                 || Types.NUMERIC == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             value = numberize(value, locale);
-            preparedStatement.setBigDecimal(paramIdx, parseBigDecimal(value, locale));
+            preparedStatement.setBigDecimal(paramIdx, parseBigDecimal(value));
         } else if (Types.NCLOB == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             preparedStatement.setString(paramIdx, sanitize(value));
         } else if (Types.BLOB == DataTypeUtils.getSqlTypeByDataType(dataType)
@@ -497,7 +497,7 @@ public class CsvProcessor {
         return Boolean.parseBoolean(value);
     }
 
-    private static BigDecimal parseBigDecimal(String input, Optional<Locale> locale) {
+    private static BigDecimal parseBigDecimal(String input) {
         try {
             return new BigDecimal(input);
         } catch (NumberFormatException ex) {
