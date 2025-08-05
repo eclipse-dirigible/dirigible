@@ -11,7 +11,6 @@ package org.eclipse.dirigible.components.data.sources.manager;
 
 import com.zaxxer.hikari.HikariConfig;
 import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.data.sources.config.DefaultDataSourceName;
 import org.eclipse.dirigible.components.data.sources.config.SystemDataSourceName;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
@@ -171,50 +170,7 @@ public class DataSourceInitializer implements DisposableBean {
         registerDataSourceBean(name, managedDataSource);
         DATASOURCES.put(name, managedDataSource);
 
-        if (dbType.isSnowflake()) {
-            // schedule data source destroy periodically since the oauth token
-            // expires after some time and data source have to be recreated
-            scheduleDataSourceDestroy(name, DirigibleConfig.SNOWFLAKE_DATA_SOURCE_LIFESPAN_SECONDS.getIntValue(), TimeUnit.SECONDS);
-        }
-
         return managedDataSource;
-    }
-
-    private void scheduleDataSourceDestroy(String name, int duration, TimeUnit unit) {
-        TimerTask repeatedTask = new TimerTask() {
-            public void run() {
-                removeInitializedDataSource(name);
-            }
-        };
-        long delayMillis = unit.toMillis(duration);
-        timer.schedule(repeatedTask, delayMillis);
-    }
-
-    /**
-     * Removes the initialized data source.
-     *
-     * @param dataSourceName the data source name
-     */
-    public void removeInitializedDataSource(String dataSourceName) {
-        String name = tenantDataSourceNameManager.getTenantDataSourceName(dataSourceName);
-        DirigibleDataSource removedDataSource = DATASOURCES.remove(name);
-        logger.info("DataSource [{}] with name [{}] will be removed if exists...", removedDataSource, name);
-        if (null != removedDataSource) {
-            removedDataSource.close();
-
-            destroySpringBean(name);
-
-            String transactionManagerBeanName = getTransactionManagerBeanName(name);
-            destroySpringBean(transactionManagerBeanName);
-            logger.info("DataSource [{}] with name [{}] was removed", removedDataSource, name);
-        }
-    }
-
-    private void destroySpringBean(String beanName) {
-        GenericApplicationContext genericAppContext = (GenericApplicationContext) applicationContext;
-        ConfigurableListableBeanFactory beanFactory = genericAppContext.getBeanFactory();
-        beanFactory.destroyBean(beanName);
-        logger.info("Spring bean with name [{}] was destroyed", beanName);
     }
 
     /**
@@ -306,5 +262,32 @@ public class DataSourceInitializer implements DisposableBean {
     public void clear() {
         Set<String> keys = new HashSet<>(DATASOURCES.keySet());
         keys.forEach(this::removeInitializedDataSource);
+    }
+
+    /**
+     * Removes the initialized data source.
+     *
+     * @param dataSourceName the data source name
+     */
+    public void removeInitializedDataSource(String dataSourceName) {
+        String name = tenantDataSourceNameManager.getTenantDataSourceName(dataSourceName);
+        DirigibleDataSource removedDataSource = DATASOURCES.remove(name);
+        logger.info("DataSource [{}] with name [{}] will be removed if exists...", removedDataSource, name);
+        if (null != removedDataSource) {
+            removedDataSource.close();
+
+            destroySpringBean(name);
+
+            String transactionManagerBeanName = getTransactionManagerBeanName(name);
+            destroySpringBean(transactionManagerBeanName);
+            logger.info("DataSource [{}] with name [{}] was removed", removedDataSource, name);
+        }
+    }
+
+    private void destroySpringBean(String beanName) {
+        GenericApplicationContext genericAppContext = (GenericApplicationContext) applicationContext;
+        ConfigurableListableBeanFactory beanFactory = genericAppContext.getBeanFactory();
+        beanFactory.destroyBean(beanName);
+        logger.info("Spring bean with name [{}] was destroyed", beanName);
     }
 }
