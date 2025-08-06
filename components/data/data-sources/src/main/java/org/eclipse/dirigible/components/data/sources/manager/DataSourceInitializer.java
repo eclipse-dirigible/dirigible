@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.data.sources.manager;
 
 import com.zaxxer.hikari.HikariConfig;
 import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.data.sources.config.DefaultDataSourceName;
 import org.eclipse.dirigible.components.data.sources.config.SystemDataSourceName;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
@@ -170,6 +171,12 @@ public class DataSourceInitializer implements DisposableBean {
         registerDataSourceBean(name, managedDataSource);
         DATASOURCES.put(name, managedDataSource);
 
+        if (dbType.isSnowflake()) {
+            // schedule data source destroy periodically since the oauth token
+            // expires after some time and data source have to be recreated
+            scheduleDataSourceDestroy(name, DirigibleConfig.SNOWFLAKE_DATA_SOURCE_LIFESPAN_SECONDS.getIntValue(), TimeUnit.SECONDS);
+        }
+
         return managedDataSource;
     }
 
@@ -238,10 +245,6 @@ public class DataSourceInitializer implements DisposableBean {
         registerSpringBean(name, dataSource);
     }
 
-    private String getTransactionManagerBeanName(String dataSourceName) {
-        return TRANSACTION_MANAGER_PREFIX + dataSourceName;
-    }
-
     private void registerSpringBean(String name, Object singletonObject) {
         GenericApplicationContext genericAppContext = (GenericApplicationContext) applicationContext;
         ConfigurableListableBeanFactory beanFactory = genericAppContext.getBeanFactory();
@@ -251,6 +254,27 @@ public class DataSourceInitializer implements DisposableBean {
             return;
         }
         beanFactory.registerSingleton(name, singletonObject);
+    }
+
+    private void scheduleDataSourceDestroy(String name, int duration, TimeUnit unit) {
+        logger.info("Scheduling destroy for data source [{}] after [{}] {}", name, duration, unit);
+        TimerTask repeatedTask = new TimerTask() {
+            public void run() {
+                if (!isInitialized(name)) {
+                    logger.info("Data source [{}] is not initialized. It will not be destroyed", name);
+                    return;
+                }
+                DirigibleDataSource dataSource = getInitializedDataSource(name);
+                if (dataSource.isInUse()) {
+                    logger.info("Data source [{}] is in use. Will reschedule its destroy.", name);
+                    scheduleDataSourceDestroy(name, duration, unit);
+                } else {
+                    removeInitializedDataSource(name);
+                }
+            }
+        };
+        long delayMillis = unit.toMillis(duration);
+        timer.schedule(repeatedTask, delayMillis);
     }
 
     @Override
@@ -282,6 +306,10 @@ public class DataSourceInitializer implements DisposableBean {
             destroySpringBean(transactionManagerBeanName);
             logger.info("DataSource [{}] with name [{}] was removed", removedDataSource, name);
         }
+    }
+
+    private String getTransactionManagerBeanName(String dataSourceName) {
+        return TRANSACTION_MANAGER_PREFIX + dataSourceName;
     }
 
     private void destroySpringBean(String beanName) {
