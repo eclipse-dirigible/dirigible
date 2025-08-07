@@ -24,6 +24,7 @@ import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Component
@@ -123,27 +124,81 @@ class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
 
     private IntegrationMessage executePromise(Value promise) {
         CountDownLatch latch = new CountDownLatch(1);
-        AtomicReference<IntegrationMessage> resultRef = new AtomicReference<>();
+        AtomicReference<Object> resultRef = new AtomicReference<>();
 
-        promise.invokeMember("then", (ProxyExecutable) args -> {
-            Value result = args[0];
-            if (!isIntegrationMessage(result)) {
-                throw new IllegalArgumentException("Unexpected values is returned from promise [" + promise + "] Expected return type ["
-                        + IntegrationMessage.class + "]. Returned result [" + result + "]");
-            }
-            resultRef.set(result.asHostObject());
-            latch.countDown();
-            return null;
-        });
-
+        // note that throwing an exceptions in these functions (onFulfilled, onRejected) will not be logged
+        // anywhere
+        // that's why the errors are propagated to the AtomicReference and thrown there
+        promise.invokeMember("then", onFulfilled(promise, resultRef, latch), onRejected(promise, resultRef, latch));
         waitForPromiseToResolve(promise, latch);
 
-        return resultRef.get();
+        return handlePromiseResult(promise, resultRef);
+    }
+
+    private ProxyExecutable onFulfilled(Value promise, AtomicReference<Object> resultRef, CountDownLatch latch) {
+        return args -> {
+            LOGGER.debug("Calling onFulfilled for promise {}", promise);
+            try {
+                Value result = args[0];
+                if (isIntegrationMessage(result)) {
+                    resultRef.set(result.asHostObject());
+                } else {
+                    IllegalArgumentException ex = new IllegalArgumentException("Unexpected values is returned from promise [" + promise
+                            + "] Expected return type [" + IntegrationMessage.class + "]. Returned result [" + result + "]");
+                    resultRef.set(ex);
+                }
+                return null;
+            } finally {
+                latch.countDown();
+            }
+        };
+    }
+
+    private ProxyExecutable onRejected(Value promise, AtomicReference<Object> resultRef, CountDownLatch latch) {
+        return args -> {
+            LOGGER.debug("Calling onRejected for promise {}", promise);
+            try {
+                Value reason = args[0];
+
+                if (!reason.isException()) {
+                    IllegalStateException ex =
+                            new IllegalStateException("Promise [" + promise + "] was rejected with non-exception reason: " + reason);
+                    resultRef.set(ex);
+                }
+
+                try {
+                    // the invocation of this method throws an exception with java script stack trace
+                    reason.throwException();
+                } catch (Throwable reasonException) {
+                    resultRef.set(reasonException);
+                }
+
+                return null;
+            } finally {
+                latch.countDown();
+            }
+        };
+    }
+
+    private IntegrationMessage handlePromiseResult(Value promise, AtomicReference<Object> resultRef) {
+        Object result = resultRef.get();
+        if (null == result) {
+            throw new IllegalStateException(
+                    "Missing integration message in the result of the execution of promise: " + promise + ". Check logs for more details.");
+        }
+        if (result instanceof IntegrationMessage integrationMessage) {
+            return integrationMessage;
+        }
+        if (result instanceof Exception ex) {
+            throw new IllegalStateException("An error occurred during execution of promise: " + promise, ex);
+        }
+
+        throw new IllegalStateException("An invalid result [" + result + "] returned by the execution of promise: " + promise);
     }
 
     private void waitForPromiseToResolve(Value promise, CountDownLatch latch) {
         try {
-            latch.await();
+            latch.await(15, TimeUnit.MINUTES);
         } catch (InterruptedException e) {
             throw new IllegalStateException("Failed to await for promise execution for: " + promise, e);
         }
