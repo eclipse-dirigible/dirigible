@@ -140,7 +140,7 @@
         <graalvm.version>24.2.1</graalvm.version>
 
         <!-- Commons -->
-        <commons.io>2.19.0</commons.io>
+        <commons.io>2.20.0</commons.io>
         <commons.lang3>3.18.0</commons.lang3>
         <commons.exec>1.5.0</commons.exec>
         <commons-csv.version>1.14.0</commons-csv.version>
