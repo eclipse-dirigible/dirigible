@@ -143,7 +143,7 @@ class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
                 if (isIntegrationMessage(result)) {
                     resultRef.set(result.asHostObject());
                 } else {
-                    IllegalArgumentException ex = new IllegalArgumentException("Unexpected values is returned from promise [" + promise
+                    IllegalArgumentException ex = new IllegalArgumentException("Unexpected value is returned from promise [" + promise
                             + "] Expected return type [" + IntegrationMessage.class + "]. Returned result [" + result + "]");
                     resultRef.set(ex);
                 }
