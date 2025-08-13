@@ -73,7 +73,7 @@
 	</dependencies>
 
 	<properties>
-		<cxf.version>4.1.2</cxf.version>
+		<cxf.version>4.1.3</cxf.version>
 		<license.header.location>../../../licensing-header.txt</license.header.location>
 		<parent.pom.folder>../../../</parent.pom.folder>
 	</properties>
