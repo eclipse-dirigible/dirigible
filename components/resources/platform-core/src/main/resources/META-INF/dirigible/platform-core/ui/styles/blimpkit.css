@@ -927,7 +927,7 @@ ng-transclude:empty {
   mask-image: linear-gradient(to right, transparent, black 1rem, black calc(100% - 1rem), transparent 100%);
 }
 
-/* input, step input and select additions */
+/* input, step input, combobox and select additions */
 
 .fd-input[type="color"] {
   padding: 0;
@@ -967,6 +967,10 @@ div.fd-input-group[aria-readonly="true"],
 div.fd-input-group[readonly] {
   pointer-events: none;
   --sapField_BorderStyle: dashed;
+}
+
+div.fd-popover__body--dropdown[aria-hidden="true"] {
+  display: none;
 }
 
 /* Tile additions */

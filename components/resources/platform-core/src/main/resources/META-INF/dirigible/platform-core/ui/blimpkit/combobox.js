@@ -102,11 +102,12 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
             scope.checkboxIds = {};
             scope.bodyExpanded = false;
 
-            scope.onControllClick = () => {
-                scope.bodyExpanded = !scope.bodyExpanded;
-                if (scope.bodyExpanded) {
+            scope.onControlClick = () => {
+                if (!scope.bodyExpanded) {
+                    scope.setDefaultSize();
                     element.find('input').focus();
                 }
+                scope.bodyExpanded = !scope.bodyExpanded;
             };
 
             scope.closeDropdown = () => {
@@ -114,7 +115,10 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
             };
 
             scope.openDropdown = () => {
-                scope.bodyExpanded = true;
+                if (!scope.bodyExpanded) {
+                    scope.setDefaultSize();
+                    scope.bodyExpanded = true;
+                }
             };
 
             scope.isBodyExpanded = () => {
@@ -277,12 +281,12 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
                 scope.filteredDropdownItems = items || [];
             });
 
-            scope.setDefault = () => {
+            scope.setDefaultSize = () => {
                 const rect = element[0].getBoundingClientRect();
                 scope.defaultHeight = $window.innerHeight - rect.bottom;
             };
             function resizeEvent() {
-                scope.$apply(function () { scope.setDefault() });
+                scope.$apply(scope.setDefaultSize);
             }
             $window.addEventListener('resize', resizeEvent);
             function cleanUp() {
@@ -292,12 +296,6 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
                 if (ngModel && scope.multiSelect) collectionWatch();
             }
             scope.$on('$destroy', cleanUp);
-            const contentLoaded = scope.$watch('$viewContentLoaded', () => {
-                $timeout(() => {
-                    scope.setDefault();
-                    contentLoaded();
-                }, 0);
-            });
         },
         template: `<div class="fd-popover" ng-keydown="onKeyDown($event)">
             <div class="fd-popover__control" ng-attr-disabled="{{isDisabled === true}}" ng-attr-aria-disabled="{{isDisabled === true}}" aria-expanded="{{ isBodyExpanded() }}" aria-haspopup="{{isReadonly ? 'false' : 'true'}}" aria-controls="{{ bodyId }}" ng-readonly="isReadonly">
@@ -309,7 +307,7 @@ blimpkit.directive('bkComboboxInput', function (uuid, classNames, $window, $time
                     </bk-tokenizer>
                     <bk-input ng-if="!multiSelect" ng-attr-id="{{ inputId }}" type="text" autocomplete="off" placeholder="{{ placeholder }}" ng-focus="openDropdown()" ng-change="onInputChange()" ng-model="search.term" tabindex="0" ng-readonly="isReadonly"></bk-input>
                     <bk-input-group-addon>
-                        <bk-button class="fd-select__button" glyph="sap-icon--navigation-down-arrow" state="${ButtonStates.Transparent}" ng-disabled="isDisabled" ng-click="onControllClick()" aria-label="{{btnAriaLabel}}" aria-controls="{{ bodyId }}" aria-haspopup="true"></bk-button>
+                        <bk-button class="fd-select__button" glyph="sap-icon--navigation-down-arrow" state="${ButtonStates.Transparent}" ng-disabled="isDisabled" ng-click="onControlClick()" aria-label="{{btnAriaLabel}}" aria-controls="{{ bodyId }}" aria-haspopup="true"></bk-button>
                     </bk-input-group-addon>
                 </bk-input-group>
                 <bk-input ng-if="isReadonly" ng-attr-id="{{ inputId }}" type="text" autocomplete="off" placeholder="{{ placeholder }}" ng-model="search.term" tabindex="0" aria-readonly="true" readonly></bk-input>
