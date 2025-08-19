@@ -9,23 +9,10 @@
  */
 package org.eclipse.dirigible.components.engine.cms;
 
-import java.io.IOException;
+import java.io.InputStream;
 
-/**
- * The Interface CmisDocument.
- */
-public interface CmisDocument extends CmisObject {
-    /**
-     * Returns the Path of this CmisDocument.
-     *
-     * @return the path
-     */
-    String getPath();
+public interface CmisObjectFactory {
 
-    /**
-     * Returns the CmisContentStream representing the contents of this CmisDocument.
-     *
-     * @return Content Stream
-     */
-    CmisContentStream getContentStream() throws IOException;
+    CmisContentStream createContentStream(String filename, long length, String mimetype, InputStream inputStream);
+
 }
