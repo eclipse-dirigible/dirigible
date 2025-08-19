@@ -9,12 +9,14 @@
  */
 package org.eclipse.dirigible.components.engine.cms.internal.repository;
 
+import org.eclipse.dirigible.components.engine.cms.CmisObjectFactory;
+
 import java.io.InputStream;
 
 /**
  * A factory for creating Object objects.
  */
-public class CmisInternalObjectFactory {
+public class CmisInternalObjectFactory implements CmisObjectFactory {
 
     /** The session. */
     private final CmisInternalSession session;
@@ -38,6 +40,7 @@ public class CmisInternalObjectFactory {
      * @param inputStream the input stream
      * @return the content stream
      */
+    @Override
     public CmisInternalContentStream createContentStream(String filename, long length, String mimetype, InputStream inputStream) {
         return new CmisInternalContentStream(filename, length, mimetype, inputStream);
     }
