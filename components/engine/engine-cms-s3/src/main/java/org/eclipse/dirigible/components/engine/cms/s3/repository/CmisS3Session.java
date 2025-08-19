@@ -27,6 +27,7 @@ public class CmisS3Session implements CmisSession {
      *
      * @return Repository Info
      */
+    @Override
     public CmisS3RepositoryInfo getRepositoryInfo() {
         return new CmisS3RepositoryInfo(this);
     }
@@ -36,6 +37,7 @@ public class CmisS3Session implements CmisSession {
      *
      * @return Object Factory
      */
+    @Override
     public CmisS3ObjectFactory getObjectFactory() {
         return new CmisS3ObjectFactory();
     }
@@ -45,7 +47,7 @@ public class CmisS3Session implements CmisSession {
      *
      * @return CmisS3Folder
      */
-
+    @Override
     public CmisS3Folder getRootFolder() {
         return new CmisS3Folder(ROOT, ROOT, true);
     }
