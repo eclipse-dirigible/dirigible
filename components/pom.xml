@@ -49,6 +49,7 @@
         <module>data/data-import</module>
         <module>data/data-anonymize</module>
         <module>data/data-source-snowpark</module>
+        <module>data/data-processes</module>
 
         <!-- Engines -->
         <module>engine/engine-javascript</module>
@@ -684,6 +685,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-data-export</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-data-processes</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

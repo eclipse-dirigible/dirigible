@@ -40,6 +40,8 @@ public interface ApplicationListenersOrder {
         /** The jobs initializer. */
         int JOBS_INITIALIZER = 50;
 
+        int PROCESSES_INITIALIZER = 60;
+
         int TENANTS_INITIALIZER = 1000;
 
     }
