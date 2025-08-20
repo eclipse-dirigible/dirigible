@@ -175,6 +175,12 @@ class Session {
 		const folder = this.createFolder(location);
 		return folder.createDocument(properties, contentStream, versioningState);
 	}
+
+	public createDocument(location: string, properties: { [key: string]: any }, contentStream: ContentStream): Document {
+		const folder = this.createFolder(location);
+		return folder.createDocument(properties, contentStream);
+	}
+
 }
 
 /**
