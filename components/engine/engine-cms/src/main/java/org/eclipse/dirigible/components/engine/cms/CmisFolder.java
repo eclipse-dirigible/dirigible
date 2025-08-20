@@ -46,6 +46,16 @@ public interface CmisFolder extends CmisObject {
             throws IOException;
 
     /**
+     * Creates a new document under this folder.
+     *
+     * @param properties the properties
+     * @param contentStream the content stream
+     * @return CmisDocument
+     * @throws IOException IO Exception
+     */
+    CmisDocument createDocument(Map<String, String> properties, CmisContentStream contentStream) throws IOException;
+
+    /**
      * Creates a new folder under this folder.
      *
      * @param properties the properties

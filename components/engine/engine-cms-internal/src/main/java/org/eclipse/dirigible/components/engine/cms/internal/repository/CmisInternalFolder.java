@@ -148,6 +148,11 @@ public class CmisInternalFolder extends CmisInternalObject implements CmisFolder
     @Override
     public CmisInternalDocument createDocument(Map<String, String> properties, CmisContentStream contentStream,
             VersioningState versioningState) throws IOException {
+        return createDocument(properties, contentStream);
+    }
+
+    @Override
+    public CmisInternalDocument createDocument(Map<String, String> properties, CmisContentStream contentStream) throws IOException {
         String name = properties.get(CmisConstants.NAME);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         IOUtils.copy(contentStream.getStream(), out);

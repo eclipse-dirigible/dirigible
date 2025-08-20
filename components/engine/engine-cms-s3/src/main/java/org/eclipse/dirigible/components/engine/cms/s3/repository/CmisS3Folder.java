@@ -93,6 +93,11 @@ public class CmisS3Folder extends CmisS3Object implements CmisFolder {
     @Override
     public CmisS3Document createDocument(Map<String, String> properties, CmisContentStream contentStream, VersioningState versioningState)
             throws IOException {
+        return createDocument(properties, contentStream);
+    }
+
+    @Override
+    public CmisS3Document createDocument(Map<String, String> properties, CmisContentStream contentStream) throws IOException {
         String name = properties.get(CmisConstants.NAME);
         String folderName = this.getId() + name;
 
