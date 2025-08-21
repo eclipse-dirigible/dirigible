@@ -440,14 +440,14 @@ resultView.controller('DatabaseResultController', ($scope, $http, Dialogs, Statu
         $scope.tableName = data.tableName;
         const sqlCommand = 'SELECT * FROM "' + data.schemaName + '"' + '.' + '"' + data.tableName + '";\n';
         executeQuery(sqlCommand);
-        $http.get('/services/data/definition/' + selectedDatabase.name + '/' + $scope.schemaName + '/' + $scope.tableName)
+        $http.get('/services/data/definition/' + selectedDatabase.name + '/' + $scope.schemaName + '/' + btoa($scope.tableName))
             .then((response) => {
                 $scope.metadata = response.data; // Set the metadata once the response is received
                 const extractedKeys = extractSpecialAndPrimaryKeys($scope.metadata);
                 $scope.primaryKeyColumns = extractedKeys.primaryKeyColumns;
                 $scope.specialColumns = extractedKeys.specialColumns;
 
-                const url = `/services/js/view-databases/js/databaseTable.js/${selectedDatabase.name}/${$scope.schemaName}/${$scope.tableName}`;
+                const url = `/services/js/view-databases/js/databaseTable.js/${selectedDatabase.name}/${$scope.schemaName}/${btoa($scope.tableName)}`;
                 $http.get(url).then(populateResultView, (reject) => {
                     cleanScope();
                     console.error(reject);

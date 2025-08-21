@@ -1,6 +1,15 @@
 @charset "UTF-8";
-
-/*! * Fundamental Library Styles v0.38.0 * Copyright (c) 2024 SAP SE or an SAP affiliate company. * Licensed under Apache License 2.0 (https://github.com/SAP/fundamental-styles/blob/main/LICENSE) */
+/*
+ * Copyright (c) 2025 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v2.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ */
 :root {
     --btp-Blue1: #ebf8ff;
     --btp-Blue2: #d1efff;

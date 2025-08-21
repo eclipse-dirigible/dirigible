@@ -294,15 +294,22 @@ public class BpmProviderFlowable implements BpmProvider {
     /**
      * Correlates a message event to the process instance.
      *
-     * @param executionId the execution id
+     * @param processInstanceId the process instance id
      * @param messageName the name of the event
      * @param variables the variables to be passed with the event
      */
-    public void correlateMessageEvent(String executionId, String messageName, Map<String, Object> variables) {
-        flowableArtefactsValidator.validateExecutionId(executionId);
+    public void correlateMessageEvent(String processInstanceId, String messageName, Map<String, Object> variables) {
+        flowableArtefactsValidator.validateProcessInstanceId(processInstanceId);
 
         RuntimeService runtimeService = processEngine.getRuntimeService();
-        runtimeService.messageEventReceived(messageName, executionId, variables);
+
+        Execution execution = runtimeService.createExecutionQuery()
+                                            .messageEventSubscriptionName(messageName)
+                                            .processInstanceId(processInstanceId)
+                                            .executionTenantId(getTenantId())
+                                            .singleResult();
+
+        runtimeService.messageEventReceived(messageName, execution.getId(), variables);
     }
 
     public List<ProcessDefinition> getProcessDefinitions(Optional<String> key) {

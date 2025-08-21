@@ -767,8 +767,7 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 		}
 
 		jstreeWidget.jstree('delete_node', jstreeWidget.jstree(true).get_node(data.node.children[0]));
-
-		$http.get(databasesSvcUrl + $scope.selectedDatabase + '/' + $scope.selectedDatasource + '/' + schemaParent + '/' + tableParent.text + '?kind=' + tableParent.original.kind.toUpperCase())
+		$http.get(databasesSvcUrl + $scope.selectedDatabase + '/' + $scope.selectedDatasource + '/' + schemaParent + '/' + btoa(tableParent.text) + '?kind=' + tableParent.original.kind.toUpperCase())
 			.then((data) => {
 				data.data.columns.forEach((column) => {
 					expandColumn(parent, column);
@@ -858,7 +857,7 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 		}
 
 		jstreeWidget.jstree('delete_node', jstreeWidget.jstree(true).get_node(data.node.children[0]));
-		$http.get(databasesSvcUrl + $scope.selectedDatabase + '/' + $scope.selectedDatasource + '/' + schemaParent + '/' + tableParent.text)
+		$http.get(databasesSvcUrl + $scope.selectedDatabase + '/' + $scope.selectedDatasource + '/' + schemaParent + '/' + btoa(tableParent.text))
 			.then((data) => {
 				data.data.indices.forEach((index) => {
 					let nodeText = index.name;
@@ -885,7 +884,7 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 		}
 
 		jstreeWidget.jstree('delete_node', jstreeWidget.jstree(true).get_node(data.node.children[0]));
-		$http.get(databasesSvcUrl + $scope.selectedDatabase + '/' + $scope.selectedDatasource + '/' + schemaParent + '/' + tableParent.text)
+		$http.get(databasesSvcUrl + $scope.selectedDatabase + '/' + $scope.selectedDatasource + '/' + schemaParent + '/' + btoa(tableParent.text))
 			.then((data) => {
 				data.data.foreignKeys.forEach((foreignKey) => {
 					const nodeText = foreignKey.name;
@@ -1028,10 +1027,10 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 	$scope.runSQL = () => {
 		MessageHub.triggerEvent('database.sql.run');
 	};
-	
+
 	$scope.exportSQL = () => {
-			MessageHub.triggerEvent('database.sql.exporting');
-		};
+		MessageHub.triggerEvent('database.sql.exporting');
+	};
 
 	MessageHub.addMessageListener({
 		topic: 'view-db-explorer.refresh',

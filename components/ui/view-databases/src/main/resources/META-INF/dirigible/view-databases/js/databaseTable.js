@@ -11,6 +11,7 @@
  */
 import { Controller, Get, Post, Put, Delete, response } from "sdk/http";
 import { Query, Database, SQLBuilder, update } from "sdk/db";
+import { Base64 } from 'sdk/utils/base64';
 
 @Controller
 class CRUDService {
@@ -19,9 +20,10 @@ class CRUDService {
     getAllRows(_, ctx) {
         const { datasourceName, schemaName, tableName } = ctx.pathParameters;
         try {
+            const decodedTableName = String.fromCharCode.apply(null, Base64.decode(tableName));
             const escapeSymbol = this.getEscapeSymbol(datasourceName);
             const sqlQuery = `SELECT * 
-                FROM ${escapeSymbol}${schemaName}${escapeSymbol}.${escapeSymbol}${tableName}${escapeSymbol};
+                FROM ${escapeSymbol}${schemaName}${escapeSymbol}.${escapeSymbol}${decodedTableName}${escapeSymbol};
             `;
             return Query.execute(sqlQuery, undefined, datasourceName);
         } catch (error) {
@@ -39,9 +41,10 @@ class CRUDService {
         const placeholders = columns.map(() => "?");
 
         try {
+            const decodedTableName = String.fromCharCode.apply(null, Base64.decode(tableName));
             const escapeSymbol = this.getEscapeSymbol(datasourceName);
             const sqlQuery = `INSERT INTO
-                ${escapeSymbol}${schemaName}${escapeSymbol}.${escapeSymbol}${tableName}${escapeSymbol} 
+                ${escapeSymbol}${schemaName}${escapeSymbol}.${escapeSymbol}${decodedTableName}${escapeSymbol} 
                 (${columns.join(", ")})
                 VALUES (${placeholders.join(", ")});
             `;
@@ -70,6 +73,7 @@ class CRUDService {
         const columnValues = [];
 
         try {
+            const decodedTableName = String.fromCharCode.apply(null, Base64.decode(tableName));
             const escapeSymbol = this.getEscapeSymbol(datasourceName);
             Object.keys(data).forEach((key) => {
                 if (!primaryKey.includes(key)) {
@@ -84,7 +88,7 @@ class CRUDService {
             const parameters = columnValues.concat(keyValues);
 
             const sqlQuery = `UPDATE
-                ${escapeSymbol}${schemaName}${escapeSymbol}.${escapeSymbol}${tableName}${escapeSymbol}
+                ${escapeSymbol}${schemaName}${escapeSymbol}.${escapeSymbol}${decodedTableName}${escapeSymbol}
                 SET ${setClauses.join(", ")}
                 WHERE ${whereClauses.join(" AND ")};
             `;
@@ -111,6 +115,7 @@ class CRUDService {
         const parameters = [];
 
         try {
+            const decodedTableName = String.fromCharCode.apply(null, Base64.decode(tableName));
             const escapeSymbol = this.getEscapeSymbol(datasourceName);
             primaryKey.forEach((key) => {
                 whereClauses.push(`${escapeSymbol}${key}${escapeSymbol} = ?`);
@@ -118,7 +123,7 @@ class CRUDService {
             });
 
             const sqlQuery = `DELETE
-                FROM ${escapeSymbol}${schemaName}${escapeSymbol}.${escapeSymbol}${tableName}${escapeSymbol}
+                FROM ${escapeSymbol}${schemaName}${escapeSymbol}.${escapeSymbol}${decodedTableName}${escapeSymbol}
                 WHERE ${whereClauses.join(" AND ")};
             `;
 

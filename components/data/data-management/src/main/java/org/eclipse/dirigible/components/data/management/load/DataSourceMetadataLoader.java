@@ -93,13 +93,18 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
             DatabaseMetaData databaseMetadata = connection.getMetaData();
             try (ResultSet rs = databaseMetadata.getTables(null, schemaName, tableName, null)) {
                 if (rs.next()) {
-                    addColumns(databaseMetadata, connection, tableMetadata, schemaName);
-                    addPrimaryKeys(databaseMetadata, connection, tableMetadata, schemaName);
-                    addForeignKeys(databaseMetadata, connection, tableMetadata, schemaName);
-                    addIndices(databaseMetadata, connection, tableMetadata, schemaName);
-                    addTableType(databaseMetadata, connection, tableMetadata, schemaName);
+                    enhanceTableMetadata(schemaName, tableMetadata, connection, databaseMetadata);
                 } else {
-                    return null;
+                    String tableNameDecoded = new String(Base64.getDecoder()
+                                                               .decode(tableName));
+                    try (ResultSet rs2 = databaseMetadata.getTables(null, schemaName, tableNameDecoded, null)) {
+                        if (rs2.next()) {
+                            tableMetadata.setName(tableNameDecoded);
+                            enhanceTableMetadata(schemaName, tableMetadata, connection, databaseMetadata);
+                        } else {
+                            return null;
+                        }
+                    }
                 }
             }
         } catch (SQLException e) {
@@ -107,6 +112,15 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
         }
 
         return tableMetadata;
+    }
+
+    public void enhanceTableMetadata(String schemaName, Table tableMetadata, Connection connection, DatabaseMetaData databaseMetadata)
+            throws SQLException {
+        addColumns(databaseMetadata, connection, tableMetadata, schemaName);
+        addPrimaryKeys(databaseMetadata, connection, tableMetadata, schemaName);
+        addForeignKeys(databaseMetadata, connection, tableMetadata, schemaName);
+        addIndices(databaseMetadata, connection, tableMetadata, schemaName);
+        addTableType(databaseMetadata, connection, tableMetadata, schemaName);
     }
 
     /**
