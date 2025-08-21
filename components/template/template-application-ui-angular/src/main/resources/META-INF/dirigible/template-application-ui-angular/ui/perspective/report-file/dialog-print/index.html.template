@@ -15,20 +15,20 @@
 
     <body>
 		<bk-toolbar has-title="true">
-			<bk-toolbar-title>{{ '$projectName:defaults.reportTitle' | t:{'name':'$name'} }}</bk-toolbar-title>
+			<bk-toolbar-title>{{ '$projectName:${tprefix}.defaults.reportTitle' | t:{'name':'$t($projectName:${tprefix}.t.${tId})'}:'${label}' }}</bk-toolbar-title>
 		</bk-toolbar>
         <bk-scrollbar ng-hide="data == null">
             <table bk-table display-mode="compact" inner-borders="top" outer-borders="none">
                 <thead bk-table-header sticky="true">
                     <tr bk-table-row>
                 #foreach ($column in $columns)
-						<th bk-table-header-cell>${column.alias}</th>
+						<th bk-table-header-cell>{{ '$projectName:${tprefix}.t.${column.tId}' | t:'${column.label}' }}</th>
                 #end
                     </tr>
                 </thead>
                 <tbody bk-table-body>
                     <tr bk-table-row hoverable="true" ng-show="data.length == 0">
-                        <td bk-table-cell no-data="true">{{'$projectName:messages.noData' | t}}</td>
+                        <td bk-table-cell no-data="true">{{'$projectName:${tprefix}.messages.noData' | t}}</td>
                     </tr>
                     <tr bk-table-row hoverable="true" ng-repeat="next in data">
             #foreach ($column in $columns) 

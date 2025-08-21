@@ -7,7 +7,7 @@ const viewData = {
     id: '${name}-details',
     label: '${name}',
     translation: {
-        key: '$projectName:t.$dataName',
+        key: '$projectName:${tprefix}.t.$dataName',
     },
     path: '/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${masterEntity}/${name}/dialog-window/index.html',
     perspectiveName: '#if($hasReferencedProjection)${referencedProjectionPerspectiveName}#else${perspectiveName}#end'

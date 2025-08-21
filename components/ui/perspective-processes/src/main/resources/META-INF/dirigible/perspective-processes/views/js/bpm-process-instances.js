@@ -266,7 +266,7 @@ processInstances.controller('BpmProcessInstancesView', ($scope, $http, Notificat
             method: 'POST',
             url: `/services/bpm/bpm-processes/instance/${$scope.selected.instanceId}`,
             data: requestBody,
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Accept': 'text/plain', 'Content-Type': 'application/json' },
         }).then(() => {
             Notifications.show({
                 title: 'Action confirmation',
@@ -274,13 +274,13 @@ processInstances.controller('BpmProcessInstancesView', ($scope, $http, Notificat
                 type: 'positive',
             });
             $scope.reload();
-        }).catch((error) => {
+        }, (error) => {
             console.error('Error making POST request:', error);
             Dialogs.showAlert({
                 title: 'Action failed',
-                message: `${actionName} operation failed. Error message ${error.message}`,
+                message: `${actionName} operation failed.\n${error.data}`,
                 type: AlertTypes.Error,
-                preformatted: false,
+                preformatted: true,
             });
         });
     };

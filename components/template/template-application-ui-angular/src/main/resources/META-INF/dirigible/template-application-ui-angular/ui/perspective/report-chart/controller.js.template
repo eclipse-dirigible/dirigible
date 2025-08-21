@@ -69,7 +69,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 #if(!$property.dataPrimaryKey)
 						{
 #if($property.widgetLabel)
-							label: LocaleService.t('$projectName:t.$property.dataName', '${property.widgetLabel}'),
+							label: LocaleService.t('$projectName:${tprefix}.t.$property.dataName', '${property.widgetLabel}'),
 #else
 							label: '${property.name}',
 #end
@@ -87,8 +87,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 				}, (error) => {
 					const message = error.data ? error.data.message : '';
 					Dialogs.showAlert({
-						title: LocaleService.t('$projectName:t.${dataName}'),
-						message: LocaleService.t('$projectName:messages.error.unableToLF', { name: '$t($projectName:t.${dataName})', message: message }),
+						title: LocaleService.t('$projectName:${tprefix}.t.${dataName}'),
+						message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLF', { name: '$t($projectName:${tprefix}.t.${dataName})', message: message }),
 						type: AlertTypes.Error
 					});
 					console.error('EntityService:', error);
@@ -96,8 +96,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
 				Dialogs.showAlert({
-					title: LocaleService.t('$projectName:t.${dataName}'),
-					message: LocaleService.t('$projectName:messages.error.unableToCount', { name: '$t($projectName:t.${dataName})', message: message }),
+					title: LocaleService.t('$projectName:${tprefix}.t.${dataName}'),
+					message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToCount', { name: '$t($projectName:${tprefix}.t.${dataName})', message: message }),
 					type: AlertTypes.Error
 				});
 				console.error('EntityService:', error);
@@ -150,7 +150,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 			const message = error.data ? error.data.message : '';
 			Dialogs.showAlert({
 				title: '${property.name}',
-				message: LocaleService.t('$projectName:messages.error.unableToLoad', { message: message }),
+				message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLoad', { message: message }),
 				type: AlertTypes.Error
 			});
 		});
@@ -169,7 +169,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 			const message = error.data ? error.data.message : '';
 			Dialogs.showAlert({
 				title: '${property.name}',
-				message: LocaleService.t('$projectName:messages.error.unableToLoad', { message: message }),
+				message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLoad', { message: message }),
 				type: AlertTypes.Error
 			});
 		});

@@ -16,8 +16,8 @@
 
 	<body class="bk-vbox">
 		<bk-toolbar has-title="true">
-			<bk-toolbar-title>{{'$projectName:defaults.items' | t}} <span bk-object-status text="{{dataCount}}" inverted="true"></bk-toolbar-title>
-			<bk-button state="transparent" label="{{ '$projectName:defaults.filter' | t }}" ng-click="openFilter()"></bk-button>
+			<bk-toolbar-title>{{'$projectName:${tprefix}.defaults.items' | t}} <span bk-object-status text="{{dataCount}}" inverted="true"></bk-toolbar-title>
+			<bk-button state="transparent" label="{{ '$projectName:${tprefix}.defaults.filter' | t }}" ng-click="openFilter()"></bk-button>
 		</bk-toolbar>
 		<canvas id="myChart" ng-non-bindable></canvas>
 		<theme></theme>

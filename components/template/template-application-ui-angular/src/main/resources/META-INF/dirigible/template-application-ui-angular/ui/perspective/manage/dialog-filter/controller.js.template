@@ -8,7 +8,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale']).controlle
 	};
 
 	LocaleService.onInit(() => {
-		description = LocaleService.t('$projectName:defaults.description');
+		description = LocaleService.t('$projectName:${tprefix}.defaults.description');
 	});
 
 	let params = ViewParameters.get();

@@ -15,13 +15,13 @@
     <body class="bk-vbox">
         <bk-scrollbar class="bk-full-height">
             <bk-fieldset class="fd-padding-begin-end--sm" ng-form="formFieldset">
-                <bk-form-group label="{{ '$projectName:defaults.formHeadSelect' | t:{'name':'$t($projectName:t.${dataName})'} }}" name="entityForm" transclude-classes="fd-container fd-form-layout-grid-container">
+                <bk-form-group label="{{ '$projectName:${tprefix}.defaults.formHeadSelect' | t:{'name':'$t($projectName:${tprefix}.t.${dataName})'} }}" name="entityForm" transclude-classes="fd-container fd-form-layout-grid-container">
 #foreach ($property in $properties)
 #if(!$property.dataAutoIncrement)
 #if($property.widgetType == "DROPDOWN")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 	                        <bk-combobox-input input-id="id${property.name}"
@@ -33,8 +33,8 @@
 	                            ng-model="entity.${property.name}"
 	                            is-readonly="true"
 	                            dropdown-items="options${property.name}"
-	                            placeholder="{{ '$projectName:messages.inputSearch' | t:{'name':'$t($projectName:t.$property.dataName)'} }}"
-								btn-aria-label="{{ '$projectName:aria.showHide' | t:{'name':'${property.name}'} }}" list-aria-label="{{ '$projectName:aria.options' | t:{'name':'${property.name}'} }}">
+	                            placeholder="{{ '$projectName:${tprefix}.messages.inputSearch' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}"
+								btn-aria-label="{{ '$projectName:${tprefix}.aria.showHide' | t:{'name':'${property.name}'} }}" list-aria-label="{{ '$projectName:${tprefix}.aria.options' | t:{'name':'${property.name}'} }}">
 	                        </bk-combobox-input>
 	                    </div>
                     </bk-form-item>
@@ -43,13 +43,13 @@
                     	<div class="fd-col fd-col-md--2"></div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 							<bk-checkbox id="id${property.name}" compact="false" ng-required="${property.isRequiredProperty}" ng-readonly="true" ng-model="entity.${property.name}"></bk-checkbox>
-                        	<bk-checkbox-label for="id${property.name}" ng-required="${property.isRequiredProperty}">{{ '$projectName:t.$property.dataName' | t }}</bk-checkbox-label>
+                        	<bk-checkbox-label for="id${property.name}" ng-required="${property.isRequiredProperty}">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-checkbox-label>
                         </div>
                     </bk-form-item>
 #elseif($property.widgetType == "COLOR")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
 	                        <bk-input id="id${property.name}"
@@ -58,14 +58,14 @@
 	                            ng-model="entity.${property.name}"
 	                            ng-readonly="true"
 	                            type="color"
-	                            placeholder="{{ '$projectName:messages.inputEnter' | t:{'name':'$t($projectName:t.$property.dataName)'} }}">
+	                            placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
 	                        </bk-input>
 	                    </div>
                     </bk-form-item>
 #elseif($property.widgetType == "NUMBER")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
 	                        <bk-step-input input-id="id${property.name}"
@@ -74,14 +74,14 @@
 								ng-required="${property.isRequiredProperty}"
 								ng-model="entity.${property.name}"
 								is-readonly="true"
-								placeholder="{{ '$projectName:messages.inputEnter' | t:{'name':'$t($projectName:t.$property.dataName)'} }}">
+								placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
 							</bk-step-input>
 	                    </div>
                     </bk-form-item>
 #elseif($property.widgetType == "MONTH")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
 	                        <bk-input id="id${property.name}"
@@ -96,7 +96,7 @@
 #elseif($property.widgetType == "WEEK")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
 	                        <bk-input id="id${property.name}"
@@ -111,7 +111,7 @@
 #elseif($property.widgetType == "TIME")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
 	                        <bk-input id="id${property.name}"
@@ -126,7 +126,7 @@
 #elseif($property.widgetType == "DATETIME-LOCAL")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--3 #end">
 	                        <bk-input id="id${property.name}"
@@ -141,7 +141,7 @@
 #elseif($property.widgetType == "DATE")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
 	                        <bk-input id="id${property.name}"
@@ -156,7 +156,7 @@
 #elseif($property.widgetType == "TEXTAREA")
 					<bk-form-item class="fd-row">
 						<div class="fd-col fd-col-md--2">
-							<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
+							<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
 						</div>
 						<div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 							<bk-textarea id="id${property.name}"
@@ -164,14 +164,14 @@
 								ng-required="${property.isRequiredProperty}"
 								ng-model="entity.${property.name}"
 								ng-readonly="true"
-								placeholder="{{ '$projectName:messages.inputEnter' | t:{'name':'$t($projectName:t.$property.dataName)'} }}">
+								placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
 							</bk-textarea>
 						</div>
 					</bk-form-item>
 #elseif($property.widgetType == "TEL")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
 						<div style="margin: 4px 0px; padding: 0px 10px" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
 							<bk-link href="tel:{{entity.${property.name}}}">{{entity.${property.name}}}</bk-link>
@@ -180,7 +180,7 @@
 #elseif($property.widgetType == "URL")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
 						<div style="margin: 4px 0px; padding: 0px 10px" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 							<bk-link href="{{entity.${property.name}}}">{{entity.${property.name}}}</bk-link>
@@ -189,7 +189,7 @@
 #elseif($property.widgetType == "EMAIL")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
 						<div style="margin: 4px 0px; padding: 0px 10px" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 							<bk-link href="mailto:{{entity.${property.name}}}">{{entity.${property.name}}}</bk-link>
@@ -198,7 +198,7 @@
 #else
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:t.$property.dataName' | t }}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 	                        <bk-input id="id${property.name}"
@@ -207,7 +207,7 @@
 	                            ng-model="entity.${property.name}"
 	                            ng-readonly="true"
 	                            type="text"
-	                            placeholder="{{ '$projectName:messages.inputEnter' | t:{'name':'$t($projectName:t.$property.dataName)'} }}">
+	                            placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
 	                        </bk-input>
 	                    </div>
                     </bk-form-item>

@@ -120,6 +120,31 @@ public class LogFacade {
         return LoggerFactory.getLogger(appLoggerName);
     }
 
+    public static boolean isDebugEnabled(String loggerName) throws IOException {
+        Logger logger = getLogger(loggerName);
+        return logger.isDebugEnabled();
+    }
+
+    public static boolean isErrorEnabled(String loggerName) throws IOException {
+        Logger logger = getLogger(loggerName);
+        return logger.isErrorEnabled();
+    }
+
+    public static boolean isWarnEnabled(String loggerName) throws IOException {
+        Logger logger = getLogger(loggerName);
+        return logger.isWarnEnabled();
+    }
+
+    public static boolean isInfoEnabled(String loggerName) throws IOException {
+        Logger logger = getLogger(loggerName);
+        return logger.isInfoEnabled();
+    }
+
+    public static boolean isTraceEnabled(String loggerName) throws IOException {
+        Logger logger = getLogger(loggerName);
+        return logger.isTraceEnabled();
+    }
+
     /**
      * Log.
      *

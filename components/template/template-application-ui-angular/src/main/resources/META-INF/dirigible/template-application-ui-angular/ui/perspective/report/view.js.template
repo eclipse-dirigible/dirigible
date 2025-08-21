@@ -7,9 +7,9 @@ const viewData = {
     id: '${name}Report',
     label: '${name} Report',
     translation: {
-        key: '$projectName:reportTitle',
+        key: '$projectName:${tprefix}.defaults.reportTitle',
         options: {
-            name: '$t($projectName:t.$dataName)',
+            name: '$t($projectName:${tprefix}.t.$dataName)',
         }
     },
     region: 'center',

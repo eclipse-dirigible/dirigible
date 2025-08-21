@@ -18,7 +18,6 @@ export function getSources(parameters) {
     return [
         {
             location: "/template-application-ui-angular/ui/translations.json.template",
-            path: "translations/en-US/translations.json",
             action: "translate",
         },
         ...listTemplate.getSources(parameters),

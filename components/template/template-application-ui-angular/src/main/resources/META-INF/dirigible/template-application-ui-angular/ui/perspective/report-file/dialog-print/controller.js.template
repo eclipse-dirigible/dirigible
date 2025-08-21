@@ -51,8 +51,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
             }, (error) => {
                 const message = error.data ? error.data.message : '';
                 Dialogs.showAlert({
-                    title: LocaleService.t('$projectName:t.${dataName}'),
-                    message: LocaleService.t('$projectName:messages.error.unableToLF', { name: '$t($projectName:t.${dataName})', message: message }),
+                    title: LocaleService.t('$projectName:${tprefix}.t.${tId}'),
+                    message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLF', { name: '$t($projectName:${tprefix}.t.${tId})', message: message }),
                     type: AlertTypes.Error
                 });
                 console.error('EntityService:', error);

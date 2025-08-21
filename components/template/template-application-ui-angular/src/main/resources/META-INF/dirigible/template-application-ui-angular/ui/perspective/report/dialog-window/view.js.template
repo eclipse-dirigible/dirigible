@@ -7,9 +7,9 @@ const viewData = {
     id: '${name}-Report-details',
     label: '${name} Report',
     translation: {
-        key: '$projectName:reportTitle',
+        key: '$projectName:${tprefix}.defaults.reportTitle',
         options: {
-            name: '$t($projectName:t.$dataName)',
+            name: '$t($projectName:${tprefix}.t.$dataName)',
         }
     },
     path: '/services/web/${projectName}/gen/${genFolderName}/ui/Reports/${name}/dialog-window/index.html',

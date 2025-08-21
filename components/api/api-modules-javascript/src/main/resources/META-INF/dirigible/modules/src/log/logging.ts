@@ -106,6 +106,26 @@ class Logger {
 		return this;
 	}
 
+    public isDebugEnabled(): boolean {
+        return LogFacade.isDebugEnabled(this.loggerName);
+    }
+
+    public isErrorEnabled(): boolean {
+        return LogFacade.isErrorEnabled(this.loggerName);
+    }
+
+    public isWarnEnabled(): boolean {
+        return LogFacade.isWarnEnabled(this.loggerName);
+    }
+
+    public isInfoEnabled(): boolean {
+        return LogFacade.isInfoEnabled(this.loggerName);
+    }
+
+    public isTraceEnabled(): boolean {
+        return LogFacade.isTraceEnabled(this.loggerName);
+    }
+
 	public log(msg: string, level: string): void {
 		const args = Array.prototype.slice.call(arguments);
 		let msgParameters = [];

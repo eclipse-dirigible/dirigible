@@ -2,7 +2,7 @@ const viewData = {
     id: '{{projectName}}-Reports-{{name}}-print',
     label: 'Print',
     translation: {
-        key: '$projectName:defaults.print',
+        key: '$projectName:${tprefix}.defaults.print',
     },
     path: '/services/web/{{projectName}}/gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-print/index.html',
     perspective: 'Reports',

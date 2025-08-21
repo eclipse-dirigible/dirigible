@@ -7,12 +7,12 @@ const perspectiveData = {
 	id: '${perspectiveName}',
 	label: '${perspectiveLabel}',
 	translation: {
-        key: '$projectName:t.$dataName',
+        key: '$projectName:${tprefix}.t.$dataName',
     },
 #if($perspectiveHeader)
 	header: '${perspectiveHeader}',
 	headerTranslation: {
-        key: '$projectName:t.${perspectiveName}pheader',
+        key: '$projectName:${tprefix}.t.${perspectiveName}pheader',
     },
 #end
 	path: '/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/index.html',

@@ -1753,6 +1753,29 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
         }
     };
 
+    // Same migration happens in generateUtils.js
+    function migrateForm(formData) {
+        for (let i = 0; i < formData.length; i++) {
+            if (formData[i].hasOwnProperty('title')) {
+                delete Object.assign(formData[i], { 'label': formData[i]['title'] })['title'];
+                $scope.fileChanged();
+            }
+            if (formData[i].hasOwnProperty('name')) {
+                delete Object.assign(formData[i], { 'label': formData[i]['name'] })['name'];
+                $scope.fileChanged();
+            }
+            if (formData[i].hasOwnProperty('errorState')) {
+                delete Object.assign(formData[i], { 'errorMessage': formData[i]['errorState'] })['errorState'];
+                $scope.fileChanged();
+            }
+            if (formData[i].hasOwnProperty('size')) {
+                delete Object.assign(formData[i], { 'headerSize': formData[i]['size'] })['size'];
+                $scope.fileChanged();
+            }
+        }
+        return formData;
+    }
+
     const loadFileContents = () => {
         if (!$scope.state.error) {
             $scope.state.isBusy = true;
@@ -1768,7 +1791,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                         $scope.formData.scripts = response.data.scripts;
                     }
                     if (response.data.hasOwnProperty('form')) {
-                        $scope.createDomFromJson(response.data.form);
+                        $scope.createDomFromJson(migrateForm(response.data.form));
                     }
                     $scope.state.isBusy = false;
                     $scope.state.initialized = true;

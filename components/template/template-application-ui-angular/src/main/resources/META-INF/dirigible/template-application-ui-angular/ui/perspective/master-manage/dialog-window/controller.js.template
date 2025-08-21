@@ -21,12 +21,12 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 		$scope.action = 'select';
 
 		LocaleService.onInit(() => {
-			description = LocaleService.t('$projectName:defaults.description');
-			$scope.formHeaders.select = LocaleService.t('$projectName:defaults.formHeadSelect', { name: '$t($projectName:t.${dataName})' });
-			$scope.formHeaders.create = LocaleService.t('$projectName:defaults.formHeadCreate', { name: '$t($projectName:t.${dataName})' });
-			$scope.formHeaders.update = LocaleService.t('$projectName:defaults.formHeadUpdate', { name: '$t($projectName:t.${dataName})' });
-			propertySuccessfullyCreated = LocaleService.t('$projectName:messages.propertySuccessfullyCreated', { name: '$t($projectName:t.${dataName})' });
-			propertySuccessfullyUpdated = LocaleService.t('$projectName:messages.propertySuccessfullyUpdated', { name: '$t($projectName:t.${dataName})' });
+			description = LocaleService.t('$projectName:${tprefix}.defaults.description');
+			$scope.formHeaders.select = LocaleService.t('$projectName:${tprefix}.defaults.formHeadSelect', { name: '$t($projectName:${tprefix}.t.${dataName})' });
+			$scope.formHeaders.create = LocaleService.t('$projectName:${tprefix}.defaults.formHeadCreate', { name: '$t($projectName:${tprefix}.t.${dataName})' });
+			$scope.formHeaders.update = LocaleService.t('$projectName:${tprefix}.defaults.formHeadUpdate', { name: '$t($projectName:${tprefix}.t.${dataName})' });
+			propertySuccessfullyCreated = LocaleService.t('$projectName:${tprefix}.messages.propertySuccessfullyCreated', { name: '$t($projectName:${tprefix}.t.${dataName})' });
+			propertySuccessfullyUpdated = LocaleService.t('$projectName:${tprefix}.messages.propertySuccessfullyUpdated', { name: '$t($projectName:${tprefix}.t.${dataName})' });
 		});
 
 		let params = ViewParameters.get();
@@ -67,7 +67,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 			EntityService.create(entity).then((response) => {
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityCreated', data: response.data });
 				Notifications.show({
-					title: LocaleService.t('$projectName:t.${dataName}'),
+					title: LocaleService.t('$projectName:${tprefix}.t.${dataName}'),
 					description: propertySuccessfullyCreated,
 					type: 'positive'
 				});
@@ -75,7 +75,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
 				$scope.$evalAsync(() => {
-					$scope.errorMessage = LocaleService.t('$projectName:messages.error.unableToCreate', { name: '$t($projectName:t.${dataName})', message: message });
+					$scope.errorMessage = LocaleService.t('$projectName:${tprefix}.messages.error.unableToCreate', { name: '$t($projectName:${tprefix}.t.${dataName})', message: message });
 				});
 				console.error('EntityService:', error);
 			});
@@ -96,14 +96,14 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityUpdated', data: response.data });
 				$scope.cancel();
 				Notifications.show({
-					title: LocaleService.t('$projectName:t.${dataName}'),
+					title: LocaleService.t('$projectName:${tprefix}.t.${dataName}'),
 					description: propertySuccessfullyUpdated,
 					type: 'positive'
 				});
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
 				$scope.$evalAsync(() => {
-					$scope.errorMessage = LocaleService.t('$projectName:messages.error.unableToUpdate', { name: '$t($projectName:t.${dataName})', message: message });
+					$scope.errorMessage = LocaleService.t('$projectName:${tprefix}.messages.error.unableToUpdate', { name: '$t($projectName:${tprefix}.t.${dataName})', message: message });
 				});
 				console.error('EntityService:', error);
 			});
@@ -125,7 +125,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 			const message = error.data ? error.data.message : '';
 			Dialogs.showAlert({
 				title: '${property.name}',
-				message: LocaleService.t('$projectName:messages.error.unableToLoad', { message: message }),
+				message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLoad', { message: message }),
 				type: AlertTypes.Error
 			});
 		});

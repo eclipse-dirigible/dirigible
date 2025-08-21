@@ -15,8 +15,8 @@
 
 	<body class="bk-vbox">
 		<bk-toolbar has-title="true">
-			<bk-toolbar-title>{{'$projectName:defaults.items' | t}} <span bk-object-status text="{{dataCount}}" inverted="true"></bk-toolbar-title>
-			<bk-button compact="true" state="transparent" label="{{ '$projectName:defaults.filter' | t }}" ng-click="openFilter()"></bk-button>
+			<bk-toolbar-title>{{'$projectName:${tprefix}.defaults.items' | t}} <span bk-object-status text="{{dataCount}}" inverted="true"></bk-toolbar-title>
+			<bk-button compact="true" state="transparent" label="{{ '$projectName:${tprefix}.defaults.filter' | t }}" ng-click="openFilter()"></bk-button>
 			<bk-button ng-repeat="action in pageActions track by $index" compact="true" state="transparent" label="{{action.translation.key | t:action.translation.options:action.label}}" ng-click="triggerPageAction(action)"></bk-button>
 			<bk-toolbar-spacer></bk-toolbar-spacer>
 		</bk-toolbar>
@@ -27,7 +27,7 @@
 					<tr bk-table-row>
 #foreach ($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-						<th bk-table-header-cell>{{ '$projectName:t.$property.dataName' | t:'$property.name' }}</th>
+						<th bk-table-header-cell>{{ '$projectName:${tprefix}.t.$property.dataName' | t:'$property.name' }}</th>
 #end
 #end
 						<th bk-table-header-cell></th>
@@ -35,7 +35,7 @@
 				</thead>
 				<tbody bk-table-body>
 					<tr bk-table-row hoverable="true" ng-show="data.length == 0">
-						<td bk-table-cell no-data="true">{{'$projectName:messages.noData' | t}}</td>
+						<td bk-table-cell no-data="true">{{'$projectName:${tprefix}.messages.noData' | t}}</td>
 					</tr>
 					<tr bk-table-row hoverable="true" ng-repeat="next in data track by $index"
 						selected="next.${primaryKeysString} === selectedEntity.${primaryKeysString}" ng-click="selectEntity(next)">
@@ -94,12 +94,12 @@
 						<td bk-table-cell fit-content="true">
 							<bk-popover>
 								<bk-popover-control>
-									<bk-button compact="true" glyph="sap-icon--overflow" state="transparent" aria-label="{{'$projectName:aria.tableRowMenuBtn' | t}}" ng-click="setTristate()"></bk-button>
+									<bk-button compact="true" glyph="sap-icon--overflow" state="transparent" aria-label="{{'$projectName:${tprefix}.aria.tableRowMenuBtn' | t}}" ng-click="setTristate()"></bk-button>
 								</bk-popover-control>
 								<bk-popover-body align="bottom-right">
-									<bk-menu aria-label="{{'$projectName:aria.tableRowMenu' | t}}" no-backdrop="true" no-shadow="true">
+									<bk-menu aria-label="{{'$projectName:${tprefix}.aria.tableRowMenu' | t}}" no-backdrop="true" no-shadow="true">
 										<bk-menu-item ng-repeat="action in entityActions track by $index" title="{{action.translation.key | t:action.translation.options:action.label}}" ng-click="triggerEntityAction(action)"></bk-menu-item>
-										<bk-menu-item title="{{ '$projectName:defaults.viewDetails' | t }}" ng-click="openDetails(next)"></bk-menu-item>
+										<bk-menu-item title="{{ '$projectName:${tprefix}.defaults.viewDetails' | t }}" ng-click="openDetails(next)"></bk-menu-item>
 									</bk-menu>
 								</bk-popover-body>
 							</bk-popover>

@@ -5,11 +5,11 @@
  */
 const viewData = {
     id: '${name}-Report-details',
-    label: '${name} Report',
+    label: '${label} Report',
     translation: {
-        key: '$projectName:reportTitle',
+        key: '$projectName:${tprefix}.defaults.reportTitle',
         options: {
-            name: '$t($projectName:t.$dataName)',
+            name: '$t($projectName:${tprefix}.t.${tId})',
         }
     },
     path: '/services/web/${projectName}/gen/${genFolderName}/ui/Reports/${name}/dialog-window/index.html',

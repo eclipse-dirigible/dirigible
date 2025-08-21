@@ -51,7 +51,8 @@ function getTranslations(lang, commonPath) {
 			for (let j = 0; j < jsons.length; j++) {
 				const translationPath = `/${modules[p]}/translations/${lang}/${jsons[j]}`;
 				if (translationPath !== commonPath) {
-					translations[modules[p]] = JSON.parse(registry.getText(translationPath));
+					if (translations[modules[p]]) Object.assign(translations[modules[p]], JSON.parse(registry.getText(translationPath)));
+					else translations[modules[p]] = JSON.parse(registry.getText(translationPath));
 				}
 			}
 		}

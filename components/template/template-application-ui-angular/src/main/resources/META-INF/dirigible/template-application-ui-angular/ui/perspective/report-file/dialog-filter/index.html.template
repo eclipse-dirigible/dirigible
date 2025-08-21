@@ -15,7 +15,7 @@
     <body class="bk-vbox">
         <bk-scrollbar class="bk-full-height">
             <bk-fieldset class="fd-padding-begin-end--sm" ng-form="forms.details">
-                <bk-form-group label="{{ '$projectName:defaults.formGrpFilter' | t:{'name':'$t($projectName:t.${dataName})'} }}" name="entityForm" transclude-classes="fd-container fd-form-layout-grid-container">
+                <bk-form-group label="{{ '$projectName:${tprefix}.defaults.formGrpFilter' | t:{'name':'$t($projectName:${tprefix}.t.${tId})'} }}" name="entityForm" transclude-classes="fd-container fd-form-layout-grid-container">
 #foreach ($parameter in $parameters)
 #if($parameter.typeTypescript == 'boolean')
                     <bk-form-item class="fd-row">
@@ -35,7 +35,7 @@
 								name="${parameter.name}"
 								state="{{ forms.details['${parameter.name}'].$valid ? '' : 'error' }}"
 								ng-model="entity.${parameter.name}"
-								placeholder="{{ '$projectName:messages.inputEnter' | t:{'name':'${parameter.name}'} }}">
+								placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'${parameter.name}'} }}">
 							</bk-step-input>
 	                    </div>
                     </bk-form-item>
@@ -45,7 +45,7 @@
                         	<bk-form-label for="id${parameter.name}" colon="true">${parameter.name}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-							<bk-form-input-message state="{{ forms.details['${parameter.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:messages.error.incorrectInput' | t}}">
+							<bk-form-input-message state="{{ forms.details['${parameter.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 								<bk-input id="id${parameter.name}"
 	                                name="${parameter.name}"
 	                                state="{{ forms.details['${parameter.name}'].$valid ? '' : 'error' }}"
@@ -61,7 +61,7 @@
                         	<bk-form-label for="id${parameter.name}" colon="true">${parameter.name}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--3">
-							<bk-form-input-message state="{{ forms.details['${parameter.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:messages.error.incorrectInput' | t}}">
+							<bk-form-input-message state="{{ forms.details['${parameter.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 								<bk-input id="id${parameter.name}"
 	                                name="${parameter.name}"
 	                                state="{{ forms.details['${parameter.name}'].$valid ? '' : 'error' }}"
@@ -77,7 +77,7 @@
                         	<bk-form-label for="id${parameter.name}" colon="true">${parameter.name}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-							<bk-form-input-message state="{{ forms.details['${parameter.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:messages.error.incorrectInput' | t}}">
+							<bk-form-input-message state="{{ forms.details['${parameter.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 								<bk-input id="id${parameter.name}"
 	                                name="${parameter.name}"
 	                                state="{{ forms.details['${parameter.name}'].$valid ? '' : 'error' }}"
@@ -93,13 +93,13 @@
                         	<bk-form-label for="id${parameter.name}" colon="true">${parameter.name}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--8">
-							<bk-form-input-message state="{{ forms.details['${parameter.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:messages.error.incorrectInput' | t}}">
+							<bk-form-input-message state="{{ forms.details['${parameter.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 								<bk-input id="id${parameter.name}"
 	                                name="${parameter.name}"
 	                                state="{{ forms.details['${parameter.name}'].$valid ? '' : 'error' }}"
 	                                ng-model="entity.${parameter.name}"
 	                                type="text"
-	                                placeholder="{{ '$projectName:messages.inputEnter' | t:{'name':'${parameter.name}'} }}">
+	                                placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'${parameter.name}'} }}">
 	                            </bk-input>
 							</bk-form-input-message>
 	                    </div>
@@ -113,13 +113,13 @@
 		<bk-bar bar-design="footer" ng-show="action !== 'select'" compact="true">
 			<bk-bar-right>
 				<bk-bar-element>
-					<bk-button label="{{ '$projectName:defaults.filter' | t }}" state="emphasized" ng-click="filter()"></bk-button>
+					<bk-button label="{{ '$projectName:${tprefix}.defaults.filter' | t }}" state="emphasized" ng-click="filter()"></bk-button>
 				</bk-bar-element>
 				<bk-bar-element>
-					<bk-button label="{{ '$projectName:defaults.reset' | t }}" ng-click="resetFilter()"></bk-button>
+					<bk-button label="{{ '$projectName:${tprefix}.defaults.reset' | t }}" ng-click="resetFilter()"></bk-button>
 				</bk-bar-element>
 				<bk-bar-element>
-					<bk-button label="{{ '$projectName:defaults.cancel' | t }}" ng-click="cancel()"></bk-button>
+					<bk-button label="{{ '$projectName:${tprefix}.defaults.cancel' | t }}" ng-click="cancel()"></bk-button>
 				</bk-bar-element>
 			</bk-bar-right>
 		</bk-bar>

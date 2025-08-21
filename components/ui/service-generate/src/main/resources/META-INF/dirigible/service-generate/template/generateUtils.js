@@ -12,11 +12,15 @@
 import { Registry } from "sdk/platform";
 import { TemplateEngines as templateEngines } from "sdk/template";
 
+function getTranslationId(str) {
+    return `${str.replaceAll(' ', '').replaceAll('_', '').replaceAll('.', '').replaceAll(':', '')}`;
+}
+
 function getTranslations(model) {
     let translations = {};
     for (const [key, value] of Object.entries(model)) {
         if ((key === 'label' || key === 'errorMessage') && value !== undefined && value !== null && value !== '') {
-            const translationId = `${value.replaceAll(' ', '').replaceAll('_', '').replaceAll('.', '').replaceAll(':', '')}`;
+            const translationId = getTranslationId(value);
             translations[translationId] = value;
             model[key === 'errorMessage' ? 'errorTranslation' : 'translation'] = translationId;
         } else if (typeof value === 'object') {
@@ -26,10 +30,61 @@ function getTranslations(model) {
     return translations;
 }
 
+function getReportTranslations(report) {
+    let translations = {};
+    translations[report.tId] = report.label;
+    for (let i = 0; i < report.columns.length; i++) {
+        translations[report.columns[i]['tId']] = report.columns[i]['label'];
+    }
+    return translations;
+}
+
+function generateTranslationPrefix(prefix) {
+    return `${prefix.substring(prefix.lastIndexOf('/') + 1).replaceAll(' ', '').replaceAll('_', '').replaceAll('.', '-').replaceAll(':', '')}`;
+}
+
+// Migrates the old form data to the new one. Should be deleted in the future
+function migrateForm(formData) {
+    for (let i = 0; i < formData.length; i++) {
+        if (formData[i].hasOwnProperty('title')) {
+            delete Object.assign(formData[i], { 'label': formData[i]['title'] })['title'];
+        }
+        if (formData[i].hasOwnProperty('name')) {
+            delete Object.assign(formData[i], { 'label': formData[i]['name'] })['name'];
+        }
+        if (formData[i].hasOwnProperty('errorState')) {
+            delete Object.assign(formData[i], { 'errorMessage': formData[i]['errorState'] })['errorState'];
+        }
+        if (formData[i].hasOwnProperty('size')) {
+            delete Object.assign(formData[i], { 'headerSize': formData[i]['size'] })['size'];
+        }
+    }
+}
+
+function migrateReport(report) {
+    if (!report.hasOwnProperty('tId')) {
+        report['tId'] = getTranslationId(report.alias);
+        report['label'] = report.alias;
+    }
+    for (let i = 0; i < report.columns.length; i++) {
+        if (!report.columns[i].hasOwnProperty('tId')) {
+            report.columns[i]['tId'] = getTranslationId(report.columns[i]['alias']);
+            report.columns[i]['label'] = report.columns[i]['alias'];
+        }
+    }
+}
+
 export function generateGeneric(model, parameters, templateSources) {
+    let isReport = false;
     const generatedFiles = []
     const templateParameters = {};
+    if (parameters.filePath.endsWith('.form')) migrateForm(model.form);
+    else if (parameters.filePath.endsWith('.report')) {
+        migrateReport(model);
+        isReport = true;
+    }
     Object.assign(templateParameters, model, parameters);
+    templateParameters['tprefix'] = generateTranslationPrefix(parameters.filePath);
 
     const cleanTemplateParameters = cleanData(templateParameters);
 
@@ -49,10 +104,11 @@ export function generateGeneric(model, parameters, templateSources) {
             });
         } else if (template.action === "translate") {
             let translations = JSON.parse(content);
-            translations.t = { ...getTranslations(model) };
+            if (isReport) translations.t = { ...getReportTranslations(model) };
+            else translations.t = { ...getTranslations(model) };
             generatedFiles.push({
-                content: JSON.stringify(translations, null, 2),
-                path: template.path
+                content: JSON.stringify({ [cleanTemplateParameters['tprefix']]: translations }, null, 2),
+                path: `translations/en-US/${parameters.filePath.substring(parameters.filePath.lastIndexOf('/') + 1)}.json`
             });
         } else {
             generatedFiles.push({
@@ -110,6 +166,8 @@ export function generateFiles(model, parameters, templateSources) {
         if (content == null) {
             throw new Error(`Template file at location '${templateSources[i].location}' does not exists.`)
         }
+
+        parameters['tprefix'] = generateTranslationPrefix(parameters.filePath);
 
         if (template.action === "copy") {
             generatedFiles.push({
@@ -263,8 +321,8 @@ export function generateFiles(model, parameters, templateSources) {
                 }
             }
             generatedFiles.push({
-                content: JSON.stringify(translations, null, 2),
-                path: template.path
+                content: JSON.stringify({ [parameters['tprefix']]: translations }, null, 2),
+                path: `translations/en-US/${parameters.filePath.substring(parameters.filePath.lastIndexOf('/') + 1)}.json`
             });
         }
     }

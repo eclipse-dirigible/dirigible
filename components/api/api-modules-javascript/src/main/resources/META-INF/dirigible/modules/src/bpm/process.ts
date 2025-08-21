@@ -13,6 +13,8 @@
  * API Process
  */
 
+import { Values } from "sdk/bpm/values";
+
 const BpmFacade = Java.type("org.eclipse.dirigible.components.api.bpm.BpmFacade");
 
 export class Process {
@@ -48,6 +50,10 @@ export class Process {
 	public static removeVariable(processInstanceId: string, variableName: string): void {
 		BpmFacade.removeVariable(processInstanceId, variableName);
 	}
+
+	public static correlateMessageEvent(processInstanceId: string, messageName: string, variables: Map<string, any>): void {
+        BpmFacade.correlateMessageEvent(processInstanceId, messageName, Values.stringifyValuesMap(variables));
+    }
 
 	public static getExecutionContext() {
 		return new ExecutionContext();
@@ -293,7 +299,7 @@ class ExecutionContext {
 	public getVariables(): Map<string, any> {
 		const variables = this.execution.getVariables();
 		for (const [key, value] of variables) {
-			variables.set(key, this.parseValue(value));
+			variables.set(key, Values.parseValue(value));
 		}
 		return variables;
 	}
@@ -311,7 +317,7 @@ class ExecutionContext {
 	public getVariablesLocal(): Map<string, any> {
 		const variablesLocal = this.execution.getVariablesLocal();
 		for (const [key, value] of variablesLocal) {
-			variablesLocal.set(key, this.parseValue(value));
+			variablesLocal.set(key, Values.parseValue(value));
 		}
 		return variablesLocal;
 	}
@@ -327,7 +333,7 @@ class ExecutionContext {
 	 * Returns the variable value for one specific variable. Will look in parent scopes when the variable does not exist on this particular scope.
 	 */
 	public getVariable(variableName: string): any {
-		return this.parseValue(this.execution.getVariable(variableName));
+		return Values.parseValue(this.execution.getVariable(variableName));
 	}
 
 	/**
@@ -341,7 +347,7 @@ class ExecutionContext {
 	 * Returns the value for the specific variable and only checks this scope and not any parent scope.
 	 */
 	public getVariableLocal(variableName: string): any {
-		return this.parseValue(this.execution.getVariableLocal(variableName));
+		return Values.parseValue(this.execution.getVariableLocal(variableName));
 	}
 
 	/**
@@ -395,7 +401,7 @@ class ExecutionContext {
 	 *            the value of the variable to be set
 	 */
 	public setVariable(variableName: string, value: any): void {
-		this.execution.setVariable(variableName, this.stringifyValue(value));
+		this.execution.setVariable(variableName, Values.stringifyValue(value));
 	}
 
 	/**
@@ -403,7 +409,7 @@ class ExecutionContext {
 	 is handled as a variable name string without resolving an expression.
 	 */
 	public setVariableLocal(variableName: string, value: any): any {
-		return this.execution.setVariableLocal(variableName, this.stringifyValue(value));
+		return this.execution.setVariableLocal(variableName, Values.stringifyValue(value));
 	}
 
 	/**
@@ -417,7 +423,7 @@ class ExecutionContext {
 	 */
 	public setVariables(variables: Map<string, any>): void {
 		for (const [key, value] of variables) {
-			variables.set(key, this.stringifyValue(value));
+			variables.set(key, Values.stringifyValue(value));
 		}
 		this.execution.setVariables(variables);
 	}
@@ -427,7 +433,7 @@ class ExecutionContext {
 	 */
 	public setVariablesLocal(variables: Map<string, any>): void {
 		for (const [key, value] of variables) {
-			variables.set(key, this.stringifyValue(value));
+			variables.set(key, Values.stringifyValue(value));
 		}
 		this.execution.setVariablesLocal(variables);
 	}
@@ -495,14 +501,14 @@ class ExecutionContext {
 	 * where 'abc' is both persistent and transient, the transient value is returned.
 	 */
 	public setTransientVariable(variableName: string, variableValue: any): void {
-		this.execution.setTransientVariable(variableName, this.stringifyValue(variableValue));
+		this.execution.setTransientVariable(variableName, Values.stringifyValue(variableValue));
 	}
 
 	/**
 	 * Similar to {@link #setVariableLocal(String, Object)}, but for a transient variable. See {@link #setTransientVariable(String, Object)} for the rules on 'transient' variables.
 	 */
 	public setTransientVariableLocal(variableName: string, variableValue: any): void {
-		this.execution.setTransientVariableLocal(variableName, this.stringifyValue(variableValue));
+		this.execution.setTransientVariableLocal(variableName, Values.stringifyValue(variableValue));
 	}
 
 	/**
@@ -510,7 +516,7 @@ class ExecutionContext {
 	 */
 	public setTransientVariables(transientVariables: Map<string, any>): void {
 		for (const [key, value] of transientVariables) {
-			transientVariables.set(key, this.stringifyValue(value));
+			transientVariables.set(key, Values.stringifyValue(value));
 		}
 		this.execution.setTransientVariables(transientVariables);
 	}
@@ -520,7 +526,7 @@ class ExecutionContext {
 	 * 'transient' variables.
 	 */
 	public getTransientVariable(variableName: string): any {
-		return this.parseValue(this.execution.getTransientVariable(variableName));
+		return Values.parseValue(this.execution.getTransientVariable(variableName));
 	}
 
 	/**
@@ -529,7 +535,7 @@ class ExecutionContext {
 	public getTransientVariables(): Map<string, any> {
 		const transientVariables = this.execution.getTransientVariables();
 		for (const [key, value] of transientVariables) {
-			transientVariables.set(key, this.parseValue(value));
+			transientVariables.set(key, Values.parseValue(value));
 		}
 		return transientVariables;
 	}
@@ -539,7 +545,7 @@ class ExecutionContext {
 	 */
 	public setTransientVariablesLocal(transientVariables: Map<string, any>): void {
 		for (const [key, value] of transientVariables) {
-			transientVariables.set(key, this.stringifyValue(value));
+			transientVariables.set(key, Values.stringifyValue(value));
 		}
 		this.execution.setTransientVariablesLocal(transientVariables);
 	}
@@ -548,7 +554,7 @@ class ExecutionContext {
 	 * Similar to {@link #getVariableLocal(String)}, but for a transient variable. See {@link #setTransientVariable(String, Object)} for the rules on 'transient' variables.
 	 */
 	public getTransientVariableLocal(variableName: string): any {
-		return this.parseValue(this.execution.getTransientVariableLocal(variableName));
+		return Values.parseValue(this.execution.getTransientVariableLocal(variableName));
 	}
 
 	/**
@@ -557,7 +563,7 @@ class ExecutionContext {
 	public getTransientVariablesLocal(): Map<string, any> {
 		const transientVariablesLocal = this.execution.getTransientVariablesLocal();
 		for (const [key, value] of transientVariablesLocal) {
-			transientVariablesLocal.set(key, this.parseValue(value));
+			transientVariablesLocal.set(key, Values.parseValue(value));
 		}
 		return transientVariablesLocal;
 	}
@@ -590,24 +596,6 @@ class ExecutionContext {
 		this.execution.removeTransientVariablesLocal();
 	}
 
-	private parseValue(value: any) {
-		try {
-			return JSON.parse(value);
-		} catch (e) {
-			// Do nothing
-		}
-		return value;
-	}
-
-	private stringifyValue(value: any): any {
-		if (Array.isArray(value)) {
-			// @ts-ignore
-			return java.util.Arrays.asList(value.map(e => JSON.stringify(e)));
-		} else if (typeof value === 'object') {
-			return JSON.stringify(value);
-		}
-		return value;
-	}
 }
 
 // @ts-ignore

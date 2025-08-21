@@ -15,20 +15,20 @@
     <body class="bk-vbox">
         <bk-scrollbar class="bk-full-height">
             <bk-fieldset class="fd-padding-begin-end--sm" ng-form="formFieldset">
-                <bk-form-group label="{{ '$projectName:defaults.formHeadSelect' | t:{'name':'$t($projectName:t.${dataName})'} }}" name="entityForm" transclude-classes="fd-container fd-form-layout-grid-container">
+                <bk-form-group label="{{ '$projectName:${tprefix}.defaults.formHeadSelect' | t:{'name':'$t($projectName:${tprefix}.t.${tId})'} }}" name="entityForm" transclude-classes="fd-container fd-form-layout-grid-container">
 #foreach ($column in $columns)
 #if($column.typeTypescript == 'boolean')
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2"></div>
                         <div class="fd-col fd-col-md--8">
 							<bk-checkbox id="id${column.alias}" compact="false" ng-readonly="true" ng-model="entity['${column.alias}']"></bk-checkbox>
-                        	<bk-checkbox-label for="id${column.alias}">${column.alias}</bk-checkbox-label>
+                        	<bk-checkbox-label for="id${column.alias}">{{ '$projectName:${tprefix}.t.${column.tId}' | t:'${column.label}' }}</bk-checkbox-label>
                         </div>
                     </bk-form-item>
 #elseif($column.typeTypescript == 'number')
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${column.alias}" colon="true">${column.alias}</bk-form-label>
+                        	<bk-form-label for="id${column.alias}" colon="true">{{ '$projectName:${tprefix}.t.${column.tId}' | t:'${column.label}' }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
 	                        <bk-step-input input-id="id${column.alias}"
@@ -36,14 +36,14 @@
 								name="${column.alias}"
 								ng-model="entity['${column.alias}']"
 								is-readonly="true"
-								placeholder="{{ '$projectName:messages.inputEnter' | t:{'name':'${column.alias}'} }}">
+								placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$column.tId)'} }}">
 							</bk-step-input>
 	                    </div>
                     </bk-form-item>
 #elseif($column.typeJava == 'time')
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${column.alias}" colon="true">${column.alias}</bk-form-label>
+                        	<bk-form-label for="id${column.alias}" colon="true">{{ '$projectName:${tprefix}.t.${column.tId}' | t:'${column.label}' }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
 	                        <bk-input id="id${column.alias}"
@@ -57,7 +57,7 @@
 #elseif($column.typeJava == 'timestamp')
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${column.alias}" colon="true">${column.alias}</bk-form-label>
+                        	<bk-form-label for="id${column.alias}" colon="true">{{ '$projectName:${tprefix}.t.${column.tId}' | t:'${column.label}' }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--3">
 	                        <bk-input id="id${column.alias}"
@@ -71,7 +71,7 @@
 #elseif($column.typeJava == 'date')
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${column.alias}" colon="true">${column.alias}</bk-form-label>
+                        	<bk-form-label for="id${column.alias}" colon="true">{{ '$projectName:${tprefix}.t.${column.tId}' | t:'${column.label}' }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
 	                        <bk-input id="id${column.alias}"
@@ -85,7 +85,7 @@
 #else
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${column.alias}" colon="true">${column.alias}</bk-form-label>
+                        	<bk-form-label for="id${column.alias}" colon="true">{{ '$projectName:${tprefix}.t.${column.tId}' | t:'${column.label}' }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--8">
 	                        <bk-input id="id${column.alias}"
@@ -93,7 +93,7 @@
 	                            ng-model="entity['${column.alias}']"
 	                            ng-readonly="true"
 	                            type="text"
-								placeholder="{{ '$projectName:messages.inputEnter' | t:{'name':'${column.alias}'} }}">
+								placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$column.tId)'} }}">
 	                        </bk-input>
 	                    </div>
                     </bk-form-item>

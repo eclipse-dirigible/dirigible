@@ -15,18 +15,18 @@
 
 	<body class="bk-vbox">
 		<bk-toolbar has-title="true">
-			<bk-toolbar-title>{{'$projectName:defaults.items' | t}} <span bk-object-status text="{{dataCount}}" inverted="true"></bk-toolbar-title>
+			<bk-toolbar-title>{{'$projectName:${tprefix}.defaults.items' | t}} <span bk-object-status text="{{dataCount}}" inverted="true"></bk-toolbar-title>
 			<bk-toolbar-spacer></bk-toolbar-spacer>
-			<bk-button compact="true" state="transparent" glyph="sap-icon--add" aria-label="{{ '$projectName:aria.addEntity' | t }}" ng-disabled="action == 'update'" ng-click="createEntity()"></bk-button>
-			<bk-button compact="true" state="transparent" glyph="sap-icon--edit" aria-label="{{ '$projectName:aria.editEntity' | t }}" ng-disabled="selectedEntity == null" ng-click="updateEntity()"></bk-button>
-			<bk-button compact="true" state="transparent" glyph="sap-icon--delete" aria-label="{{ '$projectName:aria.deleteEntity' | t }}" ng-disabled="selectedEntity == null || action == 'update'" ng-click="deleteEntity()"></bk-button>
+			<bk-button compact="true" state="transparent" glyph="sap-icon--add" aria-label="{{ '$projectName:${tprefix}.aria.addEntity' | t }}" ng-disabled="action == 'update'" ng-click="createEntity()"></bk-button>
+			<bk-button compact="true" state="transparent" glyph="sap-icon--edit" aria-label="{{ '$projectName:${tprefix}.aria.editEntity' | t }}" ng-disabled="selectedEntity == null" ng-click="updateEntity()"></bk-button>
+			<bk-button compact="true" state="transparent" glyph="sap-icon--delete" aria-label="{{ '$projectName:${tprefix}.aria.deleteEntity' | t }}" ng-disabled="selectedEntity == null || action == 'update'" ng-click="deleteEntity()"></bk-button>
 			<bk-popover>
 				<bk-popover-control>
-					<bk-button compact="true" glyph="sap-icon--overflow" state="transparent" aria-label="{{ '$projectName:aria.headerMenuBtn' | t }}"></bk-button>
+					<bk-button compact="true" glyph="sap-icon--overflow" state="transparent" aria-label="{{ '$projectName:${tprefix}.aria.headerMenuBtn' | t }}"></bk-button>
 				</bk-popover-control>
 				<bk-popover-body align="bottom-right">
-					<bk-menu aria-label="{{ '$projectName:aria.headerMenu' | t }}" no-backdrop="true" no-shadow="true">
-						<bk-menu-item title="{{ '$projectName:defaults.filter' | t }}" ng-click="openFilter()"></bk-menu-item>
+					<bk-menu aria-label="{{ '$projectName:${tprefix}.aria.headerMenu' | t }}" no-backdrop="true" no-shadow="true">
+						<bk-menu-item title="{{ '$projectName:${tprefix}.defaults.filter' | t }}" ng-click="openFilter()"></bk-menu-item>
 						<bk-menu-item ng-repeat="action in pageActions track by $index" title="{{action.translation.key | t:action.translation.options:action.label}}" ng-click="triggerPageAction(action)"></bk-menu-item>
 					</bk-menu>
 				</bk-popover-body>
@@ -80,7 +80,7 @@
 				</bk-list-item>
 			</bk-list>
 			<bk-list-action-item ng-show="dataPage <= dataPages && dataCount > dataLimit" ng-click="loadPage()">
-				{{ '$projectName:defaults.loadMore' | t }}
+				{{ '$projectName:${tprefix}.defaults.loadMore' | t }}
 			</bk-list-action-item>
 		</bk-scrollbar>
 		<theme></theme>

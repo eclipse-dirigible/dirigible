@@ -13,10 +13,10 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 		};
 
 		LocaleService.onInit(() => {
-			translated.yes = LocaleService.t('$projectName:defaults.yes');
-			translated.no = LocaleService.t('$projectName:defaults.no');
-			translated.deleteTitle = LocaleService.t('$projectName:defaults.deleteTitle', { name: '$t($projectName:t.${dataName})' });
-			translated.deleteConfirm = LocaleService.t('$projectName:messages.deleteConfirm', { name: '$t($projectName:t.${dataName})' });
+			translated.yes = LocaleService.t('$projectName:${tprefix}.defaults.yes');
+			translated.no = LocaleService.t('$projectName:${tprefix}.defaults.no');
+			translated.deleteTitle = LocaleService.t('$projectName:${tprefix}.defaults.deleteTitle', { name: '$t($projectName:${tprefix}.t.${dataName})' });
+			translated.deleteConfirm = LocaleService.t('$projectName:${tprefix}.messages.deleteConfirm', { name: '$t($projectName:${tprefix}.t.${dataName})' });
 		});
 		$scope.dataPage = 1;
 		$scope.dataCount = 0;
@@ -118,8 +118,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 				}, (error) => {
 					const message = error.data ? error.data.message : '';
 					Dialogs.showAlert({
-						title: LocaleService.t('$projectName:t.${dataName}'),
-						message: LocaleService.t('$projectName:messages.error.unableToLF', { name: '$t($projectName:t.${dataName})', message: message }),
+						title: LocaleService.t('$projectName:${tprefix}.t.${dataName}'),
+						message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLF', { name: '$t($projectName:${tprefix}.t.${dataName})', message: message }),
 						type: AlertTypes.Error
 					});
 					console.error('EntityService:', error);
@@ -127,8 +127,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 			}, (error) => {
 				const message = error.data ? error.data.message : '';
 				Dialogs.showAlert({
-					title: LocaleService.t('$projectName:t.${dataName}'),
-					message: LocaleService.t('$projectName:messages.error.unableToCount', { name: '$t($projectName:t.${dataName})', message: message }),
+					title: LocaleService.t('$projectName:${tprefix}.t.${dataName}'),
+					message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToCount', { name: '$t($projectName:${tprefix}.t.${dataName})', message: message }),
 					type: AlertTypes.Error
 				});
 				console.error('EntityService:', error);
@@ -207,8 +207,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 					}, (error) => {
 						const message = error.data ? error.data.message : '';
 						Dialogs.showAlert({
-							title: LocaleService.t('$projectName:t.${dataName}'),
-							message: LocaleService.t('$projectName:messages.error.unableToDelete', { name: '$t($projectName:t.${dataName})', message: message }),
+							title: LocaleService.t('$projectName:${tprefix}.t.${dataName}'),
+							message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToDelete', { name: '$t($projectName:${tprefix}.t.${dataName})', message: message }),
 							type: AlertTypes.Error
 						});
 						console.error('EntityService:', error);
@@ -254,7 +254,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 			const message = error.data ? error.data.message : '';
 			Dialogs.showAlert({
 				title: '${property.name}',
-				message: LocaleService.t('$projectName:messages.error.unableToLoad', { message: message }),
+				message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLoad', { message: message }),
 				type: AlertTypes.Error
 			});
 		});

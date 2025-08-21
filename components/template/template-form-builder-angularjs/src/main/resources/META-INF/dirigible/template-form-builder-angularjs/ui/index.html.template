@@ -21,7 +21,7 @@
 #macro(formWidgets $elements)
 #foreach($element in $elements)
 	#if($element.controlId == "header")
-				<h$element.headerSize.intValue() bk-title header-size="$element.headerSize.intValue()">{{ '$projectName:t.$element.translation' | t:'$element.label' }}</h$element.headerSize.intValue()>
+				<h$element.headerSize.intValue() bk-title header-size="$element.headerSize.intValue()">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</h$element.headerSize.intValue()>
 	#elseif($element.controlId == "image")
 		#if($element.link)
 				<a href="$element.link">
@@ -32,8 +32,8 @@
 		#end
 	#elseif($element.controlId == "input-textarea")
 				<bk-form-item horizontal="$element.horizontal">
-					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:t.$element.translation' | t:'$element.label' }}</bk-form-label>
-					<bk-form-input-message state="{{ forms.form['$element.id'].$valid ? '' : 'error' }}" text="{{ '$projectName:t.$element.translation' | t:'$element.errorMessage' }}">
+					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
+					<bk-form-input-message state="{{ forms.form['$element.id'].$valid ? '' : 'error' }}" text="{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.errorMessage' }}">
 						<bk-textarea id="$element.id"
 							name="$element.id"
 							ng-model="model.$element.model"
@@ -50,8 +50,8 @@
 				</bk-form-item>
 	#elseif($element.controlId == "input-textfield")
 				<bk-form-item horizontal="$element.horizontal">
-					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:t.$element.translation' | t:'$element.label' }}</bk-form-label>
-					<bk-form-input-message state="{{ forms.form['$element.id'].$valid ? '' : 'error' }}" text="{{ '$projectName:t.$element.errorTranslation' | t:'$element.errorMessage' }}">
+					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
+					<bk-form-input-message state="{{ forms.form['$element.id'].$valid ? '' : 'error' }}" text="{{ '$projectName:${tprefix}.t.$element.errorTranslation' | t:'$element.errorMessage' }}">
 						<bk-input id="$element.id"
 							name="$element.id"
 							ng-model="model.$element.model"
@@ -71,7 +71,7 @@
 				</bk-form-item>
 	#elseif($element.controlId == "input-number")
 				<bk-form-item horizontal="$element.horizontal">
-					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:t.$element.translation' | t:'$element.label' }}</bk-form-label>
+					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
 					<bk-step-input input-id="$element.id" name="$element.id" ng-model="model.$element.model" ng-required="$element.required" min="$element.minNum"
 						max="$element.maxNum" step="$element.step" state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}" compact="$element.isCompact">
 					</bk-step-input>
@@ -79,58 +79,58 @@
 	#elseif($element.controlId == "input-checkbox")
 				<bk-form-item>
 					<bk-checkbox id="$element.id" ng-model="model.$element.model" compact="$element.isCompact"></bk-checkbox>
-					<bk-checkbox-label for="$element.id">{{ '$projectName:t.$element.translation' | t:'$element.label' }}</bk-checkbox-label>
+					<bk-checkbox-label for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-checkbox-label>
 				</bk-form-item>
 	#elseif($element.controlId == "input-time")
 				<bk-form-item horizontal="$element.horizontal">
-					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:t.$element.translation' | t:'$element.label' }}</bk-form-label>
+					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
 					<bk-input id="$element.id" name="$element.id" compact="$element.isCompact" ng-model="model.$element.model" ng-required="$element.required" type="time"></bk-input>
 				</bk-form-item>
 	#elseif($element.controlId == "input-date")
 				<bk-form-item horizontal="$element.horizontal">
-					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:t.$element.translation' | t:'$element.label' }}</bk-form-label>
+					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
 					<bk-input id="$element.id" name="$element.id" compact="$element.isCompact" ng-model="model.$element.model" ng-required="$element.required" type="$element.type"></bk-input>
 				</bk-form-item>
 	#elseif($element.controlId == "input-color")
 				<bk-form-item horizontal="$element.horizontal">
-					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:t.$element.translation' | t:'$element.label' }}</bk-form-label>
+					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
 					<bk-input id="$element.id" name="$element.id" compact="$element.isCompact" ng-model="model.$element.model" ng-required="$element.required" type="color"></bk-input>
 				</bk-form-item>
 	#elseif($element.controlId == "input-combobox")
 				<bk-form-item horizontal="$element.horizontal">
-					<bk-form-label id="$element.id" colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:t.$element.translation' | t:'$element.label' }}</bk-form-label>
+					<bk-form-label id="$element.id" colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
 					<bk-combobox-input compact="$element.isCompact"#if($element.filter) filter="$element.filter"#end dropdown-items="$element.items" ng-model="model.$element.model" ng-required="$element.required" placeholder="$element.placeholder"
-						btn-aria-label="{{'$projectName:aria.showHide' | t:{element:'$t($projectName:t.$element.translation)'} }}" list-aria-label="{{'$projectName:aria.options' | t:{element:'$t($projectName:t.$element.translation)'} }}"></bk-combobox-input>
+						btn-aria-label="{{'$projectName:${tprefix}.aria.showHide' | t:{element:'$t($projectName:${tprefix}.t.$element.translation)'} }}" list-aria-label="{{'$projectName:${tprefix}.aria.options' | t:{element:'$t($projectName:${tprefix}.t.$element.translation)'} }}"></bk-combobox-input>
 				</bk-form-item>
 	#elseif($element.controlId == "input-select" && $element.staticData != true)
 				<bk-form-item horizontal="$element.horizontal">
-					<bk-form-label id="$element.id" colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:t.$element.translation' | t:'$element.label' }}</bk-form-label>
+					<bk-form-label id="$element.id" colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
 					<bk-select name="$element.id" label-id="$element.id" compact="$element.isCompact" ng-required="$element.required" ng-model="model.$element.model">
 						<bk-option text="{{ option.$element.optionLabel }}" value="option.$element.optionValue" ng-repeat="option in $element.options track by $index"></bk-option>
 					</bk-select>
 				</bk-form-item>
 	#elseif($element.controlId == "input-select" && $element.staticData)
 				<bk-form-item horizontal="$element.horizontal">
-					<bk-form-label id="$element.id" colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:t.$element.translation' | t:'$element.label' }}</bk-form-label>
+					<bk-form-label id="$element.id" colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
 					<bk-select name="$element.id" label-id="$element.id" compact="$element.isCompact" ng-required="$element.required" ng-model="model.$element.model">
 		#foreach($option in $element.staticOptions)
-						<bk-option text="{{ '$projectName:t.$option.translation' | t:'$option.label' }}" value="'$option.value'"></bk-option>
+						<bk-option text="{{ '$projectName:${tprefix}.t.$option.translation' | t:'$option.label' }}" value="'$option.value'"></bk-option>
 		#end
 					</bk-select>
 				</bk-form-item>
 	#elseif($element.controlId == "input-radio" && $element.staticData != true)
-				<bk-form-group label="{{ '$projectName:t.$element.translation' | t:'$element.label' }}">
+				<bk-form-group label="{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}">
 					<bk-form-item ng-repeat="option in $element.options track by $index">
 						<bk-radio id="$element.id-{{$index}}" name="$element.id" compact="$element.isCompact" ng-model="model.$element.model" ng-value="'{{option.$element.optionValue}}'" ng-required="$element.required"></bk-radio>
 						<bk-radio-label for="$element.id-{{$index}}">{{option.$element.optionLabel}}</bk-radio-label>
 					</bk-form-item>
 				</bk-form-group>
 	#elseif($element.controlId == "input-radio" && $element.staticData)
-				<bk-form-group label="{{ '$projectName:t.$element.translation' | t:'$element.label' }}">
+				<bk-form-group label="{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}">
 		#foreach($option in $element.staticOptions)
 					<bk-form-item>
 						<bk-radio id="$element.id-$foreach.count" name="$element.id" compact="$element.isCompact" ng-model="model.$element.model" value="$option.value" ng-required="$element.required"></bk-radio>
-						<bk-radio-label for="$element.id-$foreach.count">{{ '$projectName:t.$option.translation' | t:'$option.label' }}</bk-radio-label>
+						<bk-radio-label for="$element.id-$foreach.count">{{ '$projectName:${tprefix}.t.$option.translation' | t:'$option.label' }}</bk-radio-label>
 					</bk-form-item>
 		#end
 				</bk-form-group>
@@ -139,7 +139,7 @@
 					<thead bk-table-header interactive="false">
 						<tr bk-table-row>
 		#foreach($header in $element.headers)
-							<th bk-table-header-cell>{{ '$projectName:t.$header.translation' | t:'$header.label' }}</th>
+							<th bk-table-header-cell>{{ '$projectName:${tprefix}.t.$header.translation' | t:'$header.label' }}</th>
 		#end
 						</tr>
 					</thead>
@@ -153,7 +153,7 @@
 				</table>
 	#elseif($element.controlId == "button")
 				<div>
-					<bk-button#if($element.sizeToText) class="bk-float-right"#else class="bk-full-width"#end #if($element.isSubmit)type="submit" ng-disabled="!forms.form.$valid"#end label="{{ '$projectName:t.$element.translation' | t:'$element.label' }}" compact="$element.isCompact" state="$element.type"#if($element.callback) ng-click="$element.callback"#end></bk-button>
+					<bk-button#if($element.sizeToText) class="bk-float-right"#else class="bk-full-width"#end #if($element.isSubmit)type="submit" ng-disabled="!forms.form.$valid"#end label="{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}" compact="$element.isCompact" state="$element.type"#if($element.callback) ng-click="$element.callback"#end></bk-button>
 				</div>
 	#elseif($element.controlId == "paragraph")
 				<p class="fd-text" ng-class="{'bk-pre-wrap' : $element.format}">#if($element.model){{ model.$element.model }}#else$element.text#end</p>

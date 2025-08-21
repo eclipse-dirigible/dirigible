@@ -62,6 +62,10 @@ function getTableReportBackendSources() {
 
 function getTableReportUISource() {
     return [
+        {
+            location: "/template-application-ui-angular/ui/translations-report.json.template",
+            action: "translate",
+        },
         // Location: "gen/{{genFolderName}}/ui/perspective/list"
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/dialog-window/controller.js.template",

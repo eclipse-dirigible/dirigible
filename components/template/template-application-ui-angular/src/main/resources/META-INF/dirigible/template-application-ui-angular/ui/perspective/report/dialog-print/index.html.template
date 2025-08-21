@@ -15,7 +15,7 @@
 
     <body>
 		<bk-toolbar has-title="true">
-			<bk-toolbar-title>{{ '$projectName:defaults.reportTitle' | t:{'name':'$name'} }}</bk-toolbar-title>
+			<bk-toolbar-title>{{ '$projectName:${tprefix}.defaults.reportTitle' | t:{'name':'$name'} }}</bk-toolbar-title>
 		</bk-toolbar>
         <bk-scrollbar ng-hide="data == null">
             <table bk-table display-mode="compact" inner-borders="top" outer-borders="none">
@@ -23,14 +23,14 @@
                     <tr bk-table-row>
                 #foreach ($property in $properties)
                     #if(!$property.dataAutoIncrement)
-						<th bk-table-header-cell>{{ '$projectName:t.$property.dataName' | t:'$property.name' }}</th>
+						<th bk-table-header-cell>{{ '$projectName:${tprefix}.t.$property.dataName' | t:'$property.name' }}</th>
                     #end
                 #end
                     </tr>
                 </thead>
                 <tbody bk-table-body>
                     <tr bk-table-row hoverable="true" ng-show="data.length == 0">
-                        <td bk-table-cell no-data="true">{{'$projectName:messages.noData' | t}}</td>
+                        <td bk-table-cell no-data="true">{{'$projectName:${tprefix}.messages.noData' | t}}</td>
                     </tr>
                     <tr bk-table-row hoverable="true" ng-repeat="next in data track by $index">
             #foreach ($property in $properties) 

@@ -7,7 +7,7 @@ const viewData = {
     id: '${name}',
     label: '${name}',
     translation: {
-        key: '$projectName:t.$dataName',
+        key: '$projectName:${tprefix}.t.$dataName',
     },
     region: 'center',
     lazyLoad: true,

@@ -9,10 +9,6 @@
  */
 package org.eclipse.dirigible.commons.api.helpers;
 
-import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
@@ -25,6 +21,9 @@ import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.util.Locale;
 import java.util.Optional;
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The Class DateTimeUtils.
@@ -44,13 +43,14 @@ public class DateTimeUtils {
                                           .appendOptional(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH))
                                           .appendOptional(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
                                           .toFormatter(Locale.ENGLISH);
+
     /** The Constant timeFormatter. */
     private static final DateTimeFormatter timeFormatter =
-            DateTimeFormatter.ofPattern("[HH:mm:ss.SSSSSS]" + "[yyyy-MM-dd]" + "[HH:mm:ss[.SSS][ Z]]", Locale.ENGLISH);
+            DateTimeFormatter.ofPattern("[HH:mm:ss.SSSSSS][yyyy-MM-dd]['T'][HH:mm:ss[.SSS][ Z]['Z']]", Locale.ENGLISH);
 
     /** The Constant datetimeFormatter. */
     private static final DateTimeFormatter datetimeFormatter =
-            new DateTimeFormatterBuilder().appendOptional(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+            new DateTimeFormatterBuilder().appendOptional(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss[.SSS]['Z']"))
                                           .appendOptional(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss.SSSSSS"))
                                           .appendOptional(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS"))
                                           .appendOptional(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSS"))
