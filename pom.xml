@@ -163,7 +163,7 @@
 
         <!-- FTP -->
         <mina-core.version>2.2.4</mina-core.version>
-        <sshd-core.version>2.15.0</sshd-core.version>
+        <sshd-core.version>2.16.0</sshd-core.version>
         <ftpserver.version>1.2.1</ftpserver.version>
 
         <!-- ActiveMQ -->
