@@ -1,23 +1,23 @@
-package org.eclipse.dirigible.components.data.processes.schema.imp;
+package org.eclipse.dirigible.components.data.processes.schema.export;
 
 import org.eclipse.dirigible.components.engine.bpm.SystemBpmProcess;
 import org.springframework.stereotype.Component;
 
 @Component
-class ImportDbSchemaProcess implements SystemBpmProcess {
+class ExportSchemaProcess implements SystemBpmProcess {
 
     @Override
     public String getIdentifier() {
-        return "import-schema";
+        return "export-schema";
     }
 
     @Override
     public String getDeploymentKey() {
-        return "import-schema";
+        return "export-schema";
     }
 
     @Override
     public String getResourcePath() {
-        return "/system-processes/import-schema.bpmn";
+        return "/system-processes/export-schema.bpmn";
     }
 }

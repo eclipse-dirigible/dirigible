@@ -7,20 +7,31 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.data.processes.schema.imp.tasks;
+package org.eclipse.dirigible.components.data.processes.schema.export.tasks;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-@Component("ImportTask") // used in the bpmn process
-public class ImportTask extends BaseImportTask {
+import java.util.Set;
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ImportTask.class);
+@Component("BuildExportTopologyTask") // used in the bpmn process
+public class BuildExportTopologyTask extends BaseExportTask {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(BuildExportTopologyTask.class);
 
     @Override
-    protected void execute(ImportProcessContext context) {
+    protected void execute(ExportProcessContext context) {
         LOGGER.info("Executing {} with context {}", this, context);
+
+        Set<String> includedTables = context.getIncludedTables();
+        LOGGER.info("includedTables {}", includedTables);
+
+        Set<String> excludedTables = context.getExcludedTables();
+        LOGGER.info("excludedTables {}", excludedTables);
+
+        String schema = context.getSchema();
+        LOGGER.info("schema {}", schema);
 
         String dataSource = context.getDataSource();
         LOGGER.info("dataSource {}", dataSource);
