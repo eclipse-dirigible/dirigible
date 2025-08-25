@@ -9,13 +9,11 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.service;
 
-import static java.text.MessageFormat.format;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.engine.bpm.flowable.config.BpmProviderFlowable;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActivityStatusData;
@@ -40,11 +38,15 @@ import org.flowable.variable.api.history.HistoricVariableInstance;
 import org.flowable.variable.api.persistence.entity.VariableInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import static java.text.MessageFormat.format;
 
 /**
  * Processing the BPM UI Service incoming requests.
@@ -297,6 +299,10 @@ public class BpmService {
      * @return the process instance id
      */
     public String startProcess(String processDefinitionKey, String businessKey, String parameters) {
+        return bpmProviderFlowable.startProcess(processDefinitionKey, businessKey, parameters);
+    }
+
+    public String startProcess(String processDefinitionKey, String businessKey, Map<String, Object> parameters) {
         return bpmProviderFlowable.startProcess(processDefinitionKey, businessKey, parameters);
     }
 

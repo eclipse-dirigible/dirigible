@@ -9,13 +9,11 @@
  */
 package org.eclipse.dirigible.components.base.helpers;
 
+import com.google.gson.*;
+import com.google.gson.reflect.TypeToken;
+
 import java.io.InputStreamReader;
 import java.lang.reflect.Type;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonParser;
-import com.google.gson.JsonSyntaxException;
 
 /**
  * The GsonHelper utility class.
@@ -23,10 +21,10 @@ import com.google.gson.JsonSyntaxException;
 public class JsonHelper {
 
     /** The GSON instance. */
-    private static final transient Gson GSON = new GsonBuilder().excludeFieldsWithoutExposeAnnotation()
-                                                                .setDateFormat("yyyy-MM-dd'T'HH:mm:ssZ")
-                                                                .setPrettyPrinting()
-                                                                .create();
+    private static final Gson GSON = new GsonBuilder().excludeFieldsWithoutExposeAnnotation()
+                                                      .setDateFormat("yyyy-MM-dd'T'HH:mm:ssZ")
+                                                      .setPrettyPrinting()
+                                                      .create();
 
     /**
      * To json.
@@ -88,6 +86,14 @@ public class JsonHelper {
      */
     public static <T> T fromJson(String src, Type type) {
         return GSON.fromJson(src, type);
+    }
+
+    public static <T> T fromJson(String json, TypeToken<T> typeToken) throws JsonSyntaxException {
+        try {
+            return GSON.fromJson(json, typeToken);
+        } catch (JsonSyntaxException ex) {
+            throw new JsonSyntaxException("JSON [" + json + "] cannot be deserialized to " + typeToken, ex);
+        }
     }
 
     /**
