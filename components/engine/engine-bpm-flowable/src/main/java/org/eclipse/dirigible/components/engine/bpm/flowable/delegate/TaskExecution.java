@@ -275,24 +275,6 @@ public class TaskExecution {
         return delegateExecution.hasVariableLocal(variableName);
     }
 
-    public <T> Optional<T> getVariable(String variableName, TypeToken<T> typeToken) {
-        if (!delegateExecution.hasVariable(variableName)) {
-            return Optional.empty();
-        }
-        Object variable = delegateExecution.getVariable(variableName);
-        if (null == variable) {
-            return Optional.empty();
-        }
-
-        if (variable instanceof String json) {
-            T value = JsonHelper.fromJson(json, typeToken);
-            return Optional.of(value);
-        }
-
-        throw new InvalidVariableException(
-                "Variable with name [" + variableName + "] has invalid value [" + variable + "]. Expected value of string value.");
-    }
-
     public <T> T getMandatoryVariable(String variableName, Class<T> type) {
         if (!delegateExecution.hasVariable(variableName)) {
             throw new InvalidVariableException("Missing mandatory variable name [" + variableName + "] of type " + type);
@@ -320,4 +302,35 @@ public class TaskExecution {
                 "Variable with name [" + variableName + "] has invalid value [" + variable + "]. Expected value of string value.");
     }
 
+    public <T> T getMandatoryVariable(String variableName, TypeToken<T> type) {
+        if (!delegateExecution.hasVariable(variableName)) {
+            throw new InvalidVariableException("Missing mandatory variable name [" + variableName + "] of type " + type);
+        }
+
+        return getVariable(variableName, type).orElseThrow(
+                () -> new InvalidVariableException("Missing mandatory variable name [" + variableName + "] of type " + type));
+    }
+
+    public <T> Optional<T> getVariable(String variableName, TypeToken<T> typeToken) {
+        if (!delegateExecution.hasVariable(variableName)) {
+            return Optional.empty();
+        }
+        Object variable = delegateExecution.getVariable(variableName);
+        if (null == variable) {
+            return Optional.empty();
+        }
+
+        if (variable instanceof String json) {
+            T value = JsonHelper.fromJson(json, typeToken);
+            return Optional.of(value);
+        }
+
+        throw new InvalidVariableException(
+                "Variable with name [" + variableName + "] has invalid value [" + variable + "]. Expected value of string value.");
+    }
+
+    public void setVariable(String variableName, List<String> exportTopology) {
+        String json = JsonHelper.toJson(exportTopology);
+        delegateExecution.setVariable(variableName, json);
+    }
 }

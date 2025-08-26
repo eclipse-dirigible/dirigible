@@ -6,6 +6,7 @@ import org.eclipse.dirigible.components.engine.bpm.flowable.delegate.JsonProcess
 import org.eclipse.dirigible.components.engine.bpm.flowable.delegate.TaskExecution;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -16,6 +17,7 @@ public class ExportProcessContext {
     private static final String DATA_SOURCE_CTX_PARAM = "dataSource";
     private static final String SCHEMA_CTX_PARAM = "schema";
     private static final String EXPORT_PATH_CTX_PARAM = "exportPath";
+    private static final String EXPORT_TOPOLOGY_CTX_PARAM = "exportTopology";
 
     private final TaskExecution execution;
 
@@ -59,5 +61,15 @@ public class ExportProcessContext {
                                .addVariable(SCHEMA_CTX_PARAM, params.getSchema())
                                .addVariable(EXPORT_PATH_CTX_PARAM, params.getExportPath())
                                .build();
+    }
+
+    public List<String> getExportTopology() {
+        TypeToken<List<String>> typeToken = new TypeToken<>() {};
+
+        return execution.getMandatoryVariable(EXPORT_TOPOLOGY_CTX_PARAM, typeToken);
+    }
+
+    public void setExportTopology(List<String> exportTopology) {
+        execution.setVariable(EXPORT_TOPOLOGY_CTX_PARAM, exportTopology);
     }
 }
