@@ -65,6 +65,8 @@ public class BuildExportTopologyTask extends BaseExportTask {
             } else {
                 targetTables = includedTables;
             }
+            
+            targetTables.removeAll(excludedTables);
 
             Set<String> tablesDependencies = getTableDependencies(targetTables, schema, dataSource);
             targetTables.addAll(tablesDependencies);
@@ -73,15 +75,13 @@ public class BuildExportTopologyTask extends BaseExportTask {
             tablesMismatch.retainAll(excludedTables);
             if (!tablesMismatch.isEmpty()) {
                 String errorMessage = "Exclude tables [" + excludedTables
-                        + "] cannot be removed from the export because they are dependencies for the target tables [" + targetTables
+                        + "] cannot be removed from the export because they are dependencies for some of the target tables [" + targetTables
                         + "]. Conflicting tables: " + tablesMismatch;
                 throw new SchemaExportException(errorMessage);
             }
 
-            targetTables.removeAll(excludedTables);
-
             LOGGER.info("All needed tables for export are {} ", targetTables);
-            List<String> topology = schemaTopologyService.sortTopologically(dataSource, schema);
+            List<String> topology = schemaTopologyService.sortTopologically(dataSource, schema, targetTables);
             LOGGER.info("Determined Topology {}", topology);
         } catch (SQLException ex) {
             throw new SchemaExportException("Failed to export topology of schema [" + schema + "] in datasource [" + dataSource + "]", ex);
