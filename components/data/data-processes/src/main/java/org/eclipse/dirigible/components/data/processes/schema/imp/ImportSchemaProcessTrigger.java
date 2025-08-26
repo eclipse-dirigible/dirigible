@@ -16,10 +16,15 @@ public class ImportSchemaProcessTrigger {
     }
 
     public String trigger(ImportSchemaProcessParams params) {
-        // TODO: validate params from business perspective
+        validateParams(params);
 
         Map<String, Object> variables = ImportProcessContext.createInitialVariables(params);
 
         return bpmService.startProcess("import-schema", null, variables);
+
+    }
+
+    private void validateParams(ImportSchemaProcessParams params) {
+        // TODO: validate params from business perspective
     }
 }
