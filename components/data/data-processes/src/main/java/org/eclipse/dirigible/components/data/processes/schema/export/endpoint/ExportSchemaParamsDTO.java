@@ -2,6 +2,7 @@ package org.eclipse.dirigible.components.data.processes.schema.export.endpoint;
 
 import jakarta.validation.constraints.NotBlank;
 
+import java.util.Collections;
 import java.util.Set;
 
 class ExportSchemaParamsDTO {
@@ -44,7 +45,7 @@ class ExportSchemaParamsDTO {
     }
 
     public Set<String> getIncludedTables() {
-        return includedTables;
+        return includedTables == null ? Collections.emptySet() : includedTables;
     }
 
     public void setIncludedTables(Set<String> includedTables) {
@@ -52,7 +53,7 @@ class ExportSchemaParamsDTO {
     }
 
     public Set<String> getExcludedTables() {
-        return excludedTables;
+        return excludedTables == null ? Collections.emptySet() : excludedTables;
     }
 
     public void setExcludedTables(Set<String> excludedTables) {
