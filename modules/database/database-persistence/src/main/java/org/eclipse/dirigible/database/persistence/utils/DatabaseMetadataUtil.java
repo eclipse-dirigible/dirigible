@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.database.persistence.utils;
 
 import com.google.common.base.CaseFormat;
+import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.database.persistence.model.PersistenceTableColumnModel;
 import org.eclipse.dirigible.database.persistence.model.PersistenceTableIndexModel;
 import org.eclipse.dirigible.database.persistence.model.PersistenceTableModel;
@@ -22,7 +23,10 @@ import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The Class DatabaseMetadataUtil.
@@ -144,10 +148,11 @@ public class DatabaseMetadataUtil {
      */
     private static void iterateForeignKeys(PersistenceTableModel tableMetadata, ResultSet foreignKeys) throws SQLException {
         do {
-            PersistenceTableRelationModel relationMetadata = new PersistenceTableRelationModel(
-                    foreignKeys.getString(JDBC_FK_TABLE_NAME_PROPERTY), foreignKeys.getString(JDBC_PK_TABLE_NAME_PROPERTY),
-                    foreignKeys.getString(JDBC_FK_COLUMN_NAME_PROPERTY), foreignKeys.getString(JDBC_PK_COLUMN_NAME_PROPERTY),
-                    foreignKeys.getString(JDBC_FK_NAME_PROPERTY), foreignKeys.getString(JDBC_PK_NAME_PROPERTY));
+            PersistenceTableRelationModel relationMetadata =
+                    new PersistenceTableRelationModel(foreignKeys.getString(JDBC_FK_TABLE_NAME_PROPERTY),
+                            foreignKeys.getString(JDBC_PK_TABLE_NAME_PROPERTY), foreignKeys.getString(JDBC_FK_COLUMN_NAME_PROPERTY),
+                            foreignKeys.getString(JDBC_PK_COLUMN_NAME_PROPERTY), foreignKeys.getString(JDBC_FK_NAME_PROPERTY),
+                            foreignKeys.getString(JDBC_PK_NAME_PROPERTY));
             tableMetadata.getRelations()
                          .add(relationMetadata);
         } while (foreignKeys.next());
@@ -279,16 +284,6 @@ public class DatabaseMetadataUtil {
     }
 
     /**
-     * Adds the correct formatting.
-     *
-     * @param columnName the column name
-     * @return the string
-     */
-    public static String addCorrectFormatting(String columnName) {
-        return CaseFormat.UPPER_UNDERSCORE.to(CaseFormat.UPPER_CAMEL, columnName);
-    }
-
-    /**
      * Normalize table name.
      *
      * @param table the table
@@ -330,6 +325,16 @@ public class DatabaseMetadataUtil {
         do {
             tableMetadata.setTableType(tables.getString("TABLE_TYPE"));
         } while (tables.next());
+    }
+
+    /**
+     * Adds the correct formatting.
+     *
+     * @param columnName the column name
+     * @return the string
+     */
+    public static String addCorrectFormatting(String columnName) {
+        return CaseFormat.UPPER_UNDERSCORE.to(CaseFormat.UPPER_CAMEL, columnName);
     }
 
     /**
@@ -375,6 +380,28 @@ public class DatabaseMetadataUtil {
             }
         }
         return null;
+    }
+
+    public static Set<String> getTableDependencies(Set<String> tables, String schema, DirigibleDataSource dataSource) throws SQLException {
+        Set<String> dependencies = new HashSet<>();
+        for (String table : tables) {
+            Set<String> tableDependencies = getTableDependencies(table, schema, dataSource);
+            dependencies.addAll(tableDependencies);
+        }
+        return dependencies;
+    }
+
+    public static Set<String> getTableDependencies(String table, String schema, DirigibleDataSource dataSource) throws SQLException {
+        Set<String> dependencies = new HashSet<>();
+        PersistenceTableModel tableMetadata = DatabaseMetadataUtil.getTableMetadata(table, schema, dataSource);
+        List<PersistenceTableRelationModel> relations = tableMetadata.getRelations();
+        if (null != relations) {
+            Set<String> tableDependencies = relations.stream()
+                                                     .map(m -> m.getToTableName())
+                                                     .collect(Collectors.toSet());
+            dependencies.addAll(tableDependencies);
+        }
+        return dependencies;
     }
 
 }
