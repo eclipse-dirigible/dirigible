@@ -1,6 +1,5 @@
 package org.eclipse.dirigible.components.engine.bpm.flowable.delegate;
 
-import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -20,8 +19,8 @@ public class JsonProcessVariablesBuilder {
     }
 
     public JsonProcessVariablesBuilder addVariable(String variableName, Object value) {
-        String jsonValue = JsonHelper.toJson(value);
-        variables.put(variableName, jsonValue);
+        Object serializedValue = VariableValueSerializer.serializeValue(value);
+        variables.put(variableName, serializedValue);
         return this;
     }
 }
