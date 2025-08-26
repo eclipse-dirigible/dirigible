@@ -5,7 +5,7 @@
 #break
 #end
 #end
-import { Controller, Get, Post, Put, Delete, response } from "sdk/http"
+import { Controller, Get, Post, Put, Delete, request, response } from "sdk/http"
 import { Extensions } from "sdk/extensions"
 import { ${name}Repository, ${name}EntityOptions } from "../../dao/${perspectiveName}/${name}Repository";
 #if($perspectiveRole || $roleRead || $roleWrite || $isEntityPropertySecurityEnabled)
@@ -36,7 +36,8 @@ class ${name}Service {
 #end
             const options: ${name}EntityOptions = {
                 $limit: ctx.queryParameters["$limit"] ? parseInt(ctx.queryParameters["$limit"]) : undefined,
-                $offset: ctx.queryParameters["$offset"] ? parseInt(ctx.queryParameters["$offset"]) : undefined
+                $offset: ctx.queryParameters["$offset"] ? parseInt(ctx.queryParameters["$offset"]) : undefined,
+                $language: request.getLocale().slice(0, 2)
             };
 #if($layoutType == "MANAGE_DETAILS" || $layoutType == "LIST_DETAILS")
 
@@ -142,7 +143,10 @@ class ${name}Service {
 #end
 #end
 #end
-            const entity = this.repository.findById(id);
+            const options: DimensionEntityOptions = {
+                $language: request.getLocale().slice(0, 2)
+            };
+            const entity = this.repository.findById(id, options);
             if (entity) {
 #if($isEntityPropertySecurityEnabled)
                 return this.transformEntity("read", entity);
