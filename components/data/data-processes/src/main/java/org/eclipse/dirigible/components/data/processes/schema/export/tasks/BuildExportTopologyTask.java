@@ -12,18 +12,16 @@ package org.eclipse.dirigible.components.data.processes.schema.export.tasks;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.transfer.service.DataTransferSchemaTopologyService;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
-import org.eclipse.dirigible.database.persistence.model.PersistenceTableModel;
-import org.eclipse.dirigible.database.persistence.model.PersistenceTableRelationModel;
 import org.eclipse.dirigible.database.persistence.utils.DatabaseMetadataUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Component("BuildExportTopologyTask") // used in the bpmn process
 public class BuildExportTopologyTask extends BaseExportTask {
@@ -40,35 +38,16 @@ public class BuildExportTopologyTask extends BaseExportTask {
 
     @Override
     protected void execute(ExportProcessContext context) {
-        LOGGER.info("Executing {} with context {}", this, context);
-
         Set<String> includedTables = context.getIncludedTables();
-        LOGGER.info("includedTables {}", includedTables);
-
         Set<String> excludedTables = context.getExcludedTables();
-        LOGGER.info("excludedTables {}", excludedTables);
-
         String schema = context.getSchema();
-        LOGGER.info("schema {}", schema);
-
         String dataSourceName = context.getDataSource();
-        LOGGER.info("dataSource {}", dataSourceName);
-
-        String exportPath = context.getExportPath();
-        LOGGER.info("exportPath {}", exportPath);
 
         DirigibleDataSource dataSource = datasourceManager.getDataSource(dataSourceName);
         try {
-            Set<String> targetTables = null;
-            if (includedTables.isEmpty()) {
-                targetTables = new HashSet<>(DatabaseMetadataUtil.getTablesInSchema(dataSource, schema));
-            } else {
-                targetTables = includedTables;
-            }
-            
-            targetTables.removeAll(excludedTables);
+            Set<String> targetTables = determineInitialTargetTables(dataSource, schema, includedTables, excludedTables);
 
-            Set<String> tablesDependencies = getTableDependencies(targetTables, schema, dataSource);
+            Set<String> tablesDependencies = DatabaseMetadataUtil.getTableDependencies(targetTables, schema, dataSource);
             targetTables.addAll(tablesDependencies);
 
             Set<String> tablesMismatch = new HashSet<>(tablesDependencies);
@@ -80,27 +59,27 @@ public class BuildExportTopologyTask extends BaseExportTask {
                 throw new SchemaExportException(errorMessage);
             }
 
-            LOGGER.info("All needed tables for export are {} ", targetTables);
-            List<String> topology = schemaTopologyService.sortTopologically(dataSource, schema, targetTables);
-            LOGGER.info("Determined Topology {}", topology);
-        } catch (SQLException ex) {
+            LOGGER.info("Determined tables for export: {} ", targetTables);
+            List<String> exportTopology = schemaTopologyService.sortTopologically(dataSource, schema, targetTables);
+            LOGGER.info("Determined export topology {}", exportTopology);
+        } catch (SQLException | RuntimeException ex) {
             throw new SchemaExportException("Failed to export topology of schema [" + schema + "] in datasource [" + dataSource + "]", ex);
         }
     }
 
-    private Set<String> getTableDependencies(Set<String> tables, String schema, DirigibleDataSource dataSource) throws SQLException {
-        Set<String> dependencies = new HashSet<>();
-        for (String table : tables) {
-            PersistenceTableModel tableMetadata = DatabaseMetadataUtil.getTableMetadata(table, schema, dataSource);
-            List<PersistenceTableRelationModel> relations = tableMetadata.getRelations();
-            if (null != relations) {
-                Set<String> tableDependencies = relations.stream()
-                                                         .map(m -> m.getToTableName())
-                                                         .collect(Collectors.toSet());
-                dependencies.addAll(tableDependencies);
-            }
+    private Set<String> determineInitialTargetTables(DirigibleDataSource dataSource, String schema, Set<String> includedTables,
+            Set<String> excludedTables) throws SQLException {
+        Set<String> targetTables;
+        if (includedTables.isEmpty()) {
+            List<String> schemaTables = DatabaseMetadataUtil.getTablesInSchema(dataSource, schema);
+            targetTables = null == schemaTables ? Collections.emptySet() : new HashSet<>(schemaTables);
+        } else {
+            targetTables = includedTables;
         }
-        return dependencies;
+
+        targetTables.removeAll(excludedTables);
+
+        return targetTables;
     }
 
 }
