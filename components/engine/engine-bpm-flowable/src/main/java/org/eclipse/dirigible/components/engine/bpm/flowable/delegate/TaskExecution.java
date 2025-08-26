@@ -329,8 +329,8 @@ public class TaskExecution {
                 "Variable with name [" + variableName + "] has invalid value [" + variable + "]. Expected value of string value.");
     }
 
-    public void setVariable(String variableName, List<String> exportTopology) {
-        String json = JsonHelper.toJson(exportTopology);
+    public void setVariable(String variableName, Object value) {
+        String json = JsonHelper.toJson(value);
         delegateExecution.setVariable(variableName, json);
     }
 }
