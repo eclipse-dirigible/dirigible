@@ -32,6 +32,10 @@
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-engine-bpm-flowable</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-engine-cms</artifactId>
+        </dependency>
     </dependencies>
 
     <properties>
