@@ -18,6 +18,8 @@ public class ExportProcessContext {
     private static final String SCHEMA_CTX_PARAM = "schema";
     private static final String EXPORT_PATH_CTX_PARAM = "exportPath";
     private static final String EXPORT_TOPOLOGY_CTX_PARAM = "exportTopology";
+    // caution: this value is used in the BPMN process definition
+    private static final String EXPORT_TABLE_COUNT_CTX_PARAM = "exportTablesCount";
 
     private final TaskExecution execution;
 
@@ -71,5 +73,10 @@ public class ExportProcessContext {
 
     public void setExportTopology(List<String> exportTopology) {
         execution.setVariable(EXPORT_TOPOLOGY_CTX_PARAM, exportTopology);
+        execution.setVariable(EXPORT_TABLE_COUNT_CTX_PARAM, exportTopology.size());
+    }
+
+    public int getLoopCounter() {
+        return execution.getLoopCounter();
     }
 }

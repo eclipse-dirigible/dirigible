@@ -1,7 +1,6 @@
 package org.eclipse.dirigible.components.engine.bpm.flowable.delegate;
 
 import com.google.gson.reflect.TypeToken;
-import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.flowable.bpmn.model.FlowElement;
 import org.flowable.bpmn.model.FlowableListener;
 import org.flowable.engine.delegate.DelegateExecution;
@@ -275,33 +274,6 @@ public class TaskExecution {
         return delegateExecution.hasVariableLocal(variableName);
     }
 
-    public <T> T getMandatoryVariable(String variableName, Class<T> type) {
-        if (!delegateExecution.hasVariable(variableName)) {
-            throw new InvalidVariableException("Missing mandatory variable name [" + variableName + "] of type " + type);
-        }
-
-        return getVariable(variableName, type).orElseThrow(
-                () -> new InvalidVariableException("Missing mandatory variable name [" + variableName + "] of type " + type));
-    }
-
-    public <T> Optional<T> getVariable(String variableName, Class<T> type) {
-        if (!delegateExecution.hasVariable(variableName)) {
-            return Optional.empty();
-        }
-        Object variable = delegateExecution.getVariable(variableName);
-        if (null == variable) {
-            return Optional.empty();
-        }
-
-        if (variable instanceof String json) {
-            T value = JsonHelper.fromJson(json, type);
-            return Optional.of(value);
-        }
-
-        throw new InvalidVariableException(
-                "Variable with name [" + variableName + "] has invalid value [" + variable + "]. Expected value of string value.");
-    }
-
     public <T> T getMandatoryVariable(String variableName, TypeToken<T> type) {
         if (!delegateExecution.hasVariable(variableName)) {
             throw new InvalidVariableException("Missing mandatory variable name [" + variableName + "] of type " + type);
@@ -315,22 +287,42 @@ public class TaskExecution {
         if (!delegateExecution.hasVariable(variableName)) {
             return Optional.empty();
         }
-        Object variable = delegateExecution.getVariable(variableName);
-        if (null == variable) {
-            return Optional.empty();
-        }
+        Object raw = delegateExecution.getVariable(variableName);
 
-        if (variable instanceof String json) {
-            T value = JsonHelper.fromJson(json, typeToken);
-            return Optional.of(value);
-        }
-
-        throw new InvalidVariableException(
-                "Variable with name [" + variableName + "] has invalid value [" + variable + "]. Expected value of string value.");
+        T deserializedValue = VariableValueSerializer.deserializeValue(raw, typeToken);
+        return Optional.ofNullable(deserializedValue);
     }
 
     public void setVariable(String variableName, Object value) {
-        String json = JsonHelper.toJson(value);
-        delegateExecution.setVariable(variableName, json);
+        Object serializedValue = VariableValueSerializer.serializeValue(value);
+        delegateExecution.setVariable(variableName, serializedValue);
+    }
+
+    private boolean isPrimitiveWrapperOrString(Object value) {
+        return value instanceof String || value instanceof Number || value instanceof Boolean;
+    }
+
+    public int getLoopCounter() {
+        return getMandatoryVariable("loopCounter", Integer.class);
+    }
+
+    public <T> T getMandatoryVariable(String variableName, Class<T> type) {
+        if (!delegateExecution.hasVariable(variableName)) {
+            throw new InvalidVariableException("Missing mandatory variable name [" + variableName + "] of type " + type);
+        }
+
+        return getVariable(variableName, type).orElseThrow(
+                () -> new InvalidVariableException("Missing mandatory variable name [" + variableName + "] of type " + type));
+    }
+
+    public <T> Optional<T> getVariable(String variableName, Class<T> type) {
+        if (!delegateExecution.hasVariable(variableName)) {
+            return Optional.empty();
+        }
+
+        Object raw = delegateExecution.getVariable(variableName);
+
+        T deserializeValue = VariableValueSerializer.deserializeValue(raw, type);
+        return Optional.ofNullable(deserializeValue);
     }
 }
