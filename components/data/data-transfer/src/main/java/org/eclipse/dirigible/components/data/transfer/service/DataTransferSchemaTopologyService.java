@@ -9,21 +9,17 @@
  */
 package org.eclipse.dirigible.components.data.transfer.service;
 
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-
-import javax.sql.DataSource;
-
 import org.eclipse.dirigible.components.base.artefact.topology.TopologicalSorter;
 import org.eclipse.dirigible.database.persistence.model.PersistenceTableModel;
 import org.eclipse.dirigible.database.persistence.utils.DatabaseMetadataUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+
+import javax.sql.DataSource;
+import java.sql.SQLException;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * The Class DataTransferSchemaTopologyService.
@@ -43,20 +39,30 @@ public class DataTransferSchemaTopologyService {
      * @throws SQLException the SQL exception
      */
     public List<String> sortTopologically(DataSource dataSource, String schemaName) throws SQLException {
+        List<String> tableNames = DatabaseMetadataUtil.getTablesInSchema(dataSource, schemaName);
+        return sortTopologically(dataSource, schemaName, tableNames);
+    }
+
+    /**
+     * Sort topologically.
+     *
+     * @param dataSource the data source
+     * @param schemaName the schema name
+     * @param tableNames table names
+     * @return the list
+     * @throws SQLException the SQL exception
+     */
+    public List<String> sortTopologically(DataSource dataSource, String schemaName, Collection<String> tableNames) throws SQLException {
 
         List<PersistenceTableModel> tables = new ArrayList<PersistenceTableModel>();
 
-        List<String> tableNames = DatabaseMetadataUtil.getTablesInSchema(dataSource, schemaName);
         if (tableNames != null) {
             for (String tableName : tableNames) {
                 PersistenceTableModel persistenceTableModel = DatabaseMetadataUtil.getTableMetadata(tableName, schemaName, dataSource);
                 tables.add(persistenceTableModel);
             }
         } else {
-            String error = schemaName + " does not exist in the selected database";
-            if (logger.isErrorEnabled()) {
-                logger.error(error);
-            }
+            logger.error("{} does not exist in the selected database", schemaName);
         }
 
         tables = sortTables(tables);
