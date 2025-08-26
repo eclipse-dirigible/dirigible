@@ -148,11 +148,10 @@ public class DatabaseMetadataUtil {
      */
     private static void iterateForeignKeys(PersistenceTableModel tableMetadata, ResultSet foreignKeys) throws SQLException {
         do {
-            PersistenceTableRelationModel relationMetadata =
-                    new PersistenceTableRelationModel(foreignKeys.getString(JDBC_FK_TABLE_NAME_PROPERTY),
-                            foreignKeys.getString(JDBC_PK_TABLE_NAME_PROPERTY), foreignKeys.getString(JDBC_FK_COLUMN_NAME_PROPERTY),
-                            foreignKeys.getString(JDBC_PK_COLUMN_NAME_PROPERTY), foreignKeys.getString(JDBC_FK_NAME_PROPERTY),
-                            foreignKeys.getString(JDBC_PK_NAME_PROPERTY));
+            PersistenceTableRelationModel relationMetadata = new PersistenceTableRelationModel(
+                    foreignKeys.getString(JDBC_FK_TABLE_NAME_PROPERTY), foreignKeys.getString(JDBC_PK_TABLE_NAME_PROPERTY),
+                    foreignKeys.getString(JDBC_FK_COLUMN_NAME_PROPERTY), foreignKeys.getString(JDBC_PK_COLUMN_NAME_PROPERTY),
+                    foreignKeys.getString(JDBC_FK_NAME_PROPERTY), foreignKeys.getString(JDBC_PK_NAME_PROPERTY));
             tableMetadata.getRelations()
                          .add(relationMetadata);
         } while (foreignKeys.next());
