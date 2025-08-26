@@ -172,34 +172,34 @@ export class ${name}Repository {
 #else
         let list = this.dao.list(options);
 #end
-        if (${multilingual}) {
-            try {
-                let script = sql.getDialect().select().column("*").from('"' + ${name}Repository.DEFINITION.table + '_LANG"').where('Language = ?').build();
-                const resultSet = query.execute(script, [options.$language]);
-                if (resultSet !== null && resultSet[0] !== null) {
-                    let translatedProperties = Object.getOwnPropertyNames(resultSet[0]);
-                    let maps = [];
-                    for (let i = 0; i < translatedProperties.length - 2; i++) {
-                        maps[i] = {};
-                    }
-                    resultSet.forEach((r) => {
-                        for (let i = 0; i < translatedProperties.length - 2; i++) {
-                            maps[i][r[translatedProperties[0]]] = r[translatedProperties[i + 1]];
-                        }
-                    });
-                    list.forEach((r) => {
-                        for (let i = 0; i < translatedProperties.length - 2; i++) {
-                            if (maps[i][r[translatedProperties[0]]]) {
-                                r[translatedProperties[i + 1]] = maps[i][r[translatedProperties[0]]];
-                            }
-                        }
-
-                    });
+#if( $multilingual == "true" )
+        try {
+            let script = sql.getDialect().select().column("*").from('"' + ${name}Repository.DEFINITION.table + '_LANG"').where('Language = ?').build();
+            const resultSet = query.execute(script, [options.$language]);
+            if (resultSet !== null && resultSet[0] !== null) {
+                let translatedProperties = Object.getOwnPropertyNames(resultSet[0]);
+                let maps = [];
+                for (let i = 0; i < translatedProperties.length - 2; i++) {
+                    maps[i] = {};
                 }
-            } catch (Error) {
-                console.error("Entity is marked as language dependent, but no language table present: " + ${name}Repository.DEFINITION.table);
+                resultSet.forEach((r) => {
+                    for (let i = 0; i < translatedProperties.length - 2; i++) {
+                        maps[i][r[translatedProperties[0]]] = r[translatedProperties[i + 1]];
+                    }
+                });
+                list.forEach((r) => {
+                    for (let i = 0; i < translatedProperties.length - 2; i++) {
+                        if (maps[i][r[translatedProperties[0]]]) {
+                            r[translatedProperties[i + 1]] = maps[i][r[translatedProperties[0]]];
+                        }
+                    }
+
+                });
             }
+        } catch (Error) {
+            console.error("Entity is marked as language dependent, but no language table present: " + ${name}Repository.DEFINITION.table);
         }
+#end
         return list;
     }
 
@@ -221,8 +221,8 @@ export class ${name}Repository {
         return entity ?? undefined;
 #else
         const entity = this.dao.find(id);
-        
-        if (entity && ${multilingual}) {
+#if( $multilingual == "true" )        
+        if (entity) {
             try {
                 let script = sql.getDialect().select().column("*").from('"' + ${name}Repository.DEFINITION.table + '_LANG"').where('Language = ?').where('Id = ?').build();
                 const resultSet = query.execute(script, [options.$language, id]);
@@ -245,7 +245,7 @@ export class ${name}Repository {
                 console.error("Entity is marked as language dependent, but no language table present: " + ${name}Repository.DEFINITION.table);
             }
         }
-        
+ #end
         return entity ?? undefined;
 #end
     }
