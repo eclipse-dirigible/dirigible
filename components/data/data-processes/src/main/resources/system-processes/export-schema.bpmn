@@ -7,13 +7,17 @@
     <endEvent id="end-event"/>
     <serviceTask id="save-export-topology-in-file" name="Save Export Topology in file" flowable:async="true" flowable:delegateExpression="${SaveExportTopologyTask}"/>
     <sequenceFlow id="sid-645847E8-C959-48BD-816B-2E9CC4A2F08A" sourceRef="build-export-topology" targetRef="save-export-topology-in-file"/>
-    <serviceTask id="export-table-in-csv-file" name="Export Table in CSV file" flowable:async="true" flowable:delegateExpression="${ExportTableInCSVFileTask}">
+    <serviceTask id="export-table-data" name="Export Table Data" flowable:async="true" flowable:delegateExpression="${ExportTableDataTask}">
       <multiInstanceLoopCharacteristics isSequential="true" flowable:collection="${exportTopology}" flowable:elementVariable="targetTable">
         <extensionElements/>
       </multiInstanceLoopCharacteristics>
     </serviceTask>
-    <sequenceFlow id="sid-05E51BB6-8829-4E15-AB58-DEA9D8446866" sourceRef="save-export-topology-in-file" targetRef="export-table-in-csv-file"/>
-    <sequenceFlow id="sid-308CEE05-3C46-42AD-BC77-10D9B69683B7" sourceRef="export-table-in-csv-file" targetRef="end-event"/>
+    <sequenceFlow id="sid-308CEE05-3C46-42AD-BC77-10D9B69683B7" sourceRef="export-table-data" targetRef="end-event"/>
+    <serviceTask id="export-table-definition" name="Export Table Definition" flowable:async="true" flowable:delegateExpression="${ExportTableDefinitionTask}">
+      <multiInstanceLoopCharacteristics isSequential="true" flowable:collection="${exportTopology}" flowable:elementVariable="targetTable"/>
+    </serviceTask>
+    <sequenceFlow id="sid-4FC7E816-F254-45FF-ADD8-90D7EED42B9A" sourceRef="save-export-topology-in-file" targetRef="export-table-definition"/>
+    <sequenceFlow id="sid-41E17C87-3FB0-43F3-934B-085461CF9171" sourceRef="export-table-definition" targetRef="export-table-data"/>
   </process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_export-schema">
     <bpmndi:BPMNPlane bpmnElement="export-schema" id="BPMNPlane_export-schema">
@@ -24,31 +28,36 @@
         <omgdc:Bounds height="80.0" width="100.0" x="300.0" y="53.0"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="end-event" id="BPMNShape_end-event">
-        <omgdc:Bounds height="28.0" width="28.0" x="840.000011834232" y="79.00000297264646"/>
+        <omgdc:Bounds height="28.0" width="27.999999999999886" x="1020.000004860488" y="79.00000594529295"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="save-export-topology-in-file" id="BPMNShape_save-export-topology-in-file">
         <omgdc:Bounds height="80.00000000000001" width="100.00000000000006" x="480.0000135248369" y="53.00000185966506"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape bpmnElement="export-table-in-csv-file" id="BPMNShape_export-table-in-csv-file">
-        <omgdc:Bounds height="80.00000000000003" width="100.0" x="675.0000190193017" y="53.00000074668366"/>
+      <bpmndi:BPMNShape bpmnElement="export-table-data" id="BPMNShape_export-table-data">
+        <omgdc:Bounds height="80.00000000000006" width="100.0" x="840.000011834232" y="53.00000446601391"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="export-table-definition" id="BPMNShape_export-table-definition">
+        <omgdc:Bounds height="80.0" width="100.0" x="660.0000092983253" y="53.00000669197672"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge bpmnElement="sid-797626AE-B2F6-4C00-ABEE-FB30ADC177E4" id="BPMNEdge_sid-797626AE-B2F6-4C00-ABEE-FB30ADC177E4" flowable:sourceDockerX="15.0" flowable:sourceDockerY="15.0" flowable:targetDockerX="50.0" flowable:targetDockerY="40.0">
         <omgdi:waypoint x="119.94999969544602" y="93.0"/>
         <omgdi:waypoint x="299.9999999999858" y="93.0"/>
       </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="sid-41E17C87-3FB0-43F3-934B-085461CF9171" id="BPMNEdge_sid-41E17C87-3FB0-43F3-934B-085461CF9171" flowable:sourceDockerX="50.0" flowable:sourceDockerY="40.0" flowable:targetDockerX="50.0" flowable:targetDockerY="40.00000000000003">
+        <omgdi:waypoint x="759.9500086632855" y="93.00000607365375"/>
+        <omgdi:waypoint x="840.000010874448" y="93.00000508371859"/>
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="sid-645847E8-C959-48BD-816B-2E9CC4A2F08A" id="BPMNEdge_sid-645847E8-C959-48BD-816B-2E9CC4A2F08A" flowable:sourceDockerX="50.0" flowable:sourceDockerY="40.0" flowable:targetDockerX="50.00000000000003" flowable:targetDockerY="40.00000000000001">
         <omgdi:waypoint x="399.94999943409806" y="93.00000051605701"/>
         <omgdi:waypoint x="480.0000135248369" y="93.00000134309148"/>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge bpmnElement="sid-308CEE05-3C46-42AD-BC77-10D9B69683B7" id="BPMNEdge_sid-308CEE05-3C46-42AD-BC77-10D9B69683B7" flowable:sourceDockerX="50.0" flowable:sourceDockerY="40.000000000000014" flowable:targetDockerX="14.0" flowable:targetDockerY="14.0">
-        <omgdi:waypoint x="774.9500190193016" y="93.00000160859722"/>
-        <omgdi:waypoint x="840.000011834232" y="93.00000273106909"/>
+      <bpmndi:BPMNEdge bpmnElement="sid-308CEE05-3C46-42AD-BC77-10D9B69683B7" id="BPMNEdge_sid-308CEE05-3C46-42AD-BC77-10D9B69683B7" flowable:sourceDockerX="50.0" flowable:sourceDockerY="40.000000000000036" flowable:targetDockerX="13.999999999999943" flowable:targetDockerY="14.0">
+        <omgdi:waypoint x="939.9500118341845" y="93.0000049791389"/>
+        <omgdi:waypoint x="1020.0000048604877" y="93.00000580147416"/>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge bpmnElement="sid-05E51BB6-8829-4E15-AB58-DEA9D8446866" id="BPMNEdge_sid-05E51BB6-8829-4E15-AB58-DEA9D8446866" flowable:sourceDockerX="50.00000000000003" flowable:sourceDockerY="40.00000000000001" flowable:targetDockerX="50.0" flowable:targetDockerY="40.000000000000014">
-        <omgdi:waypoint x="579.950013524837" y="93.00000072572276"/>
-        <omgdi:waypoint x="612.0" y="93.0"/>
-        <omgdi:waypoint x="612.0" y="94.0"/>
-        <omgdi:waypoint x="675.0000190193017" y="93.44203574045315"/>
+      <bpmndi:BPMNEdge bpmnElement="sid-4FC7E816-F254-45FF-ADD8-90D7EED42B9A" id="BPMNEdge_sid-4FC7E816-F254-45FF-ADD8-90D7EED42B9A" flowable:sourceDockerX="50.000000000000036" flowable:sourceDockerY="40.00000000000001" flowable:targetDockerX="50.0" flowable:targetDockerY="40.0">
+        <omgdi:waypoint x="579.950013524837" y="93.0000032006316"/>
+        <omgdi:waypoint x="660.0000092983158" y="93.0000053496679"/>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
