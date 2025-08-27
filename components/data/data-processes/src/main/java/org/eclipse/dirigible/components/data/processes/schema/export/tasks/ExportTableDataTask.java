@@ -13,15 +13,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-@Component("ExportTableInCSVFileTask") // used in the bpmn process
-class ExportTableInCSVFileTask extends BaseExportTask {
+@Component("ExportTableDataTask") // used in the bpmn process
+class ExportTableDataTask extends BaseExportTask {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ExportTableInCSVFileTask.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ExportTableDataTask.class);
 
     @Override
     protected void execute(ExportProcessContext context) {
         String table = context.getCurrentTable();
-        LOGGER.info("Exporting table [{}]", table);
+        LOGGER.info("Exporting table data [{}]", table);
     }
 
 }
