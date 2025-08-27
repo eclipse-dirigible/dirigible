@@ -36,7 +36,6 @@ class ExportTableDefinitionTask extends BaseExportTask {
     protected void execute(ExportProcessContext context) {
         String table = context.getCurrentTable();
         String exportPath = context.getExportPath();
-        LOGGER.info("Exporting table definition [{}]", table);
 
         Table tableDefinition = loadTableDefinition(context, table);
         String fileName = table + ".json";
