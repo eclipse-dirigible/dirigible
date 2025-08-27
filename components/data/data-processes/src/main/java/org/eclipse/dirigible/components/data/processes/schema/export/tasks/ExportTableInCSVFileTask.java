@@ -13,8 +13,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
-
 @Component("ExportTableInCSVFileTask") // used in the bpmn process
 class ExportTableInCSVFileTask extends BaseExportTask {
 
@@ -22,11 +20,8 @@ class ExportTableInCSVFileTask extends BaseExportTask {
 
     @Override
     protected void execute(ExportProcessContext context) {
-        int index = context.getLoopCounter();
-
-        List<String> exportTopology = context.getExportTopology();
-        String table = exportTopology.get(index);
-        LOGGER.info("Exporting table [{}] with index [{}]", table, index);
+        String table = context.getCurrentTable();
+        LOGGER.info("Exporting table [{}]", table);
     }
 
 }

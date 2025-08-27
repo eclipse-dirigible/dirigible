@@ -17,6 +17,7 @@ import org.flowable.engine.ProcessEngineConfiguration;
 import org.flowable.spring.SpringProcessEngineConfiguration;
 import org.flowable.spring.boot.actuate.endpoint.ProcessEngineEndpoint;
 import org.flowable.spring.boot.actuate.info.FlowableInfoContributor;
+import org.flowable.variable.api.types.VariableType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -29,6 +30,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import javax.sql.DataSource;
+import java.util.List;
 
 /**
  * The Class BpmFlowableConfig.
@@ -83,6 +85,9 @@ public class BpmFlowableConfig {
         config.setApplicationContext(applicationContext);
 
         config.setProcessDiagramGenerator(new DirigibleProcessDiagramGenerator());
+
+        List<VariableType> customPreVariableTypes = List.of(new SimpleCollectionVariableType());
+        config.setCustomPreVariableTypes(customPreVariableTypes);
 
         return config;
     }

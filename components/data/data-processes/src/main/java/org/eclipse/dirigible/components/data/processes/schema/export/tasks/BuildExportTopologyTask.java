@@ -63,6 +63,7 @@ public class BuildExportTopologyTask extends BaseExportTask {
             List<String> exportTopology = schemaTopologyService.sortTopologically(dataSource, schema, targetTables);
             LOGGER.debug("Determined export topology {}", exportTopology);
             context.setExportTopology(exportTopology);
+
         } catch (SQLException | RuntimeException ex) {
             throw new SchemaExportException("Failed to export topology of schema [" + schema + "] in datasource [" + dataSource + "]", ex);
         }
