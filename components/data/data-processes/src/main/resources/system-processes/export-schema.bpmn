@@ -8,8 +8,8 @@
     <serviceTask id="save-export-topology-in-file" name="Save Export Topology in file" flowable:async="true" flowable:delegateExpression="${SaveExportTopologyTask}"/>
     <sequenceFlow id="sid-645847E8-C959-48BD-816B-2E9CC4A2F08A" sourceRef="build-export-topology" targetRef="save-export-topology-in-file"/>
     <serviceTask id="export-table-in-csv-file" name="Export Table in CSV file" flowable:async="true" flowable:delegateExpression="${ExportTableInCSVFileTask}">
-      <multiInstanceLoopCharacteristics isSequential="true">
-        <loopCardinality>${exportTablesCount}</loopCardinality>
+      <multiInstanceLoopCharacteristics isSequential="true" flowable:collection="${exportTopology}" flowable:elementVariable="targetTable">
+        <extensionElements/>
       </multiInstanceLoopCharacteristics>
     </serviceTask>
     <sequenceFlow id="sid-05E51BB6-8829-4E15-AB58-DEA9D8446866" sourceRef="save-export-topology-in-file" targetRef="export-table-in-csv-file"/>
