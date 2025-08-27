@@ -9,23 +9,15 @@
  */
 package org.eclipse.dirigible.components.data.processes.schema.export.tasks;
 
-import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.management.load.DataSourceMetadataLoader;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.structures.domain.Table;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
-import org.eclipse.dirigible.components.engine.cms.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
-import java.util.Map;
 
 @Component("ExportTableDefinitionTask") // used in the bpmn process
 class ExportTableDefinitionTask extends BaseExportTask {
@@ -63,50 +55,6 @@ class ExportTableDefinitionTask extends BaseExportTask {
             throw new SchemaExportException(
                     "Failed to export table definition for " + tableName + " from schema " + schema + " using data source " + dataSource,
                     ex);
-        }
-    }
-
-    private void saveObjectAsJsonDocument(Object object, String fileName, String exportPath) {
-        String exportTopologyJson = JsonHelper.toJson(object);
-        saveDocument(exportTopologyJson, fileName, MediaType.APPLICATION_JSON_VALUE, exportPath);
-    }
-
-    private void saveDocument(String content, String fileName, String mediaType, String exportPath) {
-        CmisFolder exportFolder = getFolder(exportPath);
-        saveDocument(content, fileName, mediaType, exportFolder);
-    }
-
-    private void saveDocument(String content, String fileName, String mediaType, CmisFolder folder) {
-        CmisSession cmisSession = CmisSessionFactory.getSession();
-
-        Map<String, String> fileProps = Map.of(CmisConstants.OBJECT_TYPE_ID, CmisConstants.OBJECT_TYPE_DOCUMENT, //
-                CmisConstants.NAME, fileName);
-
-        // this implementation is fine for small files
-        byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
-        try (InputStream inStream = new ByteArrayInputStream(bytes)) {
-
-            long length = bytes.length; // not needed?
-            CmisContentStream contentStream = cmisSession.getObjectFactory()
-                                                         .createContentStream(fileName, length, mediaType, inStream);
-
-            folder.createDocument(fileProps, contentStream);
-        } catch (IOException ex) {
-            throw new SchemaExportException("Failed to create document with name [" + fileName + "] in folder [" + folder + "]", ex);
-        }
-    }
-
-    private CmisFolder getFolder(String folderPath) {
-        CmisSession cmisSession = CmisSessionFactory.getSession();
-
-        try {
-            CmisObject exportFolderAsObject = cmisSession.getObjectByPath(folderPath);
-            if (exportFolderAsObject instanceof CmisFolder exportFolder) {
-                return exportFolder;
-            }
-            throw new SchemaExportException("Returned cmis object " + exportFolderAsObject + " is not a folder");
-        } catch (IOException ex) {
-            throw new SchemaExportException("Failed to get folder from path " + folderPath, ex);
         }
     }
 

@@ -9,17 +9,15 @@
  */
 package org.eclipse.dirigible.components.data.processes.schema.export.tasks;
 
-import org.eclipse.dirigible.components.base.helpers.JsonHelper;
-import org.eclipse.dirigible.components.engine.cms.*;
+import org.eclipse.dirigible.components.engine.cms.CmisConstants;
+import org.eclipse.dirigible.components.engine.cms.CmisFolder;
+import org.eclipse.dirigible.components.engine.cms.CmisSession;
+import org.eclipse.dirigible.components.engine.cms.CmisSessionFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -39,7 +37,7 @@ class SaveExportTopologyTask extends BaseExportTask {
         String exportPath = context.getExportPath();
         try {
             CmisFolder exportFolder = createExportFolder(cmisSession, exportPath);
-            createTopolgyFile(exportTopology, cmisSession, exportFolder);
+            saveObjectAsJsonDocument(exportTopology, EXPORT_TOPOLOGY_FILENAME, exportFolder);
         } catch (IOException ex) {
             throw new SchemaExportException("Failed to save export topology file", ex);
         }
@@ -51,23 +49,5 @@ class SaveExportTopologyTask extends BaseExportTask {
                 CmisConstants.NAME, exportPath);
 
         return rootFolder.createFolder(rootFolderProps);
-    }
-
-    private void createTopolgyFile(List<String> exportTopology, CmisSession cmisSession, CmisFolder exportFolder) throws IOException {
-        Map<String, String> topolgyFileProps = Map.of(CmisConstants.OBJECT_TYPE_ID, CmisConstants.OBJECT_TYPE_DOCUMENT, //
-                CmisConstants.NAME, EXPORT_TOPOLOGY_FILENAME);
-
-        // this implementation is fine for small files
-        String exportTopologyJson = JsonHelper.toJson(exportTopology);
-        byte[] bytes = exportTopologyJson.getBytes(StandardCharsets.UTF_8);
-        try (InputStream inStream = new ByteArrayInputStream(bytes)) {
-
-            long length = bytes.length; // not needed?
-            CmisContentStream contentStream = cmisSession.getObjectFactory()
-                                                         .createContentStream(EXPORT_TOPOLOGY_FILENAME, length,
-                                                                 MediaType.APPLICATION_JSON_VALUE, inStream);
-
-            exportFolder.createDocument(topolgyFileProps, contentStream);
-        }
     }
 }
