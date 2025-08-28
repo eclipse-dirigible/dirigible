@@ -4,12 +4,17 @@ import org.eclipse.dirigible.components.data.processes.schema.imp.ImportSchemaPr
 import org.eclipse.dirigible.components.engine.bpm.flowable.delegate.JsonProcessVariablesBuilder;
 import org.eclipse.dirigible.components.engine.bpm.flowable.delegate.TaskExecution;
 
+import java.util.List;
 import java.util.Map;
 
 public class ImportProcessContext {
 
     private static final String DATA_SOURCE_CTX_PARAM = "dataSource";
     private static final String EXPORT_PATH_CTX_PARAM = "exportPath";
+
+    // caution: these values are used in the BPMN process definition
+    private static final String TABLES_CTX_PARAM = "tables";
+    private static final String TABLE_CTX_PARAM = "table";
 
     private final TaskExecution execution;
 
@@ -32,5 +37,13 @@ public class ImportProcessContext {
                                .addVariable(DATA_SOURCE_CTX_PARAM, params.getDataSource())
                                .addVariable(EXPORT_PATH_CTX_PARAM, params.getExportPath())
                                .build();
+    }
+
+    public void setTables(List<String> tables) {
+        execution.setVariable(TABLES_CTX_PARAM, tables);
+    }
+
+    public String getTable() {
+        return execution.getMandatoryVariable(TABLE_CTX_PARAM, String.class);
     }
 }
