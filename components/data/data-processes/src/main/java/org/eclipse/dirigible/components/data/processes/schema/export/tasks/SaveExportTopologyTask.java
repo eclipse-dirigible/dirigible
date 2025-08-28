@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.data.processes.schema.export.tasks;
 
+import org.eclipse.dirigible.components.data.processes.schema.export.ExportFilesHelper;
 import org.eclipse.dirigible.components.engine.cms.CmisConstants;
 import org.eclipse.dirigible.components.engine.cms.CmisFolder;
 import org.eclipse.dirigible.components.engine.cms.CmisSession;
@@ -26,8 +27,6 @@ class SaveExportTopologyTask extends BaseExportTask {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SaveExportTopologyTask.class);
 
-    private static final String EXPORT_TOPOLOGY_FILENAME = "export-topology.json";
-
     @Override
     protected void execute(ExportProcessContext context) {
         List<String> exportTopology = context.getExportTopology();
@@ -37,7 +36,8 @@ class SaveExportTopologyTask extends BaseExportTask {
         String exportPath = context.getExportPath();
         try {
             CmisFolder exportFolder = createExportFolder(cmisSession, exportPath);
-            saveObjectAsJsonDocument(exportTopology, EXPORT_TOPOLOGY_FILENAME, exportFolder);
+            String topologyFilename = ExportFilesHelper.getExportTopologyFilename();
+            saveObjectAsJsonDocument(exportTopology, topologyFilename, exportFolder);
         } catch (IOException ex) {
             throw new SchemaExportException("Failed to save export topology file", ex);
         }
