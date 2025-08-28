@@ -38,7 +38,6 @@ abstract class BaseExportTask extends BPMTask {
         Map<String, String> fileProps = Map.of(CmisConstants.OBJECT_TYPE_ID, CmisConstants.OBJECT_TYPE_DOCUMENT, //
                 CmisConstants.NAME, fileName);
 
-        // this implementation is fine for small files
         byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
         try (InputStream inStream = new ByteArrayInputStream(bytes)) {
 
@@ -56,13 +55,33 @@ abstract class BaseExportTask extends BPMTask {
         CmisSession cmisSession = CmisSessionFactory.getSession();
 
         try {
-            CmisObject exportFolderAsObject = cmisSession.getObjectByPath(folderPath);
-            if (exportFolderAsObject instanceof CmisFolder exportFolder) {
-                return exportFolder;
+            CmisObject folderAsObject = cmisSession.getObjectByPath(folderPath);
+            if (folderAsObject instanceof CmisFolder folder) {
+                return folder;
             }
-            throw new SchemaExportException("Returned cmis object " + exportFolderAsObject + " is not a folder");
+            throw new SchemaExportException("Returned cmis object " + folderAsObject + " is not a folder");
         } catch (IOException ex) {
-            throw new SchemaExportException("Failed to get folder from path " + folderPath, ex);
+            throw new SchemaExportException("Failed to get folder for path " + folderPath, ex);
+        }
+    }
+
+    protected void saveDocument(InputStream contentInputStream, String fileName, String mediaType, String folderPath) {
+        CmisSession cmisSession = CmisSessionFactory.getSession();
+
+        Map<String, String> fileProps = Map.of(CmisConstants.OBJECT_TYPE_ID, CmisConstants.OBJECT_TYPE_DOCUMENT, //
+                CmisConstants.NAME, fileName);
+
+        CmisFolder folder = getFolder(folderPath);
+
+        try {
+
+            long length = -1; // not needed?
+            CmisContentStream contentStream = cmisSession.getObjectFactory()
+                                                         .createContentStream(fileName, length, mediaType, contentInputStream);
+
+            folder.createDocument(fileProps, contentStream);
+        } catch (IOException ex) {
+            throw new SchemaExportException("Failed to create document with name [" + fileName + "] in folder [" + folder + "]", ex);
         }
     }
 
