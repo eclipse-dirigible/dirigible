@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.data.processes.schema.export.tasks;
 
 import org.eclipse.dirigible.components.data.management.load.DataSourceMetadataLoader;
+import org.eclipse.dirigible.components.data.processes.schema.export.ExportFilesHelper;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.structures.domain.Table;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
@@ -38,7 +39,7 @@ class ExportTableDefinitionTask extends BaseExportTask {
         String exportPath = context.getExportPath();
 
         Table tableDefinition = loadTableDefinition(context, table);
-        String fileName = table + ".json";
+        String fileName = ExportFilesHelper.createTableDefinitionFilename(table);
         saveObjectAsJsonDocument(tableDefinition, fileName, exportPath);
     }
 

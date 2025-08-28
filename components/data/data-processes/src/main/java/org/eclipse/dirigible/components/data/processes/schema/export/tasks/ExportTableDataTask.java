@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.data.processes.schema.export.tasks;
 
 import org.eclipse.dirigible.components.data.export.service.DatabaseExportService;
+import org.eclipse.dirigible.components.data.processes.schema.export.ExportFilesHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -66,23 +67,22 @@ class ExportTableDataTask extends BaseExportTask {
                 databaseExportService.exportStructure(dataSourceName, schema, table, out);
             }
         } catch (IOException | RuntimeException ex) {
-            throw new SchemaExportException(
-                    "Failed to export table [" + table + "] from schema [" + schema + "] from data source [" + dataSourceName
-                            + "] into temp file", ex);
+            throw new SchemaExportException("Failed to export table [" + table + "] from schema [" + schema + "] from data source ["
+                    + dataSourceName + "] into temp file", ex);
         }
     }
 
-    private void saveFileAsDocument(ExportProcessContext context, File tempFile) {
+    private void saveFileAsDocument(ExportProcessContext context, File file) {
         String table = context.getCurrentTable();
         String exportFolder = context.getExportPath();
+        String fileName = ExportFilesHelper.createTableDataFilename(table);
 
-        try (InputStream in = new BufferedInputStream(new FileInputStream(tempFile))) {
-
-            String fileName = table + ".csv";
+        try (InputStream in = new BufferedInputStream(new FileInputStream(file))) {
             saveDocument(in, fileName, CSV_MEDIA_TYPE, exportFolder);
 
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        } catch (IOException | RuntimeException ex) {
+            throw new SchemaExportException(
+                    "Failed to save file [" + file + "] to document [" + fileName + "] in to export folder [" + exportFolder + "]", ex);
         }
     }
 

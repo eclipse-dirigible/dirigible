@@ -13,20 +13,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-@Component("ImportTask") // used in the bpmn process
-public class ImportTask extends BaseImportTask {
+@Component("ImportTableDataTask") // used in the bpmn process
+class ImportTableDataTask extends BaseImportTask {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ImportTask.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ImportTableDataTask.class);
 
     @Override
     protected void execute(ImportProcessContext context) {
-        LOGGER.info("Executing {} with context {}", this, context);
-
-        String dataSource = context.getDataSource();
-        LOGGER.info("dataSource {}", dataSource);
-
-        String exportPath = context.getExportPath();
-        LOGGER.info("exportPath {}", exportPath);
+        String table = context.getTable();
+        LOGGER.info("Importing data into table {} ", table);
     }
 
 }
