@@ -9,19 +9,10 @@
  */
 package org.eclipse.dirigible.components.data.structures.domain;
 
-import jakarta.annotation.Nullable;
-import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
-import jakarta.persistence.ElementCollection;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.OrderColumn;
-
-import org.eclipse.dirigible.components.base.converters.ArrayOfStringsToCsvConverter;
-
 import com.google.gson.annotations.Expose;
+import jakarta.annotation.Nullable;
+import jakarta.persistence.*;
+import org.eclipse.dirigible.components.base.converters.ArrayOfStringsToCsvConverter;
 
 /**
  * The Class TableConstraintForeignKey.
@@ -60,6 +51,23 @@ public class TableConstraintForeignKey extends TableConstraint {
     /**
      * Instantiates a new table constraint foreign key.
      *
+     * @param referencedTable the referenced table
+     * @param referencedSchema the referenced schema
+     * @param columnName the column name
+     * @param referencedColumnName the referenced column name
+     * @param constraints the constraints
+     */
+    public TableConstraintForeignKey(String referencedTable, String referencedSchema, String columnName, String referencedColumnName,
+            TableConstraints constraints) {
+        this(constraints.getTable()
+                        .getName()
+                + "_" + referencedTable, null, new String[] {columnName}, referencedTable, referencedSchema,
+                new String[] {referencedColumnName}, constraints);
+    }
+
+    /**
+     * Instantiates a new table constraint foreign key.
+     *
      * @param name the name
      * @param modifiers the modifiers
      * @param columns the columns
@@ -77,24 +85,6 @@ public class TableConstraintForeignKey extends TableConstraint {
         this.constraints.getForeignKeys()
                         .add(this);
     }
-
-    /**
-     * Instantiates a new table constraint foreign key.
-     *
-     * @param referencedTable the referenced table
-     * @param referencedSchema the referenced schema
-     * @param columnName the column name
-     * @param referencedColumnName the referenced column name
-     * @param constraints the constraints
-     */
-    public TableConstraintForeignKey(String referencedTable, String referencedSchema, String columnName, String referencedColumnName,
-            TableConstraints constraints) {
-        this(constraints.getTable()
-                        .getName()
-                + "_" + referencedTable, null, new String[] {columnName}, referencedTable, referencedSchema,
-                new String[] {referencedColumnName}, constraints);
-    }
-
 
     /**
      * Instantiates a new table constraint foreign key.
@@ -183,8 +173,11 @@ public class TableConstraintForeignKey extends TableConstraint {
     @Override
     public String toString() {
         return "TableConstraintForeignKey [id=" + id + ", referencedTable=" + referencedTable + ", referencedColumns=" + referencedColumns
-                + ", name=" + name + ", modifiers=" + modifiers + ", columns=" + columns + ", constraints.table=" + constraints.getTable()
-                                                                                                                               .getName()
+                + ", name=" + name + ", modifiers=" + modifiers + ", columns=" + columns + ", constraints.table="
+                + (null == constraints ? null
+                        : (null == constraints.getTable() ? null
+                                : constraints.getTable()
+                                             .getName()))
                 + "]";
     }
 
