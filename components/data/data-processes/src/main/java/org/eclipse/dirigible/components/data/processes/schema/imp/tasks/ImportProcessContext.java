@@ -11,6 +11,7 @@ public class ImportProcessContext {
 
     private static final String DATA_SOURCE_CTX_PARAM = "dataSource";
     private static final String EXPORT_PATH_CTX_PARAM = "exportPath";
+    private static final String TABLE_SCHEMA_CTX_PARAM = "tableSchema";
 
     // caution: these values are used in the BPMN process definition
     private static final String TABLES_CTX_PARAM = "tables";
@@ -45,5 +46,13 @@ public class ImportProcessContext {
 
     public String getTable() {
         return execution.getMandatoryVariable(TABLE_CTX_PARAM, String.class);
+    }
+
+    public String getTableSchema() {
+        return execution.getMandatoryVariable(TABLE_SCHEMA_CTX_PARAM, String.class);
+    }
+
+    public void setTableSchema(String schema) {
+        execution.setVariable(TABLE_SCHEMA_CTX_PARAM, schema);
     }
 }

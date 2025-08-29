@@ -9,19 +9,39 @@
  */
 package org.eclipse.dirigible.components.data.processes.schema.imp.tasks;
 
+import org.eclipse.dirigible.components.data.export.service.DataImportService;
+import org.eclipse.dirigible.components.data.processes.schema.export.ExportFilesHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+
+import java.io.BufferedInputStream;
+import java.io.InputStream;
 
 @Component("ImportTableDataTask") // used in the bpmn process
 class ImportTableDataTask extends BaseImportTask {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ImportTableDataTask.class);
 
+    private final DataImportService dataImportService;
+
+    ImportTableDataTask(DataImportService dataImportService) {
+        this.dataImportService = dataImportService;
+    }
+
     @Override
     protected void execute(ImportProcessContext context) {
         String table = context.getTable();
-        LOGGER.info("Importing data into table {} ", table);
+        String dataSource = context.getDataSource();
+        String schema = context.getTableSchema();
+
+        String tableDataFilePath = context.getExportPath() + "/" + ExportFilesHelper.createTableDataFilename(table);
+        try (InputStream inputStream = new BufferedInputStream(loadDocumentContentAsStream(tableDataFilePath))) {
+            dataImportService.importData(dataSource, schema, table, inputStream);
+        } catch (Exception ex) {
+            throw new SchemaImportException(
+                    "Failed to import data into table [" + table + "] from document with path [" + tableDataFilePath + "]", ex);
+        }
     }
 
 }
