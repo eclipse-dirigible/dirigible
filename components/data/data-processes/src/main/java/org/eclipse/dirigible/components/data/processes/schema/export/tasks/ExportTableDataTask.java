@@ -34,7 +34,7 @@ class ExportTableDataTask extends BaseExportTask {
     protected void execute(ExportProcessContext context) {
         String table = context.getCurrentTable();
 
-        // use temp file to prevent OOO
+        // use temp file to prevent OOM
         File tempFile = createTempFile(table);
         LOGGER.debug("Created temp file [{}] for table [{}]", tempFile, table);
         try {

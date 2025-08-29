@@ -49,7 +49,7 @@ public class CmisS3Document extends CmisS3Object implements CmisDocument {
      */
     @Override
     public CmisContentStream getContentStream() throws IOException {
-        byte[] content = S3Facade.get(getId());
+        byte[] content = S3Facade.get(getId()); // could cause OOM for large files
         String contentType = getContentType(getId());
         return new CmisS3ContentStream(getName(), content.length, contentType, new ByteArrayInputStream(content));
     }
