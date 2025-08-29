@@ -175,6 +175,7 @@ class Session {
 		const folder = this.createFolder(location);
 		return folder.createDocument(properties, contentStream, versioningState);
 	}
+
 }
 
 /**

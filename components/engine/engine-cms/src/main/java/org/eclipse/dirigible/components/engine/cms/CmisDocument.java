@@ -14,18 +14,18 @@ import java.io.IOException;
 /**
  * The Interface CmisDocument.
  */
-public interface CmisDocument {
+public interface CmisDocument extends CmisObject {
     /**
      * Returns the Path of this CmisDocument.
      *
      * @return the path
      */
-    public String getPath();
+    String getPath();
 
     /**
      * Returns the CmisContentStream representing the contents of this CmisDocument.
      *
      * @return Content Stream
      */
-    public CmisContentStream getContentStream() throws IOException;
+    CmisContentStream getContentStream() throws IOException;
 }

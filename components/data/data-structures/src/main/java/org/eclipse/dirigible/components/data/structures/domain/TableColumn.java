@@ -9,20 +9,11 @@
  */
 package org.eclipse.dirigible.components.data.structures.domain;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-
-import org.hibernate.annotations.OnDelete;
-import org.hibernate.annotations.OnDeleteAction;
-
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.google.gson.annotations.Expose;
+import jakarta.persistence.*;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 /**
  * The Class TableColumn.
@@ -96,6 +87,18 @@ public class TableColumn {
      * @param name the name
      * @param type the type
      * @param length the length
+     * @param table the table
+     */
+    public TableColumn(String name, String type, String length, Table table) {
+        this(name, type, length, true, false, null, "0", "0", false, table);
+    }
+
+    /**
+     * Instantiates a new table column.
+     *
+     * @param name the name
+     * @param type the type
+     * @param length the length
      * @param nullable the nullable
      * @param primaryKey the primary key
      * @param defaultValue the default value
@@ -119,18 +122,6 @@ public class TableColumn {
         this.table = table;
         this.table.getColumns()
                   .add(this);
-    }
-
-    /**
-     * Instantiates a new table column.
-     *
-     * @param name the name
-     * @param type the type
-     * @param length the length
-     * @param table the table
-     */
-    public TableColumn(String name, String type, String length, Table table) {
-        this(name, type, length, true, false, null, "0", "0", false, table);
     }
 
     /**
@@ -361,9 +352,7 @@ public class TableColumn {
     public String toString() {
         return "TableColumn [id=" + id + ", name=" + name + ", type=" + type + ", length=" + length + ", nullable=" + nullable
                 + ", primaryKey=" + primaryKey + ", defaultValue=" + defaultValue + ", precision=" + precision + ", scale=" + scale
-                + ", unique=" + unique + ", table=" + table.getName() + "]";
+                + ", unique=" + unique + ", table=" + (null == table ? null : table.getName()) + "]";
     }
-
-
 
 }

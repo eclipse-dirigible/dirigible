@@ -9,21 +9,9 @@
  */
 package org.eclipse.dirigible.components.data.structures.domain;
 
-import jakarta.annotation.Nullable;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-
-import org.hibernate.annotations.OnDelete;
-import org.hibernate.annotations.OnDeleteAction;
-
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.google.gson.annotations.Expose;
+import jakarta.annotation.Nullable;
+import jakarta.persistence.*;
 
 /**
  * The Class TableConstraintCheck.
@@ -111,11 +99,12 @@ public class TableConstraintCheck extends TableConstraint {
     @Override
     public String toString() {
         return "TableConstraintCheck [id=" + id + ", expression=" + expression + ", name=" + name + ", modifiers=" + modifiers
-                + ", columns=" + columns + ", constraints.table=" + constraints.getTable()
-                                                                               .getName()
+                + ", columns=" + columns + ", constraints.table="
+                + (null == constraints ? null
+                        : (null == constraints.getTable() ? null
+                                : constraints.getTable()
+                                             .getName()))
                 + "]";
     }
-
-
 
 }
