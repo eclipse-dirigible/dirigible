@@ -20,11 +20,20 @@ abstract class BaseImportTask extends BPMTask {
 
     protected String loadDocumentContent(String path) {
         try {
-            CmisDocument cmisDocument = getDocument(path);
-            CmisContentStream contentStream = cmisDocument.getContentStream();
-            try (InputStream inputStream = contentStream.getInputStream()) {
+            try (InputStream inputStream = loadDocumentContentAsStream(path)) {
                 return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
             }
+        } catch (IOException ex) {
+            throw new SchemaImportException("Failed to load file from path " + path, ex);
+        }
+    }
+
+    protected InputStream loadDocumentContentAsStream(String path) {
+        try {
+            CmisDocument cmisDocument = getDocument(path);
+            CmisContentStream contentStream = cmisDocument.getContentStream();
+            return contentStream.getInputStream();
+
         } catch (IOException ex) {
             throw new SchemaImportException("Failed to load file from path " + path, ex);
         }

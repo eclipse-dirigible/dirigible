@@ -87,8 +87,8 @@ public class CmisInternalDocument extends CmisInternalObject implements CmisDocu
      * @return Content Stream
      */
     @Override
-    public CmisContentStream getContentStream() throws IOException {
-        byte[] content = this.internalResource.getContent();
+    public CmisContentStream getContentStream() {
+        byte[] content = this.internalResource.getContent(); // could cause OOM for large files
         return new CmisInternalContentStream(this.internalResource.getName(), content.length, this.internalResource.getContentType(),
                 new ByteArrayInputStream(content));
     }
