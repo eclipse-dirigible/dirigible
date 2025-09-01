@@ -70,7 +70,7 @@ class CreateTableTask extends BaseImportTask {
         TableConstraints constraints = table.getConstraints();
         if (null != constraints) {
             // tmp clean up unique indexes and checks since they are created when creating the table ?
-            constraints.setUniqueIndexes(Collections.emptyList());
+            // constraints.setUniqueIndexes(Collections.emptyList());
             constraints.setChecks(Collections.emptyList());
         }
     }

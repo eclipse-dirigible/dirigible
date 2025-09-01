@@ -308,8 +308,8 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
     public static void addIndices(DatabaseMetaData databaseMetadata, Connection connection, Table tableMetadata, String schema)
             throws SQLException {
 
-        try (ResultSet indexes = databaseMetadata.getIndexInfo(connection.getCatalog(), schema, normalizeTableName(tableMetadata.getName()),
-                false, true)) {
+        try (ResultSet indexes =
+                databaseMetadata.getIndexInfo(connection.getCatalog(), schema, normalizeTableName(tableMetadata.getName()), false, true)) {
             String lastIndexName = "";
 
             while (indexes.next()) {
@@ -323,8 +323,9 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
                     boolean nonUnique = indexes.getBoolean("NON_UNIQUE");
 
                     if (nonUnique) {
+                        String expression = indexes.getShort(JDBC_FILTER_CONDITION_PROPERTY) + "";
                         index = new TableConstraintCheck(indexName, new String[] {}, new String[] {}, tableMetadata.getConstraints(),
-                                indexes.getShort(JDBC_FILTER_CONDITION_PROPERTY) + "");
+                                expression);
                     } else {
                         index = new TableConstraintUnique(indexName, new String[] {}, new String[] {}, tableMetadata.getConstraints(),
                                 indexes.getShort("TYPE") + "", indexes.getString("ASC_OR_DESC"));

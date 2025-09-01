@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -148,12 +149,23 @@ public class TableCreateProcessor {
                                                                    .getUniqueIndexes()) {
                     String uniqueIndexName = "\"" + uniqueIndex.getName() + "\"";
 
-                    String[] uniqueIndexColumns = new String[uniqueIndex.getColumns().length];
-                    int i = 0;
+                    List<String> uniqueIndexColumns = new ArrayList<>();
                     for (String column : uniqueIndex.getColumns()) {
-                        uniqueIndexColumns[i++] = "\"" + column + "\"";
+                        TableColumn definedColumn = tableModel.getColumn(column);
+                        if (null != definedColumn && definedColumn.isUnique()) {
+                            logger.debug(
+                                    "Skipping creating index for column [{}] since it is marked as unique and index will be automatically created when creating the table.",
+                                    column);
+                            continue;
+                        }
+
+                        String columnValue = "\"" + column + "\"";
+                        uniqueIndexColumns.add(columnValue);
                     }
-                    createTableBuilder.unique(uniqueIndexName, uniqueIndexColumns);
+
+                    if (!uniqueIndexColumns.isEmpty()) {
+                        createTableBuilder.unique(uniqueIndexName, uniqueIndexColumns.toArray(new String[0]));
+                    }
                 }
             }
             if (tableModel.getConstraints()
