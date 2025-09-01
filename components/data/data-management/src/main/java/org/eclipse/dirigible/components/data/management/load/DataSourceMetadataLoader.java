@@ -323,12 +323,14 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
                     boolean nonUnique = indexes.getBoolean("NON_UNIQUE");
 
                     if (nonUnique) {
-                        String expression = indexes.getShort(JDBC_FILTER_CONDITION_PROPERTY) + "";
+                        String expression = indexes.getString(JDBC_FILTER_CONDITION_PROPERTY);
                         index = new TableConstraintCheck(indexName, new String[] {}, new String[] {}, tableMetadata.getConstraints(),
                                 expression);
                     } else {
+                        String indexType = indexes.getShort("TYPE") + "";
+                        String order = indexes.getString("ASC_OR_DESC");
                         index = new TableConstraintUnique(indexName, new String[] {}, new String[] {}, tableMetadata.getConstraints(),
-                                indexes.getShort("TYPE") + "", indexes.getString("ASC_OR_DESC"));
+                                indexType, order);
                     }
 
                     lastIndexName = indexName;
