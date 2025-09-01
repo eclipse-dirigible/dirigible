@@ -13,7 +13,6 @@ import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.processes.schema.export.ExportFilesHelper;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.structures.domain.Table;
-import org.eclipse.dirigible.components.data.structures.domain.TableConstraints;
 import org.eclipse.dirigible.components.data.structures.synchronizer.table.TableCreateProcessor;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.slf4j.Logger;
@@ -58,20 +57,10 @@ class CreateTableTask extends BaseImportTask {
     private void createTable(String dataSourceName, Table table) {
         DirigibleDataSource dataSource = datasourceManager.getDataSource(dataSourceName);
         try (Connection connection = dataSource.getConnection()) {
-            prepareTable(table);
             TableCreateProcessor.execute(connection, table, false);
             LOGGER.info("Created table {} ", table.getName());
         } catch (SQLException ex) {
             throw new SchemaImportException("Failed to create table [" + table + "] in data source " + dataSource, ex);
-        }
-    }
-
-    private void prepareTable(Table table) {
-        TableConstraints constraints = table.getConstraints();
-        if (null != constraints) {
-            // tmp clean up unique indexes and checks since they are created when creating the table ?
-            // constraints.setUniqueIndexes(Collections.emptyList());
-            constraints.setChecks(Collections.emptyList());
         }
     }
 

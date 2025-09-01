@@ -174,7 +174,12 @@ public class TableCreateProcessor {
                                                             .getChecks()) {
                     String checkName = "\"" + check.getName() + "\"";
 
-                    createTableBuilder.check(checkName, check.getExpression());
+                    String expression = check.getExpression();
+                    if (null == expression) {
+                        logger.debug("Skipping check constraint [{}] since the expression is missing:[{}]", check.getName(), expression);
+                        continue;
+                    }
+                    createTableBuilder.check(checkName, expression);
                 }
             }
         }
