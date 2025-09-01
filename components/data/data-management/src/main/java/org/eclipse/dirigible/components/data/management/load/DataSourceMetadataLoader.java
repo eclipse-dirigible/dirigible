@@ -121,6 +121,39 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
         addForeignKeys(databaseMetadata, connection, tableMetadata, schemaName);
         addIndices(databaseMetadata, connection, tableMetadata, schemaName);
         addTableType(databaseMetadata, connection, tableMetadata, schemaName);
+        updateColumnsBasedOnIndices(tableMetadata);
+    }
+
+    private void updateColumnsBasedOnIndices(Table tableMetadata) {
+        TableConstraints constraints = tableMetadata.getConstraints();
+        if (null == constraints) {
+            return;
+        }
+        updateUniqueColumns(tableMetadata);
+    }
+
+    private static void updateUniqueColumns(Table tableMetadata) {
+        TableConstraints constraints = tableMetadata.getConstraints();
+        List<TableConstraintUnique> uniqueIndexes = constraints.getUniqueIndexes();
+        if (null == uniqueIndexes || uniqueIndexes.isEmpty()) {
+            return;
+        }
+
+        logger.debug("Updating columns based on indices...");
+        for (TableConstraintUnique uniqueConstraint : uniqueIndexes) {
+            String[] uniqueColumns = uniqueConstraint.getColumns();
+            if (null == uniqueColumns) {
+                continue;
+            }
+
+            for (String uniqueColumn : uniqueColumns) {
+                TableColumn column = tableMetadata.getColumn(uniqueColumn);
+                if (null == column) {
+                    continue;
+                }
+                column.setUnique(true);
+            }
+        }
     }
 
     /**
