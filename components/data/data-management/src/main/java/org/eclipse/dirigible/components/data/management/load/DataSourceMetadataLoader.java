@@ -188,7 +188,7 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
             String length = columns.getInt(JDBC_COLUMN_SIZE_PROPERTY) + "";
             boolean nullable = columns.getBoolean(JDBC_COLUMN_NULLABLE_PROPERTY);
             boolean primaryKey = false;
-            String defaultValue = null;
+            String defaultValue = columns.getString(JDBC_COLUMN_DEFAULT_VALUE_PROPERTY);
             String precision = columns.getInt(JDBC_COLUMN_SIZE_PROPERTY) + "";
             String scale = columns.getInt(JDBC_COLUMN_DECIMAL_DIGITS_PROPERTY) + "";
             boolean unique = false;
@@ -308,8 +308,8 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
     public static void addIndices(DatabaseMetaData databaseMetadata, Connection connection, Table tableMetadata, String schema)
             throws SQLException {
 
-        try (ResultSet indexes =
-                databaseMetadata.getIndexInfo(connection.getCatalog(), schema, normalizeTableName(tableMetadata.getName()), false, true)) {
+        try (ResultSet indexes = databaseMetadata.getIndexInfo(connection.getCatalog(), schema, normalizeTableName(tableMetadata.getName()),
+                false, true)) {
             String lastIndexName = "";
 
             while (indexes.next()) {
