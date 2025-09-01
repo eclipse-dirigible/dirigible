@@ -9,15 +9,6 @@
  */
 package org.eclipse.dirigible.database.sql.dialects.postgres;
 
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
 import org.eclipse.dirigible.database.sql.DataType;
 import org.eclipse.dirigible.database.sql.ISqlKeywords;
 import org.eclipse.dirigible.database.sql.builders.AlterBranchingBuilder;
@@ -28,6 +19,12 @@ import org.eclipse.dirigible.database.sql.builders.records.SelectBuilder;
 import org.eclipse.dirigible.database.sql.builders.records.UpdateBuilder;
 import org.eclipse.dirigible.database.sql.builders.sequence.LastValueIdentityBuilder;
 import org.eclipse.dirigible.database.sql.dialects.DefaultSqlDialect;
+
+import java.sql.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * The PostgreSQL SQL Dialect.
@@ -107,6 +104,11 @@ public class PostgresSqlDialect extends
     @Override
     public String functionCurrentDate() {
         return FUNCTION_CURRENT_DATE;
+    }
+
+    @Override
+    public String getAutoincrementArgument() {
+        return "GENERATED ALWAYS AS IDENTITY";
     }
 
     /**
@@ -199,10 +201,7 @@ public class PostgresSqlDialect extends
         PreparedStatement statement = connection.prepareStatement(sql);
         statement.setString(1, schema);
         ResultSet resultSet = statement.executeQuery();
-        if (resultSet.next()) {
-            return true;
-        }
-        return false;
+        return resultSet.next();
     }
 
 }

@@ -192,9 +192,21 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
             String precision = columns.getInt(JDBC_COLUMN_SIZE_PROPERTY) + "";
             String scale = columns.getInt(JDBC_COLUMN_DECIMAL_DIGITS_PROPERTY) + "";
             boolean unique = false;
+            boolean autoIncrement = getIsAutoIncrementColumn(columns);
 
-            new TableColumn(columnName, columnType, length, nullable, primaryKey, defaultValue, precision, scale, unique, tableMetadata);
+            new TableColumn(columnName, columnType, length, nullable, primaryKey, defaultValue, precision, scale, unique, autoIncrement,
+                    tableMetadata);
         } while (columns.next());
+    }
+
+    private static boolean getIsAutoIncrementColumn(ResultSet columns) {
+        try {
+            String isAutoincrement = columns.getString("IS_AUTOINCREMENT");
+            return null != isAutoincrement && isAutoincrement.equalsIgnoreCase("YES");
+        } catch (SQLException ex) {
+            logger.warn("Failed to determine whether a column is auto increment. Returning false as fallback", ex);
+            return false;
+        }
     }
 
     /**
@@ -308,8 +320,8 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
     public static void addIndices(DatabaseMetaData databaseMetadata, Connection connection, Table tableMetadata, String schema)
             throws SQLException {
 
-        try (ResultSet indexes = databaseMetadata.getIndexInfo(connection.getCatalog(), schema, normalizeTableName(tableMetadata.getName()),
-                false, true)) {
+        try (ResultSet indexes =
+                databaseMetadata.getIndexInfo(connection.getCatalog(), schema, normalizeTableName(tableMetadata.getName()), false, true)) {
             String lastIndexName = "";
 
             while (indexes.next()) {

@@ -9,16 +9,6 @@
  */
 package org.eclipse.dirigible.database.sql;
 
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
-import javax.sql.DataSource;
 import org.eclipse.dirigible.database.sql.builders.AlterBranchingBuilder;
 import org.eclipse.dirigible.database.sql.builders.CreateBranchingBuilder;
 import org.eclipse.dirigible.database.sql.builders.DropBranchingBuilder;
@@ -28,6 +18,17 @@ import org.eclipse.dirigible.database.sql.builders.records.SelectBuilder;
 import org.eclipse.dirigible.database.sql.builders.records.UpdateBuilder;
 import org.eclipse.dirigible.database.sql.builders.sequence.LastValueIdentityBuilder;
 import org.eclipse.dirigible.database.sql.builders.sequence.NextValueSequenceBuilder;
+
+import javax.sql.DataSource;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * The SQL Dialect interface.
@@ -89,6 +90,8 @@ public interface ISqlDialect<SELECT extends SelectBuilder, INSERT extends Insert
      * @return the not null argument
      */
     String getNotNullArgument();
+
+    String getAutoincrementArgument();
 
     /**
      * UNIQUE argument for a column for the create table script Default is "UNIQUE".
@@ -283,6 +286,6 @@ public interface ISqlDialect<SELECT extends SelectBuilder, INSERT extends Insert
      * @param is the input stream
      * @param fileSize the file size
      */
-    public void processSQL(DataSource dataSource, String schema, InputStream is, long fileSize) throws Exception;
+    void processSQL(DataSource dataSource, String schema, InputStream is, long fileSize) throws Exception;
 
 }

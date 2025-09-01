@@ -73,7 +73,9 @@ public class TableColumn {
     @Column(name = "COLUMN_UNIQUE", columnDefinition = "BOOLEAN", nullable = true)
     @Expose
     private boolean unique;
-
+    @Column(name = "COLUMN_AUTOINCREMENT", columnDefinition = "BOOLEAN", nullable = true)
+    @Expose
+    private boolean autoincrement;
     /** The table. */
     @ManyToOne(fetch = FetchType.EAGER, optional = false)
     @JoinColumn(name = "TABLE_ID", nullable = false)
@@ -109,6 +111,11 @@ public class TableColumn {
      */
     public TableColumn(String name, String type, String length, boolean nullable, boolean primaryKey, String defaultValue, String precision,
             String scale, boolean unique, Table table) {
+        this(name, type, length, nullable, primaryKey, defaultValue, precision, scale, unique, false, table);
+    }
+
+    public TableColumn(String name, String type, String length, boolean nullable, boolean primaryKey, String defaultValue, String precision,
+            String scale, boolean unique, boolean autoincrement, Table table) {
         super();
         this.name = name;
         this.type = type;
@@ -119,6 +126,7 @@ public class TableColumn {
         this.precision = precision;
         this.scale = scale;
         this.unique = unique;
+        this.autoincrement = autoincrement;
         this.table = table;
         this.table.getColumns()
                   .add(this);
@@ -143,6 +151,14 @@ public class TableColumn {
      */
     public TableColumn() {
         super();
+    }
+
+    public boolean isAutoincrement() {
+        return autoincrement;
+    }
+
+    public void setAutoincrement(boolean autoincrement) {
+        this.autoincrement = autoincrement;
     }
 
     /**
@@ -352,7 +368,7 @@ public class TableColumn {
     public String toString() {
         return "TableColumn [id=" + id + ", name=" + name + ", type=" + type + ", length=" + length + ", nullable=" + nullable
                 + ", primaryKey=" + primaryKey + ", defaultValue=" + defaultValue + ", precision=" + precision + ", scale=" + scale
-                + ", unique=" + unique + ", table=" + (null == table ? null : table.getName()) + "]";
+                + ", unique=" + unique + ", autoincrement=" + autoincrement + ", table=" + (null == table ? null : table.getName()) + "]";
     }
 
 }
