@@ -149,63 +149,7 @@ public abstract class AbstractTableBuilder<TABLE_BUILDER extends AbstractTableBu
      */
     public TABLE_BUILDER column(String name, DataType type, Boolean isPrimaryKey, Boolean isNullable, Boolean isUnique,
             Boolean isFuzzyIndexEnabled, String... args) {
-        return column(name, type, isPrimaryKey, isNullable, isUnique, false, isFuzzyIndexEnabled, args);
-    }
-
-    /**
-     * Column.
-     *
-     * @param name the name
-     * @param type the type
-     * @param isPrimaryKey the is primary key
-     * @param isNullable the is nullable
-     * @param isUnique the is unique
-     * @param isIdentity the is identity
-     * @param isFuzzyIndexEnabled the is fuzzy index enabled
-     * @param args the args
-     * @return the creates the table builder
-     */
-    public TABLE_BUILDER column(String name, DataType type, Boolean isPrimaryKey, Boolean isNullable, Boolean isUnique, Boolean isIdentity,
-            Boolean isFuzzyIndexEnabled, String... args) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("column: " + name + ", type: " + (type != null ? type.name() : null) + ", isPrimaryKey: " + isPrimaryKey
-                    + ", isNullable: " + isNullable + ", isUnique: " + isUnique + ", isIdentity: " + isIdentity + ", args: "
-                    + Arrays.toString(args));
-        }
-        String[] definition = new String[] {name, getDialect().getDataTypeName(type)};
-        String[] column;
-        if (isIdentity) {
-            column = Stream.of(definition, args, new String[] {getDialect().getIdentityArgument()})
-                           .flatMap(Stream::of)
-                           .toArray(String[]::new);
-        } else {
-            column = Stream.of(definition, args)
-                           .flatMap(Stream::of)
-                           .toArray(String[]::new);
-        }
-        if (!isNullable) {
-            column = Stream.of(column, new String[] {getDialect().getNotNullArgument()})
-                           .flatMap(Stream::of)
-                           .toArray(String[]::new);
-        }
-        if (isPrimaryKey) {
-            column = Stream.of(column, new String[] {getDialect().getPrimaryKeyArgument()})
-                           .flatMap(Stream::of)
-                           .toArray(String[]::new);
-        }
-        if (isUnique && !isPrimaryKey) {
-            column = Stream.of(column, new String[] {getDialect().getUniqueArgument()})
-                           .flatMap(Stream::of)
-                           .toArray(String[]::new);
-        }
-        if (isFuzzyIndexEnabled) {
-            column = Stream.of(column, new String[] {getDialect().getFuzzySearchIndex()})
-                           .flatMap(Stream::of)
-                           .toArray(String[]::new);
-        }
-
-        this.columns.add(column);
-        return (TABLE_BUILDER) this;
+        return column(name, type, isPrimaryKey, isNullable, isUnique, isFuzzyIndexEnabled, args);
     }
 
     /**
@@ -234,7 +178,71 @@ public abstract class AbstractTableBuilder<TABLE_BUILDER extends AbstractTableBu
      * @return the creates the table builder
      */
     public TABLE_BUILDER column(String name, DataType type, Boolean isPrimaryKey, Boolean isNullable, Boolean isUnique, String... args) {
-        return column(name, type, isPrimaryKey, isNullable, isUnique, false, false, args);
+        return column(name, type, isPrimaryKey, isNullable, isUnique, false, false, false, args);
+    }
+
+    /**
+     * Column.
+     *
+     * @param name the name
+     * @param type the type
+     * @param isPrimaryKey the is primary key
+     * @param isNullable the is nullable
+     * @param isUnique the is unique
+     * @param isIdentity the is identity
+     * @param isFuzzyIndexEnabled the is fuzzy index enabled
+     * @param args the args
+     * @return the creates the table builder
+     */
+    public TABLE_BUILDER column(String name, DataType type, Boolean isPrimaryKey, Boolean isNullable, Boolean isUnique,
+            Boolean isAutoincrement, Boolean isIdentity, Boolean isFuzzyIndexEnabled, String... args) {
+        if (logger.isTraceEnabled()) {
+            logger.trace("column: " + name + ", type: " + (type != null ? type.name() : null) + ", isPrimaryKey: " + isPrimaryKey
+                    + ", isNullable: " + isNullable + ", isUnique: " + isUnique + ", isAutoincrement: " + isAutoincrement + ", isIdentity: "
+                    + isIdentity + ", args: " + Arrays.toString(args));
+        }
+        String[] definition = new String[] {name, getDialect().getDataTypeName(type)};
+        String[] column;
+        if (isIdentity) {
+            column = Stream.of(definition, args, new String[] {getDialect().getIdentityArgument()})
+                           .flatMap(Stream::of)
+                           .toArray(String[]::new);
+        } else {
+            column = Stream.of(definition, args)
+                           .flatMap(Stream::of)
+                           .toArray(String[]::new);
+        }
+        if (!isNullable) {
+            column = Stream.of(column, new String[] {getDialect().getNotNullArgument()})
+                           .flatMap(Stream::of)
+                           .toArray(String[]::new);
+        }
+
+        if (isAutoincrement) {
+            column = Stream.of(column, new String[] {getDialect().getAutoincrementArgument()})
+                           .flatMap(Stream::of)
+                           .toArray(String[]::new);
+        }
+
+        if (isPrimaryKey) {
+            column = Stream.of(column, new String[] {getDialect().getPrimaryKeyArgument()})
+                           .flatMap(Stream::of)
+                           .toArray(String[]::new);
+        }
+        if (isUnique && !isPrimaryKey) {
+            column = Stream.of(column, new String[] {getDialect().getUniqueArgument()})
+                           .flatMap(Stream::of)
+                           .toArray(String[]::new);
+        }
+
+        if (isFuzzyIndexEnabled) {
+            column = Stream.of(column, new String[] {getDialect().getFuzzySearchIndex()})
+                           .flatMap(Stream::of)
+                           .toArray(String[]::new);
+        }
+
+        this.columns.add(column);
+        return (TABLE_BUILDER) this;
     }
 
     /**
@@ -565,7 +573,7 @@ public abstract class AbstractTableBuilder<TABLE_BUILDER extends AbstractTableBu
         String[] coulmn = Stream.of(definition, args)
                                 .flatMap(Stream::of)
                                 .toArray(String[]::new);
-        return this.column(name, DataType.VARCHAR, isPrimaryKey, isNullable, isUnique, isIdentity, false, coulmn);
+        return this.column(name, DataType.VARCHAR, isPrimaryKey, isNullable, isUnique, false, isIdentity, false, coulmn);
     }
 
     /**
@@ -669,7 +677,7 @@ public abstract class AbstractTableBuilder<TABLE_BUILDER extends AbstractTableBu
         String[] coulmn = Stream.of(definition, args)
                                 .flatMap(Stream::of)
                                 .toArray(String[]::new);
-        return this.column(name, DataType.NVARCHAR, isPrimaryKey, isNullable, isUnique, isIdentity, false, coulmn);
+        return this.column(name, DataType.NVARCHAR, isPrimaryKey, isNullable, isUnique, false, isIdentity, false, coulmn);
     }
 
     /**
@@ -771,7 +779,7 @@ public abstract class AbstractTableBuilder<TABLE_BUILDER extends AbstractTableBu
         String[] coulmn = Stream.of(definition, args)
                                 .flatMap(Stream::of)
                                 .toArray(String[]::new);
-        return this.column(name, DataType.CHAR, isPrimaryKey, isNullable, isUnique, isIdentity, false, coulmn);
+        return this.column(name, DataType.CHAR, isPrimaryKey, isNullable, isUnique, false, isIdentity, false, coulmn);
     }
 
     /**
@@ -1075,7 +1083,7 @@ public abstract class AbstractTableBuilder<TABLE_BUILDER extends AbstractTableBu
      */
     public TABLE_BUILDER columnInteger(String name, Boolean isPrimaryKey, Boolean isNullable, Boolean isUnique, Boolean isIdentity,
             String... args) {
-        return this.column(name, DataType.INTEGER, isPrimaryKey, isNullable, isUnique, isIdentity, false, args);
+        return this.column(name, DataType.INTEGER, isPrimaryKey, isNullable, isUnique, false, isIdentity, false, args);
     }
 
     /**
@@ -1227,7 +1235,7 @@ public abstract class AbstractTableBuilder<TABLE_BUILDER extends AbstractTableBu
      */
     public TABLE_BUILDER columnBigint(String name, Boolean isPrimaryKey, Boolean isNullable, Boolean isUnique, Boolean isIdentity,
             String... args) {
-        return this.column(name, DataType.BIGINT, isPrimaryKey, isNullable, isUnique, isIdentity, false, args);
+        return this.column(name, DataType.BIGINT, isPrimaryKey, isNullable, isUnique, false, isIdentity, false, args);
     }
 
     /**
@@ -1728,7 +1736,7 @@ public abstract class AbstractTableBuilder<TABLE_BUILDER extends AbstractTableBu
         String[] column = Stream.of(definition, args)
                                 .flatMap(Stream::of)
                                 .toArray(String[]::new);
-        return this.column(name, DataType.DECIMAL, isPrimaryKey, isNullable, isUnique, isIdentity, false, column);
+        return this.column(name, DataType.DECIMAL, isPrimaryKey, isNullable, isUnique, false, isIdentity, false, column);
     }
 
     /**

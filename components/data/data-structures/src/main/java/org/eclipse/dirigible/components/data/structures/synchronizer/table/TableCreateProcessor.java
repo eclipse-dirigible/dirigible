@@ -68,6 +68,7 @@ public class TableCreateProcessor {
             boolean isNullable = columnModel.isNullable();
             boolean isPrimaryKey = columnModel.isPrimaryKey();
             boolean isUnique = columnModel.isUnique();
+            boolean autoincrement = columnModel.isAutoincrement();
             String defaultValue = columnModel.getDefaultValue();
             String scale = columnModel.getScale();
             String precision = columnModel.getPrecision();
@@ -98,7 +99,7 @@ public class TableCreateProcessor {
                     args += " DEFAULT " + defaultValue + " ";
                 }
             }
-            createTableBuilder.column(name, type, isPrimaryKey, isNullable, isUnique, args);
+            createTableBuilder.column(name, type, isPrimaryKey, isNullable, isUnique, autoincrement, false, false, args);
         }
         if (tableModel.getConstraints() != null) {
             if (tableModel.getConstraints()
