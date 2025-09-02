@@ -63,7 +63,7 @@ public class SnowflakeCreateTableBuilder extends CreateTableBuilder<SnowflakeCre
      * @return the h 2 create table builder
      */
     public SnowflakeCreateTableBuilder column(String name, DataType type, Boolean isPrimaryKey, Boolean isNullable, Boolean isUnique,
-            Boolean isIdentity, Boolean isFuzzyIndexEnabled, String... args) {
+            Boolean isAutoincrement, Boolean isIdentity, Boolean isFuzzyIndexEnabled, String... args) {
         if (logger.isTraceEnabled()) {
             logger.trace("column: " + name + ", type: " + (type != null ? type.name() : null) + ", isPrimaryKey: " + isPrimaryKey
                     + ", isNullable: " + isNullable + ", isUnique: " + isUnique + ", isIdentity: " + isIdentity + ", args: "
@@ -87,6 +87,11 @@ public class SnowflakeCreateTableBuilder extends CreateTableBuilder<SnowflakeCre
         }
         if (!isNullable) {
             column = Stream.of(column, new String[] {getDialect().getNotNullArgument()})
+                           .flatMap(Stream::of)
+                           .toArray(String[]::new);
+        }
+        if (isAutoincrement) {
+            column = Stream.of(column, new String[] {getDialect().getAutoincrementArgument()})
                            .flatMap(Stream::of)
                            .toArray(String[]::new);
         }
