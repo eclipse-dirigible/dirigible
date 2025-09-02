@@ -59,7 +59,7 @@ class CreateTableTask extends BaseImportTask {
         try (Connection connection = dataSource.getConnection()) {
             TableCreateProcessor.execute(connection, table, false);
             LOGGER.info("Created table {} ", table.getName());
-        } catch (SQLException ex) {
+        } catch (SQLException | RuntimeException ex) {
             throw new SchemaImportException("Failed to create table [" + table + "] in data source " + dataSource, ex);
         }
     }
