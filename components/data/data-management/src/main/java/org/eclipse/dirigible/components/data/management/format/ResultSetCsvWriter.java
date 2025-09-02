@@ -9,6 +9,14 @@
  */
 package org.eclipse.dirigible.components.data.management.format;
 
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVPrinter;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.ClassUtils;
+import org.postgresql.util.PGobject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
@@ -20,13 +28,6 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.stream.Collectors;
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVPrinter;
-import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang3.ClassUtils;
-import org.postgresql.util.PGobject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * The ResultSet CSV Writer.
@@ -43,26 +44,6 @@ public class ResultSetCsvWriter extends AbstractResultSetWriter<String> {
 
     /** The stringify. */
     private boolean stringify = true;
-
-    /**
-     * Checks if is limited.
-     *
-     * @return true, if is limited
-     */
-    @Override
-    public boolean isLimited() {
-        return limited;
-    }
-
-    /**
-     * Sets the limited.
-     *
-     * @param limited the new limited
-     */
-    @Override
-    public void setLimited(boolean limited) {
-        this.limited = limited;
-    }
 
     /**
      * Checks if is stringified.
@@ -127,7 +108,7 @@ public class ResultSetCsvWriter extends AbstractResultSetWriter<String> {
                     Object value = null;
                     String name = resultSetMetaData.getColumnName(i);
                     int dbt = resultSetMetaData.getColumnType(i);
-                    if (dbt == Types.BLOB || dbt == Types.BINARY || dbt == Types.LONGVARBINARY) {
+                    if (dbt == Types.BLOB || dbt == Types.BINARY || dbt == Types.LONGVARBINARY || dbt == Types.VARBINARY) {
                         InputStream is = resultSet.getBinaryStream(name);
                         if (is == null && stringify) {
                             value = "[NULL]";
@@ -164,9 +145,8 @@ public class ResultSetCsvWriter extends AbstractResultSetWriter<String> {
                             value = "[NULL]";
                         }
                         if (value != null && !ClassUtils.isPrimitiveOrWrapper(value.getClass()) && value.getClass() != String.class
-                                && !java.util.Date.class.isAssignableFrom(value.getClass())
-                                && !java.math.BigInteger.class.isAssignableFrom(value.getClass())
-                                && !java.math.BigDecimal.class.isAssignableFrom(value.getClass())) {
+                                && !java.util.Date.class.isAssignableFrom(value.getClass()) && !java.math.BigInteger.class.isAssignableFrom(
+                                value.getClass()) && !java.math.BigDecimal.class.isAssignableFrom(value.getClass())) {
                             if (stringify) {
                                 value = "[BINARY]";
                             }
@@ -190,6 +170,26 @@ public class ResultSetCsvWriter extends AbstractResultSetWriter<String> {
         } catch (Exception e) {
             logger.error(e.getMessage(), e);
         }
+    }
+
+    /**
+     * Checks if is limited.
+     *
+     * @return true, if is limited
+     */
+    @Override
+    public boolean isLimited() {
+        return limited;
+    }
+
+    /**
+     * Sets the limited.
+     *
+     * @param limited the new limited
+     */
+    @Override
+    public void setLimited(boolean limited) {
+        this.limited = limited;
     }
 
 }
