@@ -328,10 +328,11 @@ public class CsvimProcessor {
         char quote = Objects.isNull(csvFile.getDelimEnclosing()) ? '"'
                 : csvFile.getDelimEnclosing()
                          .charAt(0);
+
+        // import csv format must be aligned with the used export csv format
         CSVFormat csvFormat = CSVFormat.newFormat(delimiter)
                                        .withIgnoreEmptyLines()
-                                       .withQuote(quote)
-                                       .withEscape('\\');
+                                       .withQuote(quote);
 
         boolean useHeader = !Objects.isNull(csvFile.getHeader()) && csvFile.getHeader();
         if (useHeader) {
