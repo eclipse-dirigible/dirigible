@@ -9,20 +9,13 @@
  */
 package org.eclipse.dirigible.components.tenants.domain;
 
+import jakarta.persistence.*;
 import org.eclipse.dirigible.components.base.artefact.Artefact;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-
 /**
- * A tenant owns/maintains a sub-section of the web application. Can be thought of as a website
- * within the application. Users can register for multiple tenant without them knowing that each
- * separate tenant is part of one and the same application. So the uniqueness of user accounts is
- * determined by the combination of the user's unique ID (= email) combined with the tenant ID.
+ * A tenant owns/maintains a sub-section of the web application. Can be thought of as a website within the application. Users can register
+ * for multiple tenant without them knowing that each separate tenant is part of one and the same application. So the uniqueness of user
+ * accounts is determined by the combination of the user's unique ID (= email) combined with the tenant ID.
  */
 @Entity
 @Table(name = "DIRIGIBLE_TENANTS")
@@ -41,7 +34,7 @@ public class Tenant extends Artefact {
     private String subdomain;
 
     /** The status. */
-    @Column(name = "TENANT_STATUS", nullable = false)
+    @Column(name = "TENANT_STATUS", nullable = false, columnDefinition = "VARCHAR", length = 32)
     @Enumerated(EnumType.STRING)
     private TenantStatus status;
 
@@ -66,7 +59,6 @@ public class Tenant extends Artefact {
     public Tenant() {
         super();
     }
-
 
     /**
      * Gets the id.
