@@ -14,6 +14,8 @@ import jakarta.annotation.Nullable;
 import jakarta.persistence.*;
 import org.eclipse.dirigible.components.base.converters.ArrayOfStringsToCsvConverter;
 
+import java.util.Arrays;
+
 /**
  * The Class TableConstraintForeignKey.
  */
@@ -60,8 +62,7 @@ public class TableConstraintForeignKey extends TableConstraint {
     public TableConstraintForeignKey(String referencedTable, String referencedSchema, String columnName, String referencedColumnName,
             TableConstraints constraints) {
         this(constraints.getTable()
-                        .getName()
-                + "_" + referencedTable, null, new String[] {columnName}, referencedTable, referencedSchema,
+                        .getName() + "_" + referencedTable, null, new String[] {columnName}, referencedTable, referencedSchema,
                 new String[] {referencedColumnName}, constraints);
     }
 
@@ -173,12 +174,26 @@ public class TableConstraintForeignKey extends TableConstraint {
     @Override
     public String toString() {
         return "TableConstraintForeignKey [id=" + id + ", referencedTable=" + referencedTable + ", referencedColumns=" + referencedColumns
-                + ", name=" + name + ", modifiers=" + modifiers + ", columns=" + columns + ", constraints.table="
-                + (null == constraints ? null
-                        : (null == constraints.getTable() ? null
-                                : constraints.getTable()
-                                             .getName()))
-                + "]";
+                + ", name=" + name + ", modifiers=" + modifiers + ", columns=" + columns + ", constraints.table=" + (null == constraints
+                ? null
+                : (null == constraints.getTable()
+                        ? null
+                        : constraints.getTable()
+                                     .getName())) + "]";
     }
 
+    public void addReferencedColumns(String[] referencedColumns) {
+        if (referencedColumns == null || referencedColumns.length == 0) {
+            return;
+        }
+
+        if (null == this.referencedColumns) {
+            this.referencedColumns = Arrays.copyOf(referencedColumns, referencedColumns.length);
+        } else {
+            int oldLength = this.referencedColumns.length;
+            int newLength = oldLength + referencedColumns.length;
+            this.referencedColumns = Arrays.copyOf(this.referencedColumns, newLength);
+            System.arraycopy(referencedColumns, 0, this.referencedColumns, oldLength, referencedColumns.length);
+        }
+    }
 }

@@ -297,6 +297,9 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
     private static void iterateForeignKeys(Table tableMetadata, ResultSet foreignKeys) throws SQLException {
         do {
             String name = foreignKeys.getString(JDBC_FK_NAME_PROPERTY);
+
+            TableConstraintForeignKey fk = getExistingForeignKeyByName(tableMetadata, name);
+
             String[] modifiers = {};
             String[] columns = {foreignKeys.getString(JDBC_FK_COLUMN_NAME_PROPERTY)};
             String referencedTable = foreignKeys.getString(JDBC_PK_TABLE_NAME_PROPERTY);
@@ -304,8 +307,24 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
             String[] referencedColumns = {foreignKeys.getString(JDBC_PK_COLUMN_NAME_PROPERTY)};
             TableConstraints constraints = tableMetadata.getConstraints();
 
-            new TableConstraintForeignKey(name, modifiers, columns, referencedTable, referencedSchema, referencedColumns, constraints);
+            if (fk != null && Objects.equals(referencedTable, fk.getReferencedTable()) && Objects.equals(referencedSchema,
+                    fk.getReferencedSchema())) {
+                // update existing foreign key
+                fk.addColumns(columns);
+                fk.addReferencedColumns(referencedColumns);
+            } else {
+                // add new foreign key
+                new TableConstraintForeignKey(name, modifiers, columns, referencedTable, referencedSchema, referencedColumns, constraints);
+            }
         } while (foreignKeys.next());
+    }
+
+    private static TableConstraintForeignKey getExistingForeignKeyByName(Table tableMetadata, String fkName) {
+        TableConstraints constraints = tableMetadata.getConstraints();
+        if (null == constraints) {
+            return null;
+        }
+        return constraints.getForeignKey(fkName);
     }
 
     /**
@@ -320,8 +339,8 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
     public static void addIndices(DatabaseMetaData databaseMetadata, Connection connection, Table tableMetadata, String schema)
             throws SQLException {
 
-        try (ResultSet indexes =
-                databaseMetadata.getIndexInfo(connection.getCatalog(), schema, normalizeTableName(tableMetadata.getName()), false, true)) {
+        try (ResultSet indexes = databaseMetadata.getIndexInfo(connection.getCatalog(), schema, normalizeTableName(tableMetadata.getName()),
+                false, true)) {
             String lastIndexName = "";
 
             while (indexes.next()) {
