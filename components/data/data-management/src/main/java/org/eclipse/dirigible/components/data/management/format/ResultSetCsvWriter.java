@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.data.management.format;
 
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
+import org.apache.commons.csv.QuoteMode;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.ClassUtils;
 import org.postgresql.util.PGobject;
@@ -100,6 +101,7 @@ public class ResultSetCsvWriter extends AbstractResultSetWriter<String> {
             CSVFormat csvFormat = CSVFormat.DEFAULT.builder()
                                                    .setHeader(names.stream()
                                                                    .toArray(String[]::new))
+                                                   .setQuoteMode(QuoteMode.ALL_NON_NULL)
                                                    .build();
             CSVPrinter printer = new CSVPrinter(sw, csvFormat);
             count = 0;

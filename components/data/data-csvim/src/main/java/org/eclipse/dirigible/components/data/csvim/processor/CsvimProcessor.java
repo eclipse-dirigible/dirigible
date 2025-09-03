@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.data.csvim.processor;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+import org.apache.commons.csv.QuoteMode;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
@@ -332,6 +333,7 @@ public class CsvimProcessor {
         // import csv format must be aligned with the used export csv format
         CSVFormat csvFormat = CSVFormat.newFormat(delimiter)
                                        .withIgnoreEmptyLines()
+                                       .withQuoteMode(QuoteMode.ALL_NON_NULL)
                                        .withQuote(quote);
 
         boolean useHeader = !Objects.isNull(csvFile.getHeader()) && csvFile.getHeader();
