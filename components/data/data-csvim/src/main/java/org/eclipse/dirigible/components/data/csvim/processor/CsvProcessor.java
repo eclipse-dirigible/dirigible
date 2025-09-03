@@ -123,6 +123,7 @@ public class CsvProcessor {
                     tableMetadata.getName());
             CsvimUtils.logProcessorErrors(errorMessage, ERROR_TYPE_PROCESSOR, csvFile.getFile(), CsvFile.ARTEFACT_TYPE, MODULE);
             logger.error(errorMessage, t);
+            // TODO: why not rethrowing the exception
         }
     }
 
@@ -343,7 +344,7 @@ public class CsvProcessor {
     private void setPreparedStatementValue(Boolean distinguishEmptyFromNull, PreparedStatement statement, int paramIdx, String value,
             String columnType, Optional<Locale> locale) throws SQLException {
         if (StringUtils.isEmpty(value)) {
-            value = distinguishEmptyFromNull ? "" : null;
+            value = distinguishEmptyFromNull ? value : null;
         }
         setValue(statement, paramIdx, columnType, value, locale);
     }
