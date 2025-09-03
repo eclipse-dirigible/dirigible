@@ -10,6 +10,8 @@
 package org.eclipse.dirigible.components.data.processes.schema.imp.tasks;
 
 import org.eclipse.dirigible.components.data.export.service.DataImportService;
+import org.eclipse.dirigible.components.data.export.service.ImportConfig;
+import org.eclipse.dirigible.components.data.export.service.ImportConfigBuilder;
 import org.eclipse.dirigible.components.data.processes.schema.export.ExportFilesHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +39,9 @@ class ImportTableDataTask extends BaseImportTask {
 
         String tableDataFilePath = context.getExportPath() + "/" + ExportFilesHelper.createTableDataFilename(table);
         try (InputStream inputStream = new BufferedInputStream(loadDocumentContentAsStream(tableDataFilePath))) {
-            dataImportService.importData(dataSource, schema, table, inputStream);
+            ImportConfig importConfig = new ImportConfigBuilder().setDistinguishEmptyFromNull(true)
+                                                                 .build();
+            dataImportService.importData(dataSource, schema, table, importConfig, inputStream);
         } catch (Exception ex) {
             throw new SchemaImportException(
                     "Failed to import data into table [" + table + "] from document with path [" + tableDataFilePath + "]", ex);
