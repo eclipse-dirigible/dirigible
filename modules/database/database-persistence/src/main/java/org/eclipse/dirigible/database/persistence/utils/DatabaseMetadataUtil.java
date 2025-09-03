@@ -391,15 +391,32 @@ public class DatabaseMetadataUtil {
     }
 
     public static Set<String> getTableDependencies(String table, String schema, DirigibleDataSource dataSource) throws SQLException {
+        Set<String> processedTables = new HashSet<>();
+        return getTableDependencies(table, schema, dataSource, processedTables);
+    }
+
+    public static Set<String> getTableDependencies(String table, String schema, DirigibleDataSource dataSource, Set<String> processedTables)
+            throws SQLException {
         Set<String> dependencies = new HashSet<>();
         PersistenceTableModel tableMetadata = DatabaseMetadataUtil.getTableMetadata(table, schema, dataSource);
         List<PersistenceTableRelationModel> relations = tableMetadata.getRelations();
         if (null != relations) {
-            Set<String> tableDependencies = relations.stream()
-                                                     .map(m -> m.getToTableName())
-                                                     .collect(Collectors.toSet());
+            Set<String> tableDependencies = new HashSet<>(relations.stream()
+                                                                   .map(m -> m.getToTableName())
+                                                                   .collect(Collectors.toSet()));
+            tableDependencies.remove(table);// sometimes current table is returned as well
             dependencies.addAll(tableDependencies);
         }
+
+        // get dependencies of the dependencies
+        Set<String> uncheckedDependencies = new HashSet<>(dependencies);
+        uncheckedDependencies.removeAll(processedTables);
+
+        for (String uncheckedDependency : uncheckedDependencies) {
+            dependencies.addAll(getTableDependencies(uncheckedDependency, schema, dataSource, processedTables));
+            processedTables.add(uncheckedDependency);
+        }
+
         return dependencies;
     }
 
