@@ -1,0 +1,22 @@
+package org.eclipse.dirigible.tests.framework.ide;
+
+import org.eclipse.dirigible.tests.framework.browser.Browser;
+import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Component;
+
+@Lazy
+@Component
+public class SecurityPerspective {
+    private final Browser browser;
+
+    protected SecurityPerspective(Browser browser) {
+        this.browser = browser;
+    }
+
+    public void assertRoleIsPresent(String roleName, String roleDescription) {
+        browser.clickOnElementWithText(HtmlElementType.SPAN, "Roles");
+        browser.assertElementExistsByTypeAndText(HtmlElementType.TD, roleName);
+        browser.assertElementExistsByTypeAndText(HtmlElementType.TD, roleDescription);
+    }
+}
