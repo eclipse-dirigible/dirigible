@@ -47,7 +47,13 @@ public class DataImportService {
      * @throws Exception the exception
      */
     public void importData(String datasource, String schema, String table, InputStream is) throws Exception {
-        importData(datasource, schema, table, true, true, ",", "\"", null, false, is);
+        ImportConfig importConfig = new ImportConfigBuilder().build();
+        importData(datasource, schema, table, importConfig, is);
+    }
+
+    public void importData(String datasource, String schema, String table, ImportConfig importConfig, InputStream is) throws Exception {
+        importData(datasource, schema, table, importConfig.isHeader(), importConfig.isUseHeaderNames(), importConfig.getDelimField(),
+                importConfig.getDelimEnclosing(), importConfig.getSequence(), importConfig.isDistinguishEmptyFromNull(), is);
     }
 
     /**
