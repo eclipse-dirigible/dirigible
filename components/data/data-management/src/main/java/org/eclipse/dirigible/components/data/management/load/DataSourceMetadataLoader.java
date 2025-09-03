@@ -307,8 +307,8 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
             String[] referencedColumns = {foreignKeys.getString(JDBC_PK_COLUMN_NAME_PROPERTY)};
             TableConstraints constraints = tableMetadata.getConstraints();
 
-            if (fk != null && Objects.equals(referencedTable, fk.getReferencedTable()) && Objects.equals(referencedSchema,
-                    fk.getReferencedSchema())) {
+            if (fk != null && Objects.equals(referencedTable, fk.getReferencedTable())
+                    && Objects.equals(referencedSchema, fk.getReferencedSchema())) {
                 // update existing foreign key
                 fk.addColumns(columns);
                 fk.addReferencedColumns(referencedColumns);
@@ -339,8 +339,8 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
     public static void addIndices(DatabaseMetaData databaseMetadata, Connection connection, Table tableMetadata, String schema)
             throws SQLException {
 
-        try (ResultSet indexes = databaseMetadata.getIndexInfo(connection.getCatalog(), schema, normalizeTableName(tableMetadata.getName()),
-                false, true)) {
+        try (ResultSet indexes =
+                databaseMetadata.getIndexInfo(connection.getCatalog(), schema, normalizeTableName(tableMetadata.getName()), false, true)) {
             String lastIndexName = "";
 
             while (indexes.next()) {
