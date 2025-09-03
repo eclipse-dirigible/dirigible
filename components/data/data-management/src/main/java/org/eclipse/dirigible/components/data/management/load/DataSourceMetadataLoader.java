@@ -146,11 +146,10 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
                 continue;
             }
 
-            for (String uniqueColumn : uniqueColumns) {
+            // single unique column (not composite)
+            if (uniqueColumns.length == 1) {
+                String uniqueColumn = uniqueColumns[0];
                 TableColumn column = tableMetadata.getColumn(uniqueColumn);
-                if (null == column) {
-                    continue;
-                }
                 column.setUnique(true);
             }
         }
@@ -346,11 +345,12 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
             while (indexes.next()) {
                 String indexName = indexes.getString("INDEX_NAME");
                 if (indexName == null) {
+                    logger.debug("Skipping entry processing since index is [{}]", indexName);
                     continue;
                 }
 
-                TableConstraint index = null;
-                if (!indexName.equals(lastIndexName)) {
+                TableConstraint index = findConstraintByName(tableMetadata, indexName);
+                if (null == index) {
                     boolean nonUnique = indexes.getBoolean("NON_UNIQUE");
 
                     if (nonUnique) {
@@ -363,18 +363,30 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
                         index = new TableConstraintUnique(indexName, new String[] {}, new String[] {}, tableMetadata.getConstraints(),
                                 indexType, order);
                     }
+                }
 
-                    lastIndexName = indexName;
-                }
-                if (index != null) {
-                    String columnName = indexes.getString(JDBC_COLUMN_NAME_PROPERTY);
-                    String[] array = Arrays.copyOf(index.getColumns(), index.getColumns().length + 1);
-                    array[array.length - 1] = columnName;
-                    index.setColumns(array);
-                }
+                String columnName = indexes.getString(JDBC_COLUMN_NAME_PROPERTY);
+                String[] array = Arrays.copyOf(index.getColumns(), index.getColumns().length + 1);
+                array[array.length - 1] = columnName;
+                index.setColumns(array);
             }
         }
 
+    }
+
+    private static TableConstraint findConstraintByName(Table tableMetadata, String name) {
+        TableConstraints constraints = tableMetadata.getConstraints();
+        if (null == constraints) {
+            return null;
+        }
+
+        TableConstraintUnique uniqueIndex = constraints.getUniqueIndex(name);
+        if (null != uniqueIndex) {
+            return uniqueIndex;
+        }
+
+        TableConstraintCheck checkIndex = constraints.getCheck(name);
+        return checkIndex;
     }
 
     /**

@@ -153,9 +153,9 @@ public class TableCreateProcessor {
                     List<String> uniqueIndexColumns = new ArrayList<>();
                     for (String column : uniqueIndex.getColumns()) {
                         TableColumn definedColumn = tableModel.getColumn(column);
-                        if (null != definedColumn && definedColumn.isUnique()) {
+                        if (null != definedColumn && (definedColumn.isUnique() || definedColumn.isPrimaryKey())) {
                             logger.debug(
-                                    "Skipping creating index for column [{}] since it is marked as unique and index will be automatically created when creating the table.",
+                                    "Skipping creating index for column [{}] since it is marked as unique or primary key. The index will be automatically created when creating the table.",
                                     column);
                             continue;
                         }
