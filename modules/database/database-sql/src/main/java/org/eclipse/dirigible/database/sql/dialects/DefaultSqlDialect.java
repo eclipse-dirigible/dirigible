@@ -168,6 +168,12 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      */
     @Override
     public String getDataTypeName(DataType dataType) {
+
+        if (DataType.ENUM.equals(dataType)) {
+            logger.info("Enum data type [{}] will be mapped to [{}]", dataType, DataType.NVARCHAR);
+            return DataType.NVARCHAR.toString();
+        }
+
         return dataType.toString();
     }
 

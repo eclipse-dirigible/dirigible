@@ -19,6 +19,8 @@ import org.eclipse.dirigible.database.sql.builders.records.SelectBuilder;
 import org.eclipse.dirigible.database.sql.builders.records.UpdateBuilder;
 import org.eclipse.dirigible.database.sql.builders.sequence.LastValueIdentityBuilder;
 import org.eclipse.dirigible.database.sql.dialects.DefaultSqlDialect;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.util.Arrays;
@@ -34,13 +36,10 @@ public class PostgresSqlDialect extends
 
     /** The Constant FUNCTION_CURRENT_DATE. */
     public static final String FUNCTION_CURRENT_DATE = "current_date"; //$NON-NLS-1$
-
     /** The Constant FUNCTION_CURRENT_TIME. */
     public static final String FUNCTION_CURRENT_TIME = "current_time"; //$NON-NLS-1$
-
     /** The Constant FUNCTION_CURRENT_TIMESTAMP. */
     public static final String FUNCTION_CURRENT_TIMESTAMP = "current_timestamp"; //$NON-NLS-1$
-
     /** The Constant FUNCTIONS. */
     public static final Set<String> FUNCTIONS = Collections.synchronizedSet(new HashSet<String>(Arrays.asList("abs", "cbrt", "ceil",
             "ceiling", "degrees", "div", "exp", "floor", "ln", "log", "mod", "pi", "power", "radians", "round", "sign", "sqrt", "trunc",
@@ -74,6 +73,8 @@ public class PostgresSqlDialect extends
             "windows_866_to_koi8_r", "windows_866_to_mic", "windows_866_to_utf8", "windows_866_to_windows_1251", "windows_874_to_utf8",
             "euc_jis_2004_to_utf8", "utf8_to_euc_jis_2004", "shift_jis_2004_to_utf8", "utf8_to_shift_jis_2004",
             "euc_jis_2004_to_shift_jis_2004", "shift_jis_2004_to_euc_jis_2004", "get_bit", "get_byte", "set_bit")));
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(PostgresSqlDialect.class);
 
     /**
      * Creates the.
@@ -139,6 +140,11 @@ public class PostgresSqlDialect extends
      */
     @Override
     public String getDataTypeName(DataType dataType) {
+        if (DataType.ENUM.equals(dataType)) {
+            LOGGER.info("Enum data type [{}] will be mapped to [{}]", dataType, DataType.NVARCHAR);
+            return DataType.NVARCHAR.toString();
+        }
+
         return switch (dataType) {
             case BLOB -> "bytea";
             case DOUBLE -> "DOUBLE PRECISION";

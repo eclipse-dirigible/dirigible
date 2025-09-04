@@ -9,10 +9,16 @@
  */
 package org.eclipse.dirigible.database.sql;
 
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * The Enum DataType.
  */
 public enum DataType {
+
+    ENUM("ENUM"),
 
     /** The varchar. */
     VARCHAR("VARCHAR"),
@@ -134,6 +140,8 @@ public enum DataType {
     /** The numeric. */
     NUMERIC("NUMERIC");
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(DataType.class);
+
     /** The name. */
     private final String name;
 
@@ -156,16 +164,6 @@ public enum DataType {
     }
 
     /**
-     * To string.
-     *
-     * @return the string
-     */
-    @Override
-    public String toString() {
-        return name;
-    }
-
-    /**
      * Value of by name.
      *
      * @param name the name
@@ -178,7 +176,33 @@ public enum DataType {
                 return type;
             }
         }
+
+        if (isEnumDataType(name)) {
+            LOGGER.debug("Type [{}] will be mapped to [{}]", name, DataType.ENUM);
+            return DataType.ENUM;
+        }
+
         throw new IllegalArgumentException("DataType not found: " + name);
+    }
+
+    /**
+     * To string.
+     *
+     * @return the string
+     */
+    @Override
+    public String toString() {
+        return name;
+    }
+
+    private static boolean isEnumDataType(String name) {
+        if (StringUtils.isBlank(name)) {
+            return false;
+        }
+
+        // more cases may need to be added for different database types
+        return name.toLowerCase()
+                   .startsWith("enum");
     }
 
     /**
