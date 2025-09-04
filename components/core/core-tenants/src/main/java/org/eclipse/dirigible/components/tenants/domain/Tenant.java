@@ -35,7 +35,7 @@ public class Tenant extends Artefact {
     private String subdomain;
 
     /** The status. */
-    @Column(name = "TENANT_STATUS", nullable = false, columnDefinition = "VARCHAR", length = 32)
+    @Column(name = "TENANT_STATUS", nullable = false)
     @Enumerated(EnumType.STRING)
     private TenantStatus status;
 

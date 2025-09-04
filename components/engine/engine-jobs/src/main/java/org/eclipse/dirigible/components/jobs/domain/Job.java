@@ -95,7 +95,7 @@ public class Job extends Artefact {
     private List<JobParameter> parameters = new ArrayList<>();
 
     /** The status. */
-    @Column(name = "JOB_STATUS", nullable = true, columnDefinition = "VARCHAR", length = 32)
+    @Column(name = "JOB_STATUS", nullable = true)
     @Enumerated(EnumType.STRING)
     private JobStatus status = JobStatus.UNKNOWN;
 
