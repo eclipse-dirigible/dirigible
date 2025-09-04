@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
 import java.io.BufferedInputStream;
 import java.io.InputStream;
 
-@Component("ImportTableDataTask") // used in the bpmn process
+@Component("ImportTableDataTask_ImportSchemaProcess") // used in the bpmn process
 class ImportTableDataTask extends BaseImportTask {
 
     private final DataImportService dataImportService;

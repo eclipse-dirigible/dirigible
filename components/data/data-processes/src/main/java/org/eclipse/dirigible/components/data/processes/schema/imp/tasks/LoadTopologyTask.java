@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-@Component("LoadTopologyTask") // used in the bpmn process
+@Component("LoadTopologyTask_ImportSchemaProcess") // used in the bpmn process
 class LoadTopologyTask extends BaseImportTask {
 
     @Override
@@ -31,7 +31,8 @@ class LoadTopologyTask extends BaseImportTask {
         String topologyFilePath = ExportFilesHelper.createExportTopologyFilePath(exportPath);
         String fileContent = loadDocumentContent(topologyFilePath);
 
-        TypeToken<List<String>> typeToken = new TypeToken<>() {};
+        TypeToken<List<String>> typeToken = new TypeToken<>() {
+        };
         return JsonHelper.fromJson(fileContent, typeToken);
     }
 

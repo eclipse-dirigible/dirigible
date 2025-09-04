@@ -3,13 +3,13 @@
   <process id="import-schema" name="Import DB Schema" isExecutable="true">
     <startEvent id="start-event"/>
     <endEvent id="end-event"/>
-    <serviceTask id="load-topology" name="Load Topology" flowable:async="true" flowable:delegateExpression="${LoadTopologyTask}"/>
+    <serviceTask id="load-topology" name="Load Topology" flowable:async="true" flowable:delegateExpression="${LoadTopologyTask_ImportSchemaProcess}"/>
     <subProcess id="import-table-process" name="Import table process" flowable:async="true">
       <multiInstanceLoopCharacteristics isSequential="true" flowable:collection="${tables}" flowable:elementVariable="table">
         <extensionElements/>
       </multiInstanceLoopCharacteristics>
-      <serviceTask id="create-table" name="Create table" flowable:async="true" flowable:delegateExpression="${CreateTableTask}"/>
-      <serviceTask id="import-table-data" name="Import Table Data" flowable:async="true" flowable:delegateExpression="${ImportTableDataTask}"/>
+      <serviceTask id="create-table" name="Create table" flowable:async="true" flowable:delegateExpression="${CreateTableTask_ImportSchemaProcess}"/>
+      <serviceTask id="import-table-data" name="Import Table Data" flowable:async="true" flowable:delegateExpression="${ImportTableDataTask_ImportSchemaProcess}"/>
       <startEvent id="sid-3434AA4A-4D6F-4ED3-9D2D-885EFFC66045"/>
       <endEvent id="sid-D4B3F6B1-50F8-4511-A577-BA679075BAD2"/>
       <sequenceFlow id="sid-5F8B1A98-725E-4362-BA11-C130696E9B3D" sourceRef="sid-3434AA4A-4D6F-4ED3-9D2D-885EFFC66045" targetRef="create-table"/>
