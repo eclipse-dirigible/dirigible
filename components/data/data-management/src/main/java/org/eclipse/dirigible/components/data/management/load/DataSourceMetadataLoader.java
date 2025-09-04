@@ -468,10 +468,7 @@ public class DataSourceMetadataLoader implements DatabaseParameters {
                 tables.add(tableModel);
             }
         } else {
-            String error = schema + " does not exist in the target database";
-            if (logger.isErrorEnabled()) {
-                logger.error(error);
-            }
+            logger.error("{} does not exist in the target database", schema);
         }
 
         return tables;

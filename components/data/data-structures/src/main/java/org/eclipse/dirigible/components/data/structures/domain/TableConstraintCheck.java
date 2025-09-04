@@ -13,6 +13,8 @@ import com.google.gson.annotations.Expose;
 import jakarta.annotation.Nullable;
 import jakarta.persistence.*;
 
+import java.util.Arrays;
+
 /**
  * The Class TableConstraintCheck.
  */
@@ -98,8 +100,8 @@ public class TableConstraintCheck extends TableConstraint {
      */
     @Override
     public String toString() {
-        return "TableConstraintCheck [id=" + id + ", expression=" + expression + ", name=" + name + ", modifiers=" + modifiers
-                + ", columns=" + columns + ", constraints.table="
+        return "TableConstraintCheck [id=" + id + ", expression=" + expression + ", name=" + name + ", modifiers="
+                + Arrays.toString(modifiers) + ", columns=" + Arrays.toString(columns) + ", constraints.table="
                 + (null == constraints ? null
                         : (null == constraints.getTable() ? null
                                 : constraints.getTable()
