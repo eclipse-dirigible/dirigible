@@ -13,8 +13,6 @@ import org.eclipse.dirigible.components.data.export.service.DataImportService;
 import org.eclipse.dirigible.components.data.export.service.ImportConfig;
 import org.eclipse.dirigible.components.data.export.service.ImportConfigBuilder;
 import org.eclipse.dirigible.components.data.processes.schema.export.ExportFilesHelper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedInputStream;
@@ -22,8 +20,6 @@ import java.io.InputStream;
 
 @Component("ImportTableDataTask") // used in the bpmn process
 class ImportTableDataTask extends BaseImportTask {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(ImportTableDataTask.class);
 
     private final DataImportService dataImportService;
 
