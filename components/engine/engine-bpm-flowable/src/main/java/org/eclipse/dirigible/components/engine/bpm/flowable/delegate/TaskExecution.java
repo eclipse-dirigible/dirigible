@@ -325,4 +325,8 @@ public class TaskExecution {
         T deserializeValue = VariableValueSerializer.deserializeValue(raw, type);
         return Optional.ofNullable(deserializeValue);
     }
+
+    public void removeVariable(String variableName) {
+        delegateExecution.removeVariable(variableName);
+    }
 }
