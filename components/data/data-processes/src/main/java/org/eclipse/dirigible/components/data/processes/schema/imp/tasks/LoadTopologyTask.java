@@ -31,8 +31,7 @@ class LoadTopologyTask extends BaseImportTask {
         String topologyFilePath = ExportFilesHelper.createExportTopologyFilePath(exportPath);
         String fileContent = loadDocumentContent(topologyFilePath);
 
-        TypeToken<List<String>> typeToken = new TypeToken<>() {
-        };
+        TypeToken<List<String>> typeToken = new TypeToken<>() {};
         return JsonHelper.fromJson(fileContent, typeToken);
     }
 
