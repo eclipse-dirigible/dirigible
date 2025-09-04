@@ -58,7 +58,7 @@ public class JobLog extends Artefact {
     private Timestamp finishedAt;
 
     /** The status. */
-    @Column(name = "JOBLOG_STATUS", nullable = false, columnDefinition = "VARCHAR", length = 32)
+    @Column(name = "JOBLOG_STATUS", nullable = false)
     @Enumerated(EnumType.STRING)
     private JobStatus status;
 
