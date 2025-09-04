@@ -13,6 +13,8 @@ import com.google.gson.annotations.Expose;
 import jakarta.annotation.Nullable;
 import jakarta.persistence.*;
 
+import java.util.Arrays;
+
 /**
  * The Class TableConstraintUnique.
  */
@@ -126,7 +128,7 @@ public class TableConstraintUnique extends TableConstraint {
     @Override
     public String toString() {
         return "TableConstraintUnique [id=" + id + ", indexType=" + indexType + ", order=" + order + ", name=" + name + ", modifiers="
-                + modifiers + ", columns=" + columns + ", constraints.table="
+                + Arrays.toString(modifiers) + ", columns=" + Arrays.toString(columns) + ", constraints.table="
                 + (null == constraints ? null
                         : (constraints.getTable() == null ? null
                                 : constraints.getTable()

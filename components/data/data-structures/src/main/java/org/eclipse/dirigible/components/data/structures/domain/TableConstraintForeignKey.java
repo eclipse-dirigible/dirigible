@@ -174,8 +174,9 @@ public class TableConstraintForeignKey extends TableConstraint {
      */
     @Override
     public String toString() {
-        return "TableConstraintForeignKey [id=" + id + ", referencedTable=" + referencedTable + ", referencedColumns=" + referencedColumns
-                + ", name=" + name + ", modifiers=" + modifiers + ", columns=" + columns + ", constraints.table="
+        return "TableConstraintForeignKey [id=" + id + ", referencedTable=" + referencedTable + ", referencedColumns="
+                + Arrays.toString(referencedColumns) + ", name=" + name + ", modifiers=" + Arrays.toString(modifiers) + ", columns="
+                + Arrays.toString(columns) + ", constraints.table="
                 + (null == constraints ? null
                         : (null == constraints.getTable() ? null
                                 : constraints.getTable()
