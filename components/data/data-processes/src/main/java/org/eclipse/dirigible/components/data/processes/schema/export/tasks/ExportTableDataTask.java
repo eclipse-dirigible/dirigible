@@ -67,9 +67,8 @@ class ExportTableDataTask extends BaseExportTask {
                 databaseExportService.exportStructure(dataSourceName, schema, table, out);
             }
         } catch (IOException | RuntimeException ex) {
-            throw new SchemaExportException(
-                    "Failed to export table [" + table + "] from schema [" + schema + "] from data source [" + dataSourceName
-                            + "] into temp file", ex);
+            throw new SchemaExportException("Failed to export table [" + table + "] from schema [" + schema + "] from data source ["
+                    + dataSourceName + "] into temp file", ex);
         }
     }
 
