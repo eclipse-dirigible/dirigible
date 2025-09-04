@@ -22,7 +22,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-@Component("SaveExportTopologyTask") // used in the bpmn process
+@Component("SaveExportTopologyTask_ExportSchemaProcess") // used in the bpmn process
 class SaveExportTopologyTask extends BaseExportTask {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SaveExportTopologyTask.class);

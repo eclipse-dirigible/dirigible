@@ -23,7 +23,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Collections;
 
-@Component("CreateTableTask") // used in the bpmn process
+@Component("CreateTableTask_ImportSchemaProcess") // used in the bpmn process
 class CreateTableTask extends BaseImportTask {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(CreateTableTask.class);

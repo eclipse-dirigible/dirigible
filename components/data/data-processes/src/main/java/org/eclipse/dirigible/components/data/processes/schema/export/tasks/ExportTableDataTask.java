@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.*;
 
-@Component("ExportTableDataTask") // used in the bpmn process
+@Component("ExportTableDataTask_ExportSchemaProcess") // used in the bpmn process
 class ExportTableDataTask extends BaseExportTask {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ExportTableDataTask.class);
@@ -67,8 +67,9 @@ class ExportTableDataTask extends BaseExportTask {
                 databaseExportService.exportStructure(dataSourceName, schema, table, out);
             }
         } catch (IOException | RuntimeException ex) {
-            throw new SchemaExportException("Failed to export table [" + table + "] from schema [" + schema + "] from data source ["
-                    + dataSourceName + "] into temp file", ex);
+            throw new SchemaExportException(
+                    "Failed to export table [" + table + "] from schema [" + schema + "] from data source [" + dataSourceName
+                            + "] into temp file", ex);
         }
     }
 

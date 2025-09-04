@@ -2,17 +2,17 @@
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:flowable="http://flowable.org/bpmn" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" typeLanguage="http://www.w3.org/2001/XMLSchema" expressionLanguage="http://www.w3.org/1999/XPath" targetNamespace="http://www.flowable.org/processdef" exporter="Flowable Open Source Modeler" exporterVersion="6.8.1">
   <process id="export-schema" name="Export DB Schema" isExecutable="true">
     <startEvent id="start-event"/>
-    <serviceTask id="build-export-topology" name="Build Export Topology" flowable:async="true" flowable:delegateExpression="${BuildExportTopologyTask}"/>
+    <serviceTask id="build-export-topology" name="Build Export Topology" flowable:async="true" flowable:delegateExpression="${BuildExportTopologyTask_ExportSchemaProcess}"/>
     <endEvent id="end-event"/>
-    <serviceTask id="save-export-topology-in-file" name="Save Export Topology in file" flowable:async="true" flowable:delegateExpression="${SaveExportTopologyTask}"/>
+    <serviceTask id="save-export-topology-in-file" name="Save Export Topology in file" flowable:async="true" flowable:delegateExpression="${SaveExportTopologyTask_ExportSchemaProcess}"/>
     <subProcess id="export-table-process" name="Export table process" flowable:async="true">
       <multiInstanceLoopCharacteristics isSequential="true" flowable:collection="${exportTopology}" flowable:elementVariable="targetTable">
         <extensionElements/>
       </multiInstanceLoopCharacteristics>
       <startEvent id="sid-4FB27850-D99C-40D0-BE3B-EFE471ADE22B"/>
       <endEvent id="sid-BCB9EFB0-6930-40AA-9C42-1B26D108DF89"/>
-      <serviceTask id="export-table-data" name="Export Table Data" flowable:async="true" flowable:delegateExpression="${ExportTableDataTask}"/>
-      <serviceTask id="export-table-definition" name="Export Table Definition" flowable:async="true" flowable:delegateExpression="${ExportTableDefinitionTask}"/>
+      <serviceTask id="export-table-data" name="Export Table Data" flowable:async="true" flowable:delegateExpression="${ExportTableDataTask_ExportSchemaProcess}"/>
+      <serviceTask id="export-table-definition" name="Export Table Definition" flowable:async="true" flowable:delegateExpression="${ExportTableDefinitionTask_ExportSchemaProcess}"/>
       <sequenceFlow id="sid-65EF35FA-8174-419B-902D-DE08B1E03A4A" sourceRef="sid-4FB27850-D99C-40D0-BE3B-EFE471ADE22B" targetRef="export-table-definition"/>
       <sequenceFlow id="sid-8090920D-076E-43A5-BF74-4EC14C24A214" sourceRef="export-table-definition" targetRef="export-table-data"/>
       <sequenceFlow id="sid-6C4F6A8A-AE29-4A50-BA6D-D5A086351DFC" sourceRef="export-table-data" targetRef="sid-BCB9EFB0-6930-40AA-9C42-1B26D108DF89"/>

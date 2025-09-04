@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
 
 import java.sql.SQLException;
 
-@Component("ExportTableDefinitionTask") // used in the bpmn process
+@Component("ExportTableDefinitionTask_ExportSchemaProcess") // used in the bpmn process
 class ExportTableDefinitionTask extends BaseExportTask {
 
     private final DataSourcesManager datasourceManager;

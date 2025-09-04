@@ -23,7 +23,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-@Component("BuildExportTopologyTask") // used in the bpmn process
+@Component("BuildExportTopologyTask_ExportSchemaProcess") // used in the bpmn process
 public class BuildExportTopologyTask extends BaseExportTask {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BuildExportTopologyTask.class);
