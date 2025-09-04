@@ -142,6 +142,9 @@ public class ResultSetCsvWriter extends AbstractResultSetWriter<String> {
                         if (dataObject instanceof PGobject) {
                             value = ((PGobject) dataObject).getValue();
                         }
+                        if (dataObject instanceof String valueString) {
+                            value = valueString;
+                        }
                     } else {
                         value = resultSet.getObject(name);
                         if (value == null && stringify) {
