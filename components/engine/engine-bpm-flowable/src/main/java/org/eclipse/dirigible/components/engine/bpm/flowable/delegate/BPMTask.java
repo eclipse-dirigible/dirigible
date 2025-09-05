@@ -35,7 +35,7 @@ public abstract class BPMTask implements JavaDelegate {
         Optional<String> action = execution.getVariable(DIRIGIBLE_BPM_INTERNAL_SKIP_STEP, String.class);
         if (action.isPresent() && SKIP.getActionName()
                                       .equals(action.get())) {
-            LOGGER.debug("Skipping task execution since it is marked for skip. Execution id [], process instance id [{}]",
+            LOGGER.debug("Skipping task execution since it is marked for skip. Execution id [{}], process instance id [{}]",
                     execution.getId(), execution.getProcessInstanceId());
             execution.removeVariable(DIRIGIBLE_BPM_INTERNAL_SKIP_STEP);
             return;
