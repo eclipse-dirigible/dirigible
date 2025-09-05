@@ -94,7 +94,6 @@ public class Job extends Artefact {
     @Transient
     private List<JobParameter> parameters = new ArrayList<>();
 
-
     /** The status. */
     @Column(name = "JOB_STATUS", nullable = true)
     @Enumerated(EnumType.STRING)

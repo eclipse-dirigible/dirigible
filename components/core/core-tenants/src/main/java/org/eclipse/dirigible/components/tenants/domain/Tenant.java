@@ -9,14 +9,8 @@
  */
 package org.eclipse.dirigible.components.tenants.domain;
 
+import jakarta.persistence.*;
 import org.eclipse.dirigible.components.base.artefact.Artefact;
-
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
 
 /**
  * A tenant owns/maintains a sub-section of the web application. Can be thought of as a website
@@ -66,7 +60,6 @@ public class Tenant extends Artefact {
     public Tenant() {
         super();
     }
-
 
     /**
      * Gets the id.

@@ -9,10 +9,16 @@
  */
 package org.eclipse.dirigible.components.engine.cms;
 
+import org.apache.chemistry.opencmis.commons.enums.VersioningState;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+
 /**
  * The Interface CmisFolder.
  */
-public interface CmisFolder {
+public interface CmisFolder extends CmisObject {
     /**
      * Returns true if this CmisInternalFolder is a root folder and false otherwise.
      *
@@ -26,4 +32,51 @@ public interface CmisFolder {
      * @return the path
      */
     String getPath();
+
+    /**
+     * Creates a new document under this folder.
+     *
+     * @param properties the properties
+     * @param contentStream the content stream
+     * @param versioningState the version state
+     * @return CmisDocument
+     * @throws IOException IO Exception
+     */
+    CmisDocument createDocument(Map<String, String> properties, CmisContentStream contentStream, VersioningState versioningState)
+            throws IOException;
+
+    /**
+     * Creates a new document under this folder.
+     *
+     * @param properties the properties
+     * @param contentStream the content stream
+     * @return CmisDocument
+     * @throws IOException IO Exception
+     */
+    CmisDocument createDocument(Map<String, String> properties, CmisContentStream contentStream) throws IOException;
+
+    /**
+     * Creates a new folder under this folder.
+     *
+     * @param properties the properties
+     * @return CmisFolder throws IOException
+     * @throws IOException IO Exception
+     */
+    CmisFolder createFolder(Map<String, String> properties) throws IOException;
+
+    /**
+     * Gets the children.
+     *
+     * @return the children
+     * @throws IOException Signals that an I/O exception has occurred.
+     */
+    List<? extends CmisObject> getChildren() throws IOException;
+
+    /**
+     * Returns the parent CmisFolder of this folder.
+     *
+     * @return CmisFolder
+     * @throws IOException IO Exception
+     */
+    CmisFolder getFolderParent() throws IOException;
 }

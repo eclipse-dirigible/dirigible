@@ -9,28 +9,7 @@
  */
 package org.eclipse.dirigible.database.sql.dialects;
 
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
-import javax.sql.DataSource;
-import org.eclipse.dirigible.database.sql.DataType;
-import org.eclipse.dirigible.database.sql.DatabaseArtifactTypes;
-import org.eclipse.dirigible.database.sql.DatabaseType;
-import org.eclipse.dirigible.database.sql.ISqlDialect;
-import org.eclipse.dirigible.database.sql.ISqlKeywords;
-import org.eclipse.dirigible.database.sql.SqlException;
+import org.eclipse.dirigible.database.sql.*;
 import org.eclipse.dirigible.database.sql.builders.AlterBranchingBuilder;
 import org.eclipse.dirigible.database.sql.builders.CreateBranchingBuilder;
 import org.eclipse.dirigible.database.sql.builders.DropBranchingBuilder;
@@ -43,6 +22,18 @@ import org.eclipse.dirigible.database.sql.builders.sequence.LastValueIdentityBui
 import org.eclipse.dirigible.database.sql.builders.sequence.NextValueSequenceBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.sql.DataSource;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.sql.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * The Default SQL Dialect.
@@ -177,6 +168,12 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      */
     @Override
     public String getDataTypeName(DataType dataType) {
+
+        if (DataType.ENUM.equals(dataType)) {
+            logger.info("Enum data type [{}] will be mapped to [{}]", dataType, DataType.NVARCHAR);
+            return DataType.NVARCHAR.toString();
+        }
+
         return dataType.toString();
     }
 
@@ -208,6 +205,11 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
     @Override
     public String getNotNullArgument() {
         return KEYWORD_NOT + SPACE + KEYWORD_NULL;
+    }
+
+    @Override
+    public String getAutoincrementArgument() {
+        return "AUTO_INCREMENT";
     }
 
     /**
@@ -305,24 +307,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
         String[] tokens = table.split("\\.");
         if (tokens.length == 2) {
             return tokens[1];
-        }
-        return table;
-    }
-
-    /**
-     * Quote table name.
-     *
-     * @param table the table
-     * @return the string
-     */
-    public static String quoteTableName(String table) {
-        table = normalizeTableName(table);
-        String[] tokens = table.split("\\.");
-        if (tokens.length == 1) {
-            return "\"" + table + "\"";
-        }
-        if (tokens.length == 2) {
-            return "\"" + tokens[0] + "\".\"" + tokens[1] + "\"";
         }
         return table;
     }
@@ -518,32 +502,6 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
     }
 
     /**
-     * All.
-     *
-     * @param connection the connection
-     * @param table the table
-     * @return the result set
-     * @throws SQLException the SQL exception
-     */
-    @Override
-    public ResultSet all(Connection connection, String table) throws SQLException {
-        String sql = allQuery(table);
-        PreparedStatement statement = connection.prepareStatement(sql);
-        return statement.executeQuery();
-    }
-
-    /**
-     * Count query.
-     *
-     * @param table the table
-     * @return the string
-     */
-    @Override
-    public String countQuery(String table) {
-        return countQuery(null, table);
-    }
-
-    /**
      * Count query.
      *
      * @param schema the schema
@@ -559,6 +517,39 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
     }
 
     /**
+     * Quote table name.
+     *
+     * @param table the table
+     * @return the string
+     */
+    public static String quoteTableName(String table) {
+        table = normalizeTableName(table);
+        String[] tokens = table.split("\\.");
+        if (tokens.length == 1) {
+            return "\"" + table + "\"";
+        }
+        if (tokens.length == 2) {
+            return "\"" + tokens[0] + "\".\"" + tokens[1] + "\"";
+        }
+        return table;
+    }
+
+    /**
+     * All.
+     *
+     * @param connection the connection
+     * @param table the table
+     * @return the result set
+     * @throws SQLException the SQL exception
+     */
+    @Override
+    public ResultSet all(Connection connection, String table) throws SQLException {
+        String sql = allQuery(table);
+        PreparedStatement statement = connection.prepareStatement(sql);
+        return statement.executeQuery();
+    }
+
+    /**
      * All query.
      *
      * @param table the table
@@ -569,6 +560,17 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
         return new SelectBuilder(this).column("*")
                                       .from(quoteTableName(table))
                                       .build();
+    }
+
+    /**
+     * Count query.
+     *
+     * @param table the table
+     * @return the string
+     */
+    @Override
+    public String countQuery(String table) {
+        return countQuery(null, table);
     }
 
     /**
@@ -672,7 +674,7 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
             logger.warn("SQL dump partially processed " + "[" + processedSize + " / " + fileSize + "] "
                     + String.format("%.1f", ((double) processedSize / (double) fileSize) * 100) + " due to an exception for "
                     + (System.currentTimeMillis() - startTime) / 1000 + " seconds");
-            logger.warn("Failed to process the following statement:\n" + builder.toString());
+            logger.warn("Failed to process the following statement:\n" + builder);
             throw e;
         } finally {
             if (connection != null) {

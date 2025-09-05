@@ -206,7 +206,7 @@ public class CreateTableTest {
         String sql = SqlFactory.getDefault()
                                .create()
                                .table("CUSTOMERS")
-                               .column("ID", DataType.BIGINT, Modifiers.REGULAR, Modifiers.NULLABLE, Modifiers.NON_UNIQUE,
+                               .column("ID", DataType.BIGINT, Modifiers.REGULAR, Modifiers.NULLABLE, Modifiers.NON_UNIQUE, false,
                                        Modifiers.IDENTITY, false)
                                .column("FIRST_NAME", DataType.VARCHAR, Modifiers.REGULAR, Modifiers.NULLABLE, Modifiers.NON_UNIQUE, "(20)")
                                .column("LAST_NAME", DataType.VARCHAR, Modifiers.REGULAR, Modifiers.NULLABLE, Modifiers.NON_UNIQUE, "(30)")

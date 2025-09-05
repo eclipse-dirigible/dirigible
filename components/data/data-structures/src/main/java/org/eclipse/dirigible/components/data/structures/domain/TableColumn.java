@@ -9,20 +9,11 @@
  */
 package org.eclipse.dirigible.components.data.structures.domain;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-
-import org.hibernate.annotations.OnDelete;
-import org.hibernate.annotations.OnDeleteAction;
-
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.google.gson.annotations.Expose;
+import jakarta.persistence.*;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 /**
  * The Class TableColumn.
@@ -82,44 +73,15 @@ public class TableColumn {
     @Column(name = "COLUMN_UNIQUE", columnDefinition = "BOOLEAN", nullable = true)
     @Expose
     private boolean unique;
-
+    @Column(name = "COLUMN_AUTOINCREMENT", columnDefinition = "BOOLEAN", nullable = true)
+    @Expose
+    private boolean autoincrement;
     /** The table. */
     @ManyToOne(fetch = FetchType.EAGER, optional = false)
     @JoinColumn(name = "TABLE_ID", nullable = false)
     @OnDelete(action = OnDeleteAction.CASCADE)
     @JsonIgnore
     private Table table;
-
-    /**
-     * Instantiates a new table column.
-     *
-     * @param name the name
-     * @param type the type
-     * @param length the length
-     * @param nullable the nullable
-     * @param primaryKey the primary key
-     * @param defaultValue the default value
-     * @param precision the precision
-     * @param scale the scale
-     * @param unique the unique
-     * @param table the table
-     */
-    public TableColumn(String name, String type, String length, boolean nullable, boolean primaryKey, String defaultValue, String precision,
-            String scale, boolean unique, Table table) {
-        super();
-        this.name = name;
-        this.type = type;
-        this.length = length;
-        this.nullable = nullable;
-        this.primaryKey = primaryKey;
-        this.defaultValue = defaultValue;
-        this.precision = precision;
-        this.scale = scale;
-        this.unique = unique;
-        this.table = table;
-        this.table.getColumns()
-                  .add(this);
-    }
 
     /**
      * Instantiates a new table column.
@@ -141,6 +103,43 @@ public class TableColumn {
      * @param length the length
      * @param nullable the nullable
      * @param primaryKey the primary key
+     * @param defaultValue the default value
+     * @param precision the precision
+     * @param scale the scale
+     * @param unique the unique
+     * @param table the table
+     */
+    public TableColumn(String name, String type, String length, boolean nullable, boolean primaryKey, String defaultValue, String precision,
+            String scale, boolean unique, Table table) {
+        this(name, type, length, nullable, primaryKey, defaultValue, precision, scale, unique, false, table);
+    }
+
+    public TableColumn(String name, String type, String length, boolean nullable, boolean primaryKey, String defaultValue, String precision,
+            String scale, boolean unique, boolean autoincrement, Table table) {
+        super();
+        this.name = name;
+        this.type = type;
+        this.length = length;
+        this.nullable = nullable;
+        this.primaryKey = primaryKey;
+        this.defaultValue = defaultValue;
+        this.precision = precision;
+        this.scale = scale;
+        this.unique = unique;
+        this.autoincrement = autoincrement;
+        this.table = table;
+        this.table.getColumns()
+                  .add(this);
+    }
+
+    /**
+     * Instantiates a new table column.
+     *
+     * @param name the name
+     * @param type the type
+     * @param length the length
+     * @param nullable the nullable
+     * @param primaryKey the primary key
      * @param table the table
      */
     public TableColumn(String name, String type, String length, boolean nullable, boolean primaryKey, Table table) {
@@ -152,6 +151,14 @@ public class TableColumn {
      */
     public TableColumn() {
         super();
+    }
+
+    public boolean isAutoincrement() {
+        return autoincrement;
+    }
+
+    public void setAutoincrement(boolean autoincrement) {
+        this.autoincrement = autoincrement;
     }
 
     /**
@@ -361,9 +368,7 @@ public class TableColumn {
     public String toString() {
         return "TableColumn [id=" + id + ", name=" + name + ", type=" + type + ", length=" + length + ", nullable=" + nullable
                 + ", primaryKey=" + primaryKey + ", defaultValue=" + defaultValue + ", precision=" + precision + ", scale=" + scale
-                + ", unique=" + unique + ", table=" + table.getName() + "]";
+                + ", unique=" + unique + ", autoincrement=" + autoincrement + ", table=" + (null == table ? null : table.getName()) + "]";
     }
-
-
 
 }

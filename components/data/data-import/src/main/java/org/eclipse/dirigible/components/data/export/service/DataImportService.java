@@ -9,9 +9,6 @@
  */
 package org.eclipse.dirigible.components.data.export.service;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.sql.Connection;
 import org.eclipse.dirigible.components.data.csvim.domain.CsvFile;
 import org.eclipse.dirigible.components.data.csvim.processor.CsvimProcessor;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
@@ -20,6 +17,9 @@ import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.io.InputStream;
+import java.sql.Connection;
 
 /**
  * The Class DataImportService.
@@ -43,6 +43,25 @@ public class DataImportService {
      * @param datasource the datasource
      * @param schema the schema
      * @param table the table
+     * @param is the is
+     * @throws Exception the exception
+     */
+    public void importData(String datasource, String schema, String table, InputStream is) throws Exception {
+        ImportConfig importConfig = new ImportConfigBuilder().build();
+        importData(datasource, schema, table, importConfig, is);
+    }
+
+    public void importData(String datasource, String schema, String table, ImportConfig importConfig, InputStream is) throws Exception {
+        importData(datasource, schema, table, importConfig.isHeader(), importConfig.isUseHeaderNames(), importConfig.getDelimField(),
+                importConfig.getDelimEnclosing(), importConfig.getSequence(), importConfig.isDistinguishEmptyFromNull(), is);
+    }
+
+    /**
+     * Import csv.
+     *
+     * @param datasource the datasource
+     * @param schema the schema
+     * @param table the table
      * @param header the header
      * @param useHeaderNames the use header names
      * @param delimField the delim field
@@ -50,11 +69,10 @@ public class DataImportService {
      * @param sequence the sequence
      * @param distinguishEmptyFromNull the distinguish empty from null
      * @param is the is
-     * @throws IOException Signals that an I/O exception has occurred.
      * @throws Exception the exception
      */
     public void importData(String datasource, String schema, String table, Boolean header, Boolean useHeaderNames, String delimField,
-            String delimEnclosing, String sequence, Boolean distinguishEmptyFromNull, InputStream is) throws IOException, Exception {
+            String delimEnclosing, String sequence, Boolean distinguishEmptyFromNull, InputStream is) throws Exception {
 
         DirigibleDataSource dataSource = datasourceManager.getDataSource(datasource);
         try (Connection connection = dataSource.getConnection()) {
@@ -71,20 +89,6 @@ public class DataImportService {
     }
 
     /**
-     * Import csv.
-     *
-     * @param datasource the datasource
-     * @param schema the schema
-     * @param table the table
-     * @param is the is
-     * @throws IOException Signals that an I/O exception has occurred.
-     * @throws Exception the exception
-     */
-    public void importData(String datasource, String schema, String table, InputStream is) throws IOException, Exception {
-        importData(datasource, schema, table, true, true, ",", "\"", null, false, is);
-    }
-
-    /**
      * Process SQL.
      *
      * @param datasource the datasource
@@ -93,10 +97,8 @@ public class DataImportService {
      */
     public void processSQL(String datasource, String schema, InputStream is, long fileSize) throws Exception {
         DirigibleDataSource dataSource = datasourceManager.getDataSource(datasource);
-        try (Connection connection = dataSource.getConnection()) {
-            ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
-            dialect.processSQL(dataSource, schema, is, fileSize);
-        }
+        ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
+        dialect.processSQL(dataSource, schema, is, fileSize);
     }
 
 }

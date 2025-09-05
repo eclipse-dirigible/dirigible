@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.engine.cms.internal.repository;
 import org.apache.chemistry.opencmis.commons.enums.VersioningState;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.engine.cms.CmisConstants;
+import org.eclipse.dirigible.components.engine.cms.CmisContentStream;
 import org.eclipse.dirigible.components.engine.cms.CmisFolder;
 import org.eclipse.dirigible.repository.api.ICollection;
 import org.eclipse.dirigible.repository.api.IRepository;
@@ -129,6 +130,7 @@ public class CmisInternalFolder extends CmisInternalObject implements CmisFolder
      * @return CmisInternalFolder
      * @throws IOException IO Exception
      */
+    @Override
     public CmisInternalFolder createFolder(Map<String, String> properties) throws IOException {
         String name = properties.get(CmisConstants.NAME);
         return new CmisInternalFolder(this.session, this.internalFolder.createCollection(name));
@@ -143,8 +145,14 @@ public class CmisInternalFolder extends CmisInternalObject implements CmisFolder
      * @return CmisDocument
      * @throws IOException IO Exception
      */
-    public CmisInternalDocument createDocument(Map<String, String> properties, CmisInternalContentStream contentStream,
+    @Override
+    public CmisInternalDocument createDocument(Map<String, String> properties, CmisContentStream contentStream,
             VersioningState versioningState) throws IOException {
+        return createDocument(properties, contentStream);
+    }
+
+    @Override
+    public CmisInternalDocument createDocument(Map<String, String> properties, CmisContentStream contentStream) throws IOException {
         String name = properties.get(CmisConstants.NAME);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         IOUtils.copy(contentStream.getStream(), out);
@@ -158,6 +166,7 @@ public class CmisInternalFolder extends CmisInternalObject implements CmisFolder
      * @return the children
      * @throws IOException Signals that an I/O exception has occurred.
      */
+    @Override
     public List<CmisInternalObject> getChildren() throws IOException {
         List<CmisInternalObject> children = new ArrayList<CmisInternalObject>();
         List<ICollection> collections = this.internalFolder.getCollections();
@@ -187,6 +196,7 @@ public class CmisInternalFolder extends CmisInternalObject implements CmisFolder
      * @return CmisInternalFolder
      * @throws IOException IO Exception
      */
+    @Override
     public CmisInternalFolder getFolderParent() throws IOException {
         if (this.internalFolder.getParent() != null) {
             return new CmisInternalFolder(this.session, this.internalFolder.getParent());

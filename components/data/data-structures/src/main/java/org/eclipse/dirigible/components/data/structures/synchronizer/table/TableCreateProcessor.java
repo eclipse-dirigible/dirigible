@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -67,6 +68,7 @@ public class TableCreateProcessor {
             boolean isNullable = columnModel.isNullable();
             boolean isPrimaryKey = columnModel.isPrimaryKey();
             boolean isUnique = columnModel.isUnique();
+            boolean autoincrement = columnModel.isAutoincrement();
             String defaultValue = columnModel.getDefaultValue();
             String scale = columnModel.getScale();
             String precision = columnModel.getPrecision();
@@ -97,7 +99,7 @@ public class TableCreateProcessor {
                     args += " DEFAULT " + defaultValue + " ";
                 }
             }
-            createTableBuilder.column(name, type, isPrimaryKey, isNullable, isUnique, args);
+            createTableBuilder.column(name, type, isPrimaryKey, isNullable, isUnique, autoincrement, false, false, args);
         }
         if (tableModel.getConstraints() != null) {
             if (tableModel.getConstraints()
@@ -148,12 +150,23 @@ public class TableCreateProcessor {
                                                                    .getUniqueIndexes()) {
                     String uniqueIndexName = "\"" + uniqueIndex.getName() + "\"";
 
-                    String[] uniqueIndexColumns = new String[uniqueIndex.getColumns().length];
-                    int i = 0;
+                    List<String> uniqueIndexColumns = new ArrayList<>();
                     for (String column : uniqueIndex.getColumns()) {
-                        uniqueIndexColumns[i++] = "\"" + column + "\"";
+                        TableColumn definedColumn = tableModel.getColumn(column);
+                        if (null != definedColumn && (definedColumn.isUnique() || definedColumn.isPrimaryKey())) {
+                            logger.debug(
+                                    "Skipping creating index for column [{}] since it is marked as unique or primary key. The index will be automatically created when creating the table.",
+                                    column);
+                            continue;
+                        }
+
+                        String columnValue = "\"" + column + "\"";
+                        uniqueIndexColumns.add(columnValue);
                     }
-                    createTableBuilder.unique(uniqueIndexName, uniqueIndexColumns);
+
+                    if (!uniqueIndexColumns.isEmpty()) {
+                        createTableBuilder.unique(uniqueIndexName, uniqueIndexColumns.toArray(new String[0]));
+                    }
                 }
             }
             if (tableModel.getConstraints()
@@ -162,7 +175,12 @@ public class TableCreateProcessor {
                                                             .getChecks()) {
                     String checkName = "\"" + check.getName() + "\"";
 
-                    createTableBuilder.check(checkName, check.getExpression());
+                    String expression = check.getExpression();
+                    if (null == expression) {
+                        logger.debug("Skipping check constraint [{}] since the expression is missing:[{}]", check.getName(), expression);
+                        continue;
+                    }
+                    createTableBuilder.check(checkName, expression);
                 }
             }
         }
