@@ -206,7 +206,7 @@
         <logcaptor.version>2.11.0</logcaptor.version>
 
         <!-- UI -->
-        <sap-theming__theming-base-content.version>11.18.2</sap-theming__theming-base-content.version>
+        <sap-theming__theming-base-content.version>11.29.3</sap-theming__theming-base-content.version>
         <chart.js.version>4.4.3</chart.js.version>
         <sortablejs.version>1.15.2</sortablejs.version>
         <fundamental-styles.version>0.38.0</fundamental-styles.version>
