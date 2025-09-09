@@ -18,6 +18,8 @@ import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.database.DatabaseSystem;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.database.persistence.utils.DatabaseMetadataUtil;
+import org.eclipse.dirigible.database.sql.ISqlDialect;
+import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.awaitility.AwaitilityExecutor;
 import org.eclipse.dirigible.tests.framework.db.DBAsserter;
@@ -71,6 +73,8 @@ class SchemaExportImportIT extends IntegrationTest {
 
         String exportProcessId = triggerSourceDSExportProcess();
         assertProcessExecutedSuccessfully(exportProcessId);
+
+        prepareTargetSchema();
 
         String importProcessId = triggerSourceDSImportProcess();
         assertProcessExecutedSuccessfully(importProcessId);
@@ -145,6 +149,20 @@ class SchemaExportImportIT extends IntegrationTest {
                                                                        .processInstanceId(processInstanceId)
                                                                        .singleResult();
         return historicProcessInstance.getEndTime() != null;
+    }
+
+    private void prepareTargetSchema() throws SQLException {
+        DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
+        if (defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
+            ISqlDialect dialect = SqlDialectFactory.getDialect(defaultDataSource);
+            String createTargetSchema = dialect.create()
+                                               .schema("PUBLIC")
+                                               .build();
+            try (Connection connection = defaultDataSource.getConnection();
+                    PreparedStatement ps = connection.prepareStatement(createTargetSchema)) {
+                ps.executeUpdate();
+            }
+        }
     }
 
     private String triggerSourceDSImportProcess() {
