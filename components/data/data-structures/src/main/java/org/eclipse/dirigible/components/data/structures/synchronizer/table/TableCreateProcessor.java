@@ -58,6 +58,9 @@ public class TableCreateProcessor {
         CreateTableBuilder createTableBuilder = SqlFactory.getNative(connection)
                                                           .create()
                                                           .table(tableName);
+
+        createTableBuilder.schema(tableModel.getSchema());
+
         List<TableColumn> columns = tableModel.getColumns();
         List<TableIndex> indexes = tableModel.getIndexes();
         for (TableColumn columnModel : columns) {

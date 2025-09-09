@@ -142,6 +142,7 @@ public class SnowflakeCreateTableBuilder extends CreateTableBuilder<SnowflakeCre
            .append(SPACE)
            .append(KEYWORD_TABLE)
            .append(SPACE)
+           .append(generateSchema())
            .append(tableName);
     }
 

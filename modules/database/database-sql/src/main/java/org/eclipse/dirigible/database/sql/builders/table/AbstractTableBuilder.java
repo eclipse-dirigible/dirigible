@@ -15,10 +15,7 @@ import org.eclipse.dirigible.database.sql.builders.AbstractCreateSqlBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -38,6 +35,7 @@ public abstract class AbstractTableBuilder<TABLE_BUILDER extends AbstractTableBu
     protected final List<String[]> columns = new ArrayList<>();
     /** The table. */
     private final String table;
+    private String schema;
 
     /**
      * Instantiates a new creates the table builder.
@@ -242,6 +240,11 @@ public abstract class AbstractTableBuilder<TABLE_BUILDER extends AbstractTableBu
         }
 
         this.columns.add(column);
+        return (TABLE_BUILDER) this;
+    }
+
+    public TABLE_BUILDER schema(String schemaName) {
+        this.schema = schemaName;
         return (TABLE_BUILDER) this;
     }
 
@@ -1893,7 +1896,21 @@ public abstract class AbstractTableBuilder<TABLE_BUILDER extends AbstractTableBu
         sql.append(SPACE)
            .append(KEYWORD_TABLE)
            .append(SPACE)
+           .append(generateSchema())
            .append(tableName);
+    }
+
+    protected String generateSchema() {
+        Optional<String> schemaOpt = getSchema();
+        if (schemaOpt.isEmpty()) {
+            return "";
+        }
+        String encapsulatedSchema = encapsulate(schemaOpt.get());
+        return encapsulatedSchema + DOT;
+    }
+
+    protected Optional<String> getSchema() {
+        return Optional.ofNullable(schema);
     }
 
     /**

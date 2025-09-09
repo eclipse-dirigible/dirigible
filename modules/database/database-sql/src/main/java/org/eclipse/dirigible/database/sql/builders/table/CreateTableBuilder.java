@@ -25,12 +25,10 @@ import java.util.stream.Collectors;
  */
 public class CreateTableBuilder<TABLE_BUILDER extends CreateTableBuilder> extends AbstractTableBuilder<TABLE_BUILDER> {
 
+    /** The Constant DELIMITER. */
+    public static final String STATEMENT_DELIMITER = "; ";
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(CreateTableBuilder.class);
-
-    /** The primary key. */
-    protected CreateTablePrimaryKeyBuilder primaryKey;
-
     /** The foreign keys. */
     protected final List<CreateTableForeignKeyBuilder> foreignKeys = new ArrayList<>();
 
@@ -42,9 +40,8 @@ public class CreateTableBuilder<TABLE_BUILDER extends CreateTableBuilder> extend
 
     /** The indices. */
     protected final List<CreateTableIndexBuilder> indices = new ArrayList<>();
-
-    /** The Constant DELIMITER. */
-    public static final String STATEMENT_DELIMITER = "; ";
+    /** The primary key. */
+    protected CreateTablePrimaryKeyBuilder primaryKey;
 
     /**
      * Instantiates a new creates the table builder.
@@ -54,6 +51,21 @@ public class CreateTableBuilder<TABLE_BUILDER extends CreateTableBuilder> extend
      */
     public CreateTableBuilder(ISqlDialect dialect, String table) {
         super(dialect, table);
+    }
+
+    /**
+     * Primary key.
+     *
+     * @param name the name
+     * @param columns the columns
+     * @return the creates the table builder
+     */
+    public TABLE_BUILDER primaryKey(String name, String columns) {
+        if (logger.isTraceEnabled()) {
+            logger.trace("primaryKey: " + name + ", columns" + columns);
+        }
+        String[] array = splitValues(columns);
+        return primaryKey(name, array);
     }
 
     /**
@@ -75,21 +87,6 @@ public class CreateTableBuilder<TABLE_BUILDER extends CreateTableBuilder> extend
             this.primaryKey.column(column);
         }
         return (TABLE_BUILDER) this;
-    }
-
-    /**
-     * Primary key.
-     *
-     * @param name the name
-     * @param columns the columns
-     * @return the creates the table builder
-     */
-    public TABLE_BUILDER primaryKey(String name, String columns) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("primaryKey: " + name + ", columns" + columns);
-        }
-        String[] array = splitValues(columns);
-        return primaryKey(name, array);
     }
 
     /**
@@ -186,6 +183,20 @@ public class CreateTableBuilder<TABLE_BUILDER extends CreateTableBuilder> extend
      * @param columns the columns
      * @return the creates the table builder
      */
+    public TABLE_BUILDER unique(String name, String columns) {
+        if (logger.isTraceEnabled()) {
+            logger.trace("unique: " + name + ", columns" + columns);
+        }
+        return unique(name, splitValues(columns));
+    }
+
+    /**
+     * Unique.
+     *
+     * @param name the name
+     * @param columns the columns
+     * @return the creates the table builder
+     */
     @Override
     public TABLE_BUILDER unique(String name, String[] columns) {
         if (logger.isTraceEnabled()) {
@@ -197,20 +208,6 @@ public class CreateTableBuilder<TABLE_BUILDER extends CreateTableBuilder> extend
         }
         this.uniqueIndices.add(uniqueIndex);
         return (TABLE_BUILDER) this;
-    }
-
-    /**
-     * Unique.
-     *
-     * @param name the name
-     * @param columns the columns
-     * @return the creates the table builder
-     */
-    public TABLE_BUILDER unique(String name, String columns) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("unique: " + name + ", columns" + columns);
-        }
-        return unique(name, splitValues(columns));
     }
 
     /**
