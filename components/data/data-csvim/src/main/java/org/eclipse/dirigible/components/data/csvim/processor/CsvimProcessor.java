@@ -149,8 +149,8 @@ public class CsvimProcessor {
         try (Connection connection = dataSource.getConnection()) {
 
             String fileSchema = csvFile.getSchema();
-            String targetSchema = null != fileSchema ? fileSchema : (defaultDataSource ? connection.getSchema() : null);
-
+            String targetSchema =
+                    defaultDataSource ? ("PUBLIC".equalsIgnoreCase(fileSchema) ? connection.getSchema() : fileSchema) : fileSchema;
             if (null != targetSchema) {
                 connection.setSchema(targetSchema);
             }
