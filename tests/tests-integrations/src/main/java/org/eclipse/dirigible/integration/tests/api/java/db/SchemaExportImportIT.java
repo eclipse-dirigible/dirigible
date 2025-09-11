@@ -155,11 +155,12 @@ class SchemaExportImportIT extends IntegrationTest {
         DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
         if (defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
             ISqlDialect dialect = SqlDialectFactory.getDialect(defaultDataSource);
-            String createTargetSchema = dialect.create()
-                                               .schema("PUBLIC")
-                                               .build();
+            String createTargetSchemaSql = dialect.create()
+                                                  .schema("PUBLIC")
+                                                  .build();
+            LOGGER.debug("Creating target schema using sql [{}]", createTargetSchemaSql);
             try (Connection connection = defaultDataSource.getConnection();
-                    PreparedStatement ps = connection.prepareStatement(createTargetSchema)) {
+                    PreparedStatement ps = connection.prepareStatement(createTargetSchemaSql)) {
                 ps.executeUpdate();
             }
         }
