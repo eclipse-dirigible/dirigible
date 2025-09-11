@@ -156,7 +156,7 @@ public class CreateTableTest {
 
         assertNotNull(sql);
         assertEquals(
-                "CREATE TABLE \"CUSTOMERS\" ( \"FIRST_NAME\" VARCHAR (20) , \"LAST_NAME\" VARCHAR (30) , CONSTRAINT \"FOREIGN_KEY\" FOREIGN KEY ( \"PERSON_ADDRESS_ID\" ) REFERENCES TEST_SCHEMA.\"ADDRESSES\"( \"ADDRESS_ID\" ))",
+                "CREATE TABLE \"CUSTOMERS\" ( \"FIRST_NAME\" VARCHAR (20) , \"LAST_NAME\" VARCHAR (30) , CONSTRAINT \"FOREIGN_KEY\" FOREIGN KEY ( \"PERSON_ADDRESS_ID\" ) REFERENCES \"TEST_SCHEMA\".\"ADDRESSES\"( \"ADDRESS_ID\" ))",
                 sql);
     }
 
