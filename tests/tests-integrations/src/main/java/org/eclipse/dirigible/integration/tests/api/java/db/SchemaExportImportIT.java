@@ -189,9 +189,10 @@ class SchemaExportImportIT extends IntegrationTest {
     }
 
     private void assertImportedTestingTables() throws SQLException {
-        assertTablesCount("DefaultDB", 5);
+        String targetSchema = "PUBLIC";
+        assertTablesCount("DefaultDB", targetSchema, 5);
 
-        Table users = dbAssserter.getDefaultDbTable("USERS");
+        Table users = dbAssserter.getDefaultDbTable(targetSchema, "USERS");
         // @formatter:off
         Assertions.assertThat(users).hasNumberOfRows(12)
                   .row(0).value("USERNAME").isEqualTo("ALICE").value("EMAIL").isEqualTo("alice@example.com").value("AGE").isEqualTo(18)
@@ -208,7 +209,7 @@ class SchemaExportImportIT extends IntegrationTest {
                   .row(11).value("USERNAME").isEqualTo("LINDA").value("EMAIL").isEqualTo("linda@example.com").value("AGE").isEqualTo(29);
         // @formatter:on
 
-        Table categories = dbAssserter.getDefaultDbTable("CATEGORIES");
+        Table categories = dbAssserter.getDefaultDbTable(targetSchema, "CATEGORIES");
         // @formatter:off
         Assertions.assertThat(categories).hasNumberOfRows(5)
                   .row(0).value("CATEGORY_ID").isEqualTo(1).value("NAME").isEqualTo("ELECTRONICS").value("DESCRIPTION").isEqualTo("Devices and gadgets")
@@ -218,7 +219,7 @@ class SchemaExportImportIT extends IntegrationTest {
                   .row(4).value("CATEGORY_ID").isEqualTo(5).value("NAME").isEqualTo("HOME").value("DESCRIPTION").isEqualTo("Home and kitchen products");
         // @formatter:on
 
-        Table products = dbAssserter.getDefaultDbTable("PRODUCTS");
+        Table products = dbAssserter.getDefaultDbTable(targetSchema, "PRODUCTS");
         // @formatter:off
         Assertions.assertThat(products).hasNumberOfRows(15)
                   .row(0).value("NAME").isEqualTo("LAPTOP").value("PRICE").isEqualTo(1200.15).value("CATEGORY_ID").isEqualTo(1)
@@ -238,7 +239,7 @@ class SchemaExportImportIT extends IntegrationTest {
                   .row(14).value("NAME").isEqualTo("E-READER").value("PRICE").isEqualTo(110.00).value("CATEGORY_ID").isEqualTo(1);
         // @formatter:on
 
-        Table orders = dbAssserter.getDefaultDbTable("ORDERS");
+        Table orders = dbAssserter.getDefaultDbTable(targetSchema, "ORDERS");
         // @formatter:off
         Assertions.assertThat(orders).hasNumberOfRows(12)
                   .row(0).value("USER_ID").isEqualTo(1).value("TOTAL_AMOUNT").isEqualTo(1250.15)
@@ -255,7 +256,7 @@ class SchemaExportImportIT extends IntegrationTest {
                   .row(11).value("USER_ID").isEqualTo(12).value("TOTAL_AMOUNT").isEqualTo(60.00);
         // @formatter:on
 
-        Table orderItems = dbAssserter.getDefaultDbTable("ORDER_ITEMS");
+        Table orderItems = dbAssserter.getDefaultDbTable(targetSchema, "ORDER_ITEMS");
         // @formatter:off
         Assertions.assertThat(orderItems).hasNumberOfRows(21)
                   .row(0).value("ORDER_ID").isEqualTo(1).value("PRODUCT_ID").isEqualTo(1).value("QUANTITY").isEqualTo(1).value("PRICE").isEqualTo(1200.15)
@@ -282,10 +283,9 @@ class SchemaExportImportIT extends IntegrationTest {
         // @formatter:on
     }
 
-    private void assertTablesCount(String dataSourceName, int expectedTablesCount) throws SQLException {
+    private void assertTablesCount(String dataSourceName, String schema, int expectedTablesCount) throws SQLException {
         DirigibleDataSource dataSource = dataSourcesManager.getDataSource(dataSourceName);
-        String schemaName = dataSource.isOfType(DatabaseSystem.POSTGRESQL) ? "public" : "PUBLIC";
-        List<String> createdTables = DatabaseMetadataUtil.getTablesInSchema(dataSource, schemaName);
+        List<String> createdTables = DatabaseMetadataUtil.getTablesInSchema(dataSource, schema);
 
         assertThat(createdTables).hasSize(expectedTablesCount);
     }
@@ -296,7 +296,7 @@ class SchemaExportImportIT extends IntegrationTest {
         assertProcessExecutedSuccessfully(exportProcessId);
 
         createH2DataSource(TARGET_DATA_SOURCE_NAME);
-        assertTablesCount(TARGET_DATA_SOURCE_NAME, 0);
+        assertTablesCount(TARGET_DATA_SOURCE_NAME, "PUBLIC", 0);
 
         String importProcessId = triggerSystemDBImportProcess();
         assertProcessExecutedSuccessfully(importProcessId);

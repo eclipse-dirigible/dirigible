@@ -14,6 +14,8 @@ import org.assertj.db.type.AssertDbConnection;
 import org.assertj.db.type.AssertDbConnectionFactory;
 import org.assertj.db.type.Table;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.database.DatabaseSystem;
+import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.springframework.stereotype.Component;
@@ -37,13 +39,24 @@ public class DBAsserter {
     }
 
     public Table getDefaultDbTable(String tableName) {
+        DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
+        String schemaName = dataSource.isOfType(DatabaseSystem.H2) ? "PUBLIC" : "public";
+
+        return getDefaultDbTable(schemaName, tableName);
+    }
+
+    public Table getDefaultDbTable(String schemaName, String tableName) {
         AssertDbConnection connection = getDefaultDbAssertDbConnection();
-        DataSource dataSource = dataSourcesManager.getDefaultDataSource();
+        DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
         ISqlDialect dialect = getDefaultDbDialect(dataSource);
+
         char escapeSymbol = dialect.getEscapeSymbol();
         String escapedTableName = escapeSymbol + tableName + escapeSymbol;
 
-        return connection.table(escapedTableName)
+        String escapedSchemaName = escapeSymbol + schemaName + escapeSymbol;
+
+        String fullTableName = escapedSchemaName + "." + escapedTableName;
+        return connection.table(fullTableName)
                          .build();
     }
 
