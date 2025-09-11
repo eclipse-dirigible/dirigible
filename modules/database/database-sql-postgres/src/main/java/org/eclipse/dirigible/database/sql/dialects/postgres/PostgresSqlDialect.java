@@ -144,6 +144,7 @@ public class PostgresSqlDialect extends
             case BLOB -> "bytea";
             case DOUBLE -> "DOUBLE PRECISION";
             case CHARACTER_LARGE_OBJECT -> "TEXT";
+            case NVARCHAR -> "VARCHAR";
             default -> super.getDataTypeName(dataType);
         };
     }
