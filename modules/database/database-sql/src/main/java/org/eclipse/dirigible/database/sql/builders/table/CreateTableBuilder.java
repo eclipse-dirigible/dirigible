@@ -418,10 +418,13 @@ public class CreateTableBuilder<TABLE_BUILDER extends CreateTableBuilder> extend
                .append(SPACE)
                .append(KEYWORD_REFERENCES)
                .append(SPACE);
+
             if (foreignKey.getReferencedTableSchema() != null) {
-                sql.append(foreignKey.getReferencedTableSchema())
-                   .append(".");
+                String refTableSchema = encapsulate(foreignKey.getReferencedTableSchema(), true);
+                sql.append(refTableSchema)
+                   .append(DOT);
             }
+
             sql.append(referencedTableName)
                .append(OPEN)
                .append(traverseNames(foreignKey.getReferencedColumns()))

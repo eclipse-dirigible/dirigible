@@ -142,8 +142,9 @@ public class TableCreateProcessor {
                             foreignKeyReferencedColumns[i++] = "\"" + column + "\"";
                         }
 
+                        String foreignKeyReferencedSchema = foreignKey.getReferencedSchema();
                         createTableBuilder.foreignKey(foreignKeyName, foreignKeyColumns, foreignKeyReferencedTable,
-                                foreignKeyReferencedColumns);
+                                foreignKeyReferencedSchema, foreignKeyReferencedColumns);
                     }
                 }
             }
