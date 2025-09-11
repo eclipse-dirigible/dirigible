@@ -153,9 +153,11 @@ public class CsvimProcessor {
             String targetSchema = fileSchema;
             if (defaultDataSource) {
                 if (("PUBLIC".equals(fileSchema) && dataSource.isOfType(DatabaseSystem.H2))//
-                        || ("public".equals(fileSchema) && dataSource.isOfType(DatabaseSystem.POSTGRESQL))) {
-                    // needed for the multitenancy logic
-                    // change the schema to the default db schema for this tenant
+                        || ("public".equals(fileSchema) && dataSource.isOfType(DatabaseSystem.POSTGRESQL))//
+                        || (dataSourceName == null && "public".equalsIgnoreCase(fileSchema))) {
+                    // 1. needed for the multitenancy logic - change the schema to the default db schema for this tenant
+                    // 2. when datasource is not specified but the import is for default schema - import into defaultdb
+                    // schema
                     logger.debug("Changing target schema from [{}] to default data source schema [{}]", targetSchema,
                             connection.getSchema());
                     targetSchema = connection.getSchema();
