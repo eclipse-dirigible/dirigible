@@ -161,8 +161,15 @@ public class DataTypeUtils {
         STRING_TO_DATABASE_TYPE.put(TEXT, Types.VARCHAR);
         // dates
         STRING_TO_DATABASE_TYPE.put(DATE, Types.DATE);
-        STRING_TO_DATABASE_TYPE.put(TIMESTAMP, Types.TIMESTAMP);
         STRING_TO_DATABASE_TYPE.put(TIME, Types.TIME);
+        STRING_TO_DATABASE_TYPE.put(TIMESTAMP, Types.TIMESTAMP);
+
+        // https://docs.snowflake.com/en/sql-reference/data-types-datetime#label-datatypes-timestamp-variations
+        STRING_TO_DATABASE_TYPE.put("TIMESTAMP_NTZ", Types.TIMESTAMP);
+        STRING_TO_DATABASE_TYPE.put("TIMESTAMPNTZ", Types.TIMESTAMP);
+        STRING_TO_DATABASE_TYPE.put("TIMESTAMP WITHOUT TIME ZONE", Types.TIMESTAMP);
+        STRING_TO_DATABASE_TYPE.put("DATETIME", Types.TIMESTAMP);
+
         // ints
         STRING_TO_DATABASE_TYPE.put(BIT, Types.BIT);
         STRING_TO_DATABASE_TYPE.put(SMALLINT, Types.SMALLINT);
