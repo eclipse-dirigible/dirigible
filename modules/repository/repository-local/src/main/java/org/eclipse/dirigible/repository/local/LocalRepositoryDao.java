@@ -74,6 +74,8 @@ public class LocalRepositoryDao {
     }
 
     public String storeFile(String path, byte[] content) throws IOException {
+        content = null != content ? content : new byte[0];
+
         try (ByteArrayInputStream contentInputStream = new ByteArrayInputStream(content)) {
             return storeFile(path, contentInputStream);
         }
