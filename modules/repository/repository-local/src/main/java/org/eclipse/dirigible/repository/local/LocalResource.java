@@ -9,17 +9,13 @@
  */
 package org.eclipse.dirigible.repository.local;
 
-import static java.text.MessageFormat.format;
-
 import org.eclipse.dirigible.commons.api.helpers.ContentTypeHelper;
-import org.eclipse.dirigible.repository.api.IResource;
-import org.eclipse.dirigible.repository.api.RepositoryNotFoundException;
-import org.eclipse.dirigible.repository.api.RepositoryPath;
-import org.eclipse.dirigible.repository.api.RepositoryReadException;
-import org.eclipse.dirigible.repository.api.RepositoryWriteException;
+import org.eclipse.dirigible.repository.api.*;
 import org.eclipse.dirigible.repository.fs.FileSystemRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static java.text.MessageFormat.format;
 
 /**
  * The file system based implementation of {@link IResource}.
@@ -58,6 +54,24 @@ public class LocalResource extends LocalEntity implements IResource {
     }
 
     /**
+     * Returns the {@link LocalFile} object matching this {@link LocalResource}. If there is no such
+     * object, then <code>null</code> is returned.
+     *
+     * @return the document
+     * @throws RepositoryReadException the repository read exception
+     */
+    protected LocalFile getDocument() throws RepositoryReadException {
+        final LocalObject object = getLocalObject();
+        if (object == null) {
+            return null;
+        }
+        if (!(object instanceof LocalFile)) {
+            return null;
+        }
+        return (LocalFile) object;
+    }
+
+    /**
      * Creates the.
      *
      * @throws RepositoryWriteException the repository write exception
@@ -69,7 +83,7 @@ public class LocalResource extends LocalEntity implements IResource {
      */
     @Override
     public void create() throws RepositoryWriteException {
-        getParent().createResource(getName(), null, false, CONTENT_TYPE_DEFAULT);
+        getParent().createResource(getName(), (byte[]) null, false, CONTENT_TYPE_DEFAULT);
     }
 
     /**
@@ -90,6 +104,21 @@ public class LocalResource extends LocalEntity implements IResource {
         } catch (LocalRepositoryException ex) {
             throw new RepositoryWriteException(format("Could not delete resource {0} ", this.getName()), ex);
         }
+    }
+
+    /**
+     * Returns the {@link LocalFile} object matching this {@link LocalResource}. If there is no such
+     * object, then an {@link RepositoryNotFoundException} is thrown.
+     *
+     * @return the document safe
+     * @throws RepositoryNotFoundException the repository not found exception
+     */
+    protected LocalFile getDocumentSafe() throws RepositoryNotFoundException {
+        final LocalFile document = getDocument();
+        if (document == null) {
+            throw new RepositoryNotFoundException(format("There is no resource at path ''{0}''.", getPath()));
+        }
+        return document;
     }
 
     /**
@@ -267,10 +296,9 @@ public class LocalResource extends LocalEntity implements IResource {
         if (obj == this) {
             return true;
         }
-        if (!(obj instanceof LocalResource)) {
+        if (!(obj instanceof LocalResource other)) {
             return false;
         }
-        final LocalResource other = (LocalResource) obj;
         return getPath().equals(other.getPath());
     }
 
@@ -293,44 +321,11 @@ public class LocalResource extends LocalEntity implements IResource {
      * Returns the {@link LocalFile} object matching this {@link LocalResource}. If there is no such
      * object, then <code>null</code> is returned.
      *
-     * @return the document
-     * @throws RepositoryReadException the repository read exception
-     */
-    protected LocalFile getDocument() throws RepositoryReadException {
-        final LocalObject object = getLocalObject();
-        if (object == null) {
-            return null;
-        }
-        if (!(object instanceof LocalFile)) {
-            return null;
-        }
-        return (LocalFile) object;
-    }
-
-    /**
-     * Returns the {@link LocalFile} object matching this {@link LocalResource}. If there is no such
-     * object, then <code>null</code> is returned.
-     *
      * @return the local file
      * @throws RepositoryReadException the repository read exception
      */
     protected LocalFile getFile() throws RepositoryReadException {
         return getDocument();
-    }
-
-    /**
-     * Returns the {@link LocalFile} object matching this {@link LocalResource}. If there is no such
-     * object, then an {@link RepositoryNotFoundException} is thrown.
-     *
-     * @return the document safe
-     * @throws RepositoryNotFoundException the repository not found exception
-     */
-    protected LocalFile getDocumentSafe() throws RepositoryNotFoundException {
-        final LocalFile document = getDocument();
-        if (document == null) {
-            throw new RepositoryNotFoundException(format("There is no resource at path ''{0}''.", getPath()));
-        }
-        return document;
     }
 
     /**

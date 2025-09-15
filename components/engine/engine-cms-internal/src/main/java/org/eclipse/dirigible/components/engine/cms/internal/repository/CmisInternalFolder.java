@@ -10,7 +10,6 @@
 package org.eclipse.dirigible.components.engine.cms.internal.repository;
 
 import org.apache.chemistry.opencmis.commons.enums.VersioningState;
-import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.engine.cms.CmisConstants;
 import org.eclipse.dirigible.components.engine.cms.CmisContentStream;
 import org.eclipse.dirigible.components.engine.cms.CmisFolder;
@@ -18,8 +17,8 @@ import org.eclipse.dirigible.repository.api.ICollection;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IResource;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -154,9 +153,9 @@ public class CmisInternalFolder extends CmisInternalObject implements CmisFolder
     @Override
     public CmisInternalDocument createDocument(Map<String, String> properties, CmisContentStream contentStream) throws IOException {
         String name = properties.get(CmisConstants.NAME);
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        IOUtils.copy(contentStream.getStream(), out);
-        IResource resource = this.internalFolder.createResource(name, out.toByteArray(), true, contentStream.getMimeType());
+
+        InputStream contentInputStream = contentStream.getStream();
+        IResource resource = this.internalFolder.createResource(name, contentInputStream, true, contentStream.getMimeType());
         return new CmisInternalDocument(this.session, resource);
     }
 

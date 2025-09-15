@@ -9,10 +9,11 @@
  */
 package org.eclipse.dirigible.repository.local;
 
-import java.util.List;
-
 import org.eclipse.dirigible.repository.api.RepositoryPath;
 import org.eclipse.dirigible.repository.fs.FileSystemRepository;
+
+import java.io.InputStream;
+import java.util.List;
 
 /**
  * Internal representation of a Folder/Collection kind of object.
@@ -73,6 +74,12 @@ public class LocalFolder extends LocalObject {
     public void createFile(String name, byte[] content, boolean isBinary, String contentType) throws LocalRepositoryException {
         getRepository().getRepositoryDao()
                        .createFile(RepositoryPath.normalizePath(getPath(), name), content, isBinary, contentType);
+    }
+
+    public void createFile(String name, InputStream contentInputStream, boolean isBinary, String contentType)
+            throws LocalRepositoryException {
+        getRepository().getRepositoryDao()
+                       .createFile(RepositoryPath.normalizePath(getPath(), name), contentInputStream, isBinary, contentType);
     }
 
     /**
