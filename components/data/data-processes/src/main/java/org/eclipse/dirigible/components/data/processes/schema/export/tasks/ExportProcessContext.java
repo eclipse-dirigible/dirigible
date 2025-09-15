@@ -17,7 +17,6 @@ public class ExportProcessContext {
     private static final String DATA_SOURCE_CTX_PARAM = "dataSource";
     private static final String SCHEMA_CTX_PARAM = "schema";
     private static final String EXPORT_PATH_CTX_PARAM = "exportPath";
-    private static final String TABLE_DATA_FILE_PATH_CTX_PARAM = "tableDataFilePath";
 
     // caution: these values are used in the BPMN process definition
     private static final String TARGET_TABLE_CTX_PARAM = "targetTable";
@@ -79,13 +78,5 @@ public class ExportProcessContext {
 
     public String getCurrentTable() {
         return execution.getMandatoryVariable(TARGET_TABLE_CTX_PARAM, String.class);
-    }
-
-    public String getTableDataFilePath() {
-        return execution.getMandatoryVariable(TABLE_DATA_FILE_PATH_CTX_PARAM, String.class);
-    }
-
-    public void setTableDataFilePath(String filePath) {
-        execution.setVariable(TABLE_DATA_FILE_PATH_CTX_PARAM, filePath);
     }
 }

@@ -10,22 +10,23 @@
 package org.eclipse.dirigible.components.data.processes.schema.export.tasks;
 
 import org.eclipse.dirigible.components.data.export.service.DatabaseExportService;
+import org.eclipse.dirigible.components.data.processes.schema.export.ExportFilesHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.*;
 
-@Component("ExportTableDataToFileTask_ExportSchemaProcess") // used in the bpmn process
-class ExportTableDataToFileTask extends BaseExportTask {
+@Component("ExportTableDataTask_ExportSchemaProcess") // used in the bpmn process
+class ExportTableDataTask extends BaseExportTask {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ExportTableDataToFileTask.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ExportTableDataTask.class);
 
     private static final String CSV_MEDIA_TYPE = "text/csv";
 
     private final DatabaseExportService databaseExportService;
 
-    ExportTableDataToFileTask(DatabaseExportService databaseExportService) {
+    ExportTableDataTask(DatabaseExportService databaseExportService) {
         this.databaseExportService = databaseExportService;
     }
 
@@ -38,16 +39,18 @@ class ExportTableDataToFileTask extends BaseExportTask {
         LOGGER.debug("Created temp file [{}] for table [{}]", tempFile, table);
         try {
             exportTableDataToFile(tempFile, context);
-            context.setTableDataFilePath(tempFile.getAbsolutePath());
-        } catch (RuntimeException e) {
+            saveFileAsDocument(context, tempFile);
+        } finally {
             tempFile.delete();
-            throw e;
         }
     }
 
     private File createTempFile(String table) {
         try {
-            return File.createTempFile(table, ".csv");
+            File tempFile = File.createTempFile(table, ".csv");
+            tempFile.deleteOnExit();
+
+            return tempFile;
         } catch (IOException ex) {
             throw new SchemaExportException("Failed to create temp file for table " + table, ex);
         }
@@ -66,6 +69,20 @@ class ExportTableDataToFileTask extends BaseExportTask {
         } catch (IOException | RuntimeException ex) {
             throw new SchemaExportException("Failed to export table [" + table + "] from schema [" + schema + "] from data source ["
                     + dataSourceName + "] into temp file", ex);
+        }
+    }
+
+    private void saveFileAsDocument(ExportProcessContext context, File file) {
+        String table = context.getCurrentTable();
+        String exportFolder = context.getExportPath();
+        String fileName = ExportFilesHelper.createTableDataFilename(table);
+
+        try (InputStream in = new BufferedInputStream(new FileInputStream(file))) {
+            saveDocument(in, fileName, CSV_MEDIA_TYPE, exportFolder);
+
+        } catch (IOException | RuntimeException ex) {
+            throw new SchemaExportException(
+                    "Failed to save file [" + file + "] to document [" + fileName + "] in to export folder [" + exportFolder + "]", ex);
         }
     }
 
