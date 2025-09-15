@@ -356,6 +356,18 @@ public class FileSystemUtils {
         return null;
     }
 
+    public static InputStream loadFileStream(String workspacePath) throws IOException {
+        String normalizedPath = FilenameUtils.normalize(workspacePath);
+        Path path = FileSystems.getDefault()
+                               .getPath(normalizedPath);
+
+        if (path.toFile()
+                .exists()) {
+            return Files.newInputStream(path);
+        }
+        return null;
+    }
+
     /**
      * Move file.
      *

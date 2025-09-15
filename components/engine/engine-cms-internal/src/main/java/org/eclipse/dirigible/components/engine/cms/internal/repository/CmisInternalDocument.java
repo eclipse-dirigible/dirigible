@@ -14,8 +14,8 @@ import org.eclipse.dirigible.components.engine.cms.CmisDocument;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IResource;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 
 /**
  * The Class CmisDocument.
@@ -88,9 +88,10 @@ public class CmisInternalDocument extends CmisInternalObject implements CmisDocu
      */
     @Override
     public CmisContentStream getContentStream() {
-        byte[] content = this.internalResource.getContent(); // could cause OOM for large files
-        return new CmisInternalContentStream(this.internalResource.getName(), content.length, this.internalResource.getContentType(),
-                new ByteArrayInputStream(content));
+        InputStream contentStream = this.internalResource.getContentStream();
+        int length = -1; // not used at all
+        return new CmisInternalContentStream(this.internalResource.getName(), length, this.internalResource.getContentType(),
+                contentStream);
     }
 
     /**

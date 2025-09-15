@@ -159,6 +159,20 @@ public class LocalRepositoryDao {
         }
     }
 
+    public InputStream getFileContentStream(LocalFile localFile) {
+        try {
+            String workspacePath = LocalWorkspaceMapper.getMappedName(getRepository(), localFile.getPath());
+            byte[] cachedContent = cache.get(workspacePath);
+            if (cachedContent != null) {
+                return new ByteArrayInputStream(cachedContent);
+            }
+
+            return FileSystemUtils.loadFileStream(workspacePath);
+        } catch (IOException e) {
+            throw new LocalRepositoryException(e);
+        }
+    }
+
     /**
      * Rename file.
      *

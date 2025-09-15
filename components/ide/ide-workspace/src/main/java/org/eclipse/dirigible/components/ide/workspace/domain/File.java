@@ -11,13 +11,15 @@ package org.eclipse.dirigible.components.ide.workspace.domain;
 
 import org.eclipse.dirigible.repository.api.*;
 
+import java.io.InputStream;
+
 /**
  * The Workspace's File.
  */
 public class File implements IResource {
 
     /** The internal. */
-    private transient IResource internal;
+    private final transient IResource internal;
 
     /**
      * Instantiates a new file.
@@ -59,6 +61,22 @@ public class File implements IResource {
     }
 
     /**
+     * Sets the content.
+     *
+     * @param content the new content
+     * @throws RepositoryWriteException the repository write exception
+     */
+    @Override
+    public void setContent(byte[] content) throws RepositoryWriteException {
+        internal.setContent(content);
+    }
+
+    @Override
+    public InputStream getContentStream() throws RepositoryReadException {
+        return internal.getContentStream();
+    }
+
+    /**
      * Gets the name.
      *
      * @return the name
@@ -76,17 +94,6 @@ public class File implements IResource {
     @Override
     public String getPath() {
         return internal.getPath();
-    }
-
-    /**
-     * Sets the content.
-     *
-     * @param content the new content
-     * @throws RepositoryWriteException the repository write exception
-     */
-    @Override
-    public void setContent(byte[] content) throws RepositoryWriteException {
-        internal.setContent(content);
     }
 
     /**

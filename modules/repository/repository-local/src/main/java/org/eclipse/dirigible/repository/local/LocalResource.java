@@ -15,6 +15,8 @@ import org.eclipse.dirigible.repository.fs.FileSystemRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.InputStream;
+
 import static java.text.MessageFormat.format;
 
 /**
@@ -274,6 +276,16 @@ public class LocalResource extends LocalEntity implements IResource {
             }
         } else {
             getParent().createResource(getName(), content, this.binary, this.contentType);
+        }
+    }
+
+    @Override
+    public InputStream getContentStream() throws RepositoryReadException {
+        final LocalFile document = getDocumentSafe();
+        try {
+            return document.getDataStream();
+        } catch (LocalRepositoryException ex) {
+            throw new RepositoryReadException("Could not read resource content.", ex);
         }
     }
 
