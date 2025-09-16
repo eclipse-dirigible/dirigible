@@ -78,7 +78,8 @@ class ExportTableDataTask extends BaseExportTask {
         String fileName = ExportFilesHelper.createTableDataFilename(table);
 
         try (InputStream in = new BufferedInputStream(new FileInputStream(file))) {
-            saveDocument(in, fileName, CSV_MEDIA_TYPE, exportFolder);
+            long contentLength = file.length();
+            saveDocument(in, contentLength, fileName, CSV_MEDIA_TYPE, exportFolder);
 
         } catch (IOException | RuntimeException ex) {
             throw new SchemaExportException(

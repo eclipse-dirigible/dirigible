@@ -14,11 +14,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.paginators.ListObjectsV2Iterable;
@@ -27,6 +25,7 @@ import software.amazon.awssdk.transfer.s3.model.DirectoryUpload;
 import software.amazon.awssdk.transfer.s3.model.UploadDirectoryRequest;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Paths;
 import java.util.List;
@@ -210,7 +209,6 @@ public class S3Facade {
             createBucket(bucket);
         } else {
             logger.warn("Unknown S3 provider via DIRIGIBLE_S3_PROVIDER: " + DIRIGIBLE_S3_PROVIDER);
-            return;
         }
     }
 
@@ -239,17 +237,20 @@ public class S3Facade {
      * @throws IOException Signals that an I/O exception has occurred.
      */
     public static byte[] get(String name) throws IOException {
+        ResponseInputStream<GetObjectResponse> response = getResponseInputStream(name);
+        return response.readAllBytes();
+    }
+
+    public static ResponseInputStream<GetObjectResponse> getResponseInputStream(String name) {
         String bucket = getBucketName();
 
         String tenantName = INSTANCE.tenantPathResolved.resolve(name);
-        ResponseInputStream<GetObjectResponse> response = S3Facade.get()
-                                                                  .getS3Client()
-                                                                  .getObject(GetObjectRequest.builder()
-                                                                                             .bucket(bucket)
-                                                                                             .key(tenantName)
-                                                                                             .build());
-
-        return response.readAllBytes();
+        return S3Facade.get()
+                       .getS3Client()
+                       .getObject(GetObjectRequest.builder()
+                                                  .bucket(bucket)
+                                                  .key(tenantName)
+                                                  .build());
     }
 
     /**
@@ -272,6 +273,11 @@ public class S3Facade {
      * @param contentType the content type
      */
     public static void put(String name, byte[] input, String contentType) {
+        RequestBody requestBody = RequestBody.fromBytes(input);
+        put(name, contentType, requestBody);
+    }
+
+    private static void put(String name, String contentType, RequestBody requestBody) {
         String tenantName = INSTANCE.tenantPathResolved.resolve(name);
         String bucket = getBucketName();
         PutObjectRequest objectRequest;
@@ -289,7 +295,12 @@ public class S3Facade {
         }
         S3Facade.get()
                 .getS3Client()
-                .putObject(objectRequest, RequestBody.fromBytes(input));
+                .putObject(objectRequest, requestBody);
+    }
+
+    public static void put(String name, InputStream inputStream, long contentLength, String contentType) {
+        RequestBody requestBody = RequestBody.fromInputStream(inputStream, contentLength);
+        put(name, contentType, requestBody);
     }
 
     /**

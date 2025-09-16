@@ -65,7 +65,7 @@ abstract class BaseExportTask extends BPMTask {
         }
     }
 
-    protected void saveDocument(InputStream contentInputStream, String fileName, String mediaType, String folderPath) {
+    protected void saveDocument(InputStream contentInputStream, long contentLength, String fileName, String mediaType, String folderPath) {
         CmisSession cmisSession = CmisSessionFactory.getSession();
 
         Map<String, String> fileProps = Map.of(CmisConstants.OBJECT_TYPE_ID, CmisConstants.OBJECT_TYPE_DOCUMENT, //
@@ -74,10 +74,8 @@ abstract class BaseExportTask extends BPMTask {
         CmisFolder folder = getFolder(folderPath);
 
         try {
-
-            long length = -1; // not needed?
             CmisContentStream contentStream = cmisSession.getObjectFactory()
-                                                         .createContentStream(fileName, length, mediaType, contentInputStream);
+                                                         .createContentStream(fileName, contentLength, mediaType, contentInputStream);
 
             folder.createDocument(fileProps, contentStream);
         } catch (IOException ex) {

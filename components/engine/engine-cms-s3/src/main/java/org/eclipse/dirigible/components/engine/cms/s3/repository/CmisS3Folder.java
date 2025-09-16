@@ -10,7 +10,6 @@
 package org.eclipse.dirigible.components.engine.cms.s3.repository;
 
 import org.apache.chemistry.opencmis.commons.enums.VersioningState;
-import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.api.s3.S3Facade;
 import org.eclipse.dirigible.components.api.s3.TenantPathResolved;
 import org.eclipse.dirigible.components.base.spring.BeanProvider;
@@ -20,7 +19,6 @@ import org.eclipse.dirigible.components.engine.cms.CmisFolder;
 import org.eclipse.dirigible.repository.api.IRepository;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -101,10 +99,7 @@ public class CmisS3Folder extends CmisS3Object implements CmisFolder {
         String name = properties.get(CmisConstants.NAME);
         String folderName = this.getId() + name;
 
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        IOUtils.copy(contentStream.getStream(), out);
-
-        S3Facade.put(folderName, out.toByteArray(), contentStream.getMimeType());
+        S3Facade.put(folderName, contentStream.getInputStream(), contentStream.getLength(), contentStream.getMimeType());
         return new CmisS3Document(folderName, name);
     }
 

@@ -143,11 +143,11 @@ public class DatabaseFacade implements InitializingBean {
     private static DirigibleDataSource getDataSource(String datasourceName) {
         try {
             boolean defaultDB = datasourceName == null || datasourceName.trim()
-                                                                        .isEmpty()
-                    || "DefaultDB".equals(datasourceName);
-            DirigibleDataSource dataSource = defaultDB ? DatabaseFacade.get()
-                                                                       .getDataSourcesManager()
-                                                                       .getDefaultDataSource()
+                                                                        .isEmpty() || "DefaultDB".equals(datasourceName);
+            DirigibleDataSource dataSource = defaultDB
+                    ? DatabaseFacade.get()
+                                    .getDataSourcesManager()
+                                    .getDefaultDataSource()
                     : DatabaseFacade.get()
                                     .getDataSourcesManager()
                                     .getDataSource(datasourceName);
@@ -185,6 +185,13 @@ public class DatabaseFacade implements InitializingBean {
     public static String getProductName(String datasourceName) throws Throwable {
         DataSource dataSource = getDataSource(datasourceName);
         return LoggingExecutor.executeWithException(dataSource, () -> DatabaseMetadataHelper.getProductName(dataSource));
+    }
+
+    public static String test(boolean throwError) throws Throwable {
+        if (throwError) {
+            throw new IllegalStateException("Test exception!");
+        }
+        return "Test value";
     }
 
     /**
@@ -516,8 +523,8 @@ public class DatabaseFacade implements InitializingBean {
         return LoggingExecutor.executeWithException(dataSource, () -> {
 
             try (Connection connection = dataSource.getConnection();
-                    NamedParameterStatement preparedStatement =
-                            new NamedParameterStatement(connection, sql, Statement.RETURN_GENERATED_KEYS)) {
+                    NamedParameterStatement preparedStatement = new NamedParameterStatement(connection, sql,
+                            Statement.RETURN_GENERATED_KEYS)) {
 
                 if (parameters.isPresent()) {
                     ParametersSetter.setNamedParameters(parameters.get(), preparedStatement);
