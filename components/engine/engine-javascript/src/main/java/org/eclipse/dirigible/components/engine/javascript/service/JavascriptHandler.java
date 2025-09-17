@@ -142,8 +142,7 @@ public class JavascriptHandler {
             String errorMessage =
                     String.format("Error on processing JavaScript service from project: [%s], and path: [%s], with parameters: [%s]",
                             projectName, projectFilePath, projectFilePathParam);
-            logger.error(errorMessage, ex);
-            throw new RuntimeException(ex.getMessage(), ex);
+            throw new RuntimeException(errorMessage, ex);
         }
     }
 

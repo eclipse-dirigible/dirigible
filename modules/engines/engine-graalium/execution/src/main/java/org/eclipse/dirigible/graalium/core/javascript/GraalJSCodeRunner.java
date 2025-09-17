@@ -23,10 +23,7 @@ import org.eclipse.dirigible.graalium.core.javascript.modules.ModuleResolver;
 import org.eclipse.dirigible.graalium.core.javascript.modules.ModuleType;
 import org.eclipse.dirigible.graalium.core.javascript.modules.downloadable.DownloadableModuleResolver;
 import org.eclipse.dirigible.graalium.core.javascript.polyfills.JavascriptPolyfill;
-import org.graalvm.polyglot.Context;
-import org.graalvm.polyglot.Engine;
-import org.graalvm.polyglot.Source;
-import org.graalvm.polyglot.Value;
+import org.graalvm.polyglot.*;
 
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
@@ -392,14 +389,72 @@ public class GraalJSCodeRunner implements CodeRunner<Source, Value> {
             span.addEvent("Successfully executed [" + codeSource.getPath() + "]");
 
             return result;
+        } catch (PolyglotException e) {
+            // Try to add the script stacktrace as cause
+            if (e.isGuestException()) {
+                Value guestObject = e.getGuestObject();
+                if (guestObject.isException()) {
+                    String exMessage = getExceptionMessage(guestObject);
+                    String exClassName = getExceptionClass(guestObject);
+                    StackTraceElement[] stackTrace = getExceptionStackTrace(guestObject);
+                    if (exMessage != null || exClassName != null || (null != stackTrace && stackTrace.length > 0)) {
+                        GuestLanguageException guestLanguageException =
+                                new GuestLanguageException(codeSource.getPath(), exMessage, exClassName);
+                        guestLanguageException.setStackTrace(stackTrace);
+
+                        e.addSuppressed(guestLanguageException);
+                    }
+                }
+            }
+
+            span.recordException(e);
+            span.setStatus(io.opentelemetry.api.trace.StatusCode.ERROR, "Exception occurred");
+
+            throw e;
         } catch (RuntimeException e) {
             span.recordException(e);
-
             span.setStatus(io.opentelemetry.api.trace.StatusCode.ERROR, "Exception occurred");
+
             throw e;
         } finally {
             span.end();
         }
+    }
+
+    private String getExceptionMessage(Value value) {
+
+        String getMessageMethodName = "getMessage";
+        if (value.isException() && value.canInvokeMember(getMessageMethodName)) {
+            return value.invokeMember(getMessageMethodName)
+                        .asString();
+        }
+        return null;
+    }
+
+    private String getExceptionClass(Value value) {
+
+        String getClassMethodName = "getClass";
+        if (value.canInvokeMember(getClassMethodName)) {
+            Value classValue = value.invokeMember(getClassMethodName);
+
+            String getNameMethodName = "getName";
+            if (classValue.canInvokeMember(getNameMethodName)) {
+                return classValue.invokeMember(getNameMethodName)
+                                 .asString();
+            }
+        }
+        return null;
+    }
+
+    private StackTraceElement[] getExceptionStackTrace(Value value) {
+
+        String getStackTraceMethodName = "getStackTrace";
+        if (value.isException() && value.canInvokeMember(getStackTraceMethodName)) {
+            Value stackTrace = value.invokeMember(getStackTraceMethodName);
+            return stackTrace.as(StackTraceElement[].class);
+        }
+
+        return new StackTraceElement[0];
     }
 
     /**
