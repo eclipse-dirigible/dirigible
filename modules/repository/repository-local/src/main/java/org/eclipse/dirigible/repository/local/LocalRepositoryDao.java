@@ -106,8 +106,7 @@ public class LocalRepositoryDao {
         return this.repository;
     }
 
-    public void createFile(String path, InputStream contentInputStream, boolean isBinary, String contentType)
-            throws LocalRepositoryException {
+    public void createFile(String path, InputStream contentInputStream) throws LocalRepositoryException {
         try {
             storeFile(path, contentInputStream);
             ((LocalRepository) getRepository()).setLastModified(System.currentTimeMillis());

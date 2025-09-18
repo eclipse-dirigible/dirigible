@@ -317,6 +317,7 @@ public class Folder implements ICollection {
      *
      * @return the repository
      */
+    @Override
     public IRepository getRepository() {
         return internal.getRepository();
     }

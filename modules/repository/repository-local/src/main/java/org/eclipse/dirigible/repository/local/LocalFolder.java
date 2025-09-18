@@ -76,10 +76,9 @@ public class LocalFolder extends LocalObject {
                        .createFile(RepositoryPath.normalizePath(getPath(), name), content, isBinary, contentType);
     }
 
-    public void createFile(String name, InputStream contentInputStream, boolean isBinary, String contentType)
-            throws LocalRepositoryException {
+    public void createFile(String name, InputStream contentInputStream) throws LocalRepositoryException {
         getRepository().getRepositoryDao()
-                       .createFile(RepositoryPath.normalizePath(getPath(), name), contentInputStream, isBinary, contentType);
+                       .createFile(RepositoryPath.normalizePath(getPath(), name), contentInputStream);
     }
 
     /**

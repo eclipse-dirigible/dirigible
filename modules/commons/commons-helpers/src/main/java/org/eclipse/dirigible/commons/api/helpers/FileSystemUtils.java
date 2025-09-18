@@ -285,7 +285,7 @@ public class FileSystemUtils {
      * @return true, if successful
      */
     public static boolean exists(String location) {
-        if ((location == null) || "".equals(location)) {
+        if ((location == null) || location.length() == 0) {
             return false;
         }
         Path path;

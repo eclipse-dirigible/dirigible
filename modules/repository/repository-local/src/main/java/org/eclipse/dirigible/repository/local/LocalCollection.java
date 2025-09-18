@@ -449,7 +449,7 @@ public class LocalCollection extends LocalEntity implements ICollection {
         createAncestorsAndSelfIfMissing();
         final LocalFolder folder = getFolderSafe();
         try {
-            folder.createFile(name, contentInputStream, isBinary, contentType);
+            folder.createFile(name, contentInputStream);
         } catch (LocalRepositoryException ex) {
             throw new RepositoryWriteException(format("Could not create child document {0}", name), ex);
         }
