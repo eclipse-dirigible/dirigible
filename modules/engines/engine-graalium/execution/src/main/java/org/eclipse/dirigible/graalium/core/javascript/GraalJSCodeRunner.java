@@ -396,12 +396,12 @@ public class GraalJSCodeRunner implements CodeRunner<Source, Value> {
                 if (guestObject.isException()) {
                     String exMessage = getExceptionMessage(guestObject);
                     String exClassName = getExceptionClass(guestObject);
+                    Throwable exCause = getExceptionCause(guestObject);
                     StackTraceElement[] stackTrace = getExceptionStackTrace(guestObject);
                     if (exMessage != null || exClassName != null || (null != stackTrace && stackTrace.length > 0)) {
                         GuestLanguageException guestLanguageException =
-                                new GuestLanguageException(codeSource.getPath(), exMessage, exClassName);
+                                new GuestLanguageException(codeSource.getPath(), exMessage, exClassName, exCause);
                         guestLanguageException.setStackTrace(stackTrace);
-
                         e.addSuppressed(guestLanguageException);
                     }
                 }
@@ -441,6 +441,18 @@ public class GraalJSCodeRunner implements CodeRunner<Source, Value> {
             if (classValue.canInvokeMember(getNameMethodName)) {
                 return classValue.invokeMember(getNameMethodName)
                                  .asString();
+            }
+        }
+        return null;
+    }
+
+    private Throwable getExceptionCause(Value value) {
+
+        String getCauseMethodName = "getCause";
+        if (value.isException() && value.canInvokeMember(getCauseMethodName)) {
+            Value causeValue = value.invokeMember(getCauseMethodName);
+            if (null != causeValue && causeValue.isException()) {
+                return causeValue.as(Throwable.class);
             }
         }
         return null;
