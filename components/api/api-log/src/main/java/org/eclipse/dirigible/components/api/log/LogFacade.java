@@ -226,7 +226,7 @@ public class LogFacade {
     }
 
     private static StackTraceElement toJavaStackTrace(GraalJSException.JSStackTraceElement jsStackTrace) {
-        String declaringClass = Strings.toJavaString(jsStackTrace.getClassName());
+        String declaringClass = "<js>";
         String methodName = jsStackTrace.getMethodName();
         String fileName = Strings.toJavaString(jsStackTrace.getFileName());
         int lineNumber = jsStackTrace.getLineNumber();
