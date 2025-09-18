@@ -59,11 +59,15 @@ class Logger {
 
 		let rawError = null;
 		if (args.length > 2) {
-			if (args[2] instanceof Error) {
-                rawError = args[2];
+			if (args[args.length-1] instanceof Error) {
+                rawError = args[args.length-1];
+
+                if (rawError.stack) {
+                    console.debug("Handling error with stack:\n" + rawError.stack);
+                }
 			}
-			const sliceIndex = rawError ? 3 : 2;
-			msgParameters = args.slice(sliceIndex).map(function (param) {
+			const endIndex = rawError ? (args.length - 1) : args.length;
+			msgParameters = args.slice(2, endIndex).map(function (param) {
 				return typeof param === 'object' ? JSON.stringify(param) : param;
 			});
 		}
