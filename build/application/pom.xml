@@ -172,6 +172,10 @@
             <artifactId>dirigible-components-group-database</artifactId>
             <type>pom</type>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-data-processes</artifactId>
+        </dependency>
 
         <!-- Engine -->
         <dependency>
