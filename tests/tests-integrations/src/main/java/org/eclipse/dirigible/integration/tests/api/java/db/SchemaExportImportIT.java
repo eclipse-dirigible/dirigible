@@ -44,7 +44,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.hamcrest.Matchers.notNullValue;
 
-class SchemaExportImportIT extends IntegrationTest {
+public class SchemaExportImportIT extends IntegrationTest {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SchemaExportImportIT.class);
 
