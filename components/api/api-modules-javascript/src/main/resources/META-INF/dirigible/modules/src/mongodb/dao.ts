@@ -144,7 +144,7 @@ export class DAO {
                     try {
                         this.remove(dbEntity[this.orm.getPrimaryKey().name]);
                     } catch (err) {
-                        this.$log.error('Could not rollback changes after failed {}[{}}] insert. ', this.orm.table, dbEntity[this.orm.getPrimaryKey().name]);
+                        this.$log.error('Could not rollback changes after failed {}[{}] insert. ', this.orm.table, dbEntity[this.orm.getPrimaryKey().name], err);
                     }
                 }
                 throw e;
@@ -189,7 +189,7 @@ export class DAO {
     
             return this;
         } catch (e) {
-            this.$log.error('Updating {}[{}] failed', this.orm.table, entity !== undefined ? entity[this.orm.getPrimaryKey().name] : entity);
+            this.$log.error('Updating {}[{}] failed', this.orm.table, entity !== undefined ? entity[this.orm.getPrimaryKey().name] : entity, e);
             throw e;
         }
     };
@@ -234,7 +234,7 @@ export class DAO {
                 collection.remove({ "_id": id });
     
             } catch (e) {
-                this.$log.error('Deleting {}[{}] entity failed', this.orm.table, id);
+                this.$log.error('Deleting {}[{}] entity failed', this.orm.table, id, e);
                 throw e;
             }
     
@@ -305,7 +305,7 @@ export class DAO {
             }
             return entity;
         } catch (e) {
-            this.$log.error("Finding {}[{}] entitiy failed.", this.orm.table, id);
+            this.$log.error("Finding {}[{}] entitiy failed.", this.orm.table, id, e);
             throw e;
         }
     }
@@ -319,7 +319,7 @@ export class DAO {
             var collection = db.getCollection(this.orm.table);
             count = collection.count();
         } catch (e) {
-            this.$log.error('Counting {} entities failed', e, this.orm.table);
+            this.$log.error('Counting {} entities failed', this.orm.table, e);
             // e.errContext = parametericStatement.toString(); // TODO: parametericStatement?
             throw e;
         }
@@ -420,7 +420,7 @@ export class DAO {
     
             return entities;
         } catch (e) {
-            this.$log.error("Listing {} entities failed.", this.orm.table);
+            this.$log.error("Listing {} entities failed.", this.orm.table, e);
             throw e;
         }
     }

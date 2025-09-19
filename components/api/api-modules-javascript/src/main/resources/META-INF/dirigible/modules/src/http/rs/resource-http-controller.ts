@@ -147,7 +147,7 @@ export class HttpController {
                 }
             }
         } else {
-            logger.error('No suitable resource handler for Resource[' + resourcePath + '], Method[' + method.toUpperCase() + '], Content-Type[' + contentTypeHeader + '], Accept[' + acceptsHeader + '] found');
+            logger.error('No suitable resource handler for Resource[{}], Method[{}], Content-Type[{}], Accept[{}] found', resourcePath, method.toUpperCase(), contentTypeHeader, acceptsHeader);
             this.sendError(response.BAD_REQUEST, undefined, 'Bad Request', 'No suitable processor for this request.');
         }
     }
@@ -257,7 +257,7 @@ const catchErrorHandler = function (logctx, ctx, err, request, response) {
         const detailsMsg = (ctx.errorName || "") + (ctx.errorCode ? " [" + ctx.errorCode + "]" : "") + (ctx.errorMessage ? ": " + ctx.errorMessage : "");
         logger.info('Serving resource[{}], Verb[{}], Content-Type[{}], Accept[{}] finished in error. {}', logctx.path, logctx.method, logctx.contentType, logctx.accepts, detailsMsg);
     } else
-        logger.error('Serving resource[' + logctx.path + '], Verb[' + logctx.method + '], Content-Type[' + logctx.contentType + '], Accept[' + logctx.accepts + '] finished in error', err);
+        logger.error('Serving resource[{}], Verb[{}], Content-Type[{}], Accept[{}] finished in error', logctx.path, logctx.method, logctx.contentType, logctx.accepts, err);
 
     const httpErrorCode = ctx.httpErrorCode || response.INTERNAL_SERVER_ERROR;
     const errorMessage = ctx.errorMessage || (err && err.message);
