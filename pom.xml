@@ -227,7 +227,7 @@
         <i18next.version>25.3.0</i18next.version>
         <!-- Tests -->
         <testcontainers.version>1.21.1</testcontainers.version>
-        <selenide.version>7.9.4</selenide.version>
+        <selenide.version>7.10.1</selenide.version>
 
         <profile.content.phase>none</profile.content.phase>
 
