@@ -52,7 +52,7 @@ class FlowableProcessesInitializer implements ApplicationListener<ApplicationRea
      */
     @Override
     public void onApplicationEvent(ApplicationReadyEvent event) {
-        LOGGER.info("Deploying [{}] system processes: {}}", systemBpmProcesses.size(), systemBpmProcesses);
+        LOGGER.info("Deploying [{}] system processes: {}", systemBpmProcesses.size(), systemBpmProcesses);
 
         systemBpmProcesses.forEach(this::deployProcess);
 
