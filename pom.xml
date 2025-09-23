@@ -114,15 +114,15 @@
         <maven.compiler.target>17</maven.compiler.target>
 
         <!-- Maven -->
-        <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
-        <maven-javadoc-plugin.version>3.11.3</maven-javadoc-plugin.version>
+        <maven-compiler-plugin.version>3.14.1</maven-compiler-plugin.version>
+        <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
         <maven-surefire-plugin.version>3.5.4</maven-surefire-plugin.version>
-        <maven-failsafe-plugin.version>3.5.3</maven-failsafe-plugin.version>
+        <maven-failsafe-plugin.version>3.5.4</maven-failsafe-plugin.version>
         <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
         <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
         <maven-jacoco-plugin.version>0.8.13</maven-jacoco-plugin.version>
         <maven-spotbugs-plugin.version>4.9.6.0</maven-spotbugs-plugin.version>
-        <maven-formatter-plugin.version>2.27.0</maven-formatter-plugin.version>
+        <maven-formatter-plugin.version>2.29.0</maven-formatter-plugin.version>
         <maven-exec-plugin.version>3.5.1</maven-exec-plugin.version>
         <maven-git-commit-id-plugin.version>4.9.10</maven-git-commit-id-plugin.version>
         <maven-license-plugin.version>5.0.0</maven-license-plugin.version>
@@ -137,7 +137,7 @@
         <webjars.locator.core.version>0.59</webjars.locator.core.version>
 
         <!-- GraalVM -->
-        <graalvm.version>24.2.2</graalvm.version>
+        <graalvm.version>25.0.0</graalvm.version>
 
         <!-- Commons -->
         <commons.io>2.20.0</commons.io>
@@ -153,7 +153,7 @@
         <jaxb.version>2.3.1</jaxb.version>
 
         <!-- Lucene -->
-        <lucene.version>10.2.2</lucene.version>
+        <lucene.version>10.3.0</lucene.version>
 
         <!-- Chemistry -->
         <chemistry.version>1.1.0</chemistry.version>
@@ -170,7 +170,7 @@
         <activemq.version>6.1.0</activemq.version>
 
         <!-- Camel -->
-        <camel.version>4.13.0</camel.version>
+        <camel.version>4.14.0</camel.version>
 
         <!-- Velocity -->
         <velocity.version>2.4</velocity.version>
@@ -179,7 +179,7 @@
         <jgit.version>7.3.0.202506031305-r</jgit.version>
 
         <!-- Flowable -->
-        <flowable.version>7.1.0</flowable.version>
+        <flowable.version>7.2.0</flowable.version>
 
         <!-- Wiki -->
         <wikitext.version>3.0.48.202308291007</wikitext.version>
@@ -200,7 +200,7 @@
 
         <!-- Various -->
         <c3p0.version>0.11.2</c3p0.version>
-        <guava.version>33.4.8-jre</guava.version>
+        <guava.version>33.5.0-jre</guava.version>
         <icu4j.version>77.1</icu4j.version>
         <classgraph.version>4.8.181</classgraph.version>
         <logcaptor.version>2.12.1</logcaptor.version>
@@ -227,7 +227,7 @@
         <i18next.version>25.3.0</i18next.version>
         <!-- Tests -->
         <testcontainers.version>1.21.1</testcontainers.version>
-        <selenide.version>7.9.4</selenide.version>
+        <selenide.version>7.10.1</selenide.version>
 
         <profile.content.phase>none</profile.content.phase>
 
