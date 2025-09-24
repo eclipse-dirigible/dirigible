@@ -10,7 +10,6 @@
  */
 package org.eclipse.dirigible.components.engine.nodejs;
 
-import org.springframework.cloud.gateway.server.mvc.filter.AfterFilterFunctions;
 import org.springframework.cloud.gateway.server.mvc.filter.BeforeFilterFunctions;
 import org.springframework.cloud.gateway.server.mvc.handler.GatewayRouterFunctions;
 import org.springframework.context.annotation.Bean;
@@ -18,6 +17,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
 
+import static org.springframework.cloud.gateway.server.mvc.handler.HandlerFunctions.http;
 import static org.springframework.cloud.gateway.server.mvc.predicate.GatewayRequestPredicates.path;
 
 @Configuration
@@ -31,10 +31,12 @@ public class NodejsProxyConfig {
     RouterFunction<ServerResponse> configureProxy(NodejsRequestDispatcher requestDispatcher) {
         return GatewayRouterFunctions.route("nodejs-apps-proxy-route")
                                      .before(BeforeFilterFunctions.rewritePath(ABSOLUTE_BASE_PATH + "(.*)", "$1"))
-                                     .route(path(BASE_PATH_PATTERN), requestDispatcher)
+                                     .before(requestDispatcher)
 
-                                     .after(AfterFilterFunctions.rewriteLocationResponseHeader(
-                                             cfg -> cfg.setProtocolsRegex("https?|ftps?|http?")))
+                                     .route(path(BASE_PATH_PATTERN), http())
+
+                                     //                                     .after(AfterFilterFunctions.rewriteLocationResponseHeader(
+                                     //                                             cfg -> cfg.setProtocolsRegex("https?|ftps?|http?")))
                                      .build();
     }
 }
