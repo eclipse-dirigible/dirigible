@@ -10,13 +10,13 @@
  */
 package org.eclipse.dirigible.components.engine.nodejs;
 
-import org.springframework.cloud.gateway.server.mvc.filter.BeforeFilterFunctions;
 import org.springframework.cloud.gateway.server.mvc.handler.GatewayRouterFunctions;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
 
+import static org.springframework.cloud.gateway.server.mvc.filter.BeforeFilterFunctions.rewritePath;
 import static org.springframework.cloud.gateway.server.mvc.handler.HandlerFunctions.http;
 import static org.springframework.cloud.gateway.server.mvc.predicate.GatewayRequestPredicates.path;
 
@@ -25,18 +25,18 @@ class NodejsProxyConfig {
 
     static final String PATH_PATTERN_REGEX = "^/([^/]+)(/.*)?$";
 
-    static final String RELATIVE_BASE_PATH = "services/nodejs";
-    static final String ABSOLUTE_BASE_PATH = "/" + RELATIVE_BASE_PATH;
-    static final String BASE_PATH_PATTERN = ABSOLUTE_BASE_PATH + "/**";
+    private static final String RELATIVE_BASE_PATH = "services/nodejs";
+    private static final String ABSOLUTE_BASE_PATH = "/" + RELATIVE_BASE_PATH;
+    private static final String BASE_PATH_PATTERN = ABSOLUTE_BASE_PATH + "/**";
 
     @Bean
-    RouterFunction<ServerResponse> configureProxy(NodejsRequestDispatcher requestDispatcher) {
+    RouterFunction<ServerResponse> configureProxy(NodejsProjectFilter projectFilter, NodejsProjectDispatcher projectDispatcher) {
         return GatewayRouterFunctions.route("nodejs-apps-proxy-route")
                                      // methods order matters
-                                     .before(BeforeFilterFunctions.rewritePath(ABSOLUTE_BASE_PATH + "(.*)", "$1")) // remove mapping base
-                                                                                                                   // path
-                                     .before(requestDispatcher)
-                                     .before(BeforeFilterFunctions.rewritePath(PATH_PATTERN_REGEX, "$2")) // remove project name part
+                                     .before(rewritePath(ABSOLUTE_BASE_PATH + "(.*)", "$1")) // remove mapping base path
+                                     .filter(projectFilter)
+                                     .before(projectDispatcher)
+                                     .before(rewritePath(PATH_PATTERN_REGEX, "$2")) // remove project name part
 
                                      .route(path(BASE_PATH_PATTERN), http())
 
