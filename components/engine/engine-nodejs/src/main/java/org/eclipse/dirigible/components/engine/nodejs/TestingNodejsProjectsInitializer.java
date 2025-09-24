@@ -37,6 +37,11 @@ class TestingNodejsProjectsInitializer implements ApplicationListener<Applicatio
         NodejsProject project1 = new NodejsProject("project1", "http://localhost:3000");
         projectsRegistry.register(project1);
 
+        NodejsProject project2 = new NodejsProject("project2", "http://localhost:3001");
+        projectsRegistry.register(project2);
+
+        NodejsProject project3 = new NodejsProject("project3", "https://httpbin.org");
+        projectsRegistry.register(project3);
     }
 
 }
