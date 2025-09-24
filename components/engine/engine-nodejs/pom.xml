@@ -19,42 +19,6 @@
             <artifactId>spring-cloud-starter-gateway-server-webmvc</artifactId>
             <version>4.3.1</version>
         </dependency>
-
-        <!--        TODO: Clean up the bellow dependencies-->
-        <!-- Base -->
-        <dependency>
-            <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-core-base</artifactId>
-        </dependency>
-
-        <!-- Project -->
-        <dependency>
-            <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-core-project</artifactId>
-        </dependency>
-
-        <!-- Repository -->
-        <dependency>
-            <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-core-repository</artifactId>
-        </dependency>
-
-        <!-- Graalium -->
-        <dependency>
-            <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-engine-graalium-execution-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-engine-javascript</artifactId>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-commons-process</artifactId>
-            <scope>compile</scope>
-        </dependency>
-
     </dependencies>
 
     <properties>
