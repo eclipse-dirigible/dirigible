@@ -21,7 +21,9 @@ import static org.springframework.cloud.gateway.server.mvc.handler.HandlerFuncti
 import static org.springframework.cloud.gateway.server.mvc.predicate.GatewayRequestPredicates.path;
 
 @Configuration
-public class NodejsProxyConfig {
+class NodejsProxyConfig {
+
+    static final String PATH_PATTERN_REGEX = "^/([^/]+)(/.*)?$";
 
     static final String RELATIVE_BASE_PATH = "services/nodejs";
     static final String ABSOLUTE_BASE_PATH = "/" + RELATIVE_BASE_PATH;
@@ -30,13 +32,14 @@ public class NodejsProxyConfig {
     @Bean
     RouterFunction<ServerResponse> configureProxy(NodejsRequestDispatcher requestDispatcher) {
         return GatewayRouterFunctions.route("nodejs-apps-proxy-route")
-                                     .before(BeforeFilterFunctions.rewritePath(ABSOLUTE_BASE_PATH + "(.*)", "$1"))
+                                     // methods order matters
+                                     .before(BeforeFilterFunctions.rewritePath(ABSOLUTE_BASE_PATH + "(.*)", "$1")) // remove mapping base
+                                                                                                                   // path
                                      .before(requestDispatcher)
+                                     .before(BeforeFilterFunctions.rewritePath(PATH_PATTERN_REGEX, "$2")) // remove project name part
 
                                      .route(path(BASE_PATH_PATTERN), http())
 
-                                     //                                     .after(AfterFilterFunctions.rewriteLocationResponseHeader(
-                                     //                                             cfg -> cfg.setProtocolsRegex("https?|ftps?|http?")))
                                      .build();
     }
 }

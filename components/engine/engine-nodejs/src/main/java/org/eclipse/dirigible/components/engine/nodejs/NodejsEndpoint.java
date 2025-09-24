@@ -24,8 +24,9 @@ import org.springframework.web.multipart.MultipartFile;
 /**
  * The Class TypeScriptEndpoint.
  */
-//@RestController
-//@RequestMapping({BaseEndpoint.PREFIX_ENDPOINT_SECURED + "nodejs", BaseEndpoint.PREFIX_ENDPOINT_PUBLIC + "nodejs"})
+// @RestController
+// @RequestMapping({BaseEndpoint.PREFIX_ENDPOINT_SECURED + "nodejs",
+// BaseEndpoint.PREFIX_ENDPOINT_PUBLIC + "nodejs"})
 public class NodejsEndpoint extends BaseEndpoint {
 
     /** The Constant HTTP_PATH_MATCHER. */
@@ -58,7 +59,7 @@ public class NodejsEndpoint extends BaseEndpoint {
             @SpanAttribute("project.file.path") @PathVariable("projectFilePath") String projectFilePath,
             @Nullable @RequestParam(required = false) MultiValueMap<String, String> params) {
         return ResponseEntity.ofNullable("Opaaaa");
-        //        return javascriptEndpoint.get(projectName, replaceTSWithJSExtension(projectFilePath), params);
+        // return javascriptEndpoint.get(projectName, replaceTSWithJSExtension(projectFilePath), params);
     }
 
     /**
