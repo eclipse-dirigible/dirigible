@@ -20,7 +20,6 @@ import org.springframework.stereotype.Component;
 @Component
 class TestingNodejsProjectsInitializer implements ApplicationListener<ApplicationReadyEvent> {
 
-    /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(TestingNodejsProjectsInitializer.class);
 
     private final NodejsProjectsRegistry projectsRegistry;

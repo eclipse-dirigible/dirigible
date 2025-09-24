@@ -11,12 +11,6 @@ import java.util.function.Function;
 @Component
 class NodejsProjectDispatcher implements Function<ServerRequest, ServerRequest> {
 
-    private final NodejsProjectsRegistry projectsRegistry;
-
-    NodejsProjectDispatcher(NodejsProjectsRegistry projectsRegistry) {
-        this.projectsRegistry = projectsRegistry;
-    }
-
     @Override
     public ServerRequest apply(ServerRequest request) {
         NodejsProject project = getProject(request);
