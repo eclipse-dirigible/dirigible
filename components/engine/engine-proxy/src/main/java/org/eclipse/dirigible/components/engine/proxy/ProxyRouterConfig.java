@@ -8,7 +8,7 @@
  * SPDX-FileCopyrightText: 2022 codbex or an codbex affiliate company and contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.engine.nodejs;
+package org.eclipse.dirigible.components.engine.proxy;
 
 import org.springframework.cloud.gateway.server.mvc.handler.GatewayRouterFunctions;
 import org.springframework.context.annotation.Bean;
@@ -21,17 +21,17 @@ import static org.springframework.cloud.gateway.server.mvc.handler.HandlerFuncti
 import static org.springframework.cloud.gateway.server.mvc.predicate.GatewayRequestPredicates.path;
 
 @Configuration
-class NodejsProxyConfig {
+class ProxyRouterConfig {
 
     static final String PATH_PATTERN_REGEX = "^/([^/]+)(/.*)?$";
 
-    private static final String RELATIVE_BASE_PATH = "services/nodejs";
+    private static final String RELATIVE_BASE_PATH = "services/proxy";
     private static final String ABSOLUTE_BASE_PATH = "/" + RELATIVE_BASE_PATH;
     private static final String BASE_PATH_PATTERN = ABSOLUTE_BASE_PATH + "/**";
 
     @Bean
-    RouterFunction<ServerResponse> configureProxy(NodejsProjectFilter projectFilter, NodejsProjectDispatcher projectDispatcher) {
-        return GatewayRouterFunctions.route("nodejs-apps-proxy-route")
+    RouterFunction<ServerResponse> configureProxy(ProxyProjectFilter projectFilter, ProxyProjectDispatcher projectDispatcher) {
+        return GatewayRouterFunctions.route("native-apps-proxy-route")
                                      // methods order matters
                                      .before(rewritePath(ABSOLUTE_BASE_PATH + "(.*)", "$1")) // remove mapping base path
                                      .filter(projectFilter)

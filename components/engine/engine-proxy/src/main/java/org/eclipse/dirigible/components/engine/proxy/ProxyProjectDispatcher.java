@@ -1,4 +1,4 @@
-package org.eclipse.dirigible.components.engine.nodejs;
+package org.eclipse.dirigible.components.engine.proxy;
 
 import org.springframework.cloud.gateway.server.mvc.common.MvcUtils;
 import org.springframework.stereotype.Component;
@@ -9,11 +9,11 @@ import java.util.Optional;
 import java.util.function.Function;
 
 @Component
-class NodejsProjectDispatcher implements Function<ServerRequest, ServerRequest> {
+class ProxyProjectDispatcher implements Function<ServerRequest, ServerRequest> {
 
     @Override
     public ServerRequest apply(ServerRequest request) {
-        NodejsProject project = getProject(request);
+        ProxyProject project = getProject(request);
 
         String projectURL = project.getMappedURL();
         setRequestURL(request, projectURL);
@@ -21,12 +21,12 @@ class NodejsProjectDispatcher implements Function<ServerRequest, ServerRequest> 
         return request;
     }
 
-    private NodejsProject getProject(ServerRequest request) {
-        Optional<Object> projectAttribute = request.attribute(NodejsProjectFilter.PROJECT_ATTRIBUTE_NAME);
+    private ProxyProject getProject(ServerRequest request) {
+        Optional<Object> projectAttribute = request.attribute(ProxyProjectFilter.PROJECT_ATTRIBUTE_NAME);
         if (projectAttribute.isEmpty()) {
-            throw new IllegalStateException("Missing required project attribute with name: " + NodejsProjectFilter.PROJECT_ATTRIBUTE_NAME);
+            throw new IllegalStateException("Missing required project attribute with name: " + ProxyProjectFilter.PROJECT_ATTRIBUTE_NAME);
         }
-        return (NodejsProject) projectAttribute.get();
+        return (ProxyProject) projectAttribute.get();
     }
 
     private static void setRequestURL(ServerRequest request, String newRequestURL) {

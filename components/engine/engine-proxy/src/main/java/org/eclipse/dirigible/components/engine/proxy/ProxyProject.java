@@ -1,11 +1,11 @@
-package org.eclipse.dirigible.components.engine.nodejs;
+package org.eclipse.dirigible.components.engine.proxy;
 
-public class NodejsProject {
+public class ProxyProject {
 
     private final String projectName;
     private final String mappedURL;
 
-    public NodejsProject(String projectName, String mappedURL) {
+    public ProxyProject(String projectName, String mappedURL) {
         this.projectName = projectName;
         this.mappedURL = mappedURL;
     }

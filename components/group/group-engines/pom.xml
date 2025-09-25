@@ -27,7 +27,7 @@
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-engine-nodejs</artifactId>
+            <artifactId>dirigible-components-engine-proxy</artifactId>
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
