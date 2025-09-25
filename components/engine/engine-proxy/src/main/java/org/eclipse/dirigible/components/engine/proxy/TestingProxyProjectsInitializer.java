@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.engine.nodejs;
+package org.eclipse.dirigible.components.engine.proxy;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,28 +18,28 @@ import org.springframework.stereotype.Component;
 
 @Order(65)
 @Component
-class TestingNodejsProjectsInitializer implements ApplicationListener<ApplicationReadyEvent> {
+class TestingProxyProjectsInitializer implements ApplicationListener<ApplicationReadyEvent> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(TestingNodejsProjectsInitializer.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(TestingProxyProjectsInitializer.class);
 
-    private final NodejsProjectsRegistry projectsRegistry;
+    private final ProxyProjectsRegistry projectsRegistry;
 
-    TestingNodejsProjectsInitializer(NodejsProjectsRegistry projectsRegistry) {
+    TestingProxyProjectsInitializer(ProxyProjectsRegistry projectsRegistry) {
         this.projectsRegistry = projectsRegistry;
     }
 
     @Override
     public void onApplicationEvent(ApplicationReadyEvent event) {
         // TODO this class is used for testing only
-        LOGGER.info("Registering testing nodejs projects...");
+        LOGGER.info("Registering testing proxy projects...");
 
-        NodejsProject project1 = new NodejsProject("project1", "http://localhost:3000");
+        ProxyProject project1 = new ProxyProject("project1", "http://localhost:3000");
         projectsRegistry.register(project1);
 
-        NodejsProject project2 = new NodejsProject("project2", "http://localhost:3001");
+        ProxyProject project2 = new ProxyProject("project2", "http://localhost:3001");
         projectsRegistry.register(project2);
 
-        NodejsProject project3 = new NodejsProject("project3", "https://httpbin.org");
+        ProxyProject project3 = new ProxyProject("project3", "https://httpbin.org");
         projectsRegistry.register(project3);
     }
 

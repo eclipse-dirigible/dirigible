@@ -1,4 +1,4 @@
-package org.eclipse.dirigible.components.engine.nodejs;
+package org.eclipse.dirigible.components.engine.proxy;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,16 +15,16 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Component
-class NodejsProjectFilter implements HandlerFilterFunction<ServerResponse, ServerResponse> {
+class ProxyProjectFilter implements HandlerFilterFunction<ServerResponse, ServerResponse> {
 
     static final String PROJECT_ATTRIBUTE_NAME = "project";
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(NodejsProjectFilter.class);
-    private static final Pattern PATH_PATTERN = Pattern.compile(NodejsProxyConfig.PATH_PATTERN_REGEX);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ProxyProjectFilter.class);
+    private static final Pattern PATH_PATTERN = Pattern.compile(ProxyRouterConfig.PATH_PATTERN_REGEX);
 
-    private final NodejsProjectsRegistry projectsRegistry;
+    private final ProxyProjectsRegistry projectsRegistry;
 
-    NodejsProjectFilter(NodejsProjectsRegistry projectsRegistry) {
+    ProxyProjectFilter(ProxyProjectsRegistry projectsRegistry) {
         this.projectsRegistry = projectsRegistry;
     }
 
@@ -41,7 +41,7 @@ class NodejsProjectFilter implements HandlerFilterFunction<ServerResponse, Serve
         }
         String projectName = matcher.group(1);
 
-        Optional<NodejsProject> project = projectsRegistry.findByProjectName(projectName);
+        Optional<ProxyProject> project = projectsRegistry.findByProjectName(projectName);
         if (project.isEmpty()) {
             LOGGER.debug("There is no registered project with name [{}]. Request path [{}]", projectName, path);
             String body = "Project [" + projectName + "] is not registered.";

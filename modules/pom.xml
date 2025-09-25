@@ -225,7 +225,7 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-engine-nodejs</artifactId>
+                <artifactId>dirigible-components-engine-proxy</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

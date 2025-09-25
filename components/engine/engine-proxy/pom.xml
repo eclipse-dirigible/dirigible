@@ -9,8 +9,8 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <name>Components - Engine - nodejs</name>
-    <artifactId>dirigible-components-engine-nodejs</artifactId>
+    <name>Components - Engine - Proxy</name>
+    <artifactId>dirigible-components-engine-proxy</artifactId>
     <packaging>jar</packaging>
 
     <dependencies>
