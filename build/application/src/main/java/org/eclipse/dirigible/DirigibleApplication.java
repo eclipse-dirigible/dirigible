@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible;
 
+import de.codecentric.boot.admin.server.cloud.config.AdminServerDiscoveryAutoConfiguration;
 import de.codecentric.boot.admin.server.config.EnableAdminServer;
 import org.apache.camel.opentelemetry.starter.CamelOpenTelemetry;
 import org.springframework.boot.SpringApplication;
@@ -27,7 +28,7 @@ import org.springframework.web.client.RestTemplate;
 @CamelOpenTelemetry
 @EnableAdminServer
 @SpringBootApplication(exclude = {DataSourceAutoConfiguration.class, DataSourceTransactionManagerAutoConfiguration.class,
-        HibernateJpaAutoConfiguration.class, JdbcTemplateAutoConfiguration.class})
+        HibernateJpaAutoConfiguration.class, JdbcTemplateAutoConfiguration.class, AdminServerDiscoveryAutoConfiguration.class})
 @EnableScheduling
 public class DirigibleApplication {
 
