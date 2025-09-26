@@ -19,6 +19,14 @@
             <artifactId>spring-cloud-starter-gateway-server-webmvc</artifactId>
             <version>4.3.1</version>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-core-base</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
     </dependencies>
 
     <properties>

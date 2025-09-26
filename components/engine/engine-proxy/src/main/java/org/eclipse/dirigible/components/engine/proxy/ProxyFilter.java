@@ -1,5 +1,6 @@
 package org.eclipse.dirigible.components.engine.proxy;
 
+import org.eclipse.dirigible.components.engine.proxy.domain.Proxy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -15,23 +16,24 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Component
-class ProxyProjectFilter implements HandlerFilterFunction<ServerResponse, ServerResponse> {
+class ProxyFilter implements HandlerFilterFunction<ServerResponse, ServerResponse> {
 
-    static final String PROJECT_ATTRIBUTE_NAME = "project";
+    static final String PROXY_ATTRIBUTE_NAME = "proxy";
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ProxyProjectFilter.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ProxyFilter.class);
+
     private static final Pattern PATH_PATTERN = Pattern.compile(ProxyRouterConfig.PATH_PATTERN_REGEX);
 
-    private final ProxyProjectsRegistry projectsRegistry;
+    private final ProxyRegistry proxyRegistry;
 
-    ProxyProjectFilter(ProxyProjectsRegistry projectsRegistry) {
-        this.projectsRegistry = projectsRegistry;
+    ProxyFilter(ProxyRegistry proxyRegistry) {
+        this.proxyRegistry = proxyRegistry;
     }
 
     @Override
-    public ServerResponse filter(ServerRequest request, HandlerFunction<ServerResponse> next) throws Exception {
+    public ServerResponse filter(ServerRequest request, HandlerFunction<ServerResponse> nextHandler) throws Exception {
         URI requestURI = request.uri();
-        LOGGER.debug("Determining project for request with URI {}", requestURI);
+        LOGGER.debug("Determining proxy for request with URI {}", requestURI);
 
         String path = requestURI.getPath();
         Matcher matcher = PATH_PATTERN.matcher(path);
@@ -39,19 +41,19 @@ class ProxyProjectFilter implements HandlerFilterFunction<ServerResponse, Server
             throw new IllegalStateException(
                     "The filter is mapped on an invalid path. Path [" + path + "] doesn't match [" + PATH_PATTERN + "]");
         }
-        String projectName = matcher.group(1);
+        String proxyName = matcher.group(1);
 
-        Optional<ProxyProject> project = projectsRegistry.findByProjectName(projectName);
-        if (project.isEmpty()) {
-            LOGGER.debug("There is no registered project with name [{}]. Request path [{}]", projectName, path);
-            String body = "Project [" + projectName + "] is not registered.";
+        Optional<Proxy> proxy = proxyRegistry.findByName(proxyName);
+        if (proxy.isEmpty()) {
+            LOGGER.debug("There is no registered proxy with name [{}]. Request path [{}]", proxyName, path);
+            String body = "Proxy with name [" + proxyName + "] is not registered.";
             return ServerResponse.status(HttpStatus.NOT_FOUND)
                                  .body(body);
         }
 
         ServerRequest modifiedRequest = ServerRequest.from(request)
-                                                     .attribute(PROJECT_ATTRIBUTE_NAME, project.get())
+                                                     .attribute(PROXY_ATTRIBUTE_NAME, proxy.get())
                                                      .build();
-        return next.handle(modifiedRequest);
+        return nextHandler.handle(modifiedRequest);
     }
 }
