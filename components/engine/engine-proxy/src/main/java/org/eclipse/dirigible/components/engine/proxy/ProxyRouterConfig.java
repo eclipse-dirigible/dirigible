@@ -30,13 +30,13 @@ class ProxyRouterConfig {
     private static final String BASE_PATH_PATTERN = ABSOLUTE_BASE_PATH + "/**";
 
     @Bean
-    RouterFunction<ServerResponse> configureProxy(ProxyProjectFilter projectFilter, ProxyProjectDispatcher projectDispatcher) {
-        return GatewayRouterFunctions.route("native-apps-proxy-route")
+    RouterFunction<ServerResponse> configureProxy(ProxyFilter proxyFilter, ProxyDispatcher proxyDispatcher) {
+        return GatewayRouterFunctions.route("proxy-route")
                                      // methods order matters
                                      .before(rewritePath(ABSOLUTE_BASE_PATH + "(.*)", "$1")) // remove mapping base path
-                                     .filter(projectFilter)
-                                     .before(projectDispatcher)
-                                     .before(rewritePath(PATH_PATTERN_REGEX, "$2")) // remove project name part
+                                     .filter(proxyFilter)
+                                     .before(proxyDispatcher)
+                                     .before(rewritePath(PATH_PATTERN_REGEX, "$2")) // remove proxy name part
 
                                      .route(path(BASE_PATH_PATTERN), http())
 
