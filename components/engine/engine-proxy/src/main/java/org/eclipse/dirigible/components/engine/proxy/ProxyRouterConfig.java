@@ -13,9 +13,11 @@ package org.eclipse.dirigible.components.engine.proxy;
 import org.springframework.cloud.gateway.server.mvc.handler.GatewayRouterFunctions;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
 
+import static org.springframework.cloud.gateway.server.mvc.filter.BeforeFilterFunctions.removeRequestHeader;
 import static org.springframework.cloud.gateway.server.mvc.filter.BeforeFilterFunctions.rewritePath;
 import static org.springframework.cloud.gateway.server.mvc.handler.HandlerFunctions.http;
 import static org.springframework.cloud.gateway.server.mvc.predicate.GatewayRequestPredicates.path;
@@ -37,6 +39,7 @@ class ProxyRouterConfig {
                                      .filter(proxyFilter)
                                      .before(proxyDispatcher)
                                      .before(rewritePath(PATH_PATTERN_REGEX, "$2")) // remove proxy name part
+                                     .before(removeRequestHeader(HttpHeaders.COOKIE))// remove client cookies so that they are not send
 
                                      .route(path(BASE_PATH_PATTERN), http())
 
