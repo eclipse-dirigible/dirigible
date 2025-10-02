@@ -1,0 +1,10 @@
+{
+  "location":"/datasources/EmbeddedPostgres.datasource",
+  "name":"EmbeddedPostgres",
+  "driver":"org.postgresql.Driver",
+  "url":"jdbc:postgresql://localhost:5430/postgres",
+  "username":"postgres",
+  "password":"postgres",
+  "properties":[
+  ]
+}
