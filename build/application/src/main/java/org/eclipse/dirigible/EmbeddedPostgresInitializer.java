@@ -29,11 +29,12 @@ class EmbeddedPostgresInitializer implements ApplicationListener<ApplicationRead
 
     @Override
     public void onApplicationEvent(ApplicationReadyEvent event) {
+        // TODO: init DB only when there are not user provided configurations for DefaultDB
         try {
             LOGGER.info("Starting embedded postgres instance...");
             EmbeddedPostgres.Builder postgresBuilder = EmbeddedPostgres.builder();
-            //                  .setDataDirectory(Files.createDirectories(tf.resolve("data-dir-parent")
-            //                                                              .resolve("data-dir")))
+            // .setDataDirectory(Files.createDirectories(tf.resolve("data-dir-parent")
+            // .resolve("data-dir")))
             long startTime = System.currentTimeMillis();
             postgresBuilder.setPort(5430);
             EmbeddedPostgres postgres = postgresBuilder.start();
