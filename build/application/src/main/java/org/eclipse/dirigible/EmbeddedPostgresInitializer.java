@@ -36,6 +36,8 @@ class EmbeddedPostgresInitializer implements ApplicationListener<ApplicationRead
             // .setDataDirectory(Files.createDirectories(tf.resolve("data-dir-parent")
             // .resolve("data-dir")))
             long startTime = System.currentTimeMillis();
+
+            // don't use the default postgres port 5432 to prevent conflicts
             postgresBuilder.setPort(5430);
             EmbeddedPostgres postgres = postgresBuilder.start();
 
