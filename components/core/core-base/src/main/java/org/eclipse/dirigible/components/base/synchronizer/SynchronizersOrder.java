@@ -71,4 +71,7 @@ public interface SynchronizersOrder {
     /** The markdown. */
     int MARKDOWN = 420;
 
+    /** The proxy. */
+    int PROXY = 430;
+
 }

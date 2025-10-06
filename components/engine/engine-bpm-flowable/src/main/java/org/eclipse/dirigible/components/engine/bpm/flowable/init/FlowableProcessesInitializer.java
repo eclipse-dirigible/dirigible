@@ -25,9 +25,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Set;
 
-/**
- * The Class JobsInitializer.
- */
 @Order(ApplicationReadyEventListeners.PROCESSES_INITIALIZER)
 @Component
 class FlowableProcessesInitializer implements ApplicationListener<ApplicationReadyEvent> {
