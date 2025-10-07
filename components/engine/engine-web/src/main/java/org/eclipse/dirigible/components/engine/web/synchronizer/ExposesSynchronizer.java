@@ -32,6 +32,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.Strictness;
+
 /**
  * The Class ExposesSynchronizer.
  */
@@ -48,6 +52,12 @@ public class ExposesSynchronizer extends BaseSynchronizer<Expose, Long> {
 
     /** The synchronization callback. */
     private SynchronizerCallback callback;
+    
+    /** The GSON instance. */
+    private static final Gson GSON = new GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mm:ssZ")
+                                                      .setPrettyPrinting()
+                                                      .setStrictness(Strictness.LENIENT)
+                                                      .create();
 
     /**
      * Instantiates a new exposes synchronizer.
@@ -86,7 +96,7 @@ public class ExposesSynchronizer extends BaseSynchronizer<Expose, Long> {
             throw new ParseException("Invalid location provided for web.json artefact: " + location, 0);
         }
         String project = repositoryPath.getSegments()[0];
-        Expose expose = GsonHelper.fromJson(new String(content, StandardCharsets.UTF_8), Expose.class);
+        Expose expose = GSON.fromJson(new String(content, StandardCharsets.UTF_8), Expose.class);
         expose.setProject(project);
         Configuration.configureObject(expose);
         expose.setLocation(location);
