@@ -52,7 +52,7 @@ public class ExposesSynchronizer extends BaseSynchronizer<Expose, Long> {
 
     /** The synchronization callback. */
     private SynchronizerCallback callback;
-    
+
     /** The GSON instance. */
     private static final Gson GSON = new GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mm:ssZ")
                                                       .setPrettyPrinting()
