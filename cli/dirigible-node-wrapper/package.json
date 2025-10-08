@@ -1,0 +1,13 @@
+{
+  "name": "dirigible-cli",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dirigible": "node ./scripts/dirigible.js"
+  },
+  "bin": {
+    "dirigible": "./scripts/dirigible.js"
+  },
+  "dependencies": {
+  }
+}

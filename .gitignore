@@ -30,7 +30,7 @@ derby.log
 *.log
 dependency-reduced-pom.xml
 host.ser
-package.json
+#package.json
 package-lock.json
 *.tgz
 **/ttyd.sh
