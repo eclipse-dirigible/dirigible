@@ -363,6 +363,12 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
             }
             logger.trace("Cleaning up removed artefacts done.");
 
+            // finishing
+            for (Synchronizer synchronizer : synchronizers) {
+                synchronizer.finishing();
+            }
+            logger.trace("Finalization step done.");
+
             // report results
             getErrors().forEach(errMsg -> {
                 logger.error("Error occured during synchronization: [{}]", errMsg);

@@ -2,6 +2,7 @@
   "entity-mapping" : {
     "class" : {
       "entity-name" : "Customer",
+      "table" : "CUSTOMER",
       "id" : {
         "column" : "ID",
         "name" : "id",

@@ -12,6 +12,8 @@ package org.eclipse.dirigible.components.data.store;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -19,14 +21,26 @@ import java.util.Map;
 
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
-import org.junit.jupiter.api.BeforeEach;
+import org.eclipse.dirigible.components.data.sources.config.DataSourceConfig;
+import org.eclipse.dirigible.components.data.sources.domain.DataSource;
+import org.eclipse.dirigible.components.data.sources.repository.DataSourceRepository;
+import org.eclipse.dirigible.components.data.store.config.CurrentTenantIdentifierResolverImpl;
+import org.eclipse.dirigible.components.initializers.SynchronousSpringEventsConfig;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.TestInstance.Lifecycle;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
+import org.springframework.test.context.support.AnnotationConfigContextLoader;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -36,20 +50,34 @@ import org.springframework.transaction.annotation.Transactional;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ComponentScan(basePackages = {"org.eclipse.dirigible.components"})
 @EntityScan("org.eclipse.dirigible.components")
+@ExtendWith(SpringExtension.class)
+@ContextConfiguration(classes = {SynchronousSpringEventsConfig.class, DataSourceConfig.class}, loader = AnnotationConfigContextLoader.class)
 @Transactional
+@TestInstance(Lifecycle.PER_CLASS)
 public class DataStoreTest {
+
+    /** The datasource repository. */
+    @Autowired
+    private DataSourceRepository datasourceRepository;
 
     /** The object store. */
     @Autowired
     private DataStore dataStore;
+
+    @Autowired
+    @Qualifier("DefaultDB")
+    private DataSource datasource;
+
+    private CurrentTenantIdentifierResolverImpl tenantIdentifier;
 
     /**
      * Setup.
      *
      * @throws Exception the exception
      */
-    @BeforeEach
+    @BeforeAll
     public void setup() throws Exception {
+        setupTenantIdentifier();
         String mappingCustomer =
                 IOUtils.toString(DataStoreTest.class.getResourceAsStream("/entity/Customer.entity"), StandardCharsets.UTF_8);
         String mappingOrder = IOUtils.toString(DataStoreTest.class.getResourceAsStream("/entity/Order.entity"), StandardCharsets.UTF_8);
@@ -61,6 +89,11 @@ public class DataStoreTest {
         dataStore.addMapping("OrderItem", mappingOrderItem);
         // objectStore.setDataSource(...);
         dataStore.recreate();
+    }
+
+    private void setupTenantIdentifier() {
+        tenantIdentifier = mock(CurrentTenantIdentifierResolverImpl.class);
+        when(tenantIdentifier.resolveCurrentTenantIdentifier()).thenReturn("default-tenant");
     }
 
     /**

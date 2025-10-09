@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.sql.DataSource;
 
@@ -31,6 +32,8 @@ import org.hibernate.boot.registry.StandardServiceRegistryBuilder;
 import org.hibernate.cfg.Configuration;
 import org.hibernate.cfg.Environment;
 import org.hibernate.query.Query;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
@@ -42,21 +45,38 @@ import org.springframework.stereotype.Component;
 @Scope("singleton")
 public class DataStore {
 
-    // private ApplicationContext applicationContext;
-    //
-    // private static final String EMF_BEAN_NAME = "dynamicEntityManagerFactory";
+    /** The Constant LOGGER. */
+    private static final Logger logger = LoggerFactory.getLogger(DataStore.class);
 
+    /** the session factory */
     private SessionFactory sessionFactory;
 
     /** The datasources manager. */
     private final DataSourcesManager datasourcesManager;
 
+    /** The connection provider */
     private final MultiTenantConnectionProviderImpl connectionProvider;
 
+    /** The tenant identifier resolver */
     private final CurrentTenantIdentifierResolverImpl tenantIdentifierResolver;
 
     /** The mappings. */
     private final Map<String, String> mappings = new HashMap<>();
+
+    /** The counter for mapings changes */
+    private final AtomicInteger counter = new AtomicInteger(0);
+
+    int getCounter() {
+        return counter.get();
+    }
+
+    void incrementCounter() {
+        counter.incrementAndGet();
+    }
+
+    void resetCounter() {
+        counter.set(0);
+    }
 
     /**
      * Instantiates a new object store.
@@ -64,10 +84,8 @@ public class DataStore {
      * @param datasourcesManager the datasources manager
      */
     @Autowired
-    public DataStore(// ApplicationContext applicationContext,
-            DataSourcesManager datasourcesManager, MultiTenantConnectionProviderImpl connectionProvider,
+    public DataStore(DataSourcesManager datasourcesManager, MultiTenantConnectionProviderImpl connectionProvider,
             CurrentTenantIdentifierResolverImpl tenantIdentifierResolver) {
-        // this.applicationContext = applicationContext;
         this.datasourcesManager = datasourcesManager;
         this.connectionProvider = connectionProvider;
         this.tenantIdentifierResolver = tenantIdentifierResolver;
@@ -90,6 +108,7 @@ public class DataStore {
      */
     public void addMapping(String name, String content) {
         mappings.put(name, content);
+        incrementCounter();
     }
 
     /**
@@ -99,36 +118,45 @@ public class DataStore {
      */
     public void removeMapping(String name) {
         mappings.remove(name);
+        incrementCounter();
     }
 
     /**
      * Initialize.
      */
     public synchronized void recreate() {
-        DataSource dataSource = datasourcesManager.getDefaultDataSource();
-        Configuration configuration = new Configuration().setProperty(Environment.SHOW_SQL, "true")
-                                                         .setProperty("hibernate.hbm2ddl.auto", "update")
-                                                         .setProperty("hibernate.current_session_context_class",
-                                                                 "org.hibernate.context.internal.ThreadLocalSessionContext");
+        if (getCounter() > 0) {
+            DataSource dataSource = datasourcesManager.getDefaultDataSource();
+            Configuration configuration = new Configuration().setProperty(Environment.SHOW_SQL, "true")
+                                                             .setProperty("hibernate.hbm2ddl.auto", "update")
+                                                             .setProperty("hibernate.current_session_context_class",
+                                                                     "org.hibernate.context.internal.ThreadLocalSessionContext");
 
+            mappings.forEach((k, v) -> addInputStreamToConfig(configuration, k, v));
 
-        // em.setJpaVendorAdapter(jpaVendorAdapter());
+            StandardServiceRegistryBuilder serviceRegistryBuilder = new StandardServiceRegistryBuilder();
+            serviceRegistryBuilder.applySetting(Environment.DATASOURCE, dataSource);
+            serviceRegistryBuilder.applySetting(Environment.JAKARTA_JTA_DATASOURCE, dataSource);
+            serviceRegistryBuilder.applySetting(Environment.MULTI_TENANT_CONNECTION_PROVIDER, connectionProvider);
+            serviceRegistryBuilder.applySetting(Environment.MULTI_TENANT_IDENTIFIER_RESOLVER, tenantIdentifierResolver);
+            serviceRegistryBuilder.applySettings(configuration.getProperties());
 
-        mappings.forEach((k, v) -> addInputStreamToConfig(configuration, k, v));
+            StandardServiceRegistry serviceRegistry = serviceRegistryBuilder.build();
 
-        StandardServiceRegistryBuilder serviceRegistryBuilder = new StandardServiceRegistryBuilder();
-        serviceRegistryBuilder.applySetting(Environment.DATASOURCE, dataSource);
-        serviceRegistryBuilder.applySetting(Environment.JAKARTA_JTA_DATASOURCE, dataSource);
-        serviceRegistryBuilder.applySetting(Environment.MULTI_TENANT_CONNECTION_PROVIDER, connectionProvider);
-        serviceRegistryBuilder.applySetting(Environment.MULTI_TENANT_IDENTIFIER_RESOLVER, tenantIdentifierResolver);
-        serviceRegistryBuilder.applySettings(configuration.getProperties());
+            sessionFactory = configuration.buildSessionFactory(serviceRegistry);
 
-        StandardServiceRegistry serviceRegistry = serviceRegistryBuilder.build();
+            logger.info("Processed {} changes in mappings", getCounter());
 
-        sessionFactory = configuration.buildSessionFactory(serviceRegistry);
+            resetCounter();
+        }
     }
 
-    public SessionFactory getSessionFactory() {
+    /**
+     * Getter for Session Factory
+     *
+     * @return the Session Factory
+     */
+    SessionFactory getSessionFactory() {
         if (sessionFactory == null) {
             recreate();
         }

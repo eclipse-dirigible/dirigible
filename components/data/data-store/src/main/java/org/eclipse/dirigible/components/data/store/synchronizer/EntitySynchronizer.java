@@ -18,7 +18,7 @@ import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.ArtefactService;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
-import org.eclipse.dirigible.components.base.synchronizer.MultitenantBaseSynchronizer;
+import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.data.store.DataStore;
@@ -35,7 +35,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Order(SynchronizersOrder.ENTITY)
-public class EntitySynchronizer extends MultitenantBaseSynchronizer<Entity, Long> {
+public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(EntitySynchronizer.class);
@@ -175,7 +175,6 @@ public class EntitySynchronizer extends MultitenantBaseSynchronizer<Entity, Long
                 if (entity.getLifecycle()
                           .equals(ArtefactLifecycle.NEW)) {
                     dataStore.addMapping(entity.getKey(), prepareContent(entity));
-                    dataStore.recreate();
                     callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
                 }
                 break;
@@ -184,7 +183,6 @@ public class EntitySynchronizer extends MultitenantBaseSynchronizer<Entity, Long
                           .equals(ArtefactLifecycle.MODIFIED)) {
                     dataStore.removeMapping(entity.getKey());
                     dataStore.addMapping(entity.getKey(), prepareContent(entity));
-                    dataStore.recreate();
                     callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
                 }
                 if (entity.getLifecycle()
@@ -201,7 +199,6 @@ public class EntitySynchronizer extends MultitenantBaseSynchronizer<Entity, Long
                         || entity.getLifecycle()
                                  .equals(ArtefactLifecycle.FAILED)) {
                     dataStore.removeMapping(entity.getKey());
-                    dataStore.recreate();
                     callback.registerState(this, wrapper, ArtefactLifecycle.DELETED);
                 }
                 break;
@@ -231,7 +228,6 @@ public class EntitySynchronizer extends MultitenantBaseSynchronizer<Entity, Long
     public void cleanupImpl(Entity entity) {
         try {
             dataStore.removeMapping(entity.getKey());
-            dataStore.recreate();
             getService().delete(entity);
         } catch (Exception e) {
             callback.addError(e.getMessage());
@@ -267,6 +263,11 @@ public class EntitySynchronizer extends MultitenantBaseSynchronizer<Entity, Long
     @Override
     public String getArtefactType() {
         return Entity.ARTEFACT_TYPE;
+    }
+
+    @Override
+    public void finalize() {
+        dataStore.recreate();
     }
 
 }
