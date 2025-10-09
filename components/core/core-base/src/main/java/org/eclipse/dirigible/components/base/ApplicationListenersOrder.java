@@ -25,6 +25,9 @@ public interface ApplicationListenersOrder {
      */
     interface ApplicationReadyEventListeners {
 
+        // should be before SYNCHRONIZATION_INTIALIZER
+        int EMBEDDED_POSTGRES_INITIALIZER = 5;
+
         /** The system roles initializer. */
         int SYSTEM_ROLES_INITIALIZER = 10;
 
