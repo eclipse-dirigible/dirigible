@@ -211,7 +211,7 @@ public class DataStore {
      */
     public void update(String type, String json) {
         Map object = JsonHelper.fromJson(json, Map.class);
-        update(type, json);
+        update(type, object);
     }
 
     /**
