@@ -22,6 +22,10 @@
     	</dependency>
     	<dependency>
 	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-core-tenants</artifactId>
+    	</dependency>
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-core-database</artifactId>
     	</dependency>
     	<dependency>

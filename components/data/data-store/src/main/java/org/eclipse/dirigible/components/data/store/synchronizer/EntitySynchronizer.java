@@ -9,11 +9,16 @@
  */
 package org.eclipse.dirigible.components.data.store.synchronizer;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
+import java.text.ParseException;
+import java.util.List;
+
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.ArtefactService;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
-import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
+import org.eclipse.dirigible.components.base.synchronizer.MultitenantBaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.data.store.DataStore;
@@ -25,17 +30,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Paths;
-import java.text.ParseException;
-import java.util.List;
-
 /**
  * The Class BpmnSynchronizer.
  */
 @Component
 @Order(SynchronizersOrder.ENTITY)
-public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
+public class EntitySynchronizer extends MultitenantBaseSynchronizer<Entity, Long> {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(EntitySynchronizer.class);
@@ -175,7 +175,7 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
                 if (entity.getLifecycle()
                           .equals(ArtefactLifecycle.NEW)) {
                     dataStore.addMapping(entity.getKey(), prepareContent(entity));
-                    dataStore.initialize();
+                    dataStore.recreate();
                     callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
                 }
                 break;
@@ -184,7 +184,7 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
                           .equals(ArtefactLifecycle.MODIFIED)) {
                     dataStore.removeMapping(entity.getKey());
                     dataStore.addMapping(entity.getKey(), prepareContent(entity));
-                    dataStore.initialize();
+                    dataStore.recreate();
                     callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
                 }
                 if (entity.getLifecycle()
@@ -201,7 +201,7 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
                         || entity.getLifecycle()
                                  .equals(ArtefactLifecycle.FAILED)) {
                     dataStore.removeMapping(entity.getKey());
-                    dataStore.initialize();
+                    dataStore.recreate();
                     callback.registerState(this, wrapper, ArtefactLifecycle.DELETED);
                 }
                 break;
@@ -231,7 +231,7 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
     public void cleanupImpl(Entity entity) {
         try {
             dataStore.removeMapping(entity.getKey());
-            dataStore.initialize();
+            dataStore.recreate();
             getService().delete(entity);
         } catch (Exception e) {
             callback.addError(e.getMessage());

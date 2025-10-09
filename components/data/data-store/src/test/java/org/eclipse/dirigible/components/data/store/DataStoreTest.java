@@ -17,8 +17,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
-import javax.sql.DataSource;
-
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,10 +43,6 @@ public class DataStoreTest {
     @Autowired
     private DataStore dataStore;
 
-    /** The data source. */
-    @Autowired
-    private DataSource dataSource;
-
     /**
      * Setup.
      *
@@ -62,12 +56,11 @@ public class DataStoreTest {
         String mappingOrderItem =
                 IOUtils.toString(DataStoreTest.class.getResourceAsStream("/entity/OrderItem.entity"), StandardCharsets.UTF_8);
 
-        dataStore.setDataSource(dataSource);
         dataStore.addMapping("Customer", mappingCustomer);
         dataStore.addMapping("Order", mappingOrder);
         dataStore.addMapping("OrderItem", mappingOrderItem);
         // objectStore.setDataSource(...);
-        dataStore.initialize();
+        dataStore.recreate();
     }
 
     /**
@@ -212,7 +205,7 @@ public class DataStoreTest {
 
         String example = "{\"name\":\"John\"}";
 
-        List list = dataStore.findByExample("Customer", example);
+        List list = dataStore.findByExample("Customer", example, 10, 0);
         System.out.println(JsonHelper.toJson(list));
 
         assertNotNull(list);

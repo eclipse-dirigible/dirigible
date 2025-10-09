@@ -66,7 +66,7 @@ public class TenantDataSourceNameManager {
         if (isTenantDataSourceName(tenant, dataSourceName)) {
             return dataSourceName;
         }
-        return tenant.isDefault() ? dataSourceName : createPrefix(tenant) + dataSourceName;
+        return tenant.isDefault() && tenant != null ? dataSourceName : createPrefix(tenant) + dataSourceName;
     }
 
     /**
