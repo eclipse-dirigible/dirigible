@@ -14,7 +14,7 @@ mvn clean install -P quick-build
 ### Build
 
 ```shell
-cd $DIRIGIBLE_REPO_PATH/cli
+cd $DIRIGIBLE_REPO_PATH/cli/java
 mvn clean install
 
 ```
@@ -22,7 +22,7 @@ mvn clean install
 ### Commands
 
 ```shell
-cd $DIRIGIBLE_REPO_PATH/cli
+cd $DIRIGIBLE_REPO_PATH/cli/java
 
 # help
 java -jar target/dirigible-cli-*-executable.jar help
@@ -36,7 +36,7 @@ java -jar target/dirigible-cli-*-executable.jar help start
 
 java -jar target/dirigible-cli-*-executable.jar start  \
   --dirigibleJarPath "$DIRIGIBLE_REPO_PATH/build/application/target/dirigible-application-13.0.0-SNAPSHOT-executable.jar" \
-  --projectPath "$DIRIGIBLE_REPO_PATH/cli/demo/dirigible-demo-project"
+  --projectPath "$DIRIGIBLE_REPO_PATH/cli/npm/dirigible-demo-project"
 
 ```
 
@@ -45,14 +45,17 @@ java -jar target/dirigible-cli-*-executable.jar start  \
 ### Install wrapper globally on your machine
 
 ```shell
-cd $DIRIGIBLE_REPO_PATH/cli/dirigible-node-wrapper
+cd $DIRIGIBLE_REPO_PATH/cli/npm/dirigible-node-wrapper
 npm i -g .
+
+#test
+dirigible help
 ```
 
 ### Install wrapper using link on your machine
 
 ```shell
-cd $DIRIGIBLE_REPO_PATH/cli/dirigible-node-wrapper
+cd $DIRIGIBLE_REPO_PATH/cli/npm/dirigible-node-wrapper
 npm ci
 npm link
 
@@ -66,7 +69,7 @@ npm link
 dirigible greet NameFromGlobalConfig
 
 # using npm scripts defined in the package.json
-$DIRIGIBLE_REPO_PATH/cli/dirigible-node-wrapper
+$DIRIGIBLE_REPO_PATH/cli/npm/dirigible-node-wrapper
 npm run dirigible greet NameFromScripts
 
 ```
@@ -78,7 +81,7 @@ npm run dirigible greet NameFromScripts
 ### Run demo application
 
 ```shell
-cd $DIRIGIBLE_REPO_PATH/cli/demo/dirigible-demo-project
+cd $DIRIGIBLE_REPO_PATH/cli/npm/dirigible-demo-project
 npm clean-install
 
 # start using start script defined in the package.json
