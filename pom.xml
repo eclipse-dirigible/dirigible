@@ -818,7 +818,7 @@
         <module>build</module>
         <module>dependencies</module>
         <module>tests</module>
-        <module>cli</module>
+        <module>cli/java</module>
     </modules>
 
     <dependencies>
