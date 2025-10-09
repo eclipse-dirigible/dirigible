@@ -266,7 +266,7 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
     }
 
     @Override
-    public void finalize() {
+    public void finishing() {
         dataStore.recreate();
     }
 
