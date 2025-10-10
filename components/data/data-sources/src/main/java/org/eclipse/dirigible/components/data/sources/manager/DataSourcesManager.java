@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.data.sources.manager;
 
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.data.sources.config.DefaultDataSourceName;
 import org.eclipse.dirigible.components.data.sources.config.SystemDataSourceName;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
@@ -76,7 +77,7 @@ public class DataSourcesManager {
      * @return the default data source
      */
     public DirigibleDataSource getDefaultDataSource() {
-        return getDataSource(defaultDataSourceName);
+        return getDataSource(Configuration.get("DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT", defaultDataSourceName));
     }
 
     /**

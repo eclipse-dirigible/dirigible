@@ -9,19 +9,21 @@
  */
 package org.eclipse.dirigible.components.data.store;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.sql.DataSource;
 
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.data.store.config.CurrentTenantIdentifierResolverImpl;
+import org.eclipse.dirigible.components.data.store.config.MultiTenantConnectionProviderImpl;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.hibernate.Transaction;
@@ -29,29 +31,55 @@ import org.hibernate.boot.registry.StandardServiceRegistry;
 import org.hibernate.boot.registry.StandardServiceRegistryBuilder;
 import org.hibernate.cfg.Configuration;
 import org.hibernate.cfg.Environment;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
-import jakarta.persistence.EntityManager;
 import org.hibernate.query.Query;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
 
 /**
  * The Class ObjectStore.
  */
 @Component
+@Scope("singleton")
 public class DataStore {
 
-    /** The session factory. */
+    /** The Constant LOGGER. */
+    private static final Logger logger = LoggerFactory.getLogger(DataStore.class);
+
+    /** the session factory */
     private SessionFactory sessionFactory;
+
+    /** The default datasource */
+    private DataSource dataSource;
 
     /** The datasources manager. */
     private final DataSourcesManager datasourcesManager;
 
-    /** The data source. */
-    private DataSource dataSource;
+    /** The connection provider */
+    private final MultiTenantConnectionProviderImpl connectionProvider;
+
+    /** The tenant identifier resolver */
+    private final CurrentTenantIdentifierResolverImpl tenantIdentifierResolver;
 
     /** The mappings. */
     private final Map<String, String> mappings = new HashMap<>();
+
+    /** The counter for mapings changes */
+    private final AtomicInteger counter = new AtomicInteger(0);
+
+    int getCounter() {
+        return counter.get();
+    }
+
+    void incrementCounter() {
+        counter.incrementAndGet();
+    }
+
+    void resetCounter() {
+        counter.set(0);
+    }
 
     /**
      * Instantiates a new object store.
@@ -59,8 +87,16 @@ public class DataStore {
      * @param datasourcesManager the datasources manager
      */
     @Autowired
-    public DataStore(DataSourcesManager datasourcesManager) {
+    public DataStore(DataSource dataSource, DataSourcesManager datasourcesManager, MultiTenantConnectionProviderImpl connectionProvider,
+            CurrentTenantIdentifierResolverImpl tenantIdentifierResolver) {
+        this.dataSource = dataSource;
         this.datasourcesManager = datasourcesManager;
+        this.connectionProvider = connectionProvider;
+        this.tenantIdentifierResolver = tenantIdentifierResolver;
+    }
+
+    public DataSource getDataSource() {
+        return dataSource;
     }
 
     /**
@@ -72,22 +108,12 @@ public class DataStore {
         return datasourcesManager;
     }
 
-    /**
-     * Gets the data source.
-     *
-     * @return the data source
-     */
-    public DataSource getDataSource() {
-        return dataSource;
+    public MultiTenantConnectionProviderImpl getConnectionProvider() {
+        return connectionProvider;
     }
 
-    /**
-     * Sets the data source.
-     *
-     * @param dataSource the new data source
-     */
-    public void setDataSource(DataSource dataSource) {
-        this.dataSource = dataSource;
+    public CurrentTenantIdentifierResolverImpl getTenantIdentifierResolver() {
+        return tenantIdentifierResolver;
     }
 
     /**
@@ -98,6 +124,7 @@ public class DataStore {
      */
     public void addMapping(String name, String content) {
         mappings.put(name, content);
+        incrementCounter();
     }
 
     /**
@@ -107,30 +134,47 @@ public class DataStore {
      */
     public void removeMapping(String name) {
         mappings.remove(name);
+        incrementCounter();
     }
 
     /**
      * Initialize.
      */
-    public synchronized void initialize() {
-        if (this.dataSource == null) {
-            this.dataSource = datasourcesManager.getDefaultDataSource();
+    public synchronized void recreate() {
+        if (getCounter() > 0) {
+            Configuration configuration = new Configuration().setProperty(Environment.SHOW_SQL, "true")
+                                                             .setProperty("hibernate.hbm2ddl.auto", "update")
+                                                             .setProperty("hibernate.current_session_context_class",
+                                                                     "org.hibernate.context.internal.ThreadLocalSessionContext");
+
+            mappings.forEach((k, v) -> addInputStreamToConfig(configuration, k, v));
+
+            StandardServiceRegistryBuilder serviceRegistryBuilder = new StandardServiceRegistryBuilder();
+            serviceRegistryBuilder.applySetting(Environment.JAKARTA_JTA_DATASOURCE, getDataSource());
+            serviceRegistryBuilder.applySetting(Environment.MULTI_TENANT_CONNECTION_PROVIDER, getConnectionProvider());
+            serviceRegistryBuilder.applySetting(Environment.MULTI_TENANT_IDENTIFIER_RESOLVER, getTenantIdentifierResolver());
+            serviceRegistryBuilder.applySettings(configuration.getProperties());
+
+            StandardServiceRegistry serviceRegistry = serviceRegistryBuilder.build();
+
+            sessionFactory = configuration.buildSessionFactory(serviceRegistry);
+
+            logger.info("Processed {} changes in mappings", getCounter());
+
+            resetCounter();
         }
-        Configuration configuration = new Configuration().setProperty(Environment.SHOW_SQL, "true")
-                                                         .setProperty("hibernate.hbm2ddl.auto", "update")
-                                                         .setProperty("hibernate.current_session_context_class",
-                                                                 "org.hibernate.context.internal.ThreadLocalSessionContext");
+    }
 
-        mappings.forEach((k, v) -> addInputStreamToConfig(configuration, k, v));
-
-        StandardServiceRegistryBuilder serviceRegistryBuilder = new StandardServiceRegistryBuilder();
-        serviceRegistryBuilder.applySetting(Environment.DATASOURCE, this.dataSource);
-        serviceRegistryBuilder.applySetting(Environment.JAKARTA_JTA_DATASOURCE, getDataSource());
-        serviceRegistryBuilder.applySettings(configuration.getProperties());
-
-        StandardServiceRegistry serviceRegistry = serviceRegistryBuilder.build();
-
-        sessionFactory = configuration.buildSessionFactory(serviceRegistry);
+    /**
+     * Getter for Session Factory
+     *
+     * @return the Session Factory
+     */
+    SessionFactory getSessionFactory() {
+        if (sessionFactory == null) {
+            recreate();
+        }
+        return sessionFactory;
     }
 
     /**
@@ -156,23 +200,8 @@ public class DataStore {
      * @return the identifier
      */
     public Object save(String type, String json) {
-        return save(type, json, getDataSource());
-    }
-
-    /**
-     * Save.
-     *
-     * @param type the type
-     * @param json the json
-     * @param datasource the datasource
-     * @return the identifier
-     */
-    public Object save(String type, String json, DataSource datasource) {
-        try (Session session = sessionFactory.openSession()) {
-            Transaction transaction = session.beginTransaction();
-            Map object = JsonHelper.fromJson(json, Map.class);
-            return save(type, object, datasource);
-        }
+        Map object = JsonHelper.fromJson(json, Map.class);
+        return save(type, object);
     }
 
     /**
@@ -183,22 +212,14 @@ public class DataStore {
      * @return the identifier
      */
     public Object save(String type, Map object) {
-        return save(type, object, getDataSource());
-    }
-
-    /**
-     * Save.
-     *
-     * @param type the type
-     * @param object the object
-     * @param datasource the datasource
-     * @return the identifier
-     */
-    public Object save(String type, Map object, DataSource datasource) {
-        try (Session session = sessionFactory.openSession()) {
+        try (Session session = getSessionFactory().openSession()) {
             Transaction transaction = session.beginTransaction();
             Object id = session.save(type, object);
             transaction.commit();
+
+
+            System.err.println("idddddddddddd >>>>>>>>>>>> " + id);
+
             return id;
         }
     }
@@ -210,22 +231,8 @@ public class DataStore {
      * @param json the json
      */
     public void upsert(String type, String json) {
-        upsert(type, json, getDataSource());
-    }
-
-    /**
-     * Save or update.
-     *
-     * @param type the type
-     * @param json the json
-     * @param datasource the datasource
-     */
-    public void upsert(String type, String json, DataSource datasource) {
-        try (Session session = sessionFactory.openSession()) {
-            Transaction transaction = session.beginTransaction();
-            Map object = JsonHelper.fromJson(json, Map.class);
-            upsert(type, object, datasource);
-        }
+        Map object = JsonHelper.fromJson(json, Map.class);
+        upsert(type, object);
     }
 
     /**
@@ -235,18 +242,7 @@ public class DataStore {
      * @param object the object
      */
     public void upsert(String type, Map object) {
-        upsert(type, object, getDataSource());
-    }
-
-    /**
-     * Save or update.
-     *
-     * @param type the type
-     * @param object the object
-     * @param datasource the datasource
-     */
-    public void upsert(String type, Map object, DataSource datasource) {
-        try (Session session = sessionFactory.openSession()) {
+        try (Session session = getSessionFactory().openSession()) {
             Transaction transaction = session.beginTransaction();
             session.saveOrUpdate(type, object);
             transaction.commit();
@@ -260,22 +256,8 @@ public class DataStore {
      * @param json the json
      */
     public void update(String type, String json) {
-        update(type, json, getDataSource());
-    }
-
-    /**
-     * Update.
-     *
-     * @param type the type
-     * @param json the json
-     * @param datasource the datasource
-     */
-    public void update(String type, String json, DataSource datasource) {
-        try (Session session = sessionFactory.openSession()) {
-            Transaction transaction = session.beginTransaction();
-            Map object = JsonHelper.fromJson(json, Map.class);
-            update(type, object, datasource);
-        }
+        Map object = JsonHelper.fromJson(json, Map.class);
+        update(type, object);
     }
 
     /**
@@ -285,18 +267,7 @@ public class DataStore {
      * @param object the object
      */
     public void update(String type, Map object) {
-        update(type, object, getDataSource());
-    }
-
-    /**
-     * Update.
-     *
-     * @param type the type
-     * @param object the object
-     * @param datasource the datasource
-     */
-    public void update(String type, Map object, DataSource datasource) {
-        try (Session session = sessionFactory.openSession()) {
+        try (Session session = getSessionFactory().openSession()) {
             Transaction transaction = session.beginTransaction();
             session.update(type, object);
             transaction.commit();
@@ -310,18 +281,7 @@ public class DataStore {
      * @param id the id
      */
     public void delete(String type, Serializable id) {
-        delete(type, id, getDataSource());
-    }
-
-    /**
-     * Delete.
-     *
-     * @param type the type
-     * @param id the id
-     * @param datasource the datasource
-     */
-    public void delete(String type, Serializable id, DataSource datasource) {
-        try (Session session = sessionFactory.openSession()) {
+        try (Session session = getSessionFactory().openSession()) {
             Transaction transaction = session.beginTransaction();
             Object object = get(type, id);
             session.delete(type, object);
@@ -337,19 +297,7 @@ public class DataStore {
      * @return the map
      */
     public Map get(String type, Serializable id) {
-        return get(type, id, getDataSource());
-    }
-
-    /**
-     * Gets the.
-     *
-     * @param type the type
-     * @param id the id
-     * @param datasource the datasource
-     * @return the map
-     */
-    public Map get(String type, Serializable id, DataSource datasource) {
-        try (Session session = sessionFactory.openSession()) {
+        try (Session session = getSessionFactory().openSession()) {
             return (Map) session.get(type, id);
         }
     }
@@ -362,19 +310,7 @@ public class DataStore {
      * @return true, if successful
      */
     public boolean contains(String type, String json) {
-        return contains(type, json, getDataSource());
-    }
-
-    /**
-     * Contains.
-     *
-     * @param type the type
-     * @param json the json
-     * @param datasource the datasource
-     * @return true, if successful
-     */
-    public boolean contains(String type, String json, DataSource datasource) {
-        try (Session session = sessionFactory.openSession()) {
+        try (Session session = getSessionFactory().openSession()) {
             Map object = JsonHelper.fromJson(json, Map.class);
             return session.contains(type, object);
         }
@@ -387,9 +323,7 @@ public class DataStore {
      * @return the list
      */
     public List<Map> list(String type) {
-        try (Session session = sessionFactory.openSession();
-                EntityManager entityManager = session.getEntityManagerFactory()
-                                                     .createEntityManager()) {
+        try (Session session = getSessionFactory().openSession()) {
 
             Query<Map> query = session.createQuery("from " + type + " c", Map.class);
             return query.getResultList();
@@ -403,10 +337,7 @@ public class DataStore {
      * @return the count
      */
     public long count(String type) {
-        try (Session session = sessionFactory.openSession();
-                EntityManager entityManager = session.getEntityManagerFactory()
-                                                     .createEntityManager()) {
-
+        try (Session session = getSessionFactory().openSession()) {
             Query<Map> query = session.createQuery("from " + type + " c", Map.class);
             return query.getResultCount();
         }
@@ -420,12 +351,8 @@ public class DataStore {
      * @return the list
      */
     public List<Map> list(String type, QueryOptions options) {
-        try (Session session = sessionFactory.openSession();
-                EntityManager entityManager = session.getEntityManagerFactory()
-                                                     .createEntityManager()) {
-
-            List<Map> matchingItems = DynamicQueryFilter.list(entityManager, type, options);
-
+        try (Session session = getSessionFactory().openSession()) {
+            List<Map> matchingItems = DynamicQueryFilter.list(session, type, options);
             return matchingItems;
         }
     }
@@ -438,15 +365,11 @@ public class DataStore {
      * @return the list
      */
     public List<Map> list(String type, String options) {
-        try (Session session = sessionFactory.openSession();
-                EntityManager entityManager = session.getEntityManagerFactory()
-                                                     .createEntityManager()) {
-            if (options != null) {
-                QueryOptions queryOptions = JsonHelper.fromJson(options, QueryOptions.class);
-                return list(type, queryOptions);
-            }
-            return list(type);
+        if (options != null) {
+            QueryOptions queryOptions = JsonHelper.fromJson(options, QueryOptions.class);
+            return list(type, queryOptions);
         }
+        return list(type);
     }
 
     /**
@@ -457,12 +380,8 @@ public class DataStore {
      * @return the count
      */
     public long count(String type, QueryOptions options) {
-        try (Session session = sessionFactory.openSession();
-                EntityManager entityManager = session.getEntityManagerFactory()
-                                                     .createEntityManager()) {
-
-            long count = DynamicQueryFilter.count(entityManager, type, options);
-
+        try (Session session = getSessionFactory().openSession()) {
+            long count = DynamicQueryFilter.count(session, type, options);
             return count;
         }
     }
@@ -475,27 +394,11 @@ public class DataStore {
      * @return the count
      */
     public long count(String type, String options) {
-        try (Session session = sessionFactory.openSession();
-                EntityManager entityManager = session.getEntityManagerFactory()
-                                                     .createEntityManager()) {
-            if (options != null) {
-                QueryOptions queryOptions = JsonHelper.fromJson(options, QueryOptions.class);
-                return count(type, queryOptions);
-            }
-            return count(type);
+        if (options != null) {
+            QueryOptions queryOptions = JsonHelper.fromJson(options, QueryOptions.class);
+            return count(type, queryOptions);
         }
-    }
-
-
-    /**
-     * Find by example.
-     *
-     * @param type the type
-     * @param json the json
-     * @return the list
-     */
-    public List<Map> findByExample(String type, String json) {
-        return findByExample(type, json, 100, 0, getDataSource());
+        return count(type);
     }
 
     /**
@@ -508,29 +411,9 @@ public class DataStore {
      * @return the list
      */
     public List<Map> findByExample(String type, String json, int limit, int offset) {
-        return findByExample(type, json, limit, offset, getDataSource());
-    }
-
-    /**
-     * Find by example.
-     *
-     * @param type the type
-     * @param json the json
-     * @param limit the limit
-     * @param offset the offset
-     * @param datasource the datasource
-     * @return the list
-     */
-    public List<Map> findByExample(String type, String json, int limit, int offset, DataSource datasource) {
-        try (Session session = sessionFactory.openSession();
-                EntityManager entityManager = session.getEntityManagerFactory()
-                                                     .createEntityManager()) {
-            Map object = JsonHelper.fromJson(json, Map.class);
-
-            List result = DynamicCriteriaFinder.findByExampleDynamic(entityManager, type, object, limit, offset);
-
-            return result;
-        }
+        Map object = JsonHelper.fromJson(json, Map.class);
+        List result = DynamicCriteriaFinder.findByExampleDynamic(getSessionFactory(), type, object, limit, offset);
+        return result;
     }
 
     /**
@@ -542,9 +425,7 @@ public class DataStore {
      * @return the list
      */
     public List<Map> query(String query, int limit, int offset) {
-        try (Session session = sessionFactory.openSession();
-                EntityManager entityManager = session.getEntityManagerFactory()
-                                                     .createEntityManager()) {
+        try (Session session = getSessionFactory().openSession()) {
             Query<Map> queryObject = session.createQuery(query, Map.class);
             if (limit > 0) {
                 queryObject.setMaxResults(limit);
@@ -563,12 +444,10 @@ public class DataStore {
      * @return the list
      */
     public List<Map> queryNative(String query) {
-        try (Session session = sessionFactory.openSession()) {
+        try (Session session = getSessionFactory().openSession()) {
             return session.createNativeQuery(query, Map.class)
                           .list();
         }
     }
 
 }
-
-

@@ -121,4 +121,9 @@ public interface Synchronizer<A extends Artefact, ID> {
      */
     boolean multitenantExecution();
 
+    /**
+     * Perform finalization activities, if any
+     */
+    default void finishing() {}
+
 }

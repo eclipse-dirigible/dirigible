@@ -1,10 +1,10 @@
 {
   "entity-mapping" : {
     "class" : {
-      "entity-name" : "Customer",
-      "table" : "CUSTOMER",
+      "entity-name" : "OrderItem",
+      "table" : "ORDER_ITEMS",
       "id" : {
-        "column" : "ID",
+        "column" : "ORDERITEM_ID",
         "name" : "id",
         "type" : "long",
         "generator" : {
@@ -12,12 +12,12 @@
         }
       },
       "property" : [ {
-        "column" : "NAME",
-        "name" : "name",
-        "type" : "string"
+        "column" : "ORDER_ID",
+        "name" : "orderId",
+        "type" : "long"
       }, {
-        "column" : "ADDRESS",
-        "name" : "address",
+        "column" : "ORDERITEM_NAME",
+        "name" : "name",
         "type" : "string"
       } ]
     }

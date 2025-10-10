@@ -7,122 +7,73 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.data.store;
+package org.eclipse.dirigible.integration.tests.api.java.db;
+
+import org.apache.commons.io.IOUtils;
+import org.eclipse.dirigible.components.base.helpers.JsonHelper;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.data.store.DataStore;
+import org.eclipse.dirigible.components.data.store.config.CurrentTenantIdentifierResolverImpl;
+import org.eclipse.dirigible.components.data.store.config.MultiTenantConnectionProviderImpl;
+import org.eclipse.dirigible.components.database.DirigibleDataSource;
+import org.eclipse.dirigible.tests.base.IntegrationTest;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doReturn;
 
-import java.nio.charset.StandardCharsets;
-import java.sql.SQLException;
-import java.util.List;
-import java.util.Map;
-
-import org.apache.commons.io.IOUtils;
-import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.components.base.helpers.JsonHelper;
-import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
-import org.eclipse.dirigible.components.base.tenant.Tenant;
-import org.eclipse.dirigible.components.base.tenant.TenantContext;
-import org.eclipse.dirigible.components.data.sources.config.DataSourceConfig;
-import org.eclipse.dirigible.components.data.sources.domain.DataSource;
-import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
-import org.eclipse.dirigible.components.data.sources.repository.DataSourceRepository;
-import org.eclipse.dirigible.components.data.store.config.CurrentTenantIdentifierResolverImpl;
-import org.eclipse.dirigible.components.data.store.config.MultiTenantConnectionProviderImpl;
-import org.eclipse.dirigible.components.database.DirigibleConnection;
-import org.eclipse.dirigible.components.database.DirigibleDataSource;
-import org.eclipse.dirigible.components.initializers.SynchronousSpringEventsConfig;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.TestInstance.Lifecycle;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.domain.EntityScan;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.DependsOn;
-import org.springframework.test.context.ContextConfiguration;
-import org.springframework.test.context.junit.jupiter.SpringExtension;
-import org.springframework.test.context.support.AnnotationConfigContextLoader;
-import org.springframework.transaction.annotation.Transactional;
-
-/**
- * The Class ObjectStoreTest.
- */
-@SpringBootTest
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@ComponentScan(basePackages = {"org.eclipse.dirigible.components"})
-@EntityScan("org.eclipse.dirigible.components")
-@ExtendWith(SpringExtension.class)
-@ContextConfiguration(classes = {SynchronousSpringEventsConfig.class, DataSourceConfig.class}, loader = AnnotationConfigContextLoader.class)
-@Transactional
-@TestInstance(Lifecycle.PER_CLASS)
-public class DataStoreTest {
-
-    /** The datasource repository. */
-    @Autowired
-    private DataSourceRepository datasourceRepository;
+public class DataStoreIT extends IntegrationTest {
 
     @Autowired
     private DataSourcesManager datasourcesManager;
 
-    /** The object store. */
+    @Autowired
     private DataStore dataStore;
 
-    private DirigibleDataSource dataSource;
+    @MockitoSpyBean
+    private CurrentTenantIdentifierResolverImpl tenantIdentifier;
 
-    @MockBean
-    private TenantContext tenantContext;
-
-    @MockBean
-    @DefaultTenant
-    private Tenant defaultTenant;
-
-    /**
-     * Setup.
-     *
-     * @throws Exception the exception
-     */
-    @BeforeAll
+    @BeforeEach
     public void setup() throws Exception {
-        Configuration.set("DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT", "StoreDB");
-        DataSource datasource = new DataSource("/test/StoreDB.datasource", "StoreDB", "", "org.h2.Driver", "jdbc:h2:~/StoreDB", "sa", "");
-        datasourceRepository.save(datasource);
-        dataSource = datasourcesManager.getDataSource("StoreDB");
-        assertNotNull(dataSource);
+        setupTenantIdentifier();
         setupMocks();
-        String mappingCustomer =
-                IOUtils.toString(DataStoreTest.class.getResourceAsStream("/entity/Customer.entity"), StandardCharsets.UTF_8);
-        String mappingOrder = IOUtils.toString(DataStoreTest.class.getResourceAsStream("/entity/Order.entity"), StandardCharsets.UTF_8);
+        String mappingCustomer = IOUtils.toString(DataStoreIT.class.getResourceAsStream("/entity/Customer.entity"), StandardCharsets.UTF_8);
+        String mappingOrder = IOUtils.toString(DataStoreIT.class.getResourceAsStream("/entity/Order.entity"), StandardCharsets.UTF_8);
         String mappingOrderItem =
-                IOUtils.toString(DataStoreTest.class.getResourceAsStream("/entity/OrderItem.entity"), StandardCharsets.UTF_8);
+                IOUtils.toString(DataStoreIT.class.getResourceAsStream("/entity/OrderItem.entity"), StandardCharsets.UTF_8);
 
         dataStore.addMapping("Customer", mappingCustomer);
         dataStore.addMapping("Order", mappingOrder);
         dataStore.addMapping("OrderItem", mappingOrderItem);
+
+        // objectStore.setDataSource(...);
         dataStore.recreate();
     }
 
-    @AfterAll
-    public void cleanup() {
-        Configuration.set("DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT", "DefaultDB");
+    private void setupTenantIdentifier() {
+        // tenantIdentifier = mock(CurrentTenantIdentifierResolverImpl.class);
+        doReturn("default-tenant").when(tenantIdentifier)
+                                  .resolveCurrentTenantIdentifier();
+        // when(tenantIdentifier.resolveCurrentTenantIdentifier()).thenReturn("default-tenant");
     }
 
     private void setupMocks() {
-        CurrentTenantIdentifierResolverImpl tenantIdentifier = new CurrentTenantIdentifierResolverImpl(tenantContext);
+        // CurrentTenantIdentifierResolverImpl tenantIdentifier = new
+        // CurrentTenantIdentifierResolverImpl(tenantContext);
         MultiTenantConnectionProviderImpl connectionProvider =
-                new MultiTenantConnectionProviderImpl(this.datasourcesManager, this.dataSource);
-        dataStore = new DataStore(this.dataSource, this.datasourcesManager, connectionProvider, tenantIdentifier);
+                new MultiTenantConnectionProviderImpl(this.datasourcesManager, this.datasourcesManager.getDefaultDataSource());
+        dataStore = new DataStore(this.datasourcesManager.getDefaultDataSource(), this.datasourcesManager, connectionProvider,
+                tenantIdentifier);
     }
 
     /**
@@ -130,12 +81,13 @@ public class DataStoreTest {
      */
     @Test
     public void save() {
+
         String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
 
         dataStore.save("Customer", json);
 
         List list = dataStore.list("Customer");
-        System.err.println(JsonHelper.toJson(list));
+        System.out.println(JsonHelper.toJson(list));
 
         assertNotNull(list);
         assertThat(list).hasSize(1);
@@ -304,13 +256,6 @@ public class DataStoreTest {
         for (Object element : list) {
             dataStore.delete("Customer", ((Long) ((Map) element).get("id")));
         }
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 
 }

@@ -28,6 +28,10 @@
 	    	<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-core-repository</artifactId>
     	</dependency>
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-core-initializers</artifactId>
+    	</dependency>
     	
     	<!-- Data -->
     	<dependency>
@@ -43,6 +47,18 @@
     	<dependency>
 	    	<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-commons-xml2json</artifactId>
+    	</dependency>
+    	
+    	<!-- Test -->
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-core-extensions</artifactId>
+			<scope>test</scope>
+    	</dependency>
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-ide-git</artifactId>
+			<scope>test</scope>
     	</dependency>
     	
     </dependencies>

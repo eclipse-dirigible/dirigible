@@ -225,4 +225,5 @@ public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchr
         return file.toString()
                    .endsWith(getFileExtension());
     }
+
 }

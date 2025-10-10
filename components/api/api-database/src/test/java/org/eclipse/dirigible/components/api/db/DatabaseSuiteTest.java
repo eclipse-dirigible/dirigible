@@ -9,9 +9,14 @@
  */
 package org.eclipse.dirigible.components.api.db;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.sources.repository.DataSourceRepository;
 import org.eclipse.dirigible.components.engine.javascript.service.JavascriptService;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -44,6 +49,9 @@ public class DatabaseSuiteTest {
     @Autowired
     private DataSourceRepository datasourceRepository;
 
+    @Autowired
+    private DataSourcesManager datasourcesManager;
+
     /** The javascript service. */
     @Autowired
     private JavascriptService javascriptService;
@@ -61,8 +69,17 @@ public class DatabaseSuiteTest {
      */
     @BeforeAll
     public void setup() {
-        DataSource datasource = new DataSource("/test/DefaultDB.datasource", "DefaultDB", "", "org.h2.Driver", "jdbc:h2:~/test", "sa", "");
-        datasourceRepository.save(datasource);
+        Configuration.set("DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT", "ApiDB");
+        // DataSource datasource = new DataSource("/test/ApiDB.datasource", "ApiDB", "", "org.h2.Driver",
+        // "jdbc:h2:~/ApiDB", "sa", "");
+        // datasourceRepository.save(datasource);
+        // javax.sql.DataSource dataSource = datasourcesManager.getDataSource("ApiDB");
+        // assertNotNull(dataSource);
+    }
+
+    @AfterAll
+    public void cleanup() {
+        Configuration.set("DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT", "DefaultDB");
     }
 
     /**

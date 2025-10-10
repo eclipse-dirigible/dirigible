@@ -9,6 +9,11 @@
  */
 package org.eclipse.dirigible.components.data.store.synchronizer;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
+import java.text.ParseException;
+import java.util.List;
+
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.ArtefactService;
@@ -24,11 +29,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Paths;
-import java.text.ParseException;
-import java.util.List;
 
 /**
  * The Class BpmnSynchronizer.
@@ -175,7 +175,6 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
                 if (entity.getLifecycle()
                           .equals(ArtefactLifecycle.NEW)) {
                     dataStore.addMapping(entity.getKey(), prepareContent(entity));
-                    dataStore.initialize();
                     callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
                 }
                 break;
@@ -184,7 +183,6 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
                           .equals(ArtefactLifecycle.MODIFIED)) {
                     dataStore.removeMapping(entity.getKey());
                     dataStore.addMapping(entity.getKey(), prepareContent(entity));
-                    dataStore.initialize();
                     callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
                 }
                 if (entity.getLifecycle()
@@ -201,7 +199,6 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
                         || entity.getLifecycle()
                                  .equals(ArtefactLifecycle.FAILED)) {
                     dataStore.removeMapping(entity.getKey());
-                    dataStore.initialize();
                     callback.registerState(this, wrapper, ArtefactLifecycle.DELETED);
                 }
                 break;
@@ -231,7 +228,6 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
     public void cleanupImpl(Entity entity) {
         try {
             dataStore.removeMapping(entity.getKey());
-            dataStore.initialize();
             getService().delete(entity);
         } catch (Exception e) {
             callback.addError(e.getMessage());
@@ -267,6 +263,11 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
     @Override
     public String getArtefactType() {
         return Entity.ARTEFACT_TYPE;
+    }
+
+    @Override
+    public void finishing() {
+        dataStore.recreate();
     }
 
 }
