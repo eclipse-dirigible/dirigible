@@ -9,7 +9,10 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.config;
 
+import java.util.List;
+import javax.sql.DataSource;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.engine.bpm.BpmProvider;
 import org.eclipse.dirigible.components.engine.bpm.flowable.diagram.DirigibleProcessDiagramGenerator;
 import org.flowable.engine.ProcessEngine;
@@ -20,6 +23,7 @@ import org.flowable.spring.boot.actuate.info.FlowableInfoContributor;
 import org.flowable.variable.api.types.VariableType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.liquibase.LiquibaseAutoConfiguration;
@@ -29,9 +33,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 
-import javax.sql.DataSource;
-import java.util.List;
-
 /**
  * The Class BpmFlowableConfig.
  */
@@ -39,6 +40,12 @@ import java.util.List;
 @EnableAutoConfiguration(exclude = {LiquibaseAutoConfiguration.class, TaskExecutionAutoConfiguration.class})
 public class BpmFlowableConfig {
     private static final Logger LOGGER = LoggerFactory.getLogger(BpmFlowableConfig.class);
+
+    /**
+     * The data sources manager.
+     */
+    @Autowired
+    private DataSourcesManager datasourceManager;
 
     @Bean("BPM_PROVIDER")
     BpmProvider getBpmProvider(BpmProviderFlowable bpmProviderFlowable) {
@@ -95,17 +102,16 @@ public class BpmFlowableConfig {
     private void setDatabaseConfig(SpringProcessEngineConfiguration config, DataSource datasource,
             PlatformTransactionManager transactionManager) {
         String dataSourceName = DirigibleConfig.FLOWABLE_DATABASE_DATASOURCE_NAME.getStringValue();
-        if (dataSourceName != null) {
-            LOGGER.info("Initializing the Flowable Process Engine with JNDI datasource name");
-            config.setDataSourceJndiName(dataSourceName);
-        }
-
         String driver = DirigibleConfig.FLOWABLE_DATABASE_DRIVER.getStringValue();
         String url = DirigibleConfig.FLOWABLE_DATABASE_URL.getStringValue();
         String user = DirigibleConfig.FLOWABLE_DATABASE_USER.getStringValue();
         String password = DirigibleConfig.FLOWABLE_DATABASE_PASSWORD.getStringValue();
 
-        if (driver != null && url != null) {
+        if (dataSourceName != null) {
+            LOGGER.info("Initializing the Flowable Process Engine with datasource name");
+            DataSource customDataSource = this.datasourceManager.getDataSource(dataSourceName);
+            config.setDataSource(customDataSource);
+        } else if (driver != null && url != null) {
             LOGGER.info("Initializing the Flowable Process Engine with environment variables datasource parameters");
 
             config.setJdbcUrl(url);
@@ -115,7 +121,7 @@ public class BpmFlowableConfig {
         } else {
             LOGGER.info("Initializing the Flowable Process Engine with datasource [{}]", datasource);
             config.setDataSource(datasource);
-            config.setTransactionManager(transactionManager);
         }
+        config.setTransactionManager(transactionManager);
     }
 }
