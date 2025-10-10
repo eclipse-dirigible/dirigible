@@ -3,7 +3,7 @@ dist/
 .settings/
 target/
 dirigible_local/
-bin/
+#bin/
 .idea
 .history
 .vscode
