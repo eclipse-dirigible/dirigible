@@ -24,7 +24,7 @@ public class CurrentTenantIdentifierResolverImpl implements CurrentTenantIdentif
     private final TenantContext tenantContext;
 
     @Autowired
-    CurrentTenantIdentifierResolverImpl(TenantContext tenantContext) {
+    public CurrentTenantIdentifierResolverImpl(TenantContext tenantContext) {
         this.tenantContext = tenantContext;
     }
 

@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.data.store;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +36,7 @@ import org.hibernate.query.Query;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
@@ -50,6 +52,9 @@ public class DataStore {
 
     /** the session factory */
     private SessionFactory sessionFactory;
+
+    /** The default datasource */
+    private DataSource dataSource;
 
     /** The datasources manager. */
     private final DataSourcesManager datasourcesManager;
@@ -84,11 +89,16 @@ public class DataStore {
      * @param datasourcesManager the datasources manager
      */
     @Autowired
-    public DataStore(DataSourcesManager datasourcesManager, MultiTenantConnectionProviderImpl connectionProvider,
+    public DataStore(DataSource dataSource, DataSourcesManager datasourcesManager, MultiTenantConnectionProviderImpl connectionProvider,
             CurrentTenantIdentifierResolverImpl tenantIdentifierResolver) {
+        this.dataSource = dataSource;
         this.datasourcesManager = datasourcesManager;
         this.connectionProvider = connectionProvider;
         this.tenantIdentifierResolver = tenantIdentifierResolver;
+    }
+
+    public DataSource getDataSource() {
+        return dataSource;
     }
 
     /**
@@ -98,6 +108,14 @@ public class DataStore {
      */
     public DataSourcesManager getDatasourcesManager() {
         return datasourcesManager;
+    }
+
+    public MultiTenantConnectionProviderImpl getConnectionProvider() {
+        return connectionProvider;
+    }
+
+    public CurrentTenantIdentifierResolverImpl getTenantIdentifierResolver() {
+        return tenantIdentifierResolver;
     }
 
     /**
@@ -126,7 +144,6 @@ public class DataStore {
      */
     public synchronized void recreate() {
         if (getCounter() > 0) {
-            DataSource dataSource = datasourcesManager.getDefaultDataSource();
             Configuration configuration = new Configuration().setProperty(Environment.SHOW_SQL, "true")
                                                              .setProperty("hibernate.hbm2ddl.auto", "update")
                                                              .setProperty("hibernate.current_session_context_class",
@@ -135,10 +152,9 @@ public class DataStore {
             mappings.forEach((k, v) -> addInputStreamToConfig(configuration, k, v));
 
             StandardServiceRegistryBuilder serviceRegistryBuilder = new StandardServiceRegistryBuilder();
-            serviceRegistryBuilder.applySetting(Environment.DATASOURCE, dataSource);
-            serviceRegistryBuilder.applySetting(Environment.JAKARTA_JTA_DATASOURCE, dataSource);
-            serviceRegistryBuilder.applySetting(Environment.MULTI_TENANT_CONNECTION_PROVIDER, connectionProvider);
-            serviceRegistryBuilder.applySetting(Environment.MULTI_TENANT_IDENTIFIER_RESOLVER, tenantIdentifierResolver);
+            serviceRegistryBuilder.applySetting(Environment.JAKARTA_JTA_DATASOURCE, getDataSource());
+            serviceRegistryBuilder.applySetting(Environment.MULTI_TENANT_CONNECTION_PROVIDER, getConnectionProvider());
+            serviceRegistryBuilder.applySetting(Environment.MULTI_TENANT_IDENTIFIER_RESOLVER, getTenantIdentifierResolver());
             serviceRegistryBuilder.applySettings(configuration.getProperties());
 
             StandardServiceRegistry serviceRegistry = serviceRegistryBuilder.build();
@@ -202,6 +218,10 @@ public class DataStore {
             Transaction transaction = session.beginTransaction();
             Object id = session.save(type, object);
             transaction.commit();
+
+
+            System.err.println("idddddddddddd >>>>>>>>>>>> " + id);
+
             return id;
         }
     }
