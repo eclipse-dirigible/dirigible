@@ -1,0 +1,25 @@
+{
+  "entity-mapping" : {
+    "class" : {
+      "entity-name" : "OrderItem",
+      "table" : "ORDER_ITEMS",
+      "id" : {
+        "column" : "ORDERITEM_ID",
+        "name" : "id",
+        "type" : "long",
+        "generator" : {
+          "class" : "sequence"
+        }
+      },
+      "property" : [ {
+        "column" : "ORDER_ID",
+        "name" : "orderId",
+        "type" : "long"
+      }, {
+        "column" : "ORDERITEM_NAME",
+        "name" : "name",
+        "type" : "string"
+      } ]
+    }
+  }
+}
