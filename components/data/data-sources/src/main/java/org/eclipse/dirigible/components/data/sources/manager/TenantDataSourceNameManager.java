@@ -66,7 +66,7 @@ public class TenantDataSourceNameManager {
         if (isTenantDataSourceName(tenant, dataSourceName)) {
             return dataSourceName;
         }
-        return tenant.isDefault() ? dataSourceName : createPrefix(tenant) + dataSourceName;
+        return tenant != null && !tenant.isDefault() ? createPrefix(tenant) + dataSourceName : dataSourceName;
     }
 
     /**
@@ -77,7 +77,7 @@ public class TenantDataSourceNameManager {
      * @return true, if is tenant data source name
      */
     private boolean isTenantDataSourceName(Tenant tenant, String dataSourceName) {
-        return dataSourceName.startsWith(createPrefix(tenant));
+        return (tenant != null) ? dataSourceName.startsWith(createPrefix(tenant)) : false;
     }
 
     /**

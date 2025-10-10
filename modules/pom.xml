@@ -21,6 +21,7 @@
         <module>engines</module>
         <module>odata</module>
         <module>repository</module>
+        <module>parsers</module>
     </modules>
 
     <dependencies>
@@ -320,6 +321,13 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-repository-local</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            
+            <!-- Parsers -->
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-parsers-typescript</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>
