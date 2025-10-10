@@ -34,19 +34,19 @@ import static org.mockito.Mockito.doReturn;
 
 public class DataStoreIT extends IntegrationTest {
 
-	@Autowired
+    @Autowired
     private DataSourcesManager datasourcesManager;
-		
+
     @Autowired
     private DataStore dataStore;
-    
+
     @MockitoSpyBean
     private CurrentTenantIdentifierResolverImpl tenantIdentifier;
 
     @BeforeEach
     public void setup() throws Exception {
         setupTenantIdentifier();
-    	setupMocks();
+        setupMocks();
         String mappingCustomer = IOUtils.toString(DataStoreIT.class.getResourceAsStream("/entity/Customer.entity"), StandardCharsets.UTF_8);
         String mappingOrder = IOUtils.toString(DataStoreIT.class.getResourceAsStream("/entity/Order.entity"), StandardCharsets.UTF_8);
         String mappingOrderItem =
@@ -66,12 +66,14 @@ public class DataStoreIT extends IntegrationTest {
                                   .resolveCurrentTenantIdentifier();
         // when(tenantIdentifier.resolveCurrentTenantIdentifier()).thenReturn("default-tenant");
     }
-    
+
     private void setupMocks() {
-//        CurrentTenantIdentifierResolverImpl tenantIdentifier = new CurrentTenantIdentifierResolverImpl(tenantContext);
+        // CurrentTenantIdentifierResolverImpl tenantIdentifier = new
+        // CurrentTenantIdentifierResolverImpl(tenantContext);
         MultiTenantConnectionProviderImpl connectionProvider =
                 new MultiTenantConnectionProviderImpl(this.datasourcesManager, this.datasourcesManager.getDefaultDataSource());
-        dataStore = new DataStore(this.datasourcesManager.getDefaultDataSource(), this.datasourcesManager, connectionProvider, tenantIdentifier);
+        dataStore = new DataStore(this.datasourcesManager.getDefaultDataSource(), this.datasourcesManager, connectionProvider,
+                tenantIdentifier);
     }
 
     /**
