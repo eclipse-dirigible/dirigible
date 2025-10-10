@@ -104,6 +104,7 @@ public abstract class Artefact extends Auditable<String> implements Serializable
         this.type = type;
         this.description = description;
         this.dependencies = dependencies;
+        this.lifecycle = ArtefactLifecycle.NEW;
         updateKey();
     }
 
