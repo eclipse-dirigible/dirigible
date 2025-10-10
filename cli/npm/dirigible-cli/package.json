@@ -3,15 +3,12 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dirigible": "node ./bin/dirigible.js",
-    "test-which": "node ./bin/resolve-jar-with-which.js",
-    "test-module": "node ./bin/resolve-jar-from-module.js"
+    "dirigible": "node ./bin/dirigible.js"
   },
   "bin": {
     "dirigible": "./bin/dirigible.js"
   },
   "dependencies": {
-    "which": "5.0.0",
     "dirigible-jar": "file:../dirigible-jar"
   }
 }
