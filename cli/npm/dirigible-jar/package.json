@@ -1,0 +1,9 @@
+{
+  "name": "dirigible-jar",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "dirigible-executable.jar": "./bin/dirigible-application-executable.jar"
+  },
+  "dependencies": {}
+}
