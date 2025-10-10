@@ -202,7 +202,7 @@
         <c3p0.version>0.11.2</c3p0.version>
         <guava.version>33.5.0-jre</guava.version>
         <icu4j.version>77.1</icu4j.version>
-        <classgraph.version>4.8.181</classgraph.version>
+        <classgraph.version>4.8.184</classgraph.version>
         <logcaptor.version>2.12.1</logcaptor.version>
 
         <!-- UI -->
