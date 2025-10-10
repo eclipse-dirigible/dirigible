@@ -11,8 +11,12 @@ package org.eclipse.dirigible.integration.tests.api.java.db;
 
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.store.DataStore;
 import org.eclipse.dirigible.components.data.store.config.CurrentTenantIdentifierResolverImpl;
+import org.eclipse.dirigible.components.data.store.config.MultiTenantConnectionProviderImpl;
+import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,15 +34,19 @@ import static org.mockito.Mockito.doReturn;
 
 public class DataStoreIT extends IntegrationTest {
 
+	@Autowired
+    private DataSourcesManager datasourcesManager;
+		
     @Autowired
     private DataStore dataStore;
-
+    
     @MockitoSpyBean
     private CurrentTenantIdentifierResolverImpl tenantIdentifier;
 
     @BeforeEach
     public void setup() throws Exception {
         setupTenantIdentifier();
+    	setupMocks();
         String mappingCustomer = IOUtils.toString(DataStoreIT.class.getResourceAsStream("/entity/Customer.entity"), StandardCharsets.UTF_8);
         String mappingOrder = IOUtils.toString(DataStoreIT.class.getResourceAsStream("/entity/Order.entity"), StandardCharsets.UTF_8);
         String mappingOrderItem =
@@ -57,6 +65,13 @@ public class DataStoreIT extends IntegrationTest {
         doReturn("default-tenant").when(tenantIdentifier)
                                   .resolveCurrentTenantIdentifier();
         // when(tenantIdentifier.resolveCurrentTenantIdentifier()).thenReturn("default-tenant");
+    }
+    
+    private void setupMocks() {
+//        CurrentTenantIdentifierResolverImpl tenantIdentifier = new CurrentTenantIdentifierResolverImpl(tenantContext);
+        MultiTenantConnectionProviderImpl connectionProvider =
+                new MultiTenantConnectionProviderImpl(this.datasourcesManager, this.datasourcesManager.getDefaultDataSource());
+        dataStore = new DataStore(this.datasourcesManager.getDefaultDataSource(), this.datasourcesManager, connectionProvider, tenantIdentifier);
     }
 
     /**
