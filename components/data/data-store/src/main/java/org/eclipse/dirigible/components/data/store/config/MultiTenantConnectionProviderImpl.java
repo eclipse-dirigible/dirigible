@@ -9,17 +9,12 @@
  */
 package org.eclipse.dirigible.components.data.store.config;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Properties;
 
 import javax.sql.DataSource;
 
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
-import org.hibernate.engine.jdbc.connections.internal.DriverManagerConnectionProviderImpl;
 import org.hibernate.engine.jdbc.connections.spi.AbstractMultiTenantConnectionProvider;
 import org.hibernate.engine.jdbc.connections.spi.ConnectionProvider;
 import org.springframework.beans.factory.annotation.Autowired;
