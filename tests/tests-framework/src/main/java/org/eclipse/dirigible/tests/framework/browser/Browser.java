@@ -78,6 +78,8 @@ public interface Browser {
 
     void doubleClickOnElementContainingText(String htmlElementType, String text);
 
+    void doubleClickOnElementById(String id);
+
     void rightClickOnElementById(String id);
 
     void rightClickOnElementContainingText(HtmlElementType htmlElementType, String text);
