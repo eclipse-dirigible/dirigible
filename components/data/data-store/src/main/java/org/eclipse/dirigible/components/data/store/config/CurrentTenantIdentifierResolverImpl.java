@@ -30,8 +30,8 @@ public class CurrentTenantIdentifierResolverImpl implements CurrentTenantIdentif
 
     @Override
     public String resolveCurrentTenantIdentifier() {
-        return (this.tenantContext.getCurrentTenant() != null) ? this.tenantContext.getCurrentTenant()
-                                                                                   .getId()
+        return tenantContext.isInitialized() ? tenantContext.getCurrentTenant()
+                                                            .getId()
                 : DEFAULT_TENANT;
     }
 
