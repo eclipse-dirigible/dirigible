@@ -48,11 +48,11 @@ public class EntityMetadata {
     }
 
     public List<EntityFieldMetadata> getFields() {
-        return new ArrayList<>(fields);
+        return fields;
     }
 
     public void setFields(List<EntityFieldMetadata> fields) {
-        this.fields = (fields == null) ? new ArrayList<>() : new ArrayList<>(fields);
+        this.fields = fields;
     }
 
 }
