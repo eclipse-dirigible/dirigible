@@ -9,8 +9,7 @@
  */
 package org.eclipse.dirigible.components.data.sources.manager;
 
-import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.components.data.sources.config.DefaultDataSourceName;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.data.sources.config.SystemDataSourceName;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
 import org.eclipse.dirigible.components.data.sources.service.CustomDataSourcesService;
@@ -42,9 +41,6 @@ public class DataSourcesManager {
     /** The tenant data source name manager. */
     private final TenantDataSourceNameManager tenantDataSourceNameManager;
 
-    /** The default data source name. */
-    private final String defaultDataSourceName;
-
     /** The system data source name. */
     private final String systemDataSourceName;
 
@@ -55,18 +51,16 @@ public class DataSourcesManager {
      * @param customDataSourcesService the custom data sources service
      * @param dataSourceInitializer the data source initializer
      * @param tenantDataSourceNameManager the tenant data source name manager
-     * @param defaultDataSourceName the default data source name
      * @param systemDataSourceName the system data source name
      */
     @Autowired
     public DataSourcesManager(DataSourceService datasourceService, CustomDataSourcesService customDataSourcesService,
             DataSourceInitializer dataSourceInitializer, TenantDataSourceNameManager tenantDataSourceNameManager,
-            @DefaultDataSourceName String defaultDataSourceName, @SystemDataSourceName String systemDataSourceName) {
+            @SystemDataSourceName String systemDataSourceName) {
         this.datasourceService = datasourceService;
         this.customDataSourcesService = customDataSourcesService;
         this.dataSourceInitializer = dataSourceInitializer;
         this.tenantDataSourceNameManager = tenantDataSourceNameManager;
-        this.defaultDataSourceName = defaultDataSourceName;
         this.systemDataSourceName = systemDataSourceName;
         this.customDataSourcesService.initialize();
     }
@@ -77,7 +71,8 @@ public class DataSourcesManager {
      * @return the default data source
      */
     public DirigibleDataSource getDefaultDataSource() {
-        return getDataSource(Configuration.get("DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT", defaultDataSourceName));
+        String dsName = DirigibleConfig.DEFAULT_DATA_SOURCE_NAME.getStringValue();
+        return getDataSource(dsName);
     }
 
     /**

@@ -9,16 +9,15 @@
  */
 package org.eclipse.dirigible.components.data.store.config;
 
-import java.sql.Connection;
-import java.sql.SQLException;
-
-import javax.sql.DataSource;
-
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.hibernate.engine.jdbc.connections.spi.AbstractMultiTenantConnectionProvider;
 import org.hibernate.engine.jdbc.connections.spi.ConnectionProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.SQLException;
 
 @Component
 public class MultiTenantConnectionProviderImpl extends AbstractMultiTenantConnectionProvider<String> {
@@ -43,8 +42,8 @@ public class MultiTenantConnectionProviderImpl extends AbstractMultiTenantConnec
 
     @Override
     public Connection getAnyConnection() throws SQLException {
-        Connection connection = this.datasource.getConnection();
-        return connection;
+        return datasourcesManager.getDefaultDataSource()
+                                 .getConnection();
     }
 
     @Override
