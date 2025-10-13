@@ -217,10 +217,6 @@ public class DataStore {
             Transaction transaction = session.beginTransaction();
             Object id = session.save(type, object);
             transaction.commit();
-
-
-            System.err.println("idddddddddddd >>>>>>>>>>>> " + id);
-
             return id;
         }
     }

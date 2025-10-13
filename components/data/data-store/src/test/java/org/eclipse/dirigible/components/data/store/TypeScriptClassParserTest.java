@@ -57,7 +57,7 @@ public class TypeScriptClassParserTest {
         assertEquals("id", metadata.getFields()
                                    .get(0)
                                    .getPropertyName());
-        assertEquals("ID", metadata.getFields()
+        assertEquals("car_id", metadata.getFields()
                                    .get(0)
                                    .getColumnDetails()
                                    .getColumnName());
