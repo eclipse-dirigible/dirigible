@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.io.IOUtils;
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
@@ -35,6 +36,7 @@ import org.eclipse.dirigible.components.data.store.config.MultiTenantConnectionP
 import org.eclipse.dirigible.components.database.DirigibleConnection;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.components.initializers.SynchronousSpringEventsConfig;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -92,12 +94,11 @@ public class DataStoreTest {
      * @throws Exception the exception
      */
     @BeforeAll
-    @DependsOn("DefaultDB")
     public void setup() throws Exception {
-        DataSource datasource =
-                new DataSource("/test/DefaultDB.datasource", "DefaultDB", "", "org.h2.Driver", "jdbc:h2:~/DefaultDB", "sa", "");
+        Configuration.set("DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT", "StoreDB");
+        DataSource datasource = new DataSource("/test/StoreDB.datasource", "StoreDB", "", "org.h2.Driver", "jdbc:h2:~/StoreDB", "sa", "");
         datasourceRepository.save(datasource);
-        dataSource = datasourcesManager.getDataSource("DefaultDB");
+        dataSource = datasourcesManager.getDataSource("StoreDB");
         assertNotNull(dataSource);
         setupMocks();
         String mappingCustomer =
@@ -110,6 +111,11 @@ public class DataStoreTest {
         dataStore.addMapping("Order", mappingOrder);
         dataStore.addMapping("OrderItem", mappingOrderItem);
         dataStore.recreate();
+    }
+
+    @AfterAll
+    public void cleanup() {
+        Configuration.set("DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT", "DefaultDB");
     }
 
     private void setupMocks() {
