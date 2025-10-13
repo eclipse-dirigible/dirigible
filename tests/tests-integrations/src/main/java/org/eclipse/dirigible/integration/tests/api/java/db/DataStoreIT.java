@@ -12,6 +12,7 @@ package org.eclipse.dirigible.integration.tests.api.java.db;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.store.DataStore;
+import org.eclipse.dirigible.components.data.store.DataStoreTest;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,10 +33,12 @@ public class DataStoreIT extends IntegrationTest {
 
     @BeforeEach
     public void setup() throws Exception {
-        String mappingCustomer = IOUtils.toString(DataStoreIT.class.getResourceAsStream("/entity/Customer.entity"), StandardCharsets.UTF_8);
-        String mappingOrder = IOUtils.toString(DataStoreIT.class.getResourceAsStream("/entity/Order.entity"), StandardCharsets.UTF_8);
+    	String mappingCustomer =
+                IOUtils.toString(DataStoreIT.class.getResourceAsStream("/typescript/Customer.entity.ts"), StandardCharsets.UTF_8);
+        String mappingOrder =
+                IOUtils.toString(DataStoreIT.class.getResourceAsStream("/typescript/Order.entity.ts"), StandardCharsets.UTF_8);
         String mappingOrderItem =
-                IOUtils.toString(DataStoreIT.class.getResourceAsStream("/entity/OrderItem.entity"), StandardCharsets.UTF_8);
+                IOUtils.toString(DataStoreIT.class.getResourceAsStream("/typescript/OrderItem.entity.ts"), StandardCharsets.UTF_8);
 
         dataStore.addMapping("Customer", mappingCustomer);
         dataStore.addMapping("Order", mappingOrder);
