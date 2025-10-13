@@ -20,7 +20,6 @@ import java.util.Map;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.store.DataStore;
-import org.eclipse.dirigible.components.data.store.DataStoreTest;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
