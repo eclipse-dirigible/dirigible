@@ -9,6 +9,14 @@
  */
 package org.eclipse.dirigible.integration.tests.api.java.db;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.store.DataStore;
@@ -17,14 +25,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import java.nio.charset.StandardCharsets;
-import java.util.List;
-import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-
 public class DataStoreIT extends IntegrationTest {
 
     @Autowired
@@ -32,10 +32,12 @@ public class DataStoreIT extends IntegrationTest {
 
     @BeforeEach
     public void setup() throws Exception {
-        String mappingCustomer = IOUtils.toString(DataStoreIT.class.getResourceAsStream("/entity/Customer.entity"), StandardCharsets.UTF_8);
-        String mappingOrder = IOUtils.toString(DataStoreIT.class.getResourceAsStream("/entity/Order.entity"), StandardCharsets.UTF_8);
+    	String mappingCustomer =
+                IOUtils.toString(DataStoreIT.class.getResourceAsStream("/typescript/Customer.entity.ts"), StandardCharsets.UTF_8);
+        String mappingOrder =
+                IOUtils.toString(DataStoreIT.class.getResourceAsStream("/typescript/Order.entity.ts"), StandardCharsets.UTF_8);
         String mappingOrderItem =
-                IOUtils.toString(DataStoreIT.class.getResourceAsStream("/entity/OrderItem.entity"), StandardCharsets.UTF_8);
+                IOUtils.toString(DataStoreIT.class.getResourceAsStream("/typescript/OrderItem.entity.ts"), StandardCharsets.UTF_8);
 
         dataStore.addMapping("Customer", mappingCustomer);
         dataStore.addMapping("Order", mappingOrder);
