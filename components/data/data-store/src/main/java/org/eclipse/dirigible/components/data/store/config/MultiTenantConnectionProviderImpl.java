@@ -42,7 +42,6 @@ public class MultiTenantConnectionProviderImpl extends AbstractMultiTenantConnec
 
     @Override
     public Connection getAnyConnection() throws SQLException {
-        // Connection connection = this.datasource.getConnection();
         return datasourcesManager.getDefaultDataSource()
                                  .getConnection();
     }
