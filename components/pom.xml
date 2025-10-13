@@ -54,6 +54,7 @@
         <!-- Engines -->
         <module>engine/engine-javascript</module>
         <module>engine/engine-typescript</module>
+        <module>engine/engine-proxy</module>
         <module>engine/engine-python</module>
         <module>engine/engine-web</module>
         <module>engine/engine-template</module>
