@@ -41,7 +41,7 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
     private static final Logger logger = LoggerFactory.getLogger(EntitySynchronizer.class);
 
     /** The Constant FILE_EXTENSION_BPMN. */
-    public static final String FILE_EXTENSION_ENTITY = ".entity";
+    public static final String FILE_EXTENSION_ENTITY = ".entity.ts";
 
     /** The entity service. */
     private final EntityService entityService;

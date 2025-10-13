@@ -23,16 +23,19 @@ public class HbmXmlDescriptor {
     private String tableName;
     private HbmIdDescriptor id;
     private List<HbmPropertyDescriptor> properties = new ArrayList<>();
+    private List<HbmCollectionDescriptor> collections = new ArrayList<>();
 
     /** Models the id element */
     public static class HbmIdDescriptor {
         private String name;
         private String column;
+        private String type;
         private String generatorClass;
 
-        public HbmIdDescriptor(String name, String column, String generatorClass) {
+        public HbmIdDescriptor(String name, String column, String type, String generatorClass) {
             this.name = name;
             this.column = column;
+            this.type = type;
             this.generatorClass = generatorClass;
         }
 
@@ -42,6 +45,10 @@ public class HbmXmlDescriptor {
 
         public String getColumn() {
             return column;
+        }
+
+        public String getType() {
+            return type;
         }
 
         public String getGeneratorClass() {
@@ -80,6 +87,81 @@ public class HbmXmlDescriptor {
         }
     }
 
+    public static class HbmCollectionDescriptor {
+        public String name;
+        public String tableName;
+        public String joinColumn;
+        public String targetClass;
+        public boolean inverse;
+        public boolean lazy;
+        public String fetch;
+        public String cascade;
+        public boolean joinColumnNotNull;
+
+        public HbmCollectionDescriptor(String name, String tableName, String joinColumn, String targetClass, boolean inverse, boolean lazy,
+                String fetch, String cascade, boolean joinColumnNotNull) {
+            super();
+            this.name = name;
+            this.tableName = tableName;
+            this.joinColumn = joinColumn;
+            this.targetClass = targetClass;
+            this.inverse = inverse;
+            this.lazy = lazy;
+            this.fetch = fetch;
+            this.cascade = cascade;
+            this.joinColumnNotNull = joinColumnNotNull;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public String getTableName() {
+            return tableName;
+        }
+
+        public String getJoinColumn() {
+            return joinColumn;
+        }
+
+        public String getTargetClass() {
+            return targetClass;
+        }
+
+        public boolean isInverse() {
+            return inverse;
+        }
+
+        public boolean isLazy() {
+            return lazy;
+        }
+
+        public String getFetch() {
+            return fetch;
+        }
+
+        public String getCascade() {
+            return cascade;
+        }
+
+        public boolean isJoinColumnNotNull() {
+            return joinColumnNotNull;
+        }
+
+        public String serialize() {
+            StringBuilder xml = new StringBuilder();
+            xml.append(String.format("        <bag name=\"%s\" table=\"%s\" inverse=\"%s\" lazy=\"%s\" fetch=\"%s\" cascade=\"%s\">\n",
+                    name, tableName, inverse, lazy, fetch, cascade));
+            xml.append("            <key>\n");
+            xml.append(String.format("                <column name=\"%s\" not-null=\"%s\" />\n", joinColumn, joinColumnNotNull));
+            xml.append("            </key>\n");
+            xml.append(String.format("            <one-to-many class=\"%s\" />\n", targetClass));
+            xml.append("        </bag>\n");
+            return xml.toString();
+        }
+
+    }
+
     public HbmXmlDescriptor(String className, String tableName, HbmIdDescriptor id) {
         this.className = className;
         this.tableName = tableName;
@@ -88,6 +170,10 @@ public class HbmXmlDescriptor {
 
     public void addProperty(HbmPropertyDescriptor property) {
         this.properties.add(property);
+    }
+
+    public void addCollection(HbmCollectionDescriptor collection) {
+        this.collections.add(collection);
     }
 
     /**
@@ -105,11 +191,12 @@ public class HbmXmlDescriptor {
         xml.append("<hibernate-mapping>\n");
 
         // --- Class Element ---
-        xml.append(String.format("    <class name=\"%s\" table=\"%s\">\n", this.className, this.tableName));
+        xml.append(String.format("    <class entity-name=\"%s\" table=\"%s\">\n", this.className, this.tableName));
 
         // --- ID Element ---
         HbmIdDescriptor idDesc = this.id;
-        xml.append(String.format("        <id name=\"%s\" column=\"%s\">\n", idDesc.getName(), idDesc.getColumn()));
+        xml.append(String.format("        <id name=\"%s\" column=\"%s\" type=\"%s\">\n", idDesc.getName(), idDesc.getColumn(),
+                idDesc.getType()));
         xml.append(String.format("            <generator class=\"%s\"/>\n", idDesc.getGeneratorClass()));
         xml.append("        </id>\n");
 
@@ -118,6 +205,11 @@ public class HbmXmlDescriptor {
             String lengthAttr = prop.getLength() != null ? String.format(" length=\"%d\"", prop.getLength()) : "";
             xml.append(String.format("        <property name=\"%s\" column=\"%s\" type=\"%s\"%s/>\n", prop.getName(), prop.getColumn(),
                     prop.getType(), lengthAttr));
+        }
+
+        // --- Collection Elements ---
+        for (HbmCollectionDescriptor collection : this.collections) {
+            xml.append(collection.serialize());
         }
 
         xml.append("    </class>\n");
@@ -130,7 +222,7 @@ public class HbmXmlDescriptor {
         // --- 1. Define Model Programmatically (Serialization Test) ---
 
         // Create the ID descriptor
-        HbmIdDescriptor id = new HbmIdDescriptor("id", "CAR_ID", "native");
+        HbmIdDescriptor id = new HbmIdDescriptor("id", "CAR_ID", "long", "native");
 
         // Create the main descriptor
         HbmXmlDescriptor carMapping = new HbmXmlDescriptor("com.example.Car", "T_CARS", id);

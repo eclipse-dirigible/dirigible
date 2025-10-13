@@ -12,7 +12,6 @@ package org.eclipse.dirigible.components.data.store;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
-import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +24,10 @@ import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.store.config.CurrentTenantIdentifierResolverImpl;
 import org.eclipse.dirigible.components.data.store.config.MultiTenantConnectionProviderImpl;
+import org.eclipse.dirigible.components.data.store.hbm.EntityToHbmMapper;
+import org.eclipse.dirigible.components.data.store.hbm.HbmXmlDescriptor;
+import org.eclipse.dirigible.components.data.store.model.EntityMetadata;
+import org.eclipse.dirigible.components.data.store.parser.EntityParser;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.hibernate.Transaction;
@@ -186,7 +189,17 @@ public class DataStore {
      * @param value the value
      */
     private void addInputStreamToConfig(Configuration configuration, String key, String value) {
-        try (InputStream inputStream = IOUtils.toInputStream(EntityTransformer.fromEntity(value), StandardCharsets.UTF_8)) {
+        String entityDescriptor;
+        try {
+            EntityParser parser = new EntityParser();
+            EntityMetadata metadata = parser.parse(value);
+            HbmXmlDescriptor hbm = EntityToHbmMapper.map(metadata);
+            entityDescriptor = hbm.serialize();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+        logger.error("Adding entity descriptor:\n" + entityDescriptor);
+        try (InputStream inputStream = IOUtils.toInputStream(entityDescriptor, StandardCharsets.UTF_8)) {
             configuration.addInputStream(inputStream);
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to add input stream to configuration for [" + key + "]: [" + value + "]", ex);

@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.parsers.typescript;
 
-import org.eclipse.dirigible.parsers.typescript.TypeScriptParserBaseVisitor;
 import org.eclipse.dirigible.parsers.typescript.TypeScriptParser.ClassDeclarationContext;
 
 public class ClassNameExtractorVisitor extends TypeScriptParserBaseVisitor<String> {

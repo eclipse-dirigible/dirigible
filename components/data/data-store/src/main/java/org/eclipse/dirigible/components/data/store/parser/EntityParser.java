@@ -18,6 +18,7 @@ import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata;
+import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.CollectionDetails;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.ColumnDetails;
 import org.eclipse.dirigible.components.data.store.model.EntityMetadata;
 import org.eclipse.dirigible.parsers.typescript.TypeScriptLexer;
@@ -89,6 +90,39 @@ public class EntityParser {
             return null;
         }
 
+        // Helper to get value for a key in a simple object literal string
+        private java.util.function.BiFunction<String, String, String> extractValue = (source, key) -> {
+            // Look for key:
+            String pattern = key + ":";
+            if (source.contains(pattern)) {
+                // Start after the key and colon
+                String valueSegment = source.substring(source.indexOf(pattern) + pattern.length())
+                                            .trim();
+
+                // Finds end of value (comma or closing brace)
+                int end = valueSegment.indexOf(",");
+                if (end == -1)
+                    end = valueSegment.length(); // Go to end of string if no comma
+
+                // Extract, strip whitespace and quotes, and remove surrounding braces
+                String value = valueSegment.substring(0, end)
+                                           .trim()
+                                           .replace("{", "")
+                                           .replace("}", "")
+                                           .replace("'", "")
+                                           .replace("\"", "");
+
+                // Handle boolean or numeric primitives
+                if (value.equalsIgnoreCase("true") || value.equalsIgnoreCase("false") || value.matches("-?\\d+(\\.\\d+)?")) {
+                    return value;
+                }
+
+                // Return original value (may still contain quotes, removed above)
+                return value;
+            }
+            return null;
+        };
+
         @Override
         public EntityMetadata visitClassDeclaration(TypeScriptParser.ClassDeclarationContext ctx) {
 
@@ -154,7 +188,6 @@ public class EntityParser {
                                              .argumentList()
                                              .argument(0)
                                              .getText();
-
                     // Simplified: search for "name:" and extract value (removes quotes)
                     if (tableArgText.contains("name:")) {
                         String nameValue = tableArgText.substring(tableArgText.indexOf("name:") + 5)
@@ -168,6 +201,10 @@ public class EntityParser {
                                                 .replace("'", "")
                                                 .replace("\"", "");
                         currentEntityMetadata.setTableName(value);
+                    } else {
+                        currentEntityMetadata.setTableName(tableArgText.trim()
+                                                                       .replace("'", "")
+                                                                       .replace("\"", ""));
                     }
                 }
             }
@@ -274,32 +311,6 @@ public class EntityParser {
                                         .argument(0)
                                         .getText();
 
-                    // Helper to get value for a key in a simple object literal string
-                    java.util.function.BiFunction<String, String, String> extractValue = (source, key) -> {
-                        // Look for key:
-                        String pattern = key + ":";
-                        if (source.contains(pattern)) {
-                            // Start after the key and colon
-                            String valueSegment = source.substring(source.indexOf(pattern) + pattern.length())
-                                                        .trim();
-
-                            // Finds end of value (comma or closing brace)
-                            int end = valueSegment.indexOf(",");
-                            if (end == -1)
-                                end = valueSegment.length() - 1;
-
-                            // Extract, strip whitespace and quotes, and remove surrounding braces
-                            String value = valueSegment.substring(0, end)
-                                                       .trim()
-                                                       .replace("{", "")
-                                                       .replace("}", "")
-                                                       .replace("'", "")
-                                                       .replace("\"", "");
-                            return value;
-                        }
-                        return null;
-                    };
-
                     String name = extractValue.apply(argText, "name");
                     if (name != null)
                         columnDetails.setColumnName(name);
@@ -325,44 +336,80 @@ public class EntityParser {
                     if (defaultValue != null)
                         columnDetails.setDefaultValue(defaultValue);
                 }
+            } else if ("OneToMany".equals(decoratorName)) {
+                // Expects @OneToMany(() => OrderItem, { table: '...', joinColumn: '...', ... })
+                if (ctx.decoratorCallExpression() != null && ctx.decoratorCallExpression()
+                                                                .arguments() != null
+                        && ctx.decoratorCallExpression()
+                              .arguments()
+                              .argumentList()
+                              .argument()
+                              .size() >= 1) {
+
+                    List<TypeScriptParser.ArgumentContext> args = ctx.decoratorCallExpression()
+                                                                     .arguments()
+                                                                     .argumentList()
+                                                                     .argument();
+
+                    // 1. Extract Target Class (from the first argument: () => ClassName)
+                    String targetClassExpression = args.get(0)
+                                                       .getText();
+                    String targetClassName = targetClassExpression.replace("()", "")
+                                                                  .replace("=>", "")
+                                                                  .trim();
+
+                    // Simple cleanup
+                    if (targetClassName.contains(" ")) {
+                        targetClassName = targetClassName.substring(targetClassName.lastIndexOf(" ") + 1)
+                                                         .trim();
+                    }
+
+                    // Create and set collection details
+                    CollectionDetails collectionDetails = new CollectionDetails();
+                    collectionDetails.setTargetClass(targetClassName);
+                    fieldMetadata.setCollectionDetails(collectionDetails);
+                    fieldMetadata.setCollection(true); // Mark as a collection
+
+                    // 2. Parse options object (second argument)
+                    if (args.size() > 1) {
+                        String argText = args.get(1)
+                                             .getText(); // The options object text (e.g., { table: '...', ... })
+
+                        String name = extractValue.apply(argText, "name");
+                        if (name != null)
+                            collectionDetails.setTableName(name);
+
+                        String tableName = extractValue.apply(argText, "table");
+                        if (tableName != null)
+                            collectionDetails.setTableName(tableName);
+
+                        String joinColumn = extractValue.apply(argText, "joinColumn");
+                        if (joinColumn != null)
+                            collectionDetails.setJoinColumn(joinColumn);
+
+                        String cascade = extractValue.apply(argText, "cascade");
+                        if (cascade != null)
+                            collectionDetails.setCascade(cascade);
+
+                        String inverse = extractValue.apply(argText, "inverse");
+                        if (inverse != null)
+                            collectionDetails.setInverse(Boolean.parseBoolean(inverse));
+
+                        String lazy = extractValue.apply(argText, "lazy");
+                        if (lazy != null)
+                            collectionDetails.setLazy(Boolean.parseBoolean(lazy));
+
+                        String fetch = extractValue.apply(argText, "fetch");
+                        if (fetch != null)
+                            collectionDetails.setFetch(fetch);
+
+                        String joinColumnNotNull = extractValue.apply(argText, "joinColumnNotNull");
+                        if (joinColumnNotNull != null)
+                            collectionDetails.setJoinColumnNotNull(Boolean.parseBoolean(joinColumnNotNull));
+                    }
+                }
             }
         }
     }
 
-    public static void main(String[] args) {
-        // Test case based on the requirements
-        String carTsCode = "@Entity('CarEntity')\n" + "@Table({ name: 'CARS' })\n" + "export class Car {\n" + "\n" + "    @Id()\n"
-                + "    @Generated('sequence')\n" + "    @Column({ name: 'car_id', type: 'int' })\n" + "    id: number;\n" + "\n"
-                + "    @Column({ type: 'varchar', length: 255 })\n" + "    make: string;\n" + "\n"
-                + "    @Column({ type: 'decimal', nullable: true })\n" + "    price: number | null;\n" + "\n"
-                + "    @Column({ name: 'is_electric', type: 'boolean', defaultValue: 'false' })\n" + "    isElectric: boolean = false;\n"
-                + "}";
-
-        EntityParser parser = new EntityParser();
-        EntityMetadata metadata = parser.parse(carTsCode);
-
-        System.out.println("--- Extracted Entity Metadata ---");
-        System.out.println("Class Name: " + metadata.getClassName());
-        System.out.println("Entity Name: " + metadata.getEntityName());
-        System.out.println("Table Name: " + metadata.getTableName());
-        System.out.println("---------------------------------");
-
-        for (EntityFieldMetadata field : metadata.getFields()) {
-            System.out.printf("Property: %s (%s)\n", field.getPropertyName(), field.getTypeScriptType());
-            System.out.printf("  Is ID: %s\n", field.isIdentifier());
-            if (field.getGenerationStrategy() != null) {
-                System.out.printf("  Strategy: %s\n", field.getGenerationStrategy());
-            }
-            if (field.getColumnDetails() != null) {
-                ColumnDetails cd = field.getColumnDetails();
-                System.out.printf("  Column: %s, Type: %s, Length: %s, Nullable: %s, Default: %s\n",
-                        cd.getColumnName() != null ? cd.getColumnName() : field.getPropertyName(), cd.getDatabaseType(),
-                        cd.getLength() != null ? cd.getLength()
-                                                   .toString()
-                                : "N/A",
-                        cd.isNullable(), cd.getDefaultValue());
-            }
-            System.out.println();
-        }
-    }
 }

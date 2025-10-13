@@ -24,33 +24,6 @@ import org.junit.Test;
 
 public class TypeScriptParserTest {
 
-    // @Test
-    // public void parseClass() throws IOException {
-    //
-    //
-    // CharStream inputStream = CharStreams.fromString(tsSource);
-    // TypeScriptLexer typeScriptLexer = new TypeScriptLexer(inputStream);
-    // CommonTokenStream tokenStream = new CommonTokenStream(typeScriptLexer);
-    // TypeScriptParser typeScriptParser = new TypeScriptParser(tokenStream);
-    // typeScriptParser.setBuildParseTree(true);
-    // ParseTree parseTree = typeScriptParser.program();
-    //
-    // processTree(parseTree);
-    //
-    // TypeScriptParserListener typeScriptParserListener = new TypeScriptParserListener();
-    // // ParseTreeWalker parseTreeWalker = new ParseTreeWalker();
-    // // parseTreeWalker.walk(typeScriptParserListener, parseTree);
-    // //
-    // // TypeScriptParser model = typeScriptParserListener.getModel();
-    // // model.checkForAllMandatoryFieldsPresence();
-    //
-    // }
-    //
-    // private static void processTree(ParseTree tree) {
-    // // Example: Print the tree structure (useful for debugging)
-    // System.out.println(tree.toStringTree(new TypeScriptParser(null)));
-    // }
-
     private ParseTree setupParser(String code) {
         CharStream input = CharStreams.fromString(code);
         TypeScriptLexer lexer = new TypeScriptLexer(input);

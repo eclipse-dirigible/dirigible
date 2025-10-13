@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.data.store.hbm;
 
 import org.eclipse.dirigible.components.data.store.hbm.HbmXmlDescriptor.HbmIdDescriptor;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata;
+import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.CollectionDetails;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.ColumnDetails;
 import org.eclipse.dirigible.components.data.store.model.EntityMetadata;
 
@@ -25,8 +26,10 @@ public class EntityToHbmMapper {
                                                     .stream()
                                                     .filter(EntityFieldMetadata::isIdentifier)
                                                     .findFirst()
-                                                    .orElseThrow(() -> new IllegalArgumentException("Entity must have an @Id field."));
+                                                    .orElseThrow(() -> new IllegalArgumentException(
+                                                            "Entity must have an @Id field.\n" + entityMetadata.getEntityName()));
 
+        ColumnDetails idCd = idField.getColumnDetails();
         HbmIdDescriptor idDesc = new HbmIdDescriptor(idField.getPropertyName(),
                 // Use ColumnDetails name, falling back to property name if null
                 idField.getColumnDetails()
@@ -34,7 +37,7 @@ public class EntityToHbmMapper {
                                                          .getColumnName()
                                : idField.getPropertyName()
                                         .toUpperCase(),
-                mapGenerationStrategy(idField.getGenerationStrategy()));
+                mapType(idField.getTypeScriptType(), idCd.getDatabaseType()), mapGenerationStrategy(idField.getGenerationStrategy()));
 
         String className = entityMetadata.getClassName();
         String tableName = entityMetadata.getTableName();
@@ -52,16 +55,25 @@ public class EntityToHbmMapper {
                       .stream()
                       .filter(f -> !f.isIdentifier()) // Exclude the ID field, as it's already mapped
                       .forEach(field -> {
-                          ColumnDetails cd = field.getColumnDetails();
+                          if (!field.isCollection()) {
+                              ColumnDetails cd = field.getColumnDetails();
 
-                          String mappedColumnName = cd.getColumnName() != null ? cd.getColumnName()
-                                  : field.getPropertyName()
-                                         .toUpperCase();
+                              String mappedColumnName = cd.getColumnName() != null ? cd.getColumnName()
+                                      : field.getPropertyName()
+                                             .toUpperCase();
 
-                          HbmXmlDescriptor.HbmPropertyDescriptor propDesc =
-                                  new HbmXmlDescriptor.HbmPropertyDescriptor(field.getPropertyName(), mappedColumnName,
-                                          mapType(field.getTypeScriptType(), cd.getDatabaseType()), cd.getLength());
-                          hbmDesc.addProperty(propDesc);
+                              HbmXmlDescriptor.HbmPropertyDescriptor propDesc =
+                                      new HbmXmlDescriptor.HbmPropertyDescriptor(field.getPropertyName(), mappedColumnName,
+                                              mapType(field.getTypeScriptType(), cd.getDatabaseType()), cd.getLength());
+                              hbmDesc.addProperty(propDesc);
+                          } else {
+                              CollectionDetails cd = field.getCollectionDetails();
+                              String mappedName = cd.getName() != null ? cd.getName() : field.getPropertyName();
+                              HbmXmlDescriptor.HbmCollectionDescriptor collDesc = new HbmXmlDescriptor.HbmCollectionDescriptor(mappedName,
+                                      cd.getTableName(), cd.getJoinColumn(), cd.getTargetClass(), cd.isInverse(), cd.isLazy(),
+                                      cd.getFetch(), cd.getCascade(), cd.isJoinColumnNotNull());
+                              hbmDesc.addCollection(collDesc);
+                          }
                       });
 
         return hbmDesc;
@@ -117,15 +129,10 @@ public class EntityToHbmMapper {
         };
     }
 
-    /** Simple mapping from common generation strategies to Hibernate generator class. */
     private static String mapGenerationStrategy(String strategy) {
         if (strategy == null)
             return "assigned";
-        return switch (strategy.toLowerCase()) {
-            case "sequence", "uuid", "increment", "auto" -> "native"; // native is often used for db-specific sequence/identity
-            case "identity" -> "identity";
-            default -> "assigned";
-        };
+        return strategy.toLowerCase();
     }
 
 }
