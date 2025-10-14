@@ -32,7 +32,7 @@ public class DataStoreIT extends IntegrationTest {
 
     @BeforeEach
     public void setup() throws Exception {
-    	String mappingCustomer =
+        String mappingCustomer =
                 IOUtils.toString(DataStoreIT.class.getResourceAsStream("/typescript/Customer.entity.ts"), StandardCharsets.UTF_8);
         String mappingOrder =
                 IOUtils.toString(DataStoreIT.class.getResourceAsStream("/typescript/Order.entity.ts"), StandardCharsets.UTF_8);
