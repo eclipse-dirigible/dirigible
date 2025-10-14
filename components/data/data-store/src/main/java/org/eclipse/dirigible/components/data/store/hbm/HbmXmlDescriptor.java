@@ -19,18 +19,24 @@ import java.util.List;
  */
 public class HbmXmlDescriptor {
 
-    private String className;
-    private String tableName;
-    private HbmIdDescriptor id;
-    private List<HbmPropertyDescriptor> properties = new ArrayList<>();
-    private List<HbmCollectionDescriptor> collections = new ArrayList<>();
+    private final String className;
+    private final String tableName;
+    private final HbmIdDescriptor id;
+    private final List<HbmPropertyDescriptor> properties = new ArrayList<>();
+    private final List<HbmCollectionDescriptor> collections = new ArrayList<>();
+
+    public HbmXmlDescriptor(String className, String tableName, HbmIdDescriptor id) {
+        this.className = className;
+        this.tableName = tableName;
+        this.id = id;
+    }
 
     /** Models the id element */
     public static class HbmIdDescriptor {
-        private String name;
-        private String column;
-        private String type;
-        private String generatorClass;
+        private final String name;
+        private final String column;
+        private final String type;
+        private final String generatorClass;
 
         public HbmIdDescriptor(String name, String column, String type, String generatorClass) {
             this.name = name;
@@ -56,12 +62,13 @@ public class HbmXmlDescriptor {
         }
     }
 
+
     /** Models a property element */
     public static class HbmPropertyDescriptor {
-        private String name;
-        private String column;
-        private String type;
-        private Integer length;
+        private final String name;
+        private final String column;
+        private final String type;
+        private final Integer length;
 
         public HbmPropertyDescriptor(String name, String column, String type, Integer length) {
             this.name = name;
@@ -86,6 +93,7 @@ public class HbmXmlDescriptor {
             return length;
         }
     }
+
 
     public static class HbmCollectionDescriptor {
         public String name;
@@ -149,23 +157,14 @@ public class HbmXmlDescriptor {
         }
 
         public String serialize() {
-            StringBuilder xml = new StringBuilder();
-            xml.append(String.format("        <bag name=\"%s\" table=\"%s\" inverse=\"%s\" lazy=\"%s\" fetch=\"%s\" cascade=\"%s\">\n",
-                    name, tableName, inverse, lazy, fetch, cascade));
-            xml.append("            <key>\n");
-            xml.append(String.format("                <column name=\"%s\" not-null=\"%s\" />\n", joinColumn, joinColumnNotNull));
-            xml.append("            </key>\n");
-            xml.append(String.format("            <one-to-many class=\"%s\" />\n", targetClass));
-            xml.append("        </bag>\n");
-            return xml.toString();
+            String xml = String.format("        <bag name=\"%s\" table=\"%s\" inverse=\"%s\" lazy=\"%s\" fetch=\"%s\" cascade=\"%s\">\n",
+                    name, tableName, inverse, lazy, fetch, cascade) + "            <key>\n"
+                    + String.format("                <column name=\"%s\" not-null=\"%s\" />\n", joinColumn, joinColumnNotNull)
+                    + "            </key>\n" + String.format("            <one-to-many class=\"%s\" />\n", targetClass)
+                    + "        </bag>\n";
+            return xml;
         }
 
-    }
-
-    public HbmXmlDescriptor(String className, String tableName, HbmIdDescriptor id) {
-        this.className = className;
-        this.tableName = tableName;
-        this.id = id;
     }
 
     public void addProperty(HbmPropertyDescriptor property) {
@@ -216,25 +215,6 @@ public class HbmXmlDescriptor {
         xml.append("</hibernate-mapping>\n");
 
         return xml.toString();
-    }
-
-    public static void main(String[] args) {
-        // --- 1. Define Model Programmatically (Serialization Test) ---
-
-        // Create the ID descriptor
-        HbmIdDescriptor id = new HbmIdDescriptor("id", "CAR_ID", "long", "native");
-
-        // Create the main descriptor
-        HbmXmlDescriptor carMapping = new HbmXmlDescriptor("com.example.Car", "T_CARS", id);
-
-        // Add properties
-        carMapping.addProperty(new HbmPropertyDescriptor("make", "MAKE_NAME", "string", 255));
-        carMapping.addProperty(new HbmPropertyDescriptor("model", "MODEL_NAME", "string", null)); // Null length
-        carMapping.addProperty(new HbmPropertyDescriptor("price", "DAILY_RATE", "big_decimal", null));
-
-        String serializedXml = carMapping.serialize();
-        System.out.println(serializedXml);
-
     }
 
 }

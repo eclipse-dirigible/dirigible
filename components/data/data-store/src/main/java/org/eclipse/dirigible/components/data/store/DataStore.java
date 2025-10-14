@@ -9,16 +9,6 @@
  */
 package org.eclipse.dirigible.components.data.store;
 
-import java.io.InputStream;
-import java.io.Serializable;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import javax.sql.DataSource;
-
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
@@ -42,6 +32,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
+import javax.sql.DataSource;
+import java.io.InputStream;
+import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
  * The Class ObjectStore.
  */
@@ -51,39 +50,20 @@ public class DataStore {
 
     /** The Constant LOGGER. */
     private static final Logger logger = LoggerFactory.getLogger(DataStore.class);
-
-    /** the session factory */
-    private SessionFactory sessionFactory;
-
-    /** The default datasource */
-    private DataSource dataSource;
-
     /** The datasources manager. */
     private final DataSourcesManager datasourcesManager;
-
     /** The connection provider */
     private final MultiTenantConnectionProviderImpl connectionProvider;
-
     /** The tenant identifier resolver */
     private final CurrentTenantIdentifierResolverImpl tenantIdentifierResolver;
-
     /** The mappings. */
     private final Map<String, String> mappings = new HashMap<>();
-
     /** The counter for mapings changes */
     private final AtomicInteger counter = new AtomicInteger(0);
-
-    int getCounter() {
-        return counter.get();
-    }
-
-    void incrementCounter() {
-        counter.incrementAndGet();
-    }
-
-    void resetCounter() {
-        counter.set(0);
-    }
+    /** The default datasource */
+    private final DataSource dataSource;
+    /** the session factory */
+    private SessionFactory sessionFactory;
 
     /**
      * Instantiates a new object store.
@@ -99,10 +79,6 @@ public class DataStore {
         this.tenantIdentifierResolver = tenantIdentifierResolver;
     }
 
-    public DataSource getDataSource() {
-        return dataSource;
-    }
-
     /**
      * Gets the datasources manager.
      *
@@ -110,14 +86,6 @@ public class DataStore {
      */
     public DataSourcesManager getDatasourcesManager() {
         return datasourcesManager;
-    }
-
-    public MultiTenantConnectionProviderImpl getConnectionProvider() {
-        return connectionProvider;
-    }
-
-    public CurrentTenantIdentifierResolverImpl getTenantIdentifierResolver() {
-        return tenantIdentifierResolver;
     }
 
     /**
@@ -131,6 +99,10 @@ public class DataStore {
         incrementCounter();
     }
 
+    void incrementCounter() {
+        counter.incrementAndGet();
+    }
+
     /**
      * Removes the mapping.
      *
@@ -139,6 +111,46 @@ public class DataStore {
     public void removeMapping(String name) {
         mappings.remove(name);
         incrementCounter();
+    }
+
+    /**
+     * Save.
+     *
+     * @param type the type
+     * @param json the json
+     * @return the identifier
+     */
+    public Object save(String type, String json) {
+        Map object = JsonHelper.fromJson(json, Map.class);
+        return save(type, object);
+    }
+
+    /**
+     * Save.
+     *
+     * @param type the type
+     * @param object the object
+     * @return the identifier
+     */
+    public Object save(String type, Map object) {
+        try (Session session = getSessionFactory().openSession()) {
+            Transaction transaction = session.beginTransaction();
+            Object id = session.save(type, object);
+            transaction.commit();
+            return id;
+        }
+    }
+
+    /**
+     * Getter for Session Factory
+     *
+     * @return the Session Factory
+     */
+    SessionFactory getSessionFactory() {
+        if (sessionFactory == null) {
+            recreate();
+        }
+        return sessionFactory;
     }
 
     /**
@@ -169,16 +181,24 @@ public class DataStore {
         }
     }
 
-    /**
-     * Getter for Session Factory
-     *
-     * @return the Session Factory
-     */
-    SessionFactory getSessionFactory() {
-        if (sessionFactory == null) {
-            recreate();
-        }
-        return sessionFactory;
+    int getCounter() {
+        return counter.get();
+    }
+
+    void resetCounter() {
+        counter.set(0);
+    }
+
+    public DataSource getDataSource() {
+        return dataSource;
+    }
+
+    public MultiTenantConnectionProviderImpl getConnectionProvider() {
+        return connectionProvider;
+    }
+
+    public CurrentTenantIdentifierResolverImpl getTenantIdentifierResolver() {
+        return tenantIdentifierResolver;
     }
 
     /**
@@ -198,39 +218,11 @@ public class DataStore {
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
-        logger.error("Adding entity descriptor:\n" + entityDescriptor);
+        logger.info("Adding entity descriptor:\n{}", entityDescriptor);
         try (InputStream inputStream = IOUtils.toInputStream(entityDescriptor, StandardCharsets.UTF_8)) {
             configuration.addInputStream(inputStream);
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to add input stream to configuration for [" + key + "]: [" + value + "]", ex);
-        }
-    }
-
-    /**
-     * Save.
-     *
-     * @param type the type
-     * @param json the json
-     * @return the identifier
-     */
-    public Object save(String type, String json) {
-        Map object = JsonHelper.fromJson(json, Map.class);
-        return save(type, object);
-    }
-
-    /**
-     * Save.
-     *
-     * @param type the type
-     * @param object the object
-     * @return the identifier
-     */
-    public Object save(String type, Map object) {
-        try (Session session = getSessionFactory().openSession()) {
-            Transaction transaction = session.beginTransaction();
-            Object id = session.save(type, object);
-            transaction.commit();
-            return id;
         }
     }
 
