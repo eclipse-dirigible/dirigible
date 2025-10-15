@@ -124,7 +124,7 @@ public class ExtensionsSynchronizer extends BaseSynchronizer<Extension, Long> {
      */
     @Override
     public List<Extension> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**

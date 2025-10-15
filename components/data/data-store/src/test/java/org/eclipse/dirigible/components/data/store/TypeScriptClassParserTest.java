@@ -27,7 +27,7 @@ public class TypeScriptClassParserTest {
 
     @Test
     public void parserTest() throws IOException {
-        String carTsCode = IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/Car.entity.ts"), StandardCharsets.UTF_8);
+        String carTsCode = IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/CarEntity.ts"), StandardCharsets.UTF_8);
 
         EntityParser parser = new EntityParser();
         EntityMetadata metadata = parser.parse(carTsCode);
@@ -74,7 +74,7 @@ public class TypeScriptClassParserTest {
 
     @Test
     public void mapperTest() throws IOException {
-        String carTsCode = IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/Car.entity.ts"), StandardCharsets.UTF_8);
+        String carTsCode = IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/CarEntity.ts"), StandardCharsets.UTF_8);
 
         EntityParser parser = new EntityParser();
         EntityMetadata metadata = parser.parse(carTsCode);
@@ -87,7 +87,7 @@ public class TypeScriptClassParserTest {
 
     @Test
     public void mapperBagTest() throws IOException {
-        String carTsCode = IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/Order.entity.ts"), StandardCharsets.UTF_8);
+        String carTsCode = IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/OrderEntity.ts"), StandardCharsets.UTF_8);
 
         EntityParser parser = new EntityParser();
         EntityMetadata metadata = parser.parse(carTsCode);

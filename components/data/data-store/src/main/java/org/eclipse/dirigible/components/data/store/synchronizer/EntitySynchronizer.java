@@ -41,7 +41,7 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
     private static final Logger logger = LoggerFactory.getLogger(EntitySynchronizer.class);
 
     /** The Constant FILE_EXTENSION_BPMN. */
-    public static final String FILE_EXTENSION_ENTITY = ".entity.ts";
+    public static final String FILE_EXTENSION_ENTITY = "Entity.ts";
 
     /** The entity service. */
     private final EntityService entityService;
@@ -101,14 +101,14 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
                             .toString());
         entity.setType(Entity.ARTEFACT_TYPE);
         entity.updateKey();
-        entity.setContent(content);
+        entity.setContent(new String(content));
         try {
             Entity maybe = getService().findByKey(entity.getKey());
             if (maybe != null) {
                 entity.setId(maybe.getId());
             }
             entity = getService().save(entity);
-            entity.setContent(content);
+            entity.setContent(new String(content));
         } catch (Exception e) {
             if (logger.isErrorEnabled()) {
                 logger.error(e.getMessage(), e);
@@ -142,7 +142,7 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
      */
     @Override
     public List<Entity> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**
@@ -203,6 +203,16 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
                 }
                 break;
             case START:
+                if (ArtefactLifecycle.CREATED.equals(entity.getLifecycle()) || ArtefactLifecycle.UPDATED.equals(entity.getLifecycle())) {
+                    if (entity.getRunning() == null || !entity.getRunning()) {
+                        try {
+                            dataStore.addMapping(entity.getKey(), prepareContent(entity));
+                        } catch (Exception e) {
+                            callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, e);
+                        }
+                    }
+                }
+                break;
             case STOP:
         }
 
@@ -216,7 +226,7 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
      * @return the string
      */
     public String prepareContent(Entity entity) {
-        return new String(entity.getContent(), StandardCharsets.UTF_8);
+        return entity.getContent();
     }
 
     /**

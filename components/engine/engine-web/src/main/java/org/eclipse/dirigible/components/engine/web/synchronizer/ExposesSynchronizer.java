@@ -142,7 +142,7 @@ public class ExposesSynchronizer extends BaseSynchronizer<Expose, Long> {
      */
     @Override
     public List<Expose> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**

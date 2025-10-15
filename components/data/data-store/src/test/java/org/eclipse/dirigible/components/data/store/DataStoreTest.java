@@ -102,11 +102,11 @@ public class DataStoreTest {
         assertNotNull(dataSource);
         setupMocks();
         String mappingCustomer =
-                IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/Customer.entity.ts"), StandardCharsets.UTF_8);
+                IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/CustomerEntity.ts"), StandardCharsets.UTF_8);
         String mappingOrder =
-                IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/Order.entity.ts"), StandardCharsets.UTF_8);
+                IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/OrderEntity.ts"), StandardCharsets.UTF_8);
         String mappingOrderItem =
-                IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/OrderItem.entity.ts"), StandardCharsets.UTF_8);
+                IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/OrderItemEntity.ts"), StandardCharsets.UTF_8);
 
         dataStore.addMapping("Customer", mappingCustomer);
         dataStore.addMapping("Order", mappingOrder);

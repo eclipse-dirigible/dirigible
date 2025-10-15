@@ -161,7 +161,7 @@ public class JobSynchronizer extends MultitenantBaseSynchronizer<Job, Long> {
      */
     @Override
     public List<Job> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**

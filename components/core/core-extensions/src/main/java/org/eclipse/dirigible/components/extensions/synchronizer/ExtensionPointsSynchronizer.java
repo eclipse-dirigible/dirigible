@@ -124,7 +124,7 @@ public class ExtensionPointsSynchronizer extends BaseSynchronizer<ExtensionPoint
      */
     @Override
     public List<ExtensionPoint> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**

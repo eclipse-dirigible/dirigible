@@ -112,7 +112,7 @@ public class ListenerSynchronizer extends MultitenantBaseSynchronizer<Listener, 
      */
     @Override
     public List<Listener> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**

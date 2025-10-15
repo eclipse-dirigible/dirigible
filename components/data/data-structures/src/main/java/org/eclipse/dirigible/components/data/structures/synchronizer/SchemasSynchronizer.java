@@ -414,7 +414,7 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
      */
     @Override
     public List<Schema> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**

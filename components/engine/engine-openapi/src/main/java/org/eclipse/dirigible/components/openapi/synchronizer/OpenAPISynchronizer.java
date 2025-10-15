@@ -134,7 +134,7 @@ public class OpenAPISynchronizer extends BaseSynchronizer<OpenAPI, Long> {
      */
     @Override
     public List<OpenAPI> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**

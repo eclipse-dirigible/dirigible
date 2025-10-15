@@ -165,7 +165,7 @@ public class MarkdownSynchronizer extends BaseSynchronizer<Markdown, Long> {
      */
     @Override
     public List<Markdown> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**

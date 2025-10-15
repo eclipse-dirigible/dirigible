@@ -115,7 +115,7 @@ public class BpmnSynchronizer extends MultitenantBaseSynchronizer<Bpmn, Long> {
      */
     @Override
     public List<Bpmn> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**

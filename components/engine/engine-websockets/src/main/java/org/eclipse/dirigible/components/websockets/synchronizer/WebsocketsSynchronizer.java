@@ -113,7 +113,7 @@ public class WebsocketsSynchronizer extends BaseSynchronizer<Websocket, Long> {
      */
     @Override
     public List<Websocket> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**

@@ -179,7 +179,7 @@ public class ODataSynchronizer extends BaseSynchronizer<OData, Long> {
      */
     @Override
     public List<OData> retrieve(String location) {
-        List<OData> list = getService().getAll();
+        List<OData> list = getService().findByLocation(location);
         for (OData odata : list) {
             OData parsed = parseOData(location, odata.getContent());
             odata.setEntities(parsed.getEntities());

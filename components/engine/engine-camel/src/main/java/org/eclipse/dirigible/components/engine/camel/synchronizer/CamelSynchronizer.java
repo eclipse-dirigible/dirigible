@@ -126,7 +126,7 @@ public class CamelSynchronizer extends BaseSynchronizer<Camel, Long> {
      */
     @Override
     public List<Camel> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**

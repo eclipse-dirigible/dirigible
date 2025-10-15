@@ -165,7 +165,7 @@ public class ConfluenceSynchronizer extends BaseSynchronizer<Confluence, Long> {
      */
     @Override
     public List<Confluence> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**
