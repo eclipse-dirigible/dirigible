@@ -88,25 +88,25 @@ jobs:
 
       #-----------------Publish to DockerHub-------------------#
 
-      - name: Docker Login
-        run: docker login -u ${{secrets.DOCKER_USER}} -p ${{secrets.DOCKER_PASSWORD}}
-
-      - name: Push Dirigible image to Docker Hub
-        run: |
-          cd build/application
-          docker buildx build --push --tag dirigiblelabs/dirigible:${{ github.event.inputs.releaseVersion }} -o type=image --platform=linux/arm64,linux/amd64 .
+      #      - name: Docker Login
+      #        run: docker login -u ${{secrets.DOCKER_USER}} -p ${{secrets.DOCKER_PASSWORD}}
+      #
+      #      - name: Push Dirigible image to Docker Hub
+      #        run: |
+      #          cd build/application
+      #          docker buildx build --push --tag dirigiblelabs/dirigible:${{ github.event.inputs.releaseVersion }} -o type=image --platform=linux/arm64,linux/amd64 .
       #-----------------Publish to DockerHub-------------------#
 
       #---------------Publish to Maven Central-----------------#
 
-      - name: Publish packages to Maven Central
-        run: |
-          mvn javadoc:jar
-          mvn deploy -P release -DskipTests -Dmaven.test.skip=true
-        env:
-          MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
-          MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
-          GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASS_PHRASE }}
+      #      - name: Publish packages to Maven Central
+      #        run: |
+      #          mvn javadoc:jar
+      #          mvn deploy -P release -DskipTests -Dmaven.test.skip=true
+      #        env:
+      #          MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+      #          MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
+      #          GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASS_PHRASE }}
 
       - name: "Git: Commit Release Version"
         run: |
