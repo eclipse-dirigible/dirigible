@@ -2,13 +2,15 @@
   "name": "@dirigiblelabs/dirigible",
   "version": "1.0.0",
   "description": "Eclipse Dirigible jar",
-  "scripts": {},
+  "scripts": {
+    "postinstall": "node postinstall.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/eclipse-dirigible/dirigible.git"
   },
   "files": [
-    "bin"
+    "postinstall.js"
   ],
   "keywords": [
     "dirigible",

@@ -7,7 +7,22 @@ This package provides a direct distribution channel for the
 official [Eclipse Dirigible](https://github.com/eclipse-dirigible/dirigible) standalone executable JAR file
 via the npm registry under the `@dirigiblelabs` organization scope.
 
-It is designed for use in environments where npm is the preferred package manager for artifact retrieval.
+It enables developers and CI/CD systems to retrieve Dirigible directly from **npm**,  
+while automatically downloading the correct JAR version during installation.
+
+---
+
+## ⚙️ How It Works
+
+When you install the package, a small **postinstall script** runs automatically and:
+
+1. Determines the package version (`package.json → version`).
+2. Downloads the corresponding Dirigible executable JAR
+3. Saves it as:
+   ```
+   @dirigiblelabs/dirigible/data/dirigible-application-executable.jar
+   ```
+4. Skips future downloads unless the npm package version changes.
 
 ---
 
@@ -15,7 +30,7 @@ It is designed for use in environments where npm is the preferred package manage
 
 Since Dirigible is a Java application, you must have the **Java Development Kit (JDK) 21 or higher** installed on your
 system to run the executable JAR. The default path of the jar is
-`@dirigiblelabs/dirigible/bin/dirigible-application-executable.jar`
+`@dirigiblelabs/dirigible/data/dirigible-application-executable.jar`
 
 ### 1. Installation
 
@@ -32,7 +47,7 @@ To run the Dirigible server, you need to execute the JAR file using the `java -j
 The executable JAR file is installed in your `node_modules` folder. You can use a one-line command to locate and run it:
 
 ```shell
-java -jar $(npm prefix)/node_modules/@dirigiblelabs/dirigible/bin/dirigible-application-executable.jar
+java -jar $(npm prefix)/node_modules/@dirigiblelabs/dirigible/data/dirigible-application-executable.jar
 ```
 
 The server will start, typically accessible at [http://localhost:8080](http://localhost:8080). Default Login `admin` /

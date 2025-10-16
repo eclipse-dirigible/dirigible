@@ -125,11 +125,6 @@ jobs:
 
       #--------------- Publish dirigible jar to NPM -----------------#
 
-      - name: Copy dirigible fat jar to NPM folder
-        run: |
-          mkdir -p ./npm/dirigible/bin
-          cp ./build/application/target/dirigible-application-${{ github.event.inputs.releaseVersion }}-executable.jar ./npm/dirigible/bin/dirigible-application-executable.jar
-
       - name: Set the new package version
         working-directory: ./npm/dirigible
         run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
