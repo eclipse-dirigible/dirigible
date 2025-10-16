@@ -4,7 +4,6 @@ const path = require("path");
 
 const { version } = require("./package.json");
 
-// Configurable download directory (default: ./data)
 const dataDir = path.join(__dirname, "data");
 const jarFile = path.join(dataDir, "dirigible-application-executable.jar");
 const versionFile = path.join(dataDir, "version.txt");
