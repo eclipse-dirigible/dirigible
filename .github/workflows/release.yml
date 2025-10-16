@@ -58,6 +58,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 18
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install TypeScript and esbuild
         run: npm install -g typescript esbuild
@@ -121,6 +122,27 @@ jobs:
           git commit -m "version set to ${{ github.event.inputs.snapshotVersion }} for development"
 
       #---------------Publish to Maven Central-----------------#
+
+      #--------------- Publish dirigible jar to NPM -----------------#
+
+      - name: Copy dirigible fat jar to NPM folder
+        run: |
+          mkdir -p ./npm/dirigible/bin
+          cp ./build/application/target/dirigible-application-${{ github.event.inputs.releaseVersion }}-executable.jar ./npm/dirigible/bin/dirigible-application-executable.jar
+
+      - name: Set the new package version
+        working-directory: ./npm/dirigible
+        run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
+
+      - name: Publish the package to npm
+        working-directory: ./npm/dirigible
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN_ORG_DIRIGIBLELABS }}
+        run: |
+          npm install
+          npm publish --access public
+
+      #--------------- Publish dirigible jar to NPM -----------------#
 
       - name: "Git: Push Changes"
         run: |
@@ -212,6 +234,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 18
+
 
       - name: Install TypeScript and esbuild
         run: npm install -g typescript esbuild

@@ -1,0 +1,22 @@
+{
+  "name": "@dirigiblelabs/dirigible",
+  "version": "1.0.0",
+  "description": "Eclipse Dirigible jar",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eclipse-dirigible/dirigible.git"
+  },
+  "files": [
+    "bin"
+  ],
+  "keywords": [
+    "dirigible",
+    "eclipse"
+  ],
+  "license": "EPL-2.0",
+  "bugs": {
+    "url": "https://github.com/eclipse-dirigible/dirigible/issues"
+  },
+  "homepage": "https://github.com/eclipse-dirigible/dirigible#readme"
+}
