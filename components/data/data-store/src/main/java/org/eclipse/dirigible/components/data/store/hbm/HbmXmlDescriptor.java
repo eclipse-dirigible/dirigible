@@ -238,6 +238,10 @@ public class HbmXmlDescriptor {
     public void addCollection(HbmCollectionDescriptor collection) {
         this.collections.add(collection);
     }
+    
+    public void addAssociation(HbmAssociationDescriptor association) {
+        this.associations.add(association);
+    }
 
     /**
      * Serializes the Java object model into the standard Hibernate *.hbm.xml format.
