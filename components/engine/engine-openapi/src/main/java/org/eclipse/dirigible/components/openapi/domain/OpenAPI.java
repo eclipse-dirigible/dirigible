@@ -33,6 +33,11 @@ public class OpenAPI extends Artefact {
     @Column(name = "OPENAPI_ID", nullable = false)
     private Long id;
 
+    /** The content. */
+    @Column(name = "OPENAPI_CONTENT", columnDefinition = "CLOB")
+    @Lob
+    private String content;
+
     /**
      * Instantiates a new open API.
      *
@@ -67,6 +72,24 @@ public class OpenAPI extends Artefact {
      */
     public void setId(Long id) {
         this.id = id;
+    }
+
+    /**
+     * Gets the content
+     *
+     * @return the content
+     */
+    public String getContent() {
+        return content;
+    }
+
+    /**
+     * Sets the content
+     *
+     * @param content the content
+     */
+    public void setContent(String content) {
+        this.content = content;
     }
 
     /**

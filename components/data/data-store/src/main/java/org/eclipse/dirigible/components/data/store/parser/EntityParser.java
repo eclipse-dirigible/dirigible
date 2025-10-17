@@ -10,13 +10,16 @@
 package org.eclipse.dirigible.components.data.store.parser;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.AssociationDetails;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.CollectionDetails;
@@ -31,14 +34,23 @@ import org.eclipse.dirigible.parsers.typescript.TypeScriptParserBaseVisitor;
  */
 public class EntityParser {
 
+    public static final Map<String, EntityMetadata> ENTITIES = new HashMap<String, EntityMetadata>();
+    public static final Map<String, String> MD5 = new HashMap<String, String>();
+
     /**
      * Parses the given TypeScript source code and extracts EntityMetadata.
      *
-     * @param tsSource The TypeScript source code string.
+     * @param source The TypeScript source code string.
      * @return EntityMetadata object populated with extracted data.
      */
-    public EntityMetadata parse(String tsSource) {
-        CharStream input = CharStreams.fromString(tsSource);
+    public EntityMetadata parse(String location, String source) {
+        String md5 = DigestUtils.md5Hex(source.getBytes());
+        String existing = MD5.get(md5);
+        if (existing != null && existing.equals(md5)) {
+            return ENTITIES.get(location);
+        }
+
+        CharStream input = CharStreams.fromString(source);
         TypeScriptLexer lexer = new TypeScriptLexer(input);
         CommonTokenStream tokens = new CommonTokenStream(lexer);
         TypeScriptParser parser = new TypeScriptParser(tokens);
@@ -49,7 +61,10 @@ public class EntityParser {
         ParseTree tree = parser.program();
 
         MetadataExtractorVisitor visitor = new MetadataExtractorVisitor();
-        return visitor.visit(tree);
+        EntityMetadata entityMetadata = visitor.visit(tree);
+        ENTITIES.put(location, entityMetadata);
+        MD5.put(location, md5);
+        return entityMetadata;
     }
 
     /**

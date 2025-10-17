@@ -30,7 +30,7 @@ public class TypeScriptClassParserTest {
         String carTsCode = IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/CarEntity.ts"), StandardCharsets.UTF_8);
 
         EntityParser parser = new EntityParser();
-        EntityMetadata metadata = parser.parse(carTsCode);
+        EntityMetadata metadata = parser.parse("/typescript/CarEntity.ts", carTsCode);
 
         System.out.println("--- Extracted Entity Metadata ---");
         System.out.println("Entity Name: " + metadata.getEntityName());
@@ -75,7 +75,7 @@ public class TypeScriptClassParserTest {
         String carTsCode = IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/CarEntity.ts"), StandardCharsets.UTF_8);
 
         EntityParser parser = new EntityParser();
-        EntityMetadata metadata = parser.parse(carTsCode);
+        EntityMetadata metadata = parser.parse("/typescript/CarEntity.ts", carTsCode);
         assertEquals("CarEntity", metadata.getEntityName());
         HbmXmlDescriptor hbm = EntityToHbmMapper.map(metadata);
         System.out.println("--- Extracted Entity Metadata as HBM XML ---");
@@ -88,7 +88,7 @@ public class TypeScriptClassParserTest {
         String carTsCode = IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/OrderEntity.ts"), StandardCharsets.UTF_8);
 
         EntityParser parser = new EntityParser();
-        EntityMetadata metadata = parser.parse(carTsCode);
+        EntityMetadata metadata = parser.parse("/typescript/OrderEntity.ts", carTsCode);
         assertEquals("Order", metadata.getEntityName());
         HbmXmlDescriptor hbm = EntityToHbmMapper.map(metadata);
         System.out.println("--- Extracted Entity Metadata as HBM XML ---");

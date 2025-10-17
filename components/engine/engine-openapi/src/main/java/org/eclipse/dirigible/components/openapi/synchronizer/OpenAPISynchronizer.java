@@ -19,6 +19,7 @@ import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.openapi.domain.OpenAPI;
+import org.eclipse.dirigible.components.openapi.generator.OpenApiGenerator;
 import org.eclipse.dirigible.components.openapi.service.OpenAPIService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +45,7 @@ public class OpenAPISynchronizer extends BaseSynchronizer<OpenAPI, Long> {
     /**
      * The Constant FILE_EXTENSION_OPENAPI.
      */
-    private static final String FILE_EXTENSION_OPENAPI = ".openapi";
+    private static final String FILE_EXTENSION_OPENAPI = "Controller.ts";
 
     /**
      * The openAPI service.
@@ -94,6 +95,8 @@ public class OpenAPISynchronizer extends BaseSynchronizer<OpenAPI, Long> {
         openAPI.setLocation(location);
         openAPI.setName(FilenameUtils.getBaseName(location));
         openAPI.setType(OpenAPI.ARTEFACT_TYPE);
+        String openApiContent = OpenApiGenerator.generate(location, new String(content));
+        openAPI.setContent(openApiContent);
         openAPI.updateKey();
         try {
             OpenAPI maybe = getService().findByKey(openAPI.getKey());
