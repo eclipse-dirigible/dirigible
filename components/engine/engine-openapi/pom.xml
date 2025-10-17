@@ -29,6 +29,14 @@
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-core-version</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-data-store</artifactId>
+        </dependency>
+        <dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-parsers-typescript</artifactId>
+    	</dependency>
 
         <dependency>
             <groupId>io.swagger.parser.v3</groupId>
