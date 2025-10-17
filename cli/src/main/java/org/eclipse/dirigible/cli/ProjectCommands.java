@@ -34,7 +34,8 @@ class ProjectCommands {
     }
 
     @ShellMethod("Run Eclipse Dirigible project")
-    String start(@ShellOption(value = {"dirigibleJarPath"}, defaultValue = ShellOption.NONE,
+    String start(
+            @ShellOption(value = {"dirigibleJarPath"}, defaultValue = ShellOption.NONE,
                     help = "Path to Eclipse Dirigible fat/uber jar.") String dirigibleJarPathOption, //
             @ShellOption(value = {"projectPath"}, defaultValue = ShellOption.NULL,
                     help = "Path to Eclipse Dirigible project. If not specified, user working directory will be used.") String projectPathOption) {
