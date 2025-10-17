@@ -68,6 +68,7 @@ public class EntityToHbmMapper {
                               String mappedName = ad.getName() != null ? ad.getName() : field.getPropertyName();
                               HbmXmlDescriptor.HbmAssociationDescriptor assDesc = new HbmXmlDescriptor.HbmAssociationDescriptor(mappedName,
                                       ad.getEntityName(), ad.getJoinColumn(), ad.getCascade(), ad.isNotNull(), ad.getLazy());
+                              hbmDesc.addAssociation(assDesc);
                           } else {
                               ColumnDetails cd = field.getColumnDetails();
 
