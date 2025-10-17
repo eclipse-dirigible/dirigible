@@ -79,7 +79,7 @@ public class OpenApiParser {
                         entityProperties.put(efm.getPropertyName(),
                                 map("type", efm.getTypeScriptType(), "description", efm.getPropertyName() + " property"));
                     }
-                    SCHEMAS.put(entityMetadata.getEntityName(), entityProperties);
+                    SCHEMAS.put(entityMetadata.getEntityName(), map("type", "object", "properties", entityProperties));
                 }
             });
         }
