@@ -1,0 +1,33 @@
+{
+  "name": "@dirigiblelabs/dirigible-cli",
+  "version": "1.0.0",
+  "description": "Eclipse Dirigible CLI",
+  "type": "module",
+  "scripts": {
+    "dirigible": "node ./bin/dirigible.js"
+  },
+  "bin": {
+    "dirigible": "./bin/dirigible.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eclipse-dirigible/dirigible.git"
+  },
+  "files": [
+    "bin"
+  ],
+  "keywords": [
+    "dirigible-cli",
+    "dirigible",
+    "cli",
+    "eclipse"
+  ],
+  "license": "EPL-2.0",
+  "bugs": {
+    "url": "https://github.com/eclipse-dirigible/dirigible/issues"
+  },
+  "homepage": "https://github.com/eclipse-dirigible/dirigible#readme",
+  "dependencies": {
+    "@dirigiblelabs/dirigible": "12.23.0"
+  }
+}
