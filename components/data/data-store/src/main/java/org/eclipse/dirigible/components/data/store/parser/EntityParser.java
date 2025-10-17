@@ -18,6 +18,7 @@ import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata;
+import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.AssociationDetails;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.CollectionDetails;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.ColumnDetails;
 import org.eclipse.dirigible.components.data.store.model.EntityMetadata;
@@ -129,7 +130,7 @@ public class EntityParser {
             TerminalNode classNameNode = ctx.identifier()
                                             .Identifier();
             if (classNameNode != null) {
-                currentEntityMetadata.setClassName(classNameNode.getText());
+                currentEntityMetadata.setEntityName(classNameNode.getText());
             }
 
             for (int i = 0; i < ctx.decoratorList()
@@ -172,8 +173,6 @@ public class EntityParser {
                         arg = arg.substring(1, arg.length() - 1);
                     }
                     currentEntityMetadata.setEntityName(arg);
-                } else {
-                    currentEntityMetadata.setEntityName(currentEntityMetadata.getClassName());
                 }
 
             } else if ("Table".equals(decoratorName)) {
@@ -286,6 +285,9 @@ public class EntityParser {
                                                                 .arguments() != null
                         && ctx.decoratorCallExpression()
                               .arguments()
+                              .argumentList() != null
+                        && ctx.decoratorCallExpression()
+                              .arguments()
                               .argumentList()
                               .argument()
                               .size() > 0) {
@@ -305,6 +307,9 @@ public class EntityParser {
                 // Expects @Column({ name: 'car_id', type: 'int', ... })
                 if (ctx.decoratorCallExpression() != null && ctx.decoratorCallExpression()
                                                                 .arguments() != null
+                        && ctx.decoratorCallExpression()
+                              .arguments()
+                              .argumentList() != null
                         && ctx.decoratorCallExpression()
                               .arguments()
                               .argumentList()
@@ -348,6 +353,9 @@ public class EntityParser {
                                                                 .arguments() != null
                         && ctx.decoratorCallExpression()
                               .arguments()
+                              .argumentList() != null
+                        && ctx.decoratorCallExpression()
+                              .arguments()
                               .argumentList()
                               .argument()
                               .size() >= 1) {
@@ -357,33 +365,21 @@ public class EntityParser {
                                                                      .argumentList()
                                                                      .argument();
 
-                    // 1. Extract Target Class (from the first argument: () => ClassName)
-                    String targetClassExpression = args.get(0)
-                                                       .getText();
-                    String targetClassName = targetClassExpression.replace("()", "")
-                                                                  .replace("=>", "")
-                                                                  .trim();
-
-                    // Simple cleanup
-                    if (targetClassName.contains(" ")) {
-                        targetClassName = targetClassName.substring(targetClassName.lastIndexOf(" ") + 1)
-                                                         .trim();
-                    }
-
                     // Create and set collection details
                     CollectionDetails collectionDetails = new CollectionDetails();
-                    collectionDetails.setTargetClass(targetClassName);
+
                     fieldMetadata.setCollectionDetails(collectionDetails);
                     fieldMetadata.setCollection(true); // Mark as a collection
 
-                    // 2. Parse options object (second argument)
-                    if (args.size() > 1) {
-                        String argText = args.get(1)
-                                             .getText(); // The options object text (e.g., { table: '...', ... })
-
+                    if (args.size() > 0) {
+                        String argText = args.get(0)
+                                             .getText();
                         String name = extractValue.apply(argText, "name");
                         if (name != null)
-                            collectionDetails.setTableName(name);
+                            collectionDetails.setName(name);
+                        String entityName = extractValue.apply(argText, "entityName");
+                        if (entityName != null)
+                            collectionDetails.setEntityName(entityName);
 
                         String tableName = extractValue.apply(argText, "table");
                         if (tableName != null)
@@ -412,6 +408,59 @@ public class EntityParser {
                         String joinColumnNotNull = extractValue.apply(argText, "joinColumnNotNull");
                         if (joinColumnNotNull != null)
                             collectionDetails.setJoinColumnNotNull(Boolean.parseBoolean(joinColumnNotNull));
+                    }
+                }
+            } else if ("ManyToOne".equals(decoratorName)) {
+                // Expects @ManyToOne(() => Customer, { column: 'CUSTOMER_FK', ... })
+                if (ctx.decoratorCallExpression() != null && ctx.decoratorCallExpression()
+                                                                .arguments() != null
+                        && ctx.decoratorCallExpression()
+                              .arguments()
+                              .argumentList() != null
+                        && ctx.decoratorCallExpression()
+                              .arguments()
+                              .argumentList()
+                              .argument()
+                              .size() >= 1) {
+
+                    List<TypeScriptParser.ArgumentContext> args = ctx.decoratorCallExpression()
+                                                                     .arguments()
+                                                                     .argumentList()
+                                                                     .argument();
+
+                    AssociationDetails associationDetails = new AssociationDetails();
+                    fieldMetadata.setAssociation(true);
+
+                    if (args.size() > 0) {
+                        String argText = args.get(0)
+                                             .getText();
+
+                        String name = extractValue.apply(argText, "name");
+                        if (name != null) {
+                            associationDetails.setName(name);
+                        }
+                        String entityName = extractValue.apply(argText, "entityName");
+                        if (entityName != null) {
+                            associationDetails.setEntityName(entityName);
+                        }
+                        String column = extractValue.apply(argText, "column");
+                        if (column != null) {
+                            associationDetails.setJoinColumn(column);
+                        }
+                        String notNull = extractValue.apply(argText, "notNull");
+                        if (notNull != null) {
+                            associationDetails.setNotNull(Boolean.parseBoolean(notNull));
+                        }
+                        String cascade = extractValue.apply(argText, "cascade");
+                        if (cascade != null) {
+                            associationDetails.setCascade(cascade);
+                        }
+                        String lazy = extractValue.apply(argText, "lazy");
+                        if (lazy != null) {
+                            associationDetails.setLazy(lazy);
+                        }
+
+                        fieldMetadata.setAssociationDetails(associationDetails);
                     }
                 }
             }

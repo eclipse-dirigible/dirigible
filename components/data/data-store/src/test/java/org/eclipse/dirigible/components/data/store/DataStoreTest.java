@@ -103,12 +103,15 @@ public class DataStoreTest {
         setupMocks();
         String mappingCustomer =
                 IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/CustomerEntity.ts"), StandardCharsets.UTF_8);
+        String mappingCustomerAddress =
+                IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/CustomerAddressEntity.ts"), StandardCharsets.UTF_8);
         String mappingOrder =
                 IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/OrderEntity.ts"), StandardCharsets.UTF_8);
         String mappingOrderItem =
                 IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/OrderItemEntity.ts"), StandardCharsets.UTF_8);
 
         dataStore.addMapping("Customer", mappingCustomer);
+        dataStore.addMapping("CustomerAddress", mappingCustomerAddress);
         dataStore.addMapping("Order", mappingOrder);
         dataStore.addMapping("OrderItem", mappingOrderItem);
         dataStore.recreate();
@@ -131,24 +134,57 @@ public class DataStoreTest {
      */
     @Test
     public void save() {
-        String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
+        try {
+            String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
 
-        dataStore.save("Customer", json);
+            dataStore.save("Customer", json);
 
-        List list = dataStore.list("Customer");
-        System.err.println(JsonHelper.toJson(list));
+            List list = dataStore.list("Customer");
+            System.err.println(JsonHelper.toJson(list));
 
-        assertNotNull(list);
-        assertThat(list).hasSize(1);
-        assertNotNull(list.get(0));
-        assertEquals("John", ((Map) list.get(0)).get("name"));
+            assertNotNull(list);
+            assertThat(list).hasSize(1);
+            assertNotNull(list.get(0));
+            assertEquals("John", ((Map) list.get(0)).get("name"));
 
-        Map object = dataStore.get("Customer", ((Long) ((Map) list.get(0)).get("id")));
-        System.out.println(JsonHelper.toJson(object));
+            Map object = dataStore.get("Customer", ((Long) ((Map) list.get(0)).get("id")));
+            System.out.println(JsonHelper.toJson(object));
 
-        assertNotNull(object);
-        assertEquals("John", object.get("name"));
+            assertNotNull(object);
+            assertEquals("John", object.get("name"));
+        } finally {
+            cleanupCustomers();
+        }
 
+
+    }
+
+    /**
+     * Criteria.
+     */
+    @Test
+    public void criteria() {
+        try {
+            String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
+            dataStore.save("Customer", json);
+            json = "{\"name\":\"Jane\",\"address\":\"Sofia, Bulgaria\"}";
+            dataStore.save("Customer", json);
+            json = "{\"name\":\"Matthias\",\"address\":\"Berlin, Germany\"}";
+            dataStore.save("Customer", json);
+
+            List list = dataStore.list("Customer");
+            System.out.println(JsonHelper.toJson(list));
+
+            assertNotNull(list);
+            assertEquals(3, list.size());
+        } finally {
+            cleanupCustomers();
+        }
+    }
+
+    public void cleanupCustomers() {
+        List list;
+        list = dataStore.list("Customer");
         for (Object element : list) {
             dataStore.delete("Customer", ((Long) ((Map) element).get("id")));
         }
@@ -157,51 +193,95 @@ public class DataStoreTest {
         assertEquals(0, list.size());
     }
 
+    public void cleanupCustomerAddresses() {
+        List list;
+        list = dataStore.list("CustomerAddress");
+        for (Object element : list) {
+            dataStore.delete("CustomerAddress", ((Long) ((Map) element).get("id")));
+        }
+        list = dataStore.list("CustomerAddress");
+        assertNotNull(list);
+        assertEquals(0, list.size());
+    }
+
     /**
-     * Criteria.
+     * ManyToOne use in object.
      */
     @Test
-    public void criteria() {
+    public void manyToOne() {
+        try {
+            String customer = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
 
-        String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
-        dataStore.save("Customer", json);
-        json = "{\"name\":\"Jane\",\"address\":\"Sofia, Bulgaria\"}";
-        dataStore.save("Customer", json);
-        json = "{\"name\":\"Matthias\",\"address\":\"Berlin, Germany\"}";
-        dataStore.save("Customer", json);
+            Object customerId = dataStore.save("Customer", customer);
 
-        List list = dataStore.list("Customer");
-        System.out.println(JsonHelper.toJson(list));
+            String customerAddress = "{\"customer\":\"" + customerId + "\",\"city\":\"Sofia\"}";
 
-        assertNotNull(list);
-        assertEquals(3, list.size());
+            dataStore.save("CustomerAddress", customerAddress);
 
-        list = dataStore.list("Customer");
-        for (Object element : list) {
-            dataStore.delete("Customer", ((Long) ((Map) element).get("id")));
+            List listCustomers = dataStore.list("Customer");
+            System.err.println(JsonHelper.toJson(listCustomers));
+
+            assertNotNull(listCustomers);
+            assertThat(listCustomers).hasSize(1);
+            assertNotNull(listCustomers.get(0));
+            assertEquals("John", ((Map) listCustomers.get(0)).get("name"));
+
+            Map object = dataStore.get("Customer", ((Long) ((Map) listCustomers.get(0)).get("id")));
+            System.out.println(JsonHelper.toJson(object));
+
+            assertNotNull(object);
+            assertEquals("John", object.get("name"));
+
+            List listAddresses = dataStore.list("CustomerAddress");
+            System.err.println(JsonHelper.toJson(listAddresses));
+
+            assertNotNull(listAddresses);
+            assertThat(listAddresses).hasSize(1);
+            assertNotNull(listAddresses.get(0));
+            assertEquals("Sofia", ((Map) listAddresses.get(0)).get("city"));
+
+        } finally {
+            cleanupCustomers();
+            cleanupCustomerAddresses();
         }
     }
 
     /**
-     * Bag in object.
+     * OneToMany with a Bag in object.
      */
     @Test
-    public void bag() {
+    public void oneToMany() {
 
-        String json = "{\"number\":\"001\",\"items\":[{\"name\":\"TV\"},{\"name\":\"Fridge\"}]}";
-        dataStore.save("Order", json);
+        try {
 
-        List list = dataStore.list("Order");
-        System.out.println(JsonHelper.toJson(list));
+            String json = "{\"number\":\"001\",\"OrderItem\":[{\"name\":\"TV\"},{\"name\":\"Fridge\"}]}";
+            dataStore.save("Order", json);
 
+            List list = dataStore.list("Order");
+            System.out.println(JsonHelper.toJson(list));
+
+            assertNotNull(list);
+            assertEquals(1, list.size());
+            assertEquals("001", ((Map) list.get(0)).get("number"));
+            assertEquals(2, ((List) ((Map) list.get(0)).get("OrderItem")).size());
+            Map order001 = dataStore.get("Order", (Long) ((Map) list.get(0)).get("id"));
+            System.out.println(JsonHelper.toJson(order001));
+            assertEquals("TV", ((Map) ((List) order001.get("OrderItem")).get(0)).get("name"));
+            dataStore.delete("Order", ((Long) ((Map) list.get(0)).get("id")));
+        } finally {
+            cleanupOrders();
+        }
+    }
+
+    public void cleanupOrders() {
+        List list;
+        list = dataStore.list("Order");
+        for (Object element : list) {
+            dataStore.delete("Order", ((Long) ((Map) element).get("id")));
+        }
+        list = dataStore.list("Order");
         assertNotNull(list);
-        assertEquals(1, list.size());
-        assertEquals("001", ((Map) list.get(0)).get("number"));
-        assertEquals(2, ((List) ((Map) list.get(0)).get("items")).size());
-        Map order001 = dataStore.get("Order", (Long) ((Map) list.get(0)).get("id"));
-        System.out.println(JsonHelper.toJson(order001));
-        assertEquals("TV", ((Map) ((List) order001.get("items")).get(0)).get("name"));
-        dataStore.delete("Order", ((Long) ((Map) list.get(0)).get("id")));
+        assertEquals(0, list.size());
     }
 
     /**
@@ -210,21 +290,21 @@ public class DataStoreTest {
     @Test
     public void query() {
 
-        String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
+        try {
+            String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
 
-        dataStore.save("Customer", json);
+            dataStore.save("Customer", json);
 
-        List list = dataStore.query("from Customer", 100, 0);
-        System.out.println(JsonHelper.toJson(list));
+            List list = dataStore.query("from Customer", 100, 0);
+            System.out.println(JsonHelper.toJson(list));
 
-        assertNotNull(list);
-        assertEquals(1, list.size());
-        assertNotNull(list.get(0));
-        assertEquals("John", ((Map) list.get(0)).get("name"));
+            assertNotNull(list);
+            assertEquals(1, list.size());
+            assertNotNull(list.get(0));
+            assertEquals("John", ((Map) list.get(0)).get("name"));
 
-        list = dataStore.list("Customer");
-        for (Object element : list) {
-            dataStore.delete("Customer", ((Long) ((Map) element).get("id")));
+        } finally {
+            cleanupCustomers();
         }
     }
 
@@ -233,22 +313,21 @@ public class DataStoreTest {
      */
     @Test
     public void queryNative() {
+        try {
+            String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
 
-        String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
+            dataStore.save("Customer", json);
 
-        dataStore.save("Customer", json);
+            List list = dataStore.queryNative("select * from Customer");
+            System.out.println(JsonHelper.toJson(list));
 
-        List list = dataStore.queryNative("select * from Customer");
-        System.out.println(JsonHelper.toJson(list));
+            assertNotNull(list);
+            assertEquals(1, list.size());
+            assertNotNull(list.get(0));
+            assertEquals("John", ((Map) list.get(0)).get("customer_name"));
 
-        assertNotNull(list);
-        assertEquals(1, list.size());
-        assertNotNull(list.get(0));
-        assertEquals("John", ((Map) list.get(0)).get("name"));
-
-        list = dataStore.list("Customer");
-        for (Object element : list) {
-            dataStore.delete("Customer", ((Long) ((Map) element).get("id")));
+        } finally {
+            cleanupCustomers();
         }
     }
 
@@ -258,24 +337,23 @@ public class DataStoreTest {
     @Test
     public void findByExample() {
 
-        String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
-        dataStore.save("Customer", json);
-        json = "{\"name\":\"Jane\",\"address\":\"Varna, Bulgaria\"}";
-        dataStore.save("Customer", json);
-        json = "{\"name\":\"Matthias\",\"address\":\"Berlin, Germany\"}";
-        dataStore.save("Customer", json);
+        try {
+            String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
+            dataStore.save("Customer", json);
+            json = "{\"name\":\"Jane\",\"address\":\"Varna, Bulgaria\"}";
+            dataStore.save("Customer", json);
+            json = "{\"name\":\"Matthias\",\"address\":\"Berlin, Germany\"}";
+            dataStore.save("Customer", json);
 
-        String example = "{\"name\":\"John\"}";
+            String example = "{\"name\":\"John\"}";
 
-        List list = dataStore.findByExample("Customer", example, 10, 0);
-        System.out.println(JsonHelper.toJson(list));
+            List list = dataStore.findByExample("Customer", example, 10, 0);
+            System.out.println(JsonHelper.toJson(list));
 
-        assertNotNull(list);
-        assertEquals(1, list.size());
-
-        list = dataStore.list("Customer");
-        for (Object element : list) {
-            dataStore.delete("Customer", ((Long) ((Map) element).get("id")));
+            assertNotNull(list);
+            assertEquals(1, list.size());
+        } finally {
+            cleanupCustomers();
         }
     }
 
@@ -285,25 +363,24 @@ public class DataStoreTest {
     @Test
     public void listWithOptions() {
 
-        String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
-        dataStore.save("Customer", json);
-        json = "{\"name\":\"Jane\",\"address\":\"Varna, Bulgaria\"}";
-        dataStore.save("Customer", json);
-        json = "{\"name\":\"Matthias\",\"address\":\"Berlin, Germany\"}";
-        dataStore.save("Customer", json);
+        try {
+            String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
+            dataStore.save("Customer", json);
+            json = "{\"name\":\"Jane\",\"address\":\"Varna, Bulgaria\"}";
+            dataStore.save("Customer", json);
+            json = "{\"name\":\"Matthias\",\"address\":\"Berlin, Germany\"}";
+            dataStore.save("Customer", json);
 
-        String options = "{\"conditions\":[{\"propertyName\":\"name\",\"operator\":\"LIKE\",\"value\":\"J%\"}],"
-                + "\"sorts\":[{\"propertyName\":\"name\",\"direction\":\"ASC\"}],\"limit\":\"100\"}";
+            String options = "{\"conditions\":[{\"propertyName\":\"name\",\"operator\":\"LIKE\",\"value\":\"J%\"}],"
+                    + "\"sorts\":[{\"propertyName\":\"name\",\"direction\":\"ASC\"}],\"limit\":\"100\"}";
 
-        List list = dataStore.list("Customer", options);
-        System.out.println(JsonHelper.toJson(list));
+            List list = dataStore.list("Customer", options);
+            System.out.println(JsonHelper.toJson(list));
 
-        assertNotNull(list);
-        assertEquals(2, list.size());
-
-        list = dataStore.list("Customer");
-        for (Object element : list) {
-            dataStore.delete("Customer", ((Long) ((Map) element).get("id")));
+            assertNotNull(list);
+            assertEquals(2, list.size());
+        } finally {
+            cleanupCustomers();
         }
     }
 
