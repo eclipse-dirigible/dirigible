@@ -23,20 +23,19 @@ import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
 
 @ShellComponent
-public class DirigibleCLICommands {
+class ProjectCommands {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleCLICommands.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ProjectCommands.class);
 
     private final DirigibleServer dirigibleServer;
 
-    DirigibleCLICommands(DirigibleServer dirigibleServer) {
+    ProjectCommands(DirigibleServer dirigibleServer) {
         this.dirigibleServer = dirigibleServer;
     }
 
     @ShellMethod("Run Eclipse Dirigible project")
-    public String start(
-            @ShellOption(value = {"dirigibleJarPath"}, defaultValue = ShellOption.NULL,
-                    help = "Path to Eclipse Dirigible jar") String dirigibleJarPathOption, //
+    String start(@ShellOption(value = {"dirigibleJarPath"}, defaultValue = ShellOption.NONE,
+                    help = "Path to Eclipse Dirigible fat/uber jar.") String dirigibleJarPathOption, //
             @ShellOption(value = {"projectPath"}, defaultValue = ShellOption.NULL,
                     help = "Path to Eclipse Dirigible project. If not specified, user working directory will be used.") String projectPathOption) {
 
@@ -54,9 +53,7 @@ public class DirigibleCLICommands {
         if (isOptionProvided(dirigibleJarPathOption)) {
             LOGGER.info("Provided dirigible jar path option with value: {}", dirigibleJarPathOption);
         } else {
-            // TODO: decide what we want, we can make this param required for now
-            LOGGER.info("Missing dirigible jar path option. Need to download the jar or we can make this option required???");
-            throw new IllegalStateException("Flow not implemented");
+            throw new IllegalStateException("Missing the required dirigible jar path option.");
         }
         Path dirigibleJarPath = Path.of(dirigibleJarPathOption);
 

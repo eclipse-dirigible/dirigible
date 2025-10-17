@@ -29,7 +29,6 @@ public class ProcessManager {
 
     public int startSynchronously(Optional<Path> processPath, String... commandArgs) {
         ProcessBuilder builder = new ProcessBuilder(commandArgs);
-        // builder.redirectErrorStream(true);
 
         if (processPath.isPresent()) {
             builder.directory(processPath.get()
@@ -40,16 +39,6 @@ public class ProcessManager {
 
         try {
             Process process = builder.start();
-
-            // try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream())))
-            // {
-            // String line;
-            // while ((line = reader.readLine()) != null) {
-            // // Stream child output directly to CLI console
-            // System.out.println(line);
-            // }
-            // }
-
             return process.waitFor();
         } catch (IOException ex) {
             String errorMessage = "Failure in process: " + Arrays.toString(commandArgs);

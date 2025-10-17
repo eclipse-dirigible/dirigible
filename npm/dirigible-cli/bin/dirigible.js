@@ -11,13 +11,11 @@ const cliJarPath = path.join(__dirname, './dirigible-cli.jar');
 const require = createRequire(import.meta.url);
 const dirigibleJarPath = require.resolve('@dirigiblelabs/dirigible/data/dirigible-application-executable.jar');
 
-// Pass any CLI arguments after "npm run dirigible -- ..."
 const userArgs = process.argv.slice(2);
 
 // Define commands that require the Dirigible jar
 const dirigibleJarCommands = ['start'];
 
-// Determine if the user command matches one of the whitelisted ones
 const userCommand = userArgs[0];
 
 if(userArgs && userArgs.length === 0){
@@ -25,6 +23,7 @@ if(userArgs && userArgs.length === 0){
     userArgs.push('help');
 }
 
+// Determine if the user command matches one of the whitelisted ones
 const shouldAddExtraArgs = dirigibleJarCommands.includes(userCommand);
 
 // Add extra args only if needed
