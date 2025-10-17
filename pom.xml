@@ -228,7 +228,7 @@
         <!-- Tests -->
         <testcontainers.version>1.21.1</testcontainers.version>
         <selenide.version>7.10.1</selenide.version>
-        
+
         <antlr4-maven-plugin.version>4.13.2</antlr4-maven-plugin.version>
         <antlr4-runtime.version>4.13.2</antlr4-runtime.version>
 
@@ -818,6 +818,7 @@
         <module>build</module>
         <module>dependencies</module>
         <module>tests</module>
+        <module>cli</module>
     </modules>
 
     <dependencies>

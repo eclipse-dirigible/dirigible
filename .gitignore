@@ -3,7 +3,7 @@ dist/
 .settings/
 target/
 dirigible_local/
-bin/
+#bin/
 .idea
 .history
 .vscode
@@ -34,3 +34,4 @@ host.ser
 package-lock.json
 *.tgz
 **/ttyd.sh
+**/spring-shell.log
