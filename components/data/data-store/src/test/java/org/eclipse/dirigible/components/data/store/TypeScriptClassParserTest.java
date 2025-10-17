@@ -33,7 +33,6 @@ public class TypeScriptClassParserTest {
         EntityMetadata metadata = parser.parse(carTsCode);
 
         System.out.println("--- Extracted Entity Metadata ---");
-        System.out.println("Class Name: " + metadata.getClassName());
         System.out.println("Entity Name: " + metadata.getEntityName());
         System.out.println("Table Name: " + metadata.getTableName());
         System.out.println("---------------------------------");
@@ -56,7 +55,6 @@ public class TypeScriptClassParserTest {
             System.out.println();
         }
 
-        assertEquals("Car", metadata.getClassName());
         assertEquals("CarEntity", metadata.getEntityName());
         assertEquals("CARS", metadata.getTableName());
 
@@ -78,7 +76,7 @@ public class TypeScriptClassParserTest {
 
         EntityParser parser = new EntityParser();
         EntityMetadata metadata = parser.parse(carTsCode);
-        assertEquals("Car", metadata.getClassName());
+        assertEquals("CarEntity", metadata.getEntityName());
         HbmXmlDescriptor hbm = EntityToHbmMapper.map(metadata);
         System.out.println("--- Extracted Entity Metadata as HBM XML ---");
         System.out.println(hbm.serialize());
@@ -91,7 +89,7 @@ public class TypeScriptClassParserTest {
 
         EntityParser parser = new EntityParser();
         EntityMetadata metadata = parser.parse(carTsCode);
-        assertEquals("Order", metadata.getClassName());
+        assertEquals("Order", metadata.getEntityName());
         HbmXmlDescriptor hbm = EntityToHbmMapper.map(metadata);
         System.out.println("--- Extracted Entity Metadata as HBM XML ---");
         System.out.println(hbm.serialize());

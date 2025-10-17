@@ -18,8 +18,6 @@ public class EntityMetadata {
 
     private String tableName;
 
-    private String className;
-
     private List<EntityFieldMetadata> fields = new ArrayList<>();
 
     // Getters and Setters (simplified)
@@ -37,14 +35,6 @@ public class EntityMetadata {
 
     public void setTableName(String tableName) {
         this.tableName = tableName;
-    }
-
-    public String getClassName() {
-        return className;
-    }
-
-    public void setClassName(String className) {
-        this.className = className;
     }
 
     public List<EntityFieldMetadata> getFields() {
