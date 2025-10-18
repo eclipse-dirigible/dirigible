@@ -81,6 +81,7 @@ public class OpenApiSerializer {
         List<String> tags = (List<String>) route.get("tags");
         String responseType = (String) route.get("responseType");
         String requestBodyRef = (String) route.get("requestBodyRef");
+        String documentation = (String) route.get("description");
 
         json.append("      \"")
             .append(method)
@@ -95,7 +96,7 @@ public class OpenApiSerializer {
             .append(opId)
             .append(" ")
             .append(tags.get(0))
-            .append(" resources\",\n");
+            .append(" " + documentation + "\",\n");
 
         // Parameters
         json.append("        \"parameters\": ");

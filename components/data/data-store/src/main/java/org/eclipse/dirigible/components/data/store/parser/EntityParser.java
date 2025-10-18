@@ -193,7 +193,7 @@ public class EntityParser {
                 }
 
             } else if ("Table".equals(decoratorName)) {
-                // Extract argument from @Table({ name: 'CARS' })
+                // Extract argument from @Table({ 'CARS' })
                 if (ctx.decoratorCallExpression() != null && ctx.decoratorCallExpression()
                                                                 .arguments() != null
                         && ctx.decoratorCallExpression()
@@ -228,6 +228,29 @@ public class EntityParser {
                                                                        .replace("'", "")
                                                                        .replace("\"", ""));
                     }
+                }
+            } else if ("Documentation".equals(decoratorName)) {
+                // Extract argument from @Documentation({ 'Used in scenario ...' })
+                if (ctx.decoratorCallExpression() != null && ctx.decoratorCallExpression()
+                                                                .arguments() != null
+                        && ctx.decoratorCallExpression()
+                              .arguments()
+                              .argumentList() != null
+                        && ctx.decoratorCallExpression()
+                              .arguments()
+                              .argumentList()
+                              .argument()
+                              .size() > 0) {
+
+                    String arg = ctx.decoratorCallExpression()
+                                    .arguments()
+                                    .argumentList()
+                                    .argument(0)
+                                    .getText();
+                    if (arg.startsWith("'") || arg.startsWith("\"")) {
+                        arg = arg.substring(1, arg.length() - 1);
+                    }
+                    currentEntityMetadata.setDocumentation(arg);
                 }
             }
         }
@@ -318,6 +341,30 @@ public class EntityParser {
                         strategy = strategy.substring(1, strategy.length() - 1);
                     }
                     fieldMetadata.setGenerationStrategy(strategy);
+                }
+
+            } else if ("Documentation".equals(decoratorName)) {
+                // Expects @Documentation('Used in scenario ...')
+                if (ctx.decoratorCallExpression() != null && ctx.decoratorCallExpression()
+                                                                .arguments() != null
+                        && ctx.decoratorCallExpression()
+                              .arguments()
+                              .argumentList() != null
+                        && ctx.decoratorCallExpression()
+                              .arguments()
+                              .argumentList()
+                              .argument()
+                              .size() > 0) {
+
+                    String strategy = ctx.decoratorCallExpression()
+                                         .arguments()
+                                         .argumentList()
+                                         .argument(0)
+                                         .getText();
+                    if (strategy.startsWith("'") || strategy.startsWith("\"")) {
+                        strategy = strategy.substring(1, strategy.length() - 1);
+                    }
+                    fieldMetadata.setDocumentation(strategy);
                 }
 
             } else if ("Column".equals(decoratorName)) {
