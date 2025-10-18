@@ -1,0 +1,11 @@
+{
+  "name": "dirigible-demo-project",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "dirigible start",
+    "greet": "dirigible greet Starting..."
+  },
+  "dependencies": {
+    "dirigible-cli": "file:../dirigible-cli"
+  }
+}
