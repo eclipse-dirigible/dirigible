@@ -17,7 +17,7 @@ export class Customer {
 	        joinColumn: "CUSTOMER_ID",
 	        notNull: true,
 	        cascade: "all",
-	        lazy: false
+	        lazy: true
 	    })
     public customer: Customer;
 }

@@ -460,7 +460,7 @@ public class EntityParser {
                         if (entityName != null) {
                             associationDetails.setEntityName(entityName);
                         }
-                        String column = extractValue.apply(argText, "column");
+                        String column = extractValue.apply(argText, "joinColumn");
                         if (column != null) {
                             associationDetails.setJoinColumn(column);
                         }
