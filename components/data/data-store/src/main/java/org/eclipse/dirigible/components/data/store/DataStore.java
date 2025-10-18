@@ -128,10 +128,6 @@ public class DataStore {
 
         normalizeNumericTypes(object);
 
-        if (object.get("customer") != null) {
-            System.out.println(">>>>>>>>>>>>>>>>>>: " + ((Map) object.get("customer")).get("id"));
-        }
-
         return save(type, object);
     }
 
@@ -462,7 +458,6 @@ public class DataStore {
         }
     }
 
-
     /**
      * Recursively traverses the map and converts numeric types (Double, Float, String) into Long if
      * they represent a whole number, or if the key suggests an ID field.
@@ -514,11 +509,12 @@ public class DataStore {
                 boolean isIdKey = entry.getKey()
                                        .toLowerCase(Locale.ROOT)
                                        .endsWith("id");
+                if (isIdKey) {
+                    Object normalizedValue = safeToLong(value);
 
-                Object normalizedValue = safeToLong(value);
-
-                if (normalizedValue instanceof Long) {
-                    entry.setValue(normalizedValue);
+                    if (normalizedValue instanceof Long) {
+                        entry.setValue(normalizedValue);
+                    }
                 }
             }
         }
@@ -542,15 +538,8 @@ public class DataStore {
             if (doubleValue == longValue) {
                 return Long.valueOf(longValue);
             }
-        }
-
-        // else if (value instanceof Integer) {
-        // return Long.valueOf(((Integer) value).longValue());
-        // }
-
-        else if (value instanceof String) {
+        } else if (value instanceof String) {
             String s = ((String) value).trim();
-            // Check if the string consists purely of digits
             if (!s.isEmpty() && s.matches("\\d+")) {
                 try {
                     return Long.parseLong(s);

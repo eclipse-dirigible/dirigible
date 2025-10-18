@@ -41,6 +41,10 @@ public class OpenApiParser {
     }
 
     private static Map<String, Object> map(Object... args) {
+        if (args.length % 2 != 0) {
+            throw new IllegalArgumentException(
+                    "Arguments to map() must be key-value pairs (even number of arguments). Received: " + args.length);
+        }
         Map<String, Object> map = new HashMap<>();
         for (int i = 0; i < args.length; i += 2) {
             map.put((String) args[i], args[i + 1]);

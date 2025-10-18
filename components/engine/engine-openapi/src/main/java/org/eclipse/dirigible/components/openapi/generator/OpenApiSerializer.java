@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.components.openapi.generator;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -178,7 +177,7 @@ public class OpenApiSerializer {
             return value.toString();
         } else if (value instanceof Map) {
             // Recurse for nested map structures like 'schema'
-            return serializeMap((Map<?, ?>) value, true);
+            return serializeMap((Map<?, ?>) value);
         } else if (value instanceof List) {
             return "[" + ((List<?>) value).stream()
                                           .map(OpenApiSerializer::serializeValue)
@@ -194,7 +193,7 @@ public class OpenApiSerializer {
             return String.format("{ \"type\": \"array\", \"items\": { \"$ref\": \"#/components/schemas/%s\" } }", baseType);
         }
         if (OpenApiParser.SCHEMAS.containsKey(responseType)) {
-            return serializeMap(OpenApiParser.SCHEMAS.get(responseType), false);
+            return serializeMap(OpenApiParser.SCHEMAS.get(responseType));
         }
         if ("void".equals(responseType)) {
             return responseType;
@@ -213,13 +212,13 @@ public class OpenApiSerializer {
             json.append("      \"")
                 .append(entry.getKey())
                 .append("\": ");
-            json.append(serializeMap(entry.getValue(), false));
+            json.append(serializeMap(entry.getValue()));
         }
         json.append("\n    }");
         return json.toString();
     }
 
-    private static String serializeMap(Map<?, ?> map, boolean isNested) {
+    private static String serializeMap(Map<?, ?> map) {
         StringBuilder sb = new StringBuilder();
         sb.append("{");
         boolean first = true;
