@@ -164,7 +164,7 @@ public class DataStoreIT extends IntegrationTest {
         assertNotNull(list);
         assertEquals(1, list.size());
         assertNotNull(list.get(0));
-        assertEquals("John", ((Map) list.get(0)).get("name"));
+        assertEquals("John", ((Map) list.get(0)).get("customer_name"));
 
         list = dataStore.list("Customer");
         for (Object element : list) {
