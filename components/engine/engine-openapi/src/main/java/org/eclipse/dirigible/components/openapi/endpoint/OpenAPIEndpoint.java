@@ -77,7 +77,7 @@ public class OpenAPIEndpoint extends BaseEndpoint {
     private static final String TITLE = "Applications Services Open API";
 
     /** The Constant VERSION. */
-    private static final String VERSION = "8.0.0";
+    private static final String VERSION = "12.0.0";
 
     /**
      * The openapi service.
