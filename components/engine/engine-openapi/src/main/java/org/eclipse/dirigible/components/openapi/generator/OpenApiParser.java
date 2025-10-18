@@ -19,6 +19,7 @@ import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
+import org.apache.commons.io.FilenameUtils;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata;
 import org.eclipse.dirigible.components.data.store.model.EntityMetadata;
 import org.eclipse.dirigible.components.data.store.parser.EntityParser;
@@ -69,10 +70,8 @@ public class OpenApiParser {
         if (!entityImports.isEmpty()) {
             entityImports.forEach((entityName, path) -> {
 
-                // TODO integrate the EntityParser
-                // System.out.printf("Imported Entity: %s from Path: %s\n", entityName, path);
-
-                EntityMetadata entityMetadata = EntityParser.ENTITIES.get(path.endsWith(".ts") ? path : path + ".ts");
+                String relative = path.endsWith(".ts") ? path : path + ".ts";
+                EntityMetadata entityMetadata = EntityParser.ENTITIES.get(FilenameUtils.getBaseName(relative));
                 if (entityMetadata != null) {
                     Map<String, Object> entityProperties = new HashMap<>();
                     for (EntityFieldMetadata efm : entityMetadata.getFields()) {

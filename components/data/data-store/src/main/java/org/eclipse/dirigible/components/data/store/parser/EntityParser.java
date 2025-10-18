@@ -20,6 +20,7 @@ import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.io.FilenameUtils;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.AssociationDetails;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.CollectionDetails;
@@ -46,8 +47,9 @@ public class EntityParser {
     public EntityMetadata parse(String location, String source) {
         String md5 = DigestUtils.md5Hex(source.getBytes());
         String existing = MD5.get(md5);
+        String filename = FilenameUtils.getBaseName(location);
         if (existing != null && existing.equals(md5)) {
-            return ENTITIES.get(location);
+            return ENTITIES.get(filename);
         }
 
         CharStream input = CharStreams.fromString(source);
@@ -62,8 +64,8 @@ public class EntityParser {
 
         MetadataExtractorVisitor visitor = new MetadataExtractorVisitor();
         EntityMetadata entityMetadata = visitor.visit(tree);
-        ENTITIES.put(location, entityMetadata);
-        MD5.put(location, md5);
+        ENTITIES.put(filename, entityMetadata);
+        MD5.put(filename, md5);
         return entityMetadata;
     }
 
