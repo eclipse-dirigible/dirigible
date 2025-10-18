@@ -191,6 +191,7 @@ public class OpenApiParser {
                     String httpMethod = null;
                     String routePath = extractDecoratorContent(decoratorCtx, "/");
                     String fullPath = normalizePath(controllerPath + routePath);
+                    String documentation = "";
 
                     switch (method) {
                         case "Get":
