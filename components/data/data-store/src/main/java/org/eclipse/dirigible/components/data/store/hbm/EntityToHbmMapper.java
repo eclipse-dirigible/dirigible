@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.data.store.hbm;
 
 import org.eclipse.dirigible.components.data.store.hbm.HbmXmlDescriptor.HbmIdDescriptor;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata;
+import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.AssociationDetails;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.CollectionDetails;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.ColumnDetails;
 import org.eclipse.dirigible.components.data.store.model.EntityMetadata;
@@ -39,23 +40,36 @@ public class EntityToHbmMapper {
                                         .toUpperCase(),
                 mapType(idField.getTypeScriptType(), idCd.getDatabaseType()), mapGenerationStrategy(idField.getGenerationStrategy()));
 
-        String className = entityMetadata.getClassName();
+        String entityName = entityMetadata.getEntityName();
         String tableName = entityMetadata.getTableName();
 
         // Fallback for tableName
         if (tableName == null || tableName.isEmpty()) {
             tableName = entityMetadata.getEntityName() != null ? entityMetadata.getEntityName()
                                                                                .toUpperCase()
-                    : className.toUpperCase();
+                    : entityName.toUpperCase();
         }
 
-        HbmXmlDescriptor hbmDesc = new HbmXmlDescriptor(className, tableName, idDesc);
+        HbmXmlDescriptor hbmDesc = new HbmXmlDescriptor(entityName, tableName, idDesc);
 
         entityMetadata.getFields()
                       .stream()
                       .filter(f -> !f.isIdentifier()) // Exclude the ID field, as it's already mapped
                       .forEach(field -> {
-                          if (!field.isCollection()) {
+                          if (field.isCollection()) {
+                              CollectionDetails cd = field.getCollectionDetails();
+                              String mappedName = cd.getName() != null ? cd.getName() : field.getPropertyName();
+                              HbmXmlDescriptor.HbmCollectionDescriptor collDesc = new HbmXmlDescriptor.HbmCollectionDescriptor(mappedName,
+                                      cd.getTableName(), cd.getJoinColumn(), cd.getEntityName(), cd.isInverse(), cd.isLazy(), cd.getFetch(),
+                                      cd.getCascade(), cd.isJoinColumnNotNull());
+                              hbmDesc.addCollection(collDesc);
+                          } else if (field.isAssociation()) {
+                              AssociationDetails ad = field.getAssociationDetails();
+                              String mappedName = ad.getName() != null ? ad.getName() : field.getPropertyName();
+                              HbmXmlDescriptor.HbmAssociationDescriptor assDesc = new HbmXmlDescriptor.HbmAssociationDescriptor(mappedName,
+                                      ad.getEntityName(), ad.getJoinColumn(), ad.getCascade(), ad.isNotNull(), ad.getLazy());
+                              hbmDesc.addAssociation(assDesc);
+                          } else {
                               ColumnDetails cd = field.getColumnDetails();
 
                               String mappedColumnName = cd.getColumnName() != null ? cd.getColumnName()
@@ -66,13 +80,6 @@ public class EntityToHbmMapper {
                                       new HbmXmlDescriptor.HbmPropertyDescriptor(field.getPropertyName(), mappedColumnName,
                                               mapType(field.getTypeScriptType(), cd.getDatabaseType()), cd.getLength());
                               hbmDesc.addProperty(propDesc);
-                          } else {
-                              CollectionDetails cd = field.getCollectionDetails();
-                              String mappedName = cd.getName() != null ? cd.getName() : field.getPropertyName();
-                              HbmXmlDescriptor.HbmCollectionDescriptor collDesc = new HbmXmlDescriptor.HbmCollectionDescriptor(mappedName,
-                                      cd.getTableName(), cd.getJoinColumn(), cd.getTargetClass(), cd.isInverse(), cd.isLazy(),
-                                      cd.getFetch(), cd.getCascade(), cd.isJoinColumnNotNull());
-                              hbmDesc.addCollection(collDesc);
                           }
                       });
 

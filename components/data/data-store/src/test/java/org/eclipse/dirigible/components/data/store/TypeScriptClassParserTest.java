@@ -30,10 +30,9 @@ public class TypeScriptClassParserTest {
         String carTsCode = IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/CarEntity.ts"), StandardCharsets.UTF_8);
 
         EntityParser parser = new EntityParser();
-        EntityMetadata metadata = parser.parse(carTsCode);
+        EntityMetadata metadata = parser.parse("/typescript/CarEntity.ts", carTsCode);
 
         System.out.println("--- Extracted Entity Metadata ---");
-        System.out.println("Class Name: " + metadata.getClassName());
         System.out.println("Entity Name: " + metadata.getEntityName());
         System.out.println("Table Name: " + metadata.getTableName());
         System.out.println("---------------------------------");
@@ -56,7 +55,6 @@ public class TypeScriptClassParserTest {
             System.out.println();
         }
 
-        assertEquals("Car", metadata.getClassName());
         assertEquals("CarEntity", metadata.getEntityName());
         assertEquals("CARS", metadata.getTableName());
 
@@ -77,8 +75,8 @@ public class TypeScriptClassParserTest {
         String carTsCode = IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/CarEntity.ts"), StandardCharsets.UTF_8);
 
         EntityParser parser = new EntityParser();
-        EntityMetadata metadata = parser.parse(carTsCode);
-        assertEquals("Car", metadata.getClassName());
+        EntityMetadata metadata = parser.parse("/typescript/CarEntity.ts", carTsCode);
+        assertEquals("CarEntity", metadata.getEntityName());
         HbmXmlDescriptor hbm = EntityToHbmMapper.map(metadata);
         System.out.println("--- Extracted Entity Metadata as HBM XML ---");
         System.out.println(hbm.serialize());
@@ -90,8 +88,8 @@ public class TypeScriptClassParserTest {
         String carTsCode = IOUtils.toString(DataStoreTest.class.getResourceAsStream("/typescript/OrderEntity.ts"), StandardCharsets.UTF_8);
 
         EntityParser parser = new EntityParser();
-        EntityMetadata metadata = parser.parse(carTsCode);
-        assertEquals("Order", metadata.getClassName());
+        EntityMetadata metadata = parser.parse("/typescript/OrderEntity.ts", carTsCode);
+        assertEquals("Order", metadata.getEntityName());
         HbmXmlDescriptor hbm = EntityToHbmMapper.map(metadata);
         System.out.println("--- Extracted Entity Metadata as HBM XML ---");
         System.out.println(hbm.serialize());

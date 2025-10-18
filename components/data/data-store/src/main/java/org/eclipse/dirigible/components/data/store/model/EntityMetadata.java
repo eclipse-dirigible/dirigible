@@ -18,7 +18,7 @@ public class EntityMetadata {
 
     private String tableName;
 
-    private String className;
+    private String documentation;
 
     private List<EntityFieldMetadata> fields = new ArrayList<>();
 
@@ -39,12 +39,12 @@ public class EntityMetadata {
         this.tableName = tableName;
     }
 
-    public String getClassName() {
-        return className;
+    public String getDocumentation() {
+        return documentation;
     }
 
-    public void setClassName(String className) {
-        this.className = className;
+    public void setDocumentation(String documentation) {
+        this.documentation = documentation;
     }
 
     public List<EntityFieldMetadata> getFields() {

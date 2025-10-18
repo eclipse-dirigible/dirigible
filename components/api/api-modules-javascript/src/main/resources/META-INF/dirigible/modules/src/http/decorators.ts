@@ -20,6 +20,13 @@ export function Controller(ctr: { new() }, context: ClassDecoratorContext): void
     router.execute();
 }
 
+export function Documentation(documentation: string) {
+  return function (
+    value: any,
+    context: ClassDecoratorContext | ClassFieldDecoratorContext | ClassMethodDecoratorContext
+  ) {};
+}
+
 export const Get = createRequestDecorator("get")
 export const Post = createRequestDecorator("post")
 export const Put = createRequestDecorator("put")

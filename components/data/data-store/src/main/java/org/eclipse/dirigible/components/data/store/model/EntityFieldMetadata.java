@@ -17,6 +17,8 @@ public class EntityFieldMetadata {
 
     private String generationStrategy;
 
+    private String documentation;
+
     private boolean isIdentifier = false;
 
     private boolean isCollection = false;
@@ -24,6 +26,10 @@ public class EntityFieldMetadata {
     private ColumnDetails columnDetails;
 
     private CollectionDetails collectionDetails;
+
+    private boolean isAssociation;
+
+    private AssociationDetails associationDetails;
 
     public String getPropertyName() {
         return propertyName;
@@ -47,6 +53,14 @@ public class EntityFieldMetadata {
 
     public void setGenerationStrategy(String generationStrategy) {
         this.generationStrategy = generationStrategy;
+    }
+
+    public String getDocumentation() {
+        return documentation;
+    }
+
+    public void setDocumentation(String documentation) {
+        this.documentation = documentation;
     }
 
     public boolean isIdentifier() {
@@ -79,6 +93,22 @@ public class EntityFieldMetadata {
 
     public void setCollectionDetails(CollectionDetails collectionDetails) {
         this.collectionDetails = collectionDetails;
+    }
+
+    public boolean isAssociation() {
+        return this.isAssociation;
+    }
+
+    public void setAssociation(boolean isAssociation) {
+        this.isAssociation = isAssociation;
+    }
+
+    public AssociationDetails getAssociationDetails() {
+        return associationDetails;
+    }
+
+    public void setAssociationDetails(AssociationDetails associationDetails) {
+        this.associationDetails = associationDetails;
     }
 
     public static class ColumnDetails {
@@ -142,7 +172,7 @@ public class EntityFieldMetadata {
 
         private String joinColumn;
 
-        private String targetClass;
+        private String entityName;
 
         private String cascade = "none";
 
@@ -178,12 +208,12 @@ public class EntityFieldMetadata {
             this.joinColumn = joinColumn;
         }
 
-        public String getTargetClass() {
-            return targetClass;
+        public String getEntityName() {
+            return entityName;
         }
 
-        public void setTargetClass(String targetClass) {
-            this.targetClass = targetClass;
+        public void setEntityName(String entityName) {
+            this.entityName = entityName;
         }
 
         public String getCascade() {
@@ -224,6 +254,70 @@ public class EntityFieldMetadata {
 
         public void setJoinColumnNotNull(boolean joinColumnNotNull) {
             this.joinColumnNotNull = joinColumnNotNull;
+        }
+    }
+
+    public static class AssociationDetails {
+
+        private String name;
+        private String entityName;
+        private String joinColumn;
+        private String cascade;
+        private boolean notNull;
+        private String lazy;
+
+        public AssociationDetails() {
+            this.notNull = false;
+            this.lazy = "proxy";
+            this.cascade = "none";
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getEntityName() {
+            return entityName;
+        }
+
+        public void setEntityName(String entityName) {
+            this.entityName = entityName;
+        }
+
+        public String getJoinColumn() {
+            return joinColumn;
+        }
+
+        public void setJoinColumn(String joinColumn) {
+            this.joinColumn = joinColumn;
+        }
+
+        public String getCascade() {
+            return cascade;
+        }
+
+        public void setCascade(String cascade) {
+            this.cascade = cascade;
+        }
+
+        public boolean isNotNull() {
+            return notNull;
+        }
+
+        public void setNotNull(boolean notNull) {
+            this.notNull = notNull;
+        }
+
+        public String getLazy() {
+            return lazy;
+        }
+
+        public void setLazy(String lazy) {
+            this.lazy = lazy;
         }
     }
 

@@ -1,10 +1,8 @@
 /**
  * @file decorators.ts
- * 
- * ECMAScript 2025-compliant ORM decorator implementation
+ * * ECMAScript 2025-compliant ORM decorator implementation
  * Compatible with GraalJS runtime.
- * 
- * Features:
+ * * Features:
  * - Uses context.addInitializer for stable decorator timing
  * - Stores metadata in a global WeakMap cache
  * - Finalizes entity metadata once per class
@@ -57,6 +55,7 @@ interface PropertyMetadata {
   propertyName: string;
   isId: boolean;
   isGenerated: boolean;
+  documentation?: string;
   columnOptions?: ColumnOptions;
   oneToManyOptions?: { type: Function; options: OneToManyOptions };
   manyToOneOptions?: { type: Function; options: ManyToOneOptions };
@@ -69,6 +68,7 @@ export interface EntityConstructor extends Function {
   $id_name: string;
   $id_column: string;
   $initialized?: boolean;
+  $documentation?: string;
 }
 
 // --- Global Metadata Cache ---
@@ -118,10 +118,45 @@ function createPropertyDecorator(
       if (kind === "id") metadata.isId = true;
       if (kind === "generated") metadata.isGenerated = true;
       if (kind === "column") metadata.columnOptions = options;
-
     });
   };
 }
+
+// --- @Documentation Decorator (Dual-Purpose) ---
+export function Documentation(description: string) {
+  return function (
+    value: any,
+    context: ClassDecoratorContext | ClassFieldDecoratorContext
+  ) {
+    if (context.kind === "class") {
+      context.addInitializer(function () {
+        (value as EntityConstructor).$documentation = description;
+      });
+      return value;
+    } else if (context.kind === "field") {
+      context.addInitializer(function () {
+        const ctor = (this as any).constructor;
+        const metadataArray = getMetadataArray(ctor);
+
+        let metadata = metadataArray.find(
+          (m) => m.propertyName === context.name.toString()
+        );
+
+        if (!metadata) {
+          metadata = {
+            propertyName: context.name.toString(),
+            isId: false,
+            isGenerated: false,
+          };
+          metadataArray.push(metadata);
+        }
+
+        metadata.documentation = description;
+      });
+    }
+  };
+}
+
 
 // --- @Entity Decorator ---
 export function Entity(entityName?: string) {

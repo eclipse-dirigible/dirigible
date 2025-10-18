@@ -9,15 +9,14 @@
  */
 package org.eclipse.dirigible.components.data.store.domain;
 
+import org.eclipse.dirigible.components.base.artefact.Artefact;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
-import jakarta.persistence.Transient;
-
-import org.eclipse.dirigible.components.base.artefact.Artefact;
 
 /**
  * The Class Entity.
@@ -36,7 +35,6 @@ public class Entity extends Artefact {
     private Long id;
 
     /** The content. */
-    /** The raw content. */
     @Column(name = "ENTITY_CONTENT", columnDefinition = "CLOB")
     @Lob
     private String content;

@@ -174,15 +174,15 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
             case CREATE:
                 if (entity.getLifecycle()
                           .equals(ArtefactLifecycle.NEW)) {
-                    dataStore.addMapping(entity.getKey(), prepareContent(entity));
+                    dataStore.addMapping(entity.getLocation(), prepareContent(entity));
                     callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
                 }
                 break;
             case UPDATE:
                 if (entity.getLifecycle()
                           .equals(ArtefactLifecycle.MODIFIED)) {
-                    dataStore.removeMapping(entity.getKey());
-                    dataStore.addMapping(entity.getKey(), prepareContent(entity));
+                    dataStore.removeMapping(entity.getLocation());
+                    dataStore.addMapping(entity.getLocation(), prepareContent(entity));
                     callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
                 }
                 if (entity.getLifecycle()
@@ -198,7 +198,7 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
                                  .equals(ArtefactLifecycle.UPDATED)
                         || entity.getLifecycle()
                                  .equals(ArtefactLifecycle.FAILED)) {
-                    dataStore.removeMapping(entity.getKey());
+                    dataStore.removeMapping(entity.getLocation());
                     callback.registerState(this, wrapper, ArtefactLifecycle.DELETED);
                 }
                 break;
@@ -206,7 +206,7 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
                 if (ArtefactLifecycle.CREATED.equals(entity.getLifecycle()) || ArtefactLifecycle.UPDATED.equals(entity.getLifecycle())) {
                     if (entity.getRunning() == null || !entity.getRunning()) {
                         try {
-                            dataStore.addMapping(entity.getKey(), prepareContent(entity));
+                            dataStore.addMapping(entity.getLocation(), prepareContent(entity));
                         } catch (Exception e) {
                             callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, e);
                         }
@@ -237,7 +237,7 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
     @Override
     public void cleanupImpl(Entity entity) {
         try {
-            dataStore.removeMapping(entity.getKey());
+            dataStore.removeMapping(entity.getLocation());
             getService().delete(entity);
         } catch (Exception e) {
             callback.addError(e.getMessage());

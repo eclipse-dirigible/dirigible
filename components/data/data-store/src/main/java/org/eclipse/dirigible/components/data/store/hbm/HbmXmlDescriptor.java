@@ -19,14 +19,15 @@ import java.util.List;
  */
 public class HbmXmlDescriptor {
 
-    private final String className;
+    private final String entityName;
     private final String tableName;
     private final HbmIdDescriptor id;
     private final List<HbmPropertyDescriptor> properties = new ArrayList<>();
     private final List<HbmCollectionDescriptor> collections = new ArrayList<>();
+    private final List<HbmAssociationDescriptor> associations = new ArrayList<>();
 
-    public HbmXmlDescriptor(String className, String tableName, HbmIdDescriptor id) {
-        this.className = className;
+    public HbmXmlDescriptor(String entityName, String tableName, HbmIdDescriptor id) {
+        this.entityName = entityName;
         this.tableName = tableName;
         this.id = id;
     }
@@ -99,20 +100,20 @@ public class HbmXmlDescriptor {
         public String name;
         public String tableName;
         public String joinColumn;
-        public String targetClass;
+        public String entityName;
         public boolean inverse;
         public boolean lazy;
         public String fetch;
         public String cascade;
         public boolean joinColumnNotNull;
 
-        public HbmCollectionDescriptor(String name, String tableName, String joinColumn, String targetClass, boolean inverse, boolean lazy,
+        public HbmCollectionDescriptor(String name, String tableName, String joinColumn, String entityName, boolean inverse, boolean lazy,
                 String fetch, String cascade, boolean joinColumnNotNull) {
             super();
             this.name = name;
             this.tableName = tableName;
             this.joinColumn = joinColumn;
-            this.targetClass = targetClass;
+            this.entityName = entityName;
             this.inverse = inverse;
             this.lazy = lazy;
             this.fetch = fetch;
@@ -132,8 +133,8 @@ public class HbmXmlDescriptor {
             return joinColumn;
         }
 
-        public String getTargetClass() {
-            return targetClass;
+        public String getEntityName() {
+            return entityName;
         }
 
         public boolean isInverse() {
@@ -160,11 +161,74 @@ public class HbmXmlDescriptor {
             String xml = String.format("        <bag name=\"%s\" table=\"%s\" inverse=\"%s\" lazy=\"%s\" fetch=\"%s\" cascade=\"%s\">\n",
                     name, tableName, inverse, lazy, fetch, cascade) + "            <key>\n"
                     + String.format("                <column name=\"%s\" not-null=\"%s\" />\n", joinColumn, joinColumnNotNull)
-                    + "            </key>\n" + String.format("            <one-to-many class=\"%s\" />\n", targetClass)
+                    + "            </key>\n" + String.format("            <one-to-many entity-name=\"%s\" />\n", entityName)
                     + "        </bag>\n";
             return xml;
         }
 
+    }
+
+    public static class HbmAssociationDescriptor {
+        private final String name;
+        private final String entityName;
+        private final String joinColumn;
+        private final String cascade;
+        private final boolean notNull;
+        private final String lazy;
+
+        public HbmAssociationDescriptor(String name, String entityName, String joinColumn, String cascade, boolean notNull, String lazy) {
+            this.name = name;
+            this.entityName = entityName;
+            this.joinColumn = joinColumn;
+            this.cascade = cascade;
+            this.notNull = notNull;
+            this.lazy = lazy;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public String getEntityName() {
+            return entityName;
+        }
+
+        public String getJoinColumn() {
+            return joinColumn;
+        }
+
+        public String getCascade() {
+            return cascade;
+        }
+
+        public boolean isNotNull() {
+            return notNull;
+        }
+
+        public String getLazy() {
+            return lazy;
+        }
+
+        public String serialize() {
+            // Build attribute list
+            StringBuilder attrs = new StringBuilder();
+            attrs.append(String.format(" name=\"%s\"", name));
+            attrs.append(String.format(" entity-name=\"%s\"", entityName));
+            attrs.append(String.format(" column=\"%s\"", joinColumn));
+
+            // Optional attributes
+            if (cascade != null && !cascade.isEmpty() && !"none".equalsIgnoreCase(cascade)) {
+                attrs.append(String.format(" cascade=\"%s\"", cascade));
+            }
+            if (notNull) {
+                attrs.append(" not-null=\"true\"");
+            }
+            if (lazy != null && !lazy.isEmpty() && !"false".equalsIgnoreCase(lazy)) {
+                attrs.append(String.format(" lazy=\"%s\"", lazy));
+            }
+
+            return String.format("        <many-to-one%s/>\n", attrs.toString());
+        }
     }
 
     public void addProperty(HbmPropertyDescriptor property) {
@@ -173,6 +237,10 @@ public class HbmXmlDescriptor {
 
     public void addCollection(HbmCollectionDescriptor collection) {
         this.collections.add(collection);
+    }
+
+    public void addAssociation(HbmAssociationDescriptor association) {
+        this.associations.add(association);
     }
 
     /**
@@ -190,7 +258,7 @@ public class HbmXmlDescriptor {
         xml.append("<hibernate-mapping>\n");
 
         // --- Class Element ---
-        xml.append(String.format("    <class entity-name=\"%s\" table=\"%s\">\n", this.className, this.tableName));
+        xml.append(String.format("    <class entity-name=\"%s\" table=\"%s\">\n", this.entityName, this.tableName));
 
         // --- ID Element ---
         HbmIdDescriptor idDesc = this.id;
@@ -198,6 +266,11 @@ public class HbmXmlDescriptor {
                 idDesc.getType()));
         xml.append(String.format("            <generator class=\"%s\"/>\n", idDesc.getGeneratorClass()));
         xml.append("        </id>\n");
+
+        // --- Association Elements (ManyToOne) ---
+        for (HbmAssociationDescriptor association : this.associations) {
+            xml.append(association.serialize());
+        }
 
         // --- Property Elements ---
         for (HbmPropertyDescriptor prop : this.properties) {

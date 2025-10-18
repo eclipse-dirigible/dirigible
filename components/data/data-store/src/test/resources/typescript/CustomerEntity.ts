@@ -4,12 +4,12 @@ export class Customer {
     
     @Id()
     @Generated("sequence")
-    @Column({ name: "ID", type: "long" })
+    @Column({ name: "CUSTOMER_ID", type: "long" })
     public id: number;
 
-    @Column({ name: "NAME", type: "string" })
+    @Column({ name: "CUSTOMER_NAME", type: "string" })
     public name: string;
 
-    @Column({ name: "ADDRESS", type: "string" })
+    @Column({ name: "CUSTOMER_ADDRESS", type: "string" })
     public address: string;
 }

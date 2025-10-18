@@ -117,7 +117,7 @@ public class DataStoreIT extends IntegrationTest {
         assertNotNull(list);
         assertEquals(1, list.size());
         assertEquals("001", ((Map) list.get(0)).get("number"));
-        assertEquals(2, ((List) ((Map) list.get(0)).get("items")).size());
+        assertEquals(2, ((List) ((Map) list.get(0)).get("OrderItem")).size());
         Map order001 = dataStore.get("Order", (Long) ((Map) list.get(0)).get("id"));
         System.out.println(JsonHelper.toJson(order001));
         assertEquals("TV", ((Map) ((List) order001.get("items")).get(0)).get("name"));
@@ -164,7 +164,7 @@ public class DataStoreIT extends IntegrationTest {
         assertNotNull(list);
         assertEquals(1, list.size());
         assertNotNull(list.get(0));
-        assertEquals("John", ((Map) list.get(0)).get("name"));
+        assertEquals("John", ((Map) list.get(0)).get("customer_name"));
 
         list = dataStore.list("Customer");
         for (Object element : list) {
