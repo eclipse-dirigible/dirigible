@@ -17,6 +17,8 @@ public class EntityFieldMetadata {
 
     private String generationStrategy;
 
+    private String documentation;
+
     private boolean isIdentifier = false;
 
     private boolean isCollection = false;
@@ -51,6 +53,14 @@ public class EntityFieldMetadata {
 
     public void setGenerationStrategy(String generationStrategy) {
         this.generationStrategy = generationStrategy;
+    }
+
+    public String getDocumentation() {
+        return documentation;
+    }
+
+    public void setDocumentation(String documentation) {
+        this.documentation = documentation;
     }
 
     public boolean isIdentifier() {

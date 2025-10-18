@@ -80,9 +80,10 @@ public class OpenApiParser {
                     Map<String, Object> entityProperties = new HashMap<>();
                     for (EntityFieldMetadata efm : entityMetadata.getFields()) {
                         entityProperties.put(efm.getPropertyName(),
-                                map("type", efm.getTypeScriptType(), "description", efm.getPropertyName() + " property"));
+                                map("type", efm.getTypeScriptType(), "description", efm.getDocumentation()));
                     }
-                    SCHEMAS.put(entityMetadata.getEntityName(), map("type", "object", "properties", entityProperties));
+                    SCHEMAS.put(entityMetadata.getEntityName(),
+                            map("type", "object", "properties", entityProperties, "description", entityMetadata.getDocumentation()));
                 }
             });
         }
@@ -97,10 +98,9 @@ public class OpenApiParser {
 
         private String controllerPath = "/";
         private String controllerName = "Controller";
+        private String documentation = "";
         private final List<Map<String, Object>> routes = new ArrayList<>();
         private final Map<String, String> entityImports = new HashMap<>();
-
-
 
         public ControllerMetadataVisitor(String controllerPath) {
             super();
@@ -114,6 +114,7 @@ public class OpenApiParser {
             Map<String, Object> result = new HashMap<>();
             result.put("path", controllerPath);
             result.put("name", controllerName);
+            result.put("description", documentation);
             result.put("routes", routes);
             result.put("entityImports", entityImports);
             return result;
@@ -146,7 +147,7 @@ public class OpenApiParser {
                                                                               .identifierName();
                     String importedName = name.getText();
 
-                    if (!importPath.contains("@dirigible/core")) {
+                    if (!importPath.contains("sdk")) {
                         entityImports.put(importedName, importPath);
                     }
                 }
@@ -161,14 +162,15 @@ public class OpenApiParser {
                                             .Identifier();
             if (classNameNode != null) {
                 controllerName = classNameNode.getText();
-                // controllerPath += controllerName;
             }
 
             if (ctx.decoratorList() != null) {
                 for (TypeScriptParser.DecoratorContext decoratorCtx : ctx.decoratorList()
                                                                          .decorator()) {
                     if ("Controller".equals(getDecoratorBaseName(decoratorCtx))) {
-                        controllerPath = extractDecoratorPath(decoratorCtx, controllerPath);
+                        controllerPath = extractDecoratorContent(decoratorCtx, controllerPath);
+                    } else if ("Documentation".equals(getDecoratorBaseName(decoratorCtx))) {
+                        documentation = extractDecoratorContent(decoratorCtx, documentation);
                     }
                 }
             }
@@ -187,6 +189,8 @@ public class OpenApiParser {
                 for (TypeScriptParser.DecoratorContext decoratorCtx : decorators) {
                     String method = getDecoratorBaseName(decoratorCtx);
                     String httpMethod = null;
+                    String routePath = extractDecoratorContent(decoratorCtx, "/");
+                    String fullPath = normalizePath(controllerPath + routePath);
 
                     switch (method) {
                         case "Get":
@@ -201,17 +205,17 @@ public class OpenApiParser {
                         case "Delete":
                             httpMethod = "delete";
                             break;
+                        case "Documentation":
+                            documentation = extractDecoratorContent(decoratorCtx, "");
                         default:
                             continue; // Skip non-HTTP decorators
                     }
-
-                    String routePath = extractDecoratorPath(decoratorCtx, "/");
-                    String fullPath = normalizePath(controllerPath + routePath);
 
                     Map<String, Object> route = new HashMap<>();
                     route.put("httpMethod", httpMethod);
                     route.put("path", fullPath);
                     route.put("methodName", methodName);
+                    route.put("description", documentation);
                     route.put("tags", List.of(controllerName));
 
                     extractMethodDetails(methodDeclaration, route);
@@ -294,7 +298,7 @@ public class OpenApiParser {
             return null;
         }
 
-        private String extractDecoratorPath(TypeScriptParser.DecoratorContext ctx, String defaultPath) {
+        private String extractDecoratorContent(TypeScriptParser.DecoratorContext ctx, String defaultPath) {
             if (ctx.decoratorCallExpression() != null && ctx.decoratorCallExpression()
                                                             .arguments() != null
                     && ctx.decoratorCallExpression()
