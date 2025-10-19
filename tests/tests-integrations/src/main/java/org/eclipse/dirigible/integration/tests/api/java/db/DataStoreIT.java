@@ -120,7 +120,7 @@ public class DataStoreIT extends IntegrationTest {
         assertEquals(2, ((List) ((Map) list.get(0)).get("OrderItem")).size());
         Map order001 = dataStore.get("Order", (Long) ((Map) list.get(0)).get("id"));
         System.out.println(JsonHelper.toJson(order001));
-        assertEquals("TV", ((Map) ((List) order001.get("items")).get(0)).get("name"));
+        assertEquals("TV", ((Map) ((List) order001.get("OrderItem")).get(0)).get("name"));
         dataStore.delete("Order", ((Long) ((Map) list.get(0)).get("id")));
     }
 
