@@ -108,7 +108,7 @@ public class DataStoreIT extends IntegrationTest {
     @Test
     public void bag() {
 
-        String json = "{\"number\":\"001\",\"items\":[{\"name\":\"TV\"},{\"name\":\"Fridge\"}]}";
+        String json = "{\"number\":\"001\",\"OrderItem\":[{\"name\":\"TV\"},{\"name\":\"Fridge\"}]}";
         dataStore.save("Order", json);
 
         List list = dataStore.list("Order");
