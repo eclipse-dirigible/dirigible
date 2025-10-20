@@ -21,6 +21,7 @@ import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.FilenameUtils;
+import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.AssociationDetails;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.CollectionDetails;
@@ -29,6 +30,8 @@ import org.eclipse.dirigible.components.data.store.model.EntityMetadata;
 import org.eclipse.dirigible.parsers.typescript.TypeScriptLexer;
 import org.eclipse.dirigible.parsers.typescript.TypeScriptParser;
 import org.eclipse.dirigible.parsers.typescript.TypeScriptParserBaseVisitor;
+
+import com.oracle.truffle.js.builtins.json.JSONBuiltins.JSON;
 
 /**
  * Main parser class to generate EntityMetadata from TypeScript code.
@@ -438,9 +441,8 @@ public class EntityParser {
                     if (args.size() > 0) {
                         String argText = args.get(0)
                                              .getText();
-                        String name = extractValue.apply(argText, "name");
-                        if (name != null)
-                            collectionDetails.setName(name);
+
+                        collectionDetails.setName(fieldMetadata.getPropertyName());
                         String entityName = extractValue.apply(argText, "entityName");
                         if (entityName != null)
                             collectionDetails.setEntityName(entityName);
@@ -499,10 +501,7 @@ public class EntityParser {
                         String argText = args.get(0)
                                              .getText();
 
-                        String name = extractValue.apply(argText, "name");
-                        if (name != null) {
-                            associationDetails.setName(name);
-                        }
+                        associationDetails.setName(fieldMetadata.getPropertyName());
                         String entityName = extractValue.apply(argText, "entityName");
                         if (entityName != null) {
                             associationDetails.setEntityName(entityName);

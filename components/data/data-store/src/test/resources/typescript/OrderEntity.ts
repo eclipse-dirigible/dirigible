@@ -11,7 +11,6 @@ export class Order {
     public number: string;
 
     @OneToMany({
-		name: "OrderItem",
 		entityName: "OrderItem",
         table: "ORDER_ITEMS",
         joinColumn: "ORDER_ID",

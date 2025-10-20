@@ -108,7 +108,7 @@ public class DataStoreIT extends IntegrationTest {
     @Test
     public void bag() {
 
-        String json = "{\"number\":\"001\",\"OrderItem\":[{\"name\":\"TV\"},{\"name\":\"Fridge\"}]}";
+        String json = "{\"number\":\"001\",\"items\":[{\"name\":\"TV\"},{\"name\":\"Fridge\"}]}";
         dataStore.save("Order", json);
 
         List list = dataStore.list("Order");
@@ -117,10 +117,10 @@ public class DataStoreIT extends IntegrationTest {
         assertNotNull(list);
         assertEquals(1, list.size());
         assertEquals("001", ((Map) list.get(0)).get("number"));
-        assertEquals(2, ((List) ((Map) list.get(0)).get("OrderItem")).size());
+        assertEquals(2, ((List) ((Map) list.get(0)).get("items")).size());
         Map order001 = dataStore.get("Order", (Long) ((Map) list.get(0)).get("id"));
         System.out.println(JsonHelper.toJson(order001));
-        assertEquals("TV", ((Map) ((List) order001.get("OrderItem")).get(0)).get("name"));
+        assertEquals("TV", ((Map) ((List) order001.get("items")).get(0)).get("name"));
         dataStore.delete("Order", ((Long) ((Map) list.get(0)).get("id")));
     }
 

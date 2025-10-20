@@ -11,7 +11,6 @@ export class Customer {
     public city: string;
 
 	@ManyToOne({
-			name: "Customer",
 			entityName: "Customer",
 	        table: "CUSTOMER",
 	        joinColumn: "CUSTOMER_ID",
