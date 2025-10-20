@@ -125,11 +125,11 @@ jobs:
 
       #--------------- Publish dirigible jar to NPM -----------------#
 
-      - name: Set the new package version
+      - name: [ dirigible ] Set the new package version
         working-directory: ./npm/dirigible
         run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
 
-      - name: Publish the package to npm
+      - name: [ dirigible ] Publish the package to npm
         working-directory: ./npm/dirigible
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN_ORG_DIRIGIBLELABS }}
@@ -137,6 +137,25 @@ jobs:
           npm publish --access public
 
       #--------------- Publish dirigible jar to NPM -----------------#
+
+      #--------------- Publish dirigible-cli to NPM -----------------#
+
+      - name: [ dirigible-cli ] Set the new package version
+        working-directory: ./npm/dirigible-cli
+        run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
+
+      - name: [ dirigible-cli ] Set the new dependency version
+        working-directory: ./npm/dirigible-cli
+        run: npm pkg set dependencies.@dirigiblelabs/dirigible=${{ github.event.inputs.releaseVersion }}
+
+      - name: [ dirigible-cli ] Publish the package to npm
+        working-directory: ./npm/dirigible-cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN_ORG_DIRIGIBLELABS }}
+        run: |
+          npm publish --access public
+
+      #--------------- Publish dirigible-cli to NPM -----------------#
 
       - name: "Git: Push Changes"
         run: |
