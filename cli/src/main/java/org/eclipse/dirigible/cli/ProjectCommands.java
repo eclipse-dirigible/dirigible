@@ -34,9 +34,8 @@ class ProjectCommands {
     }
 
     @ShellMethod("Run Eclipse Dirigible project")
-    String start(
-            @ShellOption(value = {"dirigibleJarPath"}, defaultValue = ShellOption.NONE,
-                    help = "Path to Eclipse Dirigible fat/uber jar.") String dirigibleJarPathOption, //
+    String start(@ShellOption(value = {"dirigibleJarPath"}, defaultValue = ShellOption.NULL,
+            help = "Path to the Eclipse Dirigible fat/uber jar. This value is automatically resolved when the CLI is installed via npm.") String dirigibleJarPathOption,
             @ShellOption(value = {"projectPath"}, defaultValue = ShellOption.NULL,
                     help = "Path to Eclipse Dirigible project. If not specified, user working directory will be used.") String projectPathOption) {
 
@@ -54,7 +53,7 @@ class ProjectCommands {
         if (isOptionProvided(dirigibleJarPathOption)) {
             LOGGER.info("Provided dirigible jar path option with value: {}", dirigibleJarPathOption);
         } else {
-            throw new IllegalStateException("Missing the required dirigible jar path option.");
+            throw new IllegalStateException("Missing the dirigible jar path option.");
         }
         Path dirigibleJarPath = Path.of(dirigibleJarPathOption);
 
