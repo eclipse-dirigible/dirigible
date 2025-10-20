@@ -1,0 +1,10 @@
+{
+  "name": "dirigible-demo-project",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "dirigible start"
+  },
+  "devDependencies": {
+    "@dirigiblelabs/dirigible-cli": "12.28.0"
+  }
+}

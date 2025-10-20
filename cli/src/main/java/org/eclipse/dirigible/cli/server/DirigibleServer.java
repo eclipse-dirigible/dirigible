@@ -15,6 +15,7 @@ import org.eclipse.dirigible.cli.util.ProcessManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.util.FileSystemUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -68,9 +69,9 @@ public class DirigibleServer {
     private void deleteServerFolder(Path serverDir) {
         try {
             LOGGER.info("Deleting server folder at path [{}]...", serverDir);
-            FileUtils.deleteDirectory(serverDir.toFile());
+            FileSystemUtils.deleteRecursively(serverDir);
         } catch (IOException ex) {
-            LOGGER.warn("Failed to delete server dir {}", serverDir, ex);
+            LOGGER.warn("Failed to delete server dir [{}]", serverDir, ex);
         }
     }
 }
