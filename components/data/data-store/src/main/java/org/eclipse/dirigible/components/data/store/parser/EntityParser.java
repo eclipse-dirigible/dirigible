@@ -49,8 +49,8 @@ public class EntityParser {
      */
     public EntityMetadata parse(String location, String source) {
         String md5 = DigestUtils.md5Hex(source.getBytes());
-        String existing = MD5.get(md5);
         String filename = FilenameUtils.getBaseName(location);
+        String existing = MD5.get(filename);
         if (existing != null && existing.equals(md5)) {
             return ENTITIES.get(filename);
         }
