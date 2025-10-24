@@ -59,7 +59,7 @@ public class ProjectGenerator {
         try {
             FileUtils.deleteDirectory(projectPath.toFile());
         } catch (IOException ex) {
-            LOGGER.warn("Failed to delete the existing project dir ", projectPath, ex);
+            LOGGER.warn("Failed to delete the existing project dir [{}]", projectPath, ex);
         }
     }
 
