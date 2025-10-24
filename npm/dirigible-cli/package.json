@@ -28,6 +28,6 @@
   },
   "homepage": "https://github.com/eclipse-dirigible/dirigible#readme",
   "dependencies": {
-    "@dirigiblelabs/dirigible": "1.0.0"
+    "@dirigiblelabs/dirigible": "file:../dirigible"
   }
 }

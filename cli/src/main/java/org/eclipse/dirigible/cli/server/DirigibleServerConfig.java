@@ -15,10 +15,16 @@ public class DirigibleServerConfig {
 
     private final Path serverJarPath;
     private final Path projectPath;
+    private final boolean watchMode;
 
-    public DirigibleServerConfig(Path serverJarPath, Path projectPath) {
+    public DirigibleServerConfig(Path serverJarPath, Path projectPath, boolean watchMode) {
         this.serverJarPath = serverJarPath;
         this.projectPath = projectPath;
+        this.watchMode = watchMode;
+    }
+
+    public boolean isWatchMode() {
+        return watchMode;
     }
 
     public Path getServerJarPath() {
@@ -31,6 +37,7 @@ public class DirigibleServerConfig {
 
     @Override
     public String toString() {
-        return "DirigibleServerConfig{" + "serverJarPath=" + serverJarPath + ", projectPath=" + projectPath + '}';
+        return "DirigibleServerConfig{" + "serverJarPath=" + serverJarPath + ", projectPath=" + projectPath + ", watchMode=" + watchMode
+                + '}';
     }
 }

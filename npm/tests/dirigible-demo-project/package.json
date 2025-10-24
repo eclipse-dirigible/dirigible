@@ -2,9 +2,10 @@
   "name": "dirigible-demo-project",
   "version": "1.0.0",
   "scripts": {
-    "start": "dirigible start"
+    "start": "dirigible start",
+    "start:dev": "dirigible start --watch"
   },
   "devDependencies": {
-    "@dirigiblelabs/dirigible-cli": "12.28.0"
+    "@dirigiblelabs/dirigible-cli": "file:../dirigible-cli"
   }
 }

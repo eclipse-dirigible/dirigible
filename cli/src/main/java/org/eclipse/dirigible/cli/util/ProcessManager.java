@@ -16,6 +16,8 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Map;
 import java.util.Optional;
 
 @Component
@@ -24,16 +26,19 @@ public class ProcessManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(ProcessManager.class);
 
     public int startSynchronously(String... commandArgs) throws ProcessException {
-        return startSynchronously(Optional.empty(), commandArgs);
+        return startSynchronously(Optional.empty(), Collections.emptyMap(), commandArgs);
     }
 
-    public int startSynchronously(Optional<Path> processPath, String... commandArgs) {
+    public int startSynchronously(Optional<Path> processPath, Map<String, String> envVariables, String... commandArgs) {
         ProcessBuilder builder = new ProcessBuilder(commandArgs);
 
         if (processPath.isPresent()) {
             builder.directory(processPath.get()
                                          .toFile());
         }
+
+        builder.environment()
+               .putAll(envVariables);
 
         builder.inheritIO();
 
@@ -49,7 +54,8 @@ public class ProcessManager {
         }
     }
 
-    public int startSynchronously(Path processPath, String... commandArgs) {
-        return startSynchronously(Optional.of(processPath), commandArgs);
+    public int startSynchronously(Map<String, String> envVariables, String... commandArgs) throws ProcessException {
+        return startSynchronously(Optional.empty(), envVariables, commandArgs);
     }
+
 }

@@ -7,6 +7,8 @@
 ```shell
 DIRIGIBLE_REPO_PATH='<path_to_dirigible_git_folder>'
 
+cd $DIRIGIBLE_REPO_PATH
+
 mvn clean install -P quick-build
 ```
 
