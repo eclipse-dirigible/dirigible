@@ -9,63 +9,151 @@
  */
 package org.eclipse.dirigible.components.registry.watcher;
 
-import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
-import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
-import static java.nio.file.StandardWatchEventKinds.ENTRY_CREATE;
-import static java.nio.file.StandardWatchEventKinds.ENTRY_DELETE;
-import static java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY;
-import static java.nio.file.StandardWatchEventKinds.OVERFLOW;
-
-import java.io.IOException;
-import java.nio.file.FileSystems;
-import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.WatchEvent;
-import java.nio.file.WatchKey;
-import java.nio.file.WatchService;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
+
+import java.io.IOException;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+import static java.nio.file.StandardWatchEventKinds.*;
 
 public class RecursiveFolderWatcher implements DisposableBean {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(RecursiveFolderWatcher.class);
 
+    private final Map<WatchKey, Path> keyToPathMap = new HashMap<>();
+    private Set<String> ignoredFolders = Collections.emptySet();
     private Path sourceDir;
     private Path targetDir;
     private WatchService watchService;
     private ExecutorService executorService;
-    private final Map<WatchKey, Path> keyToPathMap = new HashMap<>();
+
+    /**
+     * Initialize.
+     */
+    public synchronized void initialize(String source, String target, boolean sourceAsSubfolder, Set<String> ignoredFolders) {
+        this.ignoredFolders = ignoredFolders;
+        this.sourceDir = Paths.get(source)
+                              .toAbsolutePath();
+        if (sourceAsSubfolder) {
+            String sourceFolderName = this.sourceDir.getFileName()
+                                                    .toString();
+            this.targetDir = Paths.get(target, sourceFolderName)
+                                  .toAbsolutePath();
+        } else {
+            this.targetDir = Paths.get(target)
+                                  .toAbsolutePath();
+        }
+
+        logger.info("Initializing the External Registry file watcher from [{}] to [{}], ignoring {}...", sourceDir, targetDir,
+                this.ignoredFolders);
+
+        executorService = Executors.newFixedThreadPool(1);
+        executorService.submit(() -> {
+            try {
+                if (!Files.exists(sourceDir)) {
+                    throw new IllegalArgumentException("Source folder does not exist: " + sourceDir);
+                }
+                if (!Files.exists(targetDir)) {
+                    Files.createDirectories(targetDir);
+                }
+
+                if (this.watchService != null) {
+                    logger.warn(
+                            "Recursive Folder Watcher has been initialized already. Existing watcher will be closed and a new one will be created.");
+                    destroy();
+                }
+
+                this.watchService = FileSystems.getDefault()
+                                               .newWatchService();
+
+                // Initial sync before watching
+                initialSync();
+
+                // Register watchers recursively
+                registerAll(sourceDir);
+
+                // Start actual watching
+                this.startWatching();
+            } catch (IOException | InterruptedException e) {
+                logger.error("Error during initializing the External Registry Watcher", e);
+            }
+        });
+        logger.debug("Done initializing the External Registry file watcher.");
+    }
 
     /** Perform initial sync of all files and folders */
     private void initialSync() throws IOException {
         logger.info("Performing initial sync...");
         Files.walkFileTree(sourceDir, new SimpleFileVisitor<>() {
             @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                syncFile(file);
-                return FileVisitResult.CONTINUE;
-            }
-
-            @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                if (isIgnored(dir)) {
+                    logger.debug("Skipping ignored directory: {}", dir);
+                    return FileVisitResult.SKIP_SUBTREE;
+                }
                 Path relative = sourceDir.relativize(dir);
                 Path targetSubDir = targetDir.resolve(relative);
                 Files.createDirectories(targetSubDir);
                 return FileVisitResult.CONTINUE;
             }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                if (!isIgnored(file)) {
+                    syncFile(file);
+                }
+                return FileVisitResult.CONTINUE;
+            }
         });
         logger.info("Initial sync complete.");
+    }
+
+    private void syncFile(Path sourceFile) {
+        try {
+            if (Files.isDirectory(sourceFile) || isIgnored(sourceFile)) {
+                return;
+            }
+            Path relative = sourceDir.relativize(sourceFile);
+            Path targetFile = targetDir.resolve(relative);
+            Files.createDirectories(targetFile.getParent());
+            Files.copy(sourceFile, targetFile, REPLACE_EXISTING, COPY_ATTRIBUTES);
+            logger.info("Synced: " + sourceFile + " → " + targetFile);
+        } catch (IOException e) {
+            logger.error("Failed to sync: " + sourceFile, e);
+        }
+    }
+
+    private boolean isIgnored(Path path) {
+        if (ignoredFolders.isEmpty()) {
+            return false;
+        }
+
+        // Only ignore if this is a top-level folder directly under sourceDir
+        Path relative = sourceDir.relativize(path);
+        if (relative.getNameCount() == 1) { // path is immediate child of sourceDir
+
+            String topName = relative.getFileName()
+                                     .toString();
+
+            for (String ignored : ignoredFolders) {
+                if (topName.equalsIgnoreCase(ignored)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** Register directory and all sub-directories */
@@ -73,6 +161,10 @@ public class RecursiveFolderWatcher implements DisposableBean {
         Files.walkFileTree(start, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                if (isIgnored(dir)) {
+                    logger.debug("Skipping ignored directory registration: {}", dir);
+                    return FileVisitResult.SKIP_SUBTREE;
+                }
                 register(dir);
                 return FileVisitResult.CONTINUE;
             }
@@ -149,20 +241,6 @@ public class RecursiveFolderWatcher implements DisposableBean {
         }
     }
 
-    private void syncFile(Path sourceFile) {
-        try {
-            if (Files.isDirectory(sourceFile))
-                return;
-            Path relative = sourceDir.relativize(sourceFile);
-            Path targetFile = targetDir.resolve(relative);
-            Files.createDirectories(targetFile.getParent());
-            Files.copy(sourceFile, targetFile, REPLACE_EXISTING, COPY_ATTRIBUTES);
-            logger.info("Synced: " + sourceFile + " → " + targetFile);
-        } catch (IOException e) {
-            logger.error("Failed to sync: " + sourceFile, e);
-        }
-    }
-
     private void deleteFile(Path sourceFile) {
         try {
             Path relative = sourceDir.relativize(sourceFile);
@@ -193,62 +271,18 @@ public class RecursiveFolderWatcher implements DisposableBean {
         }
     }
 
-    /**
-     * Initialize.
-     *
-     */
-    public synchronized void initialize(String source, String target) {
-        logger.debug("Initializing the External Registry file watcher...");
-
-        executorService = Executors.newFixedThreadPool(1);
-        executorService.submit(() -> {
-            try {
-                if (source != null) {
-                    this.sourceDir = Paths.get(source)
-                                          .toAbsolutePath();
-                    this.targetDir = Paths.get(target)
-                                          .toAbsolutePath();
-
-                    if (!Files.exists(sourceDir)) {
-                        throw new IllegalArgumentException("Source folder does not exist: " + sourceDir);
-                    }
-                    if (!Files.exists(targetDir)) {
-                        Files.createDirectories(targetDir);
-                    }
-
-                    if (this.watchService != null) {
-                        logger.warn(
-                                "Recursive Folder Watcher has been initialized already. Existing watcher will be closed and a new one will be created.");
-                        destroy();
-                    }
-
-                    this.watchService = FileSystems.getDefault()
-                                                   .newWatchService();
-
-                    // Initial sync before watching
-                    initialSync();
-
-                    // Register watchers recursively
-                    registerAll(sourceDir);
-
-                    // Start actual watching
-                    this.startWatching();
-                }
-            } catch (IOException | InterruptedException e) {
-                logger.error("Error during initializing the Etenral Registry Watcher", e);
-            }
-        });
-        logger.debug("Done initializing the External Registry file watcher.");
-    }
-
     @Override
     public void destroy() throws IOException {
         logger.info("Destroying Recursive Folder Watcher");
 
-        watchService.close();
-        watchService = null;
+        if (null != watchService) {
+            watchService.close();
+            watchService = null;
+        }
 
-        executorService.shutdown();
-        executorService = null;
+        if (null != executorService) {
+            executorService.shutdown();
+            executorService = null;
+        }
     }
 }

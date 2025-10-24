@@ -1,6 +1,6 @@
 {
   "name": "@dirigiblelabs/dirigible",
-  "version": "1.0.0",
+  "version": "12.31.0",
   "description": "Eclipse Dirigible jar",
   "scripts": {
     "postinstall": "node postinstall.js"
