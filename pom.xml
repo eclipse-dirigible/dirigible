@@ -123,7 +123,7 @@
         <maven-jacoco-plugin.version>0.8.13</maven-jacoco-plugin.version>
         <maven-spotbugs-plugin.version>4.9.6.0</maven-spotbugs-plugin.version>
         <maven-formatter-plugin.version>2.29.0</maven-formatter-plugin.version>
-        <maven-exec-plugin.version>3.5.1</maven-exec-plugin.version>
+        <maven-exec-plugin.version>3.6.2</maven-exec-plugin.version>
         <maven-git-commit-id-plugin.version>4.9.10</maven-git-commit-id-plugin.version>
         <maven-license-plugin.version>5.0.0</maven-license-plugin.version>
 
@@ -141,14 +141,14 @@
 
         <!-- Commons -->
         <commons.io>2.20.0</commons.io>
-        <commons.lang3>3.18.0</commons.lang3>
+        <commons.lang3>3.19.0</commons.lang3>
         <commons.exec>1.5.0</commons.exec>
         <commons-csv.version>1.14.1</commons-csv.version>
 
         <apache-httpcomponents-httpmime.version>4.5.14</apache-httpcomponents-httpmime.version>
         <apache-httpcomponents-httpclient.version>4.5.14</apache-httpcomponents-httpclient.version>
         <apache-httpcomponents-httpasyncclient.version>4.1.5</apache-httpcomponents-httpasyncclient.version>
-        <okhttp.version>5.1.0</okhttp.version>
+        <okhttp.version>5.2.1</okhttp.version>
 
         <jaxb.version>2.3.1</jaxb.version>
 
@@ -176,7 +176,7 @@
         <velocity.version>2.4</velocity.version>
 
         <!-- JGit -->
-        <jgit.version>7.3.0.202506031305-r</jgit.version>
+        <jgit.version>7.4.0.202509020913-r</jgit.version>
 
         <!-- Flowable -->
         <flowable.version>7.2.0</flowable.version>
@@ -188,7 +188,7 @@
         <!-- JDBC -->
         <mongodb.version>3.12.14</mongodb.version>
         <ngdbc.version>2.26.6</ngdbc.version>
-        <snowflake.version>3.26.1</snowflake.version>
+        <snowflake.version>3.27.0</snowflake.version>
         <mysql.version>8.4.0</mysql.version>
 
         <!-- QLDB -->
@@ -202,7 +202,7 @@
         <c3p0.version>0.11.2</c3p0.version>
         <guava.version>33.5.0-jre</guava.version>
         <icu4j.version>77.1</icu4j.version>
-        <classgraph.version>4.8.181</classgraph.version>
+        <classgraph.version>4.8.184</classgraph.version>
         <logcaptor.version>2.12.1</logcaptor.version>
 
         <!-- UI -->
@@ -227,7 +227,7 @@
         <i18next.version>25.3.0</i18next.version>
         <!-- Tests -->
         <testcontainers.version>1.21.1</testcontainers.version>
-        <selenide.version>7.10.1</selenide.version>
+        <selenide.version>7.11.1</selenide.version>
 
         <antlr4-maven-plugin.version>4.13.2</antlr4-maven-plugin.version>
         <antlr4-runtime.version>4.13.2</antlr4-runtime.version>
@@ -617,7 +617,7 @@
                     <plugin>
                         <groupId>org.sonatype.central</groupId>
                         <artifactId>central-publishing-maven-plugin</artifactId>
-                        <version>0.8.0</version>
+                        <version>0.9.0</version>
                         <extensions>true</extensions>
                         <configuration>
                             <publishingServerId>ossrh</publishingServerId>
@@ -928,7 +928,7 @@
             <dependency>
                 <groupId>org.seleniumhq.selenium</groupId>
                 <artifactId>selenium-java</artifactId>
-                <version>4.35.0</version>
+                <version>4.37.0</version>
                 <scope>test</scope>
             </dependency>
             <dependency>
