@@ -28,11 +28,20 @@
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-data-transfer</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-engine-cms</artifactId>
+        </dependency>
 
         <!-- Test -->
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-ide-git</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-engine-cms-internal</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

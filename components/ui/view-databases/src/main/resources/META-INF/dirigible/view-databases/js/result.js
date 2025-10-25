@@ -390,7 +390,7 @@ resultView.controller('DatabaseResultController', ($scope, $http, Dialogs, Statu
         Layout.openView({ id: 'result' });
         $scope.state.error = false;
         $scope.showProgress();
-        const url = '/services/data/export/' + selectedDatabase.name;
+        const url = '/services/data/export-async/' + selectedDatabase.name;
         const sql = command.trim().toLowerCase();
         if (sql.startsWith('select')) {
             $http({
@@ -403,7 +403,8 @@ resultView.controller('DatabaseResultController', ($scope, $http, Dialogs, Statu
                 }
             }).then((result) => {
                 cleanScope();
-                triggerDownload(result);
+                // triggerDownload(result);
+				console.info("Generation of the export file has been triggered.");
                 $scope.hideProgress();
             }, (reject) => {
                 cleanScope();
