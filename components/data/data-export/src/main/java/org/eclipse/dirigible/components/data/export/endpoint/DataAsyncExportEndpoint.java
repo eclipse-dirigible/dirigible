@@ -145,7 +145,6 @@ public class DataAsyncExportEndpoint {
     /**
      * Gets the page.
      *
-     * @param path the file path
      * @return the response
      */
     @GetMapping("/")
@@ -208,7 +207,7 @@ public class DataAsyncExportEndpoint {
                 }).start();
 
                 try (PipedInputStream consumerPis = pis) {
-                    CmisDocument document = cmsService.createDocument(exportsFolder, name, "text/csv", -1, consumerPis);
+                    cmsService.createDocument(exportsFolder, name, "text/csv", -1, consumerPis);
                     export.setStatus(ExportStatus.FINISHED);
                     Timestamp to = Timestamp.from(Instant.now());
                     export.setFinishedAt(to);

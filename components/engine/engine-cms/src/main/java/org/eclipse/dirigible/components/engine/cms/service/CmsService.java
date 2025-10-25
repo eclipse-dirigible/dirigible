@@ -44,9 +44,9 @@ public class CmsService {
     /**
      * Gets the CMIS object by path.
      *
-     * @param path the path
+     * @param path the path to the document
      * @return the CMIS object by path
-     * @throws IOException
+     * @throws IOException if an I/O error occurs
      */
     public CmisObject getObjectByPath(String path) throws IOException {
         CmisObject cmisObject = CmisSessionFactory.getSession()
@@ -59,7 +59,7 @@ public class CmsService {
      *
      * @param cmisObject the CMIS object
      * @return the document by path
-     * @throws IOException
+     * @throws IOException if an I/O error occurs
      */
     public byte[] getDocumentContent(CmisObject cmisObject) throws IOException {
         if (cmisObject != null && ObjectType.DOCUMENT.equals(cmisObject.getType()) && cmisObject instanceof CmisDocument) {
@@ -74,9 +74,9 @@ public class CmsService {
     /**
      * Gets the document content.
      *
-     * @param cmisObject the CMIS object
-     * @return the document by path
-     * @throws IOException
+     * @param path the path to the document
+     * @return the document content as byte array, or null if not found
+     * @throws IOException if an I/O error occurs
      */
     public byte[] getDocument(String path) throws IOException {
         CmisObject cmisObject = getObjectByPath(path);
