@@ -63,10 +63,15 @@ jobs:
       - name: Verify tsc is accessible (windows)
         if: matrix.os == 'windows'
         run: |
-          set
-          
-          where tsc
           tsc --help
+          echo "where tsc:"
+          where tsc
+        shell: cmd
+
+      - name: Print env (windows)
+        if: matrix.os == 'windows'
+        run: |
+          set
         shell: cmd
 
       - name: Verify tsc is accessible (ubuntu)
