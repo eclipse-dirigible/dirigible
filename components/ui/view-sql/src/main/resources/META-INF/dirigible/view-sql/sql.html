@@ -52,9 +52,9 @@
                 <bk-loader size="l"></bk-loader>
               </span>
               <bk-list-content item-title="{{export.name}}">
-                <bk-list-byline ng-if="export.status === ExportStatus.FINISHED" align="left" content-wrap="true">Export finished</bk-list-byline>
-                <bk-list-byline ng-if="export.status === ExportStatus.TRIGGRED" align="left" content-wrap="true">Exporting...</bk-list-byline>
-                <bk-list-byline ng-if="export.status === ExportStatus.FAILED" align="left" content-wrap="true" data-color-error>{{export.message ?? "Unknown error"}}</bk-list-byline>
+                <bk-list-byline ng-if="export.status === ExportStatus.FINISHED" align="left">Export finished</bk-list-byline>
+                <bk-list-byline ng-if="export.status === ExportStatus.TRIGGRED" align="left">Exporting...</bk-list-byline>
+                <bk-list-byline ng-if="export.status === ExportStatus.FAILED" align="left" id="errorMessage" data-color-error>{{export.message || "Unknown error"}}</bk-list-byline>
                 <bk-list-byline align="right">{{getExportDate(export.startedAt)}}</bk-list-byline>
               </bk-list-content>
               <a bk-button ng-if="export.status === ExportStatus.FINISHED" ng-href="{{EXPORT_BASE_URL + export.name}}" bk-list-button state="transparent" glyph="sap-icon--download" aria-label="Download"></a>

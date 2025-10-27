@@ -47,3 +47,8 @@
 #exportsPopover li:last-child {
   border-bottom: none !important;
 }
+
+#errorMessage {
+  word-wrap: break-word;
+  white-space: wrap;
+}
