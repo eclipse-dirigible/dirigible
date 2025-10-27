@@ -61,12 +61,16 @@ jobs:
         run: npm install -g typescript esbuild
 
       - name: Verify tsc is accessible (windows)
-        if: runner.os == 'windows'
-        run: where tsc
+        if: matrix.os == 'windows'
+        run: |
+          where tsc
+          tsc --help
 
       - name: Verify tsc is accessible (ubuntu)
-        if: runner.os == 'ubuntu'
-        run: which tsc
+        if: matrix.os == 'ubuntu'
+        run: |
+          which tsc
+          tsc --help
 
       - name: Maven Build
         run: mvn clean install -P unit-tests -U
