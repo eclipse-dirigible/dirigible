@@ -60,8 +60,13 @@ jobs:
       - name: Install TypeScript and esbuild
         run: npm install -g typescript esbuild
 
-      - name: Verify tsc is accessible
+      - name: Verify tsc is accessible (windows)
+        if: runner.os == 'windows'
         run: where tsc
+
+      - name: Verify tsc is accessible (ubuntu)
+        if: runner.os == 'ubuntu'
+        run: which tsc
 
       - name: Maven Build
         run: mvn clean install -P unit-tests -U
