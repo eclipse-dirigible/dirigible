@@ -24,9 +24,6 @@ A simple dirigible demo project which is used for `@dirigiblelabs/dirigible-cli`
 
 ```shell
 DIRIGIBLE_REPO_PATH='<path_to_git_repo>'
-
-DIRIGIBLE_REPO_PATH='/Users/iliyan/work/git/dirigible-fork'
-
 ```
 
 - Cleanup

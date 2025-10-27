@@ -69,7 +69,7 @@ jobs:
           
           where tsc
           tsc --help
-          shell: powershell
+        shell: powershell
 
       - name: Verify tsc is accessible (ubuntu)
         if: matrix.os == 'ubuntu'
