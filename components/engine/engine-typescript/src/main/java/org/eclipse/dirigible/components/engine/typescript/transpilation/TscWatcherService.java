@@ -19,6 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
@@ -126,6 +127,11 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
             ProcessBuilder processBuilder = new ProcessBuilder("tsc", "--watch", "--pretty", "false");
             processBuilder.directory(new File(registryFolderPath));
             processBuilder.redirectErrorStream(false); // keep stdout/stderr separate
+
+            // TODO: for win workflow investigation only:
+            Map<String, String> environment = processBuilder.environment();
+            LOGGER.info("----- Available environment");
+            environment.forEach((k, v) -> LOGGER.info("----- Key:{}, Value: {}", k, v));
 
             tscProcess = processBuilder.start();
 
