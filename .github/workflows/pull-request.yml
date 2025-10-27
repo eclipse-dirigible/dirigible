@@ -63,8 +63,13 @@ jobs:
       - name: Verify tsc is accessible (windows)
         if: matrix.os == 'windows'
         run: |
+          Write-Host "--- Shell PATH Environment Variable ---"
+          Get-ChildItem Env:PATH
+          Write-Host "-------------------------------------"
+          
           where tsc
           tsc --help
+          shell: powershell
 
       - name: Verify tsc is accessible (ubuntu)
         if: matrix.os == 'ubuntu'
