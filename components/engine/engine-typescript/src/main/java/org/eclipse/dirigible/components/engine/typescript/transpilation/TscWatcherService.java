@@ -1,5 +1,6 @@
 package org.eclipse.dirigible.components.engine.typescript.transpilation;
 
+import org.apache.commons.lang3.SystemUtils;
 import org.eclipse.dirigible.components.base.ApplicationListenersOrder;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -124,7 +125,11 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
         try {
             LOGGER.info("Starting tsc watch in dir [{}]...", registryFolderPath);
 
-            ProcessBuilder processBuilder = new ProcessBuilder("tsc", "--watch", "--pretty", "false");
+            // ProcessBuilder on Windows does not always fully respect the PATHEXT variable
+            // when resolving a bare command name (like "tsc") unless it's an .exe
+            String tscCmd = SystemUtils.IS_OS_WINDOWS ? "tsc.cmd" : "tsc";
+
+            ProcessBuilder processBuilder = new ProcessBuilder(tscCmd, "--watch", "--pretty", "false");
             processBuilder.directory(new File(registryFolderPath));
             processBuilder.redirectErrorStream(false); // keep stdout/stderr separate
 
