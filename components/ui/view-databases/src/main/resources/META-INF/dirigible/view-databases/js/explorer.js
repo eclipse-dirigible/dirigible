@@ -720,6 +720,7 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 						$scope.selectedDatabase = lastSelectedDatabase.type;
 					} else {
 						$scope.selectedDatabase = $scope.databases[0];
+						lastSelectedDatabase.type = $scope.selectedDatabase;
 					}
 					if ($scope.selectedDatabase) {
 						// MessageHub.postMessage({ topic: 'database.database.selection.changed', data: $scope.selectedDatabase });
@@ -730,6 +731,7 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 									$scope.selectedDatasource = lastSelectedDatabase.name;
 								} else {
 									$scope.selectedDatasource = $scope.datasources[0];
+									lastSelectedDatabase.name = $scope.selectedDatasource;
 								}
 								if ($scope.selectedDatasource) {
 									MessageHub.postMessage({ topic: 'database.datasource.selection.changed', data: $scope.selectedDatasource });
@@ -993,44 +995,45 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 		return false;
 	};
 
-	$scope.switchDatabase = (name) => {
-		$scope.selectedDatabase = name;
-		$http.get(databasesSvcUrl + $scope.selectedDatabase)
-			.then((data) => {
-				$scope.datasources = data.data;
-				if ($scope.datasources[0]) {
-					$scope.selectedDatasource = $scope.datasources[0];
-					// MessageHub.postMessage({ topic: 'database.database.selection.changed', data: $scope.selectedDatabase });
-					MessageHub.postMessage({ topic: 'database.datasource.selection.changed', data: $scope.selectedDatasource });
-					$scope.switchDatasource();
-				} else {
-					$scope.selectedDatasource = undefined;
-				}
-				$scope.refreshDatabase();
-			}, (error) => {
-				console.error(error);
-				Notifications.show({
-					type: 'negative',
-					title: 'Unable to load database information',
-					description: 'There was an error while trying to load the database information.'
-				});
-			});
-	};
+	// $scope.switchDatabase = (name) => {
+	// 	$scope.selectedDatabase = name;
+	// 	$http.get(databasesSvcUrl + $scope.selectedDatabase)
+	// 		.then((data) => {
+	// 			$scope.datasources = data.data;
+	// 			if ($scope.datasources[0]) {
+	// 				$scope.selectedDatasource = $scope.datasources[0];
+	// 				// MessageHub.postMessage({ topic: 'database.database.selection.changed', data: $scope.selectedDatabase });
+	// 				MessageHub.postMessage({ topic: 'database.datasource.selection.changed', data: $scope.selectedDatasource });
+	// 				$scope.switchDatasource();
+	// 			} else {
+	// 				$scope.selectedDatasource = undefined;
+	// 			}
+	// 			$scope.refreshDatabase();
+	// 		}, (error) => {
+	// 			console.error(error);
+	// 			Notifications.show({
+	// 				type: 'negative',
+	// 				title: 'Unable to load database information',
+	// 				description: 'There was an error while trying to load the database information.'
+	// 			});
+	// 		});
+	// };
 
 	$scope.switchDatasource = (name) => {
-		if (name) $scope.selectedDatasource = name;
-		localStorage.setItem(lastSelectedDatabaseKey, JSON.stringify({ type: $scope.selectedDatabase, name: $scope.selectedDatasource }));
-		MessageHub.postMessage({ topic: 'database.datasource.selection.changed', data: $scope.selectedDatasource });
-		$scope.refreshDatabase();
+		if (name) {
+			$scope.selectedDatasource = name;
+			lastSelectedDatabase.name = name;
+			localStorage.setItem(lastSelectedDatabaseKey, JSON.stringify({ type: $scope.selectedDatabase, name: $scope.selectedDatasource }));
+			MessageHub.postMessage({ topic: 'database.datasource.selection.changed', data: $scope.selectedDatasource });
+			$scope.refreshDatabase();
+		}
 	};
 
-	function refreshHandler() {
-		$scope.$evalAsync(() => { $scope.refresh() });
-	}
-
-	const refreshRef = MessageHub.addMessageListener({
+	const refreshHandler = MessageHub.addMessageListener({
 		topic: 'view-db-explorer.refresh',
-		handler: refreshHandler,
+		handler: () => {
+			$scope.$evalAsync($scope.refresh)
+		},
 	});
 
 	$scope.refresh = () => {
@@ -1043,6 +1046,6 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 	};
 
 	$scope.$on('$destroy', () => {
-		MessageHub.removeMessageListener(refreshRef);
+		MessageHub.removeMessageListener(refreshHandler);
 	});
 });

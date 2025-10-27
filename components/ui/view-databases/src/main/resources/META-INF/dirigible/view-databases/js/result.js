@@ -20,7 +20,7 @@ resultView.controller('DatabaseResultController', ($scope, $http, Dialogs, Statu
         selectedDatabase = {
             name: 'DefaultDB', // Datasource
             type: 'metadata' // Database
-        }
+        };
     }
     $scope.state = {
         isBusy: false,

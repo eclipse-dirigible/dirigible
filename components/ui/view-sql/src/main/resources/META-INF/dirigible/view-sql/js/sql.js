@@ -27,7 +27,7 @@ angular.module('statements', ['blimpKit', 'platformView', 'platformTheming']).co
         selectedDatabase = {
             name: 'DefaultDB', // Datasource
             type: 'metadata' // Database
-        }
+        };
     }
     const datasourceChangedListener = dialogHub.addMessageListener({
         topic: 'database.datasource.selection.changed',
