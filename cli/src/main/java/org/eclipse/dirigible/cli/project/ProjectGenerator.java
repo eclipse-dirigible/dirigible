@@ -36,13 +36,19 @@ public class ProjectGenerator {
             response.println("Hello World!");
             """;
 
-    public Path generate(String projectName) {
+    public Path generate(String projectName, boolean overrideProject) {
         // the folder where the command is executed
         String userDir = System.getProperty("user.dir");
         Path projectPath = Path.of(userDir, projectName);
 
         if (Files.exists(projectPath)) {
-            deleteExistingProject(projectPath);
+            if (overrideProject) {
+                LOGGER.info("Will override project with path [{}]", projectPath);
+                deleteExistingProject(projectPath);
+            } else {
+                throw new IllegalArgumentException(
+                        "Project with name [" + projectName + "] already exists in [" + projectPath + "]. Use --override to replace it.");
+            }
         }
 
         createDir(projectPath);
@@ -53,14 +59,6 @@ public class ProjectGenerator {
         createProjectFile(projectPath, "hello.ts", HELLO_TS_CONTENT);
 
         return projectPath;
-    }
-
-    private static void deleteExistingProject(Path projectPath) {
-        try {
-            FileUtils.deleteDirectory(projectPath.toFile());
-        } catch (IOException ex) {
-            LOGGER.warn("Failed to delete the existing project dir [{}]", projectPath, ex);
-        }
     }
 
     private void createDir(Path path) {
@@ -77,6 +75,14 @@ public class ProjectGenerator {
             Files.writeString(filePath, content, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (IOException ex) {
             throw new IllegalStateException("Failed to create file " + filePath, ex);
+        }
+    }
+
+    private static void deleteExistingProject(Path projectPath) {
+        try {
+            FileUtils.deleteDirectory(projectPath.toFile());
+        } catch (IOException ex) {
+            LOGGER.warn("Failed to delete the existing project dir [{}]", projectPath, ex);
         }
     }
 }

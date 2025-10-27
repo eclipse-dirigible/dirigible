@@ -38,8 +38,10 @@ class ProjectCommands {
 
     @ShellMethod(value = "Generate Dirigible project.", key = {"new"})
     String generateNewProject(
-            @ShellOption(value = {"name", "n"}, defaultValue = "dirigible-project", help = "The name of the project") String projectName) {
-        Path projectPath = projectGenerator.generate(projectName);
+            @ShellOption(value = {"name", "n"}, defaultValue = "dirigible-project", help = "The name of the project") String projectName,
+            @ShellOption(value = {"override", "o"}, defaultValue = "false",
+                    help = "Set to true to overwrite the existing project if it already exists.") boolean overrideProject) {
+        Path projectPath = projectGenerator.generate(projectName, overrideProject);
 
         return "Successfully created project " + projectName + " in path " + projectPath.toString();
     }
