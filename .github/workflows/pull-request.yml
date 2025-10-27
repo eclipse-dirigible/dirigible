@@ -60,6 +60,9 @@ jobs:
       - name: Install TypeScript and esbuild
         run: npm install -g typescript esbuild
 
+      - name: Verify tsc is accessible
+        run: where tsc
+
       - name: Maven Build
         run: mvn clean install -P unit-tests -U
 
