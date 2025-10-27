@@ -18,6 +18,7 @@ import org.eclipse.dirigible.graalium.core.modules.DirigibleSourceProvider;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.RepositoryNotFoundException;
+import org.graalvm.polyglot.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -231,9 +232,9 @@ public class JavascriptEndpoint extends BaseEndpoint {
             }
 
             Object result =
-                    getJavascriptHandler().handleRequest(projectName, normalizePath(projectFilePath), normalizePath(projectFilePathParam),
-                            context, ((MultiValueMap<String, String>) context.get("params")).get("debug") != null);
-            return ResponseEntity.ok(result);
+                    getJavascriptService().handleRequest(projectName, normalizePath(projectFilePath), normalizePath(projectFilePathParam),
+                            context, ((MultiValueMap<String, String>) context.get("params")).get("debug") != null, false);
+            return ResponseEntity.ok(result instanceof Value ? null : result);
         } catch (RepositoryNotFoundException e) {
             String message = e.getMessage() + ". Try to publish the service before execution.";
             throw new RepositoryNotFoundException(message, e);
@@ -245,7 +246,7 @@ public class JavascriptEndpoint extends BaseEndpoint {
      *
      * @return the javascript handler
      */
-    protected JavascriptService getJavascriptHandler() {
+    protected JavascriptService getJavascriptService() {
         return javascriptService;
     }
 

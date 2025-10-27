@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.data.store.parser;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,7 +22,6 @@ import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.FilenameUtils;
-import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.AssociationDetails;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.CollectionDetails;
@@ -31,15 +31,13 @@ import org.eclipse.dirigible.parsers.typescript.TypeScriptLexer;
 import org.eclipse.dirigible.parsers.typescript.TypeScriptParser;
 import org.eclipse.dirigible.parsers.typescript.TypeScriptParserBaseVisitor;
 
-import com.oracle.truffle.js.builtins.json.JSONBuiltins.JSON;
-
 /**
  * Main parser class to generate EntityMetadata from TypeScript code.
  */
 public class EntityParser {
 
-    public static final Map<String, EntityMetadata> ENTITIES = new HashMap<String, EntityMetadata>();
-    public static final Map<String, String> MD5 = new HashMap<String, String>();
+    public static final Map<String, EntityMetadata> ENTITIES = Collections.synchronizedMap(new HashMap<String, EntityMetadata>());
+    public static final Map<String, String> MD5 = Collections.synchronizedMap(new HashMap<String, String>());
 
     /**
      * Parses the given TypeScript source code and extracts EntityMetadata.

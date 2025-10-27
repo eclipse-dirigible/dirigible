@@ -35,9 +35,6 @@ public interface SynchronizersOrder {
     /** The expose. */
     int EXPOSE = 70;
 
-    /** The openapi. */
-    int OPENAPI = 110;
-
     /** The websocket. */
     int WEBSOCKET = 120;
 
@@ -56,6 +53,9 @@ public interface SynchronizersOrder {
     /** The entity. */
     int ENTITY = 240;
 
+    /** The component. */
+    int COMPONENT = 250;
+
     /** The bpmn. */
     int BPMN = 300;
 
@@ -73,5 +73,8 @@ public interface SynchronizersOrder {
 
     /** The proxy. */
     int PROXY = 430;
+
+    /** The openapi. */
+    int OPENAPI = 510;
 
 }

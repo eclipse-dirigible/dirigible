@@ -39,6 +39,8 @@ public class JavascriptHandler {
     /** The repository. */
     private final IRepository repository;
 
+    DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner(null, false);
+
     /**
      * Instantiates a new javascript handler.
      *
@@ -85,7 +87,7 @@ public class JavascriptHandler {
                                      .toString(),
                     path.subpath(1, path.getNameCount() - 1)
                         .toString(),
-                    null, parameters, false);
+                    null, parameters, false, false);
         }
         throw new RuntimeException("Path to the file to be executed must contain a parent folder");
     }
@@ -101,7 +103,7 @@ public class JavascriptHandler {
      * @return the object
      */
     public Object handleRequest(String projectName, String projectFilePath, String projectFilePathParam, Map<Object, Object> parameters,
-            boolean debug) {
+            boolean debug, boolean keep) {
         try {
             if (UserRequestVerifier.isValid()) {
                 UserRequestVerifier.getRequest()
@@ -117,17 +119,12 @@ public class JavascriptHandler {
             }
 
             Path absoluteSourcePath = sourceProvider.getAbsoluteSourcePath(projectName, projectFilePath);
-            try (DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner(parameters, debug)) {
-                Source source = runner.prepareSource(absoluteSourcePath);
-                runner.getGraalJSInterceptor()
-                      .onBeforeRun(sourceFilePath, absoluteSourcePath, source, runner.getCodeRunner()
-                                                                                     .getGraalContext());
-                Value value = runner.run(source);
-                runner.getGraalJSInterceptor()
-                      .onAfterRun(sourceFilePath, absoluteSourcePath, source, runner.getCodeRunner()
-                                                                                    .getGraalContext(),
-                              value);
-                return transformValue(value);
+            if (keep) {
+                return runCode(sourceFilePath, absoluteSourcePath, runner);
+            } else {
+                try (DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner(parameters, debug)) {
+                    return runCode(sourceFilePath, absoluteSourcePath, runner);
+                }
             }
         } catch (Throwable ex) {
             if (ex.getMessage() == null) {
@@ -144,6 +141,34 @@ public class JavascriptHandler {
                     projectName, projectFilePath, projectFilePathParam, parameters);
             throw new RuntimeException(errorMessage, ex);
         }
+    }
+
+    public Object runCode(String sourceFilePath, Path absoluteSourcePath, DirigibleJavascriptCodeRunner runner) {
+        Source source = runner.prepareSource(absoluteSourcePath);
+        runner.getGraalJSInterceptor()
+              .onBeforeRun(sourceFilePath, absoluteSourcePath, source, runner.getCodeRunner()
+                                                                             .getGraalContext());
+        Value value = runner.run(source);
+        runner.getGraalJSInterceptor()
+              .onAfterRun(sourceFilePath, absoluteSourcePath, source, runner.getCodeRunner()
+                                                                            .getGraalContext(),
+                      value);
+        return transformValue(value);
+    }
+
+    /**
+     * Handle request.
+     *
+     * @param projectName the project name
+     * @param projectFilePath the project file path
+     * @param projectFilePathParam the project file path param
+     * @param parameters the parameters
+     * @param debug the debug
+     * @return the object
+     */
+    public Object handleRequest(String projectName, String projectFilePath, String projectFilePathParam, Map<Object, Object> parameters,
+            boolean debug) {
+        return handleRequest(projectName, projectFilePath, projectFilePathParam, parameters, debug, false);
     }
 
 }

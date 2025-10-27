@@ -120,6 +120,7 @@
         <module>api/api-qldb</module>
         <module>api/api-pdf</module>
         <module>api/api-junit</module>
+        <module>api/api-component</module>
 
         <!-- Platform UI -->
         <module>ui/window-about</module>
@@ -1292,6 +1293,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-api-cache</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-api-component</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

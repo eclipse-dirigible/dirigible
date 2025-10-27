@@ -175,6 +175,7 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
                 if (entity.getLifecycle()
                           .equals(ArtefactLifecycle.NEW)) {
                     dataStore.addMapping(entity.getLocation(), prepareContent(entity));
+                    entity.setRunning(true);
                     callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
                 }
                 break;
@@ -183,6 +184,7 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
                           .equals(ArtefactLifecycle.MODIFIED)) {
                     dataStore.removeMapping(entity.getLocation());
                     dataStore.addMapping(entity.getLocation(), prepareContent(entity));
+                    entity.setRunning(true);
                     callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
                 }
                 if (entity.getLifecycle()
@@ -199,6 +201,7 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
                         || entity.getLifecycle()
                                  .equals(ArtefactLifecycle.FAILED)) {
                     dataStore.removeMapping(entity.getLocation());
+                    entity.setRunning(false);
                     callback.registerState(this, wrapper, ArtefactLifecycle.DELETED);
                 }
                 break;
@@ -207,6 +210,7 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
                     if (entity.getRunning() == null || !entity.getRunning()) {
                         try {
                             dataStore.addMapping(entity.getLocation(), prepareContent(entity));
+                            entity.setRunning(true);
                         } catch (Exception e) {
                             callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, e);
                         }

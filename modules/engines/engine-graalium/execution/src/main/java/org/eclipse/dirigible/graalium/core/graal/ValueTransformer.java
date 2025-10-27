@@ -50,6 +50,6 @@ public class ValueTransformer {
         } else if (value.isTimeZone()) {
             return value.asTimeZone();
         }
-        return null;
+        return value;
     }
 }
