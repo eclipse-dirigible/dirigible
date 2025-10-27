@@ -9,16 +9,6 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-body {
-  overflow: hidden;
-  height: 100%;
-}
-
-#infobar {
-  padding-inline: 1rem;
-  padding-block: 0.375rem;
-  background-color: var(--sapInfobar_NonInteractive_Background, transparent);
-}
 
 #embeddedEditor {
   margin: 0;
@@ -27,17 +17,33 @@ body {
   height: 100%;
 }
 
-#loadingOverview {
-  width: 100vw;
-  height: 100vh;
-  z-index: 1000;
+#toolbar [bk-button] {
+  flex-shrink: 0;
 }
 
-#loadingOverview.bk-hidden {
-  display: none !important;
+#hint {
+  overflow: hidden;
+  white-space: nowrap;
 }
 
-#loadingOverview:not(.bk-hidden)~#infobar,
-#loadingOverview:not(.bk-hidden)~#embeddedEditor {
-  display: none;
+#exportsPopover>.bk-vbox {
+  min-width: 20rem;
+}
+
+#exportsPopover a[bk-list-button] {
+  margin-left: 0.5rem;
+}
+
+#exportsPopover span.bk-center {
+  width: 3rem;
+  height: 3rem;
+  margin-inline-end: .75rem;
+}
+
+#exportsPopover [data-color-error] {
+  color: var(--sapNegativeColor) !important;
+}
+
+#exportsPopover li:last-child {
+  border-bottom: none !important;
 }

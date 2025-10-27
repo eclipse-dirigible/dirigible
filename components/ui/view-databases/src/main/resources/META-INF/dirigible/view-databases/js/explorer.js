@@ -1024,19 +1024,13 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 		$scope.refreshDatabase();
 	};
 
-	$scope.runSQL = () => {
-		MessageHub.triggerEvent('database.sql.run');
-	};
+	function refreshHandler() {
+		$scope.$evalAsync(() => { $scope.refresh() });
+	}
 
-	$scope.exportSQL = () => {
-		MessageHub.triggerEvent('database.sql.exporting');
-	};
-
-	MessageHub.addMessageListener({
+	const refreshRef = MessageHub.addMessageListener({
 		topic: 'view-db-explorer.refresh',
-		handler: () => {
-			$scope.$evalAsync($scope.refresh());
-		},
+		handler: refreshHandler,
 	});
 
 	$scope.refresh = () => {
@@ -1047,4 +1041,8 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 	$scope.invalidateCache = () => {
 		$http.get(databasesInvalidateSvcUrl);
 	};
+
+	$scope.$on('$destroy', () => {
+		MessageHub.removeMessageListener(refreshRef);
+	});
 });
