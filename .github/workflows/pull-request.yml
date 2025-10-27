@@ -60,32 +60,6 @@ jobs:
       - name: Install TypeScript and esbuild
         run: npm install -g typescript esbuild
 
-      - name: Print env (windows)
-        if: matrix.os == 'windows'
-        shell: cmd
-        run: |
-          set
-
-      - name: Verify tsc is accessible (windows)
-        if: matrix.os == 'windows'
-        shell: cmd
-        run: |
-          echo "executing where tsc"
-          where tsc
-
-      - name: TSC directly
-        if: matrix.os == 'windows'
-        shell: cmd
-        run: |
-          echo "executing tsc directly"
-          C:\npm\prefix\tsc --help
-
-      - name: Verify tsc is accessible (ubuntu)
-        if: matrix.os == 'ubuntu'
-        run: |
-          which tsc
-          tsc --help
-
       - name: Maven Build
         run: mvn clean install -P unit-tests -U
 
