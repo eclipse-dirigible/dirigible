@@ -87,7 +87,7 @@ angular.module('statements', ['blimpKit', 'platformView', 'platformTheming']).co
                         containerEl.removeChild(containerEl.children.item(i));
                 }
                 let editor = monaco.editor.create(containerEl, {
-                    value: loadSQLCommand(),
+                    value: '',
                     automaticLayout: true,
                     language: "sql",
                     minimap: {
@@ -288,6 +288,7 @@ angular.module('statements', ['blimpKit', 'platformView', 'platformTheming']).co
                 $scope.$evalAsync(() => {
                     $scope.state.isBusy = false;
                 });
+                return loadSQLCommand();
             }).then((fileText) => {
                 let model = monaco.editor.createModel(fileText, "sql");
                 _editor.setModel(model);
