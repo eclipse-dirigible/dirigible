@@ -6,6 +6,7 @@ import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.core.annotation.Order;
@@ -24,6 +25,7 @@ import java.util.regex.Pattern;
 
 @Order(ApplicationListenersOrder.ApplicationReadyEventListeners.TYPE_SCRIPT_TRANSPILATION_SERVICE)
 @Component
+@ConditionalOnExpression("'${DIRIGIBLE_TSC_WATCH_SERVICE_ENABLED:true}'.toLowerCase() != 'false'")
 class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, DisposableBean {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TscWatcherService.class);
