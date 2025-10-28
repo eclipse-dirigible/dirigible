@@ -78,6 +78,7 @@
         <module>engine/engine-camel</module>
         <module>engine/engine-ftp</module>
         <module>engine/engine-sftp</module>
+        <module>engine/engine-di</module>
 
         <!-- IDE -->
         <module>ide/ide-workspace</module>

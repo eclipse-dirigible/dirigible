@@ -12,6 +12,7 @@ import org.eclipse.dirigible.components.engine.javascript.repository.ComponentRe
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.RepositoryNotFoundException;
 import org.graalvm.polyglot.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -39,6 +40,7 @@ public class ComponentService extends BaseArtefactService<Component, Long> {
      * @param javascriptService the javascriptService
      * @param contentRepository the contentRepository
      */
+    @Autowired
     public ComponentService(ComponentRepository componentRepository, JavascriptService javascriptService, IRepository contentRepository) {
         super(componentRepository);
         this.javascriptService = javascriptService;

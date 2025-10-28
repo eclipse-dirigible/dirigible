@@ -11,8 +11,6 @@ package org.eclipse.dirigible.components.engine.javascript.service;
 
 import java.util.Map;
 
-import org.eclipse.dirigible.graalium.core.JavascriptSourceProvider;
-import org.eclipse.dirigible.graalium.core.modules.DirigibleSourceProvider;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

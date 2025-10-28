@@ -39,7 +39,7 @@ public class JavascriptHandler {
     /** The repository. */
     private final IRepository repository;
 
-    DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner(null, false);
+    private DirigibleJavascriptCodeRunner runner;
 
     /**
      * Instantiates a new javascript handler.
@@ -68,6 +68,13 @@ public class JavascriptHandler {
      */
     public IRepository getRepository() {
         return repository;
+    }
+
+    public DirigibleJavascriptCodeRunner getSystemRunner() {
+        if (runner == null) {
+            this.runner = new DirigibleJavascriptCodeRunner(null, false);
+        }
+        return runner;
     }
 
     /**
@@ -120,7 +127,7 @@ public class JavascriptHandler {
 
             Path absoluteSourcePath = sourceProvider.getAbsoluteSourcePath(projectName, projectFilePath);
             if (keep) {
-                return runCode(sourceFilePath, absoluteSourcePath, runner);
+                return runCode(sourceFilePath, absoluteSourcePath, getSystemRunner());
             } else {
                 try (DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner(parameters, debug)) {
                     return runCode(sourceFilePath, absoluteSourcePath, runner);
