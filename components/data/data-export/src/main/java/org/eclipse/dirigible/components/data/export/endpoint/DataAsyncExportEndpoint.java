@@ -40,6 +40,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -143,7 +144,7 @@ public class DataAsyncExportEndpoint {
     }
 
     /**
-     * Gets the page.
+     * Gets the export.
      *
      * @return the response
      */
@@ -179,6 +180,60 @@ public class DataAsyncExportEndpoint {
         }
     }
 
+    /**
+     * Deletes all the exports.
+     *
+     * @return the response
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<String> delete(@PathVariable("id") Long id) {
+
+        try {
+            Export export = getExportService().findById(id);
+
+            CmisFolder root = getCmsService().getRootFolder();
+            CmisFolder exportsFolder = getOrCreate(root);
+            if (exportsFolder == null) {
+                exportsFolder = getCmsService().createFolder(root, EXPORTS_FOLDER_NAME);
+            }
+            CmisDocument document = getCmsService().getChildDocumentByName(exportsFolder, export.getName());
+
+            if (document != null) {
+                document.delete();
+            }
+            getExportService().delete(export.getId());
+
+            return ResponseEntity.noContent()
+                                 .build();
+        } catch (IOException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+        }
+    }
+
+    /**
+     * Deletes the export.
+     *
+     * @return the response
+     */
+    @DeleteMapping("/")
+    public ResponseEntity<String> deleteAll() {
+
+        try {
+            getExportService().deleteAll();
+
+            CmisFolder root = getCmsService().getRootFolder();
+            CmisFolder exportsFolder = getOrCreate(root);
+            if (exportsFolder != null) {
+                exportsFolder.delete();
+            }
+
+            return ResponseEntity.noContent()
+                                 .build();
+        } catch (IOException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+        }
+    }
+
     private final ExecutorService executorService = Executors.newFixedThreadPool(2);
 
     private void launchExportJob(String datasource, String statement) {
@@ -190,7 +245,6 @@ public class DataAsyncExportEndpoint {
                 String name = new SimpleDateFormat("yyyyMMddhhmmss").format(new Date()) + "-" + sanitize(statement) + ".csv";
                 PipedOutputStream pos = new PipedOutputStream();
                 PipedInputStream pis = new PipedInputStream(pos, 1024);
-                databaseExportService.exportStatement(datasource, statement, pos);
                 Timestamp from = Timestamp.from(Instant.now());
                 Export export = new Export(name, ExportStatus.TRIGGRED, from, null, null);
                 export.setId(exportService.save(export));
