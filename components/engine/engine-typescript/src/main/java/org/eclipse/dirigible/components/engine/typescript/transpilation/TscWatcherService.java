@@ -20,10 +20,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 
-// @Order(ApplicationListenersOrder.ApplicationReadyEventListeners.TYPE_SCRIPT_TRANSPILATION_SERVICE)
-// @Component
-// @ConditionalOnExpression("'${DIRIGIBLE_TSC_WATCH_SERVICE_ENABLED:true}'.toLowerCase() !=
-// 'false'")
+//@Order(ApplicationListenersOrder.ApplicationReadyEventListeners.TYPE_SCRIPT_TRANSPILATION_SERVICE)
+//@Component
+//@ConditionalOnExpression("'${DIRIGIBLE_TSC_WATCH_SERVICE_ENABLED:true}'.toLowerCase() != 'false'")
 class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, DisposableBean {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TscWatcherService.class);
@@ -84,12 +83,12 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
 
     @Override
     public void onApplicationEvent(ApplicationReadyEvent event) {
-        // try {
-        // createOrReplaceTsConfig();
-        // startTscWatch();
-        // } catch (RuntimeException ex) {
-        // throw new IllegalStateException("Failed to start tsc watch service", ex);
-        // }
+        //        try {
+        //            createOrReplaceTsConfig();
+        //            startTscWatch();
+        //        } catch (RuntimeException ex) {
+        //            throw new IllegalStateException("Failed to start tsc watch service", ex);
+        //        }
     }
 
     private void createOrReplaceTsConfig() {
