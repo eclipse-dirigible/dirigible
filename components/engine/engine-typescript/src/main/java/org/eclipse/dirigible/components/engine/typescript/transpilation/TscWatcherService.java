@@ -62,7 +62,7 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
                         "./modules/types"
                     ]
                 },
-                "exclude": ["modules"]
+                "exclude": ["modules", "modules-tests"]
             }
             """;
 
