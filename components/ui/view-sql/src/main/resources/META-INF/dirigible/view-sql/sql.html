@@ -41,7 +41,7 @@
         <bk-popover-body align="bottom-right" can-scroll="true" class="bk-vbox">
           <bk-toolbar has-title="false">
             <bk-toolbar-spacer></bk-toolbar-spacer>
-            <bk-button state="transparent" label="Clear all" ng-disabled="exports.length === 0" ng-click="clearExports()"></bk-button>
+            <bk-button state="transparent" label="Delete all" ng-disabled="exports.length === 0" ng-click="deleteExports()"></bk-button>
           </bk-toolbar>
           <bk-list ng-show="exports.length" byline="true">
             <bk-list-item ng-repeat="export in exports track by export.id">
@@ -57,7 +57,9 @@
                 <bk-list-byline ng-if="export.status === ExportStatus.FAILED" align="left" id="errorMessage" data-color-error>{{export.message || "Unknown error"}}</bk-list-byline>
                 <bk-list-byline align="right">{{getExportDate(export.startedAt)}}</bk-list-byline>
               </bk-list-content>
-              <a bk-button ng-if="export.status === ExportStatus.FINISHED" ng-href="{{EXPORT_BASE_URL + export.name}}" bk-list-button state="transparent" glyph="sap-icon--download" aria-label="Download"></a>
+              <a bk-button ng-if="export.status === ExportStatus.FINISHED" ng-href="{{EXPORT_BASE_URL + export.name}}" bk-list-button state="transparent" glyph="sap-icon--download" aria-label="Download" title="Download"></a>
+              <bk-button ng-if="export.status === ExportStatus.FINISHED || export.status === ExportStatus.FAILED || export.status === ExportStatus.UNKNOWN" bk-list-button state="transparent" glyph="sap-icon--delete" aria-label="Delete"
+                title="Delete" ng-click="deleteExport(export.id)"></bk-button>
             </bk-list-item>
           </bk-list>
           <bk-message-page ng-if="!exports.length" glyph="sap-icon--download">

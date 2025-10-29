@@ -30,7 +30,7 @@
   min-width: 20rem;
 }
 
-#exportsPopover a[bk-list-button] {
+#exportsPopover [bk-list-button]:first-of-type {
   margin-left: 0.5rem;
 }
 

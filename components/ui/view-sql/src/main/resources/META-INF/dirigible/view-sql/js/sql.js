@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-angular.module('statements', ['blimpKit', 'platformView', 'platformTheming']).controller('StatementsController', ($scope, $http, $document, $window, Theme) => {
+angular.module('statements', ['blimpKit', 'platformView', 'platformTheming']).controller('StatementsController', ($scope, $http, $document, $window, $timeout, Theme) => {
     const statusBarHub = new StatusBarHub();
     const dialogHub = new DialogHub();
     const themingHub = new ThemingHub();
@@ -42,7 +42,7 @@ angular.module('statements', ['blimpKit', 'platformView', 'platformTheming']).co
         busyText: 'Loading...',
     };
     $scope.exports = [];
-    getExports(true);
+    getExports(false);
 
     let monacoTheme = 'vs-light';
     let autoListener = false;
@@ -152,7 +152,7 @@ angular.module('statements', ['blimpKit', 'platformView', 'platformTheming']).co
                     dialogHub.showAlert({
                         type: AlertTypes.Warning,
                         title: 'No statement is selected',
-                        message: 'You must select the command you want to execute.\nUse Ctrl+A (or Cmd+A) if you want to execute and download everything.',
+                        message: 'You must select the command you want to execute.\nUse Ctrl+A (or Cmd+A) if you want to execute and/or export everything.',
                         preformatted: true,
                     });
                     themingHub.postMessage({ topic: "database.sql.error", data: "No text selected for execution." });
@@ -161,27 +161,41 @@ angular.module('statements', ['blimpKit', 'platformView', 'platformTheming']).co
         };
     }
 
-    function getExports(init = false) {
+    function getExports(open = true) {
         $http({
             method: 'GET',
             url: DB_EXPORT_SERVICE_URL,
             headers: { 'X-Requested-With': 'Fetch' }
         }).then((result) => {
             $scope.exports.length = 0;
-            $scope.exports.push(...result.data);
-            if (!init) {
+            $scope.exports.push(...result.data.reverse());
+            if (open) {
                 exportButton.focus();
                 exportButton.click();
             }
+            if (open && !$scope.exports.length) {
+                $timeout(() => { getExports(false) }, 500);
+            } else {
+                for (let i = 0; i < $scope.exports.length; i++) {
+                    if ($scope.exports[i].status === $scope.ExportStatus.TRIGGRED) {
+                        $timeout(() => { getExports(false) }, 1000);
+                        break;
+                    }
+                }
+            }
         }, (reject) => {
-            $scope.state.error = true;
-            $scope.errorMessage = reject.data.message;
+            dialogHub.showAlert({
+                type: AlertTypes.Error,
+                title: 'Could not get export list',
+                message: 'Please check the console log for more information.',
+                preformatted: true,
+            });
             console.error(reject);
         });
     }
 
     function exportQuery(command) {
-        const url = DB_EXPORT_SERVICE_URL + selectedDatabase.name;
+        const url = DB_EXPORT_SERVICE_URL + encodeURIComponent(selectedDatabase.name);
         const sql = command.trim().toLowerCase();
         if (sql.startsWith('select')) {
             $http({
@@ -241,6 +255,29 @@ angular.module('statements', ['blimpKit', 'platformView', 'platformTheming']).co
 
     let _editor;
 
+    $scope.deleteExport = (id) => {
+        $http({
+            method: 'DELETE',
+            url: DB_EXPORT_SERVICE_URL + encodeURIComponent(id),
+            headers: { 'X-Requested-With': 'Fetch' }
+        }).then(() => {
+            for (let i = 0; i < $scope.exports.length; i++) {
+                if ($scope.exports[i].id === id) {
+                    $scope.exports.splice(i, 1);
+                    break;
+                }
+            }
+        }, (reject) => {
+            dialogHub.showAlert({
+                type: AlertTypes.Error,
+                title: 'Could not get export list',
+                message: 'Please check the console log for more information.',
+                preformatted: true,
+            });
+            console.error(reject);
+        });
+    };
+
     $scope.executeSQL = () => {
         const executionObject = createExecuteAction();
         executionObject.run(_editor);
@@ -251,8 +288,22 @@ angular.module('statements', ['blimpKit', 'platformView', 'platformTheming']).co
         executionObject.run(_editor);
     };
 
-    $scope.clearExports = () => {
-        // $scope.exports.length = 0;
+    $scope.deleteExports = () => {
+        $http({
+            method: 'DELETE',
+            url: DB_EXPORT_SERVICE_URL,
+            headers: { 'X-Requested-With': 'Fetch' }
+        }).then(() => {
+            $scope.exports.length = 0;
+        }, (reject) => {
+            dialogHub.showAlert({
+                type: AlertTypes.Error,
+                title: 'Could not get export list',
+                message: 'Please check the console log for more information.',
+                preformatted: true,
+            });
+            console.error(reject);
+        });
     };
 
     $scope.getExportDate = (date) => {
