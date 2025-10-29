@@ -10,11 +10,11 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const blimpkit = angular.module('blimpKit', ['ngAria'])
-    .info({ version: '1.7.9' })
+    .info({ version: '1.8.0' })
     .constant('ScreenEdgeMargin', {
         FULL: 16,
         DOUBLE: 32,
-        QUADRUPLE: 64
+        QUADRUPLE: 64,
     }).config(($compileProvider) => {
         if ($compileProvider.debugInfoEnabled()) {
             $compileProvider.debugInfoEnabled(false);
@@ -28,7 +28,7 @@ const blimpkit = angular.module('blimpKit', ['ngAria'])
                 return s ? `-${p.substring(0, 4)}-${p.substring(4, 8)}` : p;
             }
             return _p8() + _p8(true) + _p8(true) + _p8();
-        }
+        },
     })).factory('backdrop', ($document) => {
         const backdrop = $document[0].createElement('div');
         backdrop.classList.add('bk-backdrop');
@@ -46,7 +46,7 @@ const blimpkit = angular.module('blimpKit', ['ngAria'])
         };
         const cleanUp = function () {
             backdrop.removeEventListener('contextmenu', contextmenuEvent);
-        }
+        };
         return {
             activate: activate,
             deactivate: deactivate,
@@ -73,7 +73,7 @@ const blimpkit = angular.module('blimpKit', ['ngAria'])
                 } else if (argType === 'object') {
                     if (arg.toString === Object.prototype.toString) {
                         for (const [key, value] of Object.entries(arg)) {
-                            if (value) classes.push(key)
+                            if (value) classes.push(key);
                         }
                     } else classes.push(arg.toString());
                 }
@@ -87,7 +87,7 @@ const blimpkit = angular.module('blimpKit', ['ngAria'])
             attrs.$observe('bkFocus', (newValue) => {
                 if (newValue === 'true') element.trigger('focus');
             });
-        }
+        },
     })).directive('inputRules', ($parse) => ({
         restrict: 'A',
         require: 'ngModel',
@@ -111,5 +111,5 @@ const blimpkit = angular.module('blimpKit', ['ngAria'])
                 return true;
             }
             controller.$validators.pattern = validation;
-        }
+        },
     }));

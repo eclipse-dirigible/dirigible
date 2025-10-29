@@ -29,10 +29,10 @@ html {
 
 body {
   background-color: var(--sapBackgroundColor, #f7f7f7);
-  font-size: var(--sapFontSize, .875rem);
+  font-size: var(--sapFontSize, 0.875rem);
   line-height: var(--sapContent_LineHeight, 1.4);
   color: var(--sapTextColor, #303030);
-  font-family: var(--sapFontFamily, "72", "72full", Arial, Helvetica, sans-serif);
+  font-family: var(--sapFontFamily, '72', '72full', Arial, Helvetica, sans-serif);
   overflow: auto;
 }
 
@@ -131,8 +131,8 @@ ng-transclude:empty {
 }
 
 /* Icon fixes */
-.fd-list__icon [class*="sap-icon"]:first-child,
-.fd-list__icon[class*="sap-icon"]:first-child {
+.fd-list__icon [class*='sap-icon']:first-child,
+.fd-list__icon[class*='sap-icon']:first-child {
   background-color: transparent;
 }
 
@@ -345,32 +345,32 @@ ng-transclude:empty {
   text-overflow: ellipsis;
 }
 
-[class*=sap-icon][rotate="90"]:not(.fd-list__icon) {
+[class*='sap-icon'][rotate='90']:not(.fd-list__icon) {
   transform: rotate(90deg);
 }
 
-.fd-list__icon[rotate="90"]::before {
+.fd-list__icon[rotate='90']::before {
   transform: rotate(90deg);
 }
 
-[class*=sap-icon][rotate="180"]:not(.fd-list__icon) {
+[class*='sap-icon'][rotate='180']:not(.fd-list__icon) {
   transform: rotate(180deg);
 }
 
-[class*=sap-icon].fd-list__icon[rotate="180"]::before {
+[class*='sap-icon'].fd-list__icon[rotate='180']::before {
   transform: rotate(180deg);
 }
 
-[class*=sap-icon][rotate="270"]:not(.fd-list__icon) {
+[class*='sap-icon'][rotate='270']:not(.fd-list__icon) {
   transform: rotate(270deg);
 }
 
-.fd-list__icon[rotate="270"]::before {
+.fd-list__icon[rotate='270']::before {
   transform: rotate(270deg);
 }
 
 .bk-opacity-7 {
-  opacity: .7;
+  opacity: 0.7;
 }
 
 .bk-float-right {
@@ -630,7 +630,7 @@ ng-transclude:empty {
 }
 
 .bk-box--gap {
-  gap: .5rem;
+  gap: 0.5rem;
 }
 
 .bk-box--gap-m {
@@ -736,9 +736,7 @@ ng-transclude:empty {
 }
 
 .bk-checkered-bg {
-  background-image:
-    linear-gradient(45deg, #949494 25%, transparent 25%, transparent 75%, #949494 75%),
-    linear-gradient(45deg, #949494 25%, #c1c1c1 25%, #c1c1c1 75%, #949494 75%);
+  background-image: linear-gradient(45deg, #949494 25%, transparent 25%, transparent 75%, #949494 75%), linear-gradient(45deg, #949494 25%, #c1c1c1 25%, #c1c1c1 75%, #949494 75%);
   background-size: 16px 16px;
   background-position: 0 0, 8px 8px;
 }
@@ -777,59 +775,59 @@ ng-transclude:empty {
 
 .bk-color-fill--negative,
 .bk-color-fill--negative>svg {
-  fill: var(--sapNegativeColor)
+  fill: var(--sapNegativeColor) !important;
 }
 
 .bk-color-fill--critical,
 .bk-color-fill--critical>svg {
-  fill: var(--sapCriticalColor)
+  fill: var(--sapCriticalColor) !important;
 }
 
 .bk-color-fill--positive,
 .bk-color-fill--positive>svg {
-  fill: var(--sapPositiveColor)
+  fill: var(--sapPositiveColor) !important;
 }
 
 .bk-color-fill--informative,
 .bk-color-fill--informative>svg {
-  fill: var(--sapInformativeColor)
+  fill: var(--sapInformativeColor) !important;
 }
 
 .bk-color-bg--negative {
-  background-color: var(--sapNegativeColor)
+  background-color: var(--sapNegativeColor) !important;
 }
 
 .bk-color-bg--critical {
-  background-color: var(--sapCriticalColor)
+  background-color: var(--sapCriticalColor) !important;
 }
 
 .bk-color-bg--positive {
-  background-color: var(--sapPositiveColor)
+  background-color: var(--sapPositiveColor) !important;
 }
 
 .bk-color-bg--informative {
-  background-color: var(--sapInformativeColor)
+  background-color: var(--sapInformativeColor) !important;
 }
 
 .bk-color--negative {
-  color: var(--sapNegativeColor)
+  color: var(--sapNegativeColor) !important;
 }
 
 .bk-color--critical {
-  color: var(--sapCriticalColor)
+  color: var(--sapCriticalColor) !important;
 }
 
 .bk-color--positive {
-  color: var(--sapPositiveColor)
+  color: var(--sapPositiveColor) !important;
 }
 
 .bk-color--informative {
-  color: var(--sapInformativeColor)
+  color: var(--sapInformativeColor) !important;
 }
 
 /* fd-tile-container additions */
 .fd-tile-container--buttons>.fd-button {
-  margin-right: .5rem;
+  margin-right: 0.5rem;
 }
 
 .fd-tile-container--buttons>.fd-button:last-child {
@@ -855,7 +853,7 @@ ng-transclude:empty {
 
 /* fd-icon-tab-bar additions */
 .fd-icon-tab-bar__item--overflow+.bk-icon-tab-bar__item--buttons {
-  margin: 0 0 0 .5rem;
+  margin: 0 0 0 0.5rem;
 }
 
 .bk-icon-tab-bar__item--buttons {
@@ -882,10 +880,10 @@ ng-transclude:empty {
 }
 
 .bk-icon-tab-hint {
-  opacity: .75;
+  opacity: 0.75;
   margin-left: 0.5em;
   white-space: pre;
-  font-size: var(--sapFontSmallSize, .75rem);
+  font-size: var(--sapFontSmallSize, 0.75rem);
   font-style: italic;
 }
 
@@ -895,7 +893,7 @@ ng-transclude:empty {
 }
 
 .bk-icon-tab-bar.is-compact>.fd-icon-tab-bar__header .fd-icon-tab-bar__tab {
-  padding: .688rem .188rem;
+  padding: 0.688rem 0.188rem;
 }
 
 .bk-icon-tab-bar.is-compact>.fd-icon-tab-bar__header .fd-icon-tab-bar__item.fd-icon-tab-bar__item--closable .fd-icon-tab-bar__tab {
@@ -929,31 +927,31 @@ ng-transclude:empty {
 
 /* input, step input, combobox and select additions */
 
-.fd-input[type="color"] {
+.fd-input[type='color'] {
   padding: 0;
 }
 
-.fd-input[type="color"]::-moz-color-swatch {
+.fd-input[type='color']::-moz-color-swatch {
   border: none;
 }
 
-.fd-input[type="color"]::-webkit-color-swatch-wrapper {
+.fd-input[type='color']::-webkit-color-swatch-wrapper {
   padding: 0;
   border-radius: 0;
 }
 
-.fd-input[type="color"]::-webkit-color-swatch {
+.fd-input[type='color']::-webkit-color-swatch {
   border: none;
 }
 
 .fd-step-input.is-readonly,
-.fd-step-input[aria-readonly="true"],
+.fd-step-input[aria-readonly='true'],
 .fd-step-input[readonly],
 .fd-select__control.is-readonly,
-.fd-select__control[aria-readonly="true"],
+.fd-select__control[aria-readonly='true'],
 .fd-select__control[readonly],
 .fd-input.is-readonly,
-.fd-input[aria-readonly="true"],
+.fd-input[aria-readonly='true'],
 .fd-input[readonly] {
   --sapField_BorderStyle: dashed;
 }
@@ -963,13 +961,13 @@ ng-transclude:empty {
 }
 
 div.fd-input-group.is-readonly,
-div.fd-input-group[aria-readonly="true"],
+div.fd-input-group[aria-readonly='true'],
 div.fd-input-group[readonly] {
   pointer-events: none;
   --sapField_BorderStyle: dashed;
 }
 
-div.fd-popover__body--dropdown[aria-hidden="true"] {
+div.fd-popover__body--dropdown[aria-hidden='true'] {
   display: none;
 }
 
@@ -1012,13 +1010,13 @@ div.fd-popover__body--dropdown[aria-hidden="true"] {
 }
 
 .fd-tool-header__product-name {
-  padding-left: .5rem;
-  padding-right: .5rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
 }
 
 /* Menu fixes and additions */
 .bk-submenu--left {
-  margin: .25rem 0 0 .25rem;
+  margin: 0.25rem 0 0 0.25rem;
 }
 
 .bk-menu__sublist--overflow {
@@ -1029,16 +1027,16 @@ div.fd-popover__body--dropdown[aria-hidden="true"] {
 }
 
 .bk-menu__sublist--overflow .fd-menu__separator {
-  padding-top: .0625rem;
+  padding-top: 0.0625rem;
 }
 
 /* Form label fix for 0.30.2 */
 .fd-form-label--colon {
-  padding-right: .25rem;
+  padding-right: 0.25rem;
 }
 
 .fd-container.fd-form-layout-grid-container .fd-row .fd-col-md--2>.fd-form-label.fd-form-label--required.fd-form-label--colon {
-  padding-right: .75rem;
+  padding-right: 0.75rem;
 }
 
 /* fd-container additions */
@@ -1070,19 +1068,19 @@ div.fd-popover__body--dropdown[aria-hidden="true"] {
 
 /* fd-form-item fixes */
 .fd-container.fd-form-layout-grid-container>.fd-form-item>.fd-col:has(.fd-input-group) {
-  margin-block: var(--fdInput_Field_Margin_Block, .25rem);
+  margin-block: var(--fdInput_Field_Margin_Block, 0.25rem);
 }
 
 .fd-popover__control.is-expanded>*,
-.fd-popover__control[aria-expanded="true"]>* {
-  margin: var(--fdInput_Field_Margin, .25rem 0);
+.fd-popover__control[aria-expanded='true']>* {
+  margin: var(--fdInput_Field_Margin, 0.25rem 0);
 }
 
-.fd-popover__control.is-expanded>*[class*="-compact"],
-.fd-popover__control.is-expanded>*[class*="-condensed"],
-.fd-popover__control[aria-expanded="true"]>*[class*="-compact"],
-.fd-popover__control[aria-expanded="true"]>*[class*="-condensed"] {
-  --fdInput_Field_Margin: .1875rem 0;
+.fd-popover__control.is-expanded>*[class*='-compact'],
+.fd-popover__control.is-expanded>*[class*='-condensed'],
+.fd-popover__control[aria-expanded='true']>*[class*='-compact'],
+.fd-popover__control[aria-expanded='true']>*[class*='-condensed'] {
+  --fdInput_Field_Margin: 0.1875rem 0;
 }
 
 .fd-popover__control>.fd-step-input {
@@ -1178,7 +1176,7 @@ div.fd-popover__body--dropdown[aria-hidden="true"] {
 
 /* Tokenizer fixes */
 .fd-tokenizer .fd-tokenizer__indicator {
-  margin-right: .3125rem;
+  margin-right: 0.3125rem;
 }
 
 /* Vertical nav fixes */

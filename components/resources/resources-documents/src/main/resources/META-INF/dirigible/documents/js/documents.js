@@ -50,7 +50,7 @@ class HistoryStack {
         this.history.idx++;
     }
 }
-documents.controller('DocumentsController', ($scope, $http, $timeout, $element, $document, ButtonStates, FileUploader, LocaleService) => {
+documents.controller('DocumentsController', ($scope, $http, $timeout, $element, $document, ButtonStates, FileUploader, LocaleService, ViewParameters) => {
     const dialogHub = new DialogHub();
     const notificationHub = new NotificationHub();
     const documentsApi = '/services/js/documents/api/documents.js';
@@ -70,20 +70,17 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
         'sap-icon--excel-attachment': ['xls', 'xlsx', 'ods'],
         'sap-icon--ppt-attachment': ['ppt', 'pptx', 'odp'],
     };
+    let params = ViewParameters.get();
 
     let iframe;
 
-    angular.element($document[0]).ready(() => {
-        iframe = $document[0].getElementById('preview-iframe');
-        iframe.onload = () => $scope.$evalAsync(() => {
-            $scope.previewLoading = false;
-        });
-        iframe.onerror = () => $scope.$evalAsync(() => {
-            console.error(`Error while loading preview for ${$scope.selectedFile.name}`);
-            $scope.previewLoading = false;
-        });
-    });
-
+    $scope.asWindow = params.container === 'window';
+    $scope.windowOptions = {
+        type: params['type'] ?? 'browser',
+        upload: params['upload'] ?? true,
+        download: params['download'] ?? true,
+        callbackTopic: params['callbackTopic'],
+    };
     $scope.loading = false;
     $scope.canPreview = true;
     $scope.downloadPath = '/services/js/documents/api/documents.js/download';
@@ -597,6 +594,31 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
 
         this.crumbs = crumbs;
     };
+
+    $scope.closeWindow = (submit) => {
+        if (submit && $scope.windowOptions.callbackTopic) {
+            if ($scope.windowOptions.type === 'folderSelect') {
+                dialogHub.postMessage({
+                    topic: $scope.windowOptions.callbackTopic,
+                    data: $scope.folder.path
+                });
+            }
+        }
+        dialogHub.closeWindow({ id: 'windowDocuments' });
+    };
+
+    if (!$scope.asWindow) {
+        angular.element($document[0]).ready(() => {
+            iframe = $document[0].getElementById('preview-iframe');
+            iframe.onload = () => $scope.$evalAsync(() => {
+                $scope.previewLoading = false;
+            });
+            iframe.onerror = () => $scope.$evalAsync(() => {
+                console.error(`Error while loading preview for ${$scope.selectedFile.name}`);
+                $scope.previewLoading = false;
+            });
+        });
+    }
 
     openFolder('/');
 });

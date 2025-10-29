@@ -48,10 +48,10 @@
             <bk-button glyph="sap-icon--add-folder" aria-label="{{'documents:newFolder' | t:'New folder'}}" title="{{'documents:newFolder' | t:'New folder'}}" state="transparent" ng-click="showNewFolderDialog()"></bk-button>
             <bk-button glyph="sap-icon--delete" aria-label="{{'documents:delSelected' | t:'Delete selected'}}" title="{{'documents:delSelected' | t:'Delete selected'}}" state="transparent" ng-click="showDeleteItemsDialog($event)"
                 ng-disabled="!isDeleteItemsButtonEnabled()"></bk-button>
-            <bk-toolbar-separator></bk-toolbar-separator>
-            <a bk-button glyph="sap-icon--download-from-cloud" state="transparent" aria-label="{{'documents:downloadZip' | t:'Download zip'}}" title="{{'documents:downloadZip' | t:'Download zip'}}"
+            <bk-toolbar-separator ng-if="::(windowOptions.upload && windowOptions.download)"></bk-toolbar-separator>
+            <a ng-if="::windowOptions.upload" bk-button glyph="sap-icon--download-from-cloud" state="transparent" aria-label="{{'documents:downloadZip' | t:'Download zip'}}" title="{{'documents:downloadZip' | t:'Download zip'}}"
                 ng-href="{{ downloadZipPath }}?path={{ folder.path }}"></a>
-            <bk-popover>
+            <bk-popover ng-if="::windowOptions.download">
                 <bk-popover-control>
                     <bk-button is-menu="true" glyph="sap-icon--upload-to-cloud" aria-label="{{'documents:uploadFile' | t:{count: 1}:'Upload file'}}" title="{{'documents:uploadFile' | t:{count: 1}:'Upload file'}}" state="transparent">
                     </bk-button>
@@ -80,8 +80,8 @@
         </bk-toolbar>
         <div class="bk-stretch" ng-hide="loading">
             <split direction="horizontal">
-                <split-pane size="50" min-size="340">
-                    <div ng-show="showDropZone" class="drop-zone-backdrop"></div>
+                <split-pane size="{{::asWindow ? 100 : 50}}" min-size="340">
+                    <div ng-if="::windowOptions.upload" ng-show="showDropZone" class="drop-zone-backdrop"></div>
                     <bk-scrollbar class="bk-fill-parent docs-file-drop" nv-file-drop="" uploader="uploader" filters="queueLimit, customFilter">
                         <table bk-table inner-borders="horizontal" outer-borders="none" display-mode="compact">
                             <thead bk-table-header sticky="true">
@@ -129,7 +129,7 @@
                         </div>
                     </bk-scrollbar>
                 </split-pane>
-                <split-pane size="50">
+                <split-pane size="50" ng-if="::!asWindow">
                     <iframe id="preview-iframe" ng-show="selectedFile && canPreview && !previewLoading" src="about:blank"></iframe>
                     <bk-busy-indicator-extended class="bk-fill-parent" ng-show="selectedFile && canPreview && previewLoading" size="l" ng-show="loading">{{'loadingPreview' | t:'Loading preview'}}...</bk-busy-indicator-extended>
                     <bk-message-page ng-if="!selectedFile || !canPreview" glyph="sap-icon--detail-view">
@@ -139,6 +139,14 @@
                 </split-pane>
             </split>
         </div>
+        <bk-dialog-footer compact="true" ng-if="::asWindow">
+            <bk-bar-element>
+                <bk-button label="Select" decisive="true" ng-click="closeWindow(true)" state="emphasized" type="button"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element>
+                <bk-button label="Cancel" ng-click="closeWindow()" state="transparent"></bk-button>
+            </bk-bar-element>
+        </bk-dialog-footer>
         <theme></theme>
     </body>
 

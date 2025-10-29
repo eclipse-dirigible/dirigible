@@ -20,15 +20,14 @@ blimpkit.directive('bkList', (classNames) => ({
         fixedHeight: '@?',
         byline: '<?',
         hasMessage: '<?',
-        dropdownMode: '<?'
+        dropdownMode: '<?',
     },
     link: function (scope) {
         const parseHeight = function (height) {
             if (Number.isFinite(height)) {
                 return `${height}px`;
             }
-            return height === 'true' ? true :
-                height === 'false' ? false : height;
+            return height === 'true' ? true : height === 'false' ? false : height;
         };
 
         scope.getClasses = () => classNames('fd-list', {
@@ -50,7 +49,7 @@ blimpkit.directive('bkList', (classNames) => ({
             }
         };
     },
-    template: `<ul ng-class="getClasses()" ng-style="getStyles()" role="{{listType === 'selection' ? 'listbox' : 'list'}}" tabindex="-1" ng-transclude>`
+    template: `<ul ng-class="getClasses()" ng-style="getStyles()" role="{{listType === 'selection' ? 'listbox' : 'list'}}" tabindex="-1" ng-transclude>`,
 })).directive('bkListItem', (classNames) => ({
     restrict: 'EA',
     transclude: true,
@@ -58,22 +57,21 @@ blimpkit.directive('bkList', (classNames) => ({
     scope: {
         interactive: '<?',
         inactive: '<?',
-        selected: '<?'
+        selected: '<?',
     },
     controller: ['$scope', '$element', '$attrs', function ($scope, $element, $attrs) {
         $scope.focusable = true;
         this.addClass = function (className) {
             $element.addClass(className);
-        }
+        };
         this.setRole = function (role) {
             $element.attr('role', role);
-        }
+        };
         this.canFocus = function (focusable) {
             $scope.focusable = focusable;
-        }
+        };
 
-        if (!$attrs.role)
-            this.setRole('listitem');
+        if (!$attrs.role) this.setRole('listitem');
 
         $scope.getClasses = () => {
             if ($scope.selected) {
@@ -85,21 +83,21 @@ blimpkit.directive('bkList', (classNames) => ({
                 'fd-list__item--interractive': $scope.interactive === true,
                 'fd-list__item--inactive': $scope.inactive === true,
                 'is-selected': $scope.selected === true,
-            })
+            });
         };
     }],
-    template: '<li ng-class="getClasses()" tabindex="{{focusable ? 0 : -1}}" ng-transclude></li>'
+    template: '<li ng-class="getClasses()" tabindex="{{focusable ? 0 : -1}}" ng-transclude></li>',
 })).directive('bkListTitle', () => ({
     restrict: 'EA',
     transclude: true,
     replace: true,
-    template: '<span class="fd-list__title" ng-transclude></span>'
+    template: '<span class="fd-list__title" ng-transclude></span>',
 })).directive('bkListSecondary', (classNames) => ({
     restrict: 'EA',
     transclude: true,
     replace: true,
     scope: {
-        type: "@?"
+        type: '@?',
     },
     link: function (scope) {
         const types = ['positive', 'critical', 'negative', 'informative'];
@@ -110,16 +108,16 @@ blimpkit.directive('bkList', (classNames) => ({
             }
             return classNames('fd-list__secondary', {
                 [`fd-list__secondary--${scope.type}`]: scope.type && types.includes(scope.type),
-            })
+            });
         };
     },
-    template: '<span ng-class="getClasses()" ng-transclude></span>'
+    template: '<span ng-class="getClasses()" ng-transclude></span>',
 })).directive('bkListMessage', (classNames) => ({
     restrict: 'EA',
     transclude: true,
     replace: true,
     scope: {
-        type: "@"
+        type: '@',
     },
     link: (scope) => {
         const types = ['success', 'error', 'warning', 'information'];
@@ -131,10 +129,10 @@ blimpkit.directive('bkList', (classNames) => ({
             [`fd-list__message--${scope.type}`]: types.includes(scope.type),
         });
     },
-    template: '<span ng-class="getClasses()" ng-transclude></span>'
+    template: '<span ng-class="getClasses()" ng-transclude></span>',
 })).directive('bkListButton', () => ({
     restrict: 'A',
-    link: function (_scope, element) { element.addClass('fd-list__button') }
+    link: (_scope, element) => { element.addClass('fd-list__button') },
 })).directive('bkListLink', (classNames) => ({
     restrict: 'EA',
     transclude: true,
@@ -143,7 +141,7 @@ blimpkit.directive('bkList', (classNames) => ({
     scope: {
         navigationIndicator: '<',
         navigated: '<',
-        selected: '<'
+        selected: '<',
     },
     link: (scope, _element, _attrs, listItemCtrl) => {
         listItemCtrl.addClass('fd-list__item--link');
@@ -155,7 +153,7 @@ blimpkit.directive('bkList', (classNames) => ({
             'is-selected': scope.selected === true,
         });
     },
-    template: '<a tabindex="0" ng-class="getClasses()" ng-transclude></a>'
+    template: '<a tabindex="0" ng-class="getClasses()" ng-transclude></a>',
 })).directive('bkListIcon', (classNames) => ({
     restrict: 'EA',
     replace: true,
@@ -171,15 +169,15 @@ blimpkit.directive('bkList', (classNames) => ({
             return classNames('fd-list__icon', {
                 [scope.glyph]: scope.glyph && !scope.svgPath,
                 'bk-icon--svg sap-icon': !scope.glyph && scope.svgPath,
-            })
+            });
         };
     },
-    template: '<i role="presentation" ng-class="getClasses()"><ng-include ng-if="svgPath" src="svgPath"></ng-include></i>'
+    template: '<i role="presentation" ng-class="getClasses()"><ng-include ng-if="svgPath" src="svgPath"></ng-include></i>',
 })).directive('bkListActionItem', () => ({
     restrict: 'EA',
     transclude: true,
     replace: true,
-    template: `<li role="listitem" class="fd-list__item fd-list__item--action"><button class="fd-list__title" ng-transclude></button></li>`
+    template: `<li role="listitem" class="fd-list__item fd-list__item--action"><button class="fd-list__title" ng-transclude></button></li>`,
 })).directive('bkListFormItem', () => ({
     restrict: 'EA',
     transclude: true,
@@ -188,7 +186,7 @@ blimpkit.directive('bkList', (classNames) => ({
     link: (_scope, _element, _attrs, listItemCtrl) => {
         if (listItemCtrl) listItemCtrl.setRole('option');
     },
-    template: '<div class="fd-form-item fd-list__form-item" ng-transclude></div>'
+    template: '<div class="fd-form-item fd-list__form-item" ng-transclude></div>',
 })).directive('bkListContent', (classNames) => ({
     restrict: 'EA',
     transclude: true,
@@ -197,7 +195,7 @@ blimpkit.directive('bkList', (classNames) => ({
         itemTitle: '@',
         itemTitleId: '@?',
         contentWrap: '<?',
-        titleWrap: '<?'
+        titleWrap: '<?',
     },
     controller: ['$scope', '$element', function ($scope, $element) {
         this.addClass = function (className) {
@@ -219,20 +217,19 @@ blimpkit.directive('bkList', (classNames) => ({
     template: `<div class="fd-list__content">
         <div ng-class="getTitleClasses()">{{itemTitle}}</div>
         <div ng-class="getBylineClasses()" ng-transclude></div>
-    </div>`
+    </div>`,
 })).directive('bkListGroupHeader', () => ({
     restrict: 'EA',
     transclude: true,
     replace: true,
-    template: '<li role="listitem" class="fd-list__group-header" ng-transclude></li>'
+    template: '<li role="listitem" class="fd-list__group-header" ng-transclude></li>',
 })).directive('bkListByline', (classNames) => ({
     restrict: 'EA',
     transclude: true,
     replace: true,
     scope: {
         align: '@',
-        contentWrap: '<?',
-        semanticStatus: '@?'
+        semanticStatus: '@?',
     },
     require: '^^bkListContent',
     link: function (scope, _element, _attrs, ctrl) {
@@ -250,18 +247,17 @@ blimpkit.directive('bkList', (classNames) => ({
 
         scope.getClasses = () => classNames('fd-list__title', {
             'fd-list__byline-left': scope.align === 'left',
-            'fd-list__byline-left--wrap': scope.align === 'left' && scope.contentWrap === true,
             'fd-list__byline-right': scope.align === 'right',
             [`fd-list__byline-right--${scope.semanticStatus}`]: scope.align === 'right' && semanticStatuses.includes(scope.semanticStatus),
         });
     },
-    template: '<div ng-class="getClasses()" ng-transclude></div>'
+    template: '<div ng-class="getClasses()" ng-transclude></div>',
 })).directive('bkListThumbnail', (classNames) => ({
     restrict: 'EA',
     replace: true,
     scope: {
         glyph: '@?',
-        imageUrl: '@?'
+        imageUrl: '@?',
     },
     link: (scope) => {
         if (!scope.glyph && !scope.imageUrl) {
@@ -272,13 +268,13 @@ blimpkit.directive('bkList', (classNames) => ({
             'fd-image--s': scope.imageUrl,
         });
 
-        scope.getStyles = function () {
+        scope.getStyles = () => {
             if (scope.imageUrl) return {
                 backgroundImage: `url('${scope.imageUrl}')`,
-                backgroundSize: 'cover'
-            }
+                backgroundSize: 'cover',
+            };
             return {};
         };
     },
-    template: '<span ng-class="getClasses()" ng-style="getStyles()"><i ng-if="glyph" role="presentation" ng-class="glyph"></i></span>'
+    template: '<span ng-class="getClasses()" ng-style="getStyles()"><i ng-if="glyph" role="presentation" ng-class="glyph"></i></span>',
 }));

@@ -136,7 +136,7 @@ blimpkit.constant('ButtonStates', {
             isDisabled: '<?',
             disabledFocusable: '<?',
             instructions: '@?',
-            type: '@?',
+            state: '@?',
             callback: '&?',
         },
         controller: ['$scope', '$element', '$attrs', function ($scope, $element, $attrs) {
@@ -216,8 +216,8 @@ blimpkit.constant('ButtonStates', {
             $scope.$on('$destroy', cleanUp);
         }],
         template: `<div class="fd-popover"><div ng-class="getSplitClasses()" role="group">
-        <bk-button glyph="{{ glyph }}" label="{{ label }}" ng-disabled="isDisabled" disabled-focusable="disabledFocusable" instructions="instructions" type="{{ type }}" is-split="true" compact="compact || false" ng-click="mainActionClicked()"></bk-button>
-        <bk-button glyph="{{ arrowGlyph || 'sap-icon--slim-arrow-down' }}" ng-disabled="isDisabled || disabledFocusable" type="{{ type }}" compact="compact || false" aria-label="open dropdown button" aria-controls="{{ popoverId }}" aria-haspopup="true" aria-expanded="{{ popupExpanded }}" ng-click="togglePopover()"></bk-button>
+        <bk-button glyph="{{ glyph }}" label="{{ label }}" ng-disabled="isDisabled" disabled-focusable="disabledFocusable" instructions="instructions" state="{{ state }}" is-split="true" compact="compact || false" ng-click="mainActionClicked()"></bk-button>
+        <bk-button glyph="{{ arrowGlyph || 'sap-icon--slim-arrow-down' }}" ng-disabled="isDisabled || disabledFocusable" state="{{ state }}" compact="compact || false" aria-label="open dropdown button" aria-controls="{{ popoverId }}" aria-haspopup="true" aria-expanded="{{ popupExpanded }}" ng-click="togglePopover()"></bk-button>
         </div><bk-popover-body no-arrow="true"><ng-transclude></ng-transclude></bk-popover-body></div>`,
     }
 });

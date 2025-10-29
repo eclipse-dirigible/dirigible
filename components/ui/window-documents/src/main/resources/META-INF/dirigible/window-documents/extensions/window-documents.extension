@@ -1,0 +1,5 @@
+{
+    "module": "window-documents/configs/documents.js",
+    "extensionPoint": "platform-windows",
+    "description": "Documents window"
+}

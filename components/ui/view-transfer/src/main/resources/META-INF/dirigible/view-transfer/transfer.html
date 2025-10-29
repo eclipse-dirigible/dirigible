@@ -12,7 +12,7 @@
 
 -->
 <!DOCTYPE html>
-<html lang="en" ng-app="transfer" ng-controller="TransferController" xmlns="http://www.w3.org/1999/xhtml">
+<html lang="en" ng-app="transfer" ng-controller="ViewController" xmlns="http://www.w3.org/1999/xhtml">
 
     <head>
         <meta charset="utf-8" />
@@ -43,60 +43,147 @@
         </style>
     </head>
 
-    <body class="bk-vbox">
-        <div class="fd-container fd-form-layout-grid-container fd-margin-top--tiny fd-margin-begin-end--tiny">
-            <div class="fd-row">
-                <div class="fd-col fd-col-lg--12 fd-col--wrap">
-                    <div class="fd-row">
-                        <div class="fd-col fd-col--12 fd-col-md--12 fd-col-lg--12">
-                            <div class="fd-row">
-                                <div class="fd-col fd-col--6">
-                                    <label class="fd-form-label" for="input-workspace">Source:</label>
-                                </div>
-                                <div class="fd-col fd-col--6">
-                                    <label class="fd-form-label" for="input-projects">Target:</label>
+    <body class="bk-hbox">
+        <bk-vertical-nav can-scroll="true" style="min-width:4.625rem;width:auto;z-index:2">
+            <bk-vertical-nav-main-section aria-label="main navigation">
+                <bk-list>
+                    <bk-list-navigation-item indicated="navActive === 'transfer'" ng-click="switchNav('transfer')">
+                        <span bk-list-navigation-item-text>Transfer</span>
+                        <bk-list-navigation-item-indicator ng-if="navActive === 'transfer'"></bk-list-navigation-item-indicator>
+                    </bk-list-navigation-item>
+                    <bk-list-navigation-item indicated="navActive === 'export'" ng-click="switchNav('export')">
+                        <span bk-list-navigation-item-text>Export</span>
+                        <bk-list-navigation-item-indicator ng-if="navActive === 'export'"></bk-list-navigation-item-indicator>
+                    </bk-list-navigation-item>
+                    <bk-list-navigation-item indicated="navActive === 'import'" ng-click="switchNav('import')">
+                        <span bk-list-navigation-item-text>Import</span>
+                        <bk-list-navigation-item-indicator ng-if="navActive === 'import'"></bk-list-navigation-item-indicator>
+                    </bk-list-navigation-item>
+                </bk-list>
+            </bk-vertical-nav-main-section>
+        </bk-vertical-nav>
+        <div class="bk-fill-parent" ng-show="navActive === 'transfer'" ng-controller="TransferController">
+            <div class="fd-container fd-form-layout-grid-container fd-margin-top--tiny fd-margin-begin-end--tiny">
+                <div class="fd-row">
+                    <div class="fd-col fd-col-lg--12 fd-col--wrap">
+                        <div class="fd-row">
+                            <div class="fd-col fd-col--12 fd-col-md--12 fd-col-lg--12">
+                                <div class="fd-row">
+                                    <div class="fd-col fd-col--6">
+                                        <label class="fd-form-label" for="input-workspace">Source:</label>
+                                    </div>
+                                    <div class="fd-col fd-col--6">
+                                        <label class="fd-form-label" for="input-projects">Target:</label>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        <div class="fd-col fd-col--12 fd-col-md--12 fd-col-lg--12">
-                            <div class="fd-row">
-                                <div class="fd-col fd-col--3 fd-col-md--3 fd-col-lg--3 fd-col-xl--3">
-                                    <bk-select class="bk-full-width" ng-model="definition.selectedSourceDatabase" ng-change="databaseSourceChanged()" dropdown-fixed="true">
-                                        <bk-option text="{{ database.text }}" value="database.value" ng-repeat="database in databases track by $index"></bk-option>
-                                    </bk-select>
-                                </div>
-                                <div class="fd-col fd-col--3 fd-col-md--3 fd-col-lg--3 fd-col-xl--3">
-                                    <bk-select class="bk-full-width" ng-model="definition.selectedSourceDatasource" ng-change="datasourceSourceChanged()">
-                                        <bk-option text="{{ datasource.text }}" value="datasource.value" ng-repeat="datasource in sourceDatasources track by $index"></bk-option>
-                                    </bk-select>
-                                </div>
-                                <div class="fd-col fd-col--3 fd-col-md--3 fd-col-lg--3 fd-col-xl--3">
-                                    <bk-select class="bk-full-width" ng-model="definition.selectedTargetDatabase" ng-change="databaseTargetChanged()" dropdown-fixed="true">
-                                        <bk-option text="{{ database.text }}" value="database.value" ng-repeat="database in databases  track by $index"></bk-option>
-                                    </bk-select>
-                                </div>
-                                <div class="fd-col fd-col--3 fd-col-md--3 fd-col-lg--3 fd-col-xl--3">
-                                    <bk-select class="bk-full-width" ng-model="definition.selectedTargetDatasource" ng-change="datasourceTargetChanged()">
-                                        <bk-option text="{{ datasource.text }}" value="datasource.value" ng-repeat="datasource in targetDatasources  track by $index"></bk-option>
-                                    </bk-select>
+                            <div class="fd-col fd-col--12 fd-col-md--12 fd-col-lg--12">
+                                <div class="fd-row">
+                                    <div class="fd-col fd-col--3 fd-col-md--3 fd-col-lg--3 fd-col-xl--3">
+                                        <bk-select class="bk-full-width" ng-model="definition.selectedSourceDatabase" ng-change="databaseSourceChanged()" dropdown-fixed="true">
+                                            <bk-option text="{{ database.text }}" value="database.value" ng-repeat="database in databases track by $index"></bk-option>
+                                        </bk-select>
+                                    </div>
+                                    <div class="fd-col fd-col--3 fd-col-md--3 fd-col-lg--3 fd-col-xl--3">
+                                        <bk-select class="bk-full-width" ng-model="definition.selectedSourceDatasource">
+                                            <bk-option text="{{ datasource.text }}" value="datasource.value" ng-repeat="datasource in sourceDatasources track by $index"></bk-option>
+                                        </bk-select>
+                                    </div>
+                                    <div class="fd-col fd-col--3 fd-col-md--3 fd-col-lg--3 fd-col-xl--3">
+                                        <bk-select class="bk-full-width" ng-model="definition.selectedTargetDatabase" ng-change="databaseTargetChanged()" dropdown-fixed="true">
+                                            <bk-option text="{{ database.text }}" value="database.value" ng-repeat="database in databases track by $index"></bk-option>
+                                        </bk-select>
+                                    </div>
+                                    <div class="fd-col fd-col--3 fd-col-md--3 fd-col-lg--3 fd-col-xl--3">
+                                        <bk-select class="bk-full-width" ng-model="definition.selectedTargetDatasource">
+                                            <bk-option text="{{ datasource.text }}" value="datasource.value" ng-repeat="datasource in targetDatasources track by $index"></bk-option>
+                                        </bk-select>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-        <bk-toolbar compact="true" type="transparent">
-            <bk-toolbar-spacer></bk-toolbar-spacer>
-            <bk-button state="transparent" glyph="sap-icon--media-play" title="Start Transfer" aria-label="Start Transfer" ng-click="startTransfer()"></bk-button>
-            <bk-button state="transparent" glyph="sap-icon--media-pause" title="Stop Transfer" aria-label="Stop Transfer" ng-click="stopTransfer()"></bk-button>
-            <bk-toolbar-separator></bk-toolbar-separator>
-            <bk-button state="transparent" glyph="sap-icon--clear-all" title="Clear Log" aria-label="Clear Log" ng-click="clearLog()"></bk-button>
-        </bk-toolbar>
-        <div id="logContent" class="bk-stretch" bk-scrollbar>
-            <div class="fd-text bk-padding--tiny logLine" data-loglevel="{{::log.level}}" ng-repeat="log in logs track by $index">
-                {{::log.date}} {{::log.message}}
+            <bk-toolbar compact="true" type="transparent">
+                <bk-toolbar-spacer></bk-toolbar-spacer>
+                <bk-button state="transparent" glyph="sap-icon--media-play" title="Start Transfer" aria-label="Start Transfer" ng-click="startTransfer()"></bk-button>
+                <bk-button state="transparent" glyph="sap-icon--media-pause" title="Stop Transfer" aria-label="Stop Transfer" ng-click="stopTransfer()"></bk-button>
+                <bk-toolbar-separator></bk-toolbar-separator>
+                <bk-button state="transparent" glyph="sap-icon--clear-all" title="Clear Log" aria-label="Clear Log" ng-click="clearLog()"></bk-button>
+            </bk-toolbar>
+            <div id="logContent" class="bk-stretch" bk-scrollbar>
+                <div class="fd-text bk-padding--tiny logLine" data-loglevel="{{::log.level}}" ng-repeat="log in logs track by $index">
+                    {{::log.date}} {{::log.message}}
+                </div>
             </div>
         </div>
+        <div class="bk-fill-parent bk-hbox" ng-show="navActive === 'export'" ng-controller="ExportController">
+            <bk-fieldset class="bk-padding--tiny bk-restrict-width--sm bk-full-width" bk-scrollbar ng-form="forms.ep">
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label id="db" required colon="true">Database</bk-form-label>
+                        <bk-select label-id="db" name="db" class="bk-full-width" ng-required="true" ng-model="exportData.db" ng-change="dbChanged()" dropdown-fixed="true" state="{{ forms.ep['db'].$valid ? '' : 'error' }}">
+                            <bk-option text="{{ database }}" value="database" ng-repeat="database in databases track by $index"></bk-option>
+                        </bk-select>
+                    </bk-form-item>
+                    <bk-form-item>
+                        <bk-form-label id="source" required colon="true">Source</bk-form-label>
+                        <bk-select label-id="source" name="source" class="bk-full-width" ng-required="true" ng-model="exportData.source" ng-change="sourceChanged()" state="{{ forms.ep['source'].$valid ? '' : 'error' }}">
+                            <bk-option text="{{ datasource }}" value="datasource" ng-repeat="datasource in datasources track by $index"></bk-option>
+                        </bk-select>
+                    </bk-form-item>
+                    <bk-form-item class="bk-hbox bk-box--gap">
+                        <bk-form-item class="bk-full-width">
+                            <bk-form-label for="tables" colon="true">Tables</bk-form-label>
+                            <bk-combobox-input input-id="tables" multi-select="true" ng-model="exportData.tables" dropdown-items="tables" placeholder="Search..." btn-aria-label="show/hide table options" list-aria-label="table options">
+                            </bk-combobox-input>
+                        </bk-form-item>
+                        <bk-form-item style="margin:0">
+                            <bk-form-label id="lt" colon="true">Type</bk-form-label>
+                            <bk-select label-id="lt" name="type" ng-model="exportData.type" dropdown-fixed="true" state="{{ forms.ep['type'].$valid ? '' : 'error' }}">
+                                <bk-option text="Include" value="'include'"></bk-option>
+                                <bk-option text="Exclude" value="'exclude'"></bk-option>
+                            </bk-select>
+                        </bk-form-item>
+                    </bk-form-item>
+                    <bk-form-item>
+                        <bk-message-strip glyph="sap-icon--message-information" state="information">Leave selection empty to include all tables</bk-message-strip>
+                    </bk-form-item>
+                    <bk-form-item>
+                        <bk-form-label for="path" required colon="true">Path</bk-form-label>
+                        <bk-input-group state="{{ forms.ep['path'].$valid ? '' : 'error' }}">
+                            <bk-input-group-addon>
+                                <bk-button label="Choose" title="Choose" ng-click="choosePath()"></bk-button>
+                            </bk-input-group-addon>
+                            <bk-input id="path" name="path" type="text" ng-model="exportData.path" ng-required="true" placeholder="/export/path"></bk-input>
+                        </bk-input-group>
+                    </bk-form-item>
+                    <bk-form-item class="bk-box--items-end">
+                        <bk-button type="button" state="emphasized" label="Export" ng-click="export()" ng-disabled="!forms.ep.$valid || !changed"></bk-button>
+                    </bk-form-item>
+                </bk-form-group>
+            </bk-fieldset>
+            <div class="bk-vbox bk-list-border--left bk-fill-parent">
+                <bk-toolbar type="transparent">
+                    <bk-toolbar-title>Exports</bk-toolbar-title>
+                    <bk-toolbar-spacer></bk-toolbar-spacer>
+                    <bk-button state="transparent" title="Clear All" label="Clear All" ng-click="clearAllExports()"></bk-button>
+                </bk-toolbar>
+                <bk-list fixed-height="true">
+                    <bk-list-item>
+                        <bk-list-icon glyph="sap-icon--message-success"></bk-list-icon>
+                        <bk-list-title>/export_folder</bk-list-title>
+                        <bk-list-secondary>10/27/25, 11:57 AM</bk-list-secondary>
+                    </bk-list-item>
+                    <bk-list-item>
+                        <bk-loader></bk-loader>
+                        <bk-list-title>/export_all</bk-list-title>
+                        <bk-list-secondary>10/28/25, 11:57 AM</bk-list-secondary>
+                    </bk-list-item>
+                </bk-list>
+            </div>
+        </div>
+        <div class="bk-fill-parent" ng-show="navActive === 'import'">Import</div>
         <theme></theme>
     </body>
