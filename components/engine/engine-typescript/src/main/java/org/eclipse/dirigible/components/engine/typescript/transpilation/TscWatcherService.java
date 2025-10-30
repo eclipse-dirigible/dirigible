@@ -111,7 +111,7 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
 
         Path tsConfigPath = registryFolderPath.resolve("tsconfig.json");
 
-        LOGGER.info("Creating registry tsconfig.json file with path [{}] and content:\n{}", tsConfigPath, TS_CONFIG_CONTENT);
+        LOGGER.info("Creating tsconfig.json file with path [{}] and content:\n{}", tsConfigPath, TS_CONFIG_CONTENT);
         try {
             Files.createDirectories(registryFolderPath);
             Files.writeString(tsConfigPath, TS_CONFIG_CONTENT, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
