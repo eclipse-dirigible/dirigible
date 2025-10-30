@@ -62,7 +62,7 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
         'sap-icon--number-sign': ['css', 'less', 'scss'],
         'sap-icon--text': ['txt'],
         'sap-icon--pdf-attachment': ['pdf'],
-        'sap-icon--picture': ['ico', 'bmp', 'png', 'jpg', 'jpeg', 'gif', 'svg'],
+        'sap-icon--picture': ['ico', 'bmp', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'],
         'sap-icon--document-text': ['extension', 'extensionpoint', 'edm', 'model', 'dsm', 'schema', 'bpmn', 'job', 'listener', 'websocket', 'roles', 'access', 'table', 'view', 'scheme', 'camel'],
         'sap-icon--attachment-html': ['html', 'xhtml', 'xml'],
         'sap-icon--attachment-zip-file': ['zip', 'bzip2', 'gzip', 'tar', 'wim', 'xz', '7z', 'rar'],
@@ -86,6 +86,34 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
 
     $scope.loading = false;
     $scope.canPreview = true;
+    $scope.previewType = 'web';
+    $scope.csvData = {
+        headers: [],
+        rows: [],
+    };
+    $scope.selectedFile = null;
+    const papaConfig = {
+        worker: false,
+        download: true,
+        delimitersToGuess: [',', '\t', '|', ';', '#', '~', Papa.RECORD_SEP, Papa.UNIT_SEP],
+        header: true,
+        skipEmptyLines: true,
+        complete: (papa) => {
+            $scope.$evalAsync(() => {
+                for (let h in papa.meta.fields) {
+                    $scope.csvData.headers.push(papa.meta.fields[h]);
+                }
+                for (let r = 0; r < papa.data.length; r++) {
+                    const row = [];
+                    for (let ri in papa.data[r]) {
+                        row.push(papa.data[r][ri]);
+                    }
+                    $scope.csvData.rows.push(row);
+                }
+                $scope.previewLoading = false;
+            });
+        }
+    };
     $scope.downloadPath = '/services/js/documents/api/documents.js/download';
     $scope.previewPath = '/services/js/documents/api/documents.js/preview';
     $scope.downloadZipPath = zipApi;
@@ -123,7 +151,7 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
         return path.replace(/\/\//g, '/');
     };
 
-    $scope.isDocument = (item) => item && item.type === 'cmis:document';
+    const isDocument = (item) => item && item.type === 'cmis:document';
     $scope.isFolder = (item) => item && item.type === 'cmis:folder';
 
     $scope.clearSelection = () => {
@@ -158,8 +186,25 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
 
     $scope.isDeleteItemsButtonEnabled = () => $scope.folder && $scope.folder.children.some(x => x.selected);
 
-    $scope.getFilePreviewUrl = (item) => $scope.isDocument(item) ?
+    $scope.isDlFileButtonEnabled = () => {
+        if ($scope.folder) {
+            let selected = 0;
+            for (let i = 0; i < $scope.folder.children.length; i++) {
+                if ($scope.folder.children[i].selected && isDocument($scope.folder.children[i])) {
+                    if (selected === 1) return false;
+                    else selected = 1;
+                }
+            }
+            return selected === 1;
+        }
+        return false;
+    };
+
+    const getFilePreviewUrl = (item) => isDocument(item) ?
         `${$scope.previewPath}?path=${$scope.getFullPath(item.name)}` : 'about:blank';
+
+    $scope.getFileDownloadUrl = (item) => isDocument(item) ?
+        `${$scope.downloadPath}?path=${$scope.getFullPath(item.name)}` : 'about:blank';
 
     $scope.showNewFolderDialog = (value = '', errorMsg, excluded = []) => {
         dialogHub.showFormDialog({
@@ -212,7 +257,7 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
             name: item.name
         };
 
-        const itemType = $scope.isDocument(item) ? 'file' : 'folder';
+        const itemType = isDocument(item) ? 'file' : 'folder';
 
         dialogHub.showFormDialog({
             title: `${LocaleService.t('rename', 'Rename')} ${itemType}`,
@@ -267,7 +312,7 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
             name: item.name
         }];
 
-        const title = $scope.isDocument(item) ? LocaleService.t('documents:deleteActions.deleteFile', 'Delete file') : LocaleService.t('documents:deleteActions.deleteFolder', 'Delete folder');
+        const title = isDocument(item) ? LocaleService.t('documents:deleteActions.deleteFile', 'Delete file') : LocaleService.t('documents:deleteActions.deleteFolder', 'Delete folder');
         const message = LocaleService.t('documents:deleteActions.deleteItem', { name: item.name });
 
         dialogHub.showDialog({
@@ -365,6 +410,7 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
             case 'hdi':
             case 'hdbtable':
             case 'hdbstructurе':
+            case 'hdbstructure':
             case 'hdbview':
             case 'hdbtablefunction':
             case 'hdbprocedure':
@@ -384,7 +430,6 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
             case 'access':
             case 'roles':
             case 'sh':
-            case 'csv':
             case 'csvim':
             case 'hdbti':
             case 'camel':
@@ -443,16 +488,24 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
         $scope.clearSelection();
     };
 
+    function setPreviewer() {
+        $scope.previewLoading = true;
+        $scope.csvData.headers.length = 0;
+        $scope.csvData.rows.length = 0;
+        if ($scope.selectedFile.name.endsWith('.csv')) {
+            $scope.previewType = 'csv';
+            Papa.parse($scope.getFileDownloadUrl($scope.selectedFile), papaConfig);
+        } else if (iframe) {
+            $scope.previewType = 'web';
+            iframe.contentWindow.location.replace(getFilePreviewUrl($scope.selectedFile));
+        }
+    }
+
     function setSelectedFile(selectedFile) {
         if (selectedFile === null) $scope.selectedFile = selectedFile;
         else if ($scope.canPreviewFile(selectedFile.name)) {
             $scope.selectedFile = selectedFile;
-
-            $scope.previewLoading = true;
-
-            if (iframe) {
-                iframe.contentWindow.location.replace($scope.getFilePreviewUrl($scope.selectedFile));
-            }
+            setPreviewer();
         }
     };
 

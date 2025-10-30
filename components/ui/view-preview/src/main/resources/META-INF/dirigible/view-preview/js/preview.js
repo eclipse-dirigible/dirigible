@@ -181,6 +181,7 @@ previewView.controller('PreviewController', ($scope, $document, ButtonStates) =>
                 case 'hdi':
                 case 'hdbtable':
                 case 'hdbstructurе':
+                case 'hdbstructure':
                 case 'hdbview':
                 case 'hdbtablefunction':
                 case 'hdbprocedure':

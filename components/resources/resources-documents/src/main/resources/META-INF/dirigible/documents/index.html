@@ -22,6 +22,7 @@
         <script type="text/javascript" src="/services/web/documents/configs/documents.js"></script>
         <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=view-js,split-js"></script>
         <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=file-upload-js"></script>
+        <script type="text/javascript" src="/webjars/papaparse/papaparse.min.js"></script>
         <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css,split-css" />
         <link type="text/css" rel="stylesheet" href="/services/web/documents/styles/documents.css" />
         <script type="text/javascript" src="/services/web/documents/js/documents.js"></script>
@@ -87,34 +88,34 @@
                             <thead bk-table-header sticky="true">
                                 <tr bk-table-row>
                                     <th bk-table-header-cell content-type="checkbox">
-                                        <bk-checkbox compact="true" id="cb-all" ng-model="selection.allSelected" ng-change="selectAllChanged()"></bk-checkbox>
-                                        <bk-checkbox-label empty="true" compact="true" for="cb-all"></bk-checkbox-label>
+                                        <bk-checkbox id="cb-all" ng-model="selection.allSelected" ng-change="selectAllChanged()"></bk-checkbox>
+                                        <bk-checkbox-label empty="true" for="cb-all"></bk-checkbox-label>
                                     </th>
-                                    <th bk-table-header-cell>{{'name' | t:'Name'}}</th>
-                                    <th bk-table-header-cell></th>
-                                    <th bk-table-header-cell></th>
+                                    <th bk-table-header-cell colspan="3">{{'name' | t:'Name'}}</th>
                                 </tr>
                             </thead>
                             <tbody bk-table-body>
                                 <tr bk-table-row ng-repeat="single in filteredItems = (folder.children | filter: search.filterBy | orderBy: ['-type', 'name'])" selected="single.selected">
                                     <td bk-table-cell content-type="checkbox">
-                                        <bk-checkbox id="cb-{{single.name}}" compact="true" ng-model="single.selected" ng-change="selectionChanged()" aria-labelledby="lbl-{{single.name}"></bk-checkbox>
-                                        <bk-checkbox-label empty="true" compact="true" for="cb-{{single.name}}"></bk-checkbox-label>
+                                        <bk-checkbox id="cb-{{single.name}}" ng-model="single.selected" ng-change="selectionChanged()" aria-labelledby="lbl-{{single.name}}"></bk-checkbox>
+                                        <bk-checkbox-label empty="true" for="cb-{{single.name}}"></bk-checkbox-label>
                                     </td>
                                     <td bk-table-cell hoverable="true" activable="true" ng-click="handleExplorerClick(single, $event)">
-                                        <span class="{{ isFolder(single) ? 'sap-icon--folder-blank' : getFileIcon(single.name) }} fd-margin-end--tiny"></span>
-                                        <bk-link href="#">{{ single.name }}</bk-link>
+                                        <div class="bk-hbox bk-box--gap">
+                                            <span class="{{ isFolder(single) ? 'sap-icon--folder-blank' : getFileIcon(single.name) }}"></span>
+                                            {{ single.name }}
+                                        </div>
                                     </td>
                                     <td bk-table-cell fit-content="true" style="text-align: right">
-                                        <bk-button ng-click="showRenameItemDialog(single, $event)" bk-list-button ng-disabled="!writeAccessAllowed(single)" state="transparent" compact="true" glyph="sap-icon--edit"
-                                            aria-label="{{'rename' | t:'Rename'}}" title="{{'rename' | t:'Rename'}}">
+                                        <a bk-button bk-list-button ng-if="!isFolder(single)" ng-href="{{getFileDownloadUrl(single)}}" target="_blank" rel="noopener noreferrer" state="transparent" glyph="sap-icon--download"
+                                            aria-label="{{'download' | t:'Download'}}" title="{{'download' | t:'Download'}}">
+                                        </a>
+                                        <bk-button ng-click="showRenameItemDialog(single, $event)" bk-list-button ng-disabled="!writeAccessAllowed(single)" state="transparent" glyph="sap-icon--edit" aria-label="{{'rename' | t:'Rename'}}"
+                                            title="{{'rename' | t:'Rename'}}">
                                         </bk-button>
-                                        <bk-button ng-click="showDeleteSingleItemDialog(single, $event)" bk-list-button ng-disabled="!writeAccessAllowed(single)" state="transparent" compact="true" glyph="sap-icon--delete"
+                                        <bk-button ng-click="showDeleteSingleItemDialog(single, $event)" bk-list-button ng-disabled="!writeAccessAllowed(single)" state="transparent" glyph="sap-icon--delete"
                                             aria-label="{{'delete' | t:'Delete'}}" title="{{'delete' | t:'Delete'}}">
                                         </bk-button>
-                                    </td>
-                                    <td bk-table-cell fit-content="true" navigated="selectedFile === single">
-                                        <i ng-if="isFolder(single)" bk-table-icon navigation="true" glyph="sap-icon--slim-arrow-right">></i>
                                     </td>
                                 </tr>
                                 <tr ng-if="filteredItems.length === 0" bk-table-row>
@@ -130,7 +131,21 @@
                     </bk-scrollbar>
                 </split-pane>
                 <split-pane size="50">
-                    <iframe id="preview-iframe" ng-show="selectedFile && canPreview && !previewLoading" src="about:blank"></iframe>
+                    <div class="bk-fill-parent" bk-scrollbar ng-show="selectedFile && canPreview && !previewLoading && previewType === 'csv'">
+                        <table bk-table display-mode="compact" outer-borders="bottom">
+                            <thead bk-table-header interactive="false" sticky="true">
+                                <tr bk-table-row>
+                                    <th bk-table-header-cell ng-repeat="header in csvData.headers track by $index">{{header}}</th>
+                                </tr>
+                            </thead>
+                            <tbody bk-table-body>
+                                <tr bk-table-row ng-repeat="row in csvData.rows track by $index">
+                                    <td bk-table-cell ng-repeat="rowItem in row track by $index">{{rowItem}}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <iframe id="preview-iframe" ng-show="selectedFile && canPreview && !previewLoading && previewType === 'web'" src="about:blank"></iframe>
                     <bk-busy-indicator-extended class="bk-fill-parent" ng-show="selectedFile && canPreview && previewLoading" size="l" ng-show="loading">{{'loadingPreview' | t:'Loading preview'}}...</bk-busy-indicator-extended>
                     <bk-message-page ng-if="!selectedFile || !canPreview" glyph="sap-icon--detail-view">
                         <bk-message-page-title>{{'documents:filePreview' | t:'File Preview'}}</bk-message-page-title>
