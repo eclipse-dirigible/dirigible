@@ -23,11 +23,13 @@ import org.springframework.core.annotation.Order;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -105,13 +107,13 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
     }
 
     private void createOrReplaceTsConfig() {
-        String registryFolderPath = getRegistryFolderPath();
+        Path registryFolderPath = getRegistryFolderPath();
 
-        Path tsConfigPath = Paths.get(registryFolderPath, "tsconfig.json");
+        Path tsConfigPath = registryFolderPath.resolve("tsconfig.json");
 
         LOGGER.info("Creating registry tsconfig.json file with path [{}] and content:\n{}", tsConfigPath, TS_CONFIG_CONTENT);
         try {
-            Files.createDirectories(Paths.get(registryFolderPath));
+            Files.createDirectories(registryFolderPath);
             Files.writeString(tsConfigPath, TS_CONFIG_CONTENT, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
                     StandardOpenOption.TRUNCATE_EXISTING);
         } catch (IOException ex) {
@@ -119,8 +121,9 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
         }
     }
 
-    private String getRegistryFolderPath() {
-        return this.repository.getInternalResourcePath(IRepositoryStructure.PATH_REGISTRY_PUBLIC);
+    private Path getRegistryFolderPath() {
+        String path = this.repository.getInternalResourcePath(IRepositoryStructure.PATH_REGISTRY_PUBLIC);
+        return Path.of(path);
     }
 
     private synchronized void startTscWatch() {
@@ -129,7 +132,8 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
             return;
         }
 
-        String registryFolderPath = getRegistryFolderPath();
+        Path registryFolderPath = getRegistryFolderPath();
+        createDir(registryFolderPath);
         try {
             LOGGER.info("Starting tsc watch in dir [{}]...", registryFolderPath);
 
@@ -138,7 +142,7 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
             String tscCmd = SystemUtils.IS_OS_WINDOWS ? "tsc.cmd" : "tsc";
 
             ProcessBuilder processBuilder = new ProcessBuilder(tscCmd, "--watch", "--pretty", "false");
-            processBuilder.directory(new File(registryFolderPath));
+            processBuilder.directory(registryFolderPath.toFile());
             processBuilder.redirectErrorStream(false); // keep stdout/stderr separate
 
             tscProcess = processBuilder.start();
@@ -171,6 +175,14 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
             }
         } catch (IOException ex) {
             LOGGER.error("Error reading tsc output", ex);
+        }
+    }
+
+    private void createDir(Path path) {
+        try {
+            Files.createDirectories(path);
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to create directory " + path, ex);
         }
     }
 
