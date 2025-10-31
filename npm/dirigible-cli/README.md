@@ -41,14 +41,15 @@ npm install --save-dev @dirigiblelabs/dirigible-cli
 When installed locally, you can access the command using `npx` (e.g., `npx dirigible <command>`) or by registering
 scripts in your `package.json`.
 
-**Example of registering a script:**
+**Example of registering scripts:**
 
 ```json
 // package.json
 {
   ...
   "scripts": {
-    "start": "dirigible start"
+    "start": "dirigible start",
+    "start:dev": "dirigible start --watch"
   }
 }
 ```

@@ -12,42 +12,64 @@
 
 -->
 <!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="statements" ng-controller="StatementsController">
 
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Language" content="en-us">
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
-    <title>SQL Commands</title>
-    <link type="text/css" rel="stylesheet" href="/services/web/platform-core/ui/styles/fonts.css" />
-    <link type="text/css" rel="stylesheet" href="/services/web/platform-core/ui/styles/blimpkit.css" />
-    <link type="text/css" rel="stylesheet" href="/webjars/fundamental-styles/dist/busy-indicator.css">
-    <link type="text/css" data-name="/webjars/monaco-editor/min/vs/editor/editor.main" rel="stylesheet" href="/webjars/monaco-editor/min/vs/editor/editor.main.css">
-    <link type="text/css" rel="stylesheet" href="css/editor.css" />
-    <script type="text/javascript" src="/services/js/platform-branding/branding.js"></script>
-    <script type="text/javascript" src="/services/web/platform-core/utilities/view.js"></script>
-    <script type="text/javascript" src="/services/web/platform-core/ui/platform/message-hub.js"></script>
-    <script type="text/javascript" src="/services/web/platform-core/ui/platform/theming-hub.js"></script>
-    <script type="text/javascript" src="/services/web/platform-core/ui/platform/status-bar-hub.js"></script>
-    <script type="text/javascript" src="/services/web/platform-core/ui/platform/layout-hub.js"></script>
-    <script type="text/javascript" src="/services/web/platform-core/ui/platform/dialog-hub.js"></script>
-    <script type="text/javascript" src="/webjars/monaco-editor/min/vs/loader.js"></script>
+    <title config-title></title>
+    <script type="text/javascript" src="configs/sql.js"></script>
+    <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=view-js,code-editor-js"></script>
+    <link type="text/css" rel="stylesheet" data-name="vs/editor/editor.main" href="/services/js/platform-core/services/loader.js?ids=view-css,code-editor-css" />
+    <link type="text/css" rel="stylesheet" href="styles/sql.css" />
+    <script type="text/javascript" src="js/sql.js"></script>
   </head>
 
   <body class="bk-vbox" spellcheck="false">
-    <div id="loadingOverview" class="fd-busy-indicator-extended">
-      <div class="fd-busy-indicator fd-busy-indicator--l" aria-hidden="false" aria-label="Loading">
-        <div class="fd-busy-indicator__circle"></div>
-        <div class="fd-busy-indicator__circle"></div>
-        <div class="fd-busy-indicator__circle"></div>
-      </div>
-      <div id="loadingMessage" class="fd-busy-indicator-extended__label">Loading data...</div>
-    </div>
-    <div id="infobar">Press F8 to execute the selected statement or F9 to export the result</div>
-    <div id="embeddedEditor" ng-non-bindable></div>
-    <script type="module" src="js/sql.js"></script>
+    <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{::state.busyText}}</bk-busy-indicator-extended>
+    <bk-toolbar id="toolbar" compact="true" ng-show="!state.error && !state.isBusy">
+      <span id="hint" class="bk-text--ellipsis">Press F8 to execute the selected statement or F9 to export the result</span>
+      <bk-toolbar-spacer></bk-toolbar-spacer>
+      <bk-button state="transparent" glyph="sap-icon--play" title="Execute" label="Execute" ng-click="executeSQL()"></bk-button>
+      <bk-button state="transparent" glyph="sap-icon--download" title="Export" label="Export" ng-click="exportSQL()"></bk-button>
+      <bk-toolbar-separator></bk-toolbar-separator>
+      <bk-popover close-innerclick="false" id="exportsPopover">
+        <bk-popover-control>
+          <bk-button id="exports" label="Exports" state="transparent" badge="{{exports.length ? exports.length : ''}}" is-menu="true"></bk-button>
+        </bk-popover-control>
+        <bk-popover-body align="bottom-right" can-scroll="true" class="bk-vbox">
+          <bk-toolbar has-title="false">
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-button state="transparent" label="Delete all" ng-disabled="exports.length === 0" ng-click="deleteExports()"></bk-button>
+          </bk-toolbar>
+          <bk-list ng-show="exports.length" byline="true">
+            <bk-list-item ng-repeat="export in exports track by export.id">
+              <bk-list-thumbnail ng-if="export.status === ExportStatus.FINISHED" glyph="sap-icon--message-success"></bk-list-thumbnail>
+              <bk-list-thumbnail ng-if="export.status === ExportStatus.FAILED" glyph="sap-icon--message-error" data-color-error></bk-list-thumbnail>
+              <bk-list-thumbnail ng-if="export.status === ExportStatus.UNKNOWN" glyph="sap-icon--question-mark"></bk-list-thumbnail>
+              <span ng-if="export.status === ExportStatus.TRIGGRED" class="bk-center">
+                <bk-loader size="l"></bk-loader>
+              </span>
+              <bk-list-content item-title="{{export.name}}">
+                <bk-list-byline ng-if="export.status === ExportStatus.FINISHED" align="left">Export finished</bk-list-byline>
+                <bk-list-byline ng-if="export.status === ExportStatus.TRIGGRED" align="left">Exporting...</bk-list-byline>
+                <bk-list-byline ng-if="export.status === ExportStatus.FAILED" align="left" id="errorMessage" data-color-error>{{export.message || "Unknown error"}}</bk-list-byline>
+                <bk-list-byline align="right">{{getExportDate(export.startedAt)}}</bk-list-byline>
+              </bk-list-content>
+              <a bk-button ng-if="export.status === ExportStatus.FINISHED" ng-href="{{EXPORT_BASE_URL + export.name}}" bk-list-button state="transparent" glyph="sap-icon--download" aria-label="Download" title="Download"></a>
+              <bk-button ng-if="export.status === ExportStatus.FINISHED || export.status === ExportStatus.FAILED || export.status === ExportStatus.UNKNOWN" bk-list-button state="transparent" glyph="sap-icon--delete" aria-label="Delete"
+                title="Delete" ng-click="deleteExport(export.id)"></bk-button>
+            </bk-list-item>
+          </bk-list>
+          <bk-message-page ng-if="!exports.length" glyph="sap-icon--download">
+            <bk-message-page-title>No exports</bk-message-page-title>
+          </bk-message-page>
+        </bk-popover-body>
+      </bk-popover>
+    </bk-toolbar>
+    <div id="embeddedEditor" ng-non-bindable ng-show="!state.error && !state.isBusy"></div>
+    <theme></theme>
   </body>
 
 </html>

@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.cli;
 
+import org.eclipse.dirigible.cli.project.ProjectGenerator;
 import org.eclipse.dirigible.cli.server.DirigibleServer;
 import org.eclipse.dirigible.cli.server.DirigibleServerConfig;
 import org.eclipse.dirigible.cli.util.SleepUtil;
@@ -28,21 +29,34 @@ class ProjectCommands {
     private static final Logger LOGGER = LoggerFactory.getLogger(ProjectCommands.class);
 
     private final DirigibleServer dirigibleServer;
+    private final ProjectGenerator projectGenerator;
 
-    ProjectCommands(DirigibleServer dirigibleServer) {
+    ProjectCommands(DirigibleServer dirigibleServer, ProjectGenerator projectGenerator) {
         this.dirigibleServer = dirigibleServer;
+        this.projectGenerator = projectGenerator;
     }
 
-    @ShellMethod("Run Eclipse Dirigible project")
-    String start(@ShellOption(value = {"dirigibleJarPath"}, defaultValue = ShellOption.NULL,
+    @ShellMethod(value = "Generate Dirigible project.", key = {"new"})
+    String generateNewProject(
+            @ShellOption(value = {"name", "n"}, defaultValue = "dirigible-project", help = "The name of the project") String projectName,
+            @ShellOption(value = {"override", "o"}, defaultValue = "false",
+                    help = "Set to true to overwrite the existing project if it already exists.") boolean overrideProject) {
+        Path projectPath = projectGenerator.generate(projectName, overrideProject);
+
+        return "Successfully created project " + projectName + " in path " + projectPath.toString();
+    }
+
+    @ShellMethod(value = "Run Eclipse Dirigible project", key = {"start"})
+    String startProject(@ShellOption(value = {"dirigibleJarPath"}, defaultValue = ShellOption.NULL,
             help = "Path to the Eclipse Dirigible fat/uber jar. This value is automatically resolved when the CLI is installed via npm.") String dirigibleJarPathOption,
             @ShellOption(value = {"projectPath"}, defaultValue = ShellOption.NULL,
-                    help = "Path to Eclipse Dirigible project. If not specified, user working directory will be used.") String projectPathOption) {
+                    help = "Path to Eclipse Dirigible project. If not specified, user working directory will be used.") String projectPathOption,
+            @ShellOption(value = {"watch", "w"}, defaultValue = "false", help = "Run in watch mode (live-reload).") boolean watchMode) {
 
         Path dirigibleJarPath = getDirigibleJarPath(dirigibleJarPathOption);
         Path projectPath = getProjectPath(projectPathOption);
 
-        DirigibleServerConfig serverConfig = new DirigibleServerConfig(dirigibleJarPath, projectPath);
+        DirigibleServerConfig serverConfig = new DirigibleServerConfig(dirigibleJarPath, projectPath, watchMode);
         int exitCode = dirigibleServer.start(serverConfig);
 
         SleepUtil.sleepMillis(TimeUnit.SECONDS, 3);// give time to the server to stop (prevent mixed logs)

@@ -15,11 +15,11 @@ import org.eclipse.dirigible.cli.util.ProcessManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.util.FileSystemUtils;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Map;
 
 @Component
 public class DirigibleServer {
@@ -33,11 +33,29 @@ public class DirigibleServer {
     }
 
     public int start(DirigibleServerConfig serverConfig) {
+        deleteServerFolder();
+
+        if (serverConfig.isWatchMode()) {
+            return startInWatchMode(serverConfig);
+        }
+
         copyProjectToRegistry(serverConfig);
 
-        Path serverJarPath = serverConfig.getServerJarPath();
         LOGGER.info("Starting Eclipse Dirigible server...");
-        return processManager.startSynchronously("java", "-jar", serverJarPath.toString());
+        return processManager.startSynchronously("java", "-jar", serverConfig.getServerJarPath()
+                                                                             .toString());
+    }
+
+    private int startInWatchMode(DirigibleServerConfig serverConfig) {
+        LOGGER.info("Starting Eclipse Dirigible in watch mode...");
+        Path projectPath = serverConfig.getProjectPath();
+        Map<String, String> envVariables = Map.of(//
+                "DIRIGIBLE_REGISTRY_EXTERNAL_FOLDER_AS_SUBFOLDER", "true", //
+                "DIRIGIBLE_REGISTRY_EXTERNAL_IGNORED_FOLDERS", "target,node_modules", //
+                "DIRIGIBLE_REGISTRY_EXTERNAL_FOLDER", projectPath.toString());
+
+        return processManager.startSynchronously(envVariables, "java", "-jar", serverConfig.getServerJarPath()
+                                                                                           .toString());
     }
 
     private void copyProjectToRegistry(DirigibleServerConfig serverConfig) throws DirigibleServerException {
@@ -45,13 +63,8 @@ public class DirigibleServer {
         LOGGER.info("Copying project from path [{}] to the server's registry folder...", projectPath);
         File source = projectPath.toFile();
 
-        // server target folder is located in the folder where the command is executed
-        String userDir = System.getProperty("user.dir");
-        Path serverDir = Path.of(userDir, "target", "dirigible");
-
-        deleteServerFolder(serverDir); // for testing
-        Path registryProjectPath = Path.of(serverDir.toString(), "repository", "root", "registry", "public", projectPath.getFileName()
-                                                                                                                        .toString());
+        Path registryProjectPath = Path.of(getServerDir().toString(), "repository", "root", "registry", "public", projectPath.getFileName()
+                                                                                                                             .toString());
         File target = registryProjectPath.toFile();
 
         try {
@@ -60,16 +73,23 @@ public class DirigibleServer {
             throw new DirigibleServerException(
                     "Unable to copy project to server registry. Failed to copy [" + source + "] to [" + target + "]", ex);
         }
+    }
 
-        LOGGER.info("Transpiling project files in the registry folder [{}]...", registryProjectPath);
-        int tscExitCode = processManager.startSynchronously(registryProjectPath, "tsc");
-        LOGGER.info("Transpilation exited with code [{}]", tscExitCode);
+    private void deleteServerFolder() {
+        Path serverDir = getServerDir();
+        deleteServerFolder(serverDir);
+    }
+
+    private Path getServerDir() {
+        // server target folder is located in the folder where the command is executed
+        String userDir = System.getProperty("user.dir");
+        return Path.of(userDir, "target", "dirigible");
     }
 
     private void deleteServerFolder(Path serverDir) {
         try {
             LOGGER.info("Deleting server folder at path [{}]...", serverDir);
-            FileSystemUtils.deleteRecursively(serverDir);
+            FileUtils.deleteDirectory(serverDir.toFile());
         } catch (IOException ex) {
             LOGGER.warn("Failed to delete server dir [{}]", serverDir, ex);
         }

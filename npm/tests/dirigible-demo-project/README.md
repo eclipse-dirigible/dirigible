@@ -83,17 +83,28 @@ cp -f "$DIRIGIBLE_REPO_PATH/cli/target/dirigible-cli-13.0.0-SNAPSHOT-executable.
 
 - Set `@dirigiblelabs/dirigible` version
 
-```shell
-cd $DIRIGIBLE_REPO_PATH/npm/dirigible-cli
-# v12.28.0 for example 
-npm pkg set dependencies.@dirigiblelabs/dirigible=12.28.0
-```
+    - For released version
+    ```shell
+    cd $DIRIGIBLE_REPO_PATH/npm/dirigible-cli
+    # v12.28.0 for example 
+    npm pkg set dependencies.@dirigiblelabs/dirigible=12.28.0
+  
+    npm install
+    ```
 
-- Install `dirigible-cli`
+    - For local version
+    ```shell
+    cd $DIRIGIBLE_REPO_PATH/npm/dirigible-cli
+  
+    npm pkg set dependencies.@dirigiblelabs/dirigible=file:../dirigible
+    
+    npm install
 
-```shell
-npm install
-```
+    mkdir -p $DIRIGIBLE_REPO_PATH/npm/dirigible/data
+    cp -f "$DIRIGIBLE_REPO_PATH/build/application/target/dirigible-application-13.0.0-SNAPSHOT-executable.jar" \
+    "$DIRIGIBLE_REPO_PATH/npm/dirigible/data/dirigible-application-executable.jar"
+  
+    ```
 
 - Test `dirigible-cli` npm scripts
 
@@ -133,6 +144,15 @@ npm install
 npm run start
 ```
 
+- Start the project in **watch mode**
+
+```shell
+cd "$DIRIGIBLE_REPO_PATH/npm/tests/dirigible-demo-project"
+
+npm install
+npm run start:dev
+```
+
 - Verify the project by following the steps described [here](#application-validation)
 
 ### Validate dirigible-cli global installation
@@ -143,6 +163,15 @@ npm run start
 cd "$DIRIGIBLE_REPO_PATH/npm/tests/dirigible-demo-project"
 
 dirigible start
+```
+
+- Start the project in **watch mode**
+
+```shell
+cd "$DIRIGIBLE_REPO_PATH/npm/tests/dirigible-demo-project"
+
+npm install
+npm run start:dev
 ```
 
 - Verify the project by following the steps described [here](#application-validation)

@@ -9,16 +9,25 @@
  */
 package org.eclipse.dirigible.components.registry.watcher;
 
-import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 @Component
 @Scope("singleton")
 public class ExternalRegistryWatcher extends RecursiveFolderWatcher {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ExternalRegistryWatcher.class);
 
     private final IRepository repository;
 
@@ -29,11 +38,32 @@ public class ExternalRegistryWatcher extends RecursiveFolderWatcher {
 
     /**
      * Initialize.
-     *
      */
     public void initialize() {
-        String source = Configuration.get("DIRIGIBLE_REGISTRY_EXTERNAL_FOLDER");
-        String target = this.repository.getInternalResourcePath(IRepositoryStructure.PATH_REGISTRY_PUBLIC);
-        initialize(source, target);
+        String source = DirigibleConfig.REGISTRY_EXTERNAL_FOLDER.getStringValue();
+        if (null != source) {
+            String target = this.repository.getInternalResourcePath(IRepositoryStructure.PATH_REGISTRY_PUBLIC);
+            boolean sourceAsSubfolder = DirigibleConfig.REGISTRY_EXTERNAL_FOLDER_AS_SUBFOLDER.getBooleanValue();
+
+            Set<String> ignoredFolders = getIgnoredFolders();
+
+            initialize(source, target, sourceAsSubfolder, ignoredFolders);
+        } else {
+            LOGGER.info("External registry is NOT configured.");
+        }
+
     }
+
+    private Set<String> getIgnoredFolders() {
+        String ignoredFolders = DirigibleConfig.REGISTRY_EXTERNAL_IGNORED_FOLDERS.getStringValue();
+        if (null == ignoredFolders) {
+            return Collections.emptySet();
+        }
+        String[] folders = ignoredFolders.split(",");
+        return Arrays.stream(folders)
+                     .map(String::trim)
+                     .collect(Collectors.toSet());
+
+    }
+
 }

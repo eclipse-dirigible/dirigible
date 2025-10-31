@@ -20,7 +20,8 @@ const editorData = {
 		'image/png',
 		'image/x-icon',
 		'image/gif',
-		'image/bmp'
+		'image/bmp',
+		'image/webp',
 	]
 };
 if (typeof exports !== 'undefined') {

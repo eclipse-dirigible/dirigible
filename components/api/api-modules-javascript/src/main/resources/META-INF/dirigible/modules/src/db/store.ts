@@ -59,6 +59,22 @@ export class Store {
 		const result = DataStoreFacade.queryNative(name);
 		return JSON.parse(result);
 	}
+	
+	public static getEntityName(name: string): string {
+		return DataStoreFacade.getEntityName(name);
+	}
+	
+	public static getTableName(name: string): string {
+		return DataStoreFacade.getTableName(name);
+	}
+		
+	public static getIdName(name: string): string {
+		return DataStoreFacade.getIdName(name);
+	}
+			
+	public static getIdColumn(name: string): string {
+		return DataStoreFacade.getIdColumn(name);
+	}
 
 }
 
