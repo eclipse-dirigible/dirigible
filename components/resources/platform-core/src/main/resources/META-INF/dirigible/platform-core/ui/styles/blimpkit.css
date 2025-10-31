@@ -1003,6 +1003,15 @@ div.fd-popover__body--dropdown[aria-hidden='true'] {
   --fdButton_Menu_Transparent_Separator_Height: 0.875rem;
 }
 
+a.fd-button.is-disabled,
+a.fd-button[disabled],
+a.fd-button[aria-disabled='true'] {
+  -webkit-box-shadow: none;
+  box-shadow: none;
+  opacity: var(--sapContent_DisabledOpacity);
+  pointer-events: none;
+}
+
 /* Tool header fixes */
 .fd-button--tool-header {
   width: auto;

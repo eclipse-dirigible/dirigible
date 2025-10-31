@@ -136,7 +136,8 @@
                     <bk-form-item class="bk-hbox bk-box--gap">
                         <bk-form-item class="bk-full-width">
                             <bk-form-label for="tables" colon="true">Tables</bk-form-label>
-                            <bk-combobox-input input-id="tables" multi-select="true" ng-model="exportData.tables" dropdown-items="tables" placeholder="Search..." btn-aria-label="show/hide table options" list-aria-label="table options">
+                            <bk-combobox-input input-id="tables" multi-select="true" ng-model="exportData.tables" filter="Contains" dropdown-items="tables" placeholder="Search..." btn-aria-label="show/hide table options"
+                                list-aria-label="table options">
                             </bk-combobox-input>
                         </bk-form-item>
                         <bk-form-item style="margin:0">
