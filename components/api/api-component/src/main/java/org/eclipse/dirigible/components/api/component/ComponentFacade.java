@@ -70,9 +70,6 @@ public class ComponentFacade implements InitializingBean {
 
         if (injectionsMap == null || injectionsMap.isNull()) {
             logger.error("Metadata is null for: {}", name);
-
-
-
             return;
         }
 
@@ -84,10 +81,7 @@ public class ComponentFacade implements InitializingBean {
                                         .execute();
             if (next.getMember("done")
                     .asBoolean()) {
-                logger.error("Metadata is empty for: {}", name);
-
-
-
+                //logger.warn("Metadata is empty for: {}", name);
                 break;
             }
 

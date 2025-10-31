@@ -1,10 +1,8 @@
 /**
  * @file decorators.ts
- * Hybrid Decorator Implementation — works in both GraalJS and modern JS runtimes.
+ * Hybrid Decorator Implementation — works in both GraalJS (legacy) and modern JS runtimes.
+ * Falls back to legacy (target, propertyKey) style when context.addInitializer is not available.
  */
-
-const ComponentMetadataRegistry = Java.type("org.eclipse.dirigible.components.engine.javascript.parser.ComponentMetadataRegistry");
-const ComponentFacade = Java.type("org.eclipse.dirigible.components.api.component.ComponentFacade");
 
 interface ComponentMetadata {
   name?: string;
@@ -32,10 +30,14 @@ function getComponentMetadata(constructor: object): ComponentMetadata {
   return componentCache.get(constructor)!;
 }
 
-export function Component<T extends ComponentConstructor>(constructor: T): T;
-export function Component(name?: string): <T extends ComponentConstructor>(constructor: T) => T;
+const ComponentMetadataRegistry = Java.type(
+  "org.eclipse.dirigible.components.engine.javascript.parser.ComponentMetadataRegistry"
+);
+const ComponentFacade = Java.type(
+  "org.eclipse.dirigible.components.api.component.ComponentFacade"
+);
 
-export function Component(nameOrConstructor?: any): any {
+export function Component(nameOrConstructor?: string | Function): Function {
   if (typeof nameOrConstructor === "function") {
     const constructor = nameOrConstructor as ComponentConstructor;
     const metadata = getComponentMetadata(constructor);
@@ -46,7 +48,7 @@ export function Component(nameOrConstructor?: any): any {
 
     ComponentMetadataRegistry.register(metadata.name, metadata.injections);
 
-    return class extends constructor {
+    return class extends (constructor as any) {
       constructor(...args: any[]) {
         super(...args);
         ComponentFacade.injectDependencies(this);
@@ -54,17 +56,18 @@ export function Component(nameOrConstructor?: any): any {
     };
   }
 
-  const name = nameOrConstructor as string | undefined;
-  return function <T extends ComponentConstructor>(constructor: T) {
+  const name = nameOrConstructor;
+  return function (constructor: Function): any {
     const metadata = getComponentMetadata(constructor);
     metadata.name = name || constructor.name;
 
-    constructor.__component_name = metadata.name;
-    constructor.__injections_map = metadata.injections;
+    const ctor = constructor as ComponentConstructor;
+    ctor.__component_name = metadata.name;
+    ctor.__injections_map = metadata.injections;
 
     ComponentMetadataRegistry.register(metadata.name, metadata.injections);
 
-    return class extends constructor {
+    return class extends (constructor as any) {
       constructor(...args: any[]) {
         super(...args);
         ComponentFacade.injectDependencies(this);
@@ -79,7 +82,7 @@ export function Inject(name?: string) {
       const [_, context] = args;
       if (context && typeof context.addInitializer === "function") {
         context.addInitializer(function () {
-          const ctor = (this as any).constructor as ComponentConstructor;
+          const ctor = (this as any)?.constructor as ComponentConstructor;
           const metadata = getComponentMetadata(ctor);
           metadata.injections.set(context.name, name);
           ctor.__injections_map = metadata.injections;
@@ -89,9 +92,9 @@ export function Inject(name?: string) {
     }
 
     const [target, propertyKey] = args;
-    const ctor = target.constructor as ComponentConstructor;
+    const ctor = target.constructor || target;
     const metadata = getComponentMetadata(ctor);
     metadata.injections.set(propertyKey, name);
-    ctor.__injections_map = metadata.injections;
+    (ctor as ComponentConstructor).__injections_map = metadata.injections;
   };
 }
