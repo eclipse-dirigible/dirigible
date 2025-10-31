@@ -163,7 +163,7 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
             case CREATE:
                 if (component.getLifecycle()
                              .equals(ArtefactLifecycle.NEW)) {
-                    ComponentRegister.addComponent(component.getLocation(), prepareContent(component));
+                    ComponentRegister.addComponent(component.getLocation());
                     component.setRunning(true);
                     callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
                 }
@@ -171,7 +171,7 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
             case UPDATE:
                 if (component.getLifecycle()
                              .equals(ArtefactLifecycle.MODIFIED)) {
-                    ComponentRegister.addComponent(component.getLocation(), prepareContent(component));
+                    ComponentRegister.addComponent(component.getLocation());
                     component.setRunning(true);
                     callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
                 }
@@ -188,7 +188,7 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
                                     .equals(ArtefactLifecycle.UPDATED)
                         || component.getLifecycle()
                                     .equals(ArtefactLifecycle.FAILED)) {
-                    ComponentRegister.removeComponent(component.getLocation(), prepareContent(component));
+                    ComponentRegister.removeComponent(component.getLocation());
                     component.setRunning(false);
                     callback.registerState(this, wrapper, ArtefactLifecycle.DELETED);
                 }
@@ -198,7 +198,7 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
                         || ArtefactLifecycle.UPDATED.equals(component.getLifecycle())) {
                     if (component.getRunning() == null || !component.getRunning()) {
                         try {
-                            ComponentRegister.addComponent(component.getLocation(), prepareContent(component));
+                            ComponentRegister.addComponent(component.getLocation());
                             component.setRunning(true);
                         } catch (Exception e) {
                             callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, e);
@@ -230,7 +230,7 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
     @Override
     public void cleanupImpl(org.eclipse.dirigible.components.engine.javascript.domain.Component component) {
         try {
-            ComponentRegister.removeComponent(component.getLocation(), prepareContent(component));
+            ComponentRegister.removeComponent(component.getLocation());
             getService().delete(component);
         } catch (Exception e) {
             callback.addError(e.getMessage());

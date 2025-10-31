@@ -55,15 +55,15 @@ public class ComponentRegister implements InitializingBean {
     }
 
 
-    public static void addComponent(String location, String content) {
-        processComponentFile(location, content, true);
+    public static void addComponent(String location) {
+        processComponentFile(location, true);
     }
 
-    public static void removeComponent(String location, String content) {
-        processComponentFile(location, content, false);
+    public static void removeComponent(String location) {
+        processComponentFile(location, false);
     }
 
-    private static void processComponentFile(String location, String content, boolean add) {
+    private static void processComponentFile(String location, boolean add) {
         try {
             ParsedPath path = parseFilePath(location);
             String contextId = "default"; // path.projectName; // use projectName or moduleName as context
