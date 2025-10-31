@@ -51,7 +51,6 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
      * Instantiates a new component synchronizer.
      *
      * @param componentService the component service
-     * @param dataStore the data store
      */
     @Autowired
     public ComponentSynchronizer(ComponentService componentService) {

@@ -39,7 +39,7 @@ public class JavascriptHandler {
     /** The repository. */
     private final IRepository repository;
 
-    private DirigibleJavascriptCodeRunner runner;
+    private DirigibleJavascriptCodeRunner systemRunner;
 
     /**
      * Instantiates a new javascript handler.
@@ -71,10 +71,10 @@ public class JavascriptHandler {
     }
 
     public DirigibleJavascriptCodeRunner getSystemRunner() {
-        if (runner == null) {
-            this.runner = new DirigibleJavascriptCodeRunner(null, false);
+        if (systemRunner == null) {
+            this.systemRunner = new DirigibleJavascriptCodeRunner(null, false);
         }
-        return runner;
+        return systemRunner;
     }
 
     /**

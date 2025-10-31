@@ -61,9 +61,6 @@ public class ComponentService extends BaseArtefactService<Component, Long> {
      *
      * @param projectName the project name
      * @param projectFilePath the project file path
-     * @param projectFilePathParam the project file path param
-     * @param params the params
-     * @param files the files
      * @return the response
      */
     public Value executeJavaScript(String projectName, String projectFilePath) {
