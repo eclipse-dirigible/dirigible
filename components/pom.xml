@@ -123,6 +123,7 @@
 
         <!-- Platform UI -->
         <module>ui/window-about</module>
+        <module>ui/window-documents</module>
         <module>ui/perspective-settings</module>
         <module>ui/shell-ide</module>
         <module>ui/perspective-workbench</module>
@@ -727,6 +728,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-window-about</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-window-documents</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
