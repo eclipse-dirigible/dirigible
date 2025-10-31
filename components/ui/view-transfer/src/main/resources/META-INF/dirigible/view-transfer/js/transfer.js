@@ -11,6 +11,7 @@
  */
 const transferView = angular.module('transfer', ['blimpKit', 'platformView']);
 const DB_SERVICE_URL = '/services/data/definition/';
+const EXPORT_SERVICE_URL = '/services/data/schema/exportProcesses';
 transferView.controller('ViewController', ($scope) => {
     $scope.navActive = 'export';
 
@@ -19,7 +20,7 @@ transferView.controller('ViewController', ($scope) => {
     };
 });
 
-transferView.controller('ExportController', ($scope, $http) => {
+transferView.controller('ExportController', ($scope, $http, $timeout) => {
     const dialogHub = new DialogHub();
     $scope.forms = { ep: {} };
     $scope.exportData = {
@@ -32,6 +33,8 @@ transferView.controller('ExportController', ($scope, $http) => {
     $scope.databases = [];
     $scope.datasources = [];
     $scope.tables = [];
+    $scope.exportLoading = false;
+    $scope.exports = [];
 
     $scope.choosePath = () => {
         dialogHub.showWindow({
@@ -41,6 +44,7 @@ transferView.controller('ExportController', ($scope, $http) => {
                 type: 'folderSelect',
                 upload: false,
                 download: false,
+                multiple: false,
                 callbackTopic: 'transfer.export.folder'
             },
             maxWidth: '960px',
@@ -51,9 +55,9 @@ transferView.controller('ExportController', ($scope, $http) => {
 
     const folderHandler = dialogHub.addMessageListener({
         topic: 'transfer.export.folder',
-        handler: (data) => {
+        handler: (path) => {
             $scope.$evalAsync(() => {
-                $scope.exportData.path = data;
+                $scope.exportData.path = path;
             });
         },
     });
@@ -79,6 +83,64 @@ transferView.controller('ExportController', ($scope, $http) => {
         if ($scope.exportData.source) {
             getTables();
         }
+    };
+
+    $scope.getExports = (historic = false) => {
+        if (!historic) $scope.exports.length = 0;
+        $http.get(historic ? '/services/bpm/bpm-processes/historic-instances' : '/services/bpm/bpm-processes/instances', { params: { definitionKey: 'export-schema', limit: 100 } })
+            .then((response) => {
+                for (let i = 0; i < response.data.length; i++) {
+                    $http.get(historic ? `/services/bpm/bpm-processes/historic-instances/${response.data[i].id}/variables` : `/services/bpm/bpm-processes/instances/${response.data[i].id}/variables`, { params: { 'limit': 100 } }).then((varList) => {
+                        let schema = '';
+                        let dataSource = '';
+                        let path = '';
+                        let time = '';
+                        for (let l = 0; l < varList.data.length; l++) {
+                            if (varList.data[l]['name'] === 'schema') {
+                                schema = varList.data[l]['value'];
+                                time = varList.data[l]['createTime'];
+                            } else if (varList.data[l]['name'] === 'dataSource') dataSource = varList.data[l]['value'];
+                            else if (varList.data[l]['name'] === 'exportPath') path = varList.data[l]['value'];
+                        }
+                        $scope.exports.push({
+                            id: response.data[i].id,
+                            source: schema,
+                            db: dataSource,
+                            path: path,
+                            exporting: !historic,
+                            time: new Intl.DateTimeFormat(undefined, {
+                                dateStyle: 'short',
+                                timeStyle: 'short',
+                            }).format(new Date(time))
+                        });
+
+                    }, (error) => {
+                        console.error(error);
+                    });
+                }
+                if (!historic) {
+                    $scope.getExports(true);
+                    if (response.data.length) $timeout(() => { $scope.getExports() }, 1000);
+                }
+            }, (error) => {
+                console.error(error);
+            });
+    };
+
+    $scope.startExport = () => {
+        $scope.exportLoading = true;
+        $http.post(EXPORT_SERVICE_URL, {
+            dataSource: $scope.exportData.db,
+            schema: $scope.exportData.source,
+            exportPath: $scope.exportData.path,
+            includedTables: $scope.exportData.type === 'include' ? $scope.exportData.tables : [],
+            excludedTables: $scope.exportData.type === 'exclude' ? $scope.exportData.tables : [],
+        }).then(() => {
+            $scope.exportLoading = false;
+            $scope.getExports();
+        }, (error) => {
+            console.error(error);
+        });
     };
 
     function getTables() {
@@ -109,6 +171,7 @@ transferView.controller('ExportController', ($scope, $http) => {
     };
 
     getDatabases();
+    $scope.getExports();
 
     $scope.$on('$destroy', () => {
         dialogHub.removeMessageListener(folderHandler);

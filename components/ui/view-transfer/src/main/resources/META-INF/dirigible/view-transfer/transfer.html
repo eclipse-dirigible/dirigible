@@ -119,7 +119,8 @@
             </div>
         </div>
         <div class="bk-fill-parent bk-hbox" ng-show="navActive === 'export'" ng-controller="ExportController">
-            <bk-fieldset class="bk-padding--tiny bk-restrict-width--sm bk-full-width" bk-scrollbar ng-form="forms.ep">
+            <bk-busy-indicator-extended class="bk-fill-parent" ng-show="exportLoading" size="l">Starting export...</bk-busy-indicator-extended>
+            <bk-fieldset class="bk-padding--tiny bk-restrict-width--sm bk-full-width" bk-scrollbar ng-form="forms.ep" ng-hide="exportLoading">
                 <bk-form-group>
                     <bk-form-item>
                         <bk-form-label id="db" required colon="true">Database</bk-form-label>
@@ -152,35 +153,36 @@
                         <bk-message-strip glyph="sap-icon--message-information" state="information">Leave selection empty to include all tables</bk-message-strip>
                     </bk-form-item>
                     <bk-form-item>
-                        <bk-form-label for="path" required colon="true">Path</bk-form-label>
+                        <bk-form-label for="path" required colon="true">Output folder</bk-form-label>
                         <bk-input-group state="{{ forms.ep['path'].$valid ? '' : 'error' }}">
-                            <bk-input-group-addon>
-                                <bk-button label="Choose" title="Choose" ng-click="choosePath()"></bk-button>
-                            </bk-input-group-addon>
                             <bk-input id="path" name="path" type="text" ng-model="exportData.path" ng-required="true" placeholder="/export/path"></bk-input>
+                            <bk-input-group-addon>
+                                <bk-button glyph="sap-icon--folder-blank" label="Choose" title="Choose" ng-click="choosePath()"></bk-button>
+                            </bk-input-group-addon>
                         </bk-input-group>
                     </bk-form-item>
                     <bk-form-item class="bk-box--items-end">
-                        <bk-button type="button" state="emphasized" label="Export" ng-click="export()" ng-disabled="!forms.ep.$valid || !changed"></bk-button>
+                        <bk-button type="button" state="emphasized" label="Export" ng-click="startExport()" ng-disabled="!forms.ep.$valid || exportLoading"></bk-button>
                     </bk-form-item>
                 </bk-form-group>
             </bk-fieldset>
-            <div class="bk-vbox bk-list-border--left bk-fill-parent">
+            <div class="bk-vbox bk-list-border--left bk-fill-parent" ng-hide="exportLoading">
                 <bk-toolbar type="transparent">
                     <bk-toolbar-title>Exports</bk-toolbar-title>
-                    <bk-toolbar-spacer></bk-toolbar-spacer>
-                    <bk-button state="transparent" title="Clear All" label="Clear All" ng-click="clearAllExports()"></bk-button>
                 </bk-toolbar>
-                <bk-list fixed-height="true">
-                    <bk-list-item>
-                        <bk-list-icon glyph="sap-icon--message-success"></bk-list-icon>
-                        <bk-list-title>/export_folder</bk-list-title>
-                        <bk-list-secondary>10/27/25, 11:57 AM</bk-list-secondary>
+                <bk-list list-type="navigation-indication" fixed-height="true" byline="exports.length > 0">
+                    <bk-list-item interactive="true" ng-repeat="export in exports track by export.id">
+                        <bk-list-link navigation-indicator="true">
+                            <bk-list-thumbnail ng-if="!export.exporting" glyph="sap-icon--message-success"></bk-list-thumbnail>
+                            <bk-list-thumbnail ng-if="export.exporting" loading="true"></bk-list-thumbnail>
+                            <bk-list-content item-title="{{export.path}}">
+                                <bk-list-byline align="left">{{export.db}}.{{export.source}}</bk-list-byline>
+                                <bk-list-byline align="right">{{export.time}}</bk-list-byline>
+                            </bk-list-content>
+                        </bk-list-link>
                     </bk-list-item>
-                    <bk-list-item>
-                        <bk-loader></bk-loader>
-                        <bk-list-title>/export_all</bk-list-title>
-                        <bk-list-secondary>10/28/25, 11:57 AM</bk-list-secondary>
+                    <bk-list-item ng-if="exports.length === 0">
+                        <bk-list-title style="text-align: center">No exports</bk-list-title>
                     </bk-list-item>
                 </bk-list>
             </div>

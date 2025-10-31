@@ -608,6 +608,8 @@
     --fdCheckbox_Check_Mark_Color: var(--sapTextColor);
     --fdCheckbox_Focus_Outline_Offset: 0.25rem;
     --fdCheckbox_Outline_Border_Radius: 0.8rem;
+    --fdCheckbox_Border_Radius: var(--sapField_BorderCornerRadius);
+    --fdCheckbox_Compact_Border_Radius: 0.375rem;
     --fdCheckbox_Compact_Outline_Border_Radius: 0.5rem;
     --fdCheckbox_Background_Color_Default: var(--sapField_Background);
     --fdCheckbox_Inner_Border_Width_Default: var(--sapField_BorderWidth);
@@ -1500,6 +1502,19 @@ input {
 
 .fd-button-split:hover::after {
     display: var(--fdButton_Menu_Separator_Display);
+}
+
+.fd-checkbox:indeterminate+.fd-checkbox__label .fd-checkbox__checkmark::after {
+    border-radius: var(--fdCheckbox_Border_Radius);
+}
+
+.fd-checkbox__checkmark {
+    border-radius: var(--fdCheckbox_Border_Radius);
+}
+
+[class*='-compact'] .fd-checkbox__checkmark,
+.fd-checkbox[class*='-compact']+.fd-checkbox__label>.fd-checkbox__checkmark {
+    border-radius: var(--fdCheckbox_Compact_Border_Radius);
 }
 
 .fd-vertical-nav .fd-list__navigation-item--condensed.is-hover,

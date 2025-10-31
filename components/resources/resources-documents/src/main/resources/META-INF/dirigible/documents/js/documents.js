@@ -75,10 +75,11 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
     let iframe;
 
     $scope.asWindow = params.container === 'window';
-    $scope.windowOptions = {
-        type: params['type'] ?? 'browser',
+    $scope.browserOptions = {
+        type: params['type'] ?? 'browser', // browser, fileSelect, folderSelect
         upload: params['upload'] ?? true,
         download: params['download'] ?? true,
+        multiple: params['multiple'] ?? true,
         callbackTopic: params['callbackTopic'],
     };
     $scope.loading = false;
@@ -179,6 +180,16 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
 
     $scope.selectionChanged = () => {
         $scope.selection.allSelected = $scope.folder.children.every(item => item.selected);
+    };
+
+    $scope.selectDisabled = () => {
+        if ($scope.browserOptions.type === 'folderSelect') {
+            if ($scope.folder) return false;
+            return true;
+        } else if ($scope.browserOptions.multiple && $scope.folder) {
+            return !$scope.folder.children.some(item => item.selected);
+        }
+        return $scope.selectedFile === null;
     };
 
     $scope.isDeleteItemsButtonEnabled = () => $scope.folder && $scope.folder.children.some(x => x.selected);
@@ -499,9 +510,8 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
     }
 
     function setSelectedFile(selectedFile) {
-        if (selectedFile === null) $scope.selectedFile = selectedFile;
-        else if ($scope.canPreviewFile(selectedFile.name)) {
-            $scope.selectedFile = selectedFile;
+        $scope.selectedFile = selectedFile;
+        if (selectedFile && !$scope.asWindow && $scope.canPreviewFile(selectedFile.name)) {
             setPreviewer();
         }
     };
@@ -648,12 +658,25 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
         this.crumbs = crumbs;
     };
 
+    function getSelected() {
+        const selected = [];
+        for (let i = 0; i < $scope.folder.children.length; i++) {
+            if ($scope.folder.children[i].selected) selected.push($scope.folder.children[i].path);
+        }
+        return selected;
+    }
+
     $scope.closeWindow = (submit) => {
-        if (submit && $scope.windowOptions.callbackTopic) {
-            if ($scope.windowOptions.type === 'folderSelect') {
+        if (submit && $scope.browserOptions.callbackTopic) {
+            if ($scope.browserOptions.type === 'folderSelect') {
                 dialogHub.postMessage({
-                    topic: $scope.windowOptions.callbackTopic,
+                    topic: $scope.browserOptions.callbackTopic,
                     data: $scope.folder.path
+                });
+            } else if ($scope.browserOptions.type === 'fileSelect') {
+                dialogHub.postMessage({
+                    topic: $scope.browserOptions.callbackTopic,
+                    data: $scope.browserOptions.multiple ? getSelected() : $scope.selectedFile.path,
                 });
             }
         }

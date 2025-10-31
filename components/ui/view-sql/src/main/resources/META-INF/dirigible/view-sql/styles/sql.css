@@ -34,12 +34,6 @@
   margin-left: 0.5rem;
 }
 
-#exportsPopover span.bk-center {
-  width: 3rem;
-  height: 3rem;
-  margin-inline-end: .75rem;
-}
-
 #exportsPopover [data-color-error] {
   color: var(--sapNegativeColor) !important;
 }
@@ -48,7 +42,7 @@
   border-bottom: none !important;
 }
 
-#errorMessage {
+#exportsPopover [align='left'][data-color-error] {
   word-wrap: break-word;
   white-space: wrap;
 }

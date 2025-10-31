@@ -258,10 +258,11 @@ blimpkit.directive('bkList', (classNames) => ({
     scope: {
         glyph: '@?',
         imageUrl: '@?',
+        loading: '<?'
     },
     link: (scope) => {
-        if (!scope.glyph && !scope.imageUrl) {
-            console.error('bk-list-thumbnail error: You should provide either glpyh icon or image');
+        if (!scope.glyph && !scope.imageUrl && !scope.loading) {
+            console.error('bk-list-thumbnail error: You should provide either glpyh icon, image or loading state');
         }
 
         scope.getClasses = () => classNames('fd-list__thumbnail', {
@@ -276,5 +277,5 @@ blimpkit.directive('bkList', (classNames) => ({
             return {};
         };
     },
-    template: '<span ng-class="getClasses()" ng-style="getStyles()"><i ng-if="glyph" role="presentation" ng-class="glyph"></i></span>',
+    template: '<span ng-class="getClasses()" ng-style="getStyles()"><i ng-if="glyph" role="presentation" ng-class="glyph"></i><bk-loader ng-if="loading" size="l"></bk-loader></span>',
 }));

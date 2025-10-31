@@ -1,4 +1,5 @@
 @charset "UTF-8";
+
 /*
  * Copyright (c) 2025 Eclipse Dirigible contributors
  *
@@ -205,10 +206,10 @@
     --fdSwitch_Semantic_Success_Handle_Hover_Background_Color: var(--sapButton_Handle_Positive_Hover_Background);
     --fdSwitch_Semantic_Error_Handle_Background_Color: var(--sapButton_Handle_Negative_Background);
     --fdSwitch_Semantic_Error_Handle_Hover_Background_Color: var(--sapButton_Handle_Negative_Hover_Background);
-    --fdSwitch_Semantic_Success_Handle_Border_Color: var(--sapButton_Handle_Positive_BorderColor);
     --fdSwitch_Semantic_Success_Handle_Hover_Border_Color: var(--sapButton_Handle_Positive_Hover_BorderColor);
-    --fdSwitch_Semantic_Error_Handle_Border_Color: var(--sapButton_Handle_Negative_BorderColor);
     --fdSwitch_Semantic_Error_Handle_Hover_Border_Color: var(--sapButton_Handle_Negative_Hover_BorderColor);
+    --fdSwitch_Semantic_Error_Handle_Border_Color: var(--sapButton_Track_Negative_Background);
+    --fdSwitch_Semantic_Success_Handle_Border_Color: var(--sapButton_Track_Positive_Background);
     --fdSwitch_Semantic_Icon_Position: absolute;
     --fdSwitch_Icon_Size: var(--sapFontLargeSize);
     --fdSwitch_Icon_Error_Margin: 0 0;
@@ -1280,8 +1281,6 @@
     --sapNavigation_Hover_Background: var(--sapList_Hover_Background);
     --sapNavigation_Active_Background: var(--sapList_Active_Background);
     --sapNavigation_Selected_Background: var(--sapList_Hover_SelectionBackground);
-    --fdSwitch_Semantic_Error_Handle_Border_Color: var(--sapButton_Track_Negative_Background);
-    --fdSwitch_Semantic_Success_Handle_Border_Color: var(--sapButton_Track_Positive_Background);
     --fdOverlay_Background_Opacity: 0.6;
     --fdDynamicPage_Hover_Border_Bottom: none;
     --fdDynamicPage_Title_Header_Transparent_Background: transparent;
@@ -1643,7 +1642,7 @@ input {
     border-radius: var(--fdCheckbox_Border_Radius);
 }
 
-.fd-list__item .fd-checkbox__checkmark,
+[class*='-compact'] .fd-checkbox__checkmark,
 .fd-checkbox[class*='-compact']+.fd-checkbox__label>.fd-checkbox__checkmark {
     border-radius: var(--fdCheckbox_Compact_Border_Radius);
 }

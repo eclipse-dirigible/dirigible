@@ -12,185 +12,69 @@
 
 -->
 <!DOCTYPE html>
-<html
-  lang="en"
-  ng-app="documents"
-  ng-controller="DocumentsController"
-  xmlns="http://www.w3.org/1999/xhtml"
->
+<html lang="en" ng-app="documents" ng-controller="DocumentsController" xmlns="http://www.w3.org/1999/xhtml">
+
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title config-title></title>
     <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
-    <script
-      type="text/javascript"
-      src="/services/web/documents/configs/documents.js"
-    ></script>
-    <script
-      type="text/javascript"
-      src="/services/js/platform-core/services/loader.js?ids=view-js,split-js"
-    ></script>
-    <script
-      type="text/javascript"
-      src="/services/js/platform-core/services/loader.js?id=file-upload-js"
-    ></script>
-    <script
-      type="text/javascript"
-      src="/webjars/papaparse/papaparse.min.js"
-    ></script>
-    <link
-      type="text/css"
-      rel="stylesheet"
-      href="/services/js/platform-core/services/loader.js?id=view-css,split-css"
-    />
-    <link
-      type="text/css"
-      rel="stylesheet"
-      href="/services/web/documents/styles/documents.css"
-    />
-    <script
-      type="text/javascript"
-      src="/services/web/documents/js/documents.js"
-    ></script>
+    <script type="text/javascript" src="/services/web/documents/configs/documents.js"></script>
+    <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=view-js,split-js"></script>
+    <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=file-upload-js"></script>
+    <script type="text/javascript" src="/webjars/papaparse/papaparse.min.js"></script>
+    <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css,split-css" />
+    <link type="text/css" rel="stylesheet" href="/services/web/documents/styles/documents.css" />
+    <script type="text/javascript" src="/services/web/documents/js/documents.js"></script>
   </head>
 
   <body class="bk-vbox">
-    <bk-busy-indicator-extended
-      class="bk-fill-parent"
-      size="l"
-      ng-show="loading"
-      >{{'loading' | t:'Loading'}}...</bk-busy-indicator-extended
-    >
+    <bk-busy-indicator-extended class="bk-fill-parent" size="l" ng-show="loading">{{'loading' | t:'Loading'}}...</bk-busy-indicator-extended>
     <bk-toolbar type="solid" ng-hide="loading">
-      <bk-button
-        glyph="sap-icon--arrow-left"
-        aria-label="{{'documents:goBack' | t:'Go back'}}"
-        title="{{'documents:goBack' | t:'Go back'}}"
-        state="transparent"
-        ng-disabled="!hasBack()"
-        ng-click="goBack()"
-      ></bk-button>
-      <bk-button
-        glyph="sap-icon--arrow-right"
-        aria-label="{{'documents:goForward' | t:'Go forward'}}"
-        title="{{'documents:goForward' | t:'Go forward'}}"
-        state="transparent"
-        ng-disabled="!hasForward()"
-        ng-click="goForward()"
-      >
+      <bk-button glyph="sap-icon--arrow-left" aria-label="{{'documents:goBack' | t:'Go back'}}" title="{{'documents:goBack' | t:'Go back'}}" state="transparent" ng-disabled="!hasBack()" ng-click="goBack()"></bk-button>
+      <bk-button glyph="sap-icon--arrow-right" aria-label="{{'documents:goForward' | t:'Go forward'}}" title="{{'documents:goForward' | t:'Go forward'}}" state="transparent" ng-disabled="!hasForward()" ng-click="goForward()">
       </bk-button>
       <nav aria-label="path breadcrumbs">
         <bk-breadcrumb>
-          <bk-breadcrumb-item
-            ng-if="!($last)"
-            ng-repeat="path in breadcrumbs.crumbs track by $index"
-          >
-            <bk-link href="#" ng-click="crumbsChanged(path)"
-              >{{ path.name }}</bk-link
-            >
+          <bk-breadcrumb-item ng-if="!($last)" ng-repeat="path in breadcrumbs.crumbs track by $index">
+            <bk-link href="#" ng-click="crumbsChanged(path)">{{ path.name }}</bk-link>
           </bk-breadcrumb-item>
-          <bk-breadcrumb-item aria-current="page"
-            >{{ breadcrumbs.crumbs.at(-1).name }}</bk-breadcrumb-item
-          >
+          <bk-breadcrumb-item aria-current="page">{{ breadcrumbs.crumbs.at(-1).name }}</bk-breadcrumb-item>
         </bk-breadcrumb>
       </nav>
       <bk-toolbar-spacer></bk-toolbar-spacer>
-      <bk-button
-        glyph="sap-icon--search"
-        aria-label="{{'documents:findItem' | t:'Find item'}}"
-        title="{{'documents:findItem' | t:'Find item'}}"
-        state="transparent"
-        ng-click="search.displaySearch = !search.displaySearch"
-        toggled="search.displaySearch"
-      ></bk-button>
+      <bk-button glyph="sap-icon--search" aria-label="{{'documents:findItem' | t:'Find item'}}" title="{{'documents:findItem' | t:'Find item'}}" state="transparent" ng-click="search.displaySearch = !search.displaySearch"
+        toggled="search.displaySearch"></bk-button>
       <bk-toolbar-separator></bk-toolbar-separator>
-      <bk-button
-        glyph="sap-icon--add-folder"
-        aria-label="{{'documents:newFolder' | t:'New folder'}}"
-        title="{{'documents:newFolder' | t:'New folder'}}"
-        state="transparent"
-        ng-click="showNewFolderDialog()"
-      ></bk-button>
-      <bk-button
-        glyph="sap-icon--delete"
-        aria-label="{{'documents:delSelected' | t:'Delete selected'}}"
-        title="{{'documents:delSelected' | t:'Delete selected'}}"
-        state="transparent"
-        ng-click="showDeleteItemsDialog($event)"
-        ng-disabled="!isDeleteItemsButtonEnabled()"
-      ></bk-button>
-      <bk-toolbar-separator
-        ng-if="::(windowOptions.upload && windowOptions.download)"
-      ></bk-toolbar-separator>
-      <a
-        ng-if="::windowOptions.upload"
-        bk-button
-        glyph="sap-icon--download-from-cloud"
-        state="transparent"
-        aria-label="{{'documents:downloadZip' | t:'Download zip'}}"
-        title="{{'documents:downloadZip' | t:'Download zip'}}"
-        ng-href="{{ downloadZipPath }}?path={{ folder.path }}"
-      ></a>
-      <bk-popover ng-if="::windowOptions.download">
+      <bk-button glyph="sap-icon--add-folder" aria-label="{{'documents:newFolder' | t:'New folder'}}" title="{{'documents:newFolder' | t:'New folder'}}" state="transparent" ng-click="showNewFolderDialog()"></bk-button>
+      <bk-button glyph="sap-icon--delete" aria-label="{{'documents:delSelected' | t:'Delete selected'}}" title="{{'documents:delSelected' | t:'Delete selected'}}" state="transparent" ng-click="showDeleteItemsDialog($event)"
+        ng-disabled="!isDeleteItemsButtonEnabled()"></bk-button>
+      <bk-toolbar-separator ng-if="::(browserOptions.upload && browserOptions.download)"></bk-toolbar-separator>
+      <a ng-if="::browserOptions.upload" bk-button glyph="sap-icon--download-from-cloud" state="transparent" aria-label="{{'documents:downloadZip' | t:'Download zip'}}" title="{{'documents:downloadZip' | t:'Download zip'}}"
+        ng-href="{{ downloadZipPath }}?path={{ folder.path }}"></a>
+      <bk-popover ng-if="::browserOptions.download">
         <bk-popover-control>
-          <bk-button
-            is-menu="true"
-            glyph="sap-icon--upload-to-cloud"
-            aria-label="{{'documents:uploadFile' | t:{count: 1}:'Upload file'}}"
-            title="{{'documents:uploadFile' | t:{count: 1}:'Upload file'}}"
-            state="transparent"
-          >
+          <bk-button is-menu="true" glyph="sap-icon--upload-to-cloud" aria-label="{{'documents:uploadFile' | t:{count: 1}:'Upload file'}}" title="{{'documents:uploadFile' | t:{count: 1}:'Upload file'}}" state="transparent">
           </bk-button>
         </bk-popover-control>
         <bk-popover-body align="bottom-right">
           <bk-menu aria-label="upload options menu">
-            <bk-menu-item
-              title="{{'documents:uploadFile' | t:{count: 2}:'Upload files'}}"
-              ng-click="showUploadFileDialog()"
-            ></bk-menu-item>
-            <bk-menu-item
-              title="{{'documents:uploadZipContents' | t:'Upload zip contents'}}"
-              ng-click="showUploadFileDialog({ unpackZip: true })"
-            ></bk-menu-item>
+            <bk-menu-item title="{{'documents:uploadFile' | t:{count: 2}:'Upload files'}}" ng-click="showUploadFileDialog()"></bk-menu-item>
+            <bk-menu-item title="{{'documents:uploadZipContents' | t:'Upload zip contents'}}" ng-click="showUploadFileDialog({ unpackZip: true })"></bk-menu-item>
           </bk-menu>
         </bk-popover-body>
       </bk-popover>
-      <input
-        id="fileUpload"
-        type="file"
-        nv-file-select=""
-        uploader="uploader"
-        ng-hide="true"
-        multiple
-      />
+      <input id="fileUpload" type="file" nv-file-select="" uploader="uploader" ng-hide="true" multiple />
     </bk-toolbar>
-    <bk-toolbar
-      ng-if="search.displaySearch"
-      has-title="false"
-      type="solid"
-      ng-hide="loading"
-    >
+    <bk-toolbar ng-if="search.displaySearch" has-title="false" type="solid" ng-hide="loading">
       <bk-toolbar-spacer></bk-toolbar-spacer>
       <bk-input-group compact="true" style="max-width: 50%">
         <bk-input-group-addon has-button="true">
           <span class="sap-icon--search" role="presentation"></span>
         </bk-input-group-addon>
-        <bk-input
-          type="search"
-          ng-model="search.filterBy"
-          ng-change="clearSelection()"
-          ng-keyup="keyEvent($event)"
-          placeholder="{{'documents:findInFolder' | t:'Find in folder'}}"
-          bk-focus="true"
-        ></bk-input>
+        <bk-input type="search" ng-model="search.filterBy" ng-change="clearSelection()" ng-keyup="keyEvent($event)" placeholder="{{'documents:findInFolder' | t:'Find in folder'}}" bk-focus="true"></bk-input>
         <bk-input-group-addon ng-if="search.filterBy" has-button="true">
-          <bk-button
-            glyph="sap-icon--clear-filter"
-            state="transparent"
-            ng-click="search.filterBy = ''"
-            aria-label="{{'clearFilter' | t:'Clear filter'}}"
-          ></bk-button>
+          <bk-button glyph="sap-icon--clear-filter" state="transparent" ng-click="search.filterBy = ''" aria-label="{{'clearFilter' | t:'Clear filter'}}"></bk-button>
         </bk-input-group-addon>
       </bk-input-group>
       <bk-toolbar-spacer></bk-toolbar-spacer>
@@ -198,35 +82,14 @@
     <div class="bk-stretch" ng-hide="loading">
       <split direction="horizontal">
         <split-pane size="{{::asWindow ? 100 : 50}}" min-size="340">
-          <div
-            ng-if="::windowOptions.upload"
-            ng-show="showDropZone"
-            class="drop-zone-backdrop"
-          ></div>
-          <bk-scrollbar
-            class="bk-fill-parent docs-file-drop"
-            nv-file-drop=""
-            uploader="uploader"
-            filters="queueLimit, customFilter"
-          >
-            <table
-              bk-table
-              inner-borders="horizontal"
-              outer-borders="none"
-              display-mode="compact"
-            >
-              <thead bk-table-header sticky="true">
+          <div ng-if="::browserOptions.upload" ng-show="showDropZone" class="drop-zone-backdrop"></div>
+          <bk-scrollbar class="bk-fill-parent docs-file-drop" nv-file-drop="" uploader="uploader" filters="queueLimit, customFilter">
+            <table bk-table inner-borders="horizontal" outer-borders="bottom" display-mode="compact">
+              <thead bk-table-header sticky="true" interactive="false">
                 <tr bk-table-row>
-                  <th bk-table-header-cell content-type="checkbox">
-                    <bk-checkbox
-                      id="cb-all"
-                      ng-model="selection.allSelected"
-                      ng-change="selectAllChanged()"
-                    ></bk-checkbox>
-                    <bk-checkbox-label
-                      empty="true"
-                      for="cb-all"
-                    ></bk-checkbox-label>
+                  <th bk-table-header-cell content-type="checkbox" ng-if="::browserOptions.multiple">
+                    <bk-checkbox id="cb-all" ng-model="selection.allSelected" ng-change="selectAllChanged()"></bk-checkbox>
+                    <bk-checkbox-label empty="true" for="cb-all"></bk-checkbox-label>
                   </th>
                   <th bk-table-header-cell colspan="3">
                     {{'name' | t:'Name'}}
@@ -234,120 +97,57 @@
                 </tr>
               </thead>
               <tbody bk-table-body>
-                <tr
-                  bk-table-row
-                  ng-repeat="single in filteredItems = (folder.children | filter: search.filterBy | orderBy: ['-type', 'name'])"
-                  selected="single.selected"
-                >
-                  <td bk-table-cell content-type="checkbox">
-                    <bk-checkbox
-                      id="cb-{{single.name}}"
-                      ng-model="single.selected"
-                      ng-change="selectionChanged()"
-                      aria-labelledby="lbl-{{single.name}}"
-                    ></bk-checkbox>
-                    <bk-checkbox-label
-                      empty="true"
-                      for="cb-{{single.name}}"
-                    ></bk-checkbox-label>
+                <tr bk-table-row ng-repeat="single in filteredItems = (folder.children | filter: search.filterBy | orderBy: ['-type', 'name']) track by single.id"
+                  selected="browserOptions.multiple ? single.selected : (selectedFile && selectedFile.id === single.id)">
+                  <td bk-table-cell content-type="checkbox" ng-if="::browserOptions.multiple">
+                    <bk-checkbox id="cb-{{single.name}}" ng-model="single.selected" ng-change="selectionChanged()" aria-labelledby="lbl-{{single.name}}"></bk-checkbox>
+                    <bk-checkbox-label empty="true" for="cb-{{single.name}}"></bk-checkbox-label>
                   </td>
-                  <td
-                    bk-table-cell
-                    hoverable="true"
-                    activable="true"
-                    ng-click="handleExplorerClick(single, $event)"
-                  >
+                  <td bk-table-cell hoverable="::browserOptions.type === 'folderSelect' && !isFolder(single) ? false : true" activable="::browserOptions.type === 'folderSelect' && !isFolder(single) ? false : true"
+                    ng-click="handleExplorerClick(single, $event)">
                     <div class="bk-hbox bk-box--gap">
-                      <span
-                        class="{{ isFolder(single) ? 'sap-icon--folder-blank' : getFileIcon(single.name) }}"
-                      ></span>
+                      <span class="{{ isFolder(single) ? 'sap-icon--folder-blank' : getFileIcon(single.name) }}"></span>
                       {{ single.name }}
                     </div>
                   </td>
-                  <td
-                    bk-table-cell
-                    fit-content="true"
-                    style="text-align: right"
-                  >
-                    <a
-                      bk-button
-                      bk-list-button
-                      ng-if="!isFolder(single)"
-                      ng-href="{{getFileDownloadUrl(single)}}"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      state="transparent"
-                      glyph="sap-icon--download"
-                      aria-label="{{'download' | t:'Download'}}"
-                      title="{{'download' | t:'Download'}}"
-                    >
+                  <td bk-table-cell fit-content="true" style="text-align: right">
+                    <a bk-button bk-list-button ng-if="::browserOptions.download && !isFolder(single)" ng-href="{{getFileDownloadUrl(single)}}" target="_blank" rel="noopener noreferrer" state="transparent" glyph="sap-icon--download"
+                      aria-label="{{'download' | t:'Download'}}" title="{{'download' | t:'Download'}}">
                     </a>
-                    <bk-button
-                      ng-click="showRenameItemDialog(single, $event)"
-                      bk-list-button
-                      ng-disabled="!writeAccessAllowed(single)"
-                      state="transparent"
-                      glyph="sap-icon--edit"
-                      aria-label="{{'rename' | t:'Rename'}}"
-                      title="{{'rename' | t:'Rename'}}"
-                    >
+                    <bk-button ng-click="showRenameItemDialog(single, $event)" bk-list-button ng-disabled="!writeAccessAllowed(single)" state="transparent" glyph="sap-icon--edit" aria-label="{{'rename' | t:'Rename'}}"
+                      title="{{'rename' | t:'Rename'}}">
                     </bk-button>
-                    <bk-button
-                      ng-click="showDeleteSingleItemDialog(single, $event)"
-                      bk-list-button
-                      ng-disabled="!writeAccessAllowed(single)"
-                      state="transparent"
-                      glyph="sap-icon--delete"
-                      aria-label="{{'delete' | t:'Delete'}}"
-                      title="{{'delete' | t:'Delete'}}"
-                    >
+                    <bk-button ng-click="showDeleteSingleItemDialog(single, $event)" bk-list-button ng-disabled="!writeAccessAllowed(single)" state="transparent" glyph="sap-icon--delete" aria-label="{{'delete' | t:'Delete'}}"
+                      title="{{'delete' | t:'Delete'}}">
                     </bk-button>
                   </td>
                 </tr>
                 <tr ng-if="filteredItems.length === 0" bk-table-row>
                   <td bk-table-cell no-data="true">
-                    {{ search.filterBy ? ('documents:noItemsMatch' | t:'No items
-                    match your search.') : ('documents:folderEmpty' | t:'This
-                    folder is empty.') }}
+                    {{ search.filterBy ? ('documents:noItemsMatch' | t:'No items match your search.') : ('documents:folderEmpty' | t:'This folder is empty.') }}
                   </td>
                 </tr>
               </tbody>
             </table>
             <div ng-show="showDropZone" class="drop-zone">
-              <bk-message-page
-                glyph="sap-icon--upload-to-cloud"
-                style="pointer-events: none"
-              >
-                <bk-message-page-title
-                  >{{'documents:dropFiles' | t:'Drop files
-                  here'}}</bk-message-page-title
-                >
+              <bk-message-page glyph="sap-icon--upload-to-cloud" style="pointer-events: none">
+                <bk-message-page-title>{{'documents:dropFiles' | t:'Drop files here'}}</bk-message-page-title>
               </bk-message-page>
             </div>
           </bk-scrollbar>
         </split-pane>
         <split-pane size="50" ng-if="::!asWindow">
-          <div
-            class="bk-fill-parent"
-            bk-scrollbar
-            ng-show="selectedFile && canPreview && !previewLoading && previewType === 'csv'"
-          >
+          <div class="bk-fill-parent" bk-scrollbar ng-show="selectedFile && canPreview && !previewLoading && previewType === 'csv'">
             <table bk-table display-mode="compact" outer-borders="bottom">
               <thead bk-table-header interactive="false" sticky="true">
                 <tr bk-table-row>
-                  <th
-                    bk-table-header-cell
-                    ng-repeat="header in csvData.headers track by $index"
-                  >
+                  <th bk-table-header-cell ng-repeat="header in csvData.headers track by $index">
                     {{header}}
                   </th>
                 </tr>
               </thead>
               <tbody bk-table-body>
-                <tr
-                  bk-table-row
-                  ng-repeat="row in csvData.rows track by $index"
-                >
+                <tr bk-table-row ng-repeat="row in csvData.rows track by $index">
                   <td bk-table-cell ng-repeat="rowItem in row track by $index">
                     {{rowItem}}
                   </td>
@@ -355,54 +155,24 @@
               </tbody>
             </table>
           </div>
-          <iframe
-            id="preview-iframe"
-            ng-show="selectedFile && canPreview && !previewLoading && previewType === 'web'"
-            src="about:blank"
-          ></iframe>
-          <bk-busy-indicator-extended
-            class="bk-fill-parent"
-            ng-show="selectedFile && canPreview && previewLoading"
-            size="l"
-            ng-show="loading"
-            >{{'loadingPreview' | t:'Loading
-            preview'}}...</bk-busy-indicator-extended
-          >
-          <bk-message-page
-            ng-if="!selectedFile || !canPreview"
-            glyph="sap-icon--detail-view"
-          >
-            <bk-message-page-title
-              >{{'documents:filePreview' | t:'File
-              Preview'}}</bk-message-page-title
-            >
-            <bk-message-page-subtitle
-              >{{ canPreview ? ('documents:canPreview' | t:'Click on a file to
-              see its preview') : ('documents:noPreview' | t:'This file cannot
-              be previewed') }}</bk-message-page-subtitle
-            >
+          <iframe id="preview-iframe" ng-show="selectedFile && canPreview && !previewLoading && previewType === 'web'" src="about:blank"></iframe>
+          <bk-busy-indicator-extended class="bk-fill-parent" ng-show="selectedFile && canPreview && previewLoading" size="l">{{'loadingPreview' | t:'Loading preview'}}...</bk-busy-indicator-extended>
+          <bk-message-page ng-if="!selectedFile || !canPreview" glyph="sap-icon--detail-view">
+            <bk-message-page-title>{{'documents:filePreview' | t:'File Preview'}}</bk-message-page-title>
+            <bk-message-page-subtitle>{{ canPreview ? ('documents:canPreview' | t:'Click on a file to see its preview') : ('documents:noPreview' | t:'This file cannot be previewed') }}</bk-message-page-subtitle>
           </bk-message-page>
         </split-pane>
       </split>
     </div>
     <bk-dialog-footer compact="true" ng-if="::asWindow">
       <bk-bar-element>
-        <bk-button
-          label="Select"
-          decisive="true"
-          ng-click="closeWindow(true)"
-          state="emphasized"
-          type="button"
-        ></bk-button>
+        <bk-button label="Select" decisive="true" ng-click="closeWindow(true)" state="emphasized" type="button" ng-disabled="selectDisabled()"></bk-button>
       </bk-bar-element>
       <bk-bar-element>
-        <bk-button
-          label="Cancel"
-          ng-click="closeWindow()"
-          state="transparent"
-        ></bk-button>
+        <bk-button label="Cancel" ng-click="closeWindow()" state="transparent"></bk-button>
       </bk-bar-element>
     </bk-dialog-footer>
     <theme></theme>
   </body>
+
 </html>
