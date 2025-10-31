@@ -81,7 +81,7 @@ public class ComponentFacade implements InitializingBean {
                                         .execute();
             if (next.getMember("done")
                     .asBoolean()) {
-                // logger.warn("Metadata is empty for: {}", name);
+                //logger.warn("Metadata is empty for: {}", name);
                 break;
             }
 
