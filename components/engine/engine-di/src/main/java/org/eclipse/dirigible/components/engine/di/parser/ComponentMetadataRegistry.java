@@ -1,4 +1,4 @@
-package org.eclipse.dirigible.components.engine.javascript.parser;
+package org.eclipse.dirigible.components.engine.di.parser;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;

@@ -1,10 +1,10 @@
-package org.eclipse.dirigible.components.engine.javascript.parser;
+package org.eclipse.dirigible.components.engine.di.parser;
 
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.eclipse.dirigible.components.engine.javascript.service.ComponentService;
+import org.eclipse.dirigible.components.engine.di.service.ComponentService;
 import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Value;
 import org.slf4j.Logger;

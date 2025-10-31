@@ -1,4 +1,4 @@
-package org.eclipse.dirigible.components.engine.javascript.service;
+package org.eclipse.dirigible.components.engine.di.service;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -7,8 +7,9 @@ import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.components.base.artefact.BaseArtefactService;
-import org.eclipse.dirigible.components.engine.javascript.domain.Component;
-import org.eclipse.dirigible.components.engine.javascript.repository.ComponentRepository;
+import org.eclipse.dirigible.components.engine.di.domain.Component;
+import org.eclipse.dirigible.components.engine.di.repository.ComponentRepository;
+import org.eclipse.dirigible.components.engine.javascript.service.JavascriptService;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.RepositoryNotFoundException;
 import org.graalvm.polyglot.Value;

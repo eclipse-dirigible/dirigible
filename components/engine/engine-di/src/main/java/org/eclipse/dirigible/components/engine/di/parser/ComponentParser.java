@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.engine.javascript.parser;
+package org.eclipse.dirigible.components.engine.di.parser;
 
 import java.util.ArrayList;
 import java.util.Collections;

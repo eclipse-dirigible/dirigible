@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.engine.javascript.domain;
+package org.eclipse.dirigible.components.engine.di.domain;
 
 import org.eclipse.dirigible.components.base.artefact.Artefact;
 

@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.engine.javascript.synchronizer;
+package org.eclipse.dirigible.components.engine.di.synchronizer;
 
 import java.nio.file.Paths;
 import java.text.ParseException;
@@ -20,8 +20,8 @@ import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
 import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
-import org.eclipse.dirigible.components.engine.javascript.parser.ComponentRegister;
-import org.eclipse.dirigible.components.engine.javascript.service.ComponentService;
+import org.eclipse.dirigible.components.engine.di.parser.ComponentRegister;
+import org.eclipse.dirigible.components.engine.di.service.ComponentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,7 +33,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Order(SynchronizersOrder.COMPONENT)
-public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigible.components.engine.javascript.domain.Component, Long> {
+public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigible.components.engine.di.domain.Component, Long> {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(ComponentSynchronizer.class);
@@ -65,7 +65,7 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
      */
     @Override
     public boolean isAccepted(String type) {
-        return org.eclipse.dirigible.components.engine.javascript.domain.Component.ARTEFACT_TYPE.equals(type);
+        return org.eclipse.dirigible.components.engine.di.domain.Component.ARTEFACT_TYPE.equals(type);
     }
 
     /**
@@ -77,19 +77,19 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
      * @throws ParseException the parse exception
      */
     @Override
-    protected List<org.eclipse.dirigible.components.engine.javascript.domain.Component> parseImpl(String location, byte[] content)
+    protected List<org.eclipse.dirigible.components.engine.di.domain.Component> parseImpl(String location, byte[] content)
             throws ParseException {
-        org.eclipse.dirigible.components.engine.javascript.domain.Component component =
-                new org.eclipse.dirigible.components.engine.javascript.domain.Component();
+        org.eclipse.dirigible.components.engine.di.domain.Component component =
+                new org.eclipse.dirigible.components.engine.di.domain.Component();
         component.setLocation(location);
         component.setName(Paths.get(location)
                                .getFileName()
                                .toString());
-        component.setType(org.eclipse.dirigible.components.engine.javascript.domain.Component.ARTEFACT_TYPE);
+        component.setType(org.eclipse.dirigible.components.engine.di.domain.Component.ARTEFACT_TYPE);
         component.updateKey();
         component.setContent(new String(content));
         try {
-            org.eclipse.dirigible.components.engine.javascript.domain.Component maybe = getService().findByKey(component.getKey());
+            org.eclipse.dirigible.components.engine.di.domain.Component maybe = getService().findByKey(component.getKey());
             if (maybe != null) {
                 component.setId(maybe.getId());
             }
@@ -116,7 +116,7 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
      * @return the service
      */
     @Override
-    public ArtefactService<org.eclipse.dirigible.components.engine.javascript.domain.Component, Long> getService() {
+    public ArtefactService<org.eclipse.dirigible.components.engine.di.domain.Component, Long> getService() {
         return componentService;
     }
 
@@ -127,7 +127,7 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
      * @return the list
      */
     @Override
-    public List<org.eclipse.dirigible.components.engine.javascript.domain.Component> retrieve(String location) {
+    public List<org.eclipse.dirigible.components.engine.di.domain.Component> retrieve(String location) {
         return getService().findByLocation(location);
     }
 
@@ -139,8 +139,7 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
      * @param error the error
      */
     @Override
-    public void setStatus(org.eclipse.dirigible.components.engine.javascript.domain.Component artefact, ArtefactLifecycle lifecycle,
-            String error) {
+    public void setStatus(org.eclipse.dirigible.components.engine.di.domain.Component artefact, ArtefactLifecycle lifecycle, String error) {
         artefact.setLifecycle(lifecycle);
         artefact.setError(error);
         getService().save(artefact);
@@ -154,9 +153,9 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
      * @return true, if successful
      */
     @Override
-    protected boolean completeImpl(TopologyWrapper<org.eclipse.dirigible.components.engine.javascript.domain.Component> wrapper,
+    protected boolean completeImpl(TopologyWrapper<org.eclipse.dirigible.components.engine.di.domain.Component> wrapper,
             ArtefactPhase flow) {
-        org.eclipse.dirigible.components.engine.javascript.domain.Component component = wrapper.getArtefact();
+        org.eclipse.dirigible.components.engine.di.domain.Component component = wrapper.getArtefact();
 
         switch (flow) {
             case CREATE:
@@ -217,7 +216,7 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
      * @param component the component
      * @return the string
      */
-    public String prepareContent(org.eclipse.dirigible.components.engine.javascript.domain.Component component) {
+    public String prepareContent(org.eclipse.dirigible.components.engine.di.domain.Component component) {
         return component.getContent();
     }
 
@@ -227,7 +226,7 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
      * @param component the component
      */
     @Override
-    public void cleanupImpl(org.eclipse.dirigible.components.engine.javascript.domain.Component component) {
+    public void cleanupImpl(org.eclipse.dirigible.components.engine.di.domain.Component component) {
         try {
             ComponentRegister.removeComponent(component.getLocation());
             getService().delete(component);
@@ -264,7 +263,7 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
      */
     @Override
     public String getArtefactType() {
-        return org.eclipse.dirigible.components.engine.javascript.domain.Component.ARTEFACT_TYPE;
+        return org.eclipse.dirigible.components.engine.di.domain.Component.ARTEFACT_TYPE;
     }
 
 }

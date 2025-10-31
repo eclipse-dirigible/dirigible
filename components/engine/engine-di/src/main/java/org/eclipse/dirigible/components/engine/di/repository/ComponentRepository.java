@@ -7,10 +7,10 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.engine.javascript.repository;
+package org.eclipse.dirigible.components.engine.di.repository;
 
 import org.eclipse.dirigible.components.base.artefact.ArtefactRepository;
-import org.eclipse.dirigible.components.engine.javascript.domain.Component;
+import org.eclipse.dirigible.components.engine.di.domain.Component;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

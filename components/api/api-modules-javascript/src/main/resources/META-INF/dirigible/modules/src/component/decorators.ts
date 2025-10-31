@@ -4,6 +4,13 @@
  * Falls back to legacy (target, propertyKey) style when context.addInitializer is not available.
  */
 
+const ComponentMetadataRegistry = Java.type(
+  "org.eclipse.dirigible.components.engine.di.parser.ComponentMetadataRegistry"
+);
+const ComponentFacade = Java.type(
+  "org.eclipse.dirigible.components.api.component.ComponentFacade"
+);
+
 interface ComponentMetadata {
   name?: string;
   injections: Map<string | symbol, string | undefined>;
@@ -30,14 +37,46 @@ function getComponentMetadata(constructor: object): ComponentMetadata {
   return componentCache.get(constructor)!;
 }
 
-const ComponentMetadataRegistry = Java.type(
-  "org.eclipse.dirigible.components.engine.javascript.parser.ComponentMetadataRegistry"
-);
-const ComponentFacade = Java.type(
-  "org.eclipse.dirigible.components.api.component.ComponentFacade"
-);
-
 export function Component(nameOrConstructor?: string | Function): Function {
+  if (typeof nameOrConstructor === "function") {
+    const constructor = nameOrConstructor as ComponentConstructor;
+    const metadata = getComponentMetadata(constructor);
+    metadata.name = constructor.name;
+
+    constructor.__component_name = metadata.name;
+    constructor.__injections_map = metadata.injections;
+
+    ComponentMetadataRegistry.register(metadata.name, metadata.injections);
+
+    return class extends (constructor as any) {
+      constructor(...args: any[]) {
+        super(...args);
+        ComponentFacade.injectDependencies(this);
+      }
+    };
+  }
+
+  const name = nameOrConstructor;
+  return function (constructor: Function): any {
+    const metadata = getComponentMetadata(constructor);
+    metadata.name = name || constructor.name;
+
+    const ctor = constructor as ComponentConstructor;
+    ctor.__component_name = metadata.name;
+    ctor.__injections_map = metadata.injections;
+
+    ComponentMetadataRegistry.register(metadata.name, metadata.injections);
+
+    return class extends (constructor as any) {
+      constructor(...args: any[]) {
+        super(...args);
+        ComponentFacade.injectDependencies(this);
+      }
+    };
+  };
+}
+
+export function Injected(nameOrConstructor?: string | Function): Function {
   if (typeof nameOrConstructor === "function") {
     const constructor = nameOrConstructor as ComponentConstructor;
     const metadata = getComponentMetadata(constructor);
