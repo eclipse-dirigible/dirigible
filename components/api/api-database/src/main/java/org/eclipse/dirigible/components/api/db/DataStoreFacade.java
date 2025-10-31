@@ -12,8 +12,12 @@ package org.eclipse.dirigible.components.api.db;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.store.DataStore;
+import org.eclipse.dirigible.components.data.store.model.EntityMetadata;
+import org.eclipse.dirigible.components.data.store.parser.EntityParser;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -224,6 +228,53 @@ public class DataStoreFacade implements InitializingBean {
         DataStoreFacade.get()
                        .getDataStore()
                        .delete(name, id);
+    }
+
+    public static String getEntityName(String name) {
+        EntityMetadata metadata = EntityParser.ENTITIES.get(name);
+        if (metadata == null) {
+            throw new RuntimeException(
+                    "Entity: [" + name + "] metadata does not exist. Consider to publishing it and wait a while to get registered.");
+        }
+        return metadata.getEntityName();
+    }
+
+    public static String getTableName(String name) {
+        EntityMetadata metadata = EntityParser.ENTITIES.get(name);
+        if (metadata == null) {
+            throw new RuntimeException(
+                    "Entity: [" + name + "] metadata does not exist. Consider to publishing it and wait a while to get registered.");
+        }
+        return metadata.getTableName();
+    }
+
+    public static String getIdName(String name) {
+        EntityMetadata metadata = EntityParser.ENTITIES.get(name);
+        if (metadata == null) {
+            throw new RuntimeException(
+                    "Entity: [" + name + "] metadata does not exist. Consider to publishing it and wait a while to get registered.");
+        }
+        return metadata.getFields()
+                       .stream()
+                       .filter(f -> f.isIdentifier())
+                       .collect(Collectors.toList())
+                       .getFirst()
+                       .getPropertyName();
+    }
+
+    public static String getIdColumn(String name) {
+        EntityMetadata metadata = EntityParser.ENTITIES.get(name);
+        if (metadata == null) {
+            throw new RuntimeException(
+                    "Entity: [" + name + "] metadata does not exist. Consider to publishing it and wait a while to get registered.");
+        }
+        return metadata.getFields()
+                       .stream()
+                       .filter(f -> f.isIdentifier())
+                       .collect(Collectors.toList())
+                       .getFirst()
+                       .getColumnDetails()
+                       .getColumnName();
     }
 
 }

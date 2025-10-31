@@ -18,6 +18,12 @@ export abstract class Repository<T extends Record<string, any>> {
 
     constructor(entityConstructor: EntityConstructor) {
         this.entityConstructor = entityConstructor;
+		if (!this.entityConstructor.$entity_name) {
+			this.entityConstructor.$entity_name = store.getEntityName(this.entityConstructor.name);
+			this.entityConstructor.$table_name = store.getTableName(this.entityConstructor.name);
+			this.entityConstructor.$id_name = store.getIdName(this.entityConstructor.name);
+			this.entityConstructor.$id_column = store.getIdColumn(this.entityConstructor.name);
+		}
     }
 
     protected getEntityName(): string {
