@@ -57,6 +57,11 @@
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-engine-javascript</artifactId>
 		</dependency>
+		
+		<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-parsers-typescript</artifactId>
+    	</dependency>
 
 		<!-- Libraries -->
 		<dependency>
@@ -84,6 +89,10 @@
 			<groupId>org.fusesource.hawtbuf</groupId>
 			<artifactId>hawtbuf</artifactId>
 			<version>1.11</version>
+		</dependency>
+		<dependency>
+		    <groupId>commons-codec</groupId>
+		    <artifactId>commons-codec</artifactId>
 		</dependency>
 	</dependencies>
 

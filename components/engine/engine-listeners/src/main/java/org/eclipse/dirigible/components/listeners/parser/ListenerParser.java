@@ -1,4 +1,13 @@
-package org.eclipse.dirigible.components.jobs.config.parser;
+/*
+ * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
+ */
+package org.eclipse.dirigible.components.listeners.parser;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -15,28 +24,34 @@ import org.eclipse.dirigible.parsers.typescript.TypeScriptParser;
 import org.eclipse.dirigible.parsers.typescript.TypeScriptParserBaseVisitor;
 
 /**
- * Parser that extracts scheduling metadata from TypeScript classes decorated with @Scheduled({
- * expression: "...", group: "..." }).
+ * Parser that extracts metadata from TypeScript classes decorated with:
+ *
+ * <pre>
+ * @Listener({
+ *     name: "MyListener",
+ *     kind: "event"
+ * })
+ * </pre>
  */
-public class ScheduledParser {
+public class ListenerParser {
 
-    public static final Map<String, ScheduledMetadata> JOBS = Collections.synchronizedMap(new HashMap<>());
+    public static final Map<String, ListenerMetadata> LISTENERS = Collections.synchronizedMap(new HashMap<>());
     public static final Map<String, String> MD5 = Collections.synchronizedMap(new HashMap<>());
 
     /**
-     * Parses the given TypeScript source and extracts @Scheduled metadata.
+     * Parses the given TypeScript source and extracts @Listener metadata.
      *
      * @param location the file path or name
      * @param source the TypeScript source code
-     * @return the extracted ScheduledMetadata
+     * @return the extracted ListenerMetadata
      */
-    public ScheduledMetadata parse(String location, String source) {
+    public ListenerMetadata parse(String location, String source) {
         String md5 = DigestUtils.md5Hex(source.getBytes());
         String filename = FilenameUtils.getBaseName(location);
         String existing = MD5.get(filename);
 
         if (existing != null && existing.equals(md5)) {
-            return JOBS.get(filename);
+            return LISTENERS.get(filename);
         }
 
         CharStream input = CharStreams.fromString(source);
@@ -47,29 +62,29 @@ public class ScheduledParser {
         ParseTree tree = parser.program();
 
         MetadataExtractorVisitor visitor = new MetadataExtractorVisitor();
-        ScheduledMetadata metadata = visitor.visit(tree);
+        ListenerMetadata metadata = visitor.visit(tree);
 
-        JOBS.put(filename, metadata);
+        LISTENERS.put(filename, metadata);
         MD5.put(filename, md5);
 
         return metadata;
     }
 
     /**
-     * Extracts decorator metadata from the TypeScript AST.
+     * Extracts @Listener(name, kind) decorator metadata from the TypeScript AST.
      */
-    private static class MetadataExtractorVisitor extends TypeScriptParserBaseVisitor<ScheduledMetadata> {
+    private static class MetadataExtractorVisitor extends TypeScriptParserBaseVisitor<ListenerMetadata> {
 
-        private ScheduledMetadata metadata = new ScheduledMetadata();
+        private final ListenerMetadata metadata = new ListenerMetadata();
 
         @Override
-        public ScheduledMetadata visitProgram(TypeScriptParser.ProgramContext ctx) {
+        public ListenerMetadata visitProgram(TypeScriptParser.ProgramContext ctx) {
             super.visitProgram(ctx);
             return metadata;
         }
 
         @Override
-        public ScheduledMetadata visitClassDeclaration(TypeScriptParser.ClassDeclarationContext ctx) {
+        public ListenerMetadata visitClassDeclaration(TypeScriptParser.ClassDeclarationContext ctx) {
             if (ctx.identifier() != null && ctx.identifier()
                                                .Identifier() != null) {
                 metadata.setClassName(ctx.identifier()
@@ -89,7 +104,7 @@ public class ScheduledParser {
 
         private void parseClassDecorator(TypeScriptParser.DecoratorContext ctx) {
             String decoratorName = getDecoratorBaseName(ctx);
-            if (!"Scheduled".equals(decoratorName)) {
+            if (!"Listener".equals(decoratorName)) {
                 return;
             }
 
@@ -110,9 +125,9 @@ public class ScheduledParser {
                                     .argument(0)
                                     .getText();
 
-                // Extract parameters
-                metadata.setExpression(extractValue(argText, "expression"));
-                metadata.setGroup(extractValue(argText, "group"));
+                // Extract decorator parameters
+                metadata.setName(extractValue(argText, "name"));
+                metadata.setKind(extractValue(argText, "kind"));
             }
         }
 

@@ -9,6 +9,13 @@
  */
 package org.eclipse.dirigible.components.listeners.synchronizer;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.text.ParseException;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
@@ -19,17 +26,17 @@ import org.eclipse.dirigible.components.base.synchronizer.MultitenantBaseSynchro
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.listeners.domain.Listener;
+import org.eclipse.dirigible.components.listeners.domain.ListenerKind;
+import org.eclipse.dirigible.components.listeners.parser.ListenerMetadata;
+import org.eclipse.dirigible.components.listeners.parser.ListenerParser;
 import org.eclipse.dirigible.components.listeners.service.ListenerService;
 import org.eclipse.dirigible.components.listeners.service.ListenersManager;
+import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-
-import java.nio.charset.StandardCharsets;
-import java.text.ParseException;
-import java.util.List;
 
 /**
  * The Class ListenerSynchronizer.
@@ -44,6 +51,8 @@ public class ListenerSynchronizer extends MultitenantBaseSynchronizer<Listener, 
     /** The Constant FILE_EXTENSION_LISTENER. */
     private static final String FILE_EXTENSION_LISTENER = ".listener";
 
+    public static final String[] FILE_EXTENSIONS_LISTENER = new String[] {".listener", "Listener.ts"};
+
     /** The callback. */
     private SynchronizerCallback callback;
 
@@ -54,6 +63,8 @@ public class ListenerSynchronizer extends MultitenantBaseSynchronizer<Listener, 
     /** The Scheduler manager. */
     @Autowired
     private ListenersManager listenersManager;
+
+    private final ListenerParser listenerParser = new ListenerParser();
 
     /**
      * Checks if is accepted.
@@ -76,7 +87,24 @@ public class ListenerSynchronizer extends MultitenantBaseSynchronizer<Listener, 
      */
     @Override
     protected List<Listener> parseImpl(String location, byte[] content) throws ParseException {
-        Listener listener = JsonHelper.fromJson(new String(content, StandardCharsets.UTF_8), Listener.class);
+        Listener listener = null;
+        String source = new String(content, StandardCharsets.UTF_8);
+        if (location.endsWith(FILE_EXTENSION_LISTENER)) {
+            listener = JsonHelper.fromJson(source, Listener.class);
+        } else {
+            ListenerMetadata metadata = listenerParser.parse(location, source);
+            if (metadata.getName() == null) {
+                return new ArrayList<Listener>();
+            }
+            listener = new Listener();
+            listener.setName(metadata.getName());
+            listener.setKind(resolveListenerKind(metadata.getKind()));
+            String handler = location;
+            if (handler.startsWith(IRepositoryStructure.SEPARATOR)) {
+                handler = handler.substring(1);
+            }
+            listener.setHandler(handler);
+        }
         Configuration.configureObject(listener);
         listener.setLocation(location);
         listener.setType(Listener.ARTEFACT_TYPE);
@@ -92,6 +120,25 @@ public class ListenerSynchronizer extends MultitenantBaseSynchronizer<Listener, 
             throw new ParseException(e.getMessage(), 0);
         }
         return List.of(listener);
+    }
+
+    private ListenerKind resolveListenerKind(String kind) {
+        if (kind == null) {
+            return ListenerKind.QUEUE;
+        }
+        if (kind.toLowerCase()
+                .equals("q")
+                || kind.toLowerCase()
+                       .equals("queue")) {
+            return ListenerKind.QUEUE;
+        }
+        if (kind.toLowerCase()
+                .equals("t")
+                || kind.toLowerCase()
+                       .equals("topic")) {
+            return ListenerKind.TOPIC;
+        }
+        return ListenerKind.QUEUE;
     }
 
     /**
@@ -267,4 +314,23 @@ public class ListenerSynchronizer extends MultitenantBaseSynchronizer<Listener, 
     public String getArtefactType() {
         return Listener.ARTEFACT_TYPE;
     }
+
+    /**
+     * Checks if is accepted.
+     *
+     * @param file the file
+     * @param attrs the attrs
+     * @return true, if is accepted
+     */
+    @Override
+    public boolean isAccepted(Path file, BasicFileAttributes attrs) {
+        for (String extension : FILE_EXTENSIONS_LISTENER) {
+            if (file.toString()
+                    .endsWith(extension)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 }

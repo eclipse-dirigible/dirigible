@@ -1,4 +1,4 @@
-package org.eclipse.dirigible.components.jobs.config.parser;
+package org.eclipse.dirigible.components.jobs.parser;
 
 /**
  * Represents metadata extracted from @Scheduled decorators.
