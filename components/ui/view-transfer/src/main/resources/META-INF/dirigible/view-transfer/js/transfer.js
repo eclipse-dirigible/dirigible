@@ -12,16 +12,46 @@
 const transferView = angular.module('transfer', ['blimpKit', 'platformView']);
 const DB_SERVICE_URL = '/services/data/definition/';
 const EXPORT_SERVICE_URL = '/services/data/schema/exportProcesses';
-transferView.controller('ViewController', ($scope) => {
-    $scope.navActive = 'export';
+const IMPORT_SERVICE_URL = '/services/data/schema/importProcesses';
+const dialogHub = new DialogHub();
+const shellHub = new ShellHub();
+transferView.controller('ViewController', ($scope, $http) => {
+    $scope.navActive = 'transfer';
 
     $scope.switchNav = (nav) => {
         $scope.navActive = nav;
     };
+    $scope.databases = [];
+
+    const callbacks = [];
+
+    $scope.onDBLoadedCallback = (callback) => {
+        callbacks.push(callback);
+        if (callbacks.length === 3) {
+            getDatabases();
+        }
+    };
+
+    $scope.goToDocuments = (path) => {
+        shellHub.showPerspective({ id: 'perspectiveDocuments', params: { path: path } });
+    };
+
+    function getDatabases() {
+        $http.get(DB_SERVICE_URL).then((result) => {
+            if (result.data.length > 0) {
+                $scope.databases.length = 0;
+                $scope.databases.push(...result.data);
+                for (let i = 0; i < callbacks.length; i++) {
+                    callbacks[i]();
+                }
+            }
+        }, (error) => {
+            console.error(error);
+        });
+    };
 });
 
 transferView.controller('ExportController', ($scope, $http, $timeout) => {
-    const dialogHub = new DialogHub();
     $scope.forms = { ep: {} };
     $scope.exportData = {
         db: '',
@@ -30,7 +60,10 @@ transferView.controller('ExportController', ($scope, $http, $timeout) => {
         type: 'include',
         tables: [],
     };
-    $scope.databases = [];
+    $scope.$parent.onDBLoadedCallback(() => {
+        $scope.exportData.db = $scope.$parent.databases[0];
+        $scope.dbChanged();
+    });
     $scope.datasources = [];
     $scope.tables = [];
     $scope.exportLoading = false;
@@ -85,7 +118,9 @@ transferView.controller('ExportController', ($scope, $http, $timeout) => {
         }
     };
 
-    $scope.getExports = (historic = false) => {
+    let retries = 0;
+
+    const getExports = (historic = false) => {
         if (!historic) $scope.exports.length = 0;
         $http.get(historic ? '/services/bpm/bpm-processes/historic-instances' : '/services/bpm/bpm-processes/instances', { params: { definitionKey: 'export-schema', limit: 100 } })
             .then((response) => {
@@ -119,8 +154,11 @@ transferView.controller('ExportController', ($scope, $http, $timeout) => {
                     });
                 }
                 if (!historic) {
-                    $scope.getExports(true);
-                    if (response.data.length) $timeout(() => { $scope.getExports() }, 1000);
+                    getExports(true);
+                    if (response.data.length && retries < 3) {
+                        retries += 1;
+                        $timeout(() => { getExports() }, 1000);
+                    }
                 }
             }, (error) => {
                 console.error(error);
@@ -137,7 +175,8 @@ transferView.controller('ExportController', ($scope, $http, $timeout) => {
             excludedTables: $scope.exportData.type === 'exclude' ? $scope.exportData.tables : [],
         }).then(() => {
             $scope.exportLoading = false;
-            $scope.getExports();
+            retries = 0;
+            getExports();
         }, (error) => {
             console.error(error);
         });
@@ -155,23 +194,113 @@ transferView.controller('ExportController', ($scope, $http, $timeout) => {
         });
     }
 
-    function getDatabases() {
-        $http.get(DB_SERVICE_URL).then((result) => {
-            if (result.data.length > 0) {
-                $scope.databases.length = 0;
-                $scope.databases.push(...result.data);
-                if (!$scope.databases.includes($scope.exportData.db)) {
-                    $scope.exportData.db = $scope.databases[0];
+    getExports();
+
+    $scope.$on('$destroy', () => {
+        dialogHub.removeMessageListener(folderHandler);
+    });
+});
+
+transferView.controller('ImportController', ($scope, $http, $timeout) => {
+    $scope.forms = { ep: {} };
+    $scope.importData = {
+        db: '',
+        path: '',
+    };
+    $scope.$parent.onDBLoadedCallback(() => {
+        $scope.importData.db = $scope.$parent.databases[0];
+    });
+    $scope.datasources = [];
+    $scope.tables = [];
+    $scope.importLoading = false;
+    $scope.imports = [];
+
+    $scope.choosePath = () => {
+        dialogHub.showWindow({
+            id: 'windowDocuments',
+            hasHeader: false,
+            params: {
+                type: 'folderSelect',
+                upload: false,
+                download: false,
+                multiple: false,
+                callbackTopic: 'transfer.import.folder'
+            },
+            maxWidth: '960px',
+            maxHeight: '540px',
+            closeButton: true
+        });
+    };
+
+    const folderHandler = dialogHub.addMessageListener({
+        topic: 'transfer.import.folder',
+        handler: (path) => {
+            $scope.$evalAsync(() => {
+                $scope.importData.path = path;
+            });
+        },
+    });
+
+    let retries = 0;
+
+    const getImports = (historic = false) => {
+        if (!historic) $scope.imports.length = 0;
+        $http.get(historic ? '/services/bpm/bpm-processes/historic-instances' : '/services/bpm/bpm-processes/instances', { params: { definitionKey: 'import-schema', limit: 100 } })
+            .then((response) => {
+                for (let i = 0; i < response.data.length; i++) {
+                    $http.get(historic ? `/services/bpm/bpm-processes/historic-instances/${response.data[i].id}/variables` : `/services/bpm/bpm-processes/instances/${response.data[i].id}/variables`, { params: { 'limit': 100 } }).then((varList) => {
+                        let dataSource = '';
+                        let path = '';
+                        let time = '';
+                        for (let l = 0; l < varList.data.length; l++) {
+                            if (varList.data[l]['name'] === 'dataSource') {
+                                dataSource = varList.data[l]['value'];
+                                time = varList.data[l]['createTime'];
+                            }
+                            else if (varList.data[l]['name'] === 'exportPath') path = varList.data[l]['value'];
+                        }
+                        $scope.imports.push({
+                            id: response.data[i].id,
+                            db: dataSource,
+                            path: path,
+                            importing: !historic,
+                            time: new Intl.DateTimeFormat(undefined, {
+                                dateStyle: 'short',
+                                timeStyle: 'short',
+                            }).format(new Date(time))
+                        });
+
+                    }, (error) => {
+                        console.error(error);
+                    });
                 }
-                $scope.dbChanged();
-            }
+                if (!historic) {
+                    getImports(true);
+                    if (response.data.length && retries < 2) {
+                        retries += 1;
+                        $timeout(() => { getImports() }, 1000);
+                    }
+                }
+            }, (error) => {
+                console.error(error);
+            });
+    };
+
+    $scope.startImport = () => {
+        $scope.importLoading = true;
+        $http.post(IMPORT_SERVICE_URL, {
+            dataSource: $scope.importData.db,
+            exportPath: $scope.importData.path,
+        }).then(() => {
+            $scope.importLoading = false;
+            retries = 0;
+            getImports();
         }, (error) => {
             console.error(error);
         });
     };
 
-    getDatabases();
-    $scope.getExports();
+    getImports();
 
     $scope.$on('$destroy', () => {
         dialogHub.removeMessageListener(folderHandler);
@@ -184,18 +313,30 @@ transferView.controller('TransferController', ($scope, $http) => {
 
     let transferWsUrl = "/websockets/data/transfer";
 
-    $scope.databases = [];
     $scope.definition = {};
-    $scope.definition.selectedSourceDatabase = 0;
-    $scope.definition.selectedTargetDatabase = 0;
+    $scope.definition.selectedSourceDatabase = undefined;
+    $scope.definition.selectedTargetDatabase = undefined;
     $scope.sourceDatasources = [];
     $scope.targetDatasources = [];
-    $scope.definition.selectedSourceDatasource = 0;
-    $scope.definition.selectedTargetDatasource = 0;
+    $scope.definition.selectedSourceDatasource = undefined;
+    $scope.definition.selectedTargetDatasource = undefined;
     $scope.sourceSchemes = [];
     $scope.targetSchemes = [];
     $scope.definition.selectedSourceScheme = 0;
     $scope.definition.selectedTargetScheme = 0;
+
+    $scope.$parent.onDBLoadedCallback(() => {
+        $scope.definition.selectedSourceDatabase = $scope.$parent.databases[0];
+        $scope.definition.selectedTargetDatabase = $scope.$parent.databases[0];
+        $http.get(DB_SERVICE_URL + $scope.definition.selectedSourceDatabase).then((sourceData) => {
+            if (sourceData.data.length > 0) {
+                $scope.sourceDatasources.push(...sourceData.data);
+                $scope.definition.selectedSourceDatasource = $scope.sourceDatasources[0];
+                $scope.targetDatasources.push(...sourceData.data);
+                $scope.definition.selectedTargetDatasource = $scope.targetDatasources[0];
+            }
+        });
+    });
 
     $scope.allLogs = [];
     $scope.logs = [];
@@ -203,76 +344,45 @@ transferView.controller('TransferController', ($scope, $http) => {
 
     let transferWebsocket = null;
 
-    $scope.getDatabases = () => {
-        $http.get(DB_SERVICE_URL).then((data) => {
-            if (data.data.length > 0) {
-                for (let i = 0; i < data.data.length; i++) {
-                    $scope.databases.push({ text: data.data[i], value: i });
-                }
-                if ($scope.databases[$scope.definition.selectedSourceDatabase]) {
-                    $http.get(DB_SERVICE_URL + $scope.databases[$scope.definition.selectedSourceDatabase].text).then((sourceData) => {
-                        if (sourceData.data.length > 0) {
-                            for (let i = 0; i < sourceData.data.length; i++) {
-                                $scope.sourceDatasources.push({ text: sourceData.data[i], value: i });
-                                $scope.targetDatasources.push({ text: sourceData.data[i], value: i });
-                            }
-                        }
-                    });
-                }
-            }
-        });
-    };
-
-    setTimeout($scope.getDatabases, 500); // This is absolutely awful. Must be fixed.
-    connect();
-
     $scope.databaseSourceChanged = () => {
-        $http.get(DB_SERVICE_URL + $scope.databases[$scope.definition.selectedSourceDatabase].text)
-            .then((data) => {
+        $http.get(DB_SERVICE_URL + $scope.definition.selectedSourceDatabase)
+            .then((result) => {
                 $scope.sourceDatasources.length = 0;
-                for (let i = 0; i < data.data.length; i++) {
-                    $scope.sourceDatasources.push({ text: data.data[i], value: i });
-                }
+                $scope.sourceDatasources.push(...result.data);
                 if ($scope.sourceDatasources.length > 0) {
-                    $scope.definition.selectedSourceDatasource = 0;
+                    $scope.definition.selectedSourceDatasource = $scope.sourceDatasources[0];
                 } else {
                     $scope.definition.selectedSourceDatasource = undefined;
                 }
-                //$scope.refreshDatabase();
             });
     };
 
     $scope.databaseTargetChanged = () => {
-        $http.get(DB_SERVICE_URL + $scope.databases[$scope.definition.selectedTargetDatabase].text)
-            .then((data) => {
+        $http.get(DB_SERVICE_URL + $scope.definition.selectedTargetDatabase)
+            .then((result) => {
                 $scope.targetDatasources.length = 0;
-                for (let i = 0; i < data.data.length; i++) {
-                    $scope.targetDatasources.push({ text: data.data[i], value: i });
-                }
+                $scope.targetDatasources.push(...result.data);
                 if ($scope.targetDatasources.length > 0) {
-                    $scope.definition.selectedTargetDatasource = 0;
+                    $scope.definition.selectedTargetDatasource = $scope.targetDatasources[0];
                 } else {
                     $scope.definition.selectedDatasource = undefined;
                 }
-                //$scope.refreshDatabase();
             });
     };
 
     $scope.startTransfer = () => {
-        if ($scope.databases[$scope.definition.selectedSourceDatabase]
-            && $scope.sourceDatasources[$scope.definition.selectedSourceDatasource]
-            && $scope.databases[$scope.definition.selectedTargetDatabase]
-            && $scope.targetDatasources[$scope.definition.selectedTargetDatasource]) {
-            const config = {
-                "source": $scope.databases[$scope.definition.selectedSourceDatabase].text,
-                "target": $scope.databases[$scope.definition.selectedTargetDatabase].text,
+        if ($scope.definition.selectedSourceDatabase
+            && $scope.definition.selectedSourceDatasource
+            && $scope.definition.selectedTargetDatabase
+            && $scope.definition.selectedTargetDatasource) {
+            transferData({
+                "source": $scope.definition.selectedSourceDatabase,
+                "target": $scope.definition.selectedTargetDatabase,
                 "configuration": {
-                    "sourceSchema": $scope.sourceDatasources[$scope.definition.selectedSourceDatasource].text,
-                    "targetSchema": $scope.targetDatasources[$scope.definition.selectedTargetDatasource].text
+                    "sourceSchema": $scope.definition.selectedSourceDatasource,
+                    "targetSchema": $scope.definition.selectedTargetDatasource
                 }
-            };
-
-            transferData(config);
+            });
         }
     };
 
@@ -325,6 +435,8 @@ transferView.controller('TransferController', ($scope, $http) => {
 
         }
     }
+
+    connect();
 
     function consoleLogMessage(record) {
         $scope.$evalAsync(() => {

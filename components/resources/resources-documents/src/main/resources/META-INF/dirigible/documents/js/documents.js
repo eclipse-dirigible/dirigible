@@ -72,6 +72,14 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
     };
     let params = ViewParameters.get();
 
+    const observer = ViewParameters.observe({
+        callback: (params) => {
+            if (params['path']) {
+                openFolder(params['path']);
+            }
+        }
+    });
+
     let iframe;
 
     $scope.asWindow = params.container === 'window';
@@ -163,7 +171,7 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
 
         if ($scope.isFolder(cmisObject)) {
             openFolder($scope.getFullPath(cmisObject.name));
-        } else {
+        } else if ($scope.browserOptions.type !== 'folderSelect') {
             setSelectedFile(cmisObject);
         }
     };
@@ -696,5 +704,10 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
         });
     }
 
-    openFolder('/');
+    if (params['path']) openFolder(params['path']);
+    else openFolder('/');
+
+    $scope.$on('$destroy', () => {
+        observer.disconnect();
+    });
 });

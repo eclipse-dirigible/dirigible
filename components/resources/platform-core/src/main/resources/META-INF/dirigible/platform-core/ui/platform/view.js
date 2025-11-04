@@ -74,7 +74,8 @@ if (typeof viewData === 'undefined' && typeof perspectiveData === 'undefined' &&
             getSubviews: getSubviews,
         };
     }).factory('ViewParameters', () => ({
-        get: getViewParameters
+        get: getViewParameters,
+        observe: observeViewParameters
     })).directive('embeddedView', (Views, LocaleService) => ({
         restrict: 'E',
         transclude: false,

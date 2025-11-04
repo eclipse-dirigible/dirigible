@@ -98,7 +98,7 @@
               </thead>
               <tbody bk-table-body>
                 <tr bk-table-row ng-repeat="single in filteredItems = (folder.children | filter: search.filterBy | orderBy: ['-type', 'name']) track by single.id"
-                  selected="browserOptions.multiple ? single.selected : (selectedFile && selectedFile.id === single.id)">
+                  selected="single.selected || (selectedFile && selectedFile.id === single.id)">
                   <td bk-table-cell content-type="checkbox" ng-if="::browserOptions.multiple">
                     <bk-checkbox id="cb-{{single.name}}" ng-model="single.selected" ng-change="selectionChanged()" aria-labelledby="lbl-{{single.name}}"></bk-checkbox>
                     <bk-checkbox-label empty="true" for="cb-{{single.name}}"></bk-checkbox-label>

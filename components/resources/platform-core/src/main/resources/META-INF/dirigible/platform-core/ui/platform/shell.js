@@ -20,7 +20,8 @@ if (window !== top) {
     .value('shellState', {
         perspectiveInternal: {
             id: '',
-            label: ''
+            label: '',
+            params: null,
         },
         perspectiveListeners: [],
         set perspective(newData) {
@@ -247,19 +248,22 @@ if (window !== top) {
                             shellState.perspective = {
                                 id: scope.activeId,
                                 label: label,
+                                params: null,
                             };
                         } else if (scope.config.perspectives[0].items) {
                             scope.activeId = scope.config.perspectives[0].items[0].id;
                             shellState.perspective = {
                                 id: scope.config.perspectives[0].items[0].id,
-                                label: scope.config.perspectives[0].items[0].label
+                                label: scope.config.perspectives[0].items[0].label,
+                                params: null,
                             };
                             saveSelectedPerspective(scope.config.perspectives[0].items[0].id);
                         } else {
                             scope.activeId = scope.config.perspectives[0].id;
                             shellState.perspective = {
                                 id: scope.config.perspectives[0].id,
-                                label: scope.config.perspectives[0].label
+                                label: scope.config.perspectives[0].label,
+                                params: null,
                             };
                             saveSelectedPerspective(scope.config.perspectives[0].id);
                         }
@@ -295,6 +299,7 @@ if (window !== top) {
                     shellState.perspective = {
                         id: id,
                         label: translation ? LocaleService.t(translation.key, translation.options, label) : label,
+                        params: null,
                     };
                 };
 
@@ -320,16 +325,26 @@ if (window !== top) {
                         scope.$evalAsync(() => {
                             shellState.perspective = {
                                 id: data.id,
-                                label: label
+                                label: label,
+                                params: typeof data['params'] === 'object' ? data['params'] : null,
                             };
                         });
                     }
                 });
 
-                scope.getDataParams = (params = {}) => JSON.stringify({
-                    container: 'shell',
-                    ...params
-                });
+                scope.getDataParams = (id, params = {}) => {
+                    if (shellState.perspective.id === id && shellState.perspective['params']) {
+                        return JSON.stringify({
+                            ...shellState.perspective['params'],
+                            ...params,
+                            container: 'shell',
+                        })
+                    }
+                    return JSON.stringify({
+                        ...params,
+                        container: 'shell',
+                    })
+                };
 
                 scope.$on('$destroy', () => {
                     Shell.removeMessageListener(showPerspectiveListener);
@@ -383,9 +398,9 @@ if (window !== top) {
                     </bk-list>
                 </bk-vertical-nav-utility-section>
             </bk-vertical-nav>
-            <iframe ng-repeat-start="perspective in config.perspectives track by perspective.id" ng-if="!perspective.items" ng-show="perspective.id === activeId" title="{{perspective.translation.key | t:perspective.translation.options:perspective.label}}" ng-src="{{::perspective.path}}" data-parameters="{{getDataParams(perspective.params)}}" loading="lazy"></iframe>
-            <iframe ng-repeat-end ng-if="perspective.items" ng-repeat="subperspective in perspective.items track by subperspective.id" ng-show="subperspective.id === activeId" title="{{subperspective.translation.key | t:subperspective.translation.options:subperspective.label}}" ng-src="{{::subperspective.path}}" data-parameters="{{getDataParams(subperspective.params)}}" loading="lazy"></iframe>
-            <iframe ng-repeat="perspective in config.utilities track by perspective.id" ng-show="perspective.id === activeId" title="{{perspective.translation.key | t:perspective.translation.options:perspective.label}}" ng-src="{{::perspective.path}}" data-parameters="{{getDataParams(perspective.params)}}" loading="lazy"></iframe>
+            <iframe ng-repeat-start="perspective in config.perspectives track by perspective.id" ng-if="!perspective.items" ng-show="perspective.id === activeId" title="{{perspective.translation.key | t:perspective.translation.options:perspective.label}}" ng-src="{{::perspective.path}}" data-parameters="{{getDataParams(perspective.id, perspective.params)}}" loading="lazy"></iframe>
+            <iframe ng-repeat-end ng-if="perspective.items" ng-repeat="subperspective in perspective.items track by subperspective.id" ng-show="subperspective.id === activeId" title="{{subperspective.translation.key | t:subperspective.translation.options:subperspective.label}}" ng-src="{{::subperspective.path}}" data-parameters="{{getDataParams(subperspective.id, subperspective.params)}}" loading="lazy"></iframe>
+            <iframe ng-repeat="perspective in config.utilities track by perspective.id" ng-show="perspective.id === activeId" title="{{perspective.translation.key | t:perspective.translation.options:perspective.label}}" ng-src="{{::perspective.path}}" data-parameters="{{getDataParams(perspective.id, perspective.params)}}" loading="lazy"></iframe>
         </div>`,
     })).directive('notifications', (notifications) => ({
         restrict: 'E',

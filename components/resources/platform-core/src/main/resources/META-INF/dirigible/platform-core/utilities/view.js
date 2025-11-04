@@ -64,6 +64,21 @@ function getViewParameters({ vframe = window, attribute = 'data-parameters' } = 
     }
     return {};
 }
+function observeViewParameters({ vframe = window, attribute = 'data-parameters', callback } = {}) {
+    if (!callback) {
+        throw new Error('You must provide a callback function.');
+    }
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type === 'attributes' && mutation.attributeName === attribute) {
+                callback(JSON.parse(vframe.frameElement.getAttribute(attribute) ?? '{}'));
+            }
+        });
+    });
+
+    observer.observe(vframe.frameElement, { attributes: true });
+    return observer;
+}
 function getConfigData() {
     if (typeof viewData !== 'undefined') return viewData;
     else if (typeof perspectiveData !== 'undefined') return perspectiveData;
