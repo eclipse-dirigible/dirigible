@@ -14,7 +14,4 @@ Get-ChildItem -Recurse -Include *.ts -Exclude *.d.ts | ForEach-Object {
 }
 
 # build dts
-# tsc --emitDeclarationOnly --outDir dist\dts
-
-# build types
-tsc --emitDeclarationOnly --outDir dist\types
+tsc --emitDeclarationOnly --outDir dist\dts
