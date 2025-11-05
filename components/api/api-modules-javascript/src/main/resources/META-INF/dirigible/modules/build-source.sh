@@ -12,7 +12,4 @@ esbuild $(find . -iname '*.ts' -not -iname '*.d.ts') '--out-extension:.js=.mjs' 
 esbuild $(find . -iname '*.ts' -not -iname '*.d.ts') --sourcemap=inline --outdir=dist/cjs --format=cjs --target=es2022
 
 # build dts
-#tsc --emitDeclarationOnly --outDir dist/dts
-
-# build types
-tsc --emitDeclarationOnly --outDir dist/types
+tsc --emitDeclarationOnly --outDir dist/dts
