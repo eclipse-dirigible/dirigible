@@ -1,6 +1,6 @@
 {
   "name": "@dirigiblelabs/sdk",
-  "version": "1.8.0",
+  "version": "1.12.0",
   "description": "TypeScript SDK for the Eclipse Dirigible platform.",
   "type": "module",
   "main": "./dist/cjs/index.js",
