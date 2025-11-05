@@ -1,6 +1,6 @@
 {
   "name": "@dirigiblelabs/sdk",
-  "version": "1.21.0",
+  "version": "1.30.0",
   "description": "TypeScript SDK for the Eclipse Dirigible platform.",
   "scripts": {
     "clean": "rm -rf dist",
@@ -25,5 +25,30 @@
   "devDependencies": {
     "esbuild": "^0.24.0",
     "typescript": "^5.7.0"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "package.json"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./*": {
+      "import": "./dist/*/index.js",
+      "types": "./dist/*/index.d.ts"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "dist/*/index.d.ts"
+      ]
+    }
   }
 }
