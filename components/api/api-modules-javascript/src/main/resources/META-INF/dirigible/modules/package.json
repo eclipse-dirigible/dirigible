@@ -1,6 +1,6 @@
 {
   "name": "@dirigiblelabs/sdk",
-  "version": "1.40.0",
+  "version": "1.42.0",
   "description": "TypeScript SDK for the Eclipse Dirigible platform.",
   "scripts": {
     "clean": "rm -rf dist",
