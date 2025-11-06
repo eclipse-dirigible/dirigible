@@ -86,6 +86,10 @@ public class ComponentParser {
                                      .getText());
             }
 
+            if (ctx.decoratorList() == null) {
+                return super.visitClassDeclaration(ctx);
+            }
+
             for (int i = 0; i < ctx.decoratorList()
                                    .decorator()
                                    .size(); i++) {
