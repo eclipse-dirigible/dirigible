@@ -46,6 +46,7 @@ public class ProjectGenerator {
             response.println("Hello World!");
             """;
 
+    // following the settings from the Dirigible new project template
     private static final String TS_CONFIG_CONTENT = """
             {
                 "compilerOptions": {
