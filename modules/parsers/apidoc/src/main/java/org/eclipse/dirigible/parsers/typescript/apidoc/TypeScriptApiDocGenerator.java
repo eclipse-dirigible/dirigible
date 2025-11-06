@@ -109,23 +109,23 @@ public class TypeScriptApiDocGenerator {
             sb.append(model.getFileDocumentation())
               .append("\n\n");
         }
-        
-        String sampleFileMaybe = model.getSourcePath().replace(".ts", ".sample");
+
+        String sampleFileMaybe = model.getSourcePath()
+                                      .replace(".ts", ".sample");
         if (Files.exists(Path.of(sampleFileMaybe))) {
-        	try (FileInputStream in = new FileInputStream(sampleFileMaybe)) {
-	        	sb
-	        		.append("## Usage\n")
-		        	.append("```javascript\n")
-		        	.append(IOUtils.toString(in, StandardCharsets.UTF_8))
-		        	.append("\n```\n")
-		            .append("\n\n");
-        	} catch (FileNotFoundException e) {
-				e.printStackTrace();
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
+            try (FileInputStream in = new FileInputStream(sampleFileMaybe)) {
+                sb.append("## Usage\n")
+                  .append("```javascript\n")
+                  .append(IOUtils.toString(in, StandardCharsets.UTF_8))
+                  .append("\n```\n")
+                  .append("\n\n");
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
-            
+
 
         if (!model.getExportedFunctions()
                   .isEmpty()) {
