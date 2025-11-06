@@ -4,17 +4,21 @@ const UserFacade = Java.type("org.eclipse.dirigible.components.api.security.User
  * @param {string[]} roles
  */
 export function RolesAllowed(roles) {
-    return function (target) {
+    return function (target, _context) {
 
-        const moduleName = target.name || "<anonymous>";
+        const moduleName = target.name || "<unknown>";
 
-        Object.getOwnPropertyNames(target.prototype).forEach(methodName => {
+        for (const methodName of Object.getOwnPropertyNames(target.prototype)) {
 
             if (methodName === "constructor") {
-                return;
+                continue;
             }
 
             const original = target.prototype[methodName];
+
+            if (typeof original !== "function") {
+                continue;
+            }
 
             target.prototype[methodName] = function (...args) {
 
@@ -28,7 +32,7 @@ export function RolesAllowed(roles) {
 
                 return original.apply(this, args);
             };
-        });
+        }
 
         return target;
     };
