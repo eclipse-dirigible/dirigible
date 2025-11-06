@@ -163,6 +163,21 @@ jobs:
 
       #--------------- Publish dirigible-cli to NPM -----------------#
 
+      #--------------- Publish dirigible-sdk to NPM -----------------#
+
+      - name: (dirigible-sdk) Set the new package version
+        working-directory: ./components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules
+        run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
+
+      - name: (dirigible-sdk) Publish the package to npm
+        working-directory: ./components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN_ORG_DIRIGIBLELABS }}
+        run: |
+          npm publish --access public
+
+      #--------------- Publish dirigible-cli to NPM -----------------#
+
       - name: "Git: Push Changes"
         run: |
           git checkout -B ${{ github.event.inputs.releaseVersion }}
