@@ -16,6 +16,7 @@
 
 	<modules>
 		<module>typescript</module>
+		<module>apidoc</module>
 	</modules>
 
 	<properties>

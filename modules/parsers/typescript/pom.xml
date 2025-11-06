@@ -20,6 +20,10 @@
 			<artifactId>antlr4-runtime</artifactId>
 			<version>${antlr4-runtime.version}</version>
 		</dependency>
+		<dependency>
+		    <groupId>commons-codec</groupId>
+		    <artifactId>commons-codec</artifactId>
+		</dependency>
 	</dependencies>
 
 	<properties>
