@@ -34,7 +34,8 @@ public class ProjectGenerator {
                 "start:dev": "dirigible start --watch"
               },
               "devDependencies": {
-                "@dirigiblelabs/dirigible-cli": "latest"
+                "@dirigiblelabs/dirigible-cli": "latest",
+                "@dirigiblelabs/sdk": "latest"
               }
             }
             """;
@@ -43,6 +44,27 @@ public class ProjectGenerator {
             import { response } from "sdk/http";
 
             response.println("Hello World!");
+            """;
+
+    // following the settings from the Dirigible new project template
+    private static final String TS_CONFIG_CONTENT = """
+            {
+                "compilerOptions": {
+                    "module": "ESNext",
+                    "target": "ES6",
+                    "moduleResolution": "Node",
+                    "lib": [
+                        "ESNext",
+                        "DOM"
+                    ],
+                    "paths": {
+                        "sdk/*": [
+                            "./node_modules/@dirigiblelabs/sdk/dist/dts/*"
+                        ]
+                    }
+                }
+
+            }
             """;
 
     public Path generate(String projectName, boolean overrideProject) {
@@ -64,6 +86,8 @@ public class ProjectGenerator {
 
         String packageJsonContent = String.format(PACKAGE_JSON_TEMPLATE, projectName);
         createProjectFile(projectPath, "package.json", packageJsonContent);
+
+        createProjectFile(projectPath, "tsconfig.json", TS_CONFIG_CONTENT);
 
         createProjectFile(projectPath, "hello.ts", HELLO_TS_CONTENT);
 

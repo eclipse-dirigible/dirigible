@@ -9,10 +9,6 @@
  */
 package org.eclipse.dirigible.components.listeners.parser;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -23,52 +19,17 @@ import org.eclipse.dirigible.parsers.typescript.TypeScriptLexer;
 import org.eclipse.dirigible.parsers.typescript.TypeScriptParser;
 import org.eclipse.dirigible.parsers.typescript.TypeScriptParserBaseVisitor;
 
-/**
- * Parser that extracts metadata from TypeScript classes decorated with:
- *
- * <pre>
- * @Listener({
- *     name: "MyListener",
- *     kind: "event"
- * })
- * </pre>
- */
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+
+// Parser that extracts metadata from TypeScript classes decorated with:
+// @Listener({ name: "MyListener", kind: "event" })
 public class ListenerParser {
 
     public static final Map<String, ListenerMetadata> LISTENERS = Collections.synchronizedMap(new HashMap<>());
     public static final Map<String, String> MD5 = Collections.synchronizedMap(new HashMap<>());
 
-    /**
-     * Parses the given TypeScript source and extracts @Listener metadata.
-     *
-     * @param location the file path or name
-     * @param source the TypeScript source code
-     * @return the extracted ListenerMetadata
-     */
-    public ListenerMetadata parse(String location, String source) {
-        String md5 = DigestUtils.md5Hex(source.getBytes());
-        String filename = FilenameUtils.getBaseName(location);
-        String existing = MD5.get(filename);
-
-        if (existing != null && existing.equals(md5)) {
-            return LISTENERS.get(filename);
-        }
-
-        CharStream input = CharStreams.fromString(source);
-        TypeScriptLexer lexer = new TypeScriptLexer(input);
-        CommonTokenStream tokens = new CommonTokenStream(lexer);
-        TypeScriptParser parser = new TypeScriptParser(tokens);
-
-        ParseTree tree = parser.program();
-
-        MetadataExtractorVisitor visitor = new MetadataExtractorVisitor();
-        ListenerMetadata metadata = visitor.visit(tree);
-
-        LISTENERS.put(filename, metadata);
-        MD5.put(filename, md5);
-
-        return metadata;
-    }
 
     /**
      * Extracts @Listener(name, kind) decorator metadata from the TypeScript AST.
@@ -168,5 +129,37 @@ public class ListenerParser {
             }
             return null;
         }
+    }
+
+    /**
+     * Parses the given TypeScript source and extracts @Listener metadata.
+     *
+     * @param location the file path or name
+     * @param source the TypeScript source code
+     * @return the extracted ListenerMetadata
+     */
+    public ListenerMetadata parse(String location, String source) {
+        String md5 = DigestUtils.md5Hex(source.getBytes());
+        String filename = FilenameUtils.getBaseName(location);
+        String existing = MD5.get(filename);
+
+        if (existing != null && existing.equals(md5)) {
+            return LISTENERS.get(filename);
+        }
+
+        CharStream input = CharStreams.fromString(source);
+        TypeScriptLexer lexer = new TypeScriptLexer(input);
+        CommonTokenStream tokens = new CommonTokenStream(lexer);
+        TypeScriptParser parser = new TypeScriptParser(tokens);
+
+        ParseTree tree = parser.program();
+
+        MetadataExtractorVisitor visitor = new MetadataExtractorVisitor();
+        ListenerMetadata metadata = visitor.visit(tree);
+
+        LISTENERS.put(filename, metadata);
+        MD5.put(filename, md5);
+
+        return metadata;
     }
 }

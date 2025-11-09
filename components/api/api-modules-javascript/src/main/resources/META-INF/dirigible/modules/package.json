@@ -1,0 +1,56 @@
+{
+  "name": "@dirigiblelabs/sdk",
+  "version": "1.0.0",
+  "description": "TypeScript SDK for the Eclipse Dirigible platform.",
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "node ./build.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eclipse-dirigible/dirigible.git"
+  },
+  "keywords": [
+    "dirigible-sdk",
+    "dirigible",
+    "sdk",
+    "eclipse"
+  ],
+  "license": "EPL-2.0",
+  "bugs": {
+    "url": "https://github.com/eclipse-dirigible/dirigible/issues"
+  },
+  "homepage": "https://github.com/eclipse-dirigible/dirigible#readme",
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "package.json"
+  ],
+  "module": "./dist/esm/index.mjs",
+  "main": "./dist/cjs/index.js",
+  "types": "./dist/dts/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.mjs",
+      "require": "./dist/cjs/index.js",
+      "types": "./dist/dts/index.d.ts"
+    },
+    "./*": {
+      "import": "./dist/esm/*/index.mjs",
+      "require": "./dist/cjs/*/index.js",
+      "types": "./dist/dts/*/index.d.ts"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "dist/dts/*/index.d.ts"
+      ]
+    }
+  }
+}
