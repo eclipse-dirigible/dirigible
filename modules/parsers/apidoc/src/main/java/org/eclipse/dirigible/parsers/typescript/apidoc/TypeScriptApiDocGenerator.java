@@ -53,7 +53,7 @@ public class TypeScriptApiDocGenerator {
             throw new IllegalArgumentException("rootDir must be a directory");
         }
         if (Files.isDirectory(targetDir)) {
-        	FileUtils.deleteDirectory(targetDir.toFile());
+            FileUtils.deleteDirectory(targetDir.toFile());
         }
         Files.createDirectories(targetDir);
         root = rootDir.toString();
@@ -603,14 +603,13 @@ public class TypeScriptApiDocGenerator {
                   .append("\n");
             }
             return escapeMd(sb.toString()
-                     .trim());
+                              .trim());
         }
     }
-    
+
     private static String escapeMd(String text) {
-        return text
-            .replace("{", "\\{")
-            .replace("}", "\\}");
+        return text.replace("{", "\\{")
+                   .replace("}", "\\}");
     }
 
     public static void main(String[] args) throws IOException {
