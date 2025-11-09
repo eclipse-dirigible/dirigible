@@ -1,9 +1,6 @@
 /**
  * Provides a JavaScript/TypeScript wrapper (Facade) for making synchronous HTTP requests.
  *
- * This client is designed to operate within a JavaScript runtime embedded in a Java Virtual Machine (JVM).
- * It bridges the request logic to a native Java implementation
- * (specifically, 'org.eclipse.dirigible.components.api.http.HttpClientFacade') for execution.
  */
 
 const HttpClientFacade = Java.type("org.eclipse.dirigible.components.api.http.HttpClientFacade");

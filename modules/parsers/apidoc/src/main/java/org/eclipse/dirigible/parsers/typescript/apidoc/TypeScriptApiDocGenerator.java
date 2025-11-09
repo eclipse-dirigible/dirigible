@@ -606,7 +606,6 @@ public class TypeScriptApiDocGenerator {
     public static void main(String[] args) throws IOException {
         Path src = Paths.get("../../../components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules/src");
         Path out = Paths.get("./dist/api");
-        Path work = Paths.get("./");
         TypeScriptApiDocGenerator.generate(src, out);
         MarkdownIndexGenerator.generateMarkdownIndexes(out);
     }

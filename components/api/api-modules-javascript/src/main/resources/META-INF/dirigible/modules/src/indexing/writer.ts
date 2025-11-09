@@ -3,7 +3,6 @@
  * or content to the native indexing service.
  */
 
-/** Imports the native Java class responsible for interacting with the search index. */
 const IndexingFacade = Java.type("org.eclipse.dirigible.components.api.indexing.IndexingFacade");
 
 /**

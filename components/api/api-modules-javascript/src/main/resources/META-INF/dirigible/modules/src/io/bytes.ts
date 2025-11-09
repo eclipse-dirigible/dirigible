@@ -3,7 +3,6 @@
  * facilitating conversions between JavaScript arrays, Java arrays, text, and integers.
  */
 
-/** Imports native Java types required for array manipulation and String representation. */
 const JString = Java.type("java.lang.String");
 const JByte = Java.type("java.lang.Byte");
 const JArray = Java.type("java.lang.reflect.Array");

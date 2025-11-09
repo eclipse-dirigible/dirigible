@@ -1,6 +1,5 @@
 /**
  * Provides a wrapper for managing the application lifecycle (publish/unpublish)
- * via the platform's LifecycleFacade.
  */
 const LifecycleFacade = Java.type("org.eclipse.dirigible.components.api.platform.LifecycleFacade");
 

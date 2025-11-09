@@ -3,8 +3,6 @@
  * managing standard HTTP request parameters, headers, cookies,
  * and request metadata provided to server-side scripting services.
  *
- * It acts as a bridge to the underlying Java-based HTTP request
- * implementation (`HttpRequestFacade`).
  */
 
 import { InputStream, Streams } from "sdk/io/streams";

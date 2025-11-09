@@ -6,11 +6,8 @@
 
 import { OutputStream } from "sdk/io/streams"
 
-/** Imports the native Java class responsible for HTTP response manipulation. */
 const HttpResponseFacade = Java.type("org.eclipse.dirigible.components.api.http.HttpResponseFacade");
-/** Imports Java I/O classes necessary for writing text content with explicit character encoding. */
 const OutputStreamWriter = Java.type("java.io.OutputStreamWriter");
-/** Imports Java utility for character set encoding. */
 const StandardCharsets = Java.type("java.nio.charset.StandardCharsets");
 
 /**

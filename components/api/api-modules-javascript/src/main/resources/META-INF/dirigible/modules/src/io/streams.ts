@@ -4,7 +4,6 @@
  */
 import { Bytes } from "sdk/io/bytes";
 
-/** Imports native Java type for stream operations. */
 const StreamsFacade = Java.type("org.eclipse.dirigible.components.api.io.StreamsFacade");
 
 /**

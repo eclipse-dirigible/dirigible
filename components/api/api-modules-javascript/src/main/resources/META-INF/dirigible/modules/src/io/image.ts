@@ -4,7 +4,6 @@
  */
 import { InputStream } from "sdk/io/streams";
 
-/** Imports native Java type for image processing functionality. */
 const ImageFacade = Java.type("org.eclipse.dirigible.components.api.io.ImageFacade");
 
 /**

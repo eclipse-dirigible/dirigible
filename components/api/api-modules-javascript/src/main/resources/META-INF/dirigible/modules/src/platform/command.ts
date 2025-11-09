@@ -1,5 +1,5 @@
 /**
- * Provides a wrapper for executing system commands via the platform's CommandFacade.
+ * Provides a wrapper for executing system commands via the platform's CommandEngine.
  */
 const CommandFacade = Java.type("org.eclipse.dirigible.components.api.platform.CommandFacade");
 const ProcessExecutionOptions = Java.type("org.eclipse.dirigible.commons.process.execution.ProcessExecutionOptions");

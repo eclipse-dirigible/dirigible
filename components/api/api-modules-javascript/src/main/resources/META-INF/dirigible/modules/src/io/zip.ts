@@ -5,7 +5,6 @@
 import { Bytes } from "sdk/io/bytes";
 import { InputStream, OutputStream } from "sdk/io/streams";
 
-/** Imports native Java type for ZIP operations. */
 const ZipFacade = Java.type("org.eclipse.dirigible.components.api.io.ZipFacade");
 
 /**

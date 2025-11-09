@@ -1,8 +1,6 @@
 /**
  * Provides a JavaScript/TypeScript wrapper (Facade) for making asynchronous HTTP requests.
  *
- * This client operates within a JVM-based JavaScript environment, bridging the async HTTP logic
- * to a native Java implementation using callbacks.
  */
 
 // --- Shared Interfaces (for documentation clarity) ---

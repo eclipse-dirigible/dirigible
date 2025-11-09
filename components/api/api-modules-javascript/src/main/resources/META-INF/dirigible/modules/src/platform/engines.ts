@@ -1,6 +1,3 @@
-/**
- * Provides a wrapper for executing scripts and processes through the platform's EnginesFacade.
- */
 const EnginesFacade = Java.type("org.eclipse.dirigible.components.api.platform.EnginesFacade");
 const HashMap = Java.type("java.util.HashMap");
 
