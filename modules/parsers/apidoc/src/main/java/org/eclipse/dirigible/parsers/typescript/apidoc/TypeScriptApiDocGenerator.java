@@ -602,9 +602,15 @@ public class TypeScriptApiDocGenerator {
                 sb.append(l)
                   .append("\n");
             }
-            return sb.toString()
-                     .trim();
+            return escapeMd(sb.toString()
+                     .trim());
         }
+    }
+    
+    private static String escapeMd(String text) {
+        return text
+            .replace("{", "\\{")
+            .replace("}", "\\}");
     }
 
     public static void main(String[] args) throws IOException {
@@ -612,5 +618,6 @@ public class TypeScriptApiDocGenerator {
         Path out = Paths.get("./dist/api");
         TypeScriptApiDocGenerator.generate(src, out);
         MarkdownIndexGenerator.generateMarkdownIndexes(out);
+        ApiIndexGenerator.generateApiIndexes(out);
     }
 }

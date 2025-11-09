@@ -2,6 +2,7 @@
 
 /**
  * Supported ORM schema:
+ * ```
  * {
  *	 name: <string>,
  *   table: <string>,
@@ -25,7 +26,7 @@
  *     defaults: <Object>,
  *   }]
  * }
- *
+ * ```
  *
  */
 

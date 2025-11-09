@@ -14,9 +14,9 @@ export class Websockets {
 	/**
 	 * Creates a new WebSocket client connection to a specified URI, managed by a handler script.
 	 *
-	 * @param {string} uri The target WebSocket URI (e.g., 'ws://example.com/socket').
-	 * @param {string} handler The identifier or path of the script handling the WebSocket events.
-	 * @returns {WebsocketClient} A wrapper object for the new WebSocket session.
+	 * @param uri The target WebSocket URI (e.g., 'ws://example.com/socket').
+	 * @param handler The identifier or path of the script handling the WebSocket events.
+	 * @returns A wrapper object for the new WebSocket session.
 	 */
 	public static createWebsocket(uri: string, handler: string): WebsocketClient {
 		const session = WebsocketsFacade.createWebsocket(uri, handler);
@@ -26,7 +26,7 @@ export class Websockets {
 	/**
 	 * Retrieves a list of all active WebSocket clients.
 	 *
-	 * @returns {{ uri: string, handler: string }[]} An array of objects detailing the URI and handler of each client.
+	 * @returns An array of objects detailing the URI and handler of each client.
 	 */
 	public static getClients(): { uri: string, handler: string }[] {
 		return JSON.parse(WebsocketsFacade.getClientsAsJson());
@@ -35,8 +35,8 @@ export class Websockets {
 	/**
 	 * Retrieves a specific WebSocket client wrapper by its session ID.
 	 *
-	 * @param {string} id The session ID of the client.
-	 * @returns {WebsocketClient | undefined} The client wrapper or undefined if not found.
+	 * @param id The session ID of the client.
+	 * @returns The client wrapper or undefined if not found.
 	 */
 	public static getClient(id: string): WebsocketClient | undefined {
 		const native = WebsocketsFacade.getClient(id);
@@ -46,8 +46,8 @@ export class Websockets {
 	/**
 	 * Retrieves a specific WebSocket client wrapper by its handler identifier.
 	 *
-	 * @param {string} handler The handler identifier associated with the client.
-	 * @returns {WebsocketClient | undefined} The client wrapper or undefined if not found.
+	 * @param handler The handler identifier associated with the client.
+	 * @returns The client wrapper or undefined if not found.
 	 */
 	public static getClientByHandler(handler: string): WebsocketClient | undefined {
 		const native = WebsocketsFacade.getClientByHandler(handler);
@@ -57,7 +57,7 @@ export class Websockets {
 	/**
 	 * Retrieves the message payload from the current context, typically used inside an 'onmessage' handler.
 	 *
-	 * @returns {any} The message content.
+	 * @returns The message content.
 	 */
 	public static getMessage(): any {
 		return __context.get('message');
@@ -66,7 +66,7 @@ export class Websockets {
 	/**
 	 * Retrieves error details from the current context, typically used inside an 'onerror' handler.
 	 *
-	 * @returns {any} The error object or string.
+	 * @returns The error object or string.
 	 */
 	public static getError(): any {
 		return __context.get('error');
@@ -75,7 +75,7 @@ export class Websockets {
 	/**
 	 * Retrieves the event method name that triggered the current script execution (e.g., "onopen", "onmessage").
 	 *
-	 * @returns {string} The name of the event method.
+	 * @returns The name of the event method.
 	 */
 	public static getMethod(): string {
 		// Assumes __context is a global map provided by the execution environment
@@ -84,7 +84,7 @@ export class Websockets {
 
 	/**
 	 * Checks if the current event context is 'onopen'.
-	 * @returns {boolean} True if the method is 'onopen'.
+	 * @returns True if the method is 'onopen'.
 	 */
 	public static isOnOpen(): boolean {
 		return this.getMethod() === "onopen";
@@ -92,7 +92,7 @@ export class Websockets {
 
 	/**
 	 * Checks if the current event context is 'onmessage'.
-	 * @returns {boolean} True if the method is 'onmessage'.
+	 * @returns True if the method is 'onmessage'.
 	 */
 	public static isOnMessage(): boolean {
 		return this.getMethod() === "onmessage";
@@ -100,7 +100,7 @@ export class Websockets {
 
 	/**
 	 * Checks if the current event context is 'onerror'.
-	 * @returns {boolean} True if the method is 'onerror'.
+	 * @returns True if the method is 'onerror'.
 	 */
 	public static isOnError(): boolean {
 		return this.getMethod() === "onerror";
@@ -108,7 +108,7 @@ export class Websockets {
 
 	/**
 	 * Checks if the current event context is 'onclose'.
-	 * @returns {boolean} True if the method is 'onclose'.
+	 * @returns True if the method is 'onclose'.
 	 */
 	public static isOnClose(): boolean {
 		return this.getMethod() === "onclose";
@@ -126,9 +126,9 @@ class WebsocketClient {
 	private readonly handler: string;
 
 	/**
-	 * @param {null | any} session The native Java session object.
-	 * @param {string} uri The connected URI.
-	 * @param {string} handler The handler identifier.
+	 * @param session The native Java session object.
+	 * @param uri The connected URI.
+	 * @param handler The handler identifier.
 	 */
 	constructor(session: null | any, uri: string, handler: string) {
 		this._session = session;
@@ -138,7 +138,7 @@ class WebsocketClient {
 
 	/**
 	 * Sends a text message over the WebSocket connection.
-	 * @param {string} text The message to send.
+	 * @param text The message to send.
 	 */
 	public send(text: string): void {
 		if (!this._session || this._session === null) {
