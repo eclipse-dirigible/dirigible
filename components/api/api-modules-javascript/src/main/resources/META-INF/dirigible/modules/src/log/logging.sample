@@ -1,0 +1,7 @@
+import { logging } from "sdk/log";
+
+let logger = logging.getLogger("org.eclipse.dirigible.mylogger");
+
+logger.debug("Hello from {}!", "MyLogger");
+logger.error("Oops", new Error("Something wrong happened"));
+logger.error("Oops! Param 1: {}, param 2: {}", "param1Value", "param2Value", new Error("Something wrong happened"));

@@ -1,3 +1,12 @@
+/*
+ * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
+ */
 package org.eclipse.dirigible.parsers.typescript.apidoc;
 
 import java.io.FileInputStream;
@@ -49,6 +58,8 @@ public class TypeScriptApiDocGenerator {
             List<Path> tsFiles = walker.filter(p -> Files.isRegularFile(p))
                                        .filter(p -> p.toString()
                                                      .endsWith(".ts"))
+                                       .filter(p -> !p.toString()
+                                                      .equals("index.ts"))
                                        .collect(Collectors.toList());
 
             for (Path tsFile : tsFiles) {
@@ -172,12 +183,16 @@ public class TypeScriptApiDocGenerator {
                     sb.append("#### Methods\n\n");
                     for (ApiMethod m : c.getMethods()) {
                         sb.append("<hr/>\n\n")
-                          .append("- **")
+                          .append("#### ")
                           .append(m.getName())
-                          .append("** `(")
+                          .append("\n\n")
+                          .append("- `")
+                          .append(m.getName())
+                          .append(" (")
                           .append(String.join(", ", m.getParameters()))
-                          .append(")`")
-                          .append(m.getReturnType() != null ? ": `" + m.getReturnType() + "`" : "")
+                          .append(")")
+                          .append(m.getReturnType() != null ? m.getReturnType() : "")
+                          .append("`")
                           .append("\n\n");
                         if (m.getDocumentation() != null)
                             sb.append("  ")

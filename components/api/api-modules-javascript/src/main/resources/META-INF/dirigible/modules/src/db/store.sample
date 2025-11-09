@@ -1,0 +1,73 @@
+// ---------
+// Entity.ts
+// ---------
+
+@Entity("Customer")
+@Table("CUSTOMER")
+export class Customer {
+
+    @Id()
+    @Generated("sequence")
+    @Column({ name: "CUSTOMER_ID", type: "long" })
+    public id: number;
+
+    @Column({ name: "CUSTOMER_NAME", type: "string" })
+    public name: string;
+
+    @Column({ name: "CUSTOMER_ADDRESS", type: "string" })
+    public address: string;
+}
+
+// ---------
+// Service.ts
+// ---------
+
+import { store } from "sdk/db";
+import { response } from "sdk/http";
+
+// Basic
+
+let entry = { 'name': 'John', 'address': 'Sofia, Bulgaria' };
+
+store.save('Customer', entry);
+
+let list = store.list('Customer');
+
+response.println(JSON.stringify(list));
+
+// Advanced
+
+let entry1 = { 'name': 'John', 'address': 'Sofia, Bulgaria' };
+let entry2 = { 'name': 'Jane', 'address': 'Varna, Bulgaria' };
+let entry3 = { 'name': 'Matthias', 'address': 'Berlin, Germany' };
+
+store.save('Customer', entry1);
+store.save('Customer', entry2);
+store.save('Customer', entry3);
+
+let list = store.list('Customer');
+response.println("List all customers:");
+response.println(JSON.stringify(list, null, 2));
+
+response.println("");
+response.println("Select customers with first name John:");
+let select = store.query("from Customer c where c.name = 'John'");
+response.println(JSON.stringify(select, null, 2));
+
+response.println("");
+response.println("Select native customers with first name John:");
+let selectNative = store.queryNative("select * from Customer c where c.name = 'John'");
+response.println(JSON.stringify(selectNative, null, 2));
+
+response.println("");
+response.println("Find customers by Example:");
+let findByExample = store.find('Customer', {"name":"John"});
+response.println(JSON.stringify(findByExample, null, 2));
+
+response.println("");
+response.println("List customers with filter options:");
+let listWithOptions = store.list('Customer', {"conditions":[{"propertyName":"name","operator":"LIKE","value":"J%"}],"sorts":[{"propertyName":"name","direction":"ASC"}],"limit":"100"});
+response.println(JSON.stringify(listWithOptions, null, 2));
+
+response.flush();
+response.close();

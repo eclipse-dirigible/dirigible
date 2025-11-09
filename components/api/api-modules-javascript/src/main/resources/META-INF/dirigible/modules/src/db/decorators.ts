@@ -1,5 +1,4 @@
 /**
- * @file decorators.ts
  * * ECMAScript 2025-compliant ORM decorator implementation
  * Compatible with GraalJS runtime.
  * * Features:
@@ -85,6 +84,7 @@ function getMetadataArray(constructor: Function): PropertyMetadata[] {
 
 // --- Defer Helper (GraalJS-safe microtask) ---
 function defer(fn: () => void): void {
+  // Uses Promise microtask queue for deferred execution
   Promise.resolve().then(fn);
 }
 
@@ -99,16 +99,17 @@ function createPropertyDecorator(
     }
 
     context.addInitializer(function () {
-      const ctor = (this as any).constructor;
+      const ctor = (this as any).constructor as EntityConstructor;
+      const propertyName = context.name.toString();
       const metadataArray = getMetadataArray(ctor);
 
       let metadata = metadataArray.find(
-        (m) => m.propertyName === context.name.toString()
+        (m) => m.propertyName === propertyName
       );
 
       if (!metadata) {
         metadata = {
-          propertyName: context.name.toString(),
+          propertyName: propertyName,
           isId: false,
           isGenerated: false,
         };
@@ -123,9 +124,12 @@ function createPropertyDecorator(
 }
 
 // --- @Documentation Decorator (Dual-Purpose) ---
+/**
+ * Adds documentation metadata to a class or a field.
+ */
 export function Documentation(description: string) {
   return function (
-    value: any,
+    value: Function | any,
     context: ClassDecoratorContext | ClassFieldDecoratorContext
   ) {
     if (context.kind === "class") {
@@ -135,16 +139,17 @@ export function Documentation(description: string) {
       return value;
     } else if (context.kind === "field") {
       context.addInitializer(function () {
-        const ctor = (this as any).constructor;
+        const ctor = (this as any).constructor as EntityConstructor;
+        const propertyName = context.name.toString();
         const metadataArray = getMetadataArray(ctor);
 
         let metadata = metadataArray.find(
-          (m) => m.propertyName === context.name.toString()
+          (m) => m.propertyName === propertyName
         );
 
         if (!metadata) {
           metadata = {
-            propertyName: context.name.toString(),
+            propertyName: propertyName,
             isId: false,
             isGenerated: false,
           };
@@ -159,9 +164,14 @@ export function Documentation(description: string) {
 
 
 // --- @Entity Decorator ---
+/**
+ * Marks a class as an entity and initiates metadata finalization.
+ * @param entityName The name of the entity (defaults to class name).
+ */
 export function Entity(entityName?: string) {
   return function (value: Function, context: ClassDecoratorContext) {
     context.addInitializer(function () {
+      // Defer execution to ensure all field decorators have run
       defer(() => {
         const ctor = value as EntityConstructor;
 
@@ -176,25 +186,31 @@ export function Entity(entityName?: string) {
 
         if (idMetadata) {
           ctor.$id_name = idMetadata.propertyName;
+          // Determine ID column name: use explicit name or convert property name to upper case
           ctor.$id_column =
             idMetadata.columnOptions?.name ||
             idMetadata.propertyName.toUpperCase();
         }
 
+        // Future: Logic to map all properties to columns/relations goes here
       });
     });
   };
 }
 
 // --- @Table Decorator ---
+/**
+ * Specifies the database table name for the entity.
+ * @param tableName The table name (defaults to uppercase class name).
+ */
 export function Table(tableName?: string) {
-  return function <T extends { new (...args: any[]): {} }>(
+  return function <T extends EntityConstructor>(
     value: T,
     context: ClassDecoratorContext
   ) {
     context.addInitializer(function () {
-      (value as any).$table_name =
-        tableName || (context.name?.toString() ?? value.name?.toUpperCase());
+      (value as EntityConstructor).$table_name =
+        tableName || (context.name?.toString() ?? value.name.toUpperCase());
     });
 
     return value;
@@ -202,12 +218,27 @@ export function Table(tableName?: string) {
 }
 
 // --- Exported Property Decorators ---
+/**
+ * Marks a property as a standard database column.
+ */
 export const Column = (options?: ColumnOptions) =>
   createPropertyDecorator("column", options);
+
+/**
+ * Marks a property as the entity's primary key.
+ */
 export const Id = () => createPropertyDecorator("id");
+
+/**
+ * Marks a property as a generated value (e.g., auto-increment).
+ * @param strategy The generation strategy (e.g., "IDENTITY"). Parameter is currently unused in logic.
+ */
 export const Generated = (strategy: string) =>
   createPropertyDecorator("generated");
 
+/**
+ * Defines a one-to-many relationship.
+ */
 export function OneToMany(
   typeFunction: () => Function,
   options: OneToManyOptions
@@ -216,16 +247,17 @@ export function OneToMany(
     if (context.kind !== "field") return;
 
     context.addInitializer(function () {
-      const ctor = (this as any).constructor;
+      const ctor = (this as any).constructor as EntityConstructor;
+      const propertyName = context.name.toString();
       const metadataArray = getMetadataArray(ctor);
 
       let metadata = metadataArray.find(
-        (m) => m.propertyName === context.name.toString()
+        (m) => m.propertyName === propertyName
       );
 
       if (!metadata) {
         metadata = {
-          propertyName: context.name.toString(),
+          propertyName: propertyName,
           isId: false,
           isGenerated: false,
         };
@@ -237,6 +269,9 @@ export function OneToMany(
   };
 }
 
+/**
+ * Defines a many-to-one relationship.
+ */
 export function ManyToOne(
   typeFunction: () => Function,
   options: ManyToOneOptions = {}
@@ -245,16 +280,17 @@ export function ManyToOne(
     if (context.kind !== "field") return;
 
     context.addInitializer(function () {
-      const ctor = (this as any).constructor;
+      const ctor = (this as any).constructor as EntityConstructor;
+      const propertyName = context.name.toString();
       const metadataArray = getMetadataArray(ctor);
 
       let metadata = metadataArray.find(
-        (m) => m.propertyName === context.name.toString()
+        (m) => m.propertyName === propertyName
       );
 
       if (!metadata) {
         metadata = {
-          propertyName: context.name.toString(),
+          propertyName: propertyName,
           isId: false,
           isGenerated: false,
         };

@@ -1,0 +1,49 @@
+import { dao } from "sdk/mongodb";
+import { response } from "sdk/http";
+
+//create a DAO from configuration
+let customers = dao.create({
+    table: "CUSTOMERS",
+    properties: [{
+        name: "id",
+        column: "ID",
+        type: "BIGINT",
+        id: true
+    }, {
+        name: "orgName",
+        column: "ORG_NAME",
+        type: "VARCHAR",
+        required: true
+    }, {
+        name: "employeesNumber",
+        column: "ORG_EMP_NUM",
+        type: "INTEGER",
+        required: true
+    }, {
+        name: "orgDescription",
+        column: "ORG_DESCR",
+        type: "VARCHAR",
+        required: false
+    }]
+});
+
+//Create a new customer entity
+let customerId = customers.insert({
+    orgName: "ACME",
+    employeesNumber: 1000
+});
+
+response.println("Id: " + customerId);
+
+//List all customer entities
+let customersList = customers.list();
+
+//Get a particular customer entity by its id
+let customer = customers.find(customerId);
+
+//Update a customer entity property
+customer.orgDescription = "ACME is a company";
+customers.update(customer);
+
+//Delete a customer entity
+customers.remove(customerId);

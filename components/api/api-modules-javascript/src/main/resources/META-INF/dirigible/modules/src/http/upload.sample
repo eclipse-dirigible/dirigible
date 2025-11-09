@@ -1,0 +1,41 @@
+import { upload, request, response } from "sdk/http";
+
+if (request.getMethod() === "POST") {
+    if (upload.isMultipartContent()) {
+        const fileItems = upload.parseRequest();
+        for (let i = 0; i < fileItems.size(); i++) {
+            const fileItem = fileItems.get(i);
+            const contentType = fileItem.getContentType();
+            console.log(`Content Type: ${contentType}`);
+            console.log(`Filename: ${fileItem.getOriginalFilename()}`);
+            // console.log(`Text: ${fileItem.getText()}`);
+
+            response.setContentType(contentType);
+            response.write(fileItem.getBytesNative());
+        }
+    } else {
+        response.println("The request's content must be 'multipart'");
+    }
+} else if (request.getMethod() === "GET") {
+    response.println("Use POST request.");
+}
+
+response.flush();
+response.close();
+
+
+// -----------
+// upload.html
+// -----------
+
+<!DOCTYPE html>
+<html>
+    <body>
+        <form action="/services/js/http-tests/upload/upload.js" method="post" enctype="multipart/form-data">
+            <label for="file">Filename:</label>
+            <input type="file" name="file" id="file" multiple>
+            <br>
+            <input type="submit" name="submit" value="Submit">
+        </form>
+    </body>
+</html>

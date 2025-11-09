@@ -1,0 +1,37 @@
+// ----------------
+// OrderListener.ts
+// ----------------
+
+import { Listener } from "sdk/messaging";
+
+@Listener({
+    name: "sample-listener-decorator/OrderListener",
+    kind: "queue"
+})
+export class OrderListener {
+    public static onMessage(message: string) {
+        console.log("Processing message event:", message);
+    }
+
+    public static onError(error: string) {
+        console.log("Processing error event:", error);
+    }
+}
+
+export function onMessage(message: string) {
+    OrderListener.onMessage(message);
+};
+
+export function onError(error: string) {
+    OrderListener.onError(error);
+};
+
+
+// -----------------------
+// OrderListenerTrigger.ts
+// -----------------------
+
+let producer = require('messaging/producer');
+let message = "[ I am a message created at: " + new Date() + " ]";
+producer.queue("sample-listener-decorator/OrderListener").send(message);
+console.log("Hello from the OrderListener Trigger! Message: " + message);

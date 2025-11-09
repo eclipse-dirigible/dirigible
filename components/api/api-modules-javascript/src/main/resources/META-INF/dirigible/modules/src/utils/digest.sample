@@ -1,0 +1,8 @@
+import { digest } from "sdk/utils";
+import { response } from "sdk/http";
+
+response.println("" + digest.sha256("admin:admin"));
+response.println("" + digest.sha512("YWRtaW46YWRtaW4="));
+
+response.flush();
+response.close();

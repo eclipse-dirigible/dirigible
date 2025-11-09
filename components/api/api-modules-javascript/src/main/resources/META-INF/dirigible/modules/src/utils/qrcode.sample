@@ -1,0 +1,11 @@
+import { qrcode } from "sdk/utils";
+import { response } from "sdk/http";
+
+let qrCodeBytes = qrcode.generateQRCode("https://www.dirigible.io");
+
+console.log("QR Code Bytes: " + qrCodeBytes);
+
+response.setContentType('image/png')
+response.write(qrCodeBytes);
+response.flush();
+response.close();

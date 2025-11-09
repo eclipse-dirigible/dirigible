@@ -1,0 +1,8 @@
+import { uuid } from "sdk/utils";
+import { response } from "sdk/http";
+
+response.println(uuid.random());
+response.println(JSON.stringify(uuid.validate("14a3ddce-f86d-4f51-a2e0-6e497b94bbe5")));
+
+response.flush();
+response.close();

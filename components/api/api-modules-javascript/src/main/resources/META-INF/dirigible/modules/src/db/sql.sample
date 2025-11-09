@@ -1,0 +1,9 @@
+import { sql } from "sdk/db";
+import { response } from "sdk/http";
+
+let script = sql.getDialect().select().column("FIRST_NAME").column("LAST_NAME").from("CUSTOMERS").build();
+
+response.println(script);
+
+response.flush();
+response.close();

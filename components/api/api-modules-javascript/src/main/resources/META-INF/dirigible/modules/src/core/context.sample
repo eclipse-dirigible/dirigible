@@ -1,0 +1,9 @@
+import { context } from "sdk/core";
+import { response } from "sdk/http";
+
+context.set("attr1", "value1");
+let attr = context.get("attr1");
+
+response.println("[Attribute]: " + attr);
+response.flush();
+response.close();

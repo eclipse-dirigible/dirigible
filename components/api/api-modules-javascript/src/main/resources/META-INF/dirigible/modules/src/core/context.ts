@@ -1,27 +1,28 @@
-/*
- * Copyright (c) 2025 Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
 /**
  * API Context
+ * * Provides a static interface for accessing and manipulating key-value pairs in a global, application-wide context.
  */
 
 const ContextFacade = Java.type("org.eclipse.dirigible.components.api.core.ContextFacade");
 
 export class Context {
 
+	/**
+	 * Retrieves the value associated with the specified name from the global context.
+	 * @param name The name of the context variable.
+	 * @returns The context value, or `undefined` if the name is not found or the value is null.
+	 */
 	public static get(name: string): any | undefined {
 		const value = ContextFacade.get(name)
 		return value ?? undefined;
 	}
 
+	/**
+	 * Stores a value in the global context under the specified name.
+	 * If the name already exists, its value is overwritten.
+	 * @param name The name of the context variable.
+	 * @param value The value to store.
+	 */
 	public static set(name: string, value: any): void {
 		ContextFacade.set(name, value);
 	}

@@ -1,0 +1,12 @@
+import { client } from "sdk/mail";
+import { response } from "sdk/http";
+
+const sender = "dirigible@eclipse.org";
+const to = "example@gmail.com";
+const subject = "Subject";
+const content = "<h1>Content<h1>";
+const subType = "html";
+
+client.send(sender, to, subject, content, subType);
+
+response.println("Mail sent");

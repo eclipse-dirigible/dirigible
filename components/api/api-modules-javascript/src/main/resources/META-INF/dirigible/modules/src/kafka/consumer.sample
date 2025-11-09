@@ -1,0 +1,25 @@
+// --------
+// start.ts
+// --------
+
+import { consumer } from "sdk/kafka";
+consumer.topic("topic1", "{}").startListening("my-kafka-project/my-kafka-handler", 1000);
+
+// -------------------
+// my-kafka-handler.ts
+// -------------------
+
+exports.onMessage = function(message) {
+    console.log("Hello from My Kafka Listener! Message: " + message);
+};
+
+exports.onError = function(error) {
+    console.error("Error from My Kafka Listener! Error: " + error);
+};
+
+// -------
+// stop.ts
+// -------
+
+import { consumer } from "sdk/kafka";
+consumer.topic("topic1", "{}").stopListening();

@@ -1,0 +1,16 @@
+import { query, update } from "sdk/db";
+import { response } from "sdk/http";
+
+update.execute("CREATE TABLE MY_TABLE (COLUMN_A INT)", [], "DefaultDB");
+
+update.execute("INSERT INTO MY_TABLE VALUES (1)", [], "DefaultDB");
+
+let resultSetBefore = query.execute("SELECT COLUMN_A FROM MY_TABLE", [], "DefaultDB");
+response.println("Value before update: " + JSON.stringify(resultSetBefore));
+
+update.execute("UPDATE MY_TABLE SET COLUMN_A = 2", [], "DefaultDB");
+
+let resultSetAfter = query.execute("SELECT COLUMN_A FROM MY_TABLE", [], "DefaultDB");
+response.println("Value after update: " + JSON.stringify(resultSetAfter));
+
+update.execute("DROP TABLE MY_TABLE", [], "DefaultDB");

@@ -1,0 +1,12 @@
+import { response } from "sdk/http";
+import { configurations } from "sdk/core";
+
+configurations.set("ENV_VAR_1", "ENV_VAR_1");
+configurations.set("ENV_VAR_2", "ENV_VAR_2");
+
+let credentials = {
+    envVar1: configurations.get("ENV_VAR_1"),
+    envVar2: configurations.get("ENV_VAR_2")
+};
+
+response.println(JSON.stringify(credentials));

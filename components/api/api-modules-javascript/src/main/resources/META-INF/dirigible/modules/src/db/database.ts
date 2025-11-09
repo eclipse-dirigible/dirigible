@@ -1,14 +1,3 @@
-/*
- * Copyright (c) 2025 Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
 /**
  * API Database
  *
@@ -25,7 +14,10 @@ const StringWriter = Java.type("java.io.StringWriter");
 const WriterOutputStream = Java.type("org.apache.commons.io.output.WriterOutputStream");
 const StandardCharsets = Java.type("java.nio.charset.StandardCharsets");
 
-const SQLTypes = Object.freeze({
+/**
+ * Mapping of SQL type names to their java.sql.Types integer constants.
+ */
+export const SQLTypes = Object.freeze({
 	"BOOLEAN": 16,
 	"DATE": 91,
 	"TIME": 92,
@@ -53,25 +45,21 @@ export enum DatabaseSystem {
 	UNKNOWN, DERBY, POSTGRESQL, H2, MARIADB, HANA, SNOWFLAKE, MYSQL, MONGODB, SYBASE
 }
 
+// --- Metadata Interfaces ---
+
 export interface TableMetadata {
 	/** The name. */
 	readonly name: string;
-
 	/** The type. */
 	readonly type: string;
-
 	/** The remarks. */
 	readonly remarks: string;
-
 	/** The columns. */
 	readonly columns: ColumnMetadata[];
-
 	/** The indices. */
 	readonly indices: IndexMetadata[];
-
 	/** The indices. */
 	readonly foreignKeys: ForeignKeyMetadata[];
-
 	/** The kind. */
 	readonly kind: string;
 }
@@ -79,121 +67,78 @@ export interface TableMetadata {
 export interface ColumnMetadata {
 	/** The name. */
 	readonly name: string;
-
 	/** The type. */
 	readonly type: string;
-
 	/** The size. */
 	readonly size: number;
-
 	/** The nullable. */
 	readonly nullable: boolean;
-
 	/** The key. */
 	readonly key: boolean;
-
 	/** The kind. */
 	readonly kind: string;
-
 	/** The scale. */
 	readonly scale: number;
 }
 
 export interface IndexMetadata {
-
 	/** The name. */
 	readonly name: string;
-
 	/** The type. */
 	readonly type: string;
-
 	/** The column. */
 	readonly column: string;
-
 	/** The non unique. */
 	readonly nonUnique: boolean;
-
 	/** The qualifier. */
 	readonly qualifier: string;
-
 	/** The ordinal position. */
 	readonly ordinalPosition: string;
-
 	/** The sort order. */
 	readonly sortOrder: string;
-
 	/** The cardinality. */
 	readonly cardinality: number;
-
 	/** The pages. */
 	readonly pages: number;
-
 	/** The filter condition. */
 	readonly filterCondition: string;
-
 	/** The kind. */
 	readonly kind: string;
 }
 
 export interface ForeignKeyMetadata {
-
 	/** The name. */
 	readonly name: string;
-
 	/** The kind. */
 	readonly kind: string;
 }
 
 export interface SchemaMetadata {
-	/**
-		 * The name.
-		 */
+	/** The name. */
 	readonly name: string;
-
-	/**
-	 * The kind.
-	 */
+	/** The kind. */
 	readonly kind: string;
-
-	/**
-	 * The tables.
-	 */
+	/** The tables. */
 	readonly tables: TableMetadata[];
-
-	/**
-	 * The views.
-	 */
+	/** The views. */
 	readonly views: TableMetadata[];
-
-	/**
-	 * The procedures.
-	 */
+	/** The procedures. */
 	readonly procedures: ProcedureMetadata[];
-
-	/**
-	 * The functions.
-	 */
+	/** The functions. */
 	readonly functions: FunctionMetadata[];
-
-	/**
-	 * The functions.
-	 */
+	/** The functions. */
 	readonly sequences: SequenceMetadata[];
 }
 
 export interface ProcedureMetadata {
 	/** The name. */
 	readonly name: string;
-
 	/** The type. */
 	readonly type: string;
-
 	/** The remarks. */
 	readonly remarks: string;
-
 	/** The columns. */
 	readonly columns: ParameterColumnMetadata[];
-
 	/** The kind. */
 	readonly kind: string;
 }
@@ -201,16 +146,12 @@ export interface ProcedureMetadata {
 export interface FunctionMetadata {
 	/** The name. */
 	readonly name: string;
-
 	/** The type. */
 	readonly type: string;
-
 	/** The remarks. */
 	readonly remarks: string;
-
 	/** The columns. */
 	readonly columns: ParameterColumnMetadata[];
-
 	/** The kind. */
 	readonly kind: string;
 }
@@ -218,590 +159,290 @@ export interface FunctionMetadata {
 export interface ParameterColumnMetadata {
 	/** The name. */
 	readonly name: string;
-
 	/** The kind. */
 	readonly kind: number;
-
 	/** The type. */
 	readonly type: string;
-
 	/** The precision. */
 	readonly precision: number;
-
 	/** The length. */
 	readonly length: number;
-
 	/** The scale. */
 	readonly scale: number;
-
 	/** The radix. */
 	readonly radix: number;
-
 	/** The nullable. */
 	readonly nullable: boolean;
-
 	/** The remarks. */
 	readonly remarks: string;
 }
 
 export interface SequenceMetadata {
-
 	/** The name. */
 	readonly name: string;
-
 	/** The kind. */
 	readonly kind: string;
 }
 
 export interface DatabaseMetadata {
-
-	/** The all procedures are callable. */
 	readonly allProceduresAreCallable: boolean;
-
-	/** The all tables are selectable. */
 	readonly allTablesAreSelectable: boolean;
-
-	/** The URL. */
 	readonly url: string;
-
-	/** The user name. */
 	readonly userName: string;
-
-	/** The is read only. */
 	readonly isReadOnly: boolean;
-
-	/** The nulls are sorted high. */
 	readonly nullsAreSortedHigh: boolean;
-
-	/** The nulls are sorted low. */
 	readonly nullsAreSortedLow: boolean;
-
-	/** The nulls are sorted at start. */
 	readonly nullsAreSortedAtStart: boolean;
-
-	/** The nulls are sorted at end. */
 	readonly nullsAreSortedAtEnd: boolean;
-
-	/** The database product name. */
 	readonly databaseProductName: string;
-
-	/** The database product version. */
 	readonly databaseProductVersion: string;
-
-	/** The driver name. */
 	readonly driverName: string;
-
-	/** The driver version. */
 	readonly driverVersion: string;
-
-	/** The driver major version. */
 	readonly driverMajorVersion: number;
-
-	/** The driver minor version. */
 	readonly driverMinorVersion: number;
-
-	/** The uses local files. */
 	readonly usesLocalFiles: boolean;
-
-	/** The uses local file per table. */
 	readonly usesLocalFilePerTable: boolean;
-
-	/** The supports mixed case identifiers. */
 	readonly supportsMixedCaseIdentifiers: boolean;
-
-	/** The stores upper case identifiers. */
 	readonly storesUpperCaseIdentifiers: boolean;
-
-	/** The stores lower case identifiers. */
 	readonly storesLowerCaseIdentifiers: boolean;
-
-	/** The stores mixed case identifiers. */
 	readonly storesMixedCaseIdentifiers: boolean;
-
-	/** The supports mixed case quoted identifiers. */
 	readonly supportsMixedCaseQuotedIdentifiers: boolean;
-
-	/** The stores upper case quoted identifiers. */
 	readonly storesUpperCaseQuotedIdentifiers: boolean;
-
-	/** The stores lower case quoted identifiers. */
 	readonly storesLowerCaseQuotedIdentifiers: boolean;
-
-	/** The stores mixed case quoted identifiers. */
 	readonly storesMixedCaseQuotedIdentifiers: boolean;
-
-	/** The identifier quote string. */
 	readonly identifierQuoteString: string;
-
-	/** The sql keywords. */
 	readonly sqlKeywords: string;
-
-	/** The numeric functions. */
 	readonly numericFunctions: string;
-
-	/** The string functions. */
 	readonly stringFunctions: string;
-
-	/** The system functions. */
 	readonly systemFunctions: string;
-
-	/** The time date functions. */
 	readonly timeDateFunctions: string;
-
-	/** The search string escape. */
 	readonly searchStringEscape: string;
-
-	/** The extra name characters. */
 	readonly extraNameCharacters: string;
-
-	/** The supports alter table with add column. */
 	readonly supportsAlterTableWithAddColumn: boolean;
-
-	/** The supports alter table with drop column. */
 	readonly supportsAlterTableWithDropColumn: boolean;
-
-	/** The supports column aliasing. */
 	readonly supportsColumnAliasing: boolean;
-
-	/** The null plus non null is null. */
 	readonly nullPlusNonNullIsNull: boolean;
-
-	/** The supports convert. */
 	readonly supportsConvert: boolean;
-
-	/** The supports table correlation names. */
 	readonly supportsTableCorrelationNames: boolean;
-
-	/** The supports different table correlation names. */
 	readonly supportsDifferentTableCorrelationNames: boolean;
-
-	/** The supports expressions in order by. */
 	readonly supportsExpressionsInOrderBy: boolean;
-
-	/** The supports order by unrelated. */
 	readonly supportsOrderByUnrelated: boolean;
-
-	/** The supports group by. */
 	readonly supportsGroupBy: boolean;
-
-	/** The supports group by unrelated. */
 	readonly supportsGroupByUnrelated: boolean;
-
-	/** The supports group by beyond select. */
 	readonly supportsGroupByBeyondSelect: boolean;
-
-	/** The supports like escape clause. */
 	readonly supportsLikeEscapeClause: boolean;
-
-	/** The supports multiple result sets. */
 	readonly supportsMultipleResultSets: boolean;
-
-	/** The supports multiple transactions. */
 	readonly supportsMultipleTransactions: boolean;
-
-	/** The supports non nullable columns. */
 	readonly supportsNonNullableColumns: boolean;
-
-	/** The supports minimum SQL grammar. */
 	readonly supportsMinimumSQLGrammar: boolean;
-
-	/** The supports core SQL grammar. */
 	readonly supportsCoreSQLGrammar: boolean;
-
-	/** The supports extended SQL grammar. */
 	readonly supportsExtendedSQLGrammar: boolean;
-
-	/** The supports ANSI 92 entry level SQL. */
 	readonly supportsANSI92EntryLevelSQL: boolean;
-
-	/** The supports ANSI 92 intermediate SQL. */
 	readonly supportsANSI92IntermediateSQL: boolean;
-
-	/** The supports ANSI 92 full SQL. */
 	readonly supportsANSI92FullSQL: boolean;
-
-	/** The supports integrity enhancement facility. */
 	readonly supportsIntegrityEnhancementFacility: boolean;
-
-	/** The supports outer joins. */
 	readonly supportsOuterJoins: boolean;
-
-	/** The supports full outer joins. */
 	readonly supportsFullOuterJoins: boolean;
-
-	/** The supports limited outer joins. */
 	readonly supportsLimitedOuterJoins: boolean;
-
-	/** The schema term. */
 	readonly schemaTerm: string;
-
-	/** The procedure term. */
 	readonly procedureTerm: string;
-
-	/** The catalog term. */
 	readonly catalogTerm: string;
-
-	/** The is catalog at start. */
 	readonly isCatalogAtStart: boolean;
-
-	/** The catalog separator. */
 	readonly catalogSeparator: string;
-
-	/** The supports schemas in data manipulation. */
 	readonly supportsSchemasInDataManipulation: boolean;
-
-	/** The supports schemas in procedure calls. */
 	readonly supportsSchemasInProcedureCalls: boolean;
-
-	/** The supports schemas in table definitions. */
 	readonly supportsSchemasInTableDefinitions: boolean;
-
-	/** The supports schemas in index definitions. */
 	readonly supportsSchemasInIndexDefinitions: boolean;
-
-	/** The supports schemas in privilege definitions. */
 	readonly supportsSchemasInPrivilegeDefinitions: boolean;
-
-	/** The supports catalogs in data manipulation. */
 	readonly supportsCatalogsInDataManipulation: boolean;
-
-	/** The supports catalogs in procedure calls. */
 	readonly supportsCatalogsInProcedureCalls: boolean;
-
-	/** The supports catalogs in table definitions. */
 	readonly supportsCatalogsInTableDefinitions: boolean;
-
-	/** The supports catalogs in index definitions. */
 	readonly supportsCatalogsInIndexDefinitions: boolean;
-
-	/** The supports catalogs in privilege definitions. */
 	readonly supportsCatalogsInPrivilegeDefinitions: boolean;
-
-	/** The supports positioned delete. */
 	readonly supportsPositionedDelete: boolean;
-
-	/** The supports positioned update. */
 	readonly supportsPositionedUpdate: boolean;
-
-	/** The supports select for update. */
 	readonly supportsSelectForUpdate: boolean;
-
-	/** The supports stored procedures. */
 	readonly supportsStoredProcedures: boolean;
-
-	/** The supports subqueries in comparisons. */
 	readonly supportsSubqueriesInComparisons: boolean;
-
-	/** The supports subqueries in exists. */
 	readonly supportsSubqueriesInExists: boolean;
-
-	/** The supports subqueries in ins. */
 	readonly supportsSubqueriesInIns: boolean;
-
-	/** The supports subqueries in quantifieds. */
 	readonly supportsSubqueriesInQuantifieds: boolean;
-
-	/** The supports correlated subqueries. */
 	readonly supportsCorrelatedSubqueries: boolean;
-
-	/** The supports union. */
 	readonly supportsUnion: boolean;
-
-	/** The supports union all. */
 	readonly supportsUnionAll: boolean;
-
-	/** The supports open cursors across commit. */
 	readonly supportsOpenCursorsAcrossCommit: boolean;
-
-	/** The supports open cursors across rollback. */
 	readonly supportsOpenCursorsAcrossRollback: boolean;
-
-	/** The supports open statements across commit. */
 	readonly supportsOpenStatementsAcrossCommit: boolean;
-
-	/** The supports open statements across rollback. */
 	readonly supportsOpenStatementsAcrossRollback: boolean;
-
-	/** The max binary literal length. */
 	readonly maxBinaryLiteralLength: number;
-
-	/** The max char literal length. */
 	readonly maxCharLiteralLength: number;
-
-	/** The max column name length. */
 	readonly maxColumnNameLength: number;
-
-	/** The max columns in group by. */
 	readonly maxColumnsInGroupBy: number;
-
-	/** The max columns in index. */
 	readonly maxColumnsInIndex: number;
-
-	/** The max columns in order by. */
 	readonly maxColumnsInOrderBy: number;
-
-	/** The max columns in select. */
 	readonly maxColumnsInSelect: number;
-
-	/** The max columns in table. */
 	readonly maxColumnsInTable: number;
-
-	/** The max connections. */
 	readonly maxConnections: number;
-
-	/** The max cursor name length. */
 	readonly maxCursorNameLength: number;
-
-	/** The max index length. */
 	readonly maxIndexLength: number;
-
-	/** The max schema name length. */
 	readonly maxSchemaNameLength: number;
-
-	/** The max procedure name length. */
 	readonly maxProcedureNameLength: number;
-
-	/** The max catalog name length. */
 	readonly maxCatalogNameLength: number;
-
-	/** The max row size. */
 	readonly maxRowSize: number;
-
-	/** The max row size include blobs. */
 	readonly maxRowSizeIncludeBlobs: boolean;
-
-	/** The max statement length. */
 	readonly maxStatementLength: number;
-
-	/** The max statements. */
 	readonly maxStatements: number;
-
-	/** The max table name length. */
 	readonly maxTableNameLength: number;
-
-	/** The max tables in select. */
 	readonly maxTablesInSelect: number;
-
-	/** The max user name length. */
 	readonly maxUserNameLength: number;
-
-	/** The default transaction isolation. */
 	readonly defaultTransactionIsolation: number;
-
-	/** The supports transactions. */
 	readonly supportsTransactions: boolean;
-
-	/** The supports data definition and data manipulation transactions. */
 	readonly supportsDataDefinitionAndDataManipulationTransactions: boolean;
-
-	/** The supports data manipulation transactions only. */
 	readonly supportsDataManipulationTransactionsOnly: boolean;
-
-	/** The data definition causes transaction commit. */
 	readonly dataDefinitionCausesTransactionCommit: boolean;
-
-	/** The data definition ignored in transactions. */
 	readonly dataDefinitionIgnoredInTransactions: boolean;
-
-	/** The supports batch updates. */
 	readonly supportsBatchUpdates: boolean;
-
-	/** The supports savepoints. */
 	readonly supportsSavepoints: boolean;
-
-	/** The supports named parameters. */
 	readonly supportsNamedParameters: boolean;
-
-	/** The supports multiple open results. */
 	readonly supportsMultipleOpenResults: boolean;
-
-	/** The supports get generated keys. */
 	readonly supportsGetGeneratedKeys: boolean;
-
-	/** The result set holdability. */
 	readonly resultSetHoldability: number;
-
-	/** The database major version. */
 	readonly databaseMajorVersion: number;
-
-	/** The database minor version. */
 	readonly databaseMinorVersion: number;
-
-	/** The JDBC major version. */
 	readonly jdbcMajorVersion: number;
-
-	/** The JDBC minor version. */
 	readonly jdbcMinorVersion: number;
-
-	/** The SQL state type. */
 	readonly sqlStateType: number;
-
-	/** The locators update copy. */
 	readonly locatorsUpdateCopy: boolean;
-
-	/** The supports statement pooling. */
 	readonly supportsStatementPooling: boolean;
-
-	/** The supports stored functions using call syntax. */
 	readonly supportsStoredFunctionsUsingCallSyntax: boolean;
-
-	/** The auto commit failure closes all result sets. */
 	readonly autoCommitFailureClosesAllResultSets: boolean;
-
-	/** The generated key always returned. */
 	readonly generatedKeyAlwaysReturned: boolean;
-
-	/** The max logical lob size. */
 	readonly maxLogicalLobSize: number;
-
-	/** The supports ref cursors. */
 	readonly supportsRefCursors: boolean;
-
-	/** The schemas. */
 	readonly schemas: SchemaMetadata[];
-
-	/** The kind. */
 	readonly kind: string;
 }
 
-export class Database {
+// --- Helper Functions ---
 
-	public static getDataSources(): string[] {
-		const datasources = DatabaseFacade.getDataSources();
-		return datasources ? JSON.parse(datasources) : [];
+function isHanaDatabase(connection: any): boolean {
+	let isHanaDatabase = false;
+	let metadata = connection.getMetaData();
+	if (metadata !== null && metadata !== undefined) {
+		isHanaDatabase = metadata.getDatabaseProductName() === "HDB";
 	}
+	return isHanaDatabase;
+}
 
-	public static getMetadata(datasourceName?: string): DatabaseMetadata | undefined {
-		const metadata = DatabaseFacade.getMetadata(datasourceName);
-		return metadata ? JSON.parse(metadata) : undefined;
-	}
+function readClobValue(value: any): string | any {
+	return value ? value.getSubString(1, value.length()) : value;
+}
 
-	public static getProductName(datasourceName?: string): string {
-		return DatabaseFacade.getProductName(datasourceName);
-	}
-
-	public static getConnection(datasourceName?: string): Connection {
-		return new Connection(datasourceName);
+function createClobValue(native: any, value: any): any {
+	try {
+		let connection = native.getConnection(); // intentionally not closed
+		if (connection === null || connection === undefined) {
+			throw new Error("Can't create new 'Clob' value as the connection is null");
+		}
+		let clob = null;
+		if (isHanaDatabase(connection)) {
+			let ps = null;
+			try {
+				ps = connection.prepareStatement("SELECT TO_CLOB (?) FROM DUMMY;");
+				ps.setString(1, value);
+				let rs = ps.executeQuery();
+				if (rs.next()) {
+					clob = rs.getClob(1);
+				}
+			} finally {
+				if (ps !== null && ps !== undefined) {
+					ps.close();
+				}
+			}
+		} else {
+			clob = connection.createClob();
+			clob.setString(1, value);
+		}
+		return clob;
+	} catch (e: any) {
+		throw new Error(`Error occured during creation of 'Clob' value: ${e.message}`);
 	}
 }
 
-/**
- * Connection object
- */
-export class Connection {
+function readNClobValue(value: any): string | any {
+	return value ? value.getSubString(1, value.length()) : value;
+}
 
-	public readonly native: any;
-
-	constructor(datasourceName?: string) {
-		this.native = DatabaseFacade.getConnection(datasourceName);
-	}
-
-	public isOfType(databaseSystem: DatabaseSystem): boolean {
-		return this.getDatabaseSystem() === databaseSystem;
-	}
-
-	public getDatabaseSystem(): DatabaseSystem {
-		const dbSystem = this.native.getDatabaseSystem().name();
-		switch (dbSystem) {
-			case "DERBY":
-				return DatabaseSystem.DERBY;
-			case "POSTGRESQL":
-				return DatabaseSystem.POSTGRESQL;
-			case "H2":
-				return DatabaseSystem.H2;
-			case "MARIADB":
-				return DatabaseSystem.MARIADB;
-			case "HANA":
-				return DatabaseSystem.HANA;
-			case "SNOWFLAKE":
-				return DatabaseSystem.SNOWFLAKE;
-			case "MYSQL":
-				return DatabaseSystem.MYSQL;
-			case "MONGODB":
-				return DatabaseSystem.MONGODB;
-			case "SYBASE":
-				return DatabaseSystem.SYBASE;
-			case "UNKNOWN":
-				return DatabaseSystem.UNKNOWN;
-			default:
-				throw Error(`Missing mapping for database system type ${dbSystem}`);
+function createNClobValue(native: any, value: any): any {
+	try {
+		let connection = native.getConnection(); // intentionally not closed
+		if (connection === null || connection === undefined) {
+			throw new Error("Can't create new 'NClob' value as the connection is null");
 		}
-	}
-
-	public prepareStatement(sql: string): PreparedStatement {
-		return new PreparedStatement(this.native.prepareStatement(sql));
-	}
-
-	public prepareCall(sql: string): CallableStatement {
-		return new CallableStatement(this.native.prepareCall(sql));
-	}
-
-	public close(): void {
-		if (!this.isClosed()) {
-			this.native.close();
+		let nclob = null;
+		if (isHanaDatabase(connection)) {
+			let ps = null;
+			try {
+				ps = connection.prepareStatement("SELECT TO_NCLOB (?) FROM DUMMY;");
+				ps.setString(1, value);
+				let rs = ps.executeQuery();
+				if (rs.next()) {
+					nclob = rs.getNClob(1);
+				}
+			} finally {
+				if (ps !== null && ps !== undefined) {
+					ps.close();
+				}
+			}
+		} else {
+			nclob = connection.createNClob();
+			nclob.setString(1, value);
 		}
-	}
-
-	public commit(): void {
-		this.native.commit();
-	}
-
-	public getAutoCommit(): boolean {
-		return this.native.getAutoCommit();
-	}
-
-	public getCatalog(): string {
-		return this.native.getCatalog();
-	}
-
-	public getSchema(): string {
-		return this.native.getSchema();
-	}
-
-	public getTransactionIsolation(): number {
-		return this.native.getTransactionIsolation();
-	}
-
-	public isClosed(): boolean {
-		return this.native.isClosed();
-	}
-
-	public isReadOnly(): boolean {
-		return this.native.isReadOnly();
-	}
-
-	public isValid(): boolean {
-		return this.native.isValid();
-	}
-
-	public rollback(): void {
-		this.native.rollback();
-	}
-
-	public setAutoCommit(autoCommit: boolean): void {
-		this.native.setAutoCommit(autoCommit);
-	}
-
-	public setCatalog(catalog: string): void {
-		this.native.setCatalog(catalog);
-	}
-
-	public setReadOnly(readOnly: boolean): void {
-		this.native.setReadOnly(readOnly);
-	}
-
-	public setSchema(schema: string): void {
-		this.native.setSchema(schema);
-	}
-
-	public setTransactionIsolation(transactionIsolation: number): void {
-		this.native.setTransactionIsolation(transactionIsolation);
-	}
-
-	public getMetaData(): any /*: DatabaseMetaData*/ {
-		return this.native.getMetaData();
+		return nclob;
+	} catch (e: any) {
+		throw new Error(`Error occured during creation of 'NClob' value: ${e.message}`);
 	}
 }
+
+function createBlobValue(native: any, value: any): any {
+	try {
+		let connection = native.getConnection(); // intentionally not closed
+		if (connection === null || connection === undefined) {
+			throw new Error("Can't create new 'Blob' value as the connection is null");
+		}
+		let blob = null;
+		if (isHanaDatabase(connection)) {
+			let ps = null;
+			try {
+				ps = connection.prepareStatement("SELECT TO_BLOB (?) FROM DUMMY;");
+				ps.setBytes(1, value);
+				let rs = ps.executeQuery();
+				if (rs.next()) {
+					blob = rs.getBlob(1);
+				}
+			} finally {
+				if (ps !== null && ps !== undefined) {
+					ps.close();
+				}
+			}
+		} else {
+			blob = connection.createBlob();
+			blob.setBytes(1, value);
+		}
+		return blob;
+	} catch (e: any) {
+		throw new Error(`Error occured during creation of 'Clob' value: ${e.message}`);
+	}
+}
+
+function getDateValue(value: string | Date): Date {
+	if (typeof value === "string") {
+		return new Date(value);
+	}
+	return value;
+}
+
+// --- Statement Classes ---
 
 /**
  * Statement object
@@ -814,7 +455,7 @@ export class PreparedStatement {
 		this.native = native;
 	}
 
-	public close() {
+	public close(): void {
 		this.native.close();
 	}
 
@@ -923,7 +564,7 @@ export class PreparedStatement {
 		}
 	}
 
-	public setFloat(index: number, value: number): void {
+	public setFloat(index: number, value?: number): void {
 		if (value !== null && value !== undefined) {
 			this.native.setFloat(index, value);
 		} else {
@@ -1094,15 +735,18 @@ export class CallableStatement {
 	}
 
 	public getDate(parameterIndex: number): Date {
-		return this.native.getDate(parameterIndex);
+		const dateInstance = this.native.getDate(parameterIndex);
+		return dateInstance !== null && dateInstance !== undefined ? new Date(dateInstance.getTime()) : dateInstance;
 	}
 
 	public getTime(parameterIndex: number): Date {
-		return this.native.getTime(parameterIndex);
+		const dateInstance = this.native.getTime(parameterIndex);
+		return dateInstance !== null && dateInstance !== undefined ? new Date(dateInstance.getTime()) : dateInstance;
 	}
 
 	public getTimestamp(parameterIndex: number): Date {
-		return this.native.getTimestamp(parameterIndex);
+		const dateInstance = this.native.getTimestamp(parameterIndex);
+		return dateInstance !== null && dateInstance !== undefined ? new Date(dateInstance.getTime()) : dateInstance;
 	}
 
 	public getObject(parameterIndex: number): any {
@@ -1168,7 +812,7 @@ export class CallableStatement {
 	}
 
 	public setNull(parameterIndex: number, sqlTypeStr: keyof typeof SQLTypes | number, typeName?: string): void {
-		const sqlType: number = Number.isInteger(sqlTypeStr) ? sqlTypeStr : SQLTypes[sqlTypeStr];
+		const sqlType: number = Number.isInteger(sqlTypeStr as number) ? sqlTypeStr as number : SQLTypes[sqlTypeStr as keyof typeof SQLTypes];
 		if (typeName !== undefined && typeName !== null) {
 			this.native.setNull(parameterIndex, sqlType, typeName);
 		} else {
@@ -1283,7 +927,7 @@ export class CallableStatement {
 		}
 	}
 
-	public setAsciiStream(parameterIndex: number, inputStream: InputStream, length: number): void {
+	public setAsciiStream(parameterIndex: number, inputStream: InputStream, length?: number): void {
 		if (length) {
 			this.native.setAsciiStream(parameterIndex, inputStream, length);
 		} else {
@@ -1291,7 +935,7 @@ export class CallableStatement {
 		}
 	}
 
-	public setBinaryStream(parameterIndex: number, inputStream: InputStream, length: number): void {
+	public setBinaryStream(parameterIndex: number, inputStream: InputStream, length?: number): void {
 		if (length) {
 			this.native.setBinaryStream(parameterIndex, inputStream, length);
 		} else {
@@ -1299,7 +943,7 @@ export class CallableStatement {
 		}
 	}
 
-	public setObject(parameterIndex: number, value: any, targetSqlType: number, scale: number): void {
+	public setObject(parameterIndex: number, value: any, targetSqlType?: number, scale?: number): void {
 		if (scale !== undefined && scale !== null && targetSqlType !== undefined && targetSqlType !== null) {
 			this.native.setObject(parameterIndex, value, targetSqlType, scale);
 		} else if (targetSqlType !== undefined && targetSqlType !== null) {
@@ -1325,7 +969,7 @@ export class CallableStatement {
 		if (value !== null && value !== undefined) {
 			this.native.setSQLXML(parameterIndex, value);
 		} else {
-			throw Error("Nullable SQLXML type not supported.");
+			throw new Error("Nullable SQLXML type not supported.");
 		}
 	}
 
@@ -1388,6 +1032,12 @@ export class ResultSet {
 		this.native = native;
 	}
 
+	/**
+	 * Converts the ResultSet into a JSON array of objects.
+	 * @param limited Whether to use limited JSON conversion (optimized).
+	 * @param stringify Whether to return the JSON as a string or a parsed array.
+	 * @returns A JavaScript array of objects representing the result set, or a string if stringify is true.
+	 */
 	public toJson(limited = false, stringify = false): any[] {
 		const sw = new StringWriter();
 		const output = WriterOutputStream
@@ -1396,7 +1046,8 @@ export class ResultSet {
 			.setCharset(StandardCharsets.UTF_8)
 			.get();
 		DatabaseResultSetHelper.toJson(this.native, limited, stringify, output);
-		return JSON.parse(sw.toString());
+		const jsonString = sw.toString();
+		return stringify ? jsonString : JSON.parse(jsonString);
 	}
 
 	public close(): void {
@@ -1437,7 +1088,7 @@ export class ResultSet {
 		return readClobValue(this.native.getClob(identifier));
 	}
 
-	public getNClob = function (identifier: number | string): any /*: sql.NClob*/ {
+	public getNClob(identifier: number | string): any /*: sql.NClob*/ {
 		return readNClobValue(this.native.getNClob(identifier));
 	}
 
@@ -1513,125 +1164,183 @@ export class ResultSet {
 	}
 }
 
-function isHanaDatabase(connection) {
-	let isHanaDatabase = false;
-	let metadata = connection.getMetaData();
-	if (metadata !== null && metadata !== undefined) {
-		isHanaDatabase = metadata.getDatabaseProductName() === "HDB";
+// --- Connection Class ---
+
+/**
+ * Connection object wrapper around a native Java `Connection`.
+ */
+export class Connection {
+
+	public readonly native: any;
+
+	constructor(datasourceName?: string) {
+		this.native = DatabaseFacade.getConnection(datasourceName);
 	}
-	return isHanaDatabase;
-}
 
-function createBlobValue(native, value) {
-	try {
-		let connection = native.getConnection(); // intentionally not closed
-		if (connection === null || connection === undefined) {
-			throw new Error("Can't create new 'Blob' value as the connection is null");
+	/**
+	 * Checks if the connection is for a specific database system.
+	 */
+	public isOfType(databaseSystem: DatabaseSystem): boolean {
+		return this.getDatabaseSystem() === databaseSystem;
+	}
+
+	/**
+	 * Returns the type of the underlying database system as a {@link DatabaseSystem} enum.
+	 */
+	public getDatabaseSystem(): DatabaseSystem {
+		const dbSystem: string = this.native.getDatabaseSystem().name();
+		switch (dbSystem) {
+			case "DERBY":
+				return DatabaseSystem.DERBY;
+			case "POSTGRESQL":
+				return DatabaseSystem.POSTGRESQL;
+			case "H2":
+				return DatabaseSystem.H2;
+			case "MARIADB":
+				return DatabaseSystem.MARIADB;
+			case "HANA":
+				return DatabaseSystem.HANA;
+			case "SNOWFLAKE":
+				return DatabaseSystem.SNOWFLAKE;
+			case "MYSQL":
+				return DatabaseSystem.MYSQL;
+			case "MONGODB":
+				return DatabaseSystem.MONGODB;
+			case "SYBASE":
+				return DatabaseSystem.SYBASE;
+			case "UNKNOWN":
+				return DatabaseSystem.UNKNOWN;
+			default:
+				throw new Error(`Missing mapping for database system type ${dbSystem}`);
 		}
-		let blob = null;
-		if (isHanaDatabase(connection)) {
-			let ps = null;
-			try {
-				ps = connection.prepareStatement("SELECT TO_BLOB (?) FROM DUMMY;");
-				ps.setBytes(1, value);
-				let rs = ps.executeQuery();
-				if (rs.next()) {
-					blob = rs.getBlob(1);
-				}
-			} finally {
-				if (ps !== null && ps !== undefined) {
-					ps.close();
-				}
-			}
-		} else {
-			blob = connection.createBlob();
-			blob.setBytes(1, value);
+	}
+
+	/**
+	 * Creates a new {@link PreparedStatement} object for sending parameterized SQL statements to the database.
+	 */
+	public prepareStatement(sql: string): PreparedStatement {
+		return new PreparedStatement(this.native.prepareStatement(sql));
+	}
+
+	/**
+	 * Creates a {@link CallableStatement} object for calling database stored procedures or functions.
+	 */
+	public prepareCall(sql: string): CallableStatement {
+		return new CallableStatement(this.native.prepareCall(sql));
+	}
+
+	public close(): void {
+		if (!this.isClosed()) {
+			this.native.close();
 		}
-		return blob;
-	} catch (e) {
-		throw new Error(`Error occured during creation of 'Clob' value: ${e.message}`);
+	}
+
+	public commit(): void {
+		this.native.commit();
+	}
+
+	public getAutoCommit(): boolean {
+		return this.native.getAutoCommit();
+	}
+
+	public getCatalog(): string {
+		return this.native.getCatalog();
+	}
+
+	public getSchema(): string {
+		return this.native.getSchema();
+	}
+
+	public getTransactionIsolation(): number {
+		return this.native.getTransactionIsolation();
+	}
+
+	public isClosed(): boolean {
+		return this.native.isClosed();
+	}
+
+	public isReadOnly(): boolean {
+		return this.native.isReadOnly();
+	}
+
+	public isValid(): boolean {
+		return this.native.isValid();
+	}
+
+	public rollback(): void {
+		this.native.rollback();
+	}
+
+	public setAutoCommit(autoCommit: boolean): void {
+		this.native.setAutoCommit(autoCommit);
+	}
+
+	public setCatalog(catalog: string): void {
+		this.native.setCatalog(catalog);
+	}
+
+	public setReadOnly(readOnly: boolean): void {
+		this.native.setReadOnly(readOnly);
+	}
+
+	public setSchema(schema: string): void {
+		this.native.setSchema(schema);
+	}
+
+	public setTransactionIsolation(transactionIsolation: number): void {
+		this.native.setTransactionIsolation(transactionIsolation);
+	}
+
+	public getMetaData(): any /*: DatabaseMetaData*/ {
+		return this.native.getMetaData();
 	}
 }
 
-function readClobValue(value) {
-	return value ? value.getSubString(1, value.length()) : value;
-}
+// --- Database Class ---
 
-function createClobValue(native, value) {
-	try {
-		let connection = native.getConnection(); // intentionally not closed
-		if (connection === null || connection === undefined) {
-			throw new Error("Can't create new 'Clob' value as the connection is null");
-		}
-		let clob = null;
-		if (isHanaDatabase(connection)) {
-			let ps = null;
-			try {
-				ps = connection.prepareStatement("SELECT TO_CLOB (?) FROM DUMMY;");
-				ps.setString(1, value);
-				let rs = ps.executeQuery();
-				if (rs.next()) {
-					clob = rs.getClob(1);
-				}
-			} finally {
-				if (ps !== null && ps !== undefined) {
-					ps.close();
-				}
-			}
-		} else {
-			clob = connection.createClob();
-			clob.setString(1, value);
-		}
-		return clob;
-	} catch (e) {
-		throw new Error(`Error occured during creation of 'Clob' value: ${e.message}`);
+export class Database {
+
+	/**
+	 * Returns a list of available data source names.
+	 */
+	public static getDataSources(): string[] {
+		const datasources = DatabaseFacade.getDataSources();
+		return datasources ? JSON.parse(datasources) : [];
 	}
-}
 
-function readNClobValue(value) {
-	return value ? value.getSubString(1, value.length()) : value;
-}
-
-function createNClobValue(native, value) {
-	try {
-		let connection = native.getConnection(); // intentionally not closed
-		if (connection === null || connection === undefined) {
-			throw new Error("Can't create new 'NClob' value as the connection is null");
-		}
-		let nclob = null;
-		if (isHanaDatabase(connection)) {
-			let ps = null;
-			try {
-				ps = connection.prepareStatement("SELECT TO_NCLOB (?) FROM DUMMY;");
-				ps.setString(1, value);
-				let rs = ps.executeQuery();
-				if (rs.next()) {
-					nclob = rs.getNClob(1);
-				}
-			} finally {
-				if (ps !== null && ps !== undefined) {
-					ps.close();
-				}
-			}
-		} else {
-			nclob = connection.createNClob();
-			nclob.setString(1, value);
-		}
-		return nclob;
-	} catch (e) {
-		throw new Error(`Error occured during creation of 'NClob' value: ${e.message}`);
+	/**
+	 * Returns database metadata for the specified data source.
+	 */
+	public static getMetadata(datasourceName?: string): DatabaseMetadata | undefined {
+		const metadata = DatabaseFacade.getMetadata(datasourceName);
+		return metadata ? JSON.parse(metadata) : undefined;
 	}
-}
 
-function getDateValue(value) {
-	if (typeof value === "string") {
-		return new Date(value);
+	/**
+	 * Returns the product name of the underlying database system.
+	 */
+	public static getProductName(datasourceName?: string): string {
+		return DatabaseFacade.getProductName(datasourceName);
 	}
-	return value;
+
+	/**
+	 * Gets a new database connection object.
+	 */
+	public static getConnection(datasourceName?: string): Connection {
+		return new Connection(datasourceName);
+	}
 }
 
 // @ts-ignore
 if (typeof module !== 'undefined') {
 	// @ts-ignore
-	module.exports = Database;
+	module.exports = {
+		Database,
+		Connection,
+		PreparedStatement,
+		CallableStatement,
+		ResultSet,
+		DatabaseSystem,
+		SQLTypes
+	};
 }

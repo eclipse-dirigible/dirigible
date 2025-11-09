@@ -1,0 +1,7 @@
+import { alphanumeric } from "sdk/utils";
+import { response } from "sdk/http";
+
+response.println(alphanumeric.toAlphanumeric("@mystring123!#="));
+
+response.flush();
+response.close();

@@ -1,0 +1,8 @@
+import { workspace } from "sdk/platform";
+import { response } from "sdk/http";
+
+let workspacesNames = workspace.getWorkspacesNames();
+
+response.println("Workspaces: " + workspacesNames);
+response.flush();
+response.close();

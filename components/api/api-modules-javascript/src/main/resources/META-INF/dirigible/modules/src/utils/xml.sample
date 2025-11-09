@@ -1,0 +1,27 @@
+import { xml } from "sdk/utils";
+import { response } from "sdk/http";
+
+const jsonInput = {
+    firstName: "John",
+    lastName: "Doe",
+    bio: {
+        age: 24,
+        sex: "male"
+    }
+};
+
+const xmlInput =
+    "<person>" +
+    "<firstName>John</firstName>" +
+    "<lastName>Doe</lastName>" +
+    "<bio>" +
+    "<age>24</age>" +
+    "<sex>male</sex>" +
+    "</bio>" +
+    "</person>";
+
+response.println(xml.fromJson(JSON.stringify(jsonInput)));
+response.println(xml.toJson(xmlInput));
+
+response.flush();
+response.close();

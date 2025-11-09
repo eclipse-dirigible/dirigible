@@ -1,0 +1,8 @@
+import { session, response } from "sdk/http";
+
+session.setAttribute("attr1", "value1");
+let attr = session.getAttribute("attr1");
+
+response.println("[Attribute]: " + attr);
+response.flush();
+response.close();

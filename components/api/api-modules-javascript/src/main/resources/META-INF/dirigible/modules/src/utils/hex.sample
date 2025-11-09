@@ -1,0 +1,8 @@
+import { hex } from "sdk/utils";
+import { response } from "sdk/http";
+
+response.println(hex.encode("Hex Encoded"));
+response.println(hex.decode("48657820456e636f646564"));
+
+response.flush();
+response.close();

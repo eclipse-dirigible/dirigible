@@ -1,0 +1,10 @@
+import { Problems } from "sdk/platform";
+import { response } from "sdk/http";
+
+problems.save("/my-project/my-file", Problems.ACTIVE, "line: 4", "row: 10", "", "Some problem / at line 4", "Expected end of line ;", "ProblemsModule", "my-file.mjs", "my-file.mjs");
+
+const myProblems = Problems.fetchAllProblems();
+
+response.println(JSON.stringify(myProblems));
+
+Problems.clearAllProblems();

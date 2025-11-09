@@ -1,0 +1,4 @@
+import { bytes } from "sdk/io"
+
+console.log(bytes.textToByteArray("Hello World"));
+console.log(bytes.byteArrayToText([72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100]));

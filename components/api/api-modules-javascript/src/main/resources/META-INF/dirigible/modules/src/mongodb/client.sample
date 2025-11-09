@@ -1,0 +1,21 @@
+import { client } from "sdk/mongodb";
+import { response } from "sdk/http";
+
+let mongoClient = client.getClient();
+
+let collection = mongoClient.getDB("db").getCollection("people");
+
+let person = client.createBasicDBObject()
+    .append("_id", "jo")
+    .append("name", "Jo Bloggs");
+// or directly create an Object:
+// const person = {"_id": "jo", "name": "Jo Bloggs"};
+collection.insert(person);
+
+let query = client.createBasicDBObject().append("_id", "jo");
+let cursor = collection.find(query)
+let result = cursor.one();
+
+response.println("Result: " + result._id);
+response.flush();
+response.close();

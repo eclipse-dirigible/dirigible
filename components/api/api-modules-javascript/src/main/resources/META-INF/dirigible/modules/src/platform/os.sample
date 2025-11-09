@@ -1,0 +1,12 @@
+import { OS } from "sdk/platform";
+
+if (OS.isWindows()) {
+    // Windows logic here
+}
+
+if (OS.isUnix()) {
+    // Unix logic here
+}
+
+const osName = OS.OS_NAME;
+console.log("OS is: " + osName);

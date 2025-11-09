@@ -1,0 +1,25 @@
+// --------
+// start.ts
+// --------
+
+import { consumer } from "sdk/rabbitmq";
+consumer.startListening("rabbitmq-queue", "my-rabbitmq-project/my-rabbitmq-handler");
+
+// ----------------------
+// my-rabbitmq-handler.ts
+// ----------------------
+
+exports.onMessage = function(message) {
+    console.log("Hello from My RabbitMQ Listener! Message: " + message);
+};
+
+exports.onError = function(error) {
+    console.error("Error from My RabbitMQ Listener! Error: " + error);
+};
+
+// -------
+// stop.ts
+// -------
+
+import { consumer } from "sdk/rabbitmq";
+consumer.stopListening("rabbitmq-queue", "my-rabbitmq-project/my-rabbitmq-handler");

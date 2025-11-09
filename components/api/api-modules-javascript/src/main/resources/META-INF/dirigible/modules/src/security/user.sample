@@ -1,0 +1,7 @@
+import { user } from "sdk/security";
+import { response } from "sdk/http";
+
+response.println("[UserName]: " + user.getName());
+response.println("[Is in Role]: " + user.isInRole("Developer"));
+response.flush();
+response.close();

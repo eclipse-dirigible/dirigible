@@ -1,0 +1,10 @@
+import { client } from "sdk/redis";
+import { response } from "sdk/http";
+
+const redisClient = client.getClient();
+
+redisClient.set("foo", "bar");
+
+const data = redisClient.get("foo");
+
+response.println(data);

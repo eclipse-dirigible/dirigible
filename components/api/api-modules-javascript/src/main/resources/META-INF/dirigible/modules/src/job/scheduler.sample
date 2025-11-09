@@ -1,0 +1,6 @@
+import { scheduler } from "sdk/job";
+
+let job = scheduler.getJob("/sample-job/myjob.job");
+let param = job.getParameter("myParam");
+
+console.log('Param is: ' + param);

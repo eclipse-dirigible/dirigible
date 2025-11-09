@@ -1,0 +1,10 @@
+import { engines } from "sdk/template"
+import { response } from "sdk/http";
+
+let mustache = engines.getMustacheEngine();
+let generated = mustache.generate('Hello {{name}}', [['name', 'John Smith']]);
+
+response.println(generated);
+
+response.flush();
+response.close();

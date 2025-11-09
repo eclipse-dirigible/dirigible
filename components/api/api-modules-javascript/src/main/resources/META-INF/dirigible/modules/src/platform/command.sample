@@ -1,0 +1,8 @@
+import { command } from "sdk/platform";
+import { response } from "sdk/http";
+
+let result = command.execute("echo 'hello dirigible!'");
+
+response.println("[Result]: " + result);
+response.flush();
+response.close();

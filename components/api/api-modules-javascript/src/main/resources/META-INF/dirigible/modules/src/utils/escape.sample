@@ -1,0 +1,10 @@
+import { escape } from "sdk/utils";
+import { response } from "sdk/http";
+
+const input = "<script type='text/javascript'>alert('evil script')</script>";
+const result = escape.escapeJavascript(input);
+
+response.println(result);
+
+response.flush();
+response.close();

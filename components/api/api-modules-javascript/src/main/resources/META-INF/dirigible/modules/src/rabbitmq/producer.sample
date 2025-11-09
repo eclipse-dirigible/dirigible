@@ -1,0 +1,2 @@
+import { producer } from "sdk/rabbitmq";
+producer.send("rabbitmq-queue", "My RabbitMQ message");

@@ -1,0 +1,8 @@
+import { Engine } from "sdk/platform";
+import { response } from "sdk/http";
+
+let result = new Engine("javascript").execute("project1", "hello.js", "", {});
+
+response.println(JSON.stringify(result));
+response.flush();
+response.close();

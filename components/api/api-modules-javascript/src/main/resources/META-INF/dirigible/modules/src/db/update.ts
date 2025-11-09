@@ -1,25 +1,32 @@
-/*
- * Copyright (c) 2025 Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
-
 const DatabaseFacade = Java.type("org.eclipse.dirigible.components.api.db.DatabaseFacade");
 
+/**
+ * Interface used for complex parameter types if needed, otherwise primitive types are used directly.
+ */
 export interface UpdateParameter {
 	readonly value: any;
 }
 
+/**
+ * Facade class for executing SQL UPDATE, INSERT, and DELETE statements.
+ */
 export class Update {
 
+	/**
+	 * Executes a parameterized SQL update statement (INSERT, UPDATE, or DELETE).
+	 *
+	 * @param sql The SQL statement to execute.
+	 * @param parameters Optional array of parameters to bind to the SQL statement (replaces '?').
+	 * These are serialized to JSON before being passed to the native API.
+	 * @param datasourceName Optional name of the data source to use. Defaults to the primary data source.
+	 * @returns The number of rows affected by the statement.
+	 */
 	public static execute(sql: string, parameters?: (string | number | boolean | Date | UpdateParameter)[], datasourceName?: string): number {
-		const result = DatabaseFacade.update(sql, parameters ? JSON.stringify(parameters) : undefined, datasourceName);
+		// Serialize parameters to a JSON string if they exist, otherwise pass undefined.
+		const parametersJson = parameters ? JSON.stringify(parameters) : undefined;
+		
+		const result = DatabaseFacade.update(sql, parametersJson, datasourceName);
+		
 		return result;
 	}
 }

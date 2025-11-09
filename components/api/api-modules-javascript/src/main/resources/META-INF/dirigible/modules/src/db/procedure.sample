@@ -1,0 +1,36 @@
+// Create Procedure
+
+import { procedure } from "sdk/db";
+import { response } from "sdk/http";
+
+const sql = " \
+CREATE PROCEDURE CUSTOMERS_BY_COUNTRY_AND_ALL_CUSTOMERS(c_id integer, c_name text, c_country text) \
+LANGUAGE SQL \
+AS $$ \
+  INSERT INTO CUSTOMERS(id, name, country) values (c_id, c_name, c_country); \
+$$; \
+"
+
+procedure.create(sql, "psql");
+
+response.println("Procedure created");
+response.flush();
+response.close();
+
+
+// Call Procedure
+
+import { query, procedure } from "sdk/db";
+import { response } from "sdk/http";
+
+const sql = "CALL CUSTOMERS_BY_COUNTRY_AND_ALL_CUSTOMERS(c_id => ?, c_name => ?, c_country => ?)";
+
+try {
+    procedure.execute(sql, [6, "IBM", "USA"], "psql");
+} finally {
+    let result = query.execute("SELECT * FROM CUSTOMERS", [], "psql");
+
+    response.println(JSON.stringify(result));
+    response.flush();
+    response.close();
+}

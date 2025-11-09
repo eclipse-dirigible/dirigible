@@ -1,0 +1,10 @@
+import { Scheduled } from "sdk/job"
+
+@Scheduled({ expression: "0/10 * * * * ?" })
+export class MyJob {
+    run() {
+        console.log("MyJob executed!");
+    }
+}
+
+new MyJob().run();

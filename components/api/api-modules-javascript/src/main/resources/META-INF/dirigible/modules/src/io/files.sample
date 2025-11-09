@@ -1,0 +1,8 @@
+import { files } from "sdk/io";
+
+let tempFile = files.createTempFile("temp", ".txt");
+
+console.log("Temp file: " + tempFile);
+
+files.writeText(tempFile, "Some text");
+files.deleteFile(tempFile);

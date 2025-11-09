@@ -1,0 +1,17 @@
+import { bytes } from "sdk/io";
+import { user } from "sdk/security";
+import { workspace, lifecycle } from "sdk/platform";
+import { response } from "sdk/http";
+
+const currentUser = user.getName();
+const workspaceName = "workspace";
+const projectName = "project";
+
+let myWorkspace = workspace.createWorkspace(workspaceName);
+let myProject = myWorkspace.createProject(projectName);
+let myFile = myProject.createFile("file.js");
+myFile.setContent(bytes.textToByteArray("console.log('Hello World!');"));
+
+let publishResult = lifecycle.publish(currentUser, workspaceName, projectName);
+
+response.println("publishResult: " + publishResult)

@@ -1,0 +1,20 @@
+// manipulating process variables throughout the execution context
+import { process } from "sdk/bpm";
+
+// Hello from the Enterprise Javascript delegate
+console.info("Hello from the Javascript Engine!");
+
+let execution = process.getExecutionContext();
+
+process.setVariable(execution.getId(), "variable2", "value2");
+try {
+    console.info("variable1: " + process.getVariable(execution.getId(), "variable1"));
+    console.info("variable2: " + process.getVariable(execution.getId(), "variable2"));
+} catch (e) {
+    if (e instanceof Error) {
+        console.error(e.message);
+    } else {
+        console.error("Something went wrong", e)
+    }
+
+}

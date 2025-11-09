@@ -1,0 +1,23 @@
+import { query } from "sdk/db";
+import { response } from "sdk/http";
+
+// Regular
+
+const sql = "SELECT * FROM DIRIGIBLE_EXTENSIONS WHERE EXTENSION_EXTENSIONPOINT_NAME = ?";
+let resultset = query.execute(sql, ["ide-editor"], "SystemDB");
+
+response.println(JSON.stringify(resultset));
+
+// Typed Parameters
+
+const sql = "SELECT * FROM DIRIGIBLE_EXTENSIONS WHERE EXTENSION_EXTENSIONPOINT_NAME = ?";
+let resultset = query.execute(sql, [{ "type": "VARCHAR", "value": "ide-editor" }], "SystemDB");
+
+response.println(JSON.stringify(resultset));
+
+// Named Parameters
+
+const sql = "SELECT * FROM DIRIGIBLE_EXTENSIONS WHERE EXTENSION_EXTENSIONPOINT_NAME = :editor";
+let resultset = query.executeNamed(sql, [{ "name": "editor", "type": "VARCHAR", "value": "ide-editor" }], "SystemDB");
+
+response.println(JSON.stringify(resultset));

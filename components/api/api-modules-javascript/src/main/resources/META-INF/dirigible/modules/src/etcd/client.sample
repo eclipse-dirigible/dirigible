@@ -1,0 +1,20 @@
+// Load the etcd client module.
+import { etcd } from "sdk/etcd";
+
+// Initialize the etcd client.
+let etcdClient = etcd.getClient();
+
+// Put key-value pair where the value is a string.
+etcdClient.putStringValue("foo", "bar");
+
+// Get key-value pair where value will be returned as a string.
+etcdClient.getKvsStringValue("foo"); // => { "foo": "bar" }
+
+// Put key-value pair where the value is a byte array.
+etcdClient.putByteArrayValue("foo", [98, 97, 114]);
+
+// Get key-value pair where value will be returned as a byte array.
+etcdClient.getKvsByteArrayValue("foo"); // => { "foo": [98, 97, 114] }
+
+// Delete key-value pair.
+etcdClient.delete("foo");
