@@ -28,6 +28,7 @@ import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.parsers.typescript.TypeScriptLexer;
@@ -50,6 +51,9 @@ public class TypeScriptApiDocGenerator {
     public static void generate(Path rootDir, Path targetDir) throws IOException {
         if (!Files.isDirectory(rootDir)) {
             throw new IllegalArgumentException("rootDir must be a directory");
+        }
+        if (Files.isDirectory(targetDir)) {
+        	FileUtils.deleteDirectory(targetDir.toFile());
         }
         Files.createDirectories(targetDir);
         root = rootDir.toString();
