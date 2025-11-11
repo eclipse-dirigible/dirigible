@@ -92,6 +92,10 @@ function fixPath(path, mod) {
         fixedPath = fixedPath.substring("sdk".length)
     }
 
+    if (fixedPath.startsWith("@aerokit/sdk")) {
+        fixedPath = fixedPath.substring("@aerokit/sdk".length)
+    }
+
     for (const mod of mods) {
         if (fixedPath.startsWith(mod + "/") && !fixedPath.includes("path-to-regexp")) {
             fixedPath = `modules/dist/cjs/${mod}/${fixedPath.substring(mod.length + 1)}`;
