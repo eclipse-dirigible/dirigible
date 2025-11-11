@@ -42,7 +42,7 @@ public class ProjectGenerator {
 
     private static final String HELLO_TS_CONTENT = """
             import { response } from "@aerokit/sdk/http";
-            
+
             response.println("Hello World!");
             """;
 
@@ -63,7 +63,7 @@ public class ProjectGenerator {
                         ]
                     }
                 }
-            
+
             }
             """;
 

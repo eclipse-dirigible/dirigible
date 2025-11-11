@@ -17,14 +17,13 @@ import java.util.List;
 public class DirigibleModulesMetadata {
 
     /** The Constant PURE_ESM_MODULES. */
-    private static final List<String> PURE_ESM_MODULES =
-            List.of("@aerokit/sdk/http", "@aerokit/sdk/io", "@aerokit/sdk/bpm", "@aerokit/sdk/cache", "@aerokit/sdk/cms",
-                    "@aerokit/sdk/component", "@aerokit/sdk/core", "@aerokit/sdk/db", "@aerokit/sdk/etcd", "@aerokit/sdk/extensions",
-                    "@aerokit/sdk/git", "@aerokit/sdk/indexing", "@aerokit/sdk/job", "@aerokit/sdk/kafka", "@aerokit/sdk/log",
-                    "@aerokit/sdk/mail", "@aerokit/sdk/messaging", "@aerokit/sdk/mongodb", "@aerokit/sdk/net", "@aerokit/sdk/pdf",
-                    "@aerokit/sdk/platform", "@aerokit/sdk/qldb", "@aerokit/sdk/rabbitmq", "@aerokit/sdk/redis", "@aerokit/sdk/user",
-                    "@aerokit/sdk/template", "@aerokit/sdk/utils", "@aerokit/sdk/junit", "@aerokit/sdk/integrations",
-                    "@aerokit/sdk/security");
+    private static final List<String> PURE_ESM_MODULES = List.of("@aerokit/sdk/http", "@aerokit/sdk/io", "@aerokit/sdk/bpm",
+            "@aerokit/sdk/cache", "@aerokit/sdk/cms", "@aerokit/sdk/component", "@aerokit/sdk/core", "@aerokit/sdk/db", "@aerokit/sdk/etcd",
+            "@aerokit/sdk/extensions", "@aerokit/sdk/git", "@aerokit/sdk/indexing", "@aerokit/sdk/job", "@aerokit/sdk/kafka",
+            "@aerokit/sdk/log", "@aerokit/sdk/mail", "@aerokit/sdk/messaging", "@aerokit/sdk/mongodb", "@aerokit/sdk/net",
+            "@aerokit/sdk/pdf", "@aerokit/sdk/platform", "@aerokit/sdk/qldb", "@aerokit/sdk/rabbitmq", "@aerokit/sdk/redis",
+            "@aerokit/sdk/user", "@aerokit/sdk/template", "@aerokit/sdk/utils", "@aerokit/sdk/junit", "@aerokit/sdk/integrations",
+            "@aerokit/sdk/security");
 
     /**
      * Checks if is pure esm module.

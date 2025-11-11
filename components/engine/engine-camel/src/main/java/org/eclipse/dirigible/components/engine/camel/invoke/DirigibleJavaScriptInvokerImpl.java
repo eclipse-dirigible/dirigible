@@ -102,9 +102,8 @@ class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
             return executePromise(value);
         }
 
-        throw new IllegalArgumentException(
-                "Unexpected return received from @aerokit/sdk/integrations::onMessage(). Expected return type [" + IntegrationMessage.class
-                        + "] or a promise of [" + IntegrationMessage.class + "]");
+        throw new IllegalArgumentException("Unexpected return received from @aerokit/sdk/integrations::onMessage(). Expected return type ["
+                + IntegrationMessage.class + "] or a promise of [" + IntegrationMessage.class + "]");
     }
 
     private boolean isIntegrationMessage(Value value) {
@@ -113,7 +112,8 @@ class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
 
     private boolean isPromise(Value value) {
         return value.hasMember("then") && value.getMember("then")
-                                               .canExecute() && getMetaObjectString(value).contains("function Promise");
+                                               .canExecute()
+                && getMetaObjectString(value).contains("function Promise");
     }
 
     private String getMetaObjectString(Value value) {
@@ -143,9 +143,8 @@ class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
                 if (isIntegrationMessage(result)) {
                     resultRef.set(result.asHostObject());
                 } else {
-                    IllegalArgumentException ex = new IllegalArgumentException(
-                            "Unexpected value is returned from promise [" + promise + "] Expected return type [" + IntegrationMessage.class
-                                    + "]. Returned result [" + result + "]");
+                    IllegalArgumentException ex = new IllegalArgumentException("Unexpected value is returned from promise [" + promise
+                            + "] Expected return type [" + IntegrationMessage.class + "]. Returned result [" + result + "]");
                     resultRef.set(ex);
                 }
                 return null;
