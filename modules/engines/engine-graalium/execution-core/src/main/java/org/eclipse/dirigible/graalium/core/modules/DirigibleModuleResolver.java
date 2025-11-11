@@ -9,6 +9,9 @@
  */
 package org.eclipse.dirigible.graalium.core.modules;
 
+import org.eclipse.dirigible.graalium.core.JavascriptSourceProvider;
+import org.eclipse.dirigible.graalium.core.javascript.modules.ModuleResolver;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -16,9 +19,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import org.eclipse.dirigible.graalium.core.JavascriptSourceProvider;
-import org.eclipse.dirigible.graalium.core.javascript.modules.ModuleResolver;
 
 /**
  * The Class DirigibleModuleResolver.
@@ -29,10 +29,10 @@ public class DirigibleModuleResolver implements ModuleResolver {
     private static final String DIRIGIBLE_CORE_MODULE_SIGNATURE = "sdk";
 
     /** The Constant DIRIGIBLE_CORE_MODULE_SIGNATURE_PATTERN. */
-    private static final Pattern DIRIGIBLE_CORE_MODULE_SIGNATURE_PATTERN = Pattern.compile("(sdk)(\\/)(\\w+)"); // e.g.
-                                                                                                                // sdk/core
-                                                                                                                // => $1=dirigible
-                                                                                                                // $2=/ $3=core
+    private static final Pattern DIRIGIBLE_CORE_MODULE_SIGNATURE_PATTERN = Pattern.compile("((?:@aerokit/)?sdk)(\\/)(\\w+)"); // e.g.
+    // sdk/core
+    // => $1=sdk # Captures either sdk or @aerokit/sdk
+    // $2=/ $3=core
 
     /** The dirigible module ESM proxy generator. */
     private final DirigibleModuleESMProxyGenerator dirigibleModuleESMProxyGenerator;
