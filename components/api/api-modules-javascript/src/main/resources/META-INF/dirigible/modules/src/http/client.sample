@@ -1,4 +1,4 @@
-import { client, response } from "sdk/http";
+import { client, response } from "@aerokit/sdk/http";
 
 const httpResponse = client.get("https://services.odata.org/V4/Northwind/Northwind.svc/");
 

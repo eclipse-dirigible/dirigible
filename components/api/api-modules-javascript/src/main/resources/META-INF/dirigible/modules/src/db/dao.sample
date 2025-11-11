@@ -1,4 +1,4 @@
-import { dao } from "sdk/db";
+import { dao } from "@aerokit/sdk/db";
 
 //create a DAO from configuration
 const customers = dao.create({

@@ -1,4 +1,4 @@
-import { writer, searcher } from "sdk/indexing";
+import { writer, searcher } from "@aerokit/sdk/indexing";
 
 writer.add("index1", "file1", "apache lucene", new Date(), { "name1": "value1" });
 writer.add("index1", "file2", "lucene - the search engine", new Date(), { "name2": "value2" });

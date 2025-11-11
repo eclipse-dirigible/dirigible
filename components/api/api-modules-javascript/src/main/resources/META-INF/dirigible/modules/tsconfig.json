@@ -14,7 +14,7 @@
       "./types"
     ],
     "paths": {
-      "sdk/*": [
+      "@aerokit/sdk/*": [
         "./src/*"
       ]
     }

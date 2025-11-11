@@ -1,5 +1,5 @@
-import { query, update } from "sdk/db";
-import { response } from "sdk/http";
+import { query, update } from "@aerokit/sdk/db";
+import { response } from "@aerokit/sdk/http";
 
 update.execute("CREATE TABLE MY_TABLE (COLUMN_A INT)", [], "DefaultDB");
 

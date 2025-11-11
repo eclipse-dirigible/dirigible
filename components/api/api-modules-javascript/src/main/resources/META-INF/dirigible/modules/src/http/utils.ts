@@ -2,7 +2,7 @@
  * A utility class providing static methods to standardize and send
  * common HTTP responses (success and error) with application/json content type.
  */
-import { response } from "sdk/http";
+import { response } from "@aerokit/sdk/http";
 
 /**
  * Provides convenient static methods for sending standard HTTP responses.

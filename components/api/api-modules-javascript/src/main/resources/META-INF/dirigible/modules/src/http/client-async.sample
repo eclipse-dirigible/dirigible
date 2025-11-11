@@ -1,4 +1,4 @@
-import { client, clientAsync } from "sdk/http";
+import { client, clientAsync } from "@aerokit/sdk/http";
 
 let clientAsyncInstance = clientAsync.getInstance();
 let api = 'https://services.odata.org/V4/Northwind/Northwind.svc/';

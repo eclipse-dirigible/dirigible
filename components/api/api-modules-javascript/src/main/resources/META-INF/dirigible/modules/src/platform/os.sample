@@ -1,4 +1,4 @@
-import { OS } from "sdk/platform";
+import { OS } from "@aerokit/sdk/platform";
 
 if (OS.isWindows()) {
     // Windows logic here

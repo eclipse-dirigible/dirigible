@@ -1,5 +1,5 @@
-import { base64 } from "sdk/utils";
-import { response } from "sdk/http";
+import { base64 } from "@aerokit/sdk/utils";
+import { response } from "@aerokit/sdk/http";
 
 response.println(base64.encode("admin:admin"));
 response.println(base64.decode("YWRtaW46YWRtaW4="));

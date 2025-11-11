@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { streams, image as imageIO } from "sdk/io";
+import { streams, image as imageIO } from "@aerokit/sdk/io";
 import * as documentUtils from "./document";
 
 export const uploadImageWithResize = (folder, name, image, width, height) => {

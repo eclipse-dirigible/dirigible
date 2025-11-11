@@ -2,7 +2,7 @@
  * Provides core functionality for input/output stream management,
  * including stream creation, data transfer, and byte array handling.
  */
-import { Bytes } from "sdk/io/bytes";
+import { Bytes } from "@aerokit/sdk/io/bytes";
 
 const StreamsFacade = Java.type("org.eclipse.dirigible.components.api.io.StreamsFacade");
 

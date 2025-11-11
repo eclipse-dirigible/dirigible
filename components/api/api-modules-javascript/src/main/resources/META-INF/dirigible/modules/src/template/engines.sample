@@ -1,5 +1,5 @@
-import { engines } from "sdk/template"
-import { response } from "sdk/http";
+import { engines } from "@aerokit/sdk/template"
+import { response } from "@aerokit/sdk/http";
 
 let mustache = engines.getMustacheEngine();
 let generated = mustache.generate('Hello {{name}}', [['name', 'John Smith']]);

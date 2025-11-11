@@ -1,5 +1,5 @@
-import { sql } from "sdk/db";
-import { response } from "sdk/http";
+import { sql } from "@aerokit/sdk/db";
+import { response } from "@aerokit/sdk/http";
 
 let script = sql.getDialect().select().column("FIRST_NAME").column("LAST_NAME").from("CUSTOMERS").build();
 

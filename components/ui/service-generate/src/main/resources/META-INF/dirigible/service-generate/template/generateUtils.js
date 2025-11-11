@@ -9,8 +9,8 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { Registry } from "sdk/platform";
-import { TemplateEngines as templateEngines } from "sdk/template";
+import { Registry } from "@aerokit/sdk/platform";
+import { TemplateEngines as templateEngines } from "@aerokit/sdk/template";
 
 function getTranslationId(str) {
     return `${str.replaceAll(' ', '').replaceAll('_', '').replaceAll('.', '').replaceAll(':', '')}`;

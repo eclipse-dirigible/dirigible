@@ -1,7 +1,7 @@
-import { bytes } from "sdk/io";
-import { user } from "sdk/security";
-import { workspace, lifecycle } from "sdk/platform";
-import { response } from "sdk/http";
+import { bytes } from "@aerokit/sdk/io";
+import { user } from "@aerokit/sdk/security";
+import { workspace, lifecycle } from "@aerokit/sdk/platform";
+import { response } from "@aerokit/sdk/http";
 
 const currentUser = user.getName();
 const workspaceName = "workspace";

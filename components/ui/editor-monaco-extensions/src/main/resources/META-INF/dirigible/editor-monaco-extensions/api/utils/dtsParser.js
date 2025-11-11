@@ -9,8 +9,8 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { registry } from "sdk/platform";
-import { extensions } from "sdk/extensions";
+import { registry } from "@aerokit/sdk/platform";
+import { extensions } from "@aerokit/sdk/extensions";
 
 // Returns the path to d.ts foreach modules.json entry where isPackageDescription = true
 let dtsPaths = [];

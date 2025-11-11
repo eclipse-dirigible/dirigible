@@ -9,7 +9,7 @@
             "DOM"
         ],
         "paths": {
-            "sdk/*": [
+            "@aerokit/sdk/*": [
                 "./modules/src/*"
             ],
             "/*": [

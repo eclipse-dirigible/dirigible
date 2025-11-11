@@ -1,5 +1,5 @@
-import { dao } from "sdk/mongodb";
-import { response } from "sdk/http";
+import { dao } from "@aerokit/sdk/mongodb";
+import { response } from "@aerokit/sdk/http";
 
 //create a DAO from configuration
 let customers = dao.create({

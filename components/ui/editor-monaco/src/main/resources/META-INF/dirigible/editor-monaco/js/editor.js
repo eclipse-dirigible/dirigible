@@ -1016,7 +1016,7 @@ class TypeScriptUtils {
     }
 
     static isGlobalImport(path) {
-        return !path.startsWith("/") && !path.startsWith("./") && !path.startsWith("../") && !path.startsWith("sdk/")
+        return !path.startsWith("/") && !path.startsWith("./") && !path.startsWith("../") && !path.startsWith("@aerokit/sdk/")
     }
 
     static loadImportedFiles = async (monaco, importedFiles, isReload = false) => {

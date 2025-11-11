@@ -1,4 +1,4 @@
-import { Request, Response, Upload } from "sdk/http";
+import { Request, Response, Upload } from "@aerokit/sdk/http";
 
 if (Request.getMethod() === "POST") {
     if (Upload.isMultipartContent()) {

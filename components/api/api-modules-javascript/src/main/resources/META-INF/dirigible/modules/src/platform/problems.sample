@@ -1,5 +1,5 @@
-import { Problems } from "sdk/platform";
-import { response } from "sdk/http";
+import { Problems } from "@aerokit/sdk/platform";
+import { response } from "@aerokit/sdk/http";
 
 problems.save("/my-project/my-file", Problems.ACTIVE, "line: 4", "row: 10", "", "Some problem / at line 4", "Expected end of line ;", "ProblemsModule", "my-file.mjs", "my-file.mjs");
 

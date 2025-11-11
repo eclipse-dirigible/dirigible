@@ -1,6 +1,6 @@
-import { Registry } from "sdk/platform/registry";
-import { XML } from "sdk/utils/xml";
-import { TemplateEngines } from "sdk/template";
+import { Registry } from "@aerokit/sdk/platform/registry";
+import { XML } from "@aerokit/sdk/utils/xml";
+import { TemplateEngines } from "@aerokit/sdk/template";
 const PDFFacade = Java.type("org.eclipse.dirigible.components.api.pdf.PDFFacade");
 
 // Path to the default table template

@@ -1,5 +1,5 @@
-import { qrcode } from "sdk/utils";
-import { response } from "sdk/http";
+import { qrcode } from "@aerokit/sdk/utils";
+import { response } from "@aerokit/sdk/http";
 
 let qrCodeBytes = qrcode.generateQRCode("https://www.dirigible.io");
 

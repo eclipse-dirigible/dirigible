@@ -2,7 +2,7 @@
 // PaymentComponent.ts
 // -------------------
 
-import { Component } from "sdk/component";
+import { Component } from "@aerokit/sdk/component";
 
 @Component('myPaymentService')
 export class PaymentComponent {
@@ -19,8 +19,8 @@ PaymentComponent;
 // OrderProcessor.ts
 // -----------------
 
-import { response } from "sdk/http";
-import { Injected, Inject } from "sdk/component";
+import { response } from "@aerokit/sdk/http";
+import { Injected, Inject } from "@aerokit/sdk/component";
 import { PaymentComponent } from "./PaymentComponent"
 
 @Injected()

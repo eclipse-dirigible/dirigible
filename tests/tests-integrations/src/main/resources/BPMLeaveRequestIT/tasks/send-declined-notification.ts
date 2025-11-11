@@ -1,4 +1,4 @@
-import { process } from "sdk/bpm"
+import { process } from "@aerokit/sdk/bpm"
 import { sendMail } from "./mail-util"
 
 const execution = process.getExecutionContext();

@@ -1,4 +1,4 @@
-import { sql, query } from "sdk/db";
+import { sql, query } from "@aerokit/sdk/db";
 
 /**
  * Provides static methods for translating entity properties based on a dedicated language table.

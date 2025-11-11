@@ -1,5 +1,5 @@
 // Load the etcd client module.
-import { etcd } from "sdk/etcd";
+import { etcd } from "@aerokit/sdk/etcd";
 
 // Initialize the etcd client.
 let etcdClient = etcd.getClient();

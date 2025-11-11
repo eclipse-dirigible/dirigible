@@ -9,9 +9,9 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { extensions } from "sdk/extensions";
-import { request, response } from "sdk/http";
-import { uuid } from "sdk/utils";
+import { extensions } from "@aerokit/sdk/extensions";
+import { request, response } from "@aerokit/sdk/http";
+import { uuid } from "@aerokit/sdk/utils";
 
 const editors = [];
 const extensionPoints = request.getParameterValues('extensionPoints') ?? ['platform-editors'];

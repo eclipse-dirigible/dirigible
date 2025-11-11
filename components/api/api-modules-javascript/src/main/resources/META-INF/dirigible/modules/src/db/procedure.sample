@@ -1,7 +1,7 @@
 // Create Procedure
 
-import { procedure } from "sdk/db";
-import { response } from "sdk/http";
+import { procedure } from "@aerokit/sdk/db";
+import { response } from "@aerokit/sdk/http";
 
 const sql = " \
 CREATE PROCEDURE CUSTOMERS_BY_COUNTRY_AND_ALL_CUSTOMERS(c_id integer, c_name text, c_country text) \
@@ -20,8 +20,8 @@ response.close();
 
 // Call Procedure
 
-import { query, procedure } from "sdk/db";
-import { response } from "sdk/http";
+import { query, procedure } from "@aerokit/sdk/db";
+import { response } from "@aerokit/sdk/http";
 
 const sql = "CALL CUSTOMERS_BY_COUNTRY_AND_ALL_CUSTOMERS(c_id => ?, c_name => ?, c_country => ?)";
 

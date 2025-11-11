@@ -1,4 +1,4 @@
-import { rs } from "sdk/http";
+import { rs } from "@aerokit/sdk/http";
 
 rs.service()
     .resource("")

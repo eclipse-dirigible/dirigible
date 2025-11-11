@@ -2,7 +2,7 @@
 // OrderListener.ts
 // ----------------
 
-import { Listener } from "sdk/messaging";
+import { Listener } from "@aerokit/sdk/messaging";
 
 @Listener({
     name: "sample-listener-decorator/OrderListener",

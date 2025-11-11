@@ -1,6 +1,6 @@
 
-import { configurations as config } from "sdk/core";
-import { process } from "sdk/bpm"
+import { configurations as config } from "@aerokit/sdk/core";
+import { process } from "@aerokit/sdk/bpm"
 import { sendMail } from "./mail-util"
 
 const execution = process.getExecutionContext();

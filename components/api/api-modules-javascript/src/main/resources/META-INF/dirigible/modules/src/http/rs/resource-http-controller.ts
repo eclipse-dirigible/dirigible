@@ -1,7 +1,7 @@
 import { Response as response } from "../response";
 import { Request as request } from "../request";
 import { ResourceMappings } from "./resource-mappings";
-import { Logging } from "sdk/log";
+import { Logging } from "@aerokit/sdk/log";
 
 // Declaration for the external dirigibleRequire function and its dependency
 declare function dirigibleRequire(module: string): any;

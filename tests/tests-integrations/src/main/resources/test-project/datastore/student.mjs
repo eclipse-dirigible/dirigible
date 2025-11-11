@@ -1,5 +1,5 @@
-import { store } from "sdk/db";
-import { response } from "sdk/http";
+import { store } from "@aerokit/sdk/db";
+import { response } from "@aerokit/sdk/http";
 
 let entry = { 'name': 'John', 'address': 'Sofia, Bulgaria' };
 

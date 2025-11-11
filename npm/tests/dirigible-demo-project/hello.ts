@@ -1,3 +1,3 @@
-import { response } from "sdk/http";
+import { response } from "@aerokit/sdk/http";
 
 response.println("Hello World!");

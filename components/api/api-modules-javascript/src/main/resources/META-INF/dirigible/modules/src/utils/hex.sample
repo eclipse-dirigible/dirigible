@@ -1,5 +1,5 @@
-import { hex } from "sdk/utils";
-import { response } from "sdk/http";
+import { hex } from "@aerokit/sdk/utils";
+import { response } from "@aerokit/sdk/http";
 
 response.println(hex.encode("Hex Encoded"));
 response.println(hex.decode("48657820456e636f646564"));

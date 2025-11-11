@@ -1,10 +1,10 @@
 "use strict";
 
-import { globals } from "sdk/core"
+import { globals } from "@aerokit/sdk/core"
 import { Client } from "./client"
-import * as dirigibleOrm from "sdk/db/orm";
-import { Logging } from "sdk/log";
-import { Configurations } from "sdk/core";
+import * as dirigibleOrm from "@aerokit/sdk/db/orm";
+import { Logging } from "@aerokit/sdk/log";
+import { Configurations } from "@aerokit/sdk/core";
 
 const dbUri = Configurations.get("DIRIGIBLE_MONGODB_CLIENT_URI", "mongodb://localhost:27017");
 

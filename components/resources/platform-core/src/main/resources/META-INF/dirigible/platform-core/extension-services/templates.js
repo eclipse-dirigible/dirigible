@@ -10,9 +10,9 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 
-import { extensions } from "sdk/extensions";
-import { request, response, rs } from "sdk/http";
-import { uuid } from "sdk/utils";
+import { extensions } from "@aerokit/sdk/extensions";
+import { request, response, rs } from "@aerokit/sdk/http";
+import { uuid } from "@aerokit/sdk/utils";
 
 const templates = [];
 const extensionPoints = request.getParameterValues('extensionPoints') ?? ['platform-templates'];

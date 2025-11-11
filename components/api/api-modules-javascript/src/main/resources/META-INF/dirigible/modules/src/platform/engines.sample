@@ -1,5 +1,5 @@
-import { Engine } from "sdk/platform";
-import { response } from "sdk/http";
+import { Engine } from "@aerokit/sdk/platform";
+import { response } from "@aerokit/sdk/http";
 
 let result = new Engine("javascript").execute("project1", "hello.js", "", {});
 

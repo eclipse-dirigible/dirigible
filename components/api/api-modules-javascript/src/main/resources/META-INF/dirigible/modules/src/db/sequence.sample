@@ -1,5 +1,5 @@
-import { sequence } from "sdk/db";
-import { response } from "sdk/http";
+import { sequence } from "@aerokit/sdk/db";
+import { response } from "@aerokit/sdk/http";
 
 let value = sequence.nextval("MYSEQUENCE");
 

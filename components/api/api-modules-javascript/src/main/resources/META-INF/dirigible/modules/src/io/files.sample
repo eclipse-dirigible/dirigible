@@ -1,4 +1,4 @@
-import { files } from "sdk/io";
+import { files } from "@aerokit/sdk/io";
 
 let tempFile = files.createTempFile("temp", ".txt");
 

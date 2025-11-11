@@ -1,5 +1,5 @@
-import { escape } from "sdk/utils";
-import { response } from "sdk/http";
+import { escape } from "@aerokit/sdk/utils";
+import { response } from "@aerokit/sdk/http";
 
 const input = "<script type='text/javascript'>alert('evil script')</script>";
 const result = escape.escapeJavascript(input);

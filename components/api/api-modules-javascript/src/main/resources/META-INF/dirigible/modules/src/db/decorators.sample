@@ -2,7 +2,7 @@
 // CountryEntity.ts
 // ----------------
 
-import { Entity, Table, Id, Generated, Column, Documentation } from "sdk/db";
+import { Entity, Table, Id, Generated, Column, Documentation } from "@aerokit/sdk/db";
 
 @Entity("CountryEntity")
 @Table("SAMPLE_COUNTRY")
@@ -35,8 +35,8 @@ export class CountryEntity {
 // --------------------
 
 import { CountryEntity } from "./CountryEntity";
-import { Repository, EntityConstructor } from "sdk/db";
-import { Component } from "sdk/component";
+import { Repository, EntityConstructor } from "@aerokit/sdk/db";
+import { Component } from "@aerokit/sdk/component";
 
 @Component('CountryRepository')
 export class CountryRepository extends Repository<CountryEntity> {

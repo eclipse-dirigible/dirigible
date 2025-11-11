@@ -1,6 +1,6 @@
-import { configurations } from "sdk/core";
-import { logging } from "sdk/log";
-import { client as mailClient } from "sdk/mail";
+import { configurations } from "@aerokit/sdk/core";
+import { logging } from "@aerokit/sdk/log";
+import { client as mailClient } from "@aerokit/sdk/mail";
 
 const logger = logging.getLogger("mail-util.ts");
 

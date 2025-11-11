@@ -1,4 +1,4 @@
-import { websockets } from "sdk/net"
+import { websockets } from "@aerokit/sdk/net"
 
 const uri = "ws://echo.websocket.org:80/";
 const handler = "my-project/ws-handler"

@@ -12,7 +12,7 @@
 exports.getContent = function () {
     return [
         {
-            "name": "sdk/qunit",
+            "name": "@aerokit/sdk/qunit",
             "description": "Dirigible QUnit module",
             "isPackageDescription": true,
             "dtsPath": "qunit/extensions/qunit.d.ts"

@@ -62,7 +62,7 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
                         "DOM"
                     ],
                     "paths": {
-                        "sdk/*": [
+                        "@aerokit/sdk/*": [
                             "./modules/src/*"
                         ],
                         "/*": [

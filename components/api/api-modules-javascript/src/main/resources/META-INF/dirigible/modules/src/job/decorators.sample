@@ -1,4 +1,4 @@
-import { Scheduled } from "sdk/job"
+import { Scheduled } from "@aerokit/sdk/job"
 
 @Scheduled({ expression: "0/10 * * * * ?" })
 export class MyJob {

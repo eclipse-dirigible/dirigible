@@ -1,5 +1,5 @@
-import { database } from "sdk/db";
-import { response } from "sdk/http";
+import { database } from "@aerokit/sdk/db";
+import { response } from "@aerokit/sdk/http";
 
 let connection = database.getConnection("SystemDB");
 try {

@@ -2,8 +2,8 @@
  * API Database
  *
  */
-import { Bytes } from "sdk/io/bytes";
-import { InputStream } from "sdk/io/streams";
+import { Bytes } from "@aerokit/sdk/io/bytes";
+import { InputStream } from "@aerokit/sdk/io/streams";
 
 const DatabaseFacade = Java.type("org.eclipse.dirigible.components.api.db.DatabaseFacade");
 const DatabaseResultSetHelper = Java.type("org.eclipse.dirigible.components.data.management.helpers.DatabaseResultSetHelper");

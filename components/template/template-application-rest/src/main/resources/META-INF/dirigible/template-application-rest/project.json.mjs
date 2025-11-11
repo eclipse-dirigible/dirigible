@@ -1,4 +1,4 @@
-import { workspace } from "sdk/platform";
+import { workspace } from "@aerokit/sdk/platform";
 
 export function generate(json) {
 	const parameters = JSON.parse(json);

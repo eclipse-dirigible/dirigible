@@ -1,6 +1,6 @@
 "use strict";
 
-import { Logging } from "sdk/log";
+import { Logging } from "@aerokit/sdk/log";
 import { CreateTableBuilder, DeleteBuilder, DropTableBuilder, InsertBuilder, SelectBuilder, SQLBuilder, UpdateBuilder } from "./sql";
 import { Connection } from "./database";
 
