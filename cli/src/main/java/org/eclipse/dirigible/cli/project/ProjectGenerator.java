@@ -58,8 +58,8 @@ public class ProjectGenerator {
                         "DOM"
                     ],
                     "paths": {
-                        "@aerokit/sdk/*": [
-                            "./node_modules/@dirigiblelabs/sdk/dist/dts/*"
+                        "sdk/*": [
+                            "./node_modules/@aerokit/sdk/dist/dts/*"
                         ]
                     }
                 }

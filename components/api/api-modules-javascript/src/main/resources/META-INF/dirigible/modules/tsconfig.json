@@ -16,6 +16,9 @@
     "paths": {
       "@aerokit/sdk/*": [
         "./src/*"
+      ],
+      "sdk/*": [
+        "./src/*"
       ]
     }
   },

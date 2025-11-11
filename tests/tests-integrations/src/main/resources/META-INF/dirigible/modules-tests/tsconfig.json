@@ -17,6 +17,10 @@
       "@aerokit/sdk/*": [
         "./src/*",
         "./../../../../../../../../components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules/src/*"
+      ],
+      "sdk/*": [
+        "./src/*",
+        "./../../../../../../../../components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules/src/*"
       ]
     }
   },
