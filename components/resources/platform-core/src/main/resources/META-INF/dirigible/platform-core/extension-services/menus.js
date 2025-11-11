@@ -10,9 +10,9 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 import { getWindowMenu } from './modules/window-menu.mjs'
-import { request, response } from 'sdk/http';
-import { extensions } from 'sdk/extensions';
-import { uuid } from 'sdk/utils';
+import { request, response } from '@aerokit/sdk/http';
+import { extensions } from '@aerokit/sdk/extensions';
+import { uuid } from '@aerokit/sdk/utils';
 
 let mainmenu = [];
 const extensionPoints = request.getParameterValues('extensionPoints') ?? ['platform-menus'];

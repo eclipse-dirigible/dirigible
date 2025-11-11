@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { extensions } from 'sdk/extensions';
+import { extensions } from '@aerokit/sdk/extensions';
 
 function sortPerspectives(a, b) {
 	if (a.order !== undefined && b.order !== undefined) {

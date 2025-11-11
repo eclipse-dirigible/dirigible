@@ -11,7 +11,7 @@
  */
 import { rs } from "@aerokit/sdk/http";
 import { streams } from "@aerokit/sdk/io";
-import { upload } from 'sdk/http';
+import { upload } from '@aerokit/sdk/http';
 
 import * as documentsProcessor from "./processors/documentsProcessor";
 import * as imageProcessor from "./processors/imageProcessor";

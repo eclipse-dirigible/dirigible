@@ -32,7 +32,7 @@ if (path && path.endsWith(".ts")) {
         if (result.exitCode != 0) {
             const output = `${result.standardOutput}\n${result.errorOutput}`;
             const outputLines = output.split("\n");
-            const errorMessage = outputLines.filter(line => !line.includes("TS2307: Cannot find module 'sdk/")).join("\n");
+            const errorMessage = outputLines.filter(line => !line.includes("TS2307: Cannot find module '@aerokit/sdk/")).join("\n");
 
             if (errorMessage.trim()) {
                 console.error(`Compilation of "${filePath}" failed with exit code: ${result.exitCode}`);

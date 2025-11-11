@@ -1,5 +1,5 @@
 
-import { Files } from 'sdk/io/files';
+import { Files } from '@aerokit/sdk/io/files';
 import { Assert } from 'test/assert';
 
 const tempFile = Files.createTempFile("dirigible", ".txt");

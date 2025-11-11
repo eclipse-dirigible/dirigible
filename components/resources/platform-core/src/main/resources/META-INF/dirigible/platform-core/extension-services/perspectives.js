@@ -10,8 +10,8 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 import { getPerspectives } from './modules/perspectives.mjs'
-import { request, response } from 'sdk/http';
-import { uuid } from 'sdk/utils';
+import { request, response } from '@aerokit/sdk/http';
+import { uuid } from '@aerokit/sdk/utils';
 
 
 function setETag() {
