@@ -23,7 +23,12 @@ public class DirigibleModulesMetadata {
             "@aerokit/sdk/log", "@aerokit/sdk/mail", "@aerokit/sdk/messaging", "@aerokit/sdk/mongodb", "@aerokit/sdk/net",
             "@aerokit/sdk/pdf", "@aerokit/sdk/platform", "@aerokit/sdk/qldb", "@aerokit/sdk/rabbitmq", "@aerokit/sdk/redis",
             "@aerokit/sdk/user", "@aerokit/sdk/template", "@aerokit/sdk/utils", "@aerokit/sdk/junit", "@aerokit/sdk/integrations",
-            "@aerokit/sdk/security");
+            "@aerokit/sdk/security", //
+            // add old apis as well for compatibility
+            "sdk/http", "sdk/io", "sdk/bpm", "sdk/cache", "sdk/cms", "sdk/component", "sdk/core", "sdk/db", "sdk/etcd", "sdk/extensions",
+            "sdk/git", "sdk/indexing", "sdk/job", "sdk/kafka", "sdk/log", "sdk/mail", "sdk/messaging", "sdk/mongodb", "sdk/net", "sdk/pdf",
+            "sdk/platform", "sdk/qldb", "sdk/rabbitmq", "sdk/redis", "sdk/user", "sdk/template", "sdk/utils", "sdk/junit",
+            "sdk/integrations", "sdk/security");
 
     /**
      * Checks if is pure esm module.
