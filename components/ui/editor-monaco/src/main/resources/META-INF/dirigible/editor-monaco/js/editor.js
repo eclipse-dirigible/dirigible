@@ -253,7 +253,8 @@ class FileIO {
                     throw new Error(`Unable to load [${path}, HTTP: ${response.status}, ${response.statusText}]`);
                 }
             } catch (e) {
-                console.error(e, 'Failed to load file. Reatempting using the Registry API.');
+                console.error(e);
+                console.error('Failed to load file. Reatempting using the Registry API.');
                 response = await fetch(this.#buildRegistryUrl(path), {
                     method: 'GET',
                     headers: {
@@ -992,6 +993,8 @@ class TypeScriptUtils {
 
     // Find all ES6 import statements and their modules
     static #IMPORT_REGEX = /import\s+(?:\{(?:\s*\w?\s*,?)*\}|(?:\*\s+as\s+\w+)|\w+)\s+from\s+['"]([^'"]+)['"]/g;
+    // If we want side-effect imports:
+    // import\s+(?:\{(?:\s*\w+\s*,?)*\}|(?:\*\s+as\s+\w+)|\w+)?\s*(?:from\s+['"]([^'"]+)['"]|['"]([^'"]+)['"])
 
     static #IMPORTED_FILES = new Set();
 
@@ -1002,8 +1005,10 @@ class TypeScriptUtils {
     static getImportedModuleFiles(content) {
         const importedModules = [];
 
+        const contentWithoutComments = content.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+
         let match;
-        while ((match = TypeScriptUtils.#IMPORT_REGEX.exec(content)) !== null) {
+        while ((match = TypeScriptUtils.#IMPORT_REGEX.exec(contentWithoutComments)) !== null) {
             let modulePath = match[1];
             if (!modulePath.startsWith('sdk/')) {
                 if (!modulePath.endsWith(".json")) {
@@ -1030,12 +1035,14 @@ class TypeScriptUtils {
             monaco.editor.createModel(sourceCode, fileType, uri);
         }
         for (const importedFile of importedFiles) {
+            const importedFilePath = fileIO.getWorkspacePath(fileIO.resolveFilePath(importedFile));
+            if (editorParameters.resourcePath === importedFilePath) {
+                continue;
+            } else if (TypeScriptUtils.#IMPORTED_FILES.has(importedFilePath)) {
+                continue;
+            }
             try {
-                const importedFilePath = fileIO.resolveFilePath(importedFile);
-                if (TypeScriptUtils.#IMPORTED_FILES.has(importedFilePath)) {
-                    continue;
-                }
-                const importedFileMetadata = await fileIO.loadText(fileIO.getWorkspacePath(importedFilePath));
+                const importedFileMetadata = await fileIO.loadText(importedFilePath);
                 let uriPath = importedFileMetadata.filePath;
                 if (TypeScriptUtils.isGlobalImport(importedFile)) {
                     monaco.languages.typescript.typescriptDefaults.addExtraLib(
