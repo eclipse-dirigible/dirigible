@@ -253,7 +253,7 @@ class FileIO {
                     throw new Error(`Unable to load [${path}, HTTP: ${response.status}, ${response.statusText}]`);
                 }
             } catch (e) {
-                // Fallback to file in Registry
+                console.error(e, 'Failed to load file. Reatempting using the Registry API.');
                 response = await fetch(this.#buildRegistryUrl(path), {
                     method: 'GET',
                     headers: {
@@ -1024,6 +1024,11 @@ class TypeScriptUtils {
             TypeScriptUtils.#IMPORTED_FILES.clear();
         }
         const fileIO = new FileIO();
+
+        function createModel(sourceCode, uri) {
+            const fileType = uri.path.endsWith(".json") ? "json" : "typescript";
+            monaco.editor.createModel(sourceCode, fileType, uri);
+        }
         for (const importedFile of importedFiles) {
             try {
                 const importedFilePath = fileIO.resolveFilePath(importedFile);
@@ -1042,14 +1047,17 @@ class TypeScriptUtils {
                 const uri = new monaco.Uri().with({ path: uriPath });
                 if (isReload) {
                     const model = monaco.editor.getModel(uri);
-                    model.setValue(importedFileMetadata.sourceCode);
+                    if (model) {
+                        model.setValue(importedFileMetadata.sourceCode);
+                    } else {
+                        createModel(importedFileMetadata.sourceCode, uri);
+                    }
                 } else {
-                    const fileType = uri.path.endsWith(".json") ? "json" : "typescript";
-                    monaco.editor.createModel(importedFileMetadata.sourceCode, fileType, uri);
+                    createModel(importedFileMetadata.sourceCode, uri);
                 }
                 if (importedFileMetadata.importedFilesNames?.length > 0) {
                     const relativeImportedPaths = importedFileMetadata.importedFilesNames.map(e => fileIO.resolveRelativePath(importedFile, e));
-                    if (JSON.stringify(importedFiles) !== JSON.stringify(relativeImportedPaths))
+                    if (JSON.stringify(importedFiles.sort()) !== JSON.stringify(relativeImportedPaths.sort()))
                         await TypeScriptUtils.loadImportedFiles(monaco, relativeImportedPaths, isReload);
                 }
                 TypeScriptUtils.#IMPORTED_FILES.add(importedFilePath);
