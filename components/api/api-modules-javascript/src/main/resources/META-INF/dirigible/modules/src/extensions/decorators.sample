@@ -1,0 +1,38 @@
+// ----------------
+// OrderExtension.ts
+// ----------------
+
+import { Extension } from "sdk/extensions";
+
+@Extension({
+    name: "OrderExtension",
+    to: "order-extension-point"
+})
+export class OrderExtension {
+    public static getDiscount(): number {
+        return 5;
+    }
+}
+
+export function getDiscount() {
+    return OrderExtension.getDiscount();
+}
+
+// ----------
+// Usage
+// ----------
+
+import { response } from "sdk/http";
+import { extensions } from "sdk/extensions";
+
+const orderExtensions = await Promise.resolve(extensions.load('order-extension-point'));
+
+let discount = 0;
+for (let i = 0; i < orderExtensions?.length; i++) {
+    discount += orderExtensions[i].getDiscount();
+}
+
+response.setContentType("application/json");
+response.println(JSON.stringify("Discount: " + discount));
+response.flush();
+response.close();

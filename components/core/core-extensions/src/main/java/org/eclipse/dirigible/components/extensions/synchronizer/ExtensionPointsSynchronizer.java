@@ -9,6 +9,10 @@
  */
 package org.eclipse.dirigible.components.extensions.synchronizer;
 
+import java.nio.charset.StandardCharsets;
+import java.text.ParseException;
+import java.util.List;
+
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
@@ -25,10 +29,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-
-import java.nio.charset.StandardCharsets;
-import java.text.ParseException;
-import java.util.List;
 
 /**
  * The Class ExtensionPointsSynchronizer.
