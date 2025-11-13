@@ -1,5 +1,3 @@
-// import { request, response } from "sdk/http"; // should work as well
-import { request, response } from "@aerokit/sdk/http";
-
+import { response } from "@aerokit/sdk/http"; // "sdk/http" should work as well
 
 response.println("Hello World!");

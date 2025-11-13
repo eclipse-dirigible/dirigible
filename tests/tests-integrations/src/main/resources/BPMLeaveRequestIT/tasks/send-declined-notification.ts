@@ -14,4 +14,4 @@ const requester = processVariables.requester;
 const subject = "Your leave request has been declined";
 const content = `<h4>Your leave request from [${fromDate}] to [${toDate}] has been declined by [${approver}]</h4>`;
 
-sendMail(requester, subject, content)
+sendMail(requester, subject, content);

@@ -14,4 +14,4 @@ const requester = processVariables.requester;
 const subject = "Your leave request has been approved";
 const content = `<h4>Your leave request from [${fromDate}] to [${toDate}] has been approved by [${approver}]</h4>`;
 
-sendMail(requester, subject, content)
+sendMail(requester, subject, content);
