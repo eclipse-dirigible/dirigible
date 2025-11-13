@@ -1,6 +1,6 @@
 # @aerokit/sdk
 
-[![npm version](https://badge.fury.io/js/%40aerokit%2Fsdk.svg)](https://www.npmjs.com/package/@aerokit/sdk
+[![npm version](https://badge.fury.io/js/%40aerokit%2Fsdk.svg)](https://www.npmjs.com/package/@aerokit/sdk)
 [![License](https://img.shields.io/badge/License-EPL--2.0-blue.svg)](https://opensource.org/licenses/EPL-2.0)
 
 > **Accelerate your application and integration development with a unified TypeScript SDK for modern cloud platforms.**
