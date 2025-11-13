@@ -2,7 +2,7 @@
 // OrderExtension.ts
 // ----------------
 
-import { Extension } from "sdk/extensions";
+import { Extension } from "@aerokit/sdk/extensions";
 
 @Extension({
     name: "OrderExtension",
@@ -22,8 +22,8 @@ export function getDiscount() {
 // Usage
 // ----------
 
-import { response } from "sdk/http";
-import { extensions } from "sdk/extensions";
+import { response } from "@aerokit/sdk/http";
+import { extensions } from "@aerokit/sdk/extensions";
 
 const orderExtensions = await Promise.resolve(extensions.load('order-extension-point'));
 
