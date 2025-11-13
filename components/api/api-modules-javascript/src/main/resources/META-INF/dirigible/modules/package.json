@@ -11,10 +11,12 @@
     "url": "git+https://github.com/eclipse-dirigible/dirigible.git"
   },
   "keywords": [
-    "dirigible-sdk",
-    "dirigible",
+    "aerokit-sdk",
+    "aerokit",
     "sdk",
-    "eclipse"
+    "eclipse",
+    "dirigible-sdk",
+    "dirigible"
   ],
   "license": "EPL-2.0",
   "bugs": {
