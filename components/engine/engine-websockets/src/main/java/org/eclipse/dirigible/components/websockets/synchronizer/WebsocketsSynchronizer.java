@@ -82,8 +82,6 @@ public class WebsocketsSynchronizer extends BaseSynchronizer<Websocket, Long> {
      */
     @Override
     protected List<Websocket> parseImpl(String location, byte[] content) throws ParseException {
-
-
         Websocket websocket = null;
         String source = new String(content, StandardCharsets.UTF_8);
         if (location.endsWith(FILE_EXTENSION_WEBSOCKET)) {
@@ -102,7 +100,6 @@ public class WebsocketsSynchronizer extends BaseSynchronizer<Websocket, Long> {
             }
             websocket.setHandler(handler);
         }
-
         Configuration.configureObject(websocket);
         websocket.setLocation(location);
         websocket.setName(FilenameUtils.getBaseName(location));

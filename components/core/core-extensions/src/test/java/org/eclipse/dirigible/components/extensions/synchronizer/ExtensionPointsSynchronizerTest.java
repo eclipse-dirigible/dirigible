@@ -17,8 +17,6 @@ import java.nio.file.Path;
 import java.text.ParseException;
 import java.util.List;
 
-import jakarta.persistence.EntityManager;
-
 import org.eclipse.dirigible.components.extensions.domain.ExtensionPoint;
 import org.eclipse.dirigible.components.extensions.repository.ExtensionPointRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -31,6 +29,8 @@ import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabas
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.transaction.annotation.Transactional;
+
+import jakarta.persistence.EntityManager;
 
 /**
  * The Class ExtensionPointsSynchronizerTest.

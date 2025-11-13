@@ -30,6 +30,12 @@
 			<artifactId>dirigible-components-core-repository</artifactId>
     	</dependency>
     	
+    	<!-- Parser -->
+		<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-parsers-typescript</artifactId>
+    	</dependency>
+    	
     </dependencies>
 
 	<properties>
