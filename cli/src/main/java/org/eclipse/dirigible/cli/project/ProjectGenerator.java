@@ -62,8 +62,8 @@ public class ProjectGenerator {
                             "./node_modules/@aerokit/sdk/dist/dts/*"
                         ]
                     }
-                }
-
+                },
+                "exclude": ["target"]
             }
             """;
 
