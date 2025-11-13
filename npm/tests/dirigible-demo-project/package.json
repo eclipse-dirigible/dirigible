@@ -6,6 +6,7 @@
     "start:dev": "dirigible start --watch"
   },
   "devDependencies": {
-    "@dirigiblelabs/dirigible-cli": "file:../dirigible-cli"
+    "@dirigiblelabs/dirigible-cli": "file:../dirigible-cli",
+    "@aerokit/sdk": "latest"
   }
 }
