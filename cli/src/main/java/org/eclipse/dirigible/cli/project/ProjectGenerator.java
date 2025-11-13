@@ -35,14 +35,14 @@ public class ProjectGenerator {
               },
               "devDependencies": {
                 "@dirigiblelabs/dirigible-cli": "latest",
-                "@dirigiblelabs/sdk": "latest"
+                "@aerokit/sdk": "latest"
               }
             }
             """;
 
     private static final String HELLO_TS_CONTENT = """
             import { response } from "@aerokit/sdk/http";
-
+            
             response.println("Hello World!");
             """;
 
@@ -63,7 +63,7 @@ public class ProjectGenerator {
                         ]
                     }
                 }
-
+            
             }
             """;
 
