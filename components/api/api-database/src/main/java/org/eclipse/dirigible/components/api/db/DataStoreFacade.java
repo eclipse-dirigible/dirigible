@@ -10,8 +10,10 @@
 package org.eclipse.dirigible.components.api.db;
 
 import java.io.Serializable;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
@@ -21,6 +23,9 @@ import org.eclipse.dirigible.components.data.store.parser.EntityParser;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 
 /**
  * The Class DataStoreFacade.
@@ -161,21 +166,6 @@ public class DataStoreFacade implements InitializingBean {
     }
 
     /**
-     * Query.
-     *
-     * @param name the name
-     * @param limit
-     * @param offset
-     * @return the string
-     */
-    public static String query(String name, int limit, int offset) {
-        List list = DataStoreFacade.get()
-                                   .getDataStore()
-                                   .query(name, limit, offset);
-        return JsonHelper.toJson(list);
-    }
-
-    /**
      * Find.
      *
      * @param name the name
@@ -192,15 +182,38 @@ public class DataStoreFacade implements InitializingBean {
     }
 
     /**
-     * Query native.
+     * Query.
      *
-     * @param name the name
+     * @param query the entity query
+     * @param parameters the query parameters
+     * @param limit the limit
+     * @param offset the offset
      * @return the string
+     * @throws SQLException
      */
-    public static String queryNative(String name) {
+    public static String query(String query, String parameters, int limit, int offset) throws SQLException {
+        Optional<JsonElement> parametersElement = DatabaseFacade.parseOptionalJson(parameters);
         List list = DataStoreFacade.get()
                                    .getDataStore()
-                                   .queryNative(name);
+                                   .query(query, parametersElement, limit, offset);
+        return JsonHelper.toJson(list);
+    }
+
+    /**
+     * Query native.
+     *
+     * @param query the entity name
+     * @param parameters the native query parameters
+     * @param limit the limit
+     * @param offset the offset
+     * @return the string
+     * @throws SQLException
+     */
+    public static String queryNative(String query, String parameters, int limit, int offset) throws SQLException {
+        Optional<JsonElement> parametersElement = DatabaseFacade.parseOptionalJson(parameters);
+        List list = DataStoreFacade.get()
+                                   .getDataStore()
+                                   .queryNative(query, parametersElement, limit, offset);
         return JsonHelper.toJson(list);
     }
 

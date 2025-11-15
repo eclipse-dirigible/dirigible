@@ -13,6 +13,9 @@ import net.sf.jsqlparser.expression.operators.relational.ExpressionList;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.insert.Insert;
+
+import org.eclipse.dirigible.components.database.sql.SqlParseException;
+import org.eclipse.dirigible.components.database.sql.SqlParser;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

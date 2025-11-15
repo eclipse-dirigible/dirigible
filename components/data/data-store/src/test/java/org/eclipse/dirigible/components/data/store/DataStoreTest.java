@@ -14,10 +14,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.apache.commons.io.IOUtils;
+import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
@@ -48,6 +51,9 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.context.support.AnnotationConfigContextLoader;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.google.gson.JsonElement;
+import com.google.gson.JsonSyntaxException;
 
 /**
  * The Class ObjectStoreTest.
@@ -281,16 +287,18 @@ public class DataStoreTest {
 
     /**
      * Query object.
+     *
+     * @throws SQLException
      */
     @Test
-    public void query() {
+    public void query() throws SQLException {
 
         try {
             String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
 
             dataStore.save("Customer", json);
 
-            List list = dataStore.query("from Customer", 100, 0);
+            List list = dataStore.query("from Customer", null, 100, 0);
             System.out.println(JsonHelper.toJson(list));
 
             assertNotNull(list);
@@ -305,15 +313,17 @@ public class DataStoreTest {
 
     /**
      * Query native object.
+     *
+     * @throws SQLException
      */
     @Test
-    public void queryNative() {
+    public void queryNative() throws SQLException {
         try {
             String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
 
             dataStore.save("Customer", json);
 
-            List list = dataStore.queryNative("select * from Customer");
+            List list = dataStore.queryNative("select * from Customer", null, 100, 0);
             System.out.println(JsonHelper.toJson(list));
 
             assertNotNull(list);
@@ -378,6 +388,47 @@ public class DataStoreTest {
             cleanupCustomers();
         }
     }
+
+    /**
+     * Query object.
+     *
+     * @throws SQLException
+     */
+    @Test
+    public void queryWithParameters() throws SQLException {
+
+        try {
+            String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
+            dataStore.save("Customer", json);
+            json = "{\"name\":\"Jane\",\"address\":\"Varna, Bulgaria\"}";
+            dataStore.save("Customer", json);
+            json = "{\"name\":\"Matthias\",\"address\":\"Berlin, Germany\"}";
+            dataStore.save("Customer", json);
+
+            Optional<JsonElement> params = parseOptionalJson("['M%']");
+
+            List list = dataStore.query("from Customer where name like ?1", params, 100, 0);
+            System.out.println(JsonHelper.toJson(list));
+
+            assertNotNull(list);
+            assertEquals(1, list.size());
+            assertNotNull(list.get(0));
+            assertEquals("Matthias", ((Map) list.get(0)).get("name"));
+
+        } finally {
+            cleanupCustomers();
+        }
+    }
+
+    static Optional<JsonElement> parseOptionalJson(String json) {
+        try {
+            return Optional.ofNullable(null == json ? null : GsonHelper.parseJson(json));
+        } catch (JsonSyntaxException ex) {
+            throw new IllegalArgumentException("Invalid json: " + json, ex);
+        }
+    }
+
+
 
     /**
      * The Class TestConfiguration.

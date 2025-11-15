@@ -9,15 +9,15 @@
  */
 package org.eclipse.dirigible.database.sql.dialects.snowflake;
 
+import java.util.Arrays;
+import java.util.stream.Stream;
+
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.database.sql.DataType;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.builders.table.CreateTableBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.Arrays;
-import java.util.stream.Stream;
 
 /**
  * The Class SnowflakeCreateTableBuilder.

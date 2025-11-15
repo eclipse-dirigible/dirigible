@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.database.sql;
 
+import static java.text.MessageFormat.format;
+
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
@@ -18,8 +20,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-
-import static java.text.MessageFormat.format;
 
 /**
  * The Class DataTypeUtils.

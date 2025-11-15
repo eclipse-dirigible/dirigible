@@ -14,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
@@ -126,15 +127,17 @@ public class DataStoreIT extends IntegrationTest {
 
     /**
      * Query object.
+     *
+     * @throws SQLException
      */
     @Test
-    public void query() {
+    public void query() throws SQLException {
 
         String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
 
         dataStore.save("Customer", json);
 
-        List list = dataStore.query("from Customer", 100, 0);
+        List list = dataStore.query("from Customer", null, 100, 0);
         System.out.println(JsonHelper.toJson(list));
 
         assertNotNull(list);
@@ -150,15 +153,17 @@ public class DataStoreIT extends IntegrationTest {
 
     /**
      * Query native object.
+     *
+     * @throws SQLException
      */
     @Test
-    public void queryNative() {
+    public void queryNative() throws SQLException {
 
         String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
 
         dataStore.save("Customer", json);
 
-        List list = dataStore.queryNative("select * from Customer");
+        List list = dataStore.queryNative("select * from Customer", null, 100, 0);
         System.out.println(JsonHelper.toJson(list));
 
         assertNotNull(list);

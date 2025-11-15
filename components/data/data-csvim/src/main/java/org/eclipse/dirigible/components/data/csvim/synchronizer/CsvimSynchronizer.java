@@ -9,6 +9,14 @@
  */
 package org.eclipse.dirigible.components.data.csvim.synchronizer;
 
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.text.ParseException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+
 import org.apache.commons.io.FilenameUtils;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
@@ -32,14 +40,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-
-import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.text.ParseException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
 
 /**
  * The Class CSVIM Synchronizer.

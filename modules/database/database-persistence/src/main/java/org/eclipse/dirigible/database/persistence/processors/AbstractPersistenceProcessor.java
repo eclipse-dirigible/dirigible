@@ -28,8 +28,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
-import jakarta.persistence.EnumType;
-
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.database.persistence.IEntityManagerInterceptor;
 import org.eclipse.dirigible.database.persistence.PersistenceException;
@@ -40,6 +38,8 @@ import org.eclipse.dirigible.database.persistence.parser.Serializer;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import jakarta.persistence.EnumType;
 
 /**
  * The Abstract Persistence Processor.

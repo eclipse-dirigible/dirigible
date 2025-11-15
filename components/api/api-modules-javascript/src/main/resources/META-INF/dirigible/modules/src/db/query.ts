@@ -25,7 +25,7 @@ export interface NamedQueryParameter {
 /**
  * Interface to specify formatting options for the query result set.
  */
-export interface ResultParameter {
+export interface FormattingParameter {
 	readonly dateFormat: string;
 }
 
@@ -40,16 +40,16 @@ export class Query {
 	 * @param sql The SQL query to execute.
 	 * @param parameters An optional array of values (primitives or QueryParameter objects) to replace '?' placeholders.
 	 * @param datasourceName The name of the database connection to use (optional).
-	 * @param resultParameter Optional formatting parameters for the result set (e.g., date format).
+	 * @param formatting Optional formatting parameters for the result set (e.g., date format).
 	 * @returns An array of records representing the query results.
 	 */
-	public static execute(sql: string, parameters?: (string | number | boolean | Date | QueryParameter)[], datasourceName?: string,  resultParameter?: ResultParameter): any[] {
+	public static execute(sql: string, parameters?: (string | number | boolean | Date | QueryParameter)[], datasourceName?: string,  formatting?: FormattingParameter): any[] {
 		// Serialize parameters and result parameters for the Java facade
 		const paramsJson = parameters ? JSON.stringify(parameters) : undefined;
-		const resultParamsJson = resultParameter ? JSON.stringify(resultParameter) : undefined;
+		const formattingJson = formatting ? JSON.stringify(formatting) : undefined;
 
 		// The DatabaseFacade returns a JSON string representation of the result set
-		const resultset = DatabaseFacade.query(sql, paramsJson, datasourceName, resultParamsJson);
+		const resultset = DatabaseFacade.query(sql, paramsJson, datasourceName, formattingJson);
 
 		// Parse the JSON string back into a JavaScript array of objects
 		return JSON.parse(resultset);

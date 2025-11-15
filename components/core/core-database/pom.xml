@@ -21,7 +21,6 @@
 			<artifactId>dirigible-commons-config</artifactId>
     	</dependency>
 
-
     </dependencies>
 
 	<properties>

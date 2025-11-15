@@ -14,11 +14,7 @@
     <packaging>jar</packaging>
 
     <dependencies>
-        <dependency>
-            <groupId>com.github.jsqlparser</groupId>
-            <artifactId>jsqlparser</artifactId>
-            <version>5.3</version>
-        </dependency>
+
         <!-- JS sources -->
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
@@ -36,6 +32,10 @@
         </dependency>
 
         <!-- Data -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-data-core</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-data-structures</artifactId>

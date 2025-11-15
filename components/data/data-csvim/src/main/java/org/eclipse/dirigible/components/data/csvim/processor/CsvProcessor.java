@@ -9,26 +9,6 @@
  */
 package org.eclipse.dirigible.components.data.csvim.processor;
 
-import org.apache.commons.csv.CSVRecord;
-import org.apache.commons.lang3.StringUtils;
-import org.eclipse.dirigible.commons.api.helpers.DateTimeUtils;
-import org.eclipse.dirigible.components.data.csvim.domain.CsvFile;
-import org.eclipse.dirigible.components.data.csvim.domain.CsvRecord;
-import org.eclipse.dirigible.components.data.csvim.utils.CsvimUtils;
-import org.eclipse.dirigible.components.data.management.domain.ColumnMetadata;
-import org.eclipse.dirigible.components.data.management.domain.TableMetadata;
-import org.eclipse.dirigible.database.persistence.PersistenceException;
-import org.eclipse.dirigible.database.sql.DataTypeUtils;
-import org.eclipse.dirigible.database.sql.SqlFactory;
-import org.eclipse.dirigible.database.sql.builders.records.InsertBuilder;
-import org.eclipse.dirigible.database.sql.builders.records.UpdateBuilder;
-import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
-import org.eclipse.dirigible.database.sql.dialects.postgres.PostgresSqlDialect;
-import org.postgresql.util.PGobject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
-
 import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -43,6 +23,26 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import org.apache.commons.csv.CSVRecord;
+import org.apache.commons.lang3.StringUtils;
+import org.eclipse.dirigible.commons.api.helpers.DateTimeUtils;
+import org.eclipse.dirigible.components.data.csvim.domain.CsvFile;
+import org.eclipse.dirigible.components.data.csvim.domain.CsvRecord;
+import org.eclipse.dirigible.components.data.csvim.utils.CsvimUtils;
+import org.eclipse.dirigible.components.database.domain.ColumnMetadata;
+import org.eclipse.dirigible.components.database.domain.TableMetadata;
+import org.eclipse.dirigible.database.persistence.PersistenceException;
+import org.eclipse.dirigible.database.sql.DataTypeUtils;
+import org.eclipse.dirigible.database.sql.SqlFactory;
+import org.eclipse.dirigible.database.sql.builders.records.InsertBuilder;
+import org.eclipse.dirigible.database.sql.builders.records.UpdateBuilder;
+import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
+import org.eclipse.dirigible.database.sql.dialects.postgres.PostgresSqlDialect;
+import org.postgresql.util.PGobject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
 /**
  * The Class CsvProcessor.

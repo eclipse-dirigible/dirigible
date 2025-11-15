@@ -9,13 +9,13 @@
  */
 package org.eclipse.dirigible.database.sql.builders;
 
-import org.eclipse.dirigible.database.sql.ISqlBuilder;
-import org.eclipse.dirigible.database.sql.ISqlDialect;
-
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.regex.Pattern;
+
+import org.eclipse.dirigible.database.sql.ISqlBuilder;
+import org.eclipse.dirigible.database.sql.ISqlDialect;
 
 /**
  * The Abstract SQL Builder.

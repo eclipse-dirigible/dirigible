@@ -9,16 +9,16 @@
  */
 package org.eclipse.dirigible.database.sql.builders.table;
 
-import org.eclipse.dirigible.database.sql.DataType;
-import org.eclipse.dirigible.database.sql.Modifiers;
-import org.eclipse.dirigible.database.sql.SqlFactory;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 import java.util.HashSet;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import org.eclipse.dirigible.database.sql.DataType;
+import org.eclipse.dirigible.database.sql.Modifiers;
+import org.eclipse.dirigible.database.sql.SqlFactory;
+import org.junit.Test;
 
 /**
  * The Class CreateTableTest.

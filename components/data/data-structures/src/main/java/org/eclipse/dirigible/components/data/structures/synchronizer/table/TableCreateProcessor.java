@@ -9,20 +9,25 @@
  */
 package org.eclipse.dirigible.components.data.structures.synchronizer.table;
 
-import org.eclipse.dirigible.components.data.structures.domain.*;
-import org.eclipse.dirigible.database.sql.DataType;
-import org.eclipse.dirigible.database.sql.ISqlKeywords;
-import org.eclipse.dirigible.database.sql.SqlFactory;
-import org.eclipse.dirigible.database.sql.builders.table.CreateTableBuilder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+
+import org.eclipse.dirigible.components.data.structures.domain.Table;
+import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
+import org.eclipse.dirigible.components.data.structures.domain.TableConstraintCheck;
+import org.eclipse.dirigible.components.data.structures.domain.TableConstraintForeignKey;
+import org.eclipse.dirigible.components.data.structures.domain.TableConstraintUnique;
+import org.eclipse.dirigible.components.data.structures.domain.TableIndex;
+import org.eclipse.dirigible.database.sql.DataType;
+import org.eclipse.dirigible.database.sql.ISqlKeywords;
+import org.eclipse.dirigible.database.sql.SqlFactory;
+import org.eclipse.dirigible.database.sql.builders.table.CreateTableBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The Table Create Processor.

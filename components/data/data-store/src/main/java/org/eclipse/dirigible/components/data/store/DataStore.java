@@ -12,9 +12,11 @@ package org.eclipse.dirigible.components.data.store;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.sql.DataSource;
@@ -28,6 +30,7 @@ import org.eclipse.dirigible.components.data.store.hbm.EntityToHbmMapper;
 import org.eclipse.dirigible.components.data.store.hbm.HbmXmlDescriptor;
 import org.eclipse.dirigible.components.data.store.model.EntityMetadata;
 import org.eclipse.dirigible.components.data.store.parser.EntityParser;
+import org.eclipse.dirigible.components.database.params.ParametersSetter;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.hibernate.Transaction;
@@ -35,12 +38,15 @@ import org.hibernate.boot.registry.StandardServiceRegistry;
 import org.hibernate.boot.registry.StandardServiceRegistryBuilder;
 import org.hibernate.cfg.Configuration;
 import org.hibernate.cfg.Environment;
+import org.hibernate.query.NativeQuery;
 import org.hibernate.query.Query;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
+
+import com.google.gson.JsonElement;
 
 /**
  * The Class ObjectStore.
@@ -426,13 +432,19 @@ public class DataStore {
      * Query.
      *
      * @param query the query
+     * @param parameters the query parameters
      * @param limit the limit
      * @param offset the offset
+     * @formatting the formatting patterns if any
      * @return the list
+     * @throws SQLException
      */
-    public List<Map> query(String query, int limit, int offset) {
+    public List<Map> query(String query, Optional<JsonElement> parameters, int limit, int offset) throws SQLException {
         try (Session session = getSessionFactory().openSession()) {
             Query<Map> queryObject = session.createQuery(query, Map.class);
+            if (parameters != null && parameters.isPresent()) {
+                ParametersSetter.setIndexedParameters(parameters.get(), new ParameterizedQuery(queryObject));
+            }
             if (limit > 0) {
                 queryObject.setMaxResults(limit);
             }
@@ -447,12 +459,24 @@ public class DataStore {
      * Query.
      *
      * @param query the query
+     * @param limit the limit
+     * @param offset the offset
      * @return the list
+     * @throws SQLException
      */
-    public List<Map> queryNative(String query) {
+    public List<Map> queryNative(String query, Optional<JsonElement> parameters, int limit, int offset) throws SQLException {
         try (Session session = getSessionFactory().openSession()) {
-            return session.createNativeQuery(query, Map.class)
-                          .list();
+            NativeQuery<Map> nativeQuery = session.createNativeQuery(query, Map.class);
+            if (parameters != null && parameters.isPresent()) {
+                ParametersSetter.setIndexedParameters(parameters.get(), new ParameterizedQuery(nativeQuery));
+            }
+            if (limit > 0) {
+                nativeQuery.setMaxResults(limit);
+            }
+            if (offset >= 0) {
+                nativeQuery.setFirstResult(offset);
+            }
+            return nativeQuery.list();
         }
     }
 
