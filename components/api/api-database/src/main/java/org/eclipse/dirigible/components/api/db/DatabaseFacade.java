@@ -997,4 +997,8 @@ public class DatabaseFacade implements InitializingBean {
         return baos.toByteArray();
     }
 
+    public static void toJson(ResultSet resultSet, boolean limited, boolean stringify, OutputStream output) throws Exception {
+        DatabaseResultSetHelper.toJson(resultSet, limited, stringify, output);
+    }
+
 }

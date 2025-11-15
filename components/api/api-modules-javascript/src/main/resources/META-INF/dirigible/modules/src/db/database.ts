@@ -6,7 +6,6 @@ import { Bytes } from "@aerokit/sdk/io/bytes";
 import { InputStream } from "@aerokit/sdk/io/streams";
 
 const DatabaseFacade = Java.type("org.eclipse.dirigible.components.api.db.DatabaseFacade");
-const DatabaseResultSetHelper = Java.type("org.eclipse.dirigible.components.data.management.helpers.DatabaseResultSetHelper");
 const JSqlDate = Java.type("java.sql.Date");
 const JSqlTimestamp = Java.type("java.sql.Timestamp");
 const JSqlTime = Java.type("java.sql.Time");
@@ -1045,7 +1044,7 @@ export class ResultSet {
 			.setWriter(sw)
 			.setCharset(StandardCharsets.UTF_8)
 			.get();
-		DatabaseResultSetHelper.toJson(this.native, limited, stringify, output);
+		DatabaseFacade.toJson(this.native, limited, stringify, output);
 		const jsonString = sw.toString();
 		return stringify ? jsonString : JSON.parse(jsonString);
 	}

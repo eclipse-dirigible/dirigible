@@ -24,7 +24,6 @@ import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 
 /**

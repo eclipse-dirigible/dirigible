@@ -148,24 +148,26 @@ export class Store {
 	}
 	
 	/**
-	 * Queries all entries for a given entity name with pagination.
-	 * @param name The entity/table name.
+	 * Queries all entries for a given script with pagination.
+	 * @param query The query script.
 	 * @param limit Maximum number of results to return.
 	 * @param offset Number of results to skip.
 	 * @returns An array of JavaScript objects.
 	 */
-	public static query(name: string, limit: number = 100, offset: number = 0): any[] {
-		const result = DataStoreFacade.query(name, limit, offset);
+	public static query(query: string, parameters?: (string | number | boolean | Date)[], limit: number = 100, offset: number = 0): any[] {
+		const paramsJson = parameters ? JSON.stringify(parameters) : undefined;
+		const result = DataStoreFacade.query(query, paramsJson, limit, offset);
 		return JSON.parse(result);
 	}
 	
 	/**
 	 * Queries all entries for a given entity name without pagination.
-	 * @param name The entity/table name.
+	 * @param query The entity/table name.
 	 * @returns An array of all JavaScript objects.
 	 */
-	public static queryNative(name: string): any[] {
-		const result = DataStoreFacade.queryNative(name);
+	public static queryNative(query: string, parameters?: (string | number | boolean | Date)[], limit: number = 100, offset: number = 0): any[] {
+		const paramsJson = parameters ? JSON.stringify(parameters) : undefined;
+		const result = DataStoreFacade.queryNative(query, paramsJson, limit, offset);
 		return JSON.parse(result);
 	}
 	
