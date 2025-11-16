@@ -24,6 +24,9 @@ import org.hibernate.query.ParameterMetadata;
 import org.hibernate.query.Query;
 import org.hibernate.query.QueryParameter;
 
+/**
+ * The Class ParameterizedQuery.
+ */
 public class ParameterizedQuery implements Parameterized {
 
     /** The statement this object is wrapping. */
@@ -261,26 +264,58 @@ public class ParameterizedQuery implements Parameterized {
         statement.setParameter(index, null);
     }
 
+    /**
+     * Sets the big decimal.
+     *
+     * @param index the index
+     * @param value the value
+     * @throws SQLException the SQL exception
+     */
     @Override
     public void setBigDecimal(int index, BigDecimal value) throws SQLException {
         statement.setParameter(index, value, BigDecimal.class);
     }
 
+    /**
+     * Sets the object.
+     *
+     * @param index the index
+     * @param value the value
+     * @param targetSqlType the target sql type
+     * @throws SQLException the SQL exception
+     */
     @Override
     public void setObject(int index, Object value, int targetSqlType) throws SQLException {
         statement.setParameter(index, value);
     }
 
+    /**
+     * Gets the connection.
+     *
+     * @return the connection
+     * @throws SQLException the SQL exception
+     */
     @Override
     public Connection getConnection() throws SQLException {
         throw new UnsupportedOperationException("This functionality is not available via Hibernate persistence layer");
     }
 
+    /**
+     * Adds the batch.
+     *
+     * @throws SQLException the SQL exception
+     */
     @Override
     public void addBatch() throws SQLException {
         throw new UnsupportedOperationException("This functionality is not available via Hibernate persistence layer");
     }
 
+    /**
+     * Gets the parameter count.
+     *
+     * @return the parameter count
+     * @throws SQLException the SQL exception
+     */
     @Override
     public int getParameterCount() throws SQLException {
         ParameterMetadata parameterMetaData = statement.getParameterMetadata();
@@ -288,6 +323,13 @@ public class ParameterizedQuery implements Parameterized {
         return sqlParametersCount;
     }
 
+    /**
+     * Gets the parameter type.
+     *
+     * @param sqlParamIndex the sql param index
+     * @return the parameter type
+     * @throws SQLException the SQL exception
+     */
     @Override
     public int getParameterType(int sqlParamIndex) throws SQLException {
         ParameterMetadata parameterMetaData = statement.getParameterMetadata();

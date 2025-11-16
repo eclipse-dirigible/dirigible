@@ -173,6 +173,14 @@ public class DynamicQueryFilter {
     }
 
 
+    /**
+     * Filter dynamic.
+     *
+     * @param session the session
+     * @param entityName the entity name
+     * @param queryOptions the query options
+     * @return the query
+     */
     private static Query<Map> filterDynamic(Session session, String entityName, QueryOptions queryOptions) {
 
         StringBuilder hql = new StringBuilder("SELECT e FROM " + entityName + " e WHERE 1=1");

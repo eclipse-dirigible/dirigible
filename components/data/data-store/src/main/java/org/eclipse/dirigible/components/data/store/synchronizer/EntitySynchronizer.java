@@ -279,6 +279,9 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
         return Entity.ARTEFACT_TYPE;
     }
 
+    /**
+     * Finishing.
+     */
     @Override
     public void finishing() {
         dataStore.recreate();

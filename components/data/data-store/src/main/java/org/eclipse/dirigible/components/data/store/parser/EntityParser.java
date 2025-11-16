@@ -36,12 +36,16 @@ import org.eclipse.dirigible.parsers.typescript.TypeScriptParserBaseVisitor;
  */
 public class EntityParser {
 
+    /** The Constant ENTITIES. */
     public static final Map<String, EntityMetadata> ENTITIES = Collections.synchronizedMap(new HashMap<String, EntityMetadata>());
+    
+    /** The Constant MD5. */
     public static final Map<String, String> MD5 = Collections.synchronizedMap(new HashMap<String, String>());
 
     /**
      * Parses the given TypeScript source code and extracts EntityMetadata.
      *
+     * @param location the location
      * @param source The TypeScript source code string.
      * @return EntityMetadata object populated with extracted data.
      */
@@ -76,14 +80,27 @@ public class EntityParser {
      */
     private static class MetadataExtractorVisitor extends TypeScriptParserBaseVisitor<EntityMetadata> {
 
+        /** The current entity metadata. */
         private EntityMetadata currentEntityMetadata = new EntityMetadata();
 
+        /**
+         * Visit program.
+         *
+         * @param ctx the ctx
+         * @return the entity metadata
+         */
         @Override
         public EntityMetadata visitProgram(TypeScriptParser.ProgramContext ctx) {
             super.visitProgram(ctx);
             return currentEntityMetadata;
         }
 
+        /**
+         * Gets the decorator base name.
+         *
+         * @param ctx the ctx
+         * @return the decorator base name
+         */
         private String getDecoratorBaseName(TypeScriptParser.DecoratorContext ctx) {
             TypeScriptParser.DecoratorMemberExpressionContext memberCtx = null;
 
@@ -109,6 +126,7 @@ public class EntityParser {
             return null;
         }
 
+        /** The extract value. */
         // Helper to get value for a key in a simple object literal string
         private java.util.function.BiFunction<String, String, String> extractValue = (source, key) -> {
             // Look for key:
@@ -142,6 +160,12 @@ public class EntityParser {
             return null;
         };
 
+        /**
+         * Visit class declaration.
+         *
+         * @param ctx the ctx
+         * @return the entity metadata
+         */
         @Override
         public EntityMetadata visitClassDeclaration(TypeScriptParser.ClassDeclarationContext ctx) {
 
@@ -164,6 +188,11 @@ public class EntityParser {
             return super.visitClassDeclaration(ctx);
         }
 
+        /**
+         * Parses the class decorator.
+         *
+         * @param ctx the ctx
+         */
         private void parseClassDecorator(TypeScriptParser.DecoratorContext ctx) {
             String decoratorName = getDecoratorBaseName(ctx);
             if (decoratorName == null)
@@ -259,6 +288,9 @@ public class EntityParser {
         /**
          * Overrides the visit method for class members. We manually iterate over children to find the
          * DecoratorContexts.
+         *
+         * @param ctx the ctx
+         * @return the entity metadata
          */
         @Override
         public EntityMetadata visitClassElement(TypeScriptParser.ClassElementContext ctx) {
@@ -310,6 +342,13 @@ public class EntityParser {
             return currentEntityMetadata;
         }
 
+        /**
+         * Parses the property decorator.
+         *
+         * @param ctx the ctx
+         * @param fieldMetadata the field metadata
+         * @param columnDetails the column details
+         */
         private void parsePropertyDecorator(TypeScriptParser.DecoratorContext ctx, EntityFieldMetadata fieldMetadata,
                 ColumnDetails columnDetails) {
 
