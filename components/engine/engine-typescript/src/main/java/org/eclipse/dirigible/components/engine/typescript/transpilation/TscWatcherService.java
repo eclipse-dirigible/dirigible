@@ -79,13 +79,13 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
                 "exclude": ["modules", "modules-tests"]
             }
             """;
-
-    private final ExecutorService executor = Executors.newFixedThreadPool(2);
     private final IRepository repository;
+    private ExecutorService executor;
     private Process tscProcess;
 
     TscWatcherService(IRepository repository) {
         this.repository = repository;
+        this.executor = Executors.newFixedThreadPool(2);
     }
 
     /**
@@ -189,13 +189,26 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
         }
     }
 
+    void restart() {
+        LOGGER.info("Restarting {}...", this);
+        destroy();
+
+        this.executor = Executors.newFixedThreadPool(2); // reinit since the previous executor is destroyed
+        onApplicationEvent(null);
+    }
+
     @Override
-    public void destroy() throws Exception {
+    public void destroy() {
         LOGGER.info("Destroying tsc watch service...");
         if (tscProcess != null && tscProcess.isAlive()) {
-            LOGGER.info("Stopping tsc watch process...");
-            tscProcess.destroy();
+            LOGGER.debug("Forcibly destroying tsc watch process {}...", tscProcess);
+            tscProcess.destroyForcibly();
+            tscProcess = null;
         }
-        executor.shutdownNow();
+
+        LOGGER.debug("Closing the executor [{}]...", executor);
+        executor.close();
+
+        LOGGER.info("Destroy completed!");
     }
 }
