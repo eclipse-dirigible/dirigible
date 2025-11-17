@@ -51,11 +51,6 @@ function getTableReportBackendSources() {
             action: "generate",
             rename: "project.json",
             engine: "javascript"
-        }, {
-            location: "/template-application-rest/tsconfig.json.template",
-            action: "generate",
-            rename: "tsconfig.json",
-            engine: "velocity"
         }
     ];
 }
