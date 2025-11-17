@@ -50,6 +50,7 @@ class TscWatcherServicePublisherHandler implements PublisherHandler {
         // not applicable
     }
 
+    @Override
     public void afterUnpublish(String location) {
         // not applicable
     }

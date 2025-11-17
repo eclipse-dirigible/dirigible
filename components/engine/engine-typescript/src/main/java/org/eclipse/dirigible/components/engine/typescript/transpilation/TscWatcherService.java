@@ -87,6 +87,11 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
         this.repository = repository;
     }
 
+    @Override
+    public String toString() {
+        return "TscWatcherService{" + "repository=" + repository + ", executor=" + executor + ", tscProcess=" + tscProcess + '}';
+    }
+
     /**
      * Checks every 30 seconds if the tsc process is alive. If not, restarts it.
      */
