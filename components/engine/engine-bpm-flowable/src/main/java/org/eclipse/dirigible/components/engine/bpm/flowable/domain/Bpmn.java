@@ -9,17 +9,15 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.domain;
 
+import org.eclipse.dirigible.components.base.artefact.Artefact;
+import com.google.gson.annotations.Expose;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
-import jakarta.persistence.Transient;
-
-import org.eclipse.dirigible.components.base.artefact.Artefact;
-
-import com.google.gson.annotations.Expose;
 
 /**
  * The Class Bpmn.
@@ -73,12 +71,13 @@ public class Bpmn extends Artefact {
     private String processDefinitionCategory;
 
     /** The process definition description. */
-    @Column(name = "BPMN_PROCESS_DEFINITION_DESCRIPTION", columnDefinition = "CLOB", nullable = true)
+    @Column(name = "BPMN_PROCESS_DEFINITION_DESCRIPTION", columnDefinition = "TEXT", nullable = true)
     @Expose
     private String processDefinitionDescription;
 
     /** The content. */
-    @Column(name = "BPMN_CONTENT", columnDefinition = "CLOB", nullable = true)
+    @Column(name = "BPMN_CONTENT", nullable = true)
+    @Lob
     @Expose
     private byte[] content;
 

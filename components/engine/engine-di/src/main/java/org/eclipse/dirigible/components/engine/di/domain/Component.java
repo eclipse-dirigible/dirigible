@@ -10,12 +10,10 @@
 package org.eclipse.dirigible.components.engine.di.domain;
 
 import org.eclipse.dirigible.components.base.artefact.Artefact;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
 /**
@@ -35,8 +33,7 @@ public class Component extends Artefact {
     private Long id;
 
     /** The content. */
-    @Column(name = "COMPONENT_CONTENT", columnDefinition = "CLOB")
-    @Lob
+    @Column(name = "COMPONENT_CONTENT", columnDefinition = "TEXT")
     private String content;
 
     /**

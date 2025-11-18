@@ -11,17 +11,17 @@ package org.eclipse.dirigible.components.odata.domain;
 
 import java.util.Arrays;
 import java.util.Set;
-
+import org.eclipse.dirigible.components.base.artefact.Artefact;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+import com.google.gson.annotations.Expose;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
-
-import org.eclipse.dirigible.components.base.artefact.Artefact;
-
-import com.google.gson.annotations.Expose;
 
 /**
  * The OData Schema Entity.
@@ -40,7 +40,9 @@ public class ODataContainer extends Artefact {
     private Long id;
 
     /** The content. */
-    @Column(name = "ODATAC_CONTENT", columnDefinition = "BLOB", nullable = true)
+    @Column(name = "ODATAC_CONTENT", nullable = true)
+    @Lob
+    @JdbcTypeCode(SqlTypes.BINARY)
     @Expose
     private byte[] content;
 

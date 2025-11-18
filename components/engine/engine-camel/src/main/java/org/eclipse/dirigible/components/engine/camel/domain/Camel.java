@@ -9,10 +9,15 @@
  */
 package org.eclipse.dirigible.components.engine.camel.domain;
 
-import com.google.gson.annotations.Expose;
 import org.eclipse.dirigible.components.base.artefact.Artefact;
-
-import jakarta.persistence.*;
+import com.google.gson.annotations.Expose;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Lob;
+import jakarta.persistence.Table;
 
 /**
  * The Class Camel.
@@ -31,7 +36,8 @@ public class Camel extends Artefact {
     private Long id;
 
     /** The content. */
-    @Column(name = "CAMEL_CONTENT", columnDefinition = "CLOB", nullable = true)
+    @Column(name = "CAMEL_CONTENT", nullable = true)
+    @Lob
     @Expose
     private byte[] content;
 
