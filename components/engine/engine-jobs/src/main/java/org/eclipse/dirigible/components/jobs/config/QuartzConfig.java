@@ -98,8 +98,8 @@ class QuartzConfig {
         String jobStoreClass = properties.getProperty("org.quartz.jobStore.class");
         if (null != jobStoreClass && jobStoreClass.equals(JobStoreTX.class.getCanonicalName())) {
             properties.setProperty("org.quartz.jobStore.dataSource", systemDataSourceName);
-            properties.setProperty("org.quartz.jobStore.driverDelegateClass",
-                    org.eclipse.dirigible.commons.config.Configuration.get("DIRIGIBLE_SCHEDULER_DATABASE_DELEGATE", "org.quartz.impl.jdbcjobstore.StdJDBCDelegate"));
+            properties.setProperty("org.quartz.jobStore.driverDelegateClass", org.eclipse.dirigible.commons.config.Configuration.get(
+                    "DIRIGIBLE_SCHEDULER_DATABASE_DELEGATE", "org.quartz.impl.jdbcjobstore.StdJDBCDelegate"));
         }
         return properties;
     }

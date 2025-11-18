@@ -11,6 +11,8 @@ package org.eclipse.dirigible.components.engine.wiki.domain;
 
 import java.util.Arrays;
 import org.eclipse.dirigible.components.base.artefact.Artefact;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -38,6 +40,7 @@ public class Markdown extends Artefact {
     /** The content. */
     @Column(name = "MARKDOWN_CONTENT")
     @Lob
+    @JdbcTypeCode(SqlTypes.BINARY)
     private byte[] content;
 
     /**

@@ -10,6 +10,8 @@
 package org.eclipse.dirigible.components.engine.bpm.flowable.domain;
 
 import org.eclipse.dirigible.components.base.artefact.Artefact;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import com.google.gson.annotations.Expose;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -78,6 +80,7 @@ public class Bpmn extends Artefact {
     /** The content. */
     @Column(name = "BPMN_CONTENT", nullable = true)
     @Lob
+    @JdbcTypeCode(SqlTypes.BINARY)
     @Expose
     private byte[] content;
 
