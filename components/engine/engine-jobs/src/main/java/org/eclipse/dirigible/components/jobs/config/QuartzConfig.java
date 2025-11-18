@@ -12,7 +12,6 @@ package org.eclipse.dirigible.components.jobs.config;
 import java.io.IOException;
 import java.util.Properties;
 import javax.sql.DataSource;
-import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.data.sources.config.SystemDataSourceName;
 import org.eclipse.dirigible.components.jobs.telemetry.JobExecutionsCountListener;
 import org.eclipse.dirigible.components.jobs.telemetry.JobExecutionsDurationListener;
@@ -26,6 +25,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.config.PropertiesFactoryBean;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.scheduling.quartz.SchedulerFactoryBean;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -98,7 +98,8 @@ class QuartzConfig {
         String jobStoreClass = properties.getProperty("org.quartz.jobStore.class");
         if (null != jobStoreClass && jobStoreClass.equals(JobStoreTX.class.getCanonicalName())) {
             properties.setProperty("org.quartz.jobStore.dataSource", systemDataSourceName);
-            properties.setProperty("org.quartz.jobStore.driverDelegateClass", Configuration.get("DIRIGIBLE_SCHEDULER_DATABASE_DELEGATE", "org.quartz.impl.jdbcjobstore.StdJDBCDelegate"));
+            properties.setProperty("org.quartz.jobStore.driverDelegateClass",
+                    org.eclipse.dirigible.commons.config.Configuration.get("DIRIGIBLE_SCHEDULER_DATABASE_DELEGATE", "org.quartz.impl.jdbcjobstore.StdJDBCDelegate"));
         }
         return properties;
     }
