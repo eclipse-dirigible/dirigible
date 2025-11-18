@@ -209,12 +209,14 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
                 LOGGER.debug("Forcibly destroying tsc watch process {}...", tscProcess);
                 tscProcess.destroyForcibly();
             }
+
             tscProcess = null;
         }
 
         if (null != executor) {
-            LOGGER.debug("Closing the executor [{}]...", executor);
-            executor.close();
+            LOGGER.debug("Shutting down the executor [{}]...", executor);
+            executor.shutdownNow();
+
             executor = null;
         }
 
