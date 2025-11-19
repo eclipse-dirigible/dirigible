@@ -10,13 +10,19 @@ RUN apk update && \
     nodejs \
     npm \
     git \
-    fontconfig ttf-dejavu ttf-liberation \
-    # Clean up apk cache to reduce image size
-    && rm -rf /var/cache/apk/*
+    fontconfig ttf-dejavu ttf-liberation
+
+# This forces npm to update itself and its internal dependencies
+# to the latest versions available on the npm registry
+RUN npm install -g npm
 
 # Install global npm packages
 RUN npm i -g esbuild \
-    && npm i -g typescript
+    && npm i -g typescript \
+    # Clean up npm cache to reduce image size
+    && npm cache clean --force \
+    # cleanup of apk cache
+    && rm -rf /var/cache/apk/*
 
 
 COPY target/dirigible-application-*-executable.jar dirigible.jar
