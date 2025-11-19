@@ -98,6 +98,11 @@ export class Extensions {
 			throw new Error(errorData[0]);
 		}
 	}
+	
+	/** Alias for loadExtensionModules */
+	public static async load(extensionPoint: string, requiredFunctions: string[] = [], throwError: boolean = false): Promise<any[]> {
+		return Extensions.loadExtensionModules(extensionPoint, requiredFunctions, throwError);
+	}
 }
 
 // @ts-ignore

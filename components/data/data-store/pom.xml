@@ -36,6 +36,10 @@
     	<!-- Data -->
     	<dependency>
 	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-data-core</artifactId>
+    	</dependency>
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-data-structures</artifactId>
     	</dependency>
     	<dependency>

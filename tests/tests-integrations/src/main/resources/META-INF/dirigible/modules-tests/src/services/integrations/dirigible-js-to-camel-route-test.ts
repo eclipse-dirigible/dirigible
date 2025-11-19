@@ -9,8 +9,8 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { test, assertEquals } from "sdk/junit"
-import { Integrations } from "sdk/integrations"
+import { test, assertEquals } from "@aerokit/sdk/junit"
+import { Integrations } from "@aerokit/sdk/integrations"
 
 test('dirigible-js-to-camel-route-test', () => {
     const message = "Initial Message";

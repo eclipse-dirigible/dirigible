@@ -9,17 +9,6 @@
  */
 package org.eclipse.dirigible.database.sql;
 
-import org.eclipse.dirigible.database.sql.builders.AlterBranchingBuilder;
-import org.eclipse.dirigible.database.sql.builders.CreateBranchingBuilder;
-import org.eclipse.dirigible.database.sql.builders.DropBranchingBuilder;
-import org.eclipse.dirigible.database.sql.builders.records.DeleteBuilder;
-import org.eclipse.dirigible.database.sql.builders.records.InsertBuilder;
-import org.eclipse.dirigible.database.sql.builders.records.SelectBuilder;
-import org.eclipse.dirigible.database.sql.builders.records.UpdateBuilder;
-import org.eclipse.dirigible.database.sql.builders.sequence.LastValueIdentityBuilder;
-import org.eclipse.dirigible.database.sql.builders.sequence.NextValueSequenceBuilder;
-
-import javax.sql.DataSource;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.sql.Connection;
@@ -29,6 +18,18 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+
+import javax.sql.DataSource;
+
+import org.eclipse.dirigible.database.sql.builders.AlterBranchingBuilder;
+import org.eclipse.dirigible.database.sql.builders.CreateBranchingBuilder;
+import org.eclipse.dirigible.database.sql.builders.DropBranchingBuilder;
+import org.eclipse.dirigible.database.sql.builders.records.DeleteBuilder;
+import org.eclipse.dirigible.database.sql.builders.records.InsertBuilder;
+import org.eclipse.dirigible.database.sql.builders.records.SelectBuilder;
+import org.eclipse.dirigible.database.sql.builders.records.UpdateBuilder;
+import org.eclipse.dirigible.database.sql.builders.sequence.LastValueIdentityBuilder;
+import org.eclipse.dirigible.database.sql.builders.sequence.NextValueSequenceBuilder;
 
 /**
  * The SQL Dialect interface.

@@ -1,4 +1,4 @@
-import { consumer } from "sdk/messaging";
+import { consumer } from "@aerokit/sdk/messaging";
 
 let message = consumer.queue("queue1").receive(1000);
 

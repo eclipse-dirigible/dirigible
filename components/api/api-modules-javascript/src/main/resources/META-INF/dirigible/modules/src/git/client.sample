@@ -1,4 +1,4 @@
-import { client } from "sdk/git"
+import { client } from "@aerokit/sdk/git"
 
 const user = "dirigible";
 const email = "dirigible@eclipse.org";

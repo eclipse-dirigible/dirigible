@@ -1,5 +1,5 @@
-import { client } from "sdk/mongodb";
-import { response } from "sdk/http";
+import { client } from "@aerokit/sdk/mongodb";
+import { response } from "@aerokit/sdk/http";
 
 let mongoClient = client.getClient();
 

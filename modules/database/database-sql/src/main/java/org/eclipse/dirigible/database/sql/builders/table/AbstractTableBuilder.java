@@ -9,15 +9,19 @@
  */
 package org.eclipse.dirigible.database.sql.builders.table;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import org.eclipse.dirigible.database.sql.DataType;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.builders.AbstractCreateSqlBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.*;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * The Create Table Builder.
@@ -147,7 +151,25 @@ public abstract class AbstractTableBuilder<TABLE_BUILDER extends AbstractTableBu
      */
     public TABLE_BUILDER column(String name, DataType type, Boolean isPrimaryKey, Boolean isNullable, Boolean isUnique,
             Boolean isFuzzyIndexEnabled, String... args) {
-        return column(name, type, isPrimaryKey, isNullable, isUnique, isFuzzyIndexEnabled, args);
+        return column(name, type, isPrimaryKey, isNullable, isUnique, false, isFuzzyIndexEnabled, args);
+    }
+
+    /**
+     * Column.
+     *
+     * @param name the name
+     * @param type the type
+     * @param isPrimaryKey the is primary key
+     * @param isNullable the is nullable
+     * @param isUnique the is unique
+     * @param isIdentity the is identity
+     * @param isFuzzyIndexEnabled the is fuzzy index enabled
+     * @param args the args
+     * @return the creates the table builder
+     */
+    public TABLE_BUILDER column(String name, DataType type, Boolean isPrimaryKey, Boolean isNullable, Boolean isUnique, Boolean isIdentity,
+            Boolean isFuzzyIndexEnabled, String[] args) {
+        return column(name, type, isPrimaryKey, isNullable, isUnique, false, isIdentity, isFuzzyIndexEnabled, args);
     }
 
     /**

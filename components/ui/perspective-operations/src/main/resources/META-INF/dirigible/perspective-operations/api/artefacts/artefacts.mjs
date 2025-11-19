@@ -1,5 +1,5 @@
-import { extensions } from "sdk/extensions";
-import { response } from "sdk/http";
+import { extensions } from "@aerokit/sdk/extensions";
+import { response } from "@aerokit/sdk/http";
 
 const artefacts = [];
 const artefactsExtensions = await extensions.loadExtensionModules("platform-operations-artefacts");

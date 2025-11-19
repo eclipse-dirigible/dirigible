@@ -18,10 +18,6 @@ export function getTemplate() {
             engine: "velocity",
 			rename: "handler.ts"
 		}, {
-			location: "/template-camel-http-route/tsconfig.json",
-			action: "generate",
-			rename: "tsconfig.json"
-		}, {
             location: "/template-camel-http-route/project.json",
             action: "generate",
             rename: "project.json"

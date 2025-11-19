@@ -5,7 +5,7 @@
  *
  */
 
-import { InputStream, Streams } from "sdk/io/streams";
+import { InputStream, Streams } from "@aerokit/sdk/io/streams";
 import { Cookie } from "./response";
 
 const HttpRequestFacade = Java.type("org.eclipse.dirigible.components.api.http.HttpRequestFacade");

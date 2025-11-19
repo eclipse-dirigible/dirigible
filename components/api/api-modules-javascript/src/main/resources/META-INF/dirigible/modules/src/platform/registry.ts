@@ -2,8 +2,8 @@
  * Provides a set of utilities and data structures for interacting with the platform's
  * Registry/Repository, which manages files and directories (Artefacts and Collections).
  */
-import { Bytes } from "sdk/io/bytes";
-import { Repository } from "sdk/platform/repository";
+import { Bytes } from "@aerokit/sdk/io/bytes";
+import { Repository } from "@aerokit/sdk/platform/repository";
 const RegistryFacade = Java.type("org.eclipse.dirigible.components.api.platform.RegistryFacade");
 
 /**

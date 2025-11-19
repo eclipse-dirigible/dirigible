@@ -39,6 +39,7 @@
         <module>security/security-client-registration</module>
 
         <!-- Data -->
+        <module>data/data-core</module>
         <module>data/data-structures</module>
         <module>data/data-sources</module>
         <module>data/data-transfer</module>
@@ -491,6 +492,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-core-database</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-data-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

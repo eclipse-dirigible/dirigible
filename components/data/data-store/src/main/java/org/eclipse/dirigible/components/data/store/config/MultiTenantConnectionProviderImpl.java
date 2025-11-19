@@ -19,20 +19,37 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
 
+/**
+ * The Class MultiTenantConnectionProviderImpl.
+ */
 @Component
 public class MultiTenantConnectionProviderImpl extends AbstractMultiTenantConnectionProvider<String> {
 
     /** The datasources manager. */
     private final DataSourcesManager datasourcesManager;
 
+    /** The datasource. */
     private final DataSource datasource;
 
+    /**
+     * Instantiates a new multi tenant connection provider impl.
+     *
+     * @param datasourcesManager the datasources manager
+     * @param datasource the datasource
+     */
     @Autowired
     public MultiTenantConnectionProviderImpl(DataSourcesManager datasourcesManager, DataSource datasource) {
         this.datasourcesManager = datasourcesManager;
         this.datasource = datasource;
     }
 
+    /**
+     * Gets the connection.
+     *
+     * @param tenantIdentifier the tenant identifier
+     * @return the connection
+     * @throws SQLException the SQL exception
+     */
     @Override
     public Connection getConnection(String tenantIdentifier) throws SQLException {
         Connection connection = this.datasourcesManager.getDefaultDataSource()
@@ -40,32 +57,67 @@ public class MultiTenantConnectionProviderImpl extends AbstractMultiTenantConnec
         return connection;
     }
 
+    /**
+     * Gets the any connection.
+     *
+     * @return the any connection
+     * @throws SQLException the SQL exception
+     */
     @Override
     public Connection getAnyConnection() throws SQLException {
         return datasourcesManager.getDefaultDataSource()
                                  .getConnection();
     }
 
+    /**
+     * Release any connection.
+     *
+     * @param connection the connection
+     * @throws SQLException the SQL exception
+     */
     @Override
     public void releaseAnyConnection(Connection connection) throws SQLException {
         connection.close();
     }
 
+    /**
+     * Release connection.
+     *
+     * @param tenantIdentifier the tenant identifier
+     * @param connection the connection
+     * @throws SQLException the SQL exception
+     */
     @Override
     public void releaseConnection(String tenantIdentifier, Connection connection) throws SQLException {
         connection.close();
     }
 
+    /**
+     * Supports aggressive release.
+     *
+     * @return true, if successful
+     */
     @Override
     public boolean supportsAggressiveRelease() {
         return false;
     }
 
+    /**
+     * Gets the any connection provider.
+     *
+     * @return the any connection provider
+     */
     @Override
     protected ConnectionProvider getAnyConnectionProvider() {
         return null;
     }
 
+    /**
+     * Select connection provider.
+     *
+     * @param tenantIdentifier the tenant identifier
+     * @return the connection provider
+     */
     @Override
     protected ConnectionProvider selectConnectionProvider(String tenantIdentifier) {
         return null;

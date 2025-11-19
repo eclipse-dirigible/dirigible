@@ -9,9 +9,9 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { request, response } from 'sdk/http';
-import { registry } from 'sdk/platform';
-import { uuid } from 'sdk/utils';
+import { request, response } from '@aerokit/sdk/http';
+import { registry } from '@aerokit/sdk/platform';
+import { uuid } from '@aerokit/sdk/utils';
 import { getBrandingJs, getKeyPrefix, getAnalyticsLink } from '/platform-branding/branding.mjs';
 
 const COOKIE_PREFIX = `${getKeyPrefix()}.ljs.`;

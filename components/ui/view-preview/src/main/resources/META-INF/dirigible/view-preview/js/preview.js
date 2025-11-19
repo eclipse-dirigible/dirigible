@@ -56,9 +56,11 @@ previewView.controller('PreviewController', ($scope, $document, ButtonStates) =>
     };
 
     $scope.reload = () => {
-        if (iframe.contentDocument) {
-            iframe.contentDocument.location.reload(true);
-        }
+		setTimeout(() => {
+            if (iframe.contentDocument) {
+                iframe.contentDocument.location.reload(true);
+            }
+		}, 1000);
     };
 
     $scope.getParams = () => JSON.stringify($scope.customParameters);

@@ -1,5 +1,5 @@
-import { Controller, Post, response } from "sdk/http"
-import { process } from "sdk/bpm"
+import { Controller, Post, response } from "@aerokit/sdk/http"
+import { process } from "@aerokit/sdk/bpm"
 
 @Controller
 class ProcessService {

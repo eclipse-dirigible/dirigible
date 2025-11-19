@@ -14,7 +14,7 @@ export function getTemplate() {
         name: "javascript-esm",
         label: "JavaScript Service",
         extension: "mjs",
-        data: `import { response } from "sdk/http";\n\nresponse.println("Hello World!");`,
+        data: `import { response } from "@aerokit/sdk/http";\n\nresponse.println("Hello World!");`,
         order: 1
     }
 };

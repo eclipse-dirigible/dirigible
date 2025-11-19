@@ -1,5 +1,5 @@
-import { response } from "sdk/http";
-import { configurations } from "sdk/core";
+import { response } from "@aerokit/sdk/http";
+import { configurations } from "@aerokit/sdk/core";
 
 configurations.set("ENV_VAR_1", "ENV_VAR_1");
 configurations.set("ENV_VAR_2", "ENV_VAR_2");

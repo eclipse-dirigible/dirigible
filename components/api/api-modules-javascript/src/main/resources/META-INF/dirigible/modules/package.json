@@ -1,7 +1,7 @@
 {
-  "name": "@dirigiblelabs/sdk",
+  "name": "@aerokit/sdk",
   "version": "1.0.0",
-  "description": "TypeScript SDK for the Eclipse Dirigible platform.",
+  "description": "Unified TypeScript SDK for modern cloud platforms.",
   "scripts": {
     "clean": "rm -rf dist",
     "build": "node ./build.js"
@@ -11,10 +11,12 @@
     "url": "git+https://github.com/eclipse-dirigible/dirigible.git"
   },
   "keywords": [
-    "dirigible-sdk",
-    "dirigible",
+    "aerokit-sdk",
+    "aerokit",
     "sdk",
-    "eclipse"
+    "eclipse",
+    "dirigible-sdk",
+    "dirigible"
   ],
   "license": "EPL-2.0",
   "bugs": {

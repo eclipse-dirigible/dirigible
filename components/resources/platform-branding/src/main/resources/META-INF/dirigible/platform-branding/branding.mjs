@@ -10,7 +10,7 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 // @ts-nocheck
-import { Configurations } from 'sdk/core';
+import { Configurations } from '@aerokit/sdk/core';
 
 const BRANDING_NAME = 'DIRIGIBLE_BRANDING_NAME';
 const BRANDING_BRAND = 'DIRIGIBLE_BRANDING_BRAND';

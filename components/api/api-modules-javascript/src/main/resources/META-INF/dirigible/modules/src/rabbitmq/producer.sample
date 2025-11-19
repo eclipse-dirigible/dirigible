@@ -1,2 +1,2 @@
-import { producer } from "sdk/rabbitmq";
+import { producer } from "@aerokit/sdk/rabbitmq";
 producer.send("rabbitmq-queue", "My RabbitMQ message");

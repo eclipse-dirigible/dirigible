@@ -9,6 +9,13 @@
  */
 package org.eclipse.dirigible.components.extensions.synchronizer;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.text.ParseException;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.apache.commons.io.FilenameUtils;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
@@ -20,16 +27,15 @@ import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.extensions.domain.Extension;
+import org.eclipse.dirigible.components.extensions.parser.ExtensionMetadata;
+import org.eclipse.dirigible.components.extensions.parser.ExtensionParser;
 import org.eclipse.dirigible.components.extensions.service.ExtensionService;
+import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-
-import java.nio.charset.StandardCharsets;
-import java.text.ParseException;
-import java.util.List;
 
 /**
  * The Class ExtensionsSynchronizer.
@@ -40,13 +46,19 @@ public class ExtensionsSynchronizer extends BaseSynchronizer<Extension, Long> {
 
     /** The Constant FILE_EXTENSION_EXTENSION. */
     public static final String FILE_EXTENSION_EXTENSION = ".extension";
+
+    public static final String[] FILE_EXTENSIONS_EXTENSION = new String[] {".extension", "Extension.ts"};
+
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(ExtensionsSynchronizer.class);
+
     /** The extension service. */
     private final ExtensionService extensionService;
 
     /** The synchronization callback. */
     private SynchronizerCallback callback;
+
+    private final ExtensionParser extensionParser = new ExtensionParser();
 
     /**
      * Instantiates a new extensions synchronizer.
@@ -79,7 +91,24 @@ public class ExtensionsSynchronizer extends BaseSynchronizer<Extension, Long> {
      */
     @Override
     protected List<Extension> parseImpl(String location, byte[] content) throws ParseException {
-        Extension extension = JsonHelper.fromJson(new String(content, StandardCharsets.UTF_8), Extension.class);
+        Extension extension = null;
+        String source = new String(content, StandardCharsets.UTF_8);
+        if (location.endsWith(FILE_EXTENSION_EXTENSION)) {
+            extension = JsonHelper.fromJson(source, Extension.class);
+        } else {
+            ExtensionMetadata metadata = extensionParser.parse(location, source);
+            if (metadata.getName() == null) {
+                return new ArrayList<Extension>();
+            }
+            extension = new Extension();
+            extension.setName(metadata.getName());
+            extension.setExtensionPoint(metadata.getTo());
+            String handler = location;
+            if (handler.startsWith(IRepositoryStructure.SEPARATOR)) {
+                handler = handler.substring(1);
+            }
+            extension.setModule(handler.replace(".ts", ".js"));
+        }
         Configuration.configureObject(extension);
         extension.setLocation(location);
         extension.setName(FilenameUtils.getBaseName(location));
@@ -227,6 +256,24 @@ public class ExtensionsSynchronizer extends BaseSynchronizer<Extension, Long> {
     @Override
     public String getArtefactType() {
         return Extension.ARTEFACT_TYPE;
+    }
+
+    /**
+     * Checks if is accepted.
+     *
+     * @param file the file
+     * @param attrs the attrs
+     * @return true, if is accepted
+     */
+    @Override
+    public boolean isAccepted(Path file, BasicFileAttributes attrs) {
+        for (String extension : FILE_EXTENSIONS_EXTENSION) {
+            if (file.toString()
+                    .endsWith(extension)) {
+                return true;
+            }
+        }
+        return false;
     }
 
 }

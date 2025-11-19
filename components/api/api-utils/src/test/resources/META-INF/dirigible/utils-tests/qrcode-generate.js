@@ -1,5 +1,5 @@
 
-import { QRCode } from 'sdk/utils/qrcode';
+import { QRCode } from '@aerokit/sdk/utils/qrcode';
 const input           = "Dirigible";
 const expectedResult  = [-119, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 1, 44, 0, 0, 1, 44, 1, 0, 0,
       0, 0, 81, 6, -77, -40, 0, 0, 1, 42, 73, 68, 65, 84, 120, 94, -19, -42, 75, 14, -62, 48, 12, 4, -48, -80, -30, 24, 61, 106,

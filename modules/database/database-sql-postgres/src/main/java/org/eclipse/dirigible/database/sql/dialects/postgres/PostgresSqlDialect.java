@@ -9,6 +9,16 @@
  */
 package org.eclipse.dirigible.database.sql.dialects.postgres;
 
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+
 import org.eclipse.dirigible.database.sql.DataType;
 import org.eclipse.dirigible.database.sql.ISqlKeywords;
 import org.eclipse.dirigible.database.sql.builders.AlterBranchingBuilder;
@@ -21,12 +31,6 @@ import org.eclipse.dirigible.database.sql.builders.sequence.LastValueIdentityBui
 import org.eclipse.dirigible.database.sql.dialects.DefaultSqlDialect;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.sql.*;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
 
 /**
  * The PostgreSQL SQL Dialect.

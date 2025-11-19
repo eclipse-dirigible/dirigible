@@ -14,20 +14,34 @@ import org.hibernate.context.spi.CurrentTenantIdentifierResolver;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+/**
+ * The Class CurrentTenantIdentifierResolverImpl.
+ */
 @Component
 public class CurrentTenantIdentifierResolverImpl implements CurrentTenantIdentifierResolver {
 
+    /** The Constant DEFAULT_TENANT. */
     // Default tenant to be used when no tenant is explicitly set (e.g., for common tables/metadata)
     private static final String DEFAULT_TENANT = "default-tenant";
 
     /** The tenant context. */
     private final TenantContext tenantContext;
 
+    /**
+     * Instantiates a new current tenant identifier resolver impl.
+     *
+     * @param tenantContext the tenant context
+     */
     @Autowired
     public CurrentTenantIdentifierResolverImpl(TenantContext tenantContext) {
         this.tenantContext = tenantContext;
     }
 
+    /**
+     * Resolve current tenant identifier.
+     *
+     * @return the string
+     */
     @Override
     public String resolveCurrentTenantIdentifier() {
         return tenantContext.isInitialized() ? tenantContext.getCurrentTenant()
@@ -35,6 +49,11 @@ public class CurrentTenantIdentifierResolverImpl implements CurrentTenantIdentif
                 : DEFAULT_TENANT;
     }
 
+    /**
+     * Validate existing current sessions.
+     *
+     * @return true, if successful
+     */
     @Override
     public boolean validateExistingCurrentSessions() {
         return true;

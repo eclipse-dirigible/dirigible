@@ -1,5 +1,5 @@
-import { soap } from "sdk/net";
-import { response } from "sdk/http";
+import { soap } from "@aerokit/sdk/net";
+import { response } from "@aerokit/sdk/http";
 
 response.setContentType("text/plain; charset=UTF-8");
 

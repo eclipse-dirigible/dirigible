@@ -1,4 +1,4 @@
-import { request, response } from "sdk/http";
+import { request, response } from "@aerokit/sdk/http";
 
 let method = request.getMethod();
 

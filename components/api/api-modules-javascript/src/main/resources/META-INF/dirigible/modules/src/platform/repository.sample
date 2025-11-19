@@ -1,5 +1,5 @@
-import { repository } from "sdk/platform";
-import { response } from "sdk/http";
+import { repository } from "@aerokit/sdk/platform";
+import { response } from "@aerokit/sdk/http";
 
 let resource = repository.getResource("/registry/public/modules/src/platform/repository.ts");
 

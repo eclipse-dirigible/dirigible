@@ -9,8 +9,8 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { extensions } from "sdk/extensions";
-import { rs } from "sdk/http";
+import { extensions } from "@aerokit/sdk/extensions";
+import { rs } from "@aerokit/sdk/http";
 
 const platformTemplates = await loadTemplates();
 const menuTemplates = await loadTemplates(true);

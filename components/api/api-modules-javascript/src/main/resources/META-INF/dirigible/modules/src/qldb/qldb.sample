@@ -1,12 +1,12 @@
 //first we need to create a table
-import { QLDBRepository } from "sdk/qldb";
+import { QLDBRepository } from "@aerokit/sdk/qldb";
 
 const qldb = new QLDBRepository("myLedger", "testTable").createTable();
 
 
 
 //use the newly created object to interact with qldb
-import { QLDBRepository } from "sdk/qldb";
+import { QLDBRepository } from "@aerokit/sdk/qldb";
 
 const qldb = new QLDBRepository("myLedger", "testTable");
 

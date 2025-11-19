@@ -32,10 +32,6 @@ export function getTemplate() {
 			action: "generate",
 			rename: "tasks/my-service-task.ts"
 		}, {
-			location: "/template-bpm/tsconfig.json",
-			action: "generate",
-			rename: "tsconfig.json"
-		}, {
             location: "/template-bpm/project.json",
             action: "generate",
             rename: "project.json"

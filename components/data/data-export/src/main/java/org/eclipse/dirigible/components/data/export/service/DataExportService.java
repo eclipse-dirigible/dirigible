@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.data.export.service;
 
 import static java.text.MessageFormat.format;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.StringWriter;
@@ -19,12 +20,12 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+
 import org.apache.commons.io.output.WriterOutputStream;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.api.platform.WorkspaceFacade;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.csvim.domain.CsvFile;
-import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper;
 import org.eclipse.dirigible.components.data.management.load.DataSourceMetadataLoader;
 import org.eclipse.dirigible.components.data.management.service.DatabaseDefinitionService;
 import org.eclipse.dirigible.components.data.management.service.DatabaseExecutionService;
@@ -33,6 +34,7 @@ import org.eclipse.dirigible.components.data.structures.domain.Table;
 import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
 import org.eclipse.dirigible.components.data.transfer.service.DataTransferSchemaTopologyService;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
+import org.eclipse.dirigible.components.database.helpers.DatabaseMetadataHelper;
 import org.eclipse.dirigible.components.ide.workspace.domain.File;
 import org.eclipse.dirigible.components.ide.workspace.domain.Project;
 import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
@@ -43,6 +45,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;

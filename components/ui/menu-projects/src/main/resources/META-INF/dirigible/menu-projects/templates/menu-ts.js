@@ -14,7 +14,7 @@ export function getTemplate() {
         name: "typescript",
         label: "TypeScript Service",
         extension: "ts",
-        data: `import { response } from "sdk/http";\n\nresponse.println("Hello World!");`,
+        data: `import { response } from "@aerokit/sdk/http";\n\nresponse.println("Hello World!");`,
         order: 2
     }
 };

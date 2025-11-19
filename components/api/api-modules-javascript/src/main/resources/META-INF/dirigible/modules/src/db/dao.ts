@@ -4,11 +4,11 @@ import { ORMDefinition, get as getORM } from "./orm";
 import { create as createORMStatements } from "./ormstatements";
 import { Sequence } from "./sequence";
 import { Database } from "./database";
-import { Query } from "sdk/db";
+import { Query } from "@aerokit/sdk/db";
 import { Update } from "./update";
 import { Insert } from "./insert";
-import { Logging } from "sdk/log";
-import { configurations, globals } from "sdk/core";
+import { Logging } from "@aerokit/sdk/log";
+import { configurations, globals } from "@aerokit/sdk/core";
 
 
 export function DAO(orm: ORMDefinition, logCtxName?: string, dataSourceName?: string) {

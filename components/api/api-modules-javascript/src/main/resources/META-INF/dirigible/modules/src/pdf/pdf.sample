@@ -1,5 +1,5 @@
-import { response } from "sdk/http";
-import { pdf } from "sdk/pdf";
+import { response } from "@aerokit/sdk/http";
+import { pdf } from "@aerokit/sdk/pdf";
 
 const data = {
     title: "Lorem Ipsum",

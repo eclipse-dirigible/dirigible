@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { registry as contentManager } from "sdk/platform";
+import { registry as contentManager } from "@aerokit/sdk/platform";
 let acorn = require("acornjs/acorn");
 
 const COMMENTS_OFFSET_LENGTH = 12;

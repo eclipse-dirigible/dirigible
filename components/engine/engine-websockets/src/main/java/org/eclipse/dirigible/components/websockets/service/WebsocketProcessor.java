@@ -65,12 +65,11 @@ public class WebsocketProcessor {
      * Process the event.
      *
      * @param endpoint the endpoint
-     * @param wrapper the wrapper
      * @param context the context
      * @return the object
      * @throws Exception the exception
      */
-    public Object processEvent(String endpoint, String wrapper, Map<Object, Object> context) throws Exception {
+    public Object processEvent(String endpoint, Map<Object, Object> context) throws Exception {
         Websocket websocket = websocketService.findByEndpoint(endpoint);
         String module = websocket.getHandler();
         // String engine = websocket.getEngine();

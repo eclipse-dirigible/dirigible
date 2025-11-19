@@ -15,6 +15,15 @@ package org.eclipse.dirigible.components.base.publisher;
 public interface PublisherHandler {
 
     /**
+     * The AfterPublishMetadata.
+     */
+    record AfterPublishMetadata(String workspace, String projectName, String entryPath, boolean isDirectory) {
+        public boolean isProjectMetadata() {
+            return isDirectory && "".equals(entryPath);
+        }
+    }
+
+    /**
      * Before publish.
      *
      * @param location the location
@@ -43,11 +52,5 @@ public interface PublisherHandler {
      * @param location the location
      */
     default void afterUnpublish(String location) {}
-
-    /**
-     * The AfterPublishMetadata.
-     */
-    record AfterPublishMetadata(String workspace, String projectName, String entryPath, boolean isDirectory) {
-    }
 
 }

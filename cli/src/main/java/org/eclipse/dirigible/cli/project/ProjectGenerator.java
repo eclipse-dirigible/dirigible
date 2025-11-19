@@ -35,13 +35,13 @@ public class ProjectGenerator {
               },
               "devDependencies": {
                 "@dirigiblelabs/dirigible-cli": "latest",
-                "@dirigiblelabs/sdk": "latest"
+                "@aerokit/sdk": "latest"
               }
             }
             """;
 
     private static final String HELLO_TS_CONTENT = """
-            import { response } from "sdk/http";
+            import { response } from "@aerokit/sdk/http";
 
             response.println("Hello World!");
             """;
@@ -59,11 +59,11 @@ public class ProjectGenerator {
                     ],
                     "paths": {
                         "sdk/*": [
-                            "./node_modules/@dirigiblelabs/sdk/dist/dts/*"
+                            "./node_modules/@aerokit/sdk/dist/dts/*"
                         ]
                     }
-                }
-
+                },
+                "exclude": ["target"]
             }
             """;
 

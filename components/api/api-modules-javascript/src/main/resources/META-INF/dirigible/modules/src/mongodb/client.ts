@@ -1,6 +1,6 @@
 const MongoDBFacade = Java.type("org.eclipse.dirigible.components.api.mongodb.MongoDBFacade");
 const TimeUnit = Java.type("java.util.concurrent.TimeUnit");
-import { UUID } from "sdk/utils/uuid";
+import { UUID } from "@aerokit/sdk/utils/uuid";
 
 /**
  * Define a common type for input to functions that accept either a plain JavaScript object

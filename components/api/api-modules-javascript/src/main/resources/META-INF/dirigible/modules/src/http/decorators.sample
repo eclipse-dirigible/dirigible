@@ -1,7 +1,7 @@
-import { Controller, Get, Documentation } from "sdk/http"
-import { HttpUtils } from "sdk/http/utils";
-import { Options } from "sdk/db";
-import { Injected, Inject } from "sdk/component";
+import { Controller, Get, Documentation } from "@aerokit/sdk/http"
+import { HttpUtils } from "@aerokit/sdk/http/utils";
+import { Options } from "@aerokit/sdk/db";
+import { Injected, Inject } from "@aerokit/sdk/component";
 import { CountryEntity } from "./CountryEntity";
 import { CountryRepository } from "./CountryRepository";
 

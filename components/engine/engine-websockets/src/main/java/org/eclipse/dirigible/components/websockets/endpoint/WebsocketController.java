@@ -85,7 +85,7 @@ public class WebsocketController {
         context.put("from", message.getFrom());
         context.put("method", "onmessage");
         try {
-            Object result = getProcessor().processEvent(endpoint, WebsocketsFacade.DIRIGIBLE_WEBSOCKET_WRAPPER_MODULE_ON_MESSAGE, context);
+            Object result = getProcessor().processEvent(endpoint, context);
             return new OutputMessage(message.getFrom(), result != null ? result.toString() : "", time);
         } catch (Exception e) {
             if (logger.isErrorEnabled()) {
@@ -115,7 +115,7 @@ public class WebsocketController {
         context.put("error", throwable.getMessage());
         context.put("method", "onerror");
         try {
-            getProcessor().processEvent(endpoint, WebsocketsFacade.DIRIGIBLE_WEBSOCKET_WRAPPER_MODULE_ON_ERROR, context);
+            getProcessor().processEvent(endpoint, context);
         } catch (Exception e) {
             if (logger.isErrorEnabled()) {
                 logger.error(e.getMessage(), e);

@@ -1,5 +1,5 @@
-import { utf8 } from "sdk/utils";
-import { response } from "sdk/http";
+import { utf8 } from "@aerokit/sdk/utils";
+import { response } from "@aerokit/sdk/http";
 
 response.println(JSON.stringify(utf8.encode("mystring")));
 

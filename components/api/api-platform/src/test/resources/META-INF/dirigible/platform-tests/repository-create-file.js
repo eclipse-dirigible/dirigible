@@ -1,4 +1,4 @@
-import { Repository } from "sdk/platform/repository";
+import { Repository } from "@aerokit/sdk/platform/repository";
 import { Assert } from 'test/assert';
 
 Repository.createResource("/registry/public/test/file.js", "console.log('Hello World');", "application/json");

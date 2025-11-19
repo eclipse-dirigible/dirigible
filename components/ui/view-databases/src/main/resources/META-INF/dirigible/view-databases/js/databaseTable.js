@@ -9,9 +9,9 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { Controller, Get, Post, Put, Delete, response } from "sdk/http";
-import { Query, Database, SQLBuilder, update } from "sdk/db";
-import { Base64 } from 'sdk/utils/base64';
+import { Controller, Get, Post, Put, Delete, response } from "@aerokit/sdk/http";
+import { Query, Database, SQLBuilder, update } from "@aerokit/sdk/db";
+import { Base64 } from '@aerokit/sdk/utils/base64';
 
 @Controller
 class CRUDService {

@@ -2,8 +2,8 @@
  * Provides a comprehensive static façade for file and directory operations,
  * abstracting the underlying Java file system implementation.
  */
-import { InputStream, OutputStream } from "sdk/io/streams";
-import { Bytes } from "sdk/io/bytes";
+import { InputStream, OutputStream } from "@aerokit/sdk/io/streams";
+import { Bytes } from "@aerokit/sdk/io/bytes";
 
 const FilesFacade = Java.type("org.eclipse.dirigible.components.api.io.FilesFacade");
 const File = Java.type("java.io.File")

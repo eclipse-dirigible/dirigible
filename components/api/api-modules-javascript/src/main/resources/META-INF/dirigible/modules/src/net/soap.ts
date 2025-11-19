@@ -1,6 +1,6 @@
-import { Request } from "sdk/http/request";
-import { Base64 } from "sdk/utils/base64";
-import { Streams, InputStream } from "sdk/io/streams";
+import { Request } from "@aerokit/sdk/http/request";
+import { Base64 } from "@aerokit/sdk/utils/base64";
+import { Streams, InputStream } from "@aerokit/sdk/io/streams";
 
 const MessageFactory = Java.type("jakarta.xml.soap.MessageFactory");
 const MimeHeadersInternal = Java.type("jakarta.xml.soap.MimeHeaders");

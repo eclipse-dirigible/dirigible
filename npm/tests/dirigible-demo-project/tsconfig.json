@@ -3,21 +3,17 @@
     "module": "ESNext",
     "target": "ES6",
     "moduleResolution": "Node",
-    "baseUrl": "../",
     "lib": [
       "ESNext",
       "DOM"
     ],
     "paths": {
       "sdk/*": [
-        "./modules/src/*"
-      ],
-      "/*": [
-        "./*"
+        "./node_modules/@aerokit/sdk/dist/dts/*"
       ]
-    },
-    "types": [
-      "../modules/types"
-    ]
-  }
+    }
+  },
+  "exclude": [
+    "target"
+  ]
 }

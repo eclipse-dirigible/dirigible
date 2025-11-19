@@ -2,7 +2,7 @@
 // start.ts
 // --------
 
-import { consumer } from "sdk/kafka";
+import { consumer } from "@aerokit/sdk/kafka";
 consumer.topic("topic1", "{}").startListening("my-kafka-project/my-kafka-handler", 1000);
 
 // -------------------
@@ -21,5 +21,5 @@ exports.onError = function(error) {
 // stop.ts
 // -------
 
-import { consumer } from "sdk/kafka";
+import { consumer } from "@aerokit/sdk/kafka";
 consumer.topic("topic1", "{}").stopListening();

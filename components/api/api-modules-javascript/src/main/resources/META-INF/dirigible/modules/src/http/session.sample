@@ -1,4 +1,4 @@
-import { session, response } from "sdk/http";
+import { session, response } from "@aerokit/sdk/http";
 
 session.setAttribute("attr1", "value1");
 let attr = session.getAttribute("attr1");

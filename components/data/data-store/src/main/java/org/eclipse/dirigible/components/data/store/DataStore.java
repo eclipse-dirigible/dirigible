@@ -12,9 +12,11 @@ package org.eclipse.dirigible.components.data.store;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.sql.DataSource;
@@ -28,6 +30,7 @@ import org.eclipse.dirigible.components.data.store.hbm.EntityToHbmMapper;
 import org.eclipse.dirigible.components.data.store.hbm.HbmXmlDescriptor;
 import org.eclipse.dirigible.components.data.store.model.EntityMetadata;
 import org.eclipse.dirigible.components.data.store.parser.EntityParser;
+import org.eclipse.dirigible.components.database.params.ParametersSetter;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.hibernate.Transaction;
@@ -35,6 +38,7 @@ import org.hibernate.boot.registry.StandardServiceRegistry;
 import org.hibernate.boot.registry.StandardServiceRegistryBuilder;
 import org.hibernate.cfg.Configuration;
 import org.hibernate.cfg.Environment;
+import org.hibernate.query.NativeQuery;
 import org.hibernate.query.Query;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,8 +46,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
+import com.google.gson.JsonElement;
+
 /**
- * The Class ObjectStore.
+ * The Class DataStore.
  */
 @Component
 @Scope("singleton")
@@ -53,23 +59,31 @@ public class DataStore {
     private static final Logger logger = LoggerFactory.getLogger(DataStore.class);
     /** The datasources manager. */
     private final DataSourcesManager datasourcesManager;
-    /** The connection provider */
+
+    /** The connection provider. */
     private final MultiTenantConnectionProviderImpl connectionProvider;
-    /** The tenant identifier resolver */
+
+    /** The tenant identifier resolver. */
     private final CurrentTenantIdentifierResolverImpl tenantIdentifierResolver;
     /** The mappings. */
     private final Map<String, String> mappings = new HashMap<>();
-    /** The counter for mapings changes */
+
+    /** The counter for mapings changes. */
     private final AtomicInteger counter = new AtomicInteger(0);
-    /** The default datasource */
+
+    /** The default datasource. */
     private final DataSource dataSource;
-    /** the session factory */
+
+    /** the session factory. */
     private SessionFactory sessionFactory;
 
     /**
      * Instantiates a new object store.
      *
+     * @param dataSource the data source
      * @param datasourcesManager the datasources manager
+     * @param connectionProvider the connection provider
+     * @param tenantIdentifierResolver the tenant identifier resolver
      */
     @Autowired
     public DataStore(DataSource dataSource, DataSourcesManager datasourcesManager, MultiTenantConnectionProviderImpl connectionProvider,
@@ -100,6 +114,9 @@ public class DataStore {
         incrementCounter();
     }
 
+    /**
+     * Increment counter.
+     */
     void incrementCounter() {
         counter.incrementAndGet();
     }
@@ -146,7 +163,7 @@ public class DataStore {
     }
 
     /**
-     * Getter for Session Factory
+     * Getter for Session Factory.
      *
      * @return the Session Factory
      */
@@ -185,22 +202,45 @@ public class DataStore {
         }
     }
 
+    /**
+     * Gets the counter.
+     *
+     * @return the counter
+     */
     int getCounter() {
         return counter.get();
     }
 
+    /**
+     * Reset counter.
+     */
     void resetCounter() {
         counter.set(0);
     }
 
+    /**
+     * Gets the data source.
+     *
+     * @return the data source
+     */
     public DataSource getDataSource() {
         return dataSource;
     }
 
+    /**
+     * Gets the connection provider.
+     *
+     * @return the connection provider
+     */
     public MultiTenantConnectionProviderImpl getConnectionProvider() {
         return connectionProvider;
     }
 
+    /**
+     * Gets the tenant identifier resolver.
+     *
+     * @return the tenant identifier resolver
+     */
     public CurrentTenantIdentifierResolverImpl getTenantIdentifierResolver() {
         return tenantIdentifierResolver;
     }
@@ -209,7 +249,7 @@ public class DataStore {
      * Adds the input stream to config.
      *
      * @param configuration the configuration
-     * @param key the key
+     * @param location the location
      * @param value the value
      */
     private void addInputStreamToConfig(Configuration configuration, String location, String value) {
@@ -423,16 +463,21 @@ public class DataStore {
     }
 
     /**
-     * Query.
+     * Query with indexed parameters.
      *
      * @param query the query
+     * @param parameters the query parameters
      * @param limit the limit
      * @param offset the offset
      * @return the list
+     * @throws SQLException the SQL exception
      */
-    public List<Map> query(String query, int limit, int offset) {
+    public List<Map> query(String query, Optional<JsonElement> parameters, int limit, int offset) throws SQLException {
         try (Session session = getSessionFactory().openSession()) {
             Query<Map> queryObject = session.createQuery(query, Map.class);
+            if (parameters != null && parameters.isPresent()) {
+                ParametersSetter.setIndexedParameters(parameters.get(), new ParameterizedByIndexQuery(queryObject));
+            }
             if (limit > 0) {
                 queryObject.setMaxResults(limit);
             }
@@ -444,15 +489,80 @@ public class DataStore {
     }
 
     /**
-     * Query.
+     * Query with named parameters.
      *
      * @param query the query
+     * @param parameters the query parameters
+     * @param limit the limit
+     * @param offset the offset
      * @return the list
+     * @throws SQLException the SQL exception
      */
-    public List<Map> queryNative(String query) {
+    public List<Map> queryNamed(String query, Optional<JsonElement> parameters, int limit, int offset) throws SQLException {
         try (Session session = getSessionFactory().openSession()) {
-            return session.createNativeQuery(query, Map.class)
-                          .list();
+            Query<Map> queryObject = session.createQuery(query, Map.class);
+            if (parameters != null && parameters.isPresent()) {
+                ParametersSetter.setNamedParameters(parameters.get(), new ParameterizedByNameQuery(queryObject));
+            }
+            if (limit > 0) {
+                queryObject.setMaxResults(limit);
+            }
+            if (offset >= 0) {
+                queryObject.setFirstResult(offset);
+            }
+            return queryObject.getResultList();
+        }
+    }
+
+    /**
+     * Query native with indexed parameters.
+     *
+     * @param query the query
+     * @param parameters the parameters
+     * @param limit the limit
+     * @param offset the offset
+     * @return the list
+     * @throws SQLException the SQL exception
+     */
+    public List<Map> queryNative(String query, Optional<JsonElement> parameters, int limit, int offset) throws SQLException {
+        try (Session session = getSessionFactory().openSession()) {
+            NativeQuery<Map> nativeQuery = session.createNativeQuery(query, Map.class);
+            if (parameters != null && parameters.isPresent()) {
+                ParametersSetter.setIndexedParameters(parameters.get(), new ParameterizedByIndexQuery(nativeQuery));
+            }
+            if (limit > 0) {
+                nativeQuery.setMaxResults(limit);
+            }
+            if (offset >= 0) {
+                nativeQuery.setFirstResult(offset);
+            }
+            return nativeQuery.list();
+        }
+    }
+
+    /**
+     * Query native with named parameters.
+     *
+     * @param query the query
+     * @param parameters the parameters
+     * @param limit the limit
+     * @param offset the offset
+     * @return the list
+     * @throws SQLException the SQL exception
+     */
+    public List<Map> queryNativeNamed(String query, Optional<JsonElement> parameters, int limit, int offset) throws SQLException {
+        try (Session session = getSessionFactory().openSession()) {
+            NativeQuery<Map> nativeQuery = session.createNativeQuery(query, Map.class);
+            if (parameters != null && parameters.isPresent()) {
+                ParametersSetter.setNamedParameters(parameters.get(), new ParameterizedByNameQuery(nativeQuery));
+            }
+            if (limit > 0) {
+                nativeQuery.setMaxResults(limit);
+            }
+            if (offset >= 0) {
+                nativeQuery.setFirstResult(offset);
+            }
+            return nativeQuery.list();
         }
     }
 

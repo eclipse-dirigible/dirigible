@@ -16,10 +16,16 @@ import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.Col
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata.ColumnDetails;
 import org.eclipse.dirigible.components.data.store.model.EntityMetadata;
 
+/**
+ * The Class EntityToHbmMapper.
+ */
 public class EntityToHbmMapper {
 
     /**
      * Converts EntityMetadata (typically parsed from TypeScript) into an HbmXmlDescriptor.
+     *
+     * @param entityMetadata the entity metadata
+     * @return the hbm xml descriptor
      */
     public static HbmXmlDescriptor map(EntityMetadata entityMetadata) {
 
@@ -88,6 +94,10 @@ public class EntityToHbmMapper {
 
     /**
      * Mapping from TypeScript types and Database type hints to Hibernate HBM types.
+     *
+     * @param tsType the ts type
+     * @param dbType the db type
+     * @return the string
      */
     private static String mapType(String tsType, String dbType) {
         // Clean up the TypeScript type (remove '| null' for easier matching)
@@ -136,6 +146,12 @@ public class EntityToHbmMapper {
         };
     }
 
+    /**
+     * Map generation strategy.
+     *
+     * @param strategy the strategy
+     * @return the string
+     */
     private static String mapGenerationStrategy(String strategy) {
         if (strategy == null)
             return "assigned";

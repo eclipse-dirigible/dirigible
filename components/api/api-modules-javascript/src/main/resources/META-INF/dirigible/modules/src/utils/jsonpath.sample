@@ -1,4 +1,4 @@
-import { jsonpath } from "sdk/utils";
+import { jsonpath } from "@aerokit/sdk/utils";
 
 const json = {
     "store": {

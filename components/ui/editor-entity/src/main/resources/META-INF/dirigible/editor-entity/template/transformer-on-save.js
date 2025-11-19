@@ -10,8 +10,8 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 import * as transformer from "editor-entity/template/transform-edm";
-import { Workspace as workspaceManager } from "sdk/platform";
-import { Bytes } from "sdk/io";
+import { Workspace as workspaceManager } from "@aerokit/sdk/platform";
+import { Bytes } from "@aerokit/sdk/io";
 
 const workspace = __context.get('workspace');
 const project = __context.get('project');

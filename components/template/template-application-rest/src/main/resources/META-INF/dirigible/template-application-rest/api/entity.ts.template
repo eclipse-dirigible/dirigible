@@ -5,11 +5,11 @@
 #break
 #end
 #end
-import { Controller, Get, Post, Put, Delete, request, response } from "sdk/http"
-import { Extensions } from "sdk/extensions"
+import { Controller, Get, Post, Put, Delete, request, response } from "@aerokit/sdk/http"
+import { Extensions } from "@aerokit/sdk/extensions"
 import { ${name}Repository, ${name}EntityOptions } from "../../dao/${perspectiveName}/${name}Repository";
 #if($perspectiveRole || $roleRead || $roleWrite || $isEntityPropertySecurityEnabled)
-import { user } from "sdk/security"
+import { user } from "@aerokit/sdk/security"
 #end
 #if($perspectiveRole || $roleRead || $roleWrite)
 import { ForbiddenError } from "../utils/ForbiddenError";

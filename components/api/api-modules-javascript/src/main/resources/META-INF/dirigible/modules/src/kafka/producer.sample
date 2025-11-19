@@ -1,10 +1,10 @@
 // Send
 
-import { producer } from "sdk/producer";
+import { producer } from "@aerokit/sdk/producer";
 producer.topic("topic1", "{}").send("key1", "value1");
 
 
 // Close
 
-import { producer } from "sdk/producer";
+import { producer } from "@aerokit/sdk/producer";
 producer.close("{}");

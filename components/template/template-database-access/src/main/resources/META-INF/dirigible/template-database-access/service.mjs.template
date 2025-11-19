@@ -1,5 +1,5 @@
-import { query } from "sdk/db";
-import { response } from "sdk/http";
+import { query } from "@aerokit/sdk/db";
+import { response } from "@aerokit/sdk/http";
 
 
 var sql = 'select * from DIRIGIBLE_EXTENSIONS where EXTENSION_EXTENSIONPOINT_NAME = ?';

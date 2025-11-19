@@ -90,9 +90,9 @@ public class JavascriptEndpoint extends BaseEndpoint {
         static Dts fromDtsPath(Path dtsDirRoot, Path dtsPath) {
             String content = readAllText(dtsPath);
             Path relativePath = dtsDirRoot.relativize(dtsPath);
-            String filePath = "file:///node_modules/sdk/" + relativePath;
-            String moduleName = ("sdk/" + relativePath).replace("index.d.ts", "")
-                                                       .replace(".d.ts", "");
+            String filePath = "file:///node_modules/@aerokit/sdk/" + relativePath;
+            String moduleName = ("@aerokit/sdk/" + relativePath).replace("index.d.ts", "")
+                                                                .replace(".d.ts", "");
             return new Dts(content, moduleName, filePath);
         }
 

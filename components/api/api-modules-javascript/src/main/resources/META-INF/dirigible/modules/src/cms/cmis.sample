@@ -1,6 +1,6 @@
-import { cmis } from "sdk/cms";
-import { response } from "sdk/http";
-import { streams } from "sdk/io";
+import { cmis } from "@aerokit/sdk/cms";
+import { response } from "@aerokit/sdk/http";
+import { streams } from "@aerokit/sdk/io";
 
 
 let cmisSession = cmis.getSession();

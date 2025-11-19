@@ -9,15 +9,15 @@
  */
 package org.eclipse.dirigible.components.data.csvim.domain;
 
-import org.apache.commons.csv.CSVRecord;
-import org.eclipse.dirigible.components.data.management.domain.ColumnMetadata;
-import org.eclipse.dirigible.components.data.management.domain.TableMetadata;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+
+import org.apache.commons.csv.CSVRecord;
+import org.eclipse.dirigible.components.database.domain.ColumnMetadata;
+import org.eclipse.dirigible.components.database.domain.TableMetadata;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The Class CsvRecord.

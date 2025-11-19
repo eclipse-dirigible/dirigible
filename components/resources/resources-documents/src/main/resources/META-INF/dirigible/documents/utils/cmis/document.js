@@ -9,8 +9,8 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { cmis } from "sdk/cms";
-import { streams } from "sdk/io";
+import { cmis } from "@aerokit/sdk/cms";
+import { streams } from "@aerokit/sdk/io";
 import * as objectUtils from "./object";
 const path = org.eclipse.dirigible.repository.api.RepositoryPath;
 

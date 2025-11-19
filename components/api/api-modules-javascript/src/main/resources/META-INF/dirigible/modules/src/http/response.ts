@@ -4,7 +4,7 @@
  * status codes, headers, cookies, and writing content (text, JSON, or binary).
  */
 
-import { OutputStream } from "sdk/io/streams"
+import { OutputStream } from "@aerokit/sdk/io/streams"
 
 const HttpResponseFacade = Java.type("org.eclipse.dirigible.components.api.http.HttpResponseFacade");
 const OutputStreamWriter = Java.type("java.io.OutputStreamWriter");

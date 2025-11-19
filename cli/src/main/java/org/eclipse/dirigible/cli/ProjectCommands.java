@@ -36,7 +36,7 @@ class ProjectCommands {
         this.projectGenerator = projectGenerator;
     }
 
-    @ShellMethod(value = "Generate Dirigible project.", key = {"new"})
+    @ShellMethod(value = "Generate Eclipse Dirigible project.", key = {"new"})
     String generateNewProject(
             @ShellOption(value = {"name", "n"}, defaultValue = "dirigible-project", help = "The name of the project") String projectName,
             @ShellOption(value = {"override", "o"}, defaultValue = "false",

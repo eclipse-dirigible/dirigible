@@ -2,7 +2,7 @@
 // OrderWebsocket.ts
 // ----------------
 
-import { Websocket } from "sdk/net";
+import { Websocket } from "@aerokit/sdk/net";
 
 @Websocket({
     name: "sample-websocket-decorator/OrderWebsocket",

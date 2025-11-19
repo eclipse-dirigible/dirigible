@@ -1,5 +1,5 @@
 // manipulating process variables throughout the execution context
-import { process } from "sdk/bpm";
+import { process } from "@aerokit/sdk/bpm";
 
 // Hello from the Enterprise Javascript delegate
 console.info("Hello from the Javascript Engine!");

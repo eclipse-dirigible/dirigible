@@ -1,4 +1,4 @@
-import { Database } from 'sdk/db/database';
+import { Database } from '@aerokit/sdk/db/database';
 import { Assert } from 'test/assert';
 
 const metadata = Database.getMetadata();

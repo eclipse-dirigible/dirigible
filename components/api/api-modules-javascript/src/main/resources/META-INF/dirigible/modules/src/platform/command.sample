@@ -1,5 +1,5 @@
-import { command } from "sdk/platform";
-import { response } from "sdk/http";
+import { command } from "@aerokit/sdk/platform";
+import { response } from "@aerokit/sdk/http";
 
 let result = command.execute("echo 'hello dirigible!'");
 

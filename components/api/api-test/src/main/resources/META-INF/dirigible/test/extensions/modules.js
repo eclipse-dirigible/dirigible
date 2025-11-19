@@ -12,7 +12,7 @@
 exports.getContent = function() {
 	return [
 		{
-			"name": "sdk/test",
+			"name": "@aerokit/sdk/test",
 			"description": "Dirigible Test Module",
 			"isPackageDescription": true,
 			"dtsPath": "test/extensions/test.d.ts"

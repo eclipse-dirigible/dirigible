@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { repository } from "sdk/platform"
+import { repository } from "@aerokit/sdk/platform"
 
 const path = __context.get('path');
 

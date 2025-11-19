@@ -1,5 +1,5 @@
 import { oc_orderEntity } from "../dao/oc_orderRepository";
-import { database } from "sdk/db";
+import { database } from "@aerokit/sdk/db";
 
 export function onMessage(message: any) {
     const openCartOrder: oc_orderEntity = message.getBody();

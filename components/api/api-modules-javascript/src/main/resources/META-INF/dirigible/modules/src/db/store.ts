@@ -51,6 +51,8 @@ export interface Options {
 	language?: string
 }
 
+import { TypedQueryParameter, NamedQueryParameter } from './query';
+
 /**
  * Facade class for interacting with the underlying Dirigible Data Store.
  * All methods serialize/deserialize JavaScript objects to/from JSON strings
@@ -148,25 +150,129 @@ export class Store {
 	}
 	
 	/**
-	 * Queries all entries for a given entity name with pagination.
-	 * @param name The entity/table name.
+	 * Queries all entries for a given script with pagination.
+	 * @param query The query script.
 	 * @param limit Maximum number of results to return.
 	 * @param offset Number of results to skip.
 	 * @returns An array of JavaScript objects.
 	 */
-	public static query(name: string, limit: number = 100, offset: number = 0): any[] {
-		const result = DataStoreFacade.query(name, limit, offset);
-		return JSON.parse(result);
+	public static query(query: string, parameters?: (string | number | boolean | Date | TypedQueryParameter | NamedQueryParameter)[], limit: number = 100, offset: number = 0): any[] {
+		let arr: any[] = [];
+	    if (parameters == null) {
+	      arr = [];
+	    } else if (typeof parameters === "string") {
+	      try {
+	        const parsed = JSON.parse(parameters);
+	        if (!Array.isArray(parsed)) {
+	          throw new Error("Input parameter string must represent a JSON array");
+	        }
+	        arr = parsed;
+	      } catch (e) {
+	        throw new Error("Invalid JSON parameters: " + e);
+	      }
+	    } else if (Array.isArray(parameters)) {
+	      arr = parameters;
+	    } else {
+	      throw new Error("Parameters must be either an array or a JSON string");
+	    }
+
+	    if (arr.length === 0) {
+		  const result = DataStoreFacade.query(query, null, limit, offset);
+		  return JSON.parse(result);
+	    }
+
+	    const first = arr[0];
+
+	    // NamedQueryParameter (has name + type)
+	    if (first && typeof first === "object" && "name" in first && "type" in first) {
+		  const result = DataStoreFacade.queryNamed(query, JSON.stringify(arr), limit, offset);
+		  return JSON.parse(result);
+	    }
+
+	    // TypedQueryParameter (has type, no name)
+	    if (first && typeof first === "object" && "type" in first && !("name" in first)) {
+		  const result = DataStoreFacade.query(query, JSON.stringify(arr), limit, offset);
+		  return JSON.parse(result);
+	    }
+
+	    // Primitive array
+	    if (
+	      arr.every(
+	        (v) =>
+	          typeof v === "string" ||
+	          typeof v === "number" ||
+	          typeof v === "boolean" ||
+	          v instanceof Date	||
+		  	  Array.isArray(v)
+	      )
+	    ) {
+		  const result = DataStoreFacade.query(query, JSON.stringify(arr), limit, offset);
+		  return JSON.parse(result);
+	    }
+
+	    throw new Error("Unsupported parameter format: " + JSON.stringify(parameters));
 	}
 	
 	/**
 	 * Queries all entries for a given entity name without pagination.
-	 * @param name The entity/table name.
+	 * @param query The entity/table name.
 	 * @returns An array of all JavaScript objects.
 	 */
-	public static queryNative(name: string): any[] {
-		const result = DataStoreFacade.queryNative(name);
-		return JSON.parse(result);
+	public static queryNative(query: string, parameters?: (string | number | boolean | Date | TypedQueryParameter | NamedQueryParameter)[], limit: number = 100, offset: number = 0): any[] {
+		let arr: any[] = [];
+		if (parameters == null) {
+	      arr = [];
+	    } else if (typeof parameters === "string") {
+	      try {
+	        const parsed = JSON.parse(parameters);
+	        if (!Array.isArray(parsed)) {
+	          throw new Error("Input parameter string must represent a JSON array");
+	        }
+	        arr = parsed;
+	      } catch (e) {
+	        throw new Error("Invalid JSON parameters: " + e);
+	      }
+	    } else if (Array.isArray(parameters)) {
+	      arr = parameters;
+	    } else {
+	      throw new Error("Parameters must be either an array or a JSON string");
+	    }
+
+	    if (arr.length === 0) {
+		  const result = DataStoreFacade.queryNative(query, null, limit, offset);
+		  return JSON.parse(result);
+	    }
+
+	    const first = arr[0];
+
+	    // NamedQueryParameter (has name + type)
+	    if (first && typeof first === "object" && "name" in first && "type" in first) {
+		  const result = DataStoreFacade.queryNativeNamed(query, JSON.stringify(arr), limit, offset);
+		  return JSON.parse(result);
+	    }
+
+	    // TypedQueryParameter (has type, no name)
+	    if (first && typeof first === "object" && "type" in first && !("name" in first)) {
+		  const result = DataStoreFacade.queryNative(query, JSON.stringify(arr), limit, offset);
+		  return JSON.parse(result);
+	    }
+
+	    // Primitive array
+	    if (
+	      arr.every(
+	        (v) =>
+	          typeof v === "string" ||
+	          typeof v === "number" ||
+	          typeof v === "boolean" ||
+	          v instanceof Date ||
+			  Array.isArray(v)
+	      )
+	    ) {
+		  const result = DataStoreFacade.queryNative(query, JSON.stringify(arr), limit, offset);
+		  return JSON.parse(result);
+	    }
+
+	    throw new Error("Unsupported parameter format: " + JSON.stringify(parameters));
 	}
 	
 	// --- Metadata Getters ---

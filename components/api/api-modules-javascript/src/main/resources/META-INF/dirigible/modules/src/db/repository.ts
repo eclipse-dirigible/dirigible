@@ -1,4 +1,4 @@
-import { store, translator, EntityConstructor, Options } from "sdk/db";
+import { store, translator, EntityConstructor, Options } from "@aerokit/sdk/db";
 
 /**
  * Represents the data structure passed to the event trigger method before/after an operation.

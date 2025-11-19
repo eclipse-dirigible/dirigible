@@ -102,7 +102,7 @@ class DirigibleJavaScriptInvokerImpl implements DirigibleJavaScriptInvoker {
             return executePromise(value);
         }
 
-        throw new IllegalArgumentException("Unexpected return received from sdk/integrations::onMessage(). Expected return type ["
+        throw new IllegalArgumentException("Unexpected return received from @aerokit/sdk/integrations::onMessage(). Expected return type ["
                 + IntegrationMessage.class + "] or a promise of [" + IntegrationMessage.class + "]");
     }
 

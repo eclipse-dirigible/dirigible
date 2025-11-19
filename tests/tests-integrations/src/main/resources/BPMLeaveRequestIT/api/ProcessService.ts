@@ -1,6 +1,6 @@
-import { Controller, Post, Put, Get, response } from "sdk/http"
-import { process, tasks } from "sdk/bpm"
-import { user } from "sdk/security";
+import { Controller, Post, Put, Get, response } from "@aerokit/sdk/http"
+import { process, tasks } from "@aerokit/sdk/bpm"
+import { user } from "@aerokit/sdk/security";
 
 @Controller
 class ProcessService {

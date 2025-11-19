@@ -1,6 +1,6 @@
 
-import { Files } from 'sdk/io/files';
-import { Streams } from 'sdk/io/streams';
+import { Files } from '@aerokit/sdk/io/files';
+import { Streams } from '@aerokit/sdk/io/streams';
 import { Assert } from 'test/assert';
 
 const tempFile1 = Files.createTempFile("dirigible", ".txt");

@@ -1,5 +1,5 @@
-import { digest } from "sdk/utils";
-import { response } from "sdk/http";
+import { digest } from "@aerokit/sdk/utils";
+import { response } from "@aerokit/sdk/http";
 
 response.println("" + digest.sha256("admin:admin"));
 response.println("" + digest.sha512("YWRtaW46YWRtaW4="));

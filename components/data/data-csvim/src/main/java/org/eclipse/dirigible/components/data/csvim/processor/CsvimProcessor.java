@@ -9,33 +9,7 @@
  */
 package org.eclipse.dirigible.components.data.csvim.processor;
 
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
-import org.apache.commons.csv.CSVRecord;
-import org.apache.commons.csv.QuoteMode;
-import org.apache.commons.lang3.StringUtils;
-import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.commons.config.DirigibleConfig;
-import org.eclipse.dirigible.components.data.csvim.domain.CsvFile;
-import org.eclipse.dirigible.components.data.csvim.domain.CsvRecord;
-import org.eclipse.dirigible.components.data.csvim.synchronizer.CsvimProcessingException;
-import org.eclipse.dirigible.components.data.csvim.utils.CsvimUtils;
-import org.eclipse.dirigible.components.data.management.domain.ColumnMetadata;
-import org.eclipse.dirigible.components.data.management.domain.TableMetadata;
-import org.eclipse.dirigible.components.data.sources.config.DefaultDataSourceName;
-import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
-import org.eclipse.dirigible.components.database.DatabaseSystem;
-import org.eclipse.dirigible.components.database.DirigibleDataSource;
-import org.eclipse.dirigible.database.sql.SqlFactory;
-import org.eclipse.dirigible.database.sql.builders.records.SelectBuilder;
-import org.eclipse.dirigible.repository.api.IRepository;
-import org.eclipse.dirigible.repository.api.IRepositoryStructure;
-import org.eclipse.dirigible.repository.api.IResource;
-import org.eclipse.dirigible.repository.api.RepositoryReadException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
+import static org.eclipse.dirigible.components.api.platform.RepositoryFacade.getResource;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -50,7 +24,33 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import static org.eclipse.dirigible.components.api.platform.RepositoryFacade.getResource;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
+import org.apache.commons.csv.QuoteMode;
+import org.apache.commons.lang3.StringUtils;
+import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.data.csvim.domain.CsvFile;
+import org.eclipse.dirigible.components.data.csvim.domain.CsvRecord;
+import org.eclipse.dirigible.components.data.csvim.synchronizer.CsvimProcessingException;
+import org.eclipse.dirigible.components.data.csvim.utils.CsvimUtils;
+import org.eclipse.dirigible.components.data.sources.config.DefaultDataSourceName;
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.database.DatabaseSystem;
+import org.eclipse.dirigible.components.database.DirigibleDataSource;
+import org.eclipse.dirigible.components.database.domain.ColumnMetadata;
+import org.eclipse.dirigible.components.database.domain.TableMetadata;
+import org.eclipse.dirigible.database.sql.SqlFactory;
+import org.eclipse.dirigible.database.sql.builders.records.SelectBuilder;
+import org.eclipse.dirigible.repository.api.IRepository;
+import org.eclipse.dirigible.repository.api.IRepositoryStructure;
+import org.eclipse.dirigible.repository.api.IResource;
+import org.eclipse.dirigible.repository.api.RepositoryReadException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 /**
  * The Class CsvimProcessor.

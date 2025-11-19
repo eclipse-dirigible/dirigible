@@ -9,7 +9,30 @@
  */
 package org.eclipse.dirigible.database.sql.dialects;
 
-import org.eclipse.dirigible.database.sql.*;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+
+import javax.sql.DataSource;
+
+import org.eclipse.dirigible.database.sql.DataType;
+import org.eclipse.dirigible.database.sql.DatabaseArtifactTypes;
+import org.eclipse.dirigible.database.sql.DatabaseType;
+import org.eclipse.dirigible.database.sql.ISqlDialect;
+import org.eclipse.dirigible.database.sql.ISqlKeywords;
+import org.eclipse.dirigible.database.sql.SqlException;
 import org.eclipse.dirigible.database.sql.builders.AlterBranchingBuilder;
 import org.eclipse.dirigible.database.sql.builders.CreateBranchingBuilder;
 import org.eclipse.dirigible.database.sql.builders.DropBranchingBuilder;
@@ -22,18 +45,6 @@ import org.eclipse.dirigible.database.sql.builders.sequence.LastValueIdentityBui
 import org.eclipse.dirigible.database.sql.builders.sequence.NextValueSequenceBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.sql.DataSource;
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
-import java.sql.*;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
 
 /**
  * The Default SQL Dialect.
