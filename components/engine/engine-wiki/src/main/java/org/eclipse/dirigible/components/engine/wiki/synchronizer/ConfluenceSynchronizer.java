@@ -9,6 +9,12 @@
  */
 package org.eclipse.dirigible.components.engine.wiki.synchronizer;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.text.ParseException;
+import java.util.List;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
@@ -25,13 +31,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.text.ParseException;
-import java.util.List;
 
 /**
  * The Class ConfluenceSynchronizer.
@@ -116,6 +115,7 @@ public class ConfluenceSynchronizer extends BaseSynchronizer<Confluence, Long> {
      */
     @Override
     protected List<Confluence> parseImpl(String location, byte[] content) throws ParseException {
+        String confluenceContent = new String(content, StandardCharsets.UTF_8);
         Confluence wiki = new Confluence();
         Configuration.configureObject(wiki);
         wiki.setLocation(location);
@@ -124,14 +124,14 @@ public class ConfluenceSynchronizer extends BaseSynchronizer<Confluence, Long> {
                           .toString());
         wiki.setType(Confluence.ARTEFACT_TYPE);
         wiki.updateKey();
-        wiki.setContent(content);
+        wiki.setContent(confluenceContent);
         try {
             Confluence maybe = getService().findByKey(wiki.getKey());
             if (maybe != null) {
                 wiki.setId(maybe.getId());
             }
             wiki = getService().save(wiki);
-            wiki.setContent(content);
+            wiki.setContent(confluenceContent);
         } catch (Exception e) {
             if (logger.isErrorEnabled()) {
                 logger.error(e.getMessage(), e);
@@ -196,13 +196,13 @@ public class ConfluenceSynchronizer extends BaseSynchronizer<Confluence, Long> {
         switch (flow) {
             case CREATE:
                 if (ArtefactLifecycle.NEW.equals(wiki.getLifecycle())) {
-                    wikiService.generateContent(wiki.getLocation(), new String(wiki.getContent(), StandardCharsets.UTF_8));
+                    wikiService.generateContent(wiki.getLocation(), wiki.getContent());
                     callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
                 }
                 break;
             case UPDATE:
                 if (ArtefactLifecycle.MODIFIED.equals(wiki.getLifecycle())) {
-                    wikiService.generateContent(wiki.getLocation(), new String(wiki.getContent(), StandardCharsets.UTF_8));
+                    wikiService.generateContent(wiki.getLocation(), wiki.getContent());
                     callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
                 }
                 if (ArtefactLifecycle.FAILED.equals(wiki.getLifecycle())) {

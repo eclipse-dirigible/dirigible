@@ -9,6 +9,10 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.init;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Set;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.base.ApplicationListenersOrder.ApplicationReadyEventListeners;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
@@ -20,10 +24,6 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Set;
 
 @Order(ApplicationReadyEventListeners.PROCESSES_INITIALIZER)
 @Component
@@ -64,7 +64,7 @@ class FlowableProcessesInitializer implements ApplicationListener<ApplicationRea
 
         // deploy for each tenant?
         tenantContext.executeForEachTenant(() -> {
-            bpmService.deployProcess(deploymentKey, resourceName, content);
+            bpmService.deployProcess(deploymentKey, resourceName, new String(content, StandardCharsets.UTF_8));
             return null;
         });
     }

@@ -9,8 +9,9 @@
  */
 package org.eclipse.dirigible.components.engine.camel.synchronizer;
 
-import io.opentelemetry.context.Context;
-import io.opentelemetry.context.Scope;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
+import java.util.List;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.ArtefactService;
@@ -25,9 +26,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-
-import java.nio.file.Paths;
-import java.util.List;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
 
 /**
  * The Class CamelSynchronizer.
@@ -80,6 +80,7 @@ public class CamelSynchronizer extends BaseSynchronizer<Camel, Long> {
      */
     @Override
     protected List<Camel> parseImpl(String location, byte[] content) {
+        String camelContent = new String(content, StandardCharsets.UTF_8);
         Camel camel = new Camel();
         camel.setLocation(location);
         camel.setName(Paths.get(location)
@@ -87,7 +88,7 @@ public class CamelSynchronizer extends BaseSynchronizer<Camel, Long> {
                            .toString());
         camel.setType(Camel.ARTEFACT_TYPE);
         camel.updateKey();
-        camel.setContent(content);
+        camel.setContent(camelContent);
         try {
             Camel maybe = getService().findByKey(camel.getKey());
             if (maybe != null) {

@@ -9,6 +9,16 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.config;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
@@ -40,12 +50,6 @@ import org.flowable.variable.api.runtime.VariableInstanceQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * The Class BpmProviderFlowable. NOTE! - all methods in the class should be tenant aware
@@ -472,12 +476,12 @@ public class BpmProviderFlowable implements BpmProvider {
                                            .list();
     }
 
-    public Deployment deployProcess(String deploymentKey, String resourceName, byte[] content) {
+    public Deployment deployProcess(String deploymentKey, String resourceName, String content) {
         return processEngine.getRepositoryService()
                             .createDeployment()
                             .key(deploymentKey)
                             .tenantId(getTenantId())
-                            .addBytes(resourceName, content)
+                            .addString(resourceName, content)
                             .deploy();
     }
 

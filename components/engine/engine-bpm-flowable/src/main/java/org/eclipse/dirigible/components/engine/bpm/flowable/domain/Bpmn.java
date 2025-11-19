@@ -10,15 +10,12 @@
 package org.eclipse.dirigible.components.engine.bpm.flowable.domain;
 
 import org.eclipse.dirigible.components.base.artefact.Artefact;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 import com.google.gson.annotations.Expose;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
 /**
@@ -78,11 +75,9 @@ public class Bpmn extends Artefact {
     private String processDefinitionDescription;
 
     /** The content. */
-    @Column(name = "BPMN_CONTENT", nullable = true)
-    @Lob
-    @JdbcTypeCode(SqlTypes.BINARY)
+    @Column(name = "BPMN_CONTENT", columnDefinition = "TEXT", nullable = true)
     @Expose
-    private byte[] content;
+    private String content;
 
 
 
@@ -253,7 +248,7 @@ public class Bpmn extends Artefact {
      *
      * @return the content
      */
-    public byte[] getContent() {
+    public String getContent() {
         return content;
     }
 
@@ -262,7 +257,7 @@ public class Bpmn extends Artefact {
      *
      * @param content the content to set
      */
-    public void setContent(byte[] content) {
+    public void setContent(String content) {
         this.content = content;
     }
 

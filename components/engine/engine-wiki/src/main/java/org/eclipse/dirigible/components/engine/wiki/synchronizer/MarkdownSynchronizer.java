@@ -9,6 +9,12 @@
  */
 package org.eclipse.dirigible.components.engine.wiki.synchronizer;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.text.ParseException;
+import java.util.List;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
@@ -25,13 +31,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.text.ParseException;
-import java.util.List;
 
 /**
  * The Class MarkdownSynchronizer.
@@ -116,6 +115,7 @@ public class MarkdownSynchronizer extends BaseSynchronizer<Markdown, Long> {
      */
     @Override
     protected List<Markdown> parseImpl(String location, byte[] content) throws ParseException {
+        String markdownContent = new String(content, StandardCharsets.UTF_8);
         Markdown wiki = new Markdown();
         Configuration.configureObject(wiki);
         wiki.setLocation(location);
@@ -124,14 +124,14 @@ public class MarkdownSynchronizer extends BaseSynchronizer<Markdown, Long> {
                           .toString());
         wiki.setType(Markdown.ARTEFACT_TYPE);
         wiki.updateKey();
-        wiki.setContent(content);
+        wiki.setContent(markdownContent);
         try {
             Markdown maybe = getService().findByKey(wiki.getKey());
             if (maybe != null) {
                 wiki.setId(maybe.getId());
             }
             wiki = getService().save(wiki);
-            wiki.setContent(content);
+            wiki.setContent(markdownContent);
         } catch (Exception e) {
             if (logger.isErrorEnabled()) {
                 logger.error(e.getMessage(), e);
@@ -140,7 +140,7 @@ public class MarkdownSynchronizer extends BaseSynchronizer<Markdown, Long> {
                 logger.error("wiki: {}", wiki);
             }
             if (logger.isErrorEnabled()) {
-                logger.error("content: {}", new String(content));
+                logger.error("content: {}", markdownContent);
             }
             throw new ParseException(e.getMessage(), 0);
         }
@@ -196,13 +196,13 @@ public class MarkdownSynchronizer extends BaseSynchronizer<Markdown, Long> {
         switch (flow) {
             case CREATE:
                 if (ArtefactLifecycle.NEW.equals(wiki.getLifecycle())) {
-                    wikiService.generateContent(wiki.getLocation(), new String(wiki.getContent(), StandardCharsets.UTF_8));
+                    wikiService.generateContent(wiki.getLocation(), wiki.getContent());
                     callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
                 }
                 break;
             case UPDATE:
                 if (ArtefactLifecycle.MODIFIED.equals(wiki.getLifecycle())) {
-                    wikiService.generateContent(wiki.getLocation(), new String(wiki.getContent(), StandardCharsets.UTF_8));
+                    wikiService.generateContent(wiki.getLocation(), wiki.getContent());
                     callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
                 }
                 if (ArtefactLifecycle.MODIFIED.equals(wiki.getLifecycle())) {

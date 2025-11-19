@@ -9,16 +9,12 @@
  */
 package org.eclipse.dirigible.components.engine.wiki.domain;
 
-import java.util.Arrays;
 import org.eclipse.dirigible.components.base.artefact.Artefact;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
 /**
@@ -38,10 +34,8 @@ public class Markdown extends Artefact {
     private Long id;
 
     /** The content. */
-    @Column(name = "MARKDOWN_CONTENT")
-    @Lob
-    @JdbcTypeCode(SqlTypes.BINARY)
-    private byte[] content;
+    @Column(name = "MARKDOWN_CONTENT", columnDefinition = "TEXT")
+    private String content;
 
     /**
      * Instantiates a new markdown.
@@ -84,7 +78,7 @@ public class Markdown extends Artefact {
      *
      * @return the content
      */
-    public byte[] getContent() {
+    public String getContent() {
         return content;
     }
 
@@ -93,7 +87,7 @@ public class Markdown extends Artefact {
      *
      * @param content the new content
      */
-    public void setContent(byte[] content) {
+    public void setContent(String content) {
         this.content = content;
     }
 
@@ -104,8 +98,8 @@ public class Markdown extends Artefact {
      */
     @Override
     public String toString() {
-        return "Markdown [id=" + id + ", content=" + Arrays.toString(content) + ", location=" + location + ", name=" + name + ", type="
-                + type + ", description=" + description + ", key=" + key + ", dependencies=" + dependencies + ", createdBy=" + createdBy
+        return "Markdown [id=" + id + ", content=" + content + ", location=" + location + ", name=" + name + ", type=" + type
+                + ", description=" + description + ", key=" + key + ", dependencies=" + dependencies + ", createdBy=" + createdBy
                 + ", createdAt=" + createdAt + ", updatedBy=" + updatedBy + ", updatedAt=" + updatedAt + "]";
     }
 

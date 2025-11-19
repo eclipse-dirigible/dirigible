@@ -179,6 +179,12 @@ jobs:
           DIRIGIBLE_DATASOURCE_DEFAULT_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
           DIRIGIBLE_DATASOURCE_DEFAULT_USERNAME: ${{ env.POSTGRES_USER }}
           DIRIGIBLE_DATASOURCE_DEFAULT_PASSWORD: ${{ env.POSTGRES_PASS }}
+          DIRIGIBLE_DATABASE_SYSTEM_DIALECT: org.hibernate.dialect.PostgreSQLDialect
+          DIRIGIBLE_DATABASE_SYSTEM_DRIVER: org.postgresql.Driver
+          DIRIGIBLE_DATABASE_SYSTEM_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
+          DIRIGIBLE_DATABASE_SYSTEM_USERNAME: ${{ env.POSTGRES_USER }}
+          DIRIGIBLE_DATABASE_SYSTEM_PASSWORD: ${{ env.POSTGRES_PASS }}
+          DIRIGIBLE_SCHEDULER_DATABASE_DELEGATE: org.quartz.impl.jdbcjobstore.PostgreSQLDelegate
 
       - name: Generate a random artifact name
         if: always()
