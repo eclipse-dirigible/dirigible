@@ -291,9 +291,8 @@ class FileIO {
                 fileMetadata.sourceCode = fileContent;
             }
             if (!this.isReadOnly() && TypeScriptUtils.isTypeScriptFile(path)) {
-                const importedFilesNames = TypeScriptUtils.getImportedModuleFiles(fileMetadata.sourceCode);
                 // @ts-ignore
-                fileMetadata.importedFilesNames.push(...importedFilesNames);
+                fileMetadata.importedFilesNames.push(...TypeScriptUtils.getImportedModuleFiles(fileMetadata.sourceCode));
             }
             return fileMetadata;
         } catch (e) {
@@ -685,19 +684,14 @@ class DirigibleEditor {
                     const importedModuleFiles = TypeScriptUtils.getImportedModuleFiles(editor.getModel().getValue());
                     const newImportedModules = [];
                     for (const module of importedModuleFiles) {
-                        let found = false;
-                        for (const importedModule of fileObject.importedFilesNames) {
-                            if (module === importedModule) {
-                                found = true;
-                            }
-                        }
-                        if (!found) {
+                        if (!fileObject.importedFilesNames.includes(module)) {
                             newImportedModules.push(module);
                         }
                     }
                     if (newImportedModules.length > 0) {
-                        TypeScriptUtils.loadImportedFiles(monaco, newImportedModules);
+                        TypeScriptUtils.loadImportedFiles(monaco, newImportedModules.sort());
                         fileObject.importedFilesNames.push(...newImportedModules);
+                        fileObject.importedFilesNames.sort();
                     }
                 }, 1000);
             }
@@ -998,7 +992,7 @@ class TypeScriptUtils {
 
     static #IMPORTED_FILES = new Set();
 
-    // Must do this before calling `loadImportedFiles` with isReload = true
+    // Must call this before calling `loadImportedFiles` with isReload = true
     static clearImportedFiles() {
         TypeScriptUtils.#IMPORTED_FILES.clear();
     }
@@ -1022,13 +1016,14 @@ class TypeScriptUtils {
                 importedModules.push(modulePath);
             }
         }
-        return importedModules;
+        return importedModules.sort();
     }
 
     static isGlobalImport(path) {
         return !path.startsWith("/") && !path.startsWith("./") && !path.startsWith("../") && !path.startsWith("@aerokit/sdk/")
     }
 
+    // The `importedFiles` array must be sorted before passed
     static loadImportedFiles = async (monaco, importedFiles, isReload = false) => {
         const fileIO = new FileIO();
         function createModel(sourceCode, uri) {
@@ -1038,8 +1033,8 @@ class TypeScriptUtils {
 
         async function relativeImports(importedFile, importedFileMetadata) {
             if (importedFileMetadata.importedFilesNames?.length > 0) {
-                const relativeImportedPaths = importedFileMetadata.importedFilesNames.map(e => fileIO.resolveRelativePath(importedFile, e));
-                if (JSON.stringify(importedFiles.sort()) !== JSON.stringify(relativeImportedPaths.sort())) {
+                const relativeImportedPaths = importedFileMetadata.importedFilesNames.map(e => fileIO.resolveRelativePath(importedFile, e)).sort();
+                if (JSON.stringify(importedFiles) !== JSON.stringify(relativeImportedPaths)) {
                     await TypeScriptUtils.loadImportedFiles(monaco, relativeImportedPaths, isReload);
                 }
             }
