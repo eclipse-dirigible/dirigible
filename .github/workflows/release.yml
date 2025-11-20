@@ -231,6 +231,7 @@ jobs:
           path: sast_docker_scout_sarif.json
 
       - name: Upload Docker Scout SARIF Report to GitHub Security tab
+        if: false # uncomment when the sast_docker_scout_sarif.json has allowed number of related locations < 1000
         uses: github/codeql-action/upload-sarif@v3
         if: ${{ inputs.upload-scanned-sarif-report }}
         with:
