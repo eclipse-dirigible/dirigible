@@ -982,7 +982,7 @@ class DirigibleEditor {
                 const model = editor.getModel();
                 model.setValue(model.getValue());
                 DirigibleEditor.lastSavedVersionId = model.getAlternativeVersionId();
-
+                TypeScriptUtils.clearImportedFiles();
                 TypeScriptUtils.loadImportedFiles(monaco, fileObject.importedFilesNames, true);
             },
         });
@@ -997,6 +997,11 @@ class TypeScriptUtils {
     // import\s+(?:\{(?:\s*\w+\s*,?)*\}|(?:\*\s+as\s+\w+)|\w+)?\s*(?:from\s+['"]([^'"]+)['"]|['"]([^'"]+)['"])
 
     static #IMPORTED_FILES = new Set();
+
+    // Must do this before calling `loadImportedFiles` with isReload = true
+    static clearImportedFiles() {
+        TypeScriptUtils.#IMPORTED_FILES.clear();
+    }
 
     static isTypeScriptFile(fileName) {
         return fileName && fileName.endsWith(".ts");
@@ -1025,15 +1030,21 @@ class TypeScriptUtils {
     }
 
     static loadImportedFiles = async (monaco, importedFiles, isReload = false) => {
-        if (isReload) {
-            TypeScriptUtils.#IMPORTED_FILES.clear();
-        }
         const fileIO = new FileIO();
-
         function createModel(sourceCode, uri) {
             const fileType = uri.path.endsWith(".json") ? "json" : "typescript";
             monaco.editor.createModel(sourceCode, fileType, uri);
         }
+
+        async function relativeImports(importedFile, importedFileMetadata) {
+            if (importedFileMetadata.importedFilesNames?.length > 0) {
+                const relativeImportedPaths = importedFileMetadata.importedFilesNames.map(e => fileIO.resolveRelativePath(importedFile, e));
+                if (JSON.stringify(importedFiles.sort()) !== JSON.stringify(relativeImportedPaths.sort())) {
+                    await TypeScriptUtils.loadImportedFiles(monaco, relativeImportedPaths, isReload);
+                }
+            }
+        }
+
         for (const importedFile of importedFiles) {
             const importedFilePath = fileIO.getWorkspacePath(fileIO.resolveFilePath(importedFile));
             if (editorParameters.resourcePath === importedFilePath) {
@@ -1059,15 +1070,16 @@ class TypeScriptUtils {
                     } else {
                         createModel(importedFileMetadata.sourceCode, uri);
                     }
+                    TypeScriptUtils.#IMPORTED_FILES.add(importedFilePath);
+                    await relativeImports(importedFile, importedFileMetadata);
                 } else {
-                    createModel(importedFileMetadata.sourceCode, uri);
+                    const model = monaco.editor.getModel(uri);
+                    if (!model) {
+                        createModel(importedFileMetadata.sourceCode, uri);
+                        TypeScriptUtils.#IMPORTED_FILES.add(importedFilePath);
+                        await relativeImports(importedFile, importedFileMetadata);
+                    }
                 }
-                if (importedFileMetadata.importedFilesNames?.length > 0) {
-                    const relativeImportedPaths = importedFileMetadata.importedFilesNames.map(e => fileIO.resolveRelativePath(importedFile, e));
-                    if (JSON.stringify(importedFiles.sort()) !== JSON.stringify(relativeImportedPaths.sort()))
-                        await TypeScriptUtils.loadImportedFiles(monaco, relativeImportedPaths, isReload);
-                }
-                TypeScriptUtils.#IMPORTED_FILES.add(importedFilePath);
             } catch (e) {
                 Utils.logErrorMessage(e);
             }
