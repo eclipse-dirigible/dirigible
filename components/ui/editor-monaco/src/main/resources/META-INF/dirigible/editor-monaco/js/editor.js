@@ -689,9 +689,9 @@ class DirigibleEditor {
                         }
                     }
                     if (newImportedModules.length > 0) {
+                        fileObject.importedFilesNames.length = 0;
+                        fileObject.importedFilesNames.push(...importedModuleFiles);
                         TypeScriptUtils.loadImportedFiles(monaco, newImportedModules.sort());
-                        fileObject.importedFilesNames.push(...newImportedModules);
-                        fileObject.importedFilesNames.sort();
                     }
                 }, 1000);
             }
@@ -1008,8 +1008,8 @@ class TypeScriptUtils {
 
         let match;
         while ((match = TypeScriptUtils.#IMPORT_REGEX.exec(contentWithoutComments)) !== null) {
-            let modulePath = match[1];
-            if (!modulePath.startsWith('@aerokit/sdk/')) {
+            let modulePath = match[1].trim();
+            if (!modulePath.startsWith('@aerokit/sdk/') && modulePath !== '' && modulePath !== '.' && modulePath !== './') {
                 if (!modulePath.endsWith(".json")) {
                     modulePath += ".ts";
                 }
@@ -1065,16 +1065,11 @@ class TypeScriptUtils {
                     } else {
                         createModel(importedFileMetadata.sourceCode, uri);
                     }
-                    TypeScriptUtils.#IMPORTED_FILES.add(importedFilePath);
-                    await relativeImports(importedFile, importedFileMetadata);
                 } else {
-                    const model = monaco.editor.getModel(uri);
-                    if (!model) {
-                        createModel(importedFileMetadata.sourceCode, uri);
-                        TypeScriptUtils.#IMPORTED_FILES.add(importedFilePath);
-                        await relativeImports(importedFile, importedFileMetadata);
-                    }
+                    createModel(importedFileMetadata.sourceCode, uri);
                 }
+                TypeScriptUtils.#IMPORTED_FILES.add(importedFilePath);
+                await relativeImports(importedFile, importedFileMetadata);
             } catch (e) {
                 Utils.logErrorMessage(e);
             }
