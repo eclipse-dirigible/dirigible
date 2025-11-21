@@ -9,11 +9,13 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import static java.text.MessageFormat.format;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.engine.bpm.flowable.config.BpmProviderFlowable;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActivityStatusData;
@@ -38,15 +40,11 @@ import org.flowable.variable.api.history.HistoricVariableInstance;
 import org.flowable.variable.api.persistence.entity.VariableInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
-import static java.text.MessageFormat.format;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 /**
  * Processing the BPM UI Service incoming requests.
@@ -408,7 +406,7 @@ public class BpmService {
         return bpmProviderFlowable.getProcessInstanceImage(processInstanceId);
     }
 
-    public Deployment deployProcess(String deploymentKey, String resourceName, byte[] content) {
+    public Deployment deployProcess(String deploymentKey, String resourceName, String content) {
         return bpmProviderFlowable.deployProcess(deploymentKey, resourceName, content);
     }
 

@@ -389,6 +389,8 @@ public class Configuration {
                 "DIRIGIBLE_DATABASE_SYSTEM_URL", //
                 "DIRIGIBLE_DATABASE_SYSTEM_USERNAME", //
                 "DIRIGIBLE_DATABASE_SYSTEM_PASSWORD", //
+                "DIRIGIBLE_DATABASE_SYSTEM_DIALECT", //
+                "DIRIGIBLE_DATABASE_SYSTEM_DDL_AUTO", //
                 "SNOWFLAKE_DEFAULT_TABLE_TYPE", //
                 "DIRIGIBLE_PROJECT_TYPESCRIPT", //
                 "DIRIGIBLE_MULTI_TENANT_MODE", //

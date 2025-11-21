@@ -9,6 +9,10 @@
  */
 package org.eclipse.dirigible.components.odata.synchronizer;
 
+import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
+import java.text.ParseException;
+import java.util.List;
 import org.apache.commons.io.FilenameUtils;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
@@ -19,8 +23,16 @@ import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
-import org.eclipse.dirigible.components.odata.domain.*;
-import org.eclipse.dirigible.components.odata.service.*;
+import org.eclipse.dirigible.components.odata.domain.OData;
+import org.eclipse.dirigible.components.odata.domain.ODataContainer;
+import org.eclipse.dirigible.components.odata.domain.ODataHandler;
+import org.eclipse.dirigible.components.odata.domain.ODataMapping;
+import org.eclipse.dirigible.components.odata.domain.ODataSchema;
+import org.eclipse.dirigible.components.odata.service.ODataContainerService;
+import org.eclipse.dirigible.components.odata.service.ODataHandlerService;
+import org.eclipse.dirigible.components.odata.service.ODataMappingService;
+import org.eclipse.dirigible.components.odata.service.ODataSchemaService;
+import org.eclipse.dirigible.components.odata.service.ODataService;
 import org.eclipse.dirigible.components.odata.transformers.DefaultTableMetadataProvider;
 import org.eclipse.dirigible.components.odata.transformers.OData2ODataHTransformer;
 import org.eclipse.dirigible.components.odata.transformers.OData2ODataMTransformer;
@@ -30,11 +42,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-
-import java.nio.charset.StandardCharsets;
-import java.sql.SQLException;
-import java.text.ParseException;
-import java.util.List;
 
 /**
  * The Class ListenerSynchronizer.
@@ -257,15 +264,15 @@ public class ODataSynchronizer extends BaseSynchronizer<OData, Long> {
         String[] odataxc = generateODataSchema(odata);
         String odatax = odataxc[0];
         String odatac = odataxc[1];
-        ODataSchema odataSchema = new ODataSchema(odata.getLocation(), odata.getName(), null, null, odatax.getBytes());
+        ODataSchema odataSchema = new ODataSchema(odata.getLocation(), odata.getName(), null, null, odatax);
         odataSchemaService.save(odataSchema);
-        ODataContainer odataContainer = new ODataContainer(odata.getLocation(), odata.getName(), null, null, odatac.getBytes());
+        ODataContainer odataContainer = new ODataContainer(odata.getLocation(), odata.getName(), null, null, odatac);
         odataContainerService.save(odataContainer);
 
         String[] odatams = generateODataMappings(odata);
         int i = 1;
         for (String odatam : odatams) {
-            ODataMapping odataMapping = new ODataMapping(odata.getLocation(), odata.getName() + "#" + i++, null, null, odatam.getBytes());
+            ODataMapping odataMapping = new ODataMapping(odata.getLocation(), odata.getName() + "#" + i++, null, null, odatam);
             odataMappingService.save(odataMapping);
         }
 

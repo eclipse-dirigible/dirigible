@@ -9,17 +9,20 @@
  */
 package org.eclipse.dirigible.components.base.artefact;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.google.gson.annotations.Expose;
-import jakarta.persistence.*;
+import java.io.Serializable;
+import java.util.HashSet;
+import java.util.Set;
 import org.eclipse.dirigible.components.base.converters.SetOfStringsToCsvConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.lang.Nullable;
-
-import java.io.Serializable;
-import java.util.HashSet;
-import java.util.Set;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.google.gson.annotations.Expose;
+import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.MappedSuperclass;
 
 /**
  * The Class Artefact.
@@ -48,8 +51,7 @@ public abstract class Artefact extends Auditable<String> implements Serializable
     protected String type;
 
     /** The description. */
-    @Column(name = "ARTEFACT_DESCRIPTION")
-    @Lob()
+    @Column(name = "ARTEFACT_DESCRIPTION", columnDefinition = "TEXT")
     @Expose
     protected String description;
 

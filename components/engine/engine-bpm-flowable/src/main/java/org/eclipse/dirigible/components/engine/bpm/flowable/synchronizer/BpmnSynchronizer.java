@@ -9,6 +9,10 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.synchronizer;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
+import java.text.ParseException;
+import java.util.List;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.ArtefactService;
@@ -26,10 +30,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-
-import java.nio.file.Paths;
-import java.text.ParseException;
-import java.util.List;
 
 /**
  * The Class BpmnSynchronizer.
@@ -76,6 +76,7 @@ public class BpmnSynchronizer extends MultitenantBaseSynchronizer<Bpmn, Long> {
      */
     @Override
     protected List<Bpmn> parseImpl(String location, byte[] content) throws ParseException {
+        String bpmnContent = new String(content, StandardCharsets.UTF_8);
         Bpmn bpmn = new Bpmn();
         bpmn.setLocation(location);
         bpmn.setName(Paths.get(location)
@@ -83,7 +84,7 @@ public class BpmnSynchronizer extends MultitenantBaseSynchronizer<Bpmn, Long> {
                           .toString());
         bpmn.setType(Bpmn.ARTEFACT_TYPE);
         bpmn.updateKey();
-        bpmn.setContent(content);
+        bpmn.setContent(bpmnContent);
         try {
             Bpmn maybe = getService().findByKey(bpmn.getKey());
             if (maybe != null) {
