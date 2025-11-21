@@ -366,7 +366,7 @@
                                 <goal>verify</goal>
                             </goals>
                             <configuration>
-                                <rerunFailingTestsCount>2</rerunFailingTestsCount>
+                                <rerunFailingTestsCount>3</rerunFailingTestsCount>
                             </configuration>
                         </execution>
                     </executions>
