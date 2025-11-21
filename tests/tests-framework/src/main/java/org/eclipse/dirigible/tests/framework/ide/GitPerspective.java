@@ -37,11 +37,13 @@ public class GitPerspective {
 
         SleepUtil.sleepMillis(waitForCloneMillis);
 
-        assertClonedRepository();
+        assertClonedRepository(repositoryUrl);
     }
 
-    private void assertClonedRepository() {
-        browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER4, "Repository cloned");
+    private void assertClonedRepository(String repositoryUrl) {
+        String repositoryName = GitUtil.extractRepoName(repositoryUrl);
+
+        browser.assertElementExistsByTypeAndText(HtmlElementType.ANCHOR, repositoryName);
     }
 
     /**
@@ -62,6 +64,11 @@ public class GitPerspective {
         branch.ifPresent(b -> browser.enterTextInElementById("cbi", b));
 
         browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.LABEL, "Clone");
+    }
+
+    private void assertClonedRepositoryNotification() {
+        // note that this notification is shown for only a few seconds (~4-5s)
+        browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER4, "Repository cloned");
     }
 
     public void asyncCloneRepository(String repositoryUrl) {

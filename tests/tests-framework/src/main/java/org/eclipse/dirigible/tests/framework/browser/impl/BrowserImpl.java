@@ -443,6 +443,12 @@ class BrowserImpl implements Browser {
         return findElementInAllFrames(selector, Condition.exist, Condition.matchText(Pattern.quote(text)));
     }
 
+    private SelenideElement getElementByIdAndContainsText(String id, String text) {
+        By selector = Selectors.byId(id);
+
+        return findElementInAllFrames(selector, Condition.exist, Condition.matchText(Pattern.quote(text)));
+    }
+
     @Override
     public void clickOnElementByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern, String text) {
         clickOnElementByAttributePatternAndText(elementType.getType(), attribute.getAttribute(), pattern, text);
@@ -596,6 +602,11 @@ class BrowserImpl implements Browser {
     @Override
     public void assertElementExistsByTypeAndContainsText(String elementType, String text) {
         getElementByAttributeAndContainsText(elementType, text);
+    }
+
+    @Override
+    public void assertElementExistsByIdAndContainsText(String id, String text) {
+        getElementByIdAndContainsText(id, text);
     }
 
     @Override
