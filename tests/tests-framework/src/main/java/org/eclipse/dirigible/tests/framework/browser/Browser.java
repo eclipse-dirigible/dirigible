@@ -40,6 +40,8 @@ public interface Browser {
 
     void assertElementExistsByTypeAndContainsText(String htmlElementType, String text);
 
+    void assertElementExistsByIdAndContainsText(String id, String text);
+
     void assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text);
 
     void assertElementDoesNotExistsByTypeAndContainsText(String htmlElementType, String text);

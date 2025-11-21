@@ -12,8 +12,10 @@ package org.eclipse.dirigible.components.engine.typescript.transpilation;
 import org.eclipse.dirigible.components.base.publisher.PublisherHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+@Order(30)
 @Component
 class TscWatcherServicePublisherHandler implements PublisherHandler {
 
