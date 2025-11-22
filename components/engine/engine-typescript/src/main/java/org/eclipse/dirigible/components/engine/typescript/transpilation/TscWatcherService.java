@@ -38,7 +38,7 @@ import java.util.regex.Pattern;
 @Order(ApplicationListenersOrder.ApplicationReadyEventListeners.TYPE_SCRIPT_TRANSPILATION_SERVICE)
 @Component
 @ConditionalOnExpression("'${DIRIGIBLE_TSC_WATCH_SERVICE_ENABLED:true}'.toLowerCase() != 'false'")
-class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, DisposableBean {
+public class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, DisposableBean {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TscWatcherService.class);
 
@@ -103,7 +103,7 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
         }
     }
 
-    void restart() {
+    public void restart() {
         LOGGER.info("Restarting {}...", this);
         destroy();
 

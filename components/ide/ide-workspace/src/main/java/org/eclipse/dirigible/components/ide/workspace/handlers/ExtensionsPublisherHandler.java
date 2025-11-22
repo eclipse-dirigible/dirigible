@@ -12,9 +12,6 @@
  */
 package org.eclipse.dirigible.components.ide.workspace.handlers;
 
-import java.util.HashMap;
-import java.util.Map;
-
 import org.eclipse.dirigible.components.api.extensions.ExtensionsFacade;
 import org.eclipse.dirigible.components.base.publisher.PublisherHandler;
 import org.eclipse.dirigible.components.engine.javascript.service.JavascriptService;
@@ -22,11 +19,17 @@ import org.eclipse.dirigible.repository.api.RepositoryPath;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * The Class ExtensionsPublisherHandler.
  */
+
+@Order(40)
 @Component
 public class ExtensionsPublisherHandler implements PublisherHandler {
 
@@ -63,38 +66,6 @@ public class ExtensionsPublisherHandler implements PublisherHandler {
     }
 
     /**
-     * After publish.
-     *
-     * @param workspaceLocation the workspace location
-     * @param registryLocation the registry location
-     * @param metadata the metadata
-     */
-    @Override
-    public void afterPublish(String workspaceLocation, String registryLocation, AfterPublishMetadata metadata) {
-        triggerExtensions(workspaceLocation, EXTENSION_POINT_IDE_WORKSPACE_AFTER_PUBLISH, "After Publish");
-    }
-
-    /**
-     * Before unpublish.
-     *
-     * @param location the location
-     */
-    @Override
-    public void beforeUnpublish(String location) {
-        triggerExtensions(location, EXTENSION_POINT_IDE_WORKSPACE_BEFORE_UNPUBLISH, "Before Unpublish");
-    }
-
-    /**
-     * After unpublish.
-     *
-     * @param location the location
-     */
-    @Override
-    public void afterUnpublish(String location) {
-        triggerExtensions(location, EXTENSION_POINT_IDE_WORKSPACE_AFTER_UNPUBLISH, "After Unpublish");
-    }
-
-    /**
      * Trigger extensions.
      *
      * @param location the location
@@ -128,6 +99,38 @@ public class ExtensionsPublisherHandler implements PublisherHandler {
                 logger.error(e.getMessage(), e);
             }
         }
+    }
+
+    /**
+     * After publish.
+     *
+     * @param workspaceLocation the workspace location
+     * @param registryLocation the registry location
+     * @param metadata the metadata
+     */
+    @Override
+    public void afterPublish(String workspaceLocation, String registryLocation, AfterPublishMetadata metadata) {
+        triggerExtensions(workspaceLocation, EXTENSION_POINT_IDE_WORKSPACE_AFTER_PUBLISH, "After Publish");
+    }
+
+    /**
+     * Before unpublish.
+     *
+     * @param location the location
+     */
+    @Override
+    public void beforeUnpublish(String location) {
+        triggerExtensions(location, EXTENSION_POINT_IDE_WORKSPACE_BEFORE_UNPUBLISH, "Before Unpublish");
+    }
+
+    /**
+     * After unpublish.
+     *
+     * @param location the location
+     */
+    @Override
+    public void afterUnpublish(String location) {
+        triggerExtensions(location, EXTENSION_POINT_IDE_WORKSPACE_AFTER_UNPUBLISH, "After Unpublish");
     }
 
 }
