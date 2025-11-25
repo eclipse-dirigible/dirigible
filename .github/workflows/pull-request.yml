@@ -185,6 +185,7 @@ jobs:
           DIRIGIBLE_DATABASE_SYSTEM_USERNAME: ${{ env.POSTGRES_USER }}
           DIRIGIBLE_DATABASE_SYSTEM_PASSWORD: ${{ env.POSTGRES_PASS }}
           DIRIGIBLE_SCHEDULER_DATABASE_DELEGATE: org.quartz.impl.jdbcjobstore.PostgreSQLDelegate
+          INTEGRATION_TESTS_IS_POSTGRESQL: true
 
       - name: Generate a random artifact name
         if: always()

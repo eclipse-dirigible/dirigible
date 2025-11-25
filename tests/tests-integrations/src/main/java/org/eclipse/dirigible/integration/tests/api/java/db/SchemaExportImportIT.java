@@ -9,9 +9,19 @@
  */
 package org.eclipse.dirigible.integration.tests.api.java.db;
 
-import io.restassured.http.ContentType;
+import static io.restassured.RestAssured.given;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.hamcrest.Matchers.notNullValue;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 import org.assertj.db.api.Assertions;
 import org.assertj.db.type.Table;
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourceInitializer;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
@@ -31,18 +41,7 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-
-import static io.restassured.RestAssured.given;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
-import static org.hamcrest.Matchers.notNullValue;
+import io.restassured.http.ContentType;
 
 public class SchemaExportImportIT extends IntegrationTest {
 
@@ -292,7 +291,8 @@ public class SchemaExportImportIT extends IntegrationTest {
 
     @Test
     void testSystemDBExportImport() throws SQLException {
-        String exportProcessId = triggerSystemDBExportProcess();
+        boolean isPostgreSQL = Boolean.parseBoolean(Configuration.get("INTEGRATION_TESTS_IS_POSTGRESQL", "false"));
+        String exportProcessId = triggerSystemDBExportProcess(isPostgreSQL);
         assertProcessExecutedSuccessfully(exportProcessId);
 
         createH2DataSource(TARGET_DATA_SOURCE_NAME);
@@ -316,7 +316,7 @@ public class SchemaExportImportIT extends IntegrationTest {
         return triggerImportProcess(body);
     }
 
-    private String triggerSystemDBExportProcess() {
+    private String triggerSystemDBExportProcess(boolean isPostgreSQL) {
         // exclude Flowable tables which are related to the Flowable export process execution
         // if not excluded, import will fail due to import issues related to table constraints
         String body = """
@@ -328,6 +328,15 @@ public class SchemaExportImportIT extends IntegrationTest {
                     "excludedTables": ["ACT_RU_VARIABLE", "ACT_RU_JOB"]
                 }
                 """;
-        return triggerExportProcess(body);
+        String bodyPostgreSQL = """
+                {
+                    "dataSource": "SystemDB",
+                    "schema": "public",
+                    "exportPath": "/systemdb-export-folder",
+                    "includedTables": [],
+                    "excludedTables": ["act_ru_variable", "act_ru_job"]
+                }
+                """;
+        return triggerExportProcess(isPostgreSQL ? bodyPostgreSQL : body);
     }
 }

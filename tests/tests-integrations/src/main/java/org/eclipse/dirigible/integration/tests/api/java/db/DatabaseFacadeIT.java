@@ -9,6 +9,16 @@
  */
 package org.eclipse.dirigible.integration.tests.api.java.db;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import java.math.BigInteger;
+import java.sql.Connection;
+import java.sql.Date;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Time;
+import java.sql.Timestamp;
 import org.assertj.db.api.Assertions;
 import org.assertj.db.type.Table;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
@@ -30,13 +40,6 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
-
-import java.math.BigInteger;
-import java.sql.*;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class DatabaseFacadeIT extends IntegrationTest {
@@ -198,8 +201,8 @@ class DatabaseFacadeIT extends IntegrationTest {
         @Test
         void testDropSequenceByNameAndDataSourceName() {
             assertDoesNotThrow(() -> {
-                DatabaseFacade.createSequence("TEST_SEQ_05", 300, systemDataSource);
-                DatabaseFacade.dropSequence("TEST_SEQ_05", systemDataSource);
+                DatabaseFacade.createSequence("TEST_SEQ_06", 300, systemDataSource);
+                DatabaseFacade.dropSequence("TEST_SEQ_06", systemDataSource);
             });
         }
     }
