@@ -12,4 +12,10 @@ export class Customer {
 
     @Column({ name: "CUSTOMER_ADDRESS", type: "string" })
     public address: string;
+	
+	@Column({ name: "CUSTOMER_INDUSTRY", type: "string" })
+	public industry: string;
+	
+	@Column({ name: "CUSTOMER_SEGMENT", type: "double" })
+	public segment: number;
 }

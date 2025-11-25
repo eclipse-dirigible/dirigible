@@ -1,5 +1,4 @@
 name: Release
-
 on:
   workflow_dispatch:
     inputs:
@@ -18,7 +17,7 @@ on:
       upload-scanned-sarif-report:
         description: Upload SAST and DAST code scans to Github Security
         type: boolean
-        default: true
+        default: false # enable the upload when the sast_docker_scout_sarif.json has allowed number of related locations < 1000
 
 run-name: 'version set to ${{ github.event.inputs.releaseVersion }} for release'
 
@@ -231,8 +230,8 @@ jobs:
           path: sast_docker_scout_sarif.json
 
       - name: Upload Docker Scout SARIF Report to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
         if: ${{ inputs.upload-scanned-sarif-report }}
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: sast_docker_scout_sarif.json
 

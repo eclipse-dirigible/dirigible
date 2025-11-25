@@ -45,6 +45,7 @@ public class ParametersSetter {
 
     /** The Constant paramSetters. */
     private static final Set<ParamSetter> paramSetters = Set.of(//
+            new ArrayParamSetter(), //
             new BigDecimalParamSetter(), //
             new BigIntParamSetter(), //
             new BlobParamSetter(), //
@@ -248,6 +249,11 @@ public class ParametersSetter {
                 return;
             }
 
+            if (parameterElement.isJsonArray()) {
+                paramSetter.setParam(parameterElement, sqlParamIndex, preparedStatement);
+                return;
+            }
+
             if (parameterElement.isJsonObject()) {
                 setIndexedJsonObjectParam(preparedStatement, sqlParamIndex, parameterElement, sqlType, paramSetter);
                 return;
@@ -318,7 +324,21 @@ public class ParametersSetter {
     private static void setIndexedParameter(ParameterizedByIndex preparedStatement, int sqlParamIndex, JsonElement parameterElement)
             throws IllegalArgumentException, SQLException {
 
-        int sqlType = preparedStatement.getParameterType(sqlParamIndex);
+        int sqlType;
+        if (parameterElement.isJsonArray()) {
+            sqlType = Types.ARRAY;
+        } else if (parameterElement.isJsonObject()) {
+            JsonElement typeElement = parameterElement.getAsJsonObject()
+                                                      .get("type");
+            if (typeElement != null) {
+                String providedTypeName = typeElement.getAsString();
+                sqlType = DataTypeUtils.getSqlTypeByDataType(providedTypeName);
+            } else {
+                sqlType = preparedStatement.getParameterType(sqlParamIndex);
+            }
+        } else {
+            sqlType = preparedStatement.getParameterType(sqlParamIndex);
+        }
 
         setIndexedParameter(preparedStatement, sqlParamIndex, parameterElement, sqlType);
     }

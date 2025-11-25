@@ -16,7 +16,11 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Calendar;
+import java.util.List;
 
+/**
+ * The Interface ParameterizedByIndex.
+ */
 public interface ParameterizedByIndex {
 
     /**
@@ -199,14 +203,56 @@ public interface ParameterizedByIndex {
      */
     void setNull(int index, Integer sqlType) throws SQLException;
 
+    /**
+     * Sets the object.
+     *
+     * @param index the index
+     * @param value the value
+     * @param targetSqlType the target sql type
+     * @throws SQLException the SQL exception
+     */
     void setObject(int index, Object value, int targetSqlType) throws SQLException;
 
+    /**
+     * Sets the array.
+     *
+     * @param index the index
+     * @param value the value
+     * @param typeName the type name
+     * @throws SQLException the SQL exception
+     */
+    void setArray(int index, List<?> value, String typeName) throws SQLException;
+
+    /**
+     * Gets the connection.
+     *
+     * @return the connection
+     * @throws SQLException the SQL exception
+     */
     Connection getConnection() throws SQLException;
 
+    /**
+     * Adds the batch.
+     *
+     * @throws SQLException the SQL exception
+     */
     void addBatch() throws SQLException;
 
+    /**
+     * Gets the parameter count.
+     *
+     * @return the parameter count
+     * @throws SQLException the SQL exception
+     */
     int getParameterCount() throws SQLException;
 
+    /**
+     * Gets the parameter type.
+     *
+     * @param sqlParamIndex the sql param index
+     * @return the parameter type
+     * @throws SQLException the SQL exception
+     */
     int getParameterType(int sqlParamIndex) throws SQLException;
 
 }

@@ -107,7 +107,8 @@ export class Query {
           typeof v === "string" ||
           typeof v === "number" ||
           typeof v === "boolean" ||
-          v instanceof Date
+          v instanceof Date ||
+		  Array.isArray(v)
       )
     ) {
       const resultset = DatabaseFacade.query(

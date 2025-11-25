@@ -202,7 +202,8 @@ export class Store {
 	          typeof v === "string" ||
 	          typeof v === "number" ||
 	          typeof v === "boolean" ||
-	          v instanceof Date
+	          v instanceof Date	||
+		  	  Array.isArray(v)
 	      )
 	    ) {
 		  const result = DataStoreFacade.query(query, JSON.stringify(arr), limit, offset);
@@ -263,7 +264,8 @@ export class Store {
 	          typeof v === "string" ||
 	          typeof v === "number" ||
 	          typeof v === "boolean" ||
-	          v instanceof Date
+	          v instanceof Date ||
+			  Array.isArray(v)
 	      )
 	    ) {
 		  const result = DataStoreFacade.queryNative(query, JSON.stringify(arr), limit, offset);

@@ -253,7 +253,8 @@ class FileIO {
                     throw new Error(`Unable to load [${path}, HTTP: ${response.status}, ${response.statusText}]`);
                 }
             } catch (e) {
-                // Fallback to file in Registry
+                console.error(e);
+                console.error('Failed to load file. Reatempting using the Registry API.');
                 response = await fetch(this.#buildRegistryUrl(path), {
                     method: 'GET',
                     headers: {
@@ -290,9 +291,8 @@ class FileIO {
                 fileMetadata.sourceCode = fileContent;
             }
             if (!this.isReadOnly() && TypeScriptUtils.isTypeScriptFile(path)) {
-                const importedFilesNames = TypeScriptUtils.getImportedModuleFiles(fileMetadata.sourceCode);
                 // @ts-ignore
-                fileMetadata.importedFilesNames.push(...importedFilesNames);
+                fileMetadata.importedFilesNames.push(...TypeScriptUtils.getImportedModuleFiles(fileMetadata.sourceCode));
             }
             return fileMetadata;
         } catch (e) {
@@ -684,19 +684,14 @@ class DirigibleEditor {
                     const importedModuleFiles = TypeScriptUtils.getImportedModuleFiles(editor.getModel().getValue());
                     const newImportedModules = [];
                     for (const module of importedModuleFiles) {
-                        let found = false;
-                        for (const importedModule of fileObject.importedFilesNames) {
-                            if (module === importedModule) {
-                                found = true;
-                            }
-                        }
-                        if (!found) {
+                        if (!fileObject.importedFilesNames.includes(module)) {
                             newImportedModules.push(module);
                         }
                     }
                     if (newImportedModules.length > 0) {
-                        TypeScriptUtils.loadImportedFiles(monaco, newImportedModules);
-                        fileObject.importedFilesNames.push(...newImportedModules);
+                        fileObject.importedFilesNames.length = 0;
+                        fileObject.importedFilesNames.push(...importedModuleFiles);
+                        TypeScriptUtils.loadImportedFiles(monaco, newImportedModules.sort());
                     }
                 }, 1000);
             }
@@ -981,7 +976,7 @@ class DirigibleEditor {
                 const model = editor.getModel();
                 model.setValue(model.getValue());
                 DirigibleEditor.lastSavedVersionId = model.getAlternativeVersionId();
-
+                TypeScriptUtils.clearImportedFiles();
                 TypeScriptUtils.loadImportedFiles(monaco, fileObject.importedFilesNames, true);
             },
         });
@@ -992,8 +987,15 @@ class TypeScriptUtils {
 
     // Find all ES6 import statements and their modules
     static #IMPORT_REGEX = /import\s+(?:\{(?:\s*\w?\s*,?)*\}|(?:\*\s+as\s+\w+)|\w+)\s+from\s+['"]([^'"]+)['"]/g;
+    // If we want side-effect imports:
+    // import\s+(?:\{(?:\s*\w+\s*,?)*\}|(?:\*\s+as\s+\w+)|\w+)?\s*(?:from\s+['"]([^'"]+)['"]|['"]([^'"]+)['"])
 
     static #IMPORTED_FILES = new Set();
+
+    // Must call this before calling `loadImportedFiles` with isReload = true
+    static clearImportedFiles() {
+        TypeScriptUtils.#IMPORTED_FILES.clear();
+    }
 
     static isTypeScriptFile(fileName) {
         return fileName && fileName.endsWith(".ts");
@@ -1002,35 +1004,51 @@ class TypeScriptUtils {
     static getImportedModuleFiles(content) {
         const importedModules = [];
 
+        const contentWithoutComments = content.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+
         let match;
-        while ((match = TypeScriptUtils.#IMPORT_REGEX.exec(content)) !== null) {
-            let modulePath = match[1];
-            if (!modulePath.startsWith('@aerokit/sdk/')) {
+        while ((match = TypeScriptUtils.#IMPORT_REGEX.exec(contentWithoutComments)) !== null) {
+            let modulePath = match[1].trim();
+            if (!modulePath.startsWith('@aerokit/sdk/') && modulePath !== '' && modulePath !== '.' && modulePath !== './') {
                 if (!modulePath.endsWith(".json")) {
                     modulePath += ".ts";
                 }
                 importedModules.push(modulePath);
             }
         }
-        return importedModules;
+        return importedModules.sort();
     }
 
     static isGlobalImport(path) {
         return !path.startsWith("/") && !path.startsWith("./") && !path.startsWith("../") && !path.startsWith("@aerokit/sdk/")
     }
 
+    // The `importedFiles` array must be sorted before passed
     static loadImportedFiles = async (monaco, importedFiles, isReload = false) => {
-        if (isReload) {
-            TypeScriptUtils.#IMPORTED_FILES.clear();
-        }
         const fileIO = new FileIO();
-        for (const importedFile of importedFiles) {
-            try {
-                const importedFilePath = fileIO.resolveFilePath(importedFile);
-                if (TypeScriptUtils.#IMPORTED_FILES.has(importedFilePath)) {
-                    continue;
+        function createModel(sourceCode, uri) {
+            const fileType = uri.path.endsWith(".json") ? "json" : "typescript";
+            monaco.editor.createModel(sourceCode, fileType, uri);
+        }
+
+        async function relativeImports(importedFile, importedFileMetadata) {
+            if (importedFileMetadata.importedFilesNames?.length > 0) {
+                const relativeImportedPaths = importedFileMetadata.importedFilesNames.map(e => fileIO.resolveRelativePath(importedFile, e)).sort();
+                if (JSON.stringify(importedFiles) !== JSON.stringify(relativeImportedPaths)) {
+                    await TypeScriptUtils.loadImportedFiles(monaco, relativeImportedPaths, isReload);
                 }
-                const importedFileMetadata = await fileIO.loadText(fileIO.getWorkspacePath(importedFilePath));
+            }
+        }
+
+        for (const importedFile of importedFiles) {
+            const importedFilePath = fileIO.getWorkspacePath(fileIO.resolveFilePath(importedFile));
+            if (editorParameters.resourcePath === importedFilePath) {
+                continue;
+            } else if (TypeScriptUtils.#IMPORTED_FILES.has(importedFilePath)) {
+                continue;
+            }
+            try {
+                const importedFileMetadata = await fileIO.loadText(importedFilePath);
                 let uriPath = importedFileMetadata.filePath;
                 if (TypeScriptUtils.isGlobalImport(importedFile)) {
                     monaco.languages.typescript.typescriptDefaults.addExtraLib(
@@ -1042,17 +1060,16 @@ class TypeScriptUtils {
                 const uri = new monaco.Uri().with({ path: uriPath });
                 if (isReload) {
                     const model = monaco.editor.getModel(uri);
-                    model.setValue(importedFileMetadata.sourceCode);
+                    if (model) {
+                        model.setValue(importedFileMetadata.sourceCode);
+                    } else {
+                        createModel(importedFileMetadata.sourceCode, uri);
+                    }
                 } else {
-                    const fileType = uri.path.endsWith(".json") ? "json" : "typescript";
-                    monaco.editor.createModel(importedFileMetadata.sourceCode, fileType, uri);
-                }
-                if (importedFileMetadata.importedFilesNames?.length > 0) {
-                    const relativeImportedPaths = importedFileMetadata.importedFilesNames.map(e => fileIO.resolveRelativePath(importedFile, e));
-                    if (JSON.stringify(importedFiles) !== JSON.stringify(relativeImportedPaths))
-                        await TypeScriptUtils.loadImportedFiles(monaco, relativeImportedPaths, isReload);
+                    createModel(importedFileMetadata.sourceCode, uri);
                 }
                 TypeScriptUtils.#IMPORTED_FILES.add(importedFilePath);
+                await relativeImports(importedFile, importedFileMetadata);
             } catch (e) {
                 Utils.logErrorMessage(e);
             }

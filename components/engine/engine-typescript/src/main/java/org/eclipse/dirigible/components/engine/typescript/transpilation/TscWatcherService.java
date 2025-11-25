@@ -79,13 +79,17 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
                 "exclude": ["modules", "modules-tests"]
             }
             """;
-
-    private final ExecutorService executor = Executors.newFixedThreadPool(2);
     private final IRepository repository;
+    private ExecutorService executor;
     private Process tscProcess;
 
     TscWatcherService(IRepository repository) {
         this.repository = repository;
+    }
+
+    @Override
+    public String toString() {
+        return "TscWatcherService{" + "repository=" + repository + ", executor=" + executor + ", tscProcess=" + tscProcess + '}';
     }
 
     /**
@@ -95,12 +99,18 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
     public void monitorTscProcess() {
         if (tscProcess == null || !tscProcess.isAlive()) {
             LOGGER.warn("tsc watch service is not initialized or it is not alive. Will start it again.");
-            onApplicationEvent(null);
+            restart();
         }
     }
 
-    @Override
-    public void onApplicationEvent(ApplicationReadyEvent event) {
+    void restart() {
+        LOGGER.info("Restarting {}...", this);
+        destroy();
+
+        start();
+    }
+
+    private void start() {
         try {
             createOrReplaceTsConfig();
             startTscWatch();
@@ -134,6 +144,8 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
             LOGGER.info("TSC watch process is already running and will not be retriggered. Process [{}]", tscProcess);
             return;
         }
+
+        this.executor = Executors.newFixedThreadPool(2);
 
         Path registryFolderPath = getRegistryFolderPath();
         createDir(registryFolderPath);
@@ -190,12 +202,29 @@ class TscWatcherService implements ApplicationListener<ApplicationReadyEvent>, D
     }
 
     @Override
-    public void destroy() throws Exception {
+    public void destroy() {
         LOGGER.info("Destroying tsc watch service...");
-        if (tscProcess != null && tscProcess.isAlive()) {
-            LOGGER.info("Stopping tsc watch process...");
-            tscProcess.destroy();
+        if (tscProcess != null) {
+            if (tscProcess.isAlive()) {
+                LOGGER.debug("Forcibly destroying tsc watch process {}...", tscProcess);
+                tscProcess.destroyForcibly();
+            }
+
+            tscProcess = null;
         }
-        executor.shutdownNow();
+
+        if (null != executor) {
+            LOGGER.debug("Shutting down the executor [{}]...", executor);
+            executor.shutdownNow();
+
+            executor = null;
+        }
+
+        LOGGER.info("Destroy completed!");
+    }
+
+    @Override
+    public void onApplicationEvent(ApplicationReadyEvent event) {
+        start();
     }
 }

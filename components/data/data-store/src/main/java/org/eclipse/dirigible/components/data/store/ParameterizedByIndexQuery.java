@@ -16,6 +16,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Calendar;
+import java.util.List;
 
 import org.eclipse.dirigible.components.database.ParameterizedByIndex;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
@@ -286,6 +287,19 @@ public class ParameterizedByIndexQuery implements ParameterizedByIndex {
      */
     @Override
     public void setObject(int index, Object value, int targetSqlType) throws SQLException {
+        statement.setParameter(index, value);
+    }
+
+    /**
+     * Sets the array.
+     *
+     * @param index the index
+     * @param value the value
+     * @param typeName the type name
+     * @throws SQLException the SQL exception
+     */
+    @Override
+    public void setArray(int index, List<?> value, String typeName) throws SQLException {
         statement.setParameter(index, value);
     }
 

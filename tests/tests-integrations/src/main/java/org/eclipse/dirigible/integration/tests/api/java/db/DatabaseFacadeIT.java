@@ -12,6 +12,7 @@ package org.eclipse.dirigible.integration.tests.api.java.db;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+
 import java.math.BigInteger;
 import java.sql.Connection;
 import java.sql.Date;
@@ -34,6 +35,7 @@ import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.db.DBAsserter;
 import org.eclipse.dirigible.tests.framework.util.JsonAsserter;
+import org.h2.jdbc.JdbcSQLDataException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Nested;
@@ -327,19 +329,21 @@ class DatabaseFacadeIT extends IntegrationTest {
                       .isNull();
         }
 
-        @Test
-        void testInsertWithInvalidParamsObjects() throws Throwable {
-            String parametersJson = "[[],[],[],[]]";
-
-            String insertSql = createInsertInTestTableAllColumnsSql();
-
-            Exception thrownException =
-                    assertThrows(IllegalArgumentException.class, () -> DatabaseFacade.insert(insertSql, parametersJson, null));
-
-            assertThat(thrownException.getMessage()).contains(
-                    "Parameter with index [1] must be primitive or object. Parameter element [[]]");
-
-        }
+        // Not valid anymore
+        // @Test
+        // void testInsertWithInvalidParamsObjects() throws Throwable {
+        // String parametersJson = "[[],[],[],[]]";
+        //
+        // String insertSql = createInsertInTestTableAllColumnsSql();
+        //
+        // Exception thrownException =
+        // assertThrows(JdbcSQLDataException.class, () -> DatabaseFacade.insert(insertSql, parametersJson,
+        // null));
+        //
+        // assertThat(thrownException.getMessage()).contains(
+        // "Parameter with index [1] must be primitive or object. Parameter element [[]]");
+        //
+        // }
 
         @Test
         void testInsertWithParamsObjectsArrayWithNulls() throws Throwable {

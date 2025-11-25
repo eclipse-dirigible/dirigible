@@ -14,6 +14,9 @@ import java.math.BigDecimal;
 import java.sql.*;
 import java.util.*;
 
+/**
+ * The Class ParameterizedStatement.
+ */
 public class ParameterizedStatement implements ParameterizedByIndex {
 
     /** The statement this object is wrapping. */
@@ -251,26 +254,73 @@ public class ParameterizedStatement implements ParameterizedByIndex {
         statement.setNull(index, sqlType);
     }
 
+    /**
+     * Sets the big decimal.
+     *
+     * @param index the index
+     * @param value the value
+     * @throws SQLException the SQL exception
+     */
     @Override
     public void setBigDecimal(int index, BigDecimal value) throws SQLException {
         statement.setBigDecimal(index, value);
     }
 
+    /**
+     * Sets the object.
+     *
+     * @param index the index
+     * @param value the value
+     * @param targetSqlType the target sql type
+     * @throws SQLException the SQL exception
+     */
     @Override
     public void setObject(int index, Object value, int targetSqlType) throws SQLException {
         statement.setObject(index, value, targetSqlType);
     }
 
+    /**
+     * Sets the array.
+     *
+     * @param index the index
+     * @param value the value
+     * @param typeName the type name
+     * @throws SQLException the SQL exception
+     */
+    @Override
+    public void setArray(int index, List<?> value, String typeName) throws SQLException {
+        Connection connection = getConnection();
+        Array array = connection.createArrayOf(typeName, value.toArray());
+        statement.setArray(index, array);
+    }
+
+    /**
+     * Gets the connection.
+     *
+     * @return the connection
+     * @throws SQLException the SQL exception
+     */
     @Override
     public Connection getConnection() throws SQLException {
         return statement.getConnection();
     }
 
+    /**
+     * Adds the batch.
+     *
+     * @throws SQLException the SQL exception
+     */
     @Override
     public void addBatch() throws SQLException {
         statement.addBatch();
     }
 
+    /**
+     * Gets the parameter count.
+     *
+     * @return the parameter count
+     * @throws SQLException the SQL exception
+     */
     @Override
     public int getParameterCount() throws SQLException {
         ParameterMetaData parameterMetaData = statement.getParameterMetaData();
@@ -278,6 +328,13 @@ public class ParameterizedStatement implements ParameterizedByIndex {
         return sqlParametersCount;
     }
 
+    /**
+     * Gets the parameter type.
+     *
+     * @param sqlParamIndex the sql param index
+     * @return the parameter type
+     * @throws SQLException the SQL exception
+     */
     @Override
     public int getParameterType(int sqlParamIndex) throws SQLException {
         ParameterMetaData parameterMetaData = statement.getParameterMetaData();

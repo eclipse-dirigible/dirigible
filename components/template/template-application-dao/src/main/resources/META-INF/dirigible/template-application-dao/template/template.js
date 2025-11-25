@@ -42,11 +42,6 @@ export function getTemplate(parameters) {
             rename: "project.json",
             engine: "javascript",
         }, {
-            location: "/template-application-dao/tsconfig.json.template",
-            action: "generate",
-            rename: "tsconfig.json",
-            engine: "velocity"
-        }, {
             location: "/template-application-dao/dao/utils/EntityUtils.ts.template",
             action: "copy",
             rename: "gen/{{genFolderName}}/dao/utils/EntityUtils.ts"

@@ -429,6 +429,24 @@ public class NamedParameterStatement implements AutoCloseable, ParameterizedByNa
     }
 
     /**
+     * Sets the array.
+     *
+     * @param name the name
+     * @param value the value
+     * @param typeName the type name
+     * @throws SQLException the SQL exception
+     */
+    @Override
+    public void setArray(String name, List<?> value, String typeName) throws SQLException {
+        Connection connection = getStatement().getConnection();
+        Array array = connection.createArrayOf(typeName, value.toArray());
+        int[] indexes = getIndexes(name);
+        for (int i = 0; i < indexes.length; i++) {
+            statement.setArray(indexes[i], array);
+        }
+    }
+
+    /**
      * Returns the underlying statement.
      *
      * @return the statement

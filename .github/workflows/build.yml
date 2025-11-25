@@ -263,16 +263,22 @@ jobs:
           summary: true
           only-fixed: false
 
+      - name: Trim SARIF to satisfy GitHub limit (remove relatedLocations)
+        run: |
+          jq 'del(.. | .relatedLocations?)' sast_docker_scout_sarif.json \
+            > sast_docker_scout_sarif_trimmed.json
+
       - name: Upload Docker Scout SARIF file as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sast_docker_scout_sarif.json
-          path: sast_docker_scout_sarif.json
+          name: sast_docker_scout_sarif_trimmed.json
+          path: sast_docker_scout_sarif_trimmed.json
 
       - name: Upload Docker Scout SARIF Report to GitHub Security tab
+        if: false # uncomment when the sast_docker_scout_sarif.json has allowed number of related locations < 1000
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: sast_docker_scout_sarif.json
+          sarif_file: sast_docker_scout_sarif_trimmed.json
 
   dast-scan:
     name: Perform DAST testing using ZAP

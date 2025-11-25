@@ -395,7 +395,7 @@ public class DataStoreTest {
      * @throws SQLException
      */
     @Test
-    public void queryWithParameters() throws SQLException {
+    public void queryWithPrimitiveParameters() throws SQLException {
 
         try {
             String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
@@ -414,6 +414,130 @@ public class DataStoreTest {
             assertEquals(1, list.size());
             assertNotNull(list.get(0));
             assertEquals("Matthias", ((Map) list.get(0)).get("name"));
+
+        } finally {
+            cleanupCustomers();
+        }
+    }
+
+    /**
+     * Query object.
+     *
+     * @throws SQLException
+     */
+    @Test
+    public void queryWithTypedParameters() throws SQLException {
+
+        try {
+            String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
+            dataStore.save("Customer", json);
+            json = "{\"name\":\"Jane\",\"address\":\"Varna, Bulgaria\"}";
+            dataStore.save("Customer", json);
+            json = "{\"name\":\"Matthias\",\"address\":\"Berlin, Germany\"}";
+            dataStore.save("Customer", json);
+
+            Optional<JsonElement> params = parseOptionalJson("[{'type':'VARCHAR','value':'M%'}]");
+
+            List list = dataStore.query("from Customer where name like ?1", params, 100, 0);
+            System.out.println(JsonHelper.toJson(list));
+
+            assertNotNull(list);
+            assertEquals(1, list.size());
+            assertNotNull(list.get(0));
+            assertEquals("Matthias", ((Map) list.get(0)).get("name"));
+
+        } finally {
+            cleanupCustomers();
+        }
+    }
+
+    /**
+     * Query object.
+     *
+     * @throws SQLException
+     */
+    @Test
+    public void queryWithNamedParameters() throws SQLException {
+
+        try {
+            String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\"}";
+            dataStore.save("Customer", json);
+            json = "{\"name\":\"Jane\",\"address\":\"Varna, Bulgaria\"}";
+            dataStore.save("Customer", json);
+            json = "{\"name\":\"Matthias\",\"address\":\"Berlin, Germany\"}";
+            dataStore.save("Customer", json);
+
+            Optional<JsonElement> params = parseOptionalJson("[{'name':'customer_name','type':'VARCHAR','value':'M%'}]");
+
+            List list = dataStore.queryNamed("from Customer where name like :customer_name", params, 100, 0);
+            System.out.println(JsonHelper.toJson(list));
+
+            assertNotNull(list);
+            assertEquals(1, list.size());
+            assertNotNull(list.get(0));
+            assertEquals("Matthias", ((Map) list.get(0)).get("name"));
+
+        } finally {
+            cleanupCustomers();
+        }
+    }
+
+    /**
+     * Query object.
+     *
+     * @throws SQLException
+     */
+    @Test
+    public void queryWithParametersArray() throws SQLException {
+
+        try {
+            String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\",\"industry\":\"Retail\"}";
+            dataStore.save("Customer", json);
+            json = "{\"name\":\"Jane\",\"address\":\"Varna, Bulgaria\",\"industry\":\"Utilities\"}";
+            dataStore.save("Customer", json);
+            json = "{\"name\":\"Matthias\",\"address\":\"Berlin, Germany\",\"industry\":\"Wholesale\"}";
+            dataStore.save("Customer", json);
+
+            Optional<JsonElement> params = parseOptionalJson("[[\"Retail\", \"Wholesale\"]]");
+
+            List list = dataStore.query("from Customer where industry in ?1", params, 100, 0);
+            System.out.println(JsonHelper.toJson(list));
+
+            assertNotNull(list);
+            assertEquals(2, list.size());
+            assertNotNull(list.get(0));
+            assertEquals("John", ((Map) list.get(0)).get("name"));
+
+        } finally {
+            cleanupCustomers();
+        }
+    }
+
+    /**
+     * Query object.
+     *
+     * @throws SQLException
+     */
+    @Test
+    public void queryWithParametersArrayNumbers() throws SQLException {
+
+        try {
+            String json = "{\"name\":\"John\",\"address\":\"Sofia, Bulgaria\",\"industry\":\"Retail\", \"segment\":1}";
+            dataStore.save("Customer", json);
+            json = "{\"name\":\"Jane\",\"address\":\"Varna, Bulgaria\",\"industry\":\"Utilities\", \"segment\":2}";
+            dataStore.save("Customer", json);
+            json = "{\"name\":\"Matthias\",\"address\":\"Berlin, Germany\",\"industry\":\"Wholesale\", \"segment\":3}";
+            dataStore.save("Customer", json);
+
+            Optional<JsonElement> params = parseOptionalJson("[[2, 3]]");
+
+            List list = dataStore.query("from Customer where segment in ?1", params, 100, 0);
+            System.out.println(JsonHelper.toJson(list));
+
+            assertNotNull(list);
+            assertEquals(2, list.size());
+            assertNotNull(list.get(0));
+            assertEquals("Jane", ((Map) list.get(0)).get("name"));
 
         } finally {
             cleanupCustomers();

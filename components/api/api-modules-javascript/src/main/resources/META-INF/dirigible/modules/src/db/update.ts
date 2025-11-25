@@ -79,7 +79,8 @@ export class Update {
 	          typeof v === "string" ||
 	          typeof v === "number" ||
 	          typeof v === "boolean" ||
-	          v instanceof Date
+	          v instanceof Date			  ||
+			  	  Array.isArray(v)
 	      )
 	    ) {
 		  const result = DatabaseFacade.update(sql, JSON.stringify(arr), datasourceName);

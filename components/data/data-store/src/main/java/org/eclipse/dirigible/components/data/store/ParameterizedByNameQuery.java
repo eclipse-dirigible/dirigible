@@ -14,6 +14,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Calendar;
+import java.util.List;
 
 import org.eclipse.dirigible.components.database.ParameterizedByName;
 import org.hibernate.query.Query;
@@ -256,6 +257,19 @@ public class ParameterizedByNameQuery implements ParameterizedByName {
     @Override
     public void setNull(String name, Integer sqlType) throws SQLException {
         statement.setParameter(name, null);
+    }
+
+    /**
+     * Sets the array.
+     *
+     * @param name the name
+     * @param value the value
+     * @param typeName the type name
+     * @throws SQLException the SQL exception
+     */
+    @Override
+    public void setArray(String name, List<?> value, String typeName) throws SQLException {
+        statement.setParameter(name, value);
     }
 
 }
