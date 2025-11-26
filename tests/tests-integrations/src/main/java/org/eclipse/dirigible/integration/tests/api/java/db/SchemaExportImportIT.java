@@ -316,7 +316,7 @@ public class SchemaExportImportIT extends IntegrationTest {
 
             String importProcessId = triggerSystemDBImportProcess();
             assertProcessExecutedSuccessfully(importProcessId);
-    
+
             DirigibleDataSource dataSource = dataSourcesManager.getDataSource(TARGET_DATA_SOURCE_NAME);
             List<String> createdTables = DatabaseMetadataUtil.getTablesInSchema(dataSource, "PUBLIC");
             assertThat(createdTables).hasSizeGreaterThan(0);
