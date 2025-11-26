@@ -123,6 +123,9 @@ jobs:
       POSTGRES_DB: testdb
       POSTGRES_USER: testuser
       POSTGRES_PASS: testpass
+      POSTGRES_SYSTEMDB_DB: testsystemdb
+      POSTGRES_SYSTEMDB_USER: testsystemuser
+      POSTGRES_SYSTEMDB_PASS: testsystempass
     services:
       postgres:
         image: postgres:16
@@ -132,6 +135,19 @@ jobs:
           POSTGRES_DB: ${{ env.POSTGRES_DB }}
           POSTGRES_USER: ${{ env.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ env.POSTGRES_PASS }}
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      postgres-system-db:
+        image: postgres:16
+        ports:
+          - 5433:5432
+        env:
+          POSTGRES_DB: ${{ env.POSTGRES_SYSTEMDB_DB }}
+          POSTGRES_USER: ${{ env.POSTGRES_SYSTEMDB_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_SYSTEMDB_PASS }}
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -181,9 +197,9 @@ jobs:
           DIRIGIBLE_DATASOURCE_DEFAULT_PASSWORD: ${{ env.POSTGRES_PASS }}
           DIRIGIBLE_DATABASE_SYSTEM_DIALECT: org.hibernate.dialect.PostgreSQLDialect
           DIRIGIBLE_DATABASE_SYSTEM_DRIVER: org.postgresql.Driver
-          DIRIGIBLE_DATABASE_SYSTEM_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
-          DIRIGIBLE_DATABASE_SYSTEM_USERNAME: ${{ env.POSTGRES_USER }}
-          DIRIGIBLE_DATABASE_SYSTEM_PASSWORD: ${{ env.POSTGRES_PASS }}
+          DIRIGIBLE_DATABASE_SYSTEM_URL: jdbc:postgresql://localhost:5433/${{ env.POSTGRES_SYSTEMDB_DB }}
+          DIRIGIBLE_DATABASE_SYSTEM_USERNAME: ${{ env.POSTGRES_SYSTEMDB_USER }}
+          DIRIGIBLE_DATABASE_SYSTEM_PASSWORD: ${{ env.POSTGRES_SYSTEMDB_PASS }}
           DIRIGIBLE_SCHEDULER_DATABASE_DELEGATE: org.quartz.impl.jdbcjobstore.PostgreSQLDelegate
           INTEGRATION_TESTS_IS_POSTGRESQL: true
 
