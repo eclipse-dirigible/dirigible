@@ -159,7 +159,7 @@ jobs:
       postgres-target-ds:
         image: postgres:16
         ports:
-          - 5433:5432
+          - 5434:5432
         env:
           POSTGRES_DB: ${{ env.POSTGRES_TARGET_DS_DB }}
           POSTGRES_USER: ${{ env.POSTGRES_TARGET_DS_USER }}
@@ -218,7 +218,7 @@ jobs:
           DIRIGIBLE_DATABASE_SYSTEM_PASSWORD: ${{ env.POSTGRES_SYSTEMDB_PASS }}
           DIRIGIBLE_SCHEDULER_DATABASE_DELEGATE: org.quartz.impl.jdbcjobstore.PostgreSQLDelegate
           INTEGRATION_TESTS_IS_POSTGRESQL: true
-          INTEGRATION_TESTS_TARGET_DS_URL: jdbc:postgresql://localhost:5433/${{ env.POSTGRES_TARGET_DS_DB }}
+          INTEGRATION_TESTS_TARGET_DS_URL: jdbc:postgresql://localhost:5434/${{ env.POSTGRES_TARGET_DS_DB }}
           INTEGRATION_TESTS_TARGET_DS_USERNAME: ${{ env.POSTGRES_TARGET_DS_USER }}
           INTEGRATION_TESTS_TARGET_DS_PASSWORD: ${{ env.POSTGRES_TARGET_DS_PASS }}
 
