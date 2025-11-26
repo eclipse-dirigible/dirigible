@@ -126,6 +126,9 @@ jobs:
       POSTGRES_SYSTEMDB_DB: testsystemdb
       POSTGRES_SYSTEMDB_USER: testsystemuser
       POSTGRES_SYSTEMDB_PASS: testsystempass
+      POSTGRES_TARGET_DS_DB: targetdsdb
+      POSTGRES_TARGET_DS_USER: targetdsuser
+      POSTGRES_TARGET_DS_PASS: targetdspass
     services:
       postgres:
         image: postgres:16
@@ -148,6 +151,19 @@ jobs:
           POSTGRES_DB: ${{ env.POSTGRES_SYSTEMDB_DB }}
           POSTGRES_USER: ${{ env.POSTGRES_SYSTEMDB_USER }}
           POSTGRES_PASSWORD: ${{ env.POSTGRES_SYSTEMDB_PASS }}
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      postgres-target-ds:
+        image: postgres:16
+        ports:
+          - 5433:5432
+        env:
+          POSTGRES_DB: ${{ env.POSTGRES_TARGET_DS_DB }}
+          POSTGRES_USER: ${{ env.POSTGRES_TARGET_DS_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_TARGET_DS_PASS }}
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -202,6 +218,9 @@ jobs:
           DIRIGIBLE_DATABASE_SYSTEM_PASSWORD: ${{ env.POSTGRES_SYSTEMDB_PASS }}
           DIRIGIBLE_SCHEDULER_DATABASE_DELEGATE: org.quartz.impl.jdbcjobstore.PostgreSQLDelegate
           INTEGRATION_TESTS_IS_POSTGRESQL: true
+          INTEGRATION_TESTS_TARGET_DS_URL: jdbc:postgresql://localhost:5433/${{ env.POSTGRES_TARGET_DS_DB }}
+          INTEGRATION_TESTS_TARGET_DS_USERNAME: ${{ env.POSTGRES_TARGET_DS_USER }}
+          INTEGRATION_TESTS_TARGET_DS_PASSWORD: ${{ env.POSTGRES_TARGET_DS_PASS }}
 
       - name: Generate a random artifact name
         if: always()

@@ -81,8 +81,18 @@ public class SchemaExportImportIT extends IntegrationTest {
         assertImportedTestingTables();
     }
 
-    private void createH2DataSource(String name) {
+    private void createPostgreSQLDataSource(String name) {
+        DataSource targetDataSource = new DataSource();
+        targetDataSource.setName(name);
+        targetDataSource.setDriver("org.postgresql.Driver");
+        targetDataSource.setUsername(Configuration.get("INTEGRATION_TESTS_TARGET_DS_USERNAME"));
+        targetDataSource.setPassword(Configuration.get("INTEGRATION_TESTS_TARGET_DS_PASSWORD"));
+        targetDataSource.setUrl(Configuration.get("INTEGRATION_TESTS_TARGET_DS_URL"));
 
+        dataSourceInitializer.initialize(targetDataSource);
+    }
+
+    private void createH2DataSource(String name) {
         DataSource targetDataSource = new DataSource();
         targetDataSource.setName(name);
         targetDataSource.setDriver("org.h2.Driver");
@@ -295,15 +305,22 @@ public class SchemaExportImportIT extends IntegrationTest {
         String exportProcessId = triggerSystemDBExportProcess(isPostgreSQL);
         assertProcessExecutedSuccessfully(exportProcessId);
 
-        createH2DataSource(TARGET_DATA_SOURCE_NAME);
-        assertTablesCount(TARGET_DATA_SOURCE_NAME, "PUBLIC", 0);
+        if (isPostgreSQL) {
+            createPostgreSQLDataSource(TARGET_DATA_SOURCE_NAME);
+        } else {
+            createH2DataSource(TARGET_DATA_SOURCE_NAME);
+        }
 
-        String importProcessId = triggerSystemDBImportProcess();
-        assertProcessExecutedSuccessfully(importProcessId);
+        if (!isPostgreSQL) {
+            assertTablesCount(TARGET_DATA_SOURCE_NAME, "PUBLIC", 0);
 
-        DirigibleDataSource dataSource = dataSourcesManager.getDataSource(TARGET_DATA_SOURCE_NAME);
-        List<String> createdTables = DatabaseMetadataUtil.getTablesInSchema(dataSource, "PUBLIC");
-        assertThat(createdTables).hasSizeGreaterThan(0);
+            String importProcessId = triggerSystemDBImportProcess();
+            assertProcessExecutedSuccessfully(importProcessId);
+    
+            DirigibleDataSource dataSource = dataSourcesManager.getDataSource(TARGET_DATA_SOURCE_NAME);
+            List<String> createdTables = DatabaseMetadataUtil.getTablesInSchema(dataSource, "PUBLIC");
+            assertThat(createdTables).hasSizeGreaterThan(0);
+        }
     }
 
     private String triggerSystemDBImportProcess() {

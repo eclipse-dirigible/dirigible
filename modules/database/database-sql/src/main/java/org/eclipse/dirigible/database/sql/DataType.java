@@ -50,6 +50,15 @@ public enum DataType {
     /** The int. */
     INT("INT"),
 
+    /** The int2. */
+    INT2("INT2"),
+
+    /** The int4. */
+    INT4("INT4"),
+
+    /** The int8. */
+    INT8("INT8"),
+
     /** The tinyint. */
     TINYINT("TINYINT"),
 
@@ -71,6 +80,9 @@ public enum DataType {
     /** The boolean. */
     BOOLEAN("BOOLEAN"),
 
+    /** The bool. */
+    BOOL("BOOL"),
+
     /** The blob. */
     BLOB("BLOB"),
 
@@ -82,6 +94,9 @@ public enum DataType {
 
     /** The nvarchar. */
     NVARCHAR("NVARCHAR"),
+
+    /** The bpchar. */
+    BPCHAR("BPCHAR"),
 
     /** The float. */
     FLOAT("FLOAT"),
@@ -100,6 +115,9 @@ public enum DataType {
 
     /** The binary varying. */
     BINARY_VARYING("BINARY VARYING"),
+
+    /** The bytea. */
+    BYTEA("BYTEA"),
 
     /** The shorttext. */
     SHORTTEXT("SHORTTEXT"),
@@ -172,7 +190,7 @@ public enum DataType {
     public static final DataType valueOfByName(String name) {
         for (DataType type : DataType.class.getEnumConstants()) {
             if (type.toString()
-                    .equals(name)) {
+                    .equalsIgnoreCase(name)) {
                 return type;
             }
         }
