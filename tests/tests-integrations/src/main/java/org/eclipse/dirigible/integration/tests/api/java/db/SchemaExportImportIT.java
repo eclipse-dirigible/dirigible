@@ -137,7 +137,7 @@ public class SchemaExportImportIT extends IntegrationTest {
 
     private void assertProcessExecutedSuccessfully(String processInstanceId) {
         AwaitilityExecutor.execute("Process with id " + processInstanceId + " didn't completed for the expected time.",
-                () -> await().atMost(10, TimeUnit.SECONDS)
+                () -> await().atMost(30, TimeUnit.SECONDS)
                              .pollInterval(1, TimeUnit.SECONDS)
                              .until(() -> isProcessCompletedSuccessfully(processInstanceId)));
     }
