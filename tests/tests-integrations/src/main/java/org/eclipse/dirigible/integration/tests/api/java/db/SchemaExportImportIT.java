@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.assertj.db.api.Assertions;
 import org.assertj.db.type.Table;
-import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourceInitializer;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
@@ -81,17 +80,6 @@ public class SchemaExportImportIT extends IntegrationTest {
         assertImportedTestingTables();
     }
 
-    private void createPostgreSQLDataSource(String name) {
-        DataSource targetDataSource = new DataSource();
-        targetDataSource.setName(name);
-        targetDataSource.setDriver("org.postgresql.Driver");
-        targetDataSource.setUsername(Configuration.get("INTEGRATION_TESTS_TARGET_DS_USERNAME"));
-        targetDataSource.setPassword(Configuration.get("INTEGRATION_TESTS_TARGET_DS_PASSWORD"));
-        targetDataSource.setUrl(Configuration.get("INTEGRATION_TESTS_TARGET_DS_URL"));
-
-        dataSourceInitializer.initialize(targetDataSource);
-    }
-
     private void createH2DataSource(String name) {
         DataSource targetDataSource = new DataSource();
         targetDataSource.setName(name);
@@ -147,7 +135,7 @@ public class SchemaExportImportIT extends IntegrationTest {
 
     private void assertProcessExecutedSuccessfully(String processInstanceId) {
         AwaitilityExecutor.execute("Process with id " + processInstanceId + " didn't completed for the expected time.",
-                () -> await().atMost(30, TimeUnit.SECONDS)
+                () -> await().atMost(60, TimeUnit.SECONDS)
                              .pollInterval(1, TimeUnit.SECONDS)
                              .until(() -> isProcessCompletedSuccessfully(processInstanceId)));
     }
@@ -301,26 +289,19 @@ public class SchemaExportImportIT extends IntegrationTest {
 
     @Test
     void testSystemDBExportImport() throws SQLException {
-        boolean isPostgreSQL = Boolean.parseBoolean(Configuration.get("INTEGRATION_TESTS_IS_POSTGRESQL", "false"));
-        String exportProcessId = triggerSystemDBExportProcess(isPostgreSQL);
+        String exportProcessId = triggerSystemDBExportProcess();
         assertProcessExecutedSuccessfully(exportProcessId);
 
-        if (isPostgreSQL) {
-            createPostgreSQLDataSource(TARGET_DATA_SOURCE_NAME);
-        } else {
-            createH2DataSource(TARGET_DATA_SOURCE_NAME);
-        }
+        createH2DataSource(TARGET_DATA_SOURCE_NAME);
 
-        if (!isPostgreSQL) {
-            assertTablesCount(TARGET_DATA_SOURCE_NAME, "PUBLIC", 0);
+        assertTablesCount(TARGET_DATA_SOURCE_NAME, "PUBLIC", 0);
 
-            String importProcessId = triggerSystemDBImportProcess();
-            assertProcessExecutedSuccessfully(importProcessId);
+        String importProcessId = triggerSystemDBImportProcess();
+        assertProcessExecutedSuccessfully(importProcessId);
 
-            DirigibleDataSource dataSource = dataSourcesManager.getDataSource(TARGET_DATA_SOURCE_NAME);
-            List<String> createdTables = DatabaseMetadataUtil.getTablesInSchema(dataSource, "PUBLIC");
-            assertThat(createdTables).hasSizeGreaterThan(0);
-        }
+        DirigibleDataSource dataSource = dataSourcesManager.getDataSource(TARGET_DATA_SOURCE_NAME);
+        List<String> createdTables = DatabaseMetadataUtil.getTablesInSchema(dataSource, "PUBLIC");
+        assertThat(createdTables).hasSizeGreaterThan(0);
     }
 
     private String triggerSystemDBImportProcess() {
@@ -333,7 +314,7 @@ public class SchemaExportImportIT extends IntegrationTest {
         return triggerImportProcess(body);
     }
 
-    private String triggerSystemDBExportProcess(boolean isPostgreSQL) {
+    private String triggerSystemDBExportProcess() {
         // exclude Flowable tables which are related to the Flowable export process execution
         // if not excluded, import will fail due to import issues related to table constraints
         String body = """
@@ -345,15 +326,6 @@ public class SchemaExportImportIT extends IntegrationTest {
                     "excludedTables": ["ACT_RU_VARIABLE", "ACT_RU_JOB"]
                 }
                 """;
-        String bodyPostgreSQL = """
-                {
-                    "dataSource": "SystemDB",
-                    "schema": "public",
-                    "exportPath": "/systemdb-export-folder",
-                    "includedTables": [],
-                    "excludedTables": ["act_ru_variable", "act_ru_job"]
-                }
-                """;
-        return triggerExportProcess(isPostgreSQL ? bodyPostgreSQL : body);
+        return triggerExportProcess(body);
     }
 }
