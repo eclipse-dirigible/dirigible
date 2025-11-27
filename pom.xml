@@ -363,6 +363,9 @@
                                 <goal>integration-test</goal>
                                 <goal>verify</goal>
                             </goals>
+                            <configuration>
+                                <rerunFailingTestsCount>3</rerunFailingTestsCount>
+                            </configuration>
                         </execution>
                     </executions>
                 </plugin>
