@@ -323,7 +323,7 @@ public class DataStoreTest {
 
             dataStore.save("Customer", json);
 
-            List list = dataStore.queryNative("select * from Customer", null, 100, 0);
+            List list = dataStore.queryNative("select * from \"CUSTOMER\"", null, 100, 0);
             System.out.println(JsonHelper.toJson(list));
 
             assertNotNull(list);
