@@ -10,6 +10,7 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests.sample;
 
+import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.ide.GitPerspective;
 import org.eclipse.dirigible.tests.framework.ide.Workbench;
@@ -21,7 +22,7 @@ abstract class SampleProjectRepositoryIT extends UserInterfaceIntegrationTest {
 
     @Autowired
     protected RestAssuredExecutor restAssuredExecutor;
-    
+
     @Autowired
     protected SynchronizationProcessor synchronizationProcessor;
 
@@ -31,7 +32,7 @@ abstract class SampleProjectRepositoryIT extends UserInterfaceIntegrationTest {
 
         Workbench workbench = ide.openWorkbench();
         workbench.publishAll(true);
-        
+
         synchronizationProcessor.forceProcessSynchronizers();
 
         verifyProject();
