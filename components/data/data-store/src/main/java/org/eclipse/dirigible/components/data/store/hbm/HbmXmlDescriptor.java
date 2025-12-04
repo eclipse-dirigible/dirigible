@@ -511,7 +511,7 @@ public class HbmXmlDescriptor {
         xml.append("<hibernate-mapping>\n");
 
         // --- Class Element ---
-        xml.append(String.format("    <class entity-name=\"%s\" table=\"%s\">\n", this.entityName, this.tableName));
+        xml.append(String.format("    <class entity-name=\"%s\" table=\"`%s`\">\n", this.entityName, this.tableName));
 
         // --- ID Element ---
         HbmIdDescriptor idDesc = this.id;
