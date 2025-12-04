@@ -336,7 +336,7 @@ public class HbmXmlDescriptor {
          * @return the string
          */
         public String serialize() {
-            String xml = String.format("        <bag name=\"%s\" table=\"%s\" inverse=\"%s\" lazy=\"%s\" fetch=\"%s\" cascade=\"%s\">\n",
+            String xml = String.format("        <bag name=\"%s\" table=\"`%s`\" inverse=\"%s\" lazy=\"%s\" fetch=\"%s\" cascade=\"%s\">\n",
                     name, tableName, inverse, lazy, fetch, cascade) + "            <key>\n"
                     + String.format("                <column name=\"%s\" not-null=\"%s\" />\n", joinColumn, joinColumnNotNull)
                     + "            </key>\n" + String.format("            <one-to-many entity-name=\"%s\" />\n", entityName)
