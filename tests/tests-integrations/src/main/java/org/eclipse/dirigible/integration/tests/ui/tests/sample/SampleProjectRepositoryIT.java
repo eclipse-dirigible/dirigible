@@ -21,6 +21,9 @@ abstract class SampleProjectRepositoryIT extends UserInterfaceIntegrationTest {
 
     @Autowired
     protected RestAssuredExecutor restAssuredExecutor;
+    
+    @Autowired
+    protected SynchronizationProcessor synchronizationProcessor;
 
     @Test
     final void testSampleProject() {
@@ -28,6 +31,8 @@ abstract class SampleProjectRepositoryIT extends UserInterfaceIntegrationTest {
 
         Workbench workbench = ide.openWorkbench();
         workbench.publishAll(true);
+        
+        synchronizationProcessor.forceProcessSynchronizers();
 
         verifyProject();
     }

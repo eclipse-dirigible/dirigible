@@ -178,11 +178,11 @@ public class DataStore {
      * Initialize.
      */
     public synchronized void recreate() {
-    	
-    	if (sessionFactory != null && getCounter() == 0) {
+
+        if (sessionFactory != null && getCounter() == 0) {
             return;
         }
-    	
+
         Configuration configuration = new Configuration().setProperty(Environment.SHOW_SQL, "true")
                                                          .setProperty("hibernate.hbm2ddl.auto", "update")
                                                          .setProperty("hibernate.current_session_context_class",
