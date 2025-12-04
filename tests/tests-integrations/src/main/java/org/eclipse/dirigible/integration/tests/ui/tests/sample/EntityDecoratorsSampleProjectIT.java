@@ -17,7 +17,6 @@ import org.junit.jupiter.api.Disabled;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalToCompressingWhiteSpace;
 
-@Disabled("Disabled until the issue with the postgres execution is resolved. Currently hibernate doesn't quote table identifiers.")
 public class EntityDecoratorsSampleProjectIT extends SampleProjectRepositoryIT {
 
     private static final String COUNTRIES_RESPONSE_BODY =
