@@ -178,28 +178,31 @@ public class DataStore {
      * Initialize.
      */
     public synchronized void recreate() {
-        if (getCounter() > 0) {
-            Configuration configuration = new Configuration().setProperty(Environment.SHOW_SQL, "true")
-                                                             .setProperty("hibernate.hbm2ddl.auto", "update")
-                                                             .setProperty("hibernate.current_session_context_class",
-                                                                     "org.hibernate.context.internal.ThreadLocalSessionContext");
-
-            mappings.forEach((k, v) -> addInputStreamToConfig(configuration, k, v));
-
-            StandardServiceRegistryBuilder serviceRegistryBuilder = new StandardServiceRegistryBuilder();
-            serviceRegistryBuilder.applySetting(Environment.JAKARTA_JTA_DATASOURCE, getDataSource());
-            serviceRegistryBuilder.applySetting(Environment.MULTI_TENANT_CONNECTION_PROVIDER, getConnectionProvider());
-            serviceRegistryBuilder.applySetting(Environment.MULTI_TENANT_IDENTIFIER_RESOLVER, getTenantIdentifierResolver());
-            serviceRegistryBuilder.applySettings(configuration.getProperties());
-
-            StandardServiceRegistry serviceRegistry = serviceRegistryBuilder.build();
-
-            sessionFactory = configuration.buildSessionFactory(serviceRegistry);
-
-            logger.info("Processed {} changes in mappings", getCounter());
-
-            resetCounter();
+    	
+    	if (sessionFactory != null && getCounter() == 0) {
+            return;
         }
+    	
+        Configuration configuration = new Configuration().setProperty(Environment.SHOW_SQL, "true")
+                                                         .setProperty("hibernate.hbm2ddl.auto", "update")
+                                                         .setProperty("hibernate.current_session_context_class",
+                                                                 "org.hibernate.context.internal.ThreadLocalSessionContext");
+
+        mappings.forEach((k, v) -> addInputStreamToConfig(configuration, k, v));
+
+        StandardServiceRegistryBuilder serviceRegistryBuilder = new StandardServiceRegistryBuilder();
+        serviceRegistryBuilder.applySetting(Environment.JAKARTA_JTA_DATASOURCE, getDataSource());
+        serviceRegistryBuilder.applySetting(Environment.MULTI_TENANT_CONNECTION_PROVIDER, getConnectionProvider());
+        serviceRegistryBuilder.applySetting(Environment.MULTI_TENANT_IDENTIFIER_RESOLVER, getTenantIdentifierResolver());
+        serviceRegistryBuilder.applySettings(configuration.getProperties());
+
+        StandardServiceRegistry serviceRegistry = serviceRegistryBuilder.build();
+
+        sessionFactory = configuration.buildSessionFactory(serviceRegistry);
+
+        logger.info("Processed {} changes in mappings", getCounter());
+
+        resetCounter();
     }
 
     /**
