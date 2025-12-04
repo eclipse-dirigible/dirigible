@@ -56,7 +56,7 @@ response.println(JSON.stringify(select, null, 2));
 
 response.println("");
 response.println("Select native customers with first name John:");
-let selectNative = store.queryNative("select * from Customer c where c.name = 'John'");
+let selectNative = store.queryNative("select * from \"CUSTOMER\" c where c.name = 'John'");
 response.println(JSON.stringify(selectNative, null, 2));
 
 response.println("");
