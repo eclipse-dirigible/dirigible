@@ -346,6 +346,7 @@ public class HbmXmlDescriptor {
 
     }
 
+
     /**
      * The Class HbmAssociationDescriptor.
      */
@@ -465,7 +466,7 @@ public class HbmXmlDescriptor {
                 attrs.append(String.format(" lazy=\"%s\"", lazy));
             }
 
-            return String.format("        <many-to-one%s/>\n", attrs.toString());
+            return String.format("        <many-to-one%s/>\n", attrs);
         }
     }
 
@@ -515,7 +516,7 @@ public class HbmXmlDescriptor {
 
         // --- ID Element ---
         HbmIdDescriptor idDesc = this.id;
-        xml.append(String.format("        <id name=\"%s\" column=\"%s\" type=\"%s\">\n", idDesc.getName(), idDesc.getColumn(),
+        xml.append(String.format("        <id name=\"%s\" column=\"`%s`\" type=\"%s\">\n", idDesc.getName(), idDesc.getColumn(),
                 idDesc.getType()));
         xml.append(String.format("            <generator class=\"%s\"/>\n", idDesc.getGeneratorClass()));
         xml.append("        </id>\n");
@@ -528,7 +529,7 @@ public class HbmXmlDescriptor {
         // --- Property Elements ---
         for (HbmPropertyDescriptor prop : this.properties) {
             String lengthAttr = prop.getLength() != null ? String.format(" length=\"%d\"", prop.getLength()) : "";
-            xml.append(String.format("        <property name=\"%s\" column=\"%s\" type=\"%s\"%s/>\n", prop.getName(), prop.getColumn(),
+            xml.append(String.format("        <property name=\"%s\" column=\"`%s`\" type=\"%s\"%s/>\n", prop.getName(), prop.getColumn(),
                     prop.getType(), lengthAttr));
         }
 
