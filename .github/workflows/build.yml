@@ -263,10 +263,14 @@ jobs:
           summary: true
           only-fixed: false
 
-      - name: Trim SARIF to satisfy GitHub limit (remove relatedLocations)
+      - name: Trim SARIF to satisfy GitHub limit (max 1000 relatedLocations)
         run: |
-          jq 'del(.. | .relatedLocations?)' sast_docker_scout_sarif.json \
-            > sast_docker_scout_sarif_trimmed.json
+          jq '(.runs[].results[] |=
+            if .relatedLocations and (.relatedLocations | length) > 1000
+            then .relatedLocations = (.relatedLocations[:1000])
+            else .
+            end
+          )' sast_docker_scout_sarif.json > sast_docker_scout_sarif_trimmed.json
 
       - name: Upload Docker Scout SARIF file as artifact
         uses: actions/upload-artifact@v4
