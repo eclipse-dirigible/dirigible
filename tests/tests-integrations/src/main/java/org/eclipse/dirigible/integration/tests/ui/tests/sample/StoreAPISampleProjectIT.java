@@ -165,3 +165,4 @@ public class StoreAPISampleProjectIT extends SampleProjectRepositoryIT {
     }
 
 }
+
