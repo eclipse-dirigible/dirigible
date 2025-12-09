@@ -9,12 +9,6 @@
  */
 package org.eclipse.dirigible.components.engine.di.service;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 import org.eclipse.dirigible.components.base.artefact.BaseArtefactService;
 import org.eclipse.dirigible.components.engine.di.domain.Component;
 import org.eclipse.dirigible.components.engine.di.repository.ComponentRepository;
@@ -23,13 +17,8 @@ import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.RepositoryNotFoundException;
 import org.graalvm.polyglot.Value;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.MultiValueMap;
-import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.server.ResponseStatusException;
 
 /**
  * The Class EntityService.
@@ -58,15 +47,6 @@ public class ComponentService extends BaseArtefactService<Component, Long> {
     }
 
     /**
-     * Gets the javascript handler.
-     *
-     * @return the javascript handler
-     */
-    protected JavascriptService getJavascriptService() {
-        return javascriptService;
-    }
-
-    /**
      * Execute java script.
      *
      * @param projectName the project name
@@ -79,12 +59,23 @@ public class ComponentService extends BaseArtefactService<Component, Long> {
             if (object instanceof Value) {
                 return (Value) object;
             }
-            throw new IllegalArgumentException(
-                    "Invalid result of the Component file. The reference of the component class must be the last expression in the file.");
+            String errorMessage = "Invalid result of the Component file [" + projectFilePath + "] in project [" + projectName
+                    + "]. The reference of the component class must be the last expression in the file. Returned object is: [" + object
+                    + "] of type [" + (null == object ? object : object.getClass()) + "] but expected instance of " + Value.class;
+            throw new IllegalArgumentException(errorMessage);
         } catch (RepositoryNotFoundException e) {
             String message = e.getMessage() + ". Try to publish the service before execution.";
             throw new RepositoryNotFoundException(message, e);
         }
+    }
+
+    /**
+     * Gets the javascript handler.
+     *
+     * @return the javascript handler
+     */
+    protected JavascriptService getJavascriptService() {
+        return javascriptService;
     }
 
 }
