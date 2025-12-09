@@ -17,7 +17,7 @@ on:
       upload-scanned-sarif-report:
         description: Upload SAST and DAST code scans to Github Security
         type: boolean
-        default: false # enable the upload when the sast_docker_scout_sarif.json has allowed number of related locations < 1000
+        default: true
 
 run-name: 'version set to ${{ github.event.inputs.releaseVersion }} for release'
 
