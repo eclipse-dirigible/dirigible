@@ -9,14 +9,6 @@
  */
 package org.eclipse.dirigible.components.engine.di.synchronizer;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.text.ParseException;
-import java.util.ArrayList;
-import java.util.List;
-
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.ArtefactService;
@@ -34,6 +26,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.text.ParseException;
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * The Class ComponentSynchronizer.
  */
@@ -41,21 +41,16 @@ import org.springframework.stereotype.Component;
 @Order(SynchronizersOrder.COMPONENT)
 public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigible.components.engine.di.domain.Component, Long> {
 
-    /** The Constant logger. */
-    private static final Logger logger = LoggerFactory.getLogger(ComponentSynchronizer.class);
-
     /** The Constant FILE_EXTENSION_COMPONENT. */
     public static final String FILE_EXTENSION_COMPONENT = "Component.ts";
-
     public static final String[] FILE_EXTENSIONS_COMPONENT = new String[] {"Component.ts", "Repository.ts", "Service.ts"};
-
+    /** The Constant logger. */
+    private static final Logger logger = LoggerFactory.getLogger(ComponentSynchronizer.class);
     /** The component service. */
     private final ComponentService componentService;
-
+    private final ComponentParser componentParser = new ComponentParser();
     /** The synchronization callback. */
     private SynchronizerCallback callback;
-
-    private ComponentParser componentParser = new ComponentParser();
 
     /**
      * Instantiates a new component synchronizer.
@@ -176,7 +171,9 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
         switch (flow) {
             case CREATE:
                 if (component.getLifecycle()
-                             .equals(ArtefactLifecycle.NEW)) {
+                             .equals(ArtefactLifecycle.NEW)
+                        || component.getLifecycle()
+                                    .equals(ArtefactLifecycle.FAILED)) {
                     ComponentRegister.addComponent(component.getLocation());
                     component.setRunning(true);
                     callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
@@ -184,15 +181,12 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
                 break;
             case UPDATE:
                 if (component.getLifecycle()
-                             .equals(ArtefactLifecycle.MODIFIED)) {
+                             .equals(ArtefactLifecycle.MODIFIED)
+                        || component.getLifecycle()
+                                    .equals(ArtefactLifecycle.FAILED)) {
                     ComponentRegister.addComponent(component.getLocation());
                     component.setRunning(true);
                     callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
-                }
-                if (component.getLifecycle()
-                             .equals(ArtefactLifecycle.FAILED)) {
-                    callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
-                    return false;
                 }
                 break;
             case DELETE:
