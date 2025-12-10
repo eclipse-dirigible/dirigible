@@ -142,7 +142,7 @@
         <!-- Commons -->
         <commons.io>2.21.0</commons.io>
         <commons.lang3>3.19.0</commons.lang3>
-        <commons.exec>1.5.0</commons.exec>
+        <commons.exec>1.6.0</commons.exec>
         <commons-csv.version>1.14.1</commons-csv.version>
 
         <apache-httpcomponents-httpmime.version>4.5.14</apache-httpcomponents-httpmime.version>
