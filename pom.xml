@@ -163,7 +163,7 @@
         <olingo.version>3.1.4</olingo.version>
 
         <!-- FTP -->
-        <mina-core.version>2.2.4</mina-core.version>
+        <mina-core.version>2.2.5</mina-core.version>
         <sshd-core.version>2.16.0</sshd-core.version>
         <ftpserver.version>1.2.1</ftpserver.version>
 
