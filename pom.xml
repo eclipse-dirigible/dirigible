@@ -572,7 +572,7 @@
                             <dependency>
                                 <groupId><![CDATA[com.github.spotbugs]]></groupId>
                                 <artifactId>spotbugs</artifactId>
-                                <version>4.9.6</version>
+                                <version>4.9.8</version>
                             </dependency>
                         </dependencies>
                     </plugin>
