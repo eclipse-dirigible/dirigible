@@ -121,7 +121,7 @@
         <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
         <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
         <maven-jacoco-plugin.version>0.8.13</maven-jacoco-plugin.version>
-        <maven-spotbugs-plugin.version>4.9.8.1</maven-spotbugs-plugin.version>
+        <maven-spotbugs-plugin.version>4.9.8.2</maven-spotbugs-plugin.version>
         <maven-formatter-plugin.version>2.29.0</maven-formatter-plugin.version>
         <maven-exec-plugin.version>3.6.2</maven-exec-plugin.version>
         <maven-git-commit-id-plugin.version>4.9.10</maven-git-commit-id-plugin.version>
