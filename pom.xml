@@ -228,7 +228,7 @@
         <i18next.version>25.3.0</i18next.version>
         <!-- Tests -->
         <testcontainers.version>1.21.1</testcontainers.version>
-        <selenide.version>7.11.1</selenide.version>
+        <selenide.version>7.12.3</selenide.version>
 
         <antlr4-maven-plugin.version>4.13.2</antlr4-maven-plugin.version>
         <antlr4-runtime.version>4.13.2</antlr4-runtime.version>
