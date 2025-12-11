@@ -103,14 +103,14 @@ public class TscWatcherService implements ApplicationListener<ApplicationReadyEv
         }
     }
 
-    public void restart() {
+    public synchronized void restart() {
         LOGGER.info("Restarting {}...", this);
         destroy();
 
         start();
     }
 
-    private void start() {
+    private synchronized void start() {
         try {
             createOrReplaceTsConfig();
             startTscWatch();
@@ -139,7 +139,7 @@ public class TscWatcherService implements ApplicationListener<ApplicationReadyEv
         return Path.of(path);
     }
 
-    private synchronized void startTscWatch() {
+    private void startTscWatch() {
         if (tscProcess != null && tscProcess.isAlive()) {
             LOGGER.info("TSC watch process is already running and will not be retriggered. Process [{}]", tscProcess);
             return;
