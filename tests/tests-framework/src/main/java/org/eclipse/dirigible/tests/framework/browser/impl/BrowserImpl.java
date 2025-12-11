@@ -299,6 +299,11 @@ class BrowserImpl implements Browser {
     }
 
     @Override
+    public void pressArrowDown() {
+        pressKey(Keys.ARROW_DOWN);
+    }
+
+    @Override
     public void pressEnter() {
         pressKey(Keys.ENTER);
     }
