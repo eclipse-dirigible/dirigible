@@ -369,8 +369,12 @@ class BrowserImpl implements Browser {
                     finalExecution = false;
                     break;
                 }
-                LOGGER.debug("Element by [{}] and conditions [{}] was NOT found. Will try to reload the page and find it.", by,
-                        Arrays.toString(conditions));
+                if (LOGGER.isWarnEnabled()) {
+                    String screenshotPath = createScreenshot();
+                    LOGGER.warn(
+                            "Timeout reached! Element by [{}] and conditions [{}] was NOT found. Will try to reload the page and find it. Screenshot of the current state could be found at [{}]",
+                            by, Arrays.toString(conditions), screenshotPath);
+                }
                 reload();
                 SleepUtil.sleepSeconds(3);
                 continueExecution = false;
