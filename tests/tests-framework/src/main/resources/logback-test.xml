@@ -74,6 +74,7 @@
     </root>
 
     <logger name="org.eclipse.dirigible.tests" level="DEBUG"/>
+    <logger name="org.eclipse.dirigible.integration.tests" level="DEBUG"/>
     <logger name="org.eclipse.dirigible.tests.framework.util.FileUtil" level="INFO"/>
     <logger name="org.eclipse.dirigible.tests.framework.browser.impl.BrowserImpl" level="INFO"/>
 
