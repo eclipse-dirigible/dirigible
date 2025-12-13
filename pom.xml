@@ -177,7 +177,7 @@
         <velocity.version>2.4</velocity.version>
 
         <!-- JGit -->
-        <jgit.version>7.4.0.202509020913-r</jgit.version>
+        <jgit.version>7.5.0.202512021534-r</jgit.version>
 
         <!-- Flowable -->
         <flowable.version>7.2.0</flowable.version>
