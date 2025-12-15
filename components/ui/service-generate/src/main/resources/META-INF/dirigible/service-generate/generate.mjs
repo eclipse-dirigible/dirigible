@@ -117,8 +117,10 @@ function cleanGenFolder(workspaceName, projectName, genFolderName) {
     const genFolder = project.getFolder("gen");
     if (genFolder.exists() && genFolder.existsFolder(genFolderName)) {
         genFolder.deleteFolder(genFolderName);
+        // can we unpublish the gen folder only?
+        // unpublish only when the folder exists
+        lifecycle.unpublish(projectName + "/gen");
     }
-    lifecycle.unpublish(projectName);
 }
 
 function createFile(workspaceName, projectName, path, content) {
