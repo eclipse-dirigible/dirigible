@@ -78,6 +78,7 @@
     <logger name="org.eclipse.dirigible.tests.framework.util.FileUtil" level="INFO"/>
     <logger name="org.eclipse.dirigible.tests.framework.browser.impl.BrowserImpl" level="INFO"/>
 
+    <logger name="org.eclipse.dirigible.components.api.log.LogFacade" level="INFO"/>
     <logger name="org.eclipse.dirigible.components.tenants.tenant" level="INFO"/>
     <logger name="org.eclipse.dirigible.commons.api.helpers.GsonHelper" level="INFO"/>
     <logger name="org.eclipse.dirigible.components.initializers.synchronizer" level="INFO"/>
