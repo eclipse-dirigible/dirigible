@@ -117,7 +117,7 @@ function cleanGenFolder(workspaceName, projectName, genFolderName) {
     const genFolder = project.getFolder("gen");
     if (genFolder.exists() && genFolder.existsFolder(genFolderName)) {
         genFolder.deleteFolder(genFolderName);
-        lifecycle.unpublish(projectName + "/gen");
+        lifecycle.unpublish(projectName + "/gen/" + genFolderName);
     }
 }
 
