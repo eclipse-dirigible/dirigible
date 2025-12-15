@@ -55,7 +55,7 @@ jobs:
       - name: Install NodeJS
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22.x
 
       - name: Install TypeScript and esbuild
         run: npm install -g typescript esbuild
@@ -87,7 +87,7 @@ jobs:
       - name: Install NodeJS
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22.x
 
       - name: Install TypeScript and esbuild
         run: npm install -g typescript esbuild
@@ -159,7 +159,7 @@ jobs:
       - name: Install NodeJS
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22.x
 
       - name: Install TypeScript and esbuild
         run: npm install -g typescript esbuild

@@ -14,7 +14,7 @@ RUN apk update && \
 
 # This forces npm to update itself and its internal dependencies
 # to the latest versions available on the npm registry
-RUN npm install -g npm
+RUN npm install -g npm@latest
 
 # Install global npm packages
 RUN npm i -g esbuild \

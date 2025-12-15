@@ -23,6 +23,7 @@ run-name: 'version set to ${{ github.event.inputs.releaseVersion }} for release'
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release-artifacts:
@@ -56,8 +57,12 @@ jobs:
       - name: Install NodeJS
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22.x
           registry-url: 'https://registry.npmjs.org'
+
+      # Ensure npm 11.5.1 or later is installed
+      - name: Update npm
+        run: npm install -g npm@latest
 
       - name: Install TypeScript and esbuild
         run: npm install -g typescript esbuild
@@ -124,56 +129,47 @@ jobs:
 
       #--------------- Publish dirigible jar to NPM -----------------#
 
-      - name: (dirigible) Set the new package version
+      - name: (@dirigiblelabs/dirigible) Set the new package version
         working-directory: ./npm/dirigible
         run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
 
-      - name: (dirigible) Publish the package to npm
+      - name: (@dirigiblelabs/dirigible) Publish the package to npm
         working-directory: ./npm/dirigible
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN_ORG_DIRIGIBLELABS }}
-        run: |
-          npm publish --access public
+        run: npm publish --access public
 
       #--------------- Publish dirigible jar to NPM -----------------#
 
       #--------------- Publish dirigible-cli to NPM -----------------#
 
-      - name: (dirigible-cli) Copy cli jar to the npm project
+      - name: (@dirigiblelabs/dirigible-cli) Copy cli jar to the npm project
         working-directory: ./
         run: |
           mkdir -p ./npm/dirigible-cli/bin
           cp ./cli/target/dirigible-cli-${{ github.event.inputs.releaseVersion }}-executable.jar ./npm/dirigible-cli/bin/dirigible-cli.jar
 
-      - name: (dirigible-cli) Set the new package version
+      - name: (@dirigiblelabs/dirigible-cli) Set the new package version
         working-directory: ./npm/dirigible-cli
         run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
 
-      - name: (dirigible-cli) Set the new dependency version
+      - name: (@dirigiblelabs/dirigible-cli) Set the new dependency version
         working-directory: ./npm/dirigible-cli
         run: npm pkg set dependencies.@dirigiblelabs/dirigible=${{ github.event.inputs.releaseVersion }}
 
-      - name: (dirigible-cli) Publish the package to npm
+      - name: (@dirigiblelabs/dirigible-cli) Publish the package to npm
         working-directory: ./npm/dirigible-cli
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN_ORG_DIRIGIBLELABS }}
-        run: |
-          npm publish --access public
+        run: npm publish --access public
 
       #--------------- Publish dirigible-cli to NPM -----------------#
 
       #--------------- Publish aerokit/sdk to NPM -----------------#
 
-      - name: (aerokit/sdk) Set the new package version
+      - name: (@aerokit/sdk) Set the new package version
         working-directory: ./components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules
         run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
 
-      - name: (aerokit/sdk) Publish the package to npm
+      - name: (@aerokit/sdk) Publish the package to npm
         working-directory: ./components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN_ORG_AEROKIT }}
-        run: |
-          npm publish --access public
+        run: npm publish --access public
 
       #--------------- Publish aerokit/sdk to NPM -----------------#
 
@@ -266,7 +262,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22.x
 
 
       - name: Install TypeScript and esbuild
