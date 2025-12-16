@@ -63,6 +63,31 @@ jobs:
       - name: Maven Build
         run: mvn clean install -P unit-tests -U
 
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK Corretto 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '21'
+          architecture: x64
+
+      - name: Install NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
+
+      - name: Maven Build
+        run: mvn clean install -P quick-build
+
       - name: Setup Docker Buildx
         run: |
           docker buildx create --name dirigible-builder
