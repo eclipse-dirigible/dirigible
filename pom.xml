@@ -228,7 +228,7 @@
         <bpmn-visualization.version>0.46.0</bpmn-visualization.version>
         <i18next.version>25.3.0</i18next.version>
         <!-- Tests -->
-        <testcontainers.version>1.21.1</testcontainers.version>
+        <testcontainers.version>2.0.3</testcontainers.version>
         <selenide.version>7.13.0</selenide.version>
 
         <antlr4-maven-plugin.version>4.13.2</antlr4-maven-plugin.version>
