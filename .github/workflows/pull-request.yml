@@ -97,134 +97,134 @@ jobs:
           cd build/application
           docker buildx build --tag dirigiblelabs/dirigible -o type=image .
 
-  # integration-tests-h2:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0
+  integration-tests-h2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-  #     - name: Cache local Maven repository
-  #       uses: actions/cache@v4
-  #       with:
-  #         path: ~/.m2/repository
-  #         key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-  #         restore-keys: ${{ runner.os }}-maven-
+      - name: Cache local Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
 
-  #     - name: Set up JDK Corretto 21
-  #       uses: actions/setup-java@v4
-  #       with:
-  #         distribution: 'corretto'
-  #         java-version: '21'
-  #         architecture: x64
+      - name: Set up JDK Corretto 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '21'
+          architecture: x64
 
-  #     - name: Install NodeJS
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: 22.x
+      - name: Install NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
 
-  #     - name: Install TypeScript and esbuild
-  #       run: npm install -g typescript esbuild
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
 
-  #     - name: Install ttyd (prebuilt)
-  #       run: |
-  #         sudo apt update
-  #         sudo apt install -y ttyd
-  #     - name: Verify ttyd installation
-  #       run: ttyd --version
+      - name: Install ttyd (prebuilt)
+        run: |
+          sudo apt update
+          sudo apt install -y ttyd
+      - name: Verify ttyd installation
+        run: ttyd --version
 
-  #     - name: Integration tests
-  #       run: mvn clean install -P integration-tests
+      - name: Integration tests
+        run: mvn clean install -P integration-tests
 
-  #     - name: Generate a random artifact name
-  #       if: always()
-  #       id: generate_name
-  #       run: |
-  #         TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-  #         echo "ARTIFACT_NAME=selenide-screenshots-${TIMESTAMP}.zip" >> $GITHUB_ENV
+      - name: Generate a random artifact name
+        if: always()
+        id: generate_name
+        run: |
+          TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+          echo "ARTIFACT_NAME=selenide-screenshots-${TIMESTAMP}.zip" >> $GITHUB_ENV
 
-  #     - name: Upload selenide screenshots
-  #       uses: actions/upload-artifact@v4
-  #       if: always()
-  #       with:
-  #         retention-days: 1
-  #         name: ${{ env.ARTIFACT_NAME }}
-  #         path: tests/tests-integrations/build/reports/tests
+      - name: Upload selenide screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          retention-days: 1
+          name: ${{ env.ARTIFACT_NAME }}
+          path: tests/tests-integrations/build/reports/tests
 
-  # integration-tests-postgresql:
-  #   runs-on: ubuntu-latest
-  #   env:
-  #     POSTGRES_DB: testdb
-  #     POSTGRES_USER: testuser
-  #     POSTGRES_PASS: testpass
-  #   services:
-  #     postgres:
-  #       image: postgres:16
-  #       ports:
-  #         - 5432:5432
-  #       env:
-  #         POSTGRES_DB: ${{ env.POSTGRES_DB }}
-  #         POSTGRES_USER: ${{ env.POSTGRES_USER }}
-  #         POSTGRES_PASSWORD: ${{ env.POSTGRES_PASS }}
-  #       options: >-
-  #         --health-cmd pg_isready
-  #         --health-interval 10s
-  #         --health-timeout 5s
-  #         --health-retries 5
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0
+  integration-tests-postgresql:
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_DB: testdb
+      POSTGRES_USER: testuser
+      POSTGRES_PASS: testpass
+    services:
+      postgres:
+        image: postgres:16
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASS }}
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-  #     - name: Cache local Maven repository
-  #       uses: actions/cache@v4
-  #       with:
-  #         path: ~/.m2/repository
-  #         key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-  #         restore-keys: ${{ runner.os }}-maven-
+      - name: Cache local Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
 
-  #     - name: Set up JDK Corretto 21
-  #       uses: actions/setup-java@v4
-  #       with:
-  #         distribution: 'corretto'
-  #         java-version: '21'
-  #         architecture: x64
+      - name: Set up JDK Corretto 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '21'
+          architecture: x64
 
-  #     - name: Install NodeJS
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: 22.x
+      - name: Install NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
 
-  #     - name: Install TypeScript and esbuild
-  #       run: npm install -g typescript esbuild
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
 
-  #     - name: Install ttyd (prebuilt)
-  #       run: |
-  #         sudo apt update
-  #         sudo apt install -y ttyd
+      - name: Install ttyd (prebuilt)
+        run: |
+          sudo apt update
+          sudo apt install -y ttyd
 
-  #     - name: Verify ttyd installation
-  #       run: ttyd --version
+      - name: Verify ttyd installation
+        run: ttyd --version
 
-  #     - name: Integration tests
-  #       run: mvn clean install -P integration-tests
-  #       env:
-  #         DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER: org.postgresql.Driver
-  #         DIRIGIBLE_DATASOURCE_DEFAULT_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
-  #         DIRIGIBLE_DATASOURCE_DEFAULT_USERNAME: ${{ env.POSTGRES_USER }}
-  #         DIRIGIBLE_DATASOURCE_DEFAULT_PASSWORD: ${{ env.POSTGRES_PASS }}
+      - name: Integration tests
+        run: mvn clean install -P integration-tests
+        env:
+          DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER: org.postgresql.Driver
+          DIRIGIBLE_DATASOURCE_DEFAULT_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
+          DIRIGIBLE_DATASOURCE_DEFAULT_USERNAME: ${{ env.POSTGRES_USER }}
+          DIRIGIBLE_DATASOURCE_DEFAULT_PASSWORD: ${{ env.POSTGRES_PASS }}
 
-  #     - name: Generate a random artifact name
-  #       if: always()
-  #       id: generate_name
-  #       run: |
-  #         TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-  #         echo "ARTIFACT_NAME=selenide-screenshots-${TIMESTAMP}.zip" >> $GITHUB_ENV
+      - name: Generate a random artifact name
+        if: always()
+        id: generate_name
+        run: |
+          TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+          echo "ARTIFACT_NAME=selenide-screenshots-${TIMESTAMP}.zip" >> $GITHUB_ENV
 
-  #     - name: Upload selenide screenshots
-  #       uses: actions/upload-artifact@v4
-  #       if: always()
-  #       with:
-  #         retention-days: 1
-  #         name: ${{ env.ARTIFACT_NAME }}
-  #         path: tests/tests-integrations/build/reports/tests
+      - name: Upload selenide screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          retention-days: 1
+          name: ${{ env.ARTIFACT_NAME }}
+          path: tests/tests-integrations/build/reports/tests

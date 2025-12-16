@@ -26,6 +26,64 @@ permissions:
   id-token: write
 
 jobs:
+  release-docker-images:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, ubuntu-24.04-arm ]
+    steps:
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Cache local Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+
+      - name: Set up JDK Corretto 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '21'
+
+      - name: Install NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          install: true
+
+      - name: Setup Docker Buildx
+        run: |
+          docker buildx create --name dirigible-builder
+          docker buildx use dirigible-builder
+
+      - name: "Maven: Set Release Version"
+        run: mvn versions:set -DnewVersion=${{ github.event.inputs.releaseVersion }}
+
+      - name: Build Dirigible
+        run: mvn clean install -P quick-build
+
+      - name: Docker Login
+        run: docker login -u ${{secrets.DOCKER_USER}} -p ${{secrets.DOCKER_PASSWORD}}
+
+      - name: Push Dirigible image to Docker Hub
+        run: |
+          cd build/application
+          docker buildx build --push --tag dirigiblelabs/dirigible:${{ github.event.inputs.releaseVersion }} -o type=image .
+
   release-artifacts:
     runs-on: ubuntu-latest
     steps:
@@ -67,16 +125,6 @@ jobs:
       - name: Install TypeScript and esbuild
         run: npm install -g typescript esbuild
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          install: true
-
-      - name: Setup Docker Buildx
-        run: |
-          docker buildx create --name dirigible-builder
-          docker buildx use dirigible-builder
-
       - name: "Configure Git"
         run: |
           git fetch
@@ -89,19 +137,6 @@ jobs:
 
       - name: Build Dirigible
         run: mvn clean install -Dmaven.javadoc.skip=false
-
-      #-----------------Publish to DockerHub-------------------#
-
-      - name: Docker Login
-        run: docker login -u ${{secrets.DOCKER_USER}} -p ${{secrets.DOCKER_PASSWORD}}
-
-      - name: Push Dirigible image to Docker Hub
-        run: |
-          cd build/application
-          docker buildx build --push --tag dirigiblelabs/dirigible:${{ github.event.inputs.releaseVersion }} -o type=image --platform=linux/arm64,linux/amd64 .
-      #-----------------Publish to DockerHub-------------------#
-
-      #---------------Publish to Maven Central-----------------#
 
       - name: Publish packages to Maven Central
         run: |
@@ -193,7 +228,7 @@ jobs:
   sast-docker-scout-scan:
     if: ${{ inputs.code-scans }}
     runs-on: ubuntu-latest
-    needs: release-artifacts
+    needs: release-docker-images
     permissions:
       security-events: write # Required to upload SARIF to GitHub Security tab
 
@@ -235,7 +270,7 @@ jobs:
     if: ${{ inputs.code-scans }}
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
-    needs: release-artifacts
+    needs: release-docker-images
     permissions:
       security-events: write # Required to upload SARIF to GitHub Security tab
 
@@ -301,7 +336,7 @@ jobs:
   dast-scan:
     if: ${{ inputs.code-scans }}
     name: Perform DAST testing using ZAP
-    needs: release-artifacts
+    needs: release-docker-images
     runs-on: ubuntu-latest
 
     services:
@@ -375,7 +410,7 @@ jobs:
   github-release:
     if: ${{ always() && !failure() && !cancelled() }} #  run only if all prior jobs succeeded or were skipped, but not if one failed
     runs-on: ubuntu-latest
-    needs: generate-git-security-report
+    needs: [release-artifacts, generate-git-security-report]
     permissions:
       packages: write
       contents: write

@@ -25,7 +25,10 @@ jobs:
 
   build-deploy:
     needs: [ tests, integration-tests-h2, integration-tests-postgresql ]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, ubuntu-24.04-arm ]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,7 +46,6 @@ jobs:
         with:
           distribution: 'corretto'
           java-version: '21'
-          architecture: x64
 
       - name: Install NodeJS
         uses: actions/setup-node@v4
@@ -67,7 +69,7 @@ jobs:
       - name: Push Dirigible image to Docker Hub
         run: |
           cd build/application
-          docker buildx build --push --tag dirigiblelabs/dirigible -o type=image --platform=linux/arm64,linux/amd64 .
+          docker buildx build --push --tag dirigiblelabs/dirigible -o type=image .
 
   tests:
     runs-on: ${{ matrix.os }}-latest
