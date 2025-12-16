@@ -63,6 +63,16 @@ jobs:
       - name: Maven Build
         run: mvn clean install -P unit-tests -U
 
+      - name: Setup Docker Buildx
+        run: |
+          docker buildx create --name dirigible-builder
+          docker buildx use dirigible-builder
+
+      - name: Build Dirigible Docker image
+        run: |
+          cd build/application
+          docker buildx build --tag dirigiblelabs/dirigible -o type=image --platform=linux/arm64,linux/amd64 .
+
   integration-tests-h2:
     runs-on: ubuntu-latest
     steps:
