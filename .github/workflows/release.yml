@@ -84,6 +84,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           platforms: ${{ matrix.platform }}
+          tags: dirigiblelabs/dirigible
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
