@@ -80,6 +80,11 @@
         		dirigible-components-core-initializers
         	</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.webjars.npm</groupId>
+            <artifactId>stomp__stompjs</artifactId>
+            <version>${stompjs.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

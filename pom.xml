@@ -216,6 +216,7 @@
         <diff.version>5.1.0</diff.version>
         <monaco-editor.version>0.40.0</monaco-editor.version>
         <requirejs.version>2.3.6</requirejs.version>
+        <stompjs.version>7.2.1</stompjs.version>
         <jstree.version>3.3.12</jstree.version>
         <jquery.version>3.7.1</jquery.version>
         <jqplot.version>1.0.8r1250</jqplot.version>
