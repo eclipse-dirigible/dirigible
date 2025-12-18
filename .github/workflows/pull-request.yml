@@ -27,8 +27,10 @@ jobs:
           path: uploaded-artifacts
           github-token: ${{ secrets.GITHUB_TOKEN }}
           pattern: |
-            **
-            !**/*.dockerbuild
+            security-*
+            sast-*
+            dast-*
+            application-*
 
       - name: Display Downloaded Artifacts
         run: ls -R uploaded-artifacts
