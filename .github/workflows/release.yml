@@ -467,12 +467,49 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Create uploaded-artifacts folder
-        run: mkdir uploaded-artifacts
+        run: |
+          mkdir -p uploaded-artifacts/application-all
+          mkdir -p uploaded-artifacts/dast_zap_report
+          mkdir -p uploaded-artifacts/sast_codeql_sarif_java-kotlin
+          mkdir -p uploaded-artifacts/sast_codeql_sarif_javascript-typescript
+          mkdir -p uploaded-artifacts/sast_docker_scout_sarif.json
+          mkdir -p uploaded-artifacts/security_report
 
-      - name: Download Uploaded Artifacts
-        uses: actions/download-artifact@v4
+      - name: Download Uploaded Artifacts (application-all)
+        uses: actions/download-artifact@v5
         with:
-          path: uploaded-artifacts
+          path: uploaded-artifacts/application-all
+          pattern: application-all
+
+      - name: Download Uploaded Artifacts (dast_zap_report)
+        uses: actions/download-artifact@v5
+        with:
+          path: uploaded-artifacts/dast_zap_report
+          pattern: dast_zap_report
+
+      - name: Download Uploaded Artifacts (sast_codeql_sarif_java-kotlin)
+        uses: actions/download-artifact@v5
+        with:
+          path: uploaded-artifacts/sast_codeql_sarif_java-kotlin
+          pattern: sast_codeql_sarif_java-kotlin
+
+      - name: Download Uploaded Artifacts (sast_codeql_sarif_javascript-typescript)
+        uses: actions/download-artifact@v5
+        with:
+          path: uploaded-artifacts/sast_codeql_sarif_javascript-typescript
+          pattern: sast_codeql_sarif_javascript-typescript
+
+      - name: Download Uploaded Artifacts (sast_docker_scout_sarif.json)
+        uses: actions/download-artifact@v5
+        with:
+          path: uploaded-artifacts/sast_docker_scout_sarif.json
+          pattern: sast_docker_scout_sarif.json
+
+      - name: Download Uploaded Artifacts (security_report)
+        uses: actions/download-artifact@v5
+        with:
+          path: uploaded-artifacts/security_report
+          pattern: security_report
 
       - name: Display Downloaded Artifacts
         run: ls -R uploaded-artifacts

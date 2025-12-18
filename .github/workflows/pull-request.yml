@@ -8,297 +8,228 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-download:
+  code-style:
     runs-on: ubuntu-latest
-    permissions:
-      packages: write
-      contents: write
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Create uploaded-artifacts folder
+      - name: Set up JDK Corretto 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '21'
+          architecture: x64
+
+      - name: Validate Java code formatting
+        run: mvn -T 1C formatter:validate
+
+  tests:
+    runs-on: ${{ matrix.os }}-latest
+    strategy:
+      matrix:
+        os: [ ubuntu, windows ]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache local Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+
+      - name: Set up JDK Corretto 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '21'
+          architecture: x64
+
+      - name: Install NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
+
+      - name: Maven Build
+        run: mvn clean install -P unit-tests -U
+
+  docker-build:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: amd64
+          - runner: ubuntu-24.04-arm
+            platform: arm64
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK Corretto 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '21'
+
+      - name: Install NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
+
+      - name: Maven Build
+        run: mvn clean install -P quick-build
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: build/application
+          platforms: ${{ matrix.platform }}
+          push: false
+
+  integration-tests-h2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache local Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+
+      - name: Set up JDK Corretto 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '21'
+          architecture: x64
+
+      - name: Install NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
+
+      - name: Install ttyd (prebuilt)
         run: |
-          mkdir -p uploaded-artifacts/application-all
-          mkdir -p uploaded-artifacts/dast_zap_report
-          mkdir -p uploaded-artifacts/sast_codeql_sarif_java-kotlin
-          mkdir -p uploaded-artifacts/sast_codeql_sarif_javascript-typescript
-          mkdir -p uploaded-artifacts/sast_docker_scout_sarif.json
-          mkdir -p uploaded-artifacts/security_report
+          sudo apt update
+          sudo apt install -y ttyd
+      - name: Verify ttyd installation
+        run: ttyd --version
 
-      - name: Download Uploaded Artifacts (application-all)
-        uses: actions/download-artifact@v5
+      - name: Integration tests
+        run: mvn clean install -P integration-tests
+
+      - name: Generate a random artifact name
+        if: always()
+        id: generate_name
+        run: |
+          TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+          echo "ARTIFACT_NAME=selenide-screenshots-${TIMESTAMP}.zip" >> $GITHUB_ENV
+
+      - name: Upload selenide screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
         with:
-          path: uploaded-artifacts/application-all
-          pattern: application-all
-          run-id: 20312546252
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          retention-days: 1
+          name: ${{ env.ARTIFACT_NAME }}
+          path: tests/tests-integrations/build/reports/tests
 
-      - name: Download Uploaded Artifacts (dast_zap_report)
-        uses: actions/download-artifact@v5
+  integration-tests-postgresql:
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_DB: testdb
+      POSTGRES_USER: testuser
+      POSTGRES_PASS: testpass
+    services:
+      postgres:
+        image: postgres:16
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASS }}
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
         with:
-          path: uploaded-artifacts/dast_zap_report
-          pattern: dast_zap_report
-          run-id: 20312546252
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
-      - name: Download Uploaded Artifacts (sast_codeql_sarif_java-kotlin)
-        uses: actions/download-artifact@v5
+      - name: Cache local Maven repository
+        uses: actions/cache@v4
         with:
-          path: uploaded-artifacts/sast_codeql_sarif_java-kotlin
-          pattern: sast_codeql_sarif_java-kotlin
-          run-id: 20312546252
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
 
-      - name: Download Uploaded Artifacts (sast_codeql_sarif_javascript-typescript)
-        uses: actions/download-artifact@v5
+      - name: Set up JDK Corretto 21
+        uses: actions/setup-java@v4
         with:
-          path: uploaded-artifacts/sast_codeql_sarif_javascript-typescript
-          pattern: sast_codeql_sarif_javascript-typescript
-          run-id: 20312546252
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          distribution: 'corretto'
+          java-version: '21'
+          architecture: x64
 
-      - name: Download Uploaded Artifacts (sast_docker_scout_sarif.json)
-        uses: actions/download-artifact@v5
+      - name: Install NodeJS
+        uses: actions/setup-node@v4
         with:
-          path: uploaded-artifacts/sast_docker_scout_sarif.json
-          pattern: sast_docker_scout_sarif.json
-          run-id: 20312546252
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          node-version: 22.x
 
-      - name: Download Uploaded Artifacts (security_report)
-        uses: actions/download-artifact@v5
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript esbuild
+
+      - name: Install ttyd (prebuilt)
+        run: |
+          sudo apt update
+          sudo apt install -y ttyd
+
+      - name: Verify ttyd installation
+        run: ttyd --version
+
+      - name: Integration tests
+        run: mvn clean install -P integration-tests
+        env:
+          DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER: org.postgresql.Driver
+          DIRIGIBLE_DATASOURCE_DEFAULT_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
+          DIRIGIBLE_DATASOURCE_DEFAULT_USERNAME: ${{ env.POSTGRES_USER }}
+          DIRIGIBLE_DATASOURCE_DEFAULT_PASSWORD: ${{ env.POSTGRES_PASS }}
+
+      - name: Generate a random artifact name
+        if: always()
+        id: generate_name
+        run: |
+          TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+          echo "ARTIFACT_NAME=selenide-screenshots-${TIMESTAMP}.zip" >> $GITHUB_ENV
+
+      - name: Upload selenide screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
         with:
-          path: uploaded-artifacts/security_report
-          pattern: security_report
-          run-id: 20312546252
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Display Downloaded Artifacts
-        run: ls -R uploaded-artifacts
-
-  # code-style:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0
-
-  #     - name: Set up JDK Corretto 21
-  #       uses: actions/setup-java@v4
-  #       with:
-  #         distribution: 'corretto'
-  #         java-version: '21'
-  #         architecture: x64
-
-  #     - name: Validate Java code formatting
-  #       run: mvn -T 1C formatter:validate
-
-  # tests:
-  #   runs-on: ${{ matrix.os }}-latest
-  #   strategy:
-  #     matrix:
-  #       os: [ ubuntu, windows ]
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0
-
-  #     - name: Cache local Maven repository
-  #       uses: actions/cache@v4
-  #       with:
-  #         path: ~/.m2/repository
-  #         key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-  #         restore-keys: ${{ runner.os }}-maven-
-
-  #     - name: Set up JDK Corretto 21
-  #       uses: actions/setup-java@v4
-  #       with:
-  #         distribution: 'corretto'
-  #         java-version: '21'
-  #         architecture: x64
-
-  #     - name: Install NodeJS
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: 22.x
-
-  #     - name: Install TypeScript and esbuild
-  #       run: npm install -g typescript esbuild
-
-  #     - name: Maven Build
-  #       run: mvn clean install -P unit-tests -U
-
-  # docker-build:
-  #   runs-on: ${{ matrix.runner }}
-  #   strategy:
-  #     matrix:
-  #       include:
-  #         - runner: ubuntu-latest
-  #           platform: amd64
-  #         - runner: ubuntu-24.04-arm
-  #           platform: arm64
-
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0
-
-  #     - name: Set up JDK Corretto 21
-  #       uses: actions/setup-java@v4
-  #       with:
-  #         distribution: 'corretto'
-  #         java-version: '21'
-
-  #     - name: Install NodeJS
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: 22.x
-
-  #     - name: Install TypeScript and esbuild
-  #       run: npm install -g typescript esbuild
-
-  #     - name: Maven Build
-  #       run: mvn clean install -P quick-build
-
-  #     - name: Set up Docker Buildx
-  #       uses: docker/setup-buildx-action@v3
-
-  #     - name: Build Docker image
-  #       uses: docker/build-push-action@v6
-  #       with:
-  #         context: build/application
-  #         platforms: ${{ matrix.platform }}
-  #         push: false
-
-  # integration-tests-h2:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0
-
-  #     - name: Cache local Maven repository
-  #       uses: actions/cache@v4
-  #       with:
-  #         path: ~/.m2/repository
-  #         key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-  #         restore-keys: ${{ runner.os }}-maven-
-
-  #     - name: Set up JDK Corretto 21
-  #       uses: actions/setup-java@v4
-  #       with:
-  #         distribution: 'corretto'
-  #         java-version: '21'
-  #         architecture: x64
-
-  #     - name: Install NodeJS
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: 22.x
-
-  #     - name: Install TypeScript and esbuild
-  #       run: npm install -g typescript esbuild
-
-  #     - name: Install ttyd (prebuilt)
-  #       run: |
-  #         sudo apt update
-  #         sudo apt install -y ttyd
-  #     - name: Verify ttyd installation
-  #       run: ttyd --version
-
-  #     - name: Integration tests
-  #       run: mvn clean install -P integration-tests
-
-  #     - name: Generate a random artifact name
-  #       if: always()
-  #       id: generate_name
-  #       run: |
-  #         TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-  #         echo "ARTIFACT_NAME=selenide-screenshots-${TIMESTAMP}.zip" >> $GITHUB_ENV
-
-  #     - name: Upload selenide screenshots
-  #       uses: actions/upload-artifact@v4
-  #       if: always()
-  #       with:
-  #         retention-days: 1
-  #         name: ${{ env.ARTIFACT_NAME }}
-  #         path: tests/tests-integrations/build/reports/tests
-
-  # integration-tests-postgresql:
-  #   runs-on: ubuntu-latest
-  #   env:
-  #     POSTGRES_DB: testdb
-  #     POSTGRES_USER: testuser
-  #     POSTGRES_PASS: testpass
-  #   services:
-  #     postgres:
-  #       image: postgres:16
-  #       ports:
-  #         - 5432:5432
-  #       env:
-  #         POSTGRES_DB: ${{ env.POSTGRES_DB }}
-  #         POSTGRES_USER: ${{ env.POSTGRES_USER }}
-  #         POSTGRES_PASSWORD: ${{ env.POSTGRES_PASS }}
-  #       options: >-
-  #         --health-cmd pg_isready
-  #         --health-interval 10s
-  #         --health-timeout 5s
-  #         --health-retries 5
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0
-
-  #     - name: Cache local Maven repository
-  #       uses: actions/cache@v4
-  #       with:
-  #         path: ~/.m2/repository
-  #         key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-  #         restore-keys: ${{ runner.os }}-maven-
-
-  #     - name: Set up JDK Corretto 21
-  #       uses: actions/setup-java@v4
-  #       with:
-  #         distribution: 'corretto'
-  #         java-version: '21'
-  #         architecture: x64
-
-  #     - name: Install NodeJS
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: 22.x
-
-  #     - name: Install TypeScript and esbuild
-  #       run: npm install -g typescript esbuild
-
-  #     - name: Install ttyd (prebuilt)
-  #       run: |
-  #         sudo apt update
-  #         sudo apt install -y ttyd
-
-  #     - name: Verify ttyd installation
-  #       run: ttyd --version
-
-  #     - name: Integration tests
-  #       run: mvn clean install -P integration-tests
-  #       env:
-  #         DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER: org.postgresql.Driver
-  #         DIRIGIBLE_DATASOURCE_DEFAULT_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
-  #         DIRIGIBLE_DATASOURCE_DEFAULT_USERNAME: ${{ env.POSTGRES_USER }}
-  #         DIRIGIBLE_DATASOURCE_DEFAULT_PASSWORD: ${{ env.POSTGRES_PASS }}
-
-  #     - name: Generate a random artifact name
-  #       if: always()
-  #       id: generate_name
-  #       run: |
-  #         TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-  #         echo "ARTIFACT_NAME=selenide-screenshots-${TIMESTAMP}.zip" >> $GITHUB_ENV
-
-  #     - name: Upload selenide screenshots
-  #       uses: actions/upload-artifact@v4
-  #       if: always()
-  #       with:
-  #         retention-days: 1
-  #         name: ${{ env.ARTIFACT_NAME }}
-  #         path: tests/tests-integrations/build/reports/tests
+          retention-days: 1
+          name: ${{ env.ARTIFACT_NAME }}
+          path: tests/tests-integrations/build/reports/tests
