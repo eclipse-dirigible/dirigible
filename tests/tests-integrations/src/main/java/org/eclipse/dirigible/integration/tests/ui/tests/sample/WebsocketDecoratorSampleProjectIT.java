@@ -32,7 +32,7 @@ public class WebsocketDecoratorSampleProjectIT extends SampleProjectRepositoryIT
         browser.openPath("/services/web/sample-websocket-decorator/order-websocket-page.html");
 
         browser.enterTextInElementById("fromInput", "Test user");
-        browser.clickOnElementById("connect");
+        browser.clickOnElementById("connectBtn");
 
         browser.enterTextInElementById("textInput", "A test message");
         browser.clickOnElementById("sendMessage");
