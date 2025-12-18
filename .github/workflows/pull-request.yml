@@ -25,6 +25,7 @@ jobs:
         with:
           run-id: 20312546252
           path: uploaded-artifacts
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           # pattern: |
           #   **
           #   !**/*.dockerbuild
