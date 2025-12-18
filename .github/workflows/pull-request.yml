@@ -26,7 +26,31 @@ jobs:
           run-id: 20312546252
           path: uploaded-artifacts
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          pattern: application-all, dast_zap_report, sast_**, security_report
+          pattern: application-all
+
+      - name: Download Uploaded Artifacts
+        uses: actions/download-artifact@v5
+        with:
+          run-id: 20312546252
+          path: uploaded-artifacts
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pattern: dast_zap_report
+
+      - name: Download Uploaded Artifacts
+        uses: actions/download-artifact@v5
+        with:
+          run-id: 20312546252
+          path: uploaded-artifacts
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pattern: sast_**
+
+      - name: Download Uploaded Artifacts
+        uses: actions/download-artifact@v5
+        with:
+          run-id: 20312546252
+          path: uploaded-artifacts
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pattern: security_report
 
       - name: Display Downloaded Artifacts
         run: ls -R uploaded-artifacts
