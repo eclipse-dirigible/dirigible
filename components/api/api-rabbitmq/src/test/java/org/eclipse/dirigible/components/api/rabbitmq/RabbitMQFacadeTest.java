@@ -13,21 +13,10 @@ import nl.altindag.log.LogCaptor;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.testcontainers.containers.RabbitMQContainer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-@ExtendWith(SpringExtension.class)
-@SpringBootTest
-@AutoConfigureMockMvc
-@ComponentScan(basePackages = {"org.eclipse.dirigible.components.*"})
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class RabbitMQFacadeTest {
 
     private static final String message = "testMessage";
