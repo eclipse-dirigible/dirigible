@@ -26,9 +26,9 @@ jobs:
           run-id: 20312546252
           path: uploaded-artifacts
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          # pattern: |
-          #   **
-          #   !**/*.dockerbuild
+          pattern: |
+            **
+            !**/*.dockerbuild
 
       - name: Display Downloaded Artifacts
         run: ls -R uploaded-artifacts
