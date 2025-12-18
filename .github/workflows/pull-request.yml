@@ -58,7 +58,12 @@ jobs:
           run-id: 20312546252
           path: uploaded-artifacts
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          pattern: application-all|dast_zap_report|sast_**|security_report
+          pattern: |
+                application-all
+                dast_zap_report
+                sast_*
+                security_report
+          merge-multiple: true
 
       - name: Display Downloaded Artifacts
         run: ls -R uploaded-artifacts
