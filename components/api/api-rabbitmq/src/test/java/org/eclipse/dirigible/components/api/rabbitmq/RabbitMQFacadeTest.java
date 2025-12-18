@@ -9,9 +9,10 @@
  */
 package org.eclipse.dirigible.components.api.rabbitmq;
 
+import nl.altindag.log.LogCaptor;
 import org.eclipse.dirigible.commons.config.Configuration;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -19,8 +20,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.testcontainers.containers.RabbitMQContainer;
-
-import nl.altindag.log.LogCaptor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -31,12 +30,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class RabbitMQFacadeTest {
 
-    LogCaptor logCaptor = LogCaptor.forClass(RabbitMQFacade.class);
     private static final String message = "testMessage";
     private static final String queue = "test-queue";
+    LogCaptor logCaptor = LogCaptor.forClass(RabbitMQFacade.class);
 
-
-    @Before
+    @BeforeEach
     public void setUp() {
         RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:3.8.19-alpine");
         rabbit.start();
