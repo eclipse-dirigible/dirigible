@@ -25,9 +25,9 @@ jobs:
         with:
           run-id: 20312546252
           path: uploaded-artifacts
-          pattern: |
-            **
-            !**/*.dockerbuild
+          # pattern: |
+          #   **
+          #   !**/*.dockerbuild
 
       - name: Display Downloaded Artifacts
         run: ls -R uploaded-artifacts
