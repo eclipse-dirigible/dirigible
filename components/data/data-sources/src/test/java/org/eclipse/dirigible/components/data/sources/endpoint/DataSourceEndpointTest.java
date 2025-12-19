@@ -29,7 +29,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.data.domain.Page;
@@ -54,32 +54,34 @@ import org.springframework.web.context.WebApplicationContext;
 @Transactional
 public class DataSourceEndpointTest {
 
-    /** The entity manager. */
-    @Autowired
-    private EntityManager entityManager;
-
-    /** The datasource service. */
-    @Autowired
-    private DataSourceService datasourceService;
-
-    /** The datasource repository. */
-    @Autowired
-    private DataSourceRepository datasourceRepository;
-
-    /** The test data source. */
-    private DataSource testDataSource;
-
-    /** The mock mvc. */
-    @Autowired
-    private MockMvc mockMvc;
-
     /** The wac. */
     @Autowired
     protected WebApplicationContext wac;
-
+    /** The entity manager. */
+    @Autowired
+    private EntityManager entityManager;
+    /** The datasource service. */
+    @Autowired
+    private DataSourceService datasourceService;
+    /** The datasource repository. */
+    @Autowired
+    private DataSourceRepository datasourceRepository;
+    /** The test data source. */
+    private DataSource testDataSource;
+    /** The mock mvc. */
+    @Autowired
+    private MockMvc mockMvc;
     /** The spring security filter chain. */
     @Autowired
     private FilterChainProxy springSecurityFilterChain;
+
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Setup.
@@ -192,12 +194,5 @@ public class DataSourceEndpointTest {
         mockMvc.perform(get("/services/data/sources", name))
                .andDo(print())
                .andExpect(status().is2xxSuccessful());
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

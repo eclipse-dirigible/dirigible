@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
@@ -51,16 +51,59 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 public class HttpSuiteTest {
 
     @Autowired
+    protected WebApplicationContext context;
+    @Autowired
     private JavascriptService javascriptService;
-
     @Autowired
     private MockMvc mockMvc;
-
-    @Autowired
-    protected WebApplicationContext context;
-
     @Autowired
     private Filter springSecurityFilterChain;
+
+
+    @Configuration
+    static class Config {
+        @Autowired
+        HttpResponseHeaderHandlerFilter httpResponseHeaderHandlerFilter;
+
+        @Autowired
+        public void configureGlobal(AuthenticationManagerBuilder auth) throws Exception {
+            auth.inMemoryAuthentication()
+                .withUser("user")
+                .password("password")
+                .roles("ROLE");
+        }
+
+        @Bean
+        PasswordEncoder passwordEncoder() {
+            return NoOpPasswordEncoder.getInstance();
+        }
+
+    }
+
+
+    static class HttpResponseHeaderHandlerFilter extends OncePerRequestFilter {
+
+        @Override
+        protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+                throws ServletException, IOException {
+
+            response.setHeader("header1", "val1");
+            response.setHeader("header2", "val2");
+
+            filterChain.doFilter(request, response);
+        }
+    }
+
+
+    @SpringBootApplication
+    static class TestConfiguration {
+
+        @Bean
+        HttpResponseHeaderHandlerFilter getHttpResponseHeaderHandlerFilter() {
+            return new HttpResponseHeaderHandlerFilter();
+        }
+
+    }
 
     @Test
     public void executeClientTest() throws Exception {
@@ -154,50 +197,5 @@ public class HttpSuiteTest {
                                  .encodeToString("user:password".getBytes())))
                .andDo(print())
                .andExpect(status().is2xxSuccessful());
-    }
-
-    @Configuration
-    static class Config {
-        @Autowired
-        public void configureGlobal(AuthenticationManagerBuilder auth) throws Exception {
-            auth.inMemoryAuthentication()
-                .withUser("user")
-                .password("password")
-                .roles("ROLE");
-        }
-
-        @Bean
-        PasswordEncoder passwordEncoder() {
-            return NoOpPasswordEncoder.getInstance();
-        }
-
-        @Autowired
-        HttpResponseHeaderHandlerFilter httpResponseHeaderHandlerFilter;
-
-    }
-
-
-    static class HttpResponseHeaderHandlerFilter extends OncePerRequestFilter {
-
-        @Override
-        protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-                throws ServletException, IOException {
-
-            response.setHeader("header1", "val1");
-            response.setHeader("header2", "val2");
-
-            filterChain.doFilter(request, response);
-        }
-    }
-
-
-    @SpringBootApplication
-    static class TestConfiguration {
-
-        @Bean
-        HttpResponseHeaderHandlerFilter getHttpResponseHeaderHandlerFilter() {
-            return new HttpResponseHeaderHandlerFilter();
-        }
-
     }
 }

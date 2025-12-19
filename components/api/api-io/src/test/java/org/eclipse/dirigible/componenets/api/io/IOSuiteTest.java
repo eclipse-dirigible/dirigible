@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -30,18 +30,15 @@ import org.springframework.web.context.WebApplicationContext;
 public class IOSuiteTest {
 
     @Autowired
+    protected WebApplicationContext wac;
+    @Autowired
     private JavascriptService javascriptService;
-
     @Autowired
     private MockMvc mockMvc;
 
-    @Autowired
-    protected WebApplicationContext wac;
 
-    @Test
-    public void executeFilesTest() throws Exception {
-        javascriptService.handleRequest("io-tests", "files-create-temp-file.js", null, null, false);
-        javascriptService.handleRequest("io-tests", "files-file-streams.js", null, null, false);
+    @SpringBootApplication
+    static class TestConfiguration {
     }
 
     // @Test
@@ -50,12 +47,14 @@ public class IOSuiteTest {
     // }
 
     @Test
+    public void executeFilesTest() throws Exception {
+        javascriptService.handleRequest("io-tests", "files-create-temp-file.js", null, null, false);
+        javascriptService.handleRequest("io-tests", "files-file-streams.js", null, null, false);
+    }
+
+    @Test
     public void executeStreamsTest() throws Exception {
         javascriptService.handleRequest("io-tests", "streams-copy.js", null, null, false);
         javascriptService.handleRequest("io-tests", "streams-text.js", null, null, false);
-    }
-
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

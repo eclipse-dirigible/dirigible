@@ -16,7 +16,7 @@ import org.junit.jupiter.api.TestInstance.Lifecycle;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -33,20 +33,19 @@ import org.springframework.web.context.WebApplicationContext;
 public class GitSuiteTest {
 
     @Autowired
+    protected WebApplicationContext wac;
+    @Autowired
     private JavascriptService javascriptService;
-
     @Autowired
     private MockMvc mockMvc;
 
-    @Autowired
-    protected WebApplicationContext wac;
+
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     @Test
     public void executeGitTest() throws Exception {
         javascriptService.handleRequest("git-tests", "git-local.js", null, null, false);
-    }
-
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

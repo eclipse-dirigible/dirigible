@@ -27,7 +27,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -51,18 +51,16 @@ import org.springframework.web.context.WebApplicationContext;
 @AutoConfigureMockMvc
 public class JavascriptEndpointDITest {
 
-    /** The javascript service. */
-    @Autowired
-    private JavascriptService javascriptService;
-
-    /** The mock mvc. */
-    // @Autowired
-    // private MockMvc mockMvc;
-
     /** The wac. */
     @Autowired
     protected WebApplicationContext wac;
 
+    /** The mock mvc. */
+    // @Autowired
+    // private MockMvc mockMvc;
+    /** The javascript service. */
+    @Autowired
+    private JavascriptService javascriptService;
     /** The spring security filter chain. */
     @Autowired
     private FilterChainProxy springSecurityFilterChain;
@@ -73,6 +71,14 @@ public class JavascriptEndpointDITest {
 
     @Autowired
     private DataSourcesManager datasourcesManager;
+
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Setup.
@@ -87,19 +93,6 @@ public class JavascriptEndpointDITest {
                 "org.eclipse.dirigible.components.base.http.access.UserResponseVerifier.getResponse().getOutputStream().println(\"Hello World!\");".getBytes());
         repository.createResource("/registry/public/test1/test2/hello-world.js",
                 "org.eclipse.dirigible.components.base.http.access.UserResponseVerifier.getResponse().getOutputStream().println(\"Hello World!\");".getBytes());
-    }
-
-    /**
-     * Cleanup.
-     *
-     * @throws Exception the exception
-     */
-    @AfterEach
-    public void cleanup() throws Exception {
-
-        // delete test javascript service
-        repository.removeResource("/registry/public/test/hello-world.js");
-        repository.removeResource("/registry/public/test1/test2/hello-world.js");
     }
 
     // @Test
@@ -213,9 +206,15 @@ public class JavascriptEndpointDITest {
     // }
 
     /**
-     * The Class TestConfiguration.
+     * Cleanup.
+     *
+     * @throws Exception the exception
      */
-    @SpringBootApplication
-    static class TestConfiguration {
+    @AfterEach
+    public void cleanup() throws Exception {
+
+        // delete test javascript service
+        repository.removeResource("/registry/public/test/hello-world.js");
+        repository.removeResource("/registry/public/test1/test2/hello-world.js");
     }
 }

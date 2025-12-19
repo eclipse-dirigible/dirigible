@@ -12,13 +12,14 @@ package org.eclipse.dirigible.components.api.core;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import org.eclipse.dirigible.components.engine.javascript.service.JavascriptService;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -34,13 +35,16 @@ import org.springframework.web.context.WebApplicationContext;
 public class CoreSuiteTest {
 
     @Autowired
+    protected WebApplicationContext wac;
+    @Autowired
     private JavascriptService javascriptService;
-
     @Autowired
     private MockMvc mockMvc;
 
-    @Autowired
-    protected WebApplicationContext wac;
+
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     @Test
     public void executeConfigurationGetTest() throws Exception {
@@ -88,9 +92,5 @@ public class CoreSuiteTest {
         mockMvc.perform(get("/services/js/core-tests/destinations-get-test.js"))
                .andDo(print())
                .andExpect(status().is2xxSuccessful());
-    }
-
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

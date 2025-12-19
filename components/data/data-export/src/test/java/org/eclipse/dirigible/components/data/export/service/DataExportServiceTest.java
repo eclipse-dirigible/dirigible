@@ -27,7 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.web.FilterChainProxy;
@@ -49,25 +49,29 @@ import org.springframework.web.context.WebApplicationContext;
 @Transactional
 public class DataExportServiceTest {
 
-    /** The datasource repository. */
-    @Autowired
-    private DataSourceRepository datasourceRepository;
-
-    /** The data export service. */
-    @Autowired
-    private DataExportService dataExportService;
-
-    /** The workspace service. */
-    @Autowired
-    private WorkspaceService workspaceService;
-
     /** The wac. */
     @Autowired
     protected WebApplicationContext wac;
-
+    /** The datasource repository. */
+    @Autowired
+    private DataSourceRepository datasourceRepository;
+    /** The data export service. */
+    @Autowired
+    private DataExportService dataExportService;
+    /** The workspace service. */
+    @Autowired
+    private WorkspaceService workspaceService;
     /** The spring security filter chain. */
     @Autowired
     private FilterChainProxy springSecurityFilterChain;
+
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Setup.
@@ -77,7 +81,6 @@ public class DataExportServiceTest {
         DataSource datasource = new DataSource("/test/TestDB.datasource", "TestDB", "", "org.h2.Driver", "jdbc:h2:~/test", "sa", "");
         datasourceRepository.save(datasource);
     }
-
 
     /**
      * Cleanup.
@@ -132,12 +135,5 @@ public class DataExportServiceTest {
         }
 
         assertNotNull(foundFile);
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

@@ -128,9 +128,9 @@
         <maven-license-plugin.version>5.0.0</maven-license-plugin.version>
 
         <!-- Spring -->
-        <spring.boot.version>3.5.9</spring.boot.version>
+        <spring.boot.version>4.0.1</spring.boot.version>
         <spring.admin.version>3.5.6</spring.admin.version>
-        <springdoc.version>2.8.13</springdoc.version>
+        <springdoc.version>3.0.0</springdoc.version>
 
         <!-- Webjars -->
         <webjars.locator.version>0.52</webjars.locator.version>
@@ -901,6 +901,11 @@
             <artifactId>mockito-core</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- End Test Dependencies -->
     </dependencies>
 
@@ -929,6 +934,12 @@
                 <groupId>org.seleniumhq.selenium</groupId>
                 <artifactId>selenium-java</artifactId>
                 <version>4.39.0</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.rest-assured</groupId>
+                <artifactId>rest-assured</artifactId>
+                <version>5.5.6</version>
                 <scope>test</scope>
             </dependency>
             <dependency>

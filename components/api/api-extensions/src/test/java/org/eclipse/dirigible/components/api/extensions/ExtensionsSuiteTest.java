@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -40,19 +40,20 @@ import org.springframework.web.context.WebApplicationContext;
 public class ExtensionsSuiteTest {
 
     @Autowired
+    protected WebApplicationContext wac;
+    @Autowired
     private ExtensionPointRepository extensionPointRepository;
-
     @Autowired
     private ExtensionRepository extensionRepository;
-
     @Autowired
     private JavascriptService javascriptService;
-
     @Autowired
     private MockMvc mockMvc;
 
-    @Autowired
-    protected WebApplicationContext wac;
+
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     @BeforeEach
     public void setup() throws Exception {
@@ -72,6 +73,16 @@ public class ExtensionsSuiteTest {
         extensionRepository.deleteAll();
     }
 
+    public static ExtensionPoint createExtensionPoint(String location, String name, String description) {
+        ExtensionPoint extensionPoint = new ExtensionPoint(location, name, description);
+        return extensionPoint;
+    }
+
+    public static Extension createExtension(String location, String name, String description, String extensionPoint, String module) {
+        Extension extension = new Extension(location, name, description, extensionPoint, module, null);
+        return extension;
+    }
+
     @Test
     public void executeExtensionsTest() throws Exception {
         javascriptService.handleRequest("extensions-tests", "extensions-get-extension-points.js", null, null, false);
@@ -86,19 +97,5 @@ public class ExtensionsSuiteTest {
         mockMvc.perform(get("/services/js/extensions-tests/extensions-get-extensions.js"))
                .andDo(print())
                .andExpect(status().is2xxSuccessful());
-    }
-
-    public static ExtensionPoint createExtensionPoint(String location, String name, String description) {
-        ExtensionPoint extensionPoint = new ExtensionPoint(location, name, description);
-        return extensionPoint;
-    }
-
-    public static Extension createExtension(String location, String name, String description, String extensionPoint, String module) {
-        Extension extension = new Extension(location, name, description, extensionPoint, module, null);
-        return extension;
-    }
-
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }
