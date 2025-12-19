@@ -52,8 +52,7 @@ public class Csvim extends Artefact {
         this.files = files;
     }
 
-    public Csvim() {
-    }
+    public Csvim() {}
 
     public Long getId() {
         return id;
