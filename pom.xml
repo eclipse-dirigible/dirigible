@@ -173,6 +173,7 @@
         <!-- Camel -->
         <camel.version>4.16.0</camel.version>
 
+
         <!-- Velocity -->
         <velocity.version>2.4</velocity.version>
 
