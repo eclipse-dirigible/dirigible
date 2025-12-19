@@ -66,4 +66,3 @@ public class DirigibleJavaScriptEndpointUriFactory extends org.apache.camel.supp
         return false;
     }
 }
-

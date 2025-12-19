@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import org.eclipse.dirigible.components.ide.problems.domain.Problem;
 import org.eclipse.dirigible.components.ide.problems.service.ProblemService;
 import org.junit.jupiter.api.AfterEach;
@@ -22,7 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.data.domain.PageRequest;
@@ -52,6 +53,14 @@ class ProblemsEndpointTest {
     @Autowired
     private MockMvc mockMvc;
 
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
+
     /**
      * Setup.
      *
@@ -77,6 +86,26 @@ class ProblemsEndpointTest {
     @AfterEach
     void cleanup() throws Exception {
 
+    }
+
+    /**
+     * Creates the problem.
+     *
+     * @param location the location
+     * @param type the type
+     * @param line the line
+     * @param column the column
+     * @param cause the cause
+     * @param expected the expected
+     * @param category the category
+     * @param module the module
+     * @param source the source
+     * @param program the program
+     * @return the problem
+     */
+    public static Problem createProblem(String location, String type, String line, String column, String cause, String expected,
+            String category, String module, String source, String program) {
+        return new Problem(location, type, line, column, cause, expected, category, module, source, program);
     }
 
     /**
@@ -114,32 +143,5 @@ class ProblemsEndpointTest {
         mockMvc.perform(get("/services/ide/problems/search?condition=co&limit=5"))
                .andDo(print())
                .andExpect(status().is2xxSuccessful());
-    }
-
-    /**
-     * Creates the problem.
-     *
-     * @param location the location
-     * @param type the type
-     * @param line the line
-     * @param column the column
-     * @param cause the cause
-     * @param expected the expected
-     * @param category the category
-     * @param module the module
-     * @param source the source
-     * @param program the program
-     * @return the problem
-     */
-    public static Problem createProblem(String location, String type, String line, String column, String cause, String expected,
-            String category, String module, String source, String program) {
-        return new Problem(location, type, line, column, cause, expected, category, module, source, program);
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

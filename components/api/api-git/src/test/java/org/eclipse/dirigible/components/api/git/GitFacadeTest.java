@@ -33,7 +33,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestInstance.Lifecycle;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -53,23 +53,23 @@ import com.google.gson.reflect.TypeToken;
 @TestInstance(Lifecycle.PER_CLASS)
 public class GitFacadeTest {
 
+    /** The gson. */
+    private final Gson gson = new Gson();
     /** The username. */
     private String username = "dirigible";
-
     /** The email. */
     private String email = "dirigible@eclipse.com";
-
     /** The project name. */
     private String projectName = "project1";
-
     /** The workspace name. */
     private String workspaceName = "workspace";
-
     /** The repository. */
     private String repository = "project1-repo";
 
-    /** The gson. */
-    private final Gson gson = new Gson();
+
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Test init repository and commit.
@@ -124,10 +124,6 @@ public class GitFacadeTest {
 
         assertEquals(project.getName(), parsedProjectJsonContent.get("guid"));
         assertEquals(1, parsedProjectJsonContent.size());
-    }
-
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 
 }

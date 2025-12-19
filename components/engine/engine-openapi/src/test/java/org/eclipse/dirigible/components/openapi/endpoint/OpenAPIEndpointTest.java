@@ -9,13 +9,6 @@
  */
 package org.eclipse.dirigible.components.openapi.endpoint;
 
-import static org.eclipse.dirigible.components.openapi.repository.OpenAPIRepositoryTest.createOpenAPI;
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
 import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
@@ -31,16 +24,23 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.security.web.FilterChainProxy;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
+
+import static org.eclipse.dirigible.components.openapi.repository.OpenAPIRepositoryTest.createOpenAPI;
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * The Class OpenAPIEndpointTest.
@@ -54,18 +54,15 @@ import org.springframework.web.context.WebApplicationContext;
 @Transactional
 class OpenAPIEndpointTest {
 
-    /** The open API repository. */
-    @Autowired
-    private OpenAPIRepository openAPIRepository;
-
-    /** The mock mvc. */
-    @Autowired
-    private MockMvc mockMvc;
-
     /** The wac. */
     @Autowired
     protected WebApplicationContext wac;
-
+    /** The open API repository. */
+    @Autowired
+    private OpenAPIRepository openAPIRepository;
+    /** The mock mvc. */
+    @Autowired
+    private MockMvc mockMvc;
     /** The spring security filter chain. */
     @Autowired
     private FilterChainProxy springSecurityFilterChain;
@@ -74,12 +71,20 @@ class OpenAPIEndpointTest {
     @Autowired
     private IRepository repository;
 
-    @MockBean
+    @MockitoBean
     private TenantContext tenantContext;
 
-    @MockBean
+    @MockitoBean
     @DefaultTenant
     private Tenant defaultTenant;
+
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Setup.
@@ -123,12 +128,5 @@ class OpenAPIEndpointTest {
                .andExpect(status().isOk())
                .andExpect(content().string(containsString(
                        "{\"openapi\":\"3.0.1\",\"info\":{\"title\":\"Applications Services Open API\",\"description\":\"Services Open API provided by the applications\",\"contact\":{\"name\":\"Eclipse Dirigible\",\"url\":\"https://www.dirigible.io\",\"email\":\"dirigible-dev@eclipse.org\"},\"license\":{\"name\":\"Eclipse Public License - v 2.0\",\"url\":\"https://www.eclipse.org/legal/epl-v20.html\"},\"version\":\"0.0.1\"},\"servers\":[],\"security\":[],\"tags\":[],\"paths\":{},\"components\":{\"schemas\":{},\"responses\":{},\"parameters\":{},\"examples\":{},\"requestBodies\":{},\"headers\":{},\"securitySchemes\":{},\"links\":{},\"callbacks\":{}}}")));
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

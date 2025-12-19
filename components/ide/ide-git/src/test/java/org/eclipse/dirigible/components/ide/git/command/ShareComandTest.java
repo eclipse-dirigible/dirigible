@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -48,6 +48,14 @@ public class ShareComandTest {
 
     /** The workspaces service. */
     private WorkspaceService workspaceService;
+
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Creates the workspace test.
@@ -83,13 +91,6 @@ public class ShareComandTest {
                 shareCommand.execute(workspace1, project1, shareModel);
             }
         }
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 
 }

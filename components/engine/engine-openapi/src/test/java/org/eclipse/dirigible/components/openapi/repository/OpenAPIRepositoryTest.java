@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.openapi.repository;
 
+import jakarta.persistence.EntityManager;
 import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
@@ -21,14 +22,14 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
-import jakarta.persistence.EntityManager;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * The Class OpenAPIRepositoryTest.
@@ -40,20 +41,26 @@ import static org.junit.jupiter.api.Assertions.*;
 @Transactional
 public class OpenAPIRepositoryTest {
 
-    /** The open API repository. */
-    @Autowired
-    private OpenAPIRepository openAPIRepository;
-
     /** The entity manager. */
     @Autowired
     EntityManager entityManager;
-
-    @MockBean
+    /** The open API repository. */
+    @Autowired
+    private OpenAPIRepository openAPIRepository;
+    @MockitoBean
     private TenantContext tenantContext;
 
-    @MockBean
+    @MockitoBean
     @DefaultTenant
     private Tenant defaultTenant;
+
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Setup.
@@ -77,6 +84,19 @@ public class OpenAPIRepositoryTest {
     @AfterEach
     public void cleanup() {
         openAPIRepository.deleteAll();
+    }
+
+    /**
+     * Creates the openapi.
+     *
+     * @param location the location
+     * @param name the name
+     * @param description the description
+     * @return the openapi
+     */
+    public static OpenAPI createOpenAPI(String location, String name, String description) {
+        OpenAPI openAPI = new OpenAPI(location, name, description);
+        return openAPI;
     }
 
     /**
@@ -111,25 +131,5 @@ public class OpenAPIRepositoryTest {
         OpenAPI openAPI = entityManager.getReference(OpenAPI.class, id);
         assertNotNull(openAPI);
         assertNotNull(openAPI.getLocation());
-    }
-
-    /**
-     * Creates the openapi.
-     *
-     * @param location the location
-     * @param name the name
-     * @param description the description
-     * @return the openapi
-     */
-    public static OpenAPI createOpenAPI(String location, String name, String description) {
-        OpenAPI openAPI = new OpenAPI(location, name, description);
-        return openAPI;
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

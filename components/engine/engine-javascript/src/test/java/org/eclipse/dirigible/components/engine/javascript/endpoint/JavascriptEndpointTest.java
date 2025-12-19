@@ -9,12 +9,6 @@
  */
 package org.eclipse.dirigible.components.engine.javascript.endpoint;
 
-import static org.hamcrest.Matchers.containsString;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
 import org.eclipse.dirigible.components.engine.javascript.service.JavascriptService;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -23,14 +17,20 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.security.web.FilterChainProxy;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.context.WebApplicationContext;
+
+import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * The Class JavascriptEndpointTest.
@@ -42,18 +42,15 @@ import org.springframework.web.context.WebApplicationContext;
 @ComponentScan(basePackages = {"org.eclipse.dirigible.components.*"})
 public class JavascriptEndpointTest {
 
-    /** The javascript service. */
-    @Autowired
-    private JavascriptService javascriptService;
-
-    /** The mock mvc. */
-    @Autowired
-    private MockMvc mockMvc;
-
     /** The wac. */
     @Autowired
     protected WebApplicationContext wac;
-
+    /** The javascript service. */
+    @Autowired
+    private JavascriptService javascriptService;
+    /** The mock mvc. */
+    @Autowired
+    private MockMvc mockMvc;
     /** The spring security filter chain. */
     @Autowired
     private FilterChainProxy springSecurityFilterChain;
@@ -61,6 +58,14 @@ public class JavascriptEndpointTest {
     /** The repository. */
     @Autowired
     private IRepository repository;
+
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Setup.
@@ -77,6 +82,11 @@ public class JavascriptEndpointTest {
                 "org.eclipse.dirigible.components.base.http.access.UserResponseVerifier.getResponse().getOutputStream().println(\"Hello World!\");".getBytes());
     }
 
+    // @Test
+    // public void handleRequest() {
+    // assertNotNull(javascriptService.handleRequest("test", "hello-world.js", null, null, false));
+    // }
+
     /**
      * Cleanup.
      *
@@ -89,11 +99,6 @@ public class JavascriptEndpointTest {
         repository.removeResource("/registry/public/test/hello-world.js");
         repository.removeResource("/registry/public/test1/test2/hello-world.js");
     }
-
-    // @Test
-    // public void handleRequest() {
-    // assertNotNull(javascriptService.handleRequest("test", "hello-world.js", null, null, false));
-    // }
 
     /**
      * Gets the status.
@@ -198,12 +203,5 @@ public class JavascriptEndpointTest {
                .andDo(print())
                .andExpect(content().string(containsString("Hello World!")));
 
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

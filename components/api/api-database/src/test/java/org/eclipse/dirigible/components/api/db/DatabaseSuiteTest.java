@@ -24,7 +24,7 @@ import org.junit.jupiter.api.TestInstance.Lifecycle;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -45,24 +45,28 @@ import org.springframework.web.context.WebApplicationContext;
 @TestInstance(Lifecycle.PER_CLASS)
 public class DatabaseSuiteTest {
 
+    /** The wac. */
+    @Autowired
+    protected WebApplicationContext wac;
     /** The datasource repository. */
     @Autowired
     private DataSourceRepository datasourceRepository;
-
     @Autowired
     private DataSourcesManager datasourcesManager;
-
     /** The javascript service. */
     @Autowired
     private JavascriptService javascriptService;
-
     /** The mock mvc. */
     @Autowired
     private MockMvc mockMvc;
 
-    /** The wac. */
-    @Autowired
-    protected WebApplicationContext wac;
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Setup.
@@ -122,13 +126,5 @@ public class DatabaseSuiteTest {
     @Test
     public void executeSequenceTest() throws Exception {
         javascriptService.handleRequest("db-tests", "sequence-nextval.js", null, null, false);
-    }
-
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

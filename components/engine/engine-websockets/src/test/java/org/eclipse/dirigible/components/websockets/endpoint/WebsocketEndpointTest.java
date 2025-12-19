@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -43,25 +43,29 @@ import org.springframework.web.context.WebApplicationContext;
 @Transactional
 public class WebsocketEndpointTest {
 
-    /** The websocket service. */
-    @Autowired
-    private WebsocketService websocketService;
-
-    /** The websocket repository. */
-    @Autowired
-    private WebsocketRepository websocketRepository;
-
-    /** The mock mvc. */
-    @Autowired
-    private MockMvc mockMvc;
-
     /** The wac. */
     @Autowired
     protected WebApplicationContext wac;
-
+    /** The websocket service. */
+    @Autowired
+    private WebsocketService websocketService;
+    /** The websocket repository. */
+    @Autowired
+    private WebsocketRepository websocketRepository;
+    /** The mock mvc. */
+    @Autowired
+    private MockMvc mockMvc;
     /** The spring security filter chain. */
     @Autowired
     private FilterChainProxy springSecurityFilterChain;
+
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Setup.
@@ -95,12 +99,5 @@ public class WebsocketEndpointTest {
                .andDo(print())
                .andExpect(status().is2xxSuccessful());
         // .andExpect(jsonPath("$.content[0].location").value("/a/b/c/w1.websocket"));
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

@@ -22,7 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -38,15 +38,6 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
 @ComponentScan(basePackages = {"org.eclipse.dirigible.components"})
 @EntityScan("org.eclipse.dirigible.components")
 public class ActionsServiceTest {
-
-
-    /** The actions service. */
-    @Autowired
-    private ActionsService actionsService;
-
-    /** The workspaces core service. */
-    @Autowired
-    private WorkspaceService workspaceService;
 
     /** The project json content. */
     private static final String PROJECT_JSON_CONTENT = """
@@ -68,7 +59,20 @@ public class ActionsServiceTest {
             	  }]
             }
             """;
+    /** The actions service. */
+    @Autowired
+    private ActionsService actionsService;
+    /** The workspaces core service. */
+    @Autowired
+    private WorkspaceService workspaceService;
 
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Publish with action test.
@@ -99,7 +103,6 @@ public class ActionsServiceTest {
         workspaceService.deleteWorkspace("TestWorkspace1");
     }
 
-
     /**
      * Publish without action test.
      */
@@ -125,13 +128,6 @@ public class ActionsServiceTest {
         } finally {
             Configuration.set("DIRIGIBLE_PROJECT_TYPESCRIPT", "true");
         }
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 
 }

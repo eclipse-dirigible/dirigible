@@ -22,10 +22,10 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.annotation.DirtiesContext.ClassMode;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.nio.file.Path;
 import java.text.ParseException;
@@ -52,11 +52,11 @@ public class ListenerSynchronizerTest {
     private ListenerRepository listenerRepository;
 
     /** The tenant context. */
-    @MockBean
+    @MockitoBean
     private TenantContext tenantContext;
 
     /** The tenant. */
-    @MockBean
+    @MockitoBean
     @DefaultTenant
     private Tenant tenant;
 

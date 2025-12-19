@@ -27,7 +27,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.data.domain.Page;
@@ -54,32 +54,34 @@ import jakarta.persistence.EntityManager;
 @Transactional
 public class ExtensionPointEndpointTest {
 
-    /** The entity manager. */
-    @Autowired
-    private EntityManager entityManager;
-
-    /** The extension point service. */
-    @Autowired
-    private ExtensionPointService extensionPointService;
-
-    /** The extension point repository. */
-    @Autowired
-    private ExtensionPointRepository extensionPointRepository;
-
-    /** The test extension point. */
-    private ExtensionPoint testExtensionPoint;
-
-    /** The mock mvc. */
-    @Autowired
-    private MockMvc mockMvc;
-
     /** The wac. */
     @Autowired
     protected WebApplicationContext wac;
-
+    /** The entity manager. */
+    @Autowired
+    private EntityManager entityManager;
+    /** The extension point service. */
+    @Autowired
+    private ExtensionPointService extensionPointService;
+    /** The extension point repository. */
+    @Autowired
+    private ExtensionPointRepository extensionPointRepository;
+    /** The test extension point. */
+    private ExtensionPoint testExtensionPoint;
+    /** The mock mvc. */
+    @Autowired
+    private MockMvc mockMvc;
     /** The spring security filter chain. */
     @Autowired
     private FilterChainProxy springSecurityFilterChain;
+
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Setup.
@@ -188,12 +190,5 @@ public class ExtensionPointEndpointTest {
         mockMvc.perform(get("/services/core/extensionpoints", name))
                .andDo(print())
                .andExpect(status().is2xxSuccessful());
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

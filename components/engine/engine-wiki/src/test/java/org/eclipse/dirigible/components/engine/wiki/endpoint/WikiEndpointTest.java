@@ -26,7 +26,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -48,14 +48,12 @@ import org.springframework.web.context.WebApplicationContext;
 @Transactional
 public class WikiEndpointTest {
 
-    /** The mock mvc. */
-    @Autowired
-    private MockMvc mockMvc;
-
     /** The wac. */
     @Autowired
     protected WebApplicationContext wac;
-
+    /** The mock mvc. */
+    @Autowired
+    private MockMvc mockMvc;
     /** The spring security filter chain. */
     @Autowired
     private FilterChainProxy springSecurityFilterChain;
@@ -63,6 +61,14 @@ public class WikiEndpointTest {
     /** The synchronization processor. */
     @Autowired
     private SynchronizationProcessor synchronizationProcessor;
+
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Load the artefact.
@@ -87,12 +93,5 @@ public class WikiEndpointTest {
                                            .toFile());
             synchronizationProcessor.processSynchronizers();
         }
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

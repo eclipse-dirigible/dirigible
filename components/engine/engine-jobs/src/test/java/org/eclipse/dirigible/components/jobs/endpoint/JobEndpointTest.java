@@ -34,7 +34,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.data.domain.Page;
@@ -58,32 +58,34 @@ import org.springframework.web.context.WebApplicationContext;
 @Transactional
 public class JobEndpointTest {
 
-    /** The entity manager. */
-    @Autowired
-    private EntityManager entityManager;
-
-    /** The job service. */
-    @Autowired
-    private JobService jobService;
-
-    /** The job repository. */
-    @Autowired
-    private JobRepository jobRepository;
-
-    /** The test job. */
-    private Job testJob;
-
-    /** The mockMvc. */
-    @Autowired
-    private MockMvc mockMvc;
-
     /** The wac. */
     @Autowired
     protected WebApplicationContext wac;
-
+    /** The entity manager. */
+    @Autowired
+    private EntityManager entityManager;
+    /** The job service. */
+    @Autowired
+    private JobService jobService;
+    /** The job repository. */
+    @Autowired
+    private JobRepository jobRepository;
+    /** The test job. */
+    private Job testJob;
+    /** The mockMvc. */
+    @Autowired
+    private MockMvc mockMvc;
     /** The spring security filter chain. */
     @Autowired
     private FilterChainProxy springSecurityFilterChain;
+
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Setup.
@@ -109,6 +111,29 @@ public class JobEndpointTest {
 
         entityManager.refresh(testJob);
 
+    }
+
+    /**
+     * Creates the job.
+     *
+     * @param jobService the job repository
+     * @param name the job name
+     * @param group the job group
+     * @param clazz the job clazz
+     * @param handler the job handler
+     * @param engine the job engine
+     * @param description the job description
+     * @param expression the job expression
+     * @param singleton the singleton
+     * @param parameters the job parameters
+     * @param location the job location
+     * @param dependencies the dependencies
+     */
+    public static void createJob(JobService jobService, String name, String group, String clazz, String handler, String engine,
+            String description, String expression, boolean singleton, List<JobParameter> parameters, String location,
+            Set<String> dependencies) {
+        Job job = new Job(name, group, clazz, handler, engine, description, expression, singleton, parameters, location, dependencies);
+        jobService.save(job);
     }
 
     /**
@@ -171,35 +196,5 @@ public class JobEndpointTest {
                .andDo(print());
         // .andExpect(status().is2xxSuccessful());
 
-    }
-
-    /**
-     * Creates the job.
-     *
-     * @param jobService the job repository
-     * @param name the job name
-     * @param group the job group
-     * @param clazz the job clazz
-     * @param handler the job handler
-     * @param engine the job engine
-     * @param description the job description
-     * @param expression the job expression
-     * @param singleton the singleton
-     * @param parameters the job parameters
-     * @param location the job location
-     * @param dependencies the dependencies
-     */
-    public static void createJob(JobService jobService, String name, String group, String clazz, String handler, String engine,
-            String description, String expression, boolean singleton, List<JobParameter> parameters, String location,
-            Set<String> dependencies) {
-        Job job = new Job(name, group, clazz, handler, engine, description, expression, singleton, parameters, location, dependencies);
-        jobService.save(job);
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

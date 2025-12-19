@@ -13,8 +13,6 @@ import com.google.gson.annotations.Expose;
 import jakarta.persistence.*;
 import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.eclipse.dirigible.components.base.encryption.Encrypted;
-import org.hibernate.annotations.LazyCollection;
-import org.hibernate.annotations.LazyCollectionOption;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -62,10 +60,9 @@ public class DataSource extends Artefact {
     private String schema;
 
     /** The properties. */
-    @OneToMany(mappedBy = "datasource", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    @LazyCollection(LazyCollectionOption.FALSE)
+    @OneToMany(mappedBy = "datasource", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     @Expose
-    private List<DataSourceProperty> properties = new ArrayList<DataSourceProperty>();
+    private List<DataSourceProperty> properties = new ArrayList<>();
 
     /**
      * Instantiates a new data source.
@@ -91,120 +88,62 @@ public class DataSource extends Artefact {
      */
     public DataSource() {}
 
-    /**
-     * Gets the id.
-     *
-     * @return the id
-     */
     public Long getId() {
         return id;
     }
 
-    /**
-     * Sets the id.
-     *
-     * @param id the id to set
-     */
     public void setId(Long id) {
         this.id = id;
     }
 
-    /**
-     * Gets the driver.
-     *
-     * @return the driver
-     */
     public String getDriver() {
         return driver;
     }
 
-    /**
-     * Sets the driver.
-     *
-     * @param driver the driver to set
-     */
     public void setDriver(String driver) {
         this.driver = driver;
     }
 
-    /**
-     * Gets the url.
-     *
-     * @return the url
-     */
     public String getUrl() {
         return url;
     }
 
-    /**
-     * Sets the url.
-     *
-     * @param url the url to set
-     */
     public void setUrl(String url) {
         this.url = url;
     }
 
-    /**
-     * Gets the username.
-     *
-     * @return the username
-     */
     public String getUsername() {
         return username;
     }
 
-    /**
-     * Sets the username.
-     *
-     * @param username the username to set
-     */
     public void setUsername(String username) {
         this.username = username;
     }
 
-    /**
-     * Gets the password.
-     *
-     * @return the password
-     */
     public String getPassword() {
         return password;
     }
 
-    /**
-     * Sets the password.
-     *
-     * @param password the password to set
-     */
     public void setPassword(String password) {
         this.password = password;
     }
 
-    /**
-     * Sets the properties.
-     *
-     * @param properties the properties to set
-     */
-    public void setProperties(List<DataSourceProperty> properties) {
-        this.properties = properties;
+    public String getSchema() {
+        return schema;
     }
 
-    /**
-     * Gets the properties.
-     *
-     * @return the properties
-     */
+    public void setSchema(String schema) {
+        this.schema = schema;
+    }
+
     public List<DataSourceProperty> getProperties() {
         return properties;
     }
 
-    /**
-     * Get the property by name.
-     *
-     * @param name the name
-     * @return the property
-     */
+    public void setProperties(List<DataSourceProperty> properties) {
+        this.properties = properties;
+    }
+
     public DataSourceProperty getProperty(String name) {
         for (DataSourceProperty p : properties) {
             if (p.getName()
@@ -215,46 +154,15 @@ public class DataSource extends Artefact {
         return null;
     }
 
-    /**
-     * Adds the property.
-     *
-     * @param name the name
-     * @param value the value
-     * @return the data source property
-     */
     public DataSourceProperty addProperty(String name, String value) {
         DataSourceProperty property = new DataSourceProperty(name, value, this);
         properties.add(property);
         return property;
     }
 
-    /**
-     * Gets the schema.
-     *
-     * @return the schema
-     */
-    public String getSchema() {
-        return schema;
-    }
-
-    /**
-     * Sets the schema.
-     *
-     * @param schema the new schema
-     */
-    public void setSchema(String schema) {
-        this.schema = schema;
-    }
-
-    /**
-     * To string.
-     *
-     * @return the string
-     */
     @Override
     public String toString() {
         return "DataSource [id=" + id + ", driver=" + driver + ", url=" + url + ", username=" + username + ", schema=" + schema
                 + ", properties=" + properties + "]";
     }
-
 }

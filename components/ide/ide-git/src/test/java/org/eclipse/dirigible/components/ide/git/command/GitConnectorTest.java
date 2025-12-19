@@ -30,7 +30,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -49,6 +49,14 @@ public class GitConnectorTest {
 
     /** The Constant DIRIGIBLE_TEST_GIT_ENABLED. */
     public static final String DIRIGIBLE_TEST_GIT_ENABLED = "DIRIGIBLE_TEST_GIT_ENABLED";
+
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Clone repository.
@@ -81,13 +89,6 @@ public class GitConnectorTest {
                 }
             }
         }
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 
 }

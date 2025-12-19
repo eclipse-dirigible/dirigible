@@ -19,12 +19,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.security.web.FilterChainProxy;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,37 +52,38 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 public class WebEndpointTest {
 
-    /** The mock mvc. */
-    @Autowired
-    private MockMvc mockMvc;
-
+    /** The project json. */
+    private static final String projectJson = "{\n" + "    \"guid\":\"demo\",\n" + "    \"repository\":{\n" + "        \"type\":\"git\",\n"
+            + "        \"branch\":\"master\",\n" + "        \"url\":\"https://github.com/dirigiblelabs/demo.git\"\n" + "    }}";
     /** The wac. */
     @Autowired
     protected WebApplicationContext wac;
-
+    /** The definition repository. */
+    @MockitoBean
+    DefinitionRepository definitionRepository;
+    /** The mock mvc. */
+    @Autowired
+    private MockMvc mockMvc;
     /** The spring security filter chain. */
     @Autowired
     private FilterChainProxy springSecurityFilterChain;
-
     /** The synchronization processor. */
     @Autowired
     private SynchronizationProcessor synchronizationProcessor;
-
     /** The classpath expander. */
     @Autowired
     private ClasspathExpander classpathExpander;
-
     /** The synchronization watcher. */
     @Autowired
     private SynchronizationWatcher synchronizationWatcher;
 
-    /** The definition repository. */
-    @MockBean
-    DefinitionRepository definitionRepository;
 
-    /** The project json. */
-    private static final String projectJson = "{\n" + "    \"guid\":\"demo\",\n" + "    \"repository\":{\n" + "        \"type\":\"git\",\n"
-            + "        \"branch\":\"master\",\n" + "        \"url\":\"https://github.com/dirigiblelabs/demo.git\"\n" + "    }}";
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Load the artefact.
@@ -126,12 +127,5 @@ public class WebEndpointTest {
                                            .toFile());
             synchronizationProcessor.processSynchronizers();
         }
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

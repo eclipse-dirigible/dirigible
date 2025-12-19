@@ -9,16 +9,8 @@
  */
 package org.eclipse.dirigible.components.data.store;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-
-import java.nio.charset.StandardCharsets;
-import java.sql.SQLException;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
+import com.google.gson.JsonElement;
+import com.google.gson.JsonSyntaxException;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.commons.config.Configuration;
@@ -45,15 +37,22 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.context.support.AnnotationConfigContextLoader;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonSyntaxException;
+import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * The Class ObjectStoreTest.
@@ -80,12 +79,20 @@ public class DataStoreTest {
 
     private DirigibleDataSource dataSource;
 
-    @MockBean
+    @MockitoBean
     private TenantContext tenantContext;
 
-    @MockBean
+    @MockitoBean
     @DefaultTenant
     private Tenant defaultTenant;
+
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Setup.
@@ -116,16 +123,16 @@ public class DataStoreTest {
         dataStore.recreate();
     }
 
-    @AfterAll
-    public void cleanup() {
-        Configuration.set("DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT", "DefaultDB");
-    }
-
     private void setupMocks() {
         CurrentTenantIdentifierResolverImpl tenantIdentifier = new CurrentTenantIdentifierResolverImpl(tenantContext);
         MultiTenantConnectionProviderImpl connectionProvider =
                 new MultiTenantConnectionProviderImpl(this.datasourcesManager, this.dataSource);
         dataStore = new DataStore(this.dataSource, this.datasourcesManager, connectionProvider, tenantIdentifier);
+    }
+
+    @AfterAll
+    public void cleanup() {
+        Configuration.set("DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT", "DefaultDB");
     }
 
     /**
@@ -155,7 +162,17 @@ public class DataStoreTest {
             cleanupCustomers();
         }
 
+    }
 
+    public void cleanupCustomers() {
+        List list;
+        list = dataStore.list("Customer");
+        for (Object element : list) {
+            dataStore.delete("Customer", ((Long) ((Map) element).get("id")));
+        }
+        list = dataStore.list("Customer");
+        assertNotNull(list);
+        assertEquals(0, list.size());
     }
 
     /**
@@ -179,28 +196,6 @@ public class DataStoreTest {
         } finally {
             cleanupCustomers();
         }
-    }
-
-    public void cleanupCustomers() {
-        List list;
-        list = dataStore.list("Customer");
-        for (Object element : list) {
-            dataStore.delete("Customer", ((Long) ((Map) element).get("id")));
-        }
-        list = dataStore.list("Customer");
-        assertNotNull(list);
-        assertEquals(0, list.size());
-    }
-
-    public void cleanupCustomerAddresses() {
-        List list;
-        list = dataStore.list("CustomerAddress");
-        for (Object element : list) {
-            dataStore.delete("CustomerAddress", ((Long) ((Map) element).get("id")));
-        }
-        list = dataStore.list("CustomerAddress");
-        assertNotNull(list);
-        assertEquals(0, list.size());
     }
 
     /**
@@ -245,6 +240,17 @@ public class DataStoreTest {
             cleanupCustomerAddresses();
             cleanupCustomers();
         }
+    }
+
+    public void cleanupCustomerAddresses() {
+        List list;
+        list = dataStore.list("CustomerAddress");
+        for (Object element : list) {
+            dataStore.delete("CustomerAddress", ((Long) ((Map) element).get("id")));
+        }
+        list = dataStore.list("CustomerAddress");
+        assertNotNull(list);
+        assertEquals(0, list.size());
     }
 
     /**
@@ -420,6 +426,14 @@ public class DataStoreTest {
         }
     }
 
+    static Optional<JsonElement> parseOptionalJson(String json) {
+        try {
+            return Optional.ofNullable(null == json ? null : GsonHelper.parseJson(json));
+        } catch (JsonSyntaxException ex) {
+            throw new IllegalArgumentException("Invalid json: " + json, ex);
+        }
+    }
+
     /**
      * Query object.
      *
@@ -542,23 +556,6 @@ public class DataStoreTest {
         } finally {
             cleanupCustomers();
         }
-    }
-
-    static Optional<JsonElement> parseOptionalJson(String json) {
-        try {
-            return Optional.ofNullable(null == json ? null : GsonHelper.parseJson(json));
-        } catch (JsonSyntaxException ex) {
-            throw new IllegalArgumentException("Invalid json: " + json, ex);
-        }
-    }
-
-
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 
 }

@@ -11,11 +11,11 @@ package org.eclipse.dirigible.components.data.sources;
 
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @TestConfiguration
 public class TestConfig {
 
-    @MockBean
+    @MockitoBean
     private TenantContext tenantContext;
 }

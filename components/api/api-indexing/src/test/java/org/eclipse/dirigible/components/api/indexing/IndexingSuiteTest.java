@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.test.context.ContextConfiguration;
@@ -31,19 +31,19 @@ import org.springframework.web.context.WebApplicationContext;
 public class IndexingSuiteTest {
 
     @Autowired
+    protected WebApplicationContext context;
+    @Autowired
     private JavascriptService javascriptService;
 
-    @Autowired
-    protected WebApplicationContext context;
+
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     @Test
     public void executeClientTest() throws Exception {
         javascriptService.handleRequest("indexing-tests", "searcher-between.js", null, null, false);
         javascriptService.handleRequest("indexing-tests", "searcher-search.js", null, null, false);
         javascriptService.handleRequest("indexing-tests", "writer-add.js", null, null, false);
-    }
-
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

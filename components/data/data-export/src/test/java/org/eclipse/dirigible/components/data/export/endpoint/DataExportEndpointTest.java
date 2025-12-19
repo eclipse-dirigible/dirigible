@@ -23,7 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -51,21 +51,26 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 public class DataExportEndpointTest {
 
+    /** The wac. */
+    @Autowired
+    protected WebApplicationContext wac;
     /** The datasource repository. */
     @Autowired
     private DataSourceRepository datasourceRepository;
-
     /** The workspace service. */
     @Autowired
     private WorkspaceService workspaceService;
-
     /** The mock mvc. */
     @Autowired
     private MockMvc mockMvc;
 
-    /** The wac. */
-    @Autowired
-    protected WebApplicationContext wac;
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Setup.
@@ -122,12 +127,5 @@ public class DataExportEndpointTest {
         assertNotNull(workspace);
         Project project = workspace.getProject("INFORMATION_SCHEMA");
         assertNotNull(project);
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

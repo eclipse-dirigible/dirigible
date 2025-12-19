@@ -9,13 +9,13 @@
  */
 package org.eclipse.dirigible.components.database;
 
-import java.util.Properties;
-import javax.sql.DataSource;
+import com.zaxxer.hikari.HikariDataSource;
+import jakarta.persistence.EntityManagerFactory;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
+import org.springframework.boot.jdbc.autoconfigure.DataSourceProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
@@ -25,8 +25,9 @@ import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
-import com.zaxxer.hikari.HikariDataSource;
-import jakarta.persistence.EntityManagerFactory;
+
+import javax.sql.DataSource;
+import java.util.Properties;
 
 /**
  * The Class DataSourceSystemConfig.

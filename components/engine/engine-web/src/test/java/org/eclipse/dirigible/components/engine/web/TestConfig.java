@@ -13,15 +13,15 @@ import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @TestConfiguration
 public class TestConfig {
 
-    @MockBean
+    @MockitoBean
     private TenantContext tenantContext;
 
-    @MockBean
+    @MockitoBean
     @DefaultTenant
     private Tenant defaultTenant;
 }

@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -40,25 +40,29 @@ import org.springframework.web.context.WebApplicationContext;
 @ComponentScan(basePackages = {"org.eclipse.dirigible.components.*"})
 public class RegistryEndpointTest {
 
-    /** The repository. */
-    @Autowired
-    private IRepository repository;
-
-    /** The registry service. */
-    @Autowired
-    private RegistryService registryService;
-
-    /** The mock mvc. */
-    @Autowired
-    private MockMvc mockMvc;
-
     /** The wac. */
     @Autowired
     protected WebApplicationContext wac;
-
+    /** The repository. */
+    @Autowired
+    private IRepository repository;
+    /** The registry service. */
+    @Autowired
+    private RegistryService registryService;
+    /** The mock mvc. */
+    @Autowired
+    private MockMvc mockMvc;
     /** The spring security filter chain. */
     @Autowired
     private FilterChainProxy springSecurityFilterChain;
+
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Setup.
@@ -93,12 +97,5 @@ public class RegistryEndpointTest {
         mockMvc.perform(get("/services/core/registry/{path}", "a/test2.txt"))
                .andDo(print())
                .andExpect(status().is2xxSuccessful());
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

@@ -16,7 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.test.web.servlet.MockMvc;
@@ -28,19 +28,19 @@ import org.springframework.web.context.WebApplicationContext;
 public class ForbiddenTest {
 
     @Autowired
+    protected WebApplicationContext wac;
+    @Autowired
     private MockMvc mockMvc;
 
-    @Autowired
-    protected WebApplicationContext wac;
+
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     @Test
     public void forbidden() throws Exception {
         mockMvc.perform(get("/services/js/test/successful.js"))
                .andDo(print())
                .andExpect(status().is4xxClientError());
-    }
-
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

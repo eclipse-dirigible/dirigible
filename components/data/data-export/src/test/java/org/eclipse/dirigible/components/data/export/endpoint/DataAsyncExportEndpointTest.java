@@ -34,7 +34,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -55,25 +55,29 @@ import org.springframework.web.context.WebApplicationContext;
 @Transactional
 public class DataAsyncExportEndpointTest {
 
+    /** The wac. */
+    @Autowired
+    protected WebApplicationContext wac;
     /** The datasource repository. */
     @Autowired
     private DataSourceRepository datasourceRepository;
-
     /** The cms service. */
     @Autowired
     private ExportService exportService;
-
     /** The cms service. */
     @Autowired
     private CmsService cmsService;
-
     /** The mock mvc. */
     @Autowired
     private MockMvc mockMvc;
 
-    /** The wac. */
-    @Autowired
-    protected WebApplicationContext wac;
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Setup.
@@ -112,13 +116,5 @@ public class DataAsyncExportEndpointTest {
         CmisDocument document = cmsService.getChildDocumentByName(exportsFolder, exports.get(0)
                                                                                         .getName());
         // assertNotNull(document); fails on GitHub?
-    }
-
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

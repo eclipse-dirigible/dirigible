@@ -9,12 +9,6 @@
  */
 package org.eclipse.dirigible.components.openapi.service;
 
-import static org.eclipse.dirigible.components.openapi.repository.OpenAPIRepositoryTest.createOpenAPI;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import java.util.List;
-
 import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
@@ -27,11 +21,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+import static org.eclipse.dirigible.components.openapi.repository.OpenAPIRepositoryTest.createOpenAPI;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * The Class OpenAPIServiceTest.
@@ -51,10 +50,10 @@ class OpenAPIServiceTest {
     @Autowired
     private OpenAPIService openAPIService;
 
-    @MockBean
+    @MockitoBean
     private TenantContext tenantContext;
 
-    @MockBean
+    @MockitoBean
     @DefaultTenant
     private Tenant defaultTenant;
 
