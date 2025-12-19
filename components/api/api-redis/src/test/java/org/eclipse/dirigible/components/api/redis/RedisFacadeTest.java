@@ -13,6 +13,7 @@ import org.eclipse.dirigible.commons.config.Configuration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.utility.DockerImageName;
 import redis.clients.jedis.Jedis;
 
@@ -20,9 +21,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class RedisFacadeTest {
 
+    @Container
+    static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:5.0.3-alpine")).withExposedPorts(6379);
+
     @BeforeEach
     public void setUp() {
-        GenericContainer redis = new GenericContainer(DockerImageName.parse("redis:5.0.3-alpine")).withExposedPorts(6379);
         redis.start();
 
         String host = redis.getHost();

@@ -14,6 +14,7 @@ import org.eclipse.dirigible.commons.config.Configuration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.RabbitMQContainer;
+import org.testcontainers.junit.jupiter.Container;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -21,11 +22,14 @@ public class RabbitMQFacadeTest {
 
     private static final String message = "testMessage";
     private static final String queue = "test-queue";
+
+    @Container
+    static RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:3.8.19-alpine");
+
     LogCaptor logCaptor = LogCaptor.forClass(RabbitMQFacade.class);
 
     @BeforeEach
     public void setUp() {
-        RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:3.8.19-alpine");
         rabbit.start();
 
         String host = rabbit.getHost();
