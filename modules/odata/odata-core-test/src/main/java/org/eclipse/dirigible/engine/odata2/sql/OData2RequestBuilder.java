@@ -9,24 +9,11 @@
  */
 package org.eclipse.dirigible.engine.odata2.sql;
 
-import static org.apache.olingo.odata2.api.commons.ODataHttpMethod.GET;
-import static org.apache.olingo.odata2.api.commons.ODataHttpMethod.POST;
-import static org.apache.olingo.odata2.api.commons.ODataHttpMethod.PUT;
-import static org.easymock.EasyMock.capture;
-import static org.easymock.EasyMock.expect;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map.Entry;
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletInputStream;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.ws.rs.core.*;
 import org.apache.cxf.helpers.IOUtils;
 import org.apache.cxf.jaxrs.impl.MetadataMap;
 import org.apache.cxf.jaxrs.impl.PathSegmentImpl;
@@ -46,22 +33,22 @@ import org.apache.olingo.odata2.core.batch.BatchHandlerImpl;
 import org.apache.olingo.odata2.core.processor.ODataSingleProcessorService;
 import org.apache.olingo.odata2.core.rest.ODataSubLocator;
 import org.apache.olingo.odata2.core.rest.SubLocatorParameter;
-import org.easymock.Capture;
-import org.easymock.CaptureType;
-import org.easymock.EasyMock;
-import org.easymock.EasyMockSupport;
-import org.easymock.IAnswer;
+import org.easymock.*;
 import org.eclipse.dirigible.engine.odata2.sql.processor.DefaultSQLProcessor;
-import jakarta.servlet.ServletContext;
-import jakarta.servlet.ServletInputStream;
-import jakarta.servlet.ServletRequest;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.ws.rs.core.HttpHeaders;
-import jakarta.ws.rs.core.MultivaluedMap;
-import jakarta.ws.rs.core.PathSegment;
-import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.core.UriInfo;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import java.util.Map.Entry;
+
+import static org.apache.olingo.odata2.api.commons.ODataHttpMethod.*;
+import static org.easymock.EasyMock.capture;
+import static org.easymock.EasyMock.expect;
 
 /**
  * Base class for OData API tests, which can be used to simulate calls to the OData API without
@@ -74,7 +61,6 @@ import jakarta.ws.rs.core.UriInfo;
  * {@link OData2RequestBuilder#enrichServletContextMock(ServletContext)} and
  * {@link OData2RequestBuilder#enrichServletRequestMock(ServletRequest)} methods to provide the
  * handles to you mock data.
- *
  */
 public class OData2RequestBuilder {
 
@@ -163,28 +149,6 @@ public class OData2RequestBuilder {
     }
 
     /**
-     * Service factory.
-     *
-     * @param serviceFactory serviceFactory
-     * @return OData2RequestBuilder
-     */
-    public OData2RequestBuilder serviceFactory(ODataServiceFactory serviceFactory) {
-        this.serviceFactory = serviceFactory;
-        return this;
-    }
-
-    /**
-     * Creates the request.
-     *
-     * @param sf ODataServiceFactory
-     * @return OData2RequestBuilder
-     */
-    public static OData2RequestBuilder createRequest(ODataServiceFactory sf) {
-        final OData2RequestBuilder request = new OData2RequestBuilder();
-        return request.serviceFactory(sf);
-    }
-
-    /**
      * This methods executes an OData Request based on applied parameters and mocked REST layer.
      *
      * @param method Mandatory parameter defining Http Method to be used for the request. Expected
@@ -213,7 +177,7 @@ public class OData2RequestBuilder {
         headersMap.add("cache-control", "no-cache");
         headersMap.add("connection", "keep-alive");
         headersMap.add("Content-Type", "application/json");
-        headersMap.add("host", HOST + "" + PORT);
+        headersMap.add("host", HOST + PORT);
         headersMap.add("user-agent", "Mozilla/5.0");
         expect(httpHeaders.getRequestHeaders()).andReturn(headersMap);
         final Capture<String> nameCapture = Capture.newInstance(CaptureType.LAST);
@@ -293,42 +257,6 @@ public class OData2RequestBuilder {
         return response;
     }
 
-
-
-    /**
-     * Execute batch request.
-     *
-     * @param batch the batch
-     * @return the o data response
-     * @throws IOException Signals that an I/O exception has occurred.
-     * @throws URISyntaxException the URI syntax exception
-     * @throws ODataException the o data exception
-     */
-    public ODataResponse executeBatchRequest(List<BatchPart> batch) throws IOException, URISyntaxException, ODataException {
-        InputStream body = EntityProvider.writeBatchRequest(batch, "batch_1");
-        String batchRequestBody = IOUtils.toString(body);
-
-        PathInfoImpl pathInfo = new PathInfoImpl();
-        pathInfo.setServiceRoot(new URI("https://localhost:8080/odata/v2"));
-        pathInfo.setODataPathSegment(Collections.singletonList(new ODataPathSegmentImpl("$batch", null)));
-        ODataRequest batchRequest = ODataRequest.method(POST)
-                                                .contentType("application/json")
-                                                .pathInfo(pathInfo)
-                                                .acceptableLanguages(Collections.singletonList(Locale.ENGLISH))
-                                                .build();
-
-        ODataContext testContext = new ODataContextImpl(batchRequest, serviceFactory);
-
-        ODataSingleProcessorService service = (ODataSingleProcessorService) serviceFactory.createService(testContext);
-        DefaultSQLProcessor proc = (DefaultSQLProcessor) service.getProcessor();
-        proc.setContext(testContext);
-        BatchHandlerImpl handler = new BatchHandlerImpl(serviceFactory, service);
-
-        return proc.executeBatch(handler, "multipart/mixed; boundary=batch_1",
-                new ByteArrayInputStream(batchRequestBody.getBytes(StandardCharsets.UTF_8)));
-    }
-
-
     /**
      * Gets the servlet input stream.
      *
@@ -341,34 +269,24 @@ public class OData2RequestBuilder {
             final HttpServletRequest servletRequest) throws IOException {
         @SuppressWarnings("resource")
         final ServletInputStream contentInputStream = easyMockSupport.createMock(ServletInputStream.class); // NOSONAR mock doesn't have to
-                                                                                                            // be closed
+        // be closed
         if (method.equals(POST) || method.equals(PUT)) {
             expect(contentInputStream.available()).andReturn(0)
                                                   .anyTimes();
             if (contentSize > 0) {
-                expect(contentInputStream.read(EasyMock.anyObject())).andReturn(contentSize)
-                                                                     .times(1)
-                                                                     .andReturn(-1)
-                                                                     .times(1)
-                                                                     .andReturn(0)
-                                                                     .anyTimes();
+                expect(contentInputStream.read(EasyMock.anyObject(ByteBuffer.class))).andReturn(contentSize)
+                                                                                     .times(1)
+                                                                                     .andReturn(-1)
+                                                                                     .times(1)
+                                                                                     .andReturn(0)
+                                                                                     .anyTimes();
             } else {
-                expect(contentInputStream.read(EasyMock.anyObject())).andReturn(contentSize)
-                                                                     .times(1);
+                expect(contentInputStream.read(EasyMock.anyObject(ByteBuffer.class))).andReturn(contentSize)
+                                                                                     .times(1);
             }
         }
         expect(servletRequest.getInputStream()).andReturn(contentInputStream)
                                                .atLeastOnce();
-    }
-
-    /**
-     * Content.
-     *
-     * @param content the content
-     * @return OData2RequestBuilder
-     */
-    public OData2RequestBuilder content(@SuppressWarnings("unused") final String content) { // NOSONAR to be overridden by subclasses
-        return this;
     }
 
     /**
@@ -388,7 +306,6 @@ public class OData2RequestBuilder {
      * {@link ServletContext} reference, for instance.
      *
      * @param servletRequest the EasyMock instance of the {@link ServletRequest}.
-     *
      */
     protected void enrichServletRequestMock(final ServletRequest servletRequest) {
         // default implementation is empty
@@ -438,6 +355,71 @@ public class OData2RequestBuilder {
      */
     private String absoluteServiceRoot() {
         return PROTOCOL + "://" + HOST + ":" + PORT + RELATIVE_SERVICE_ROOT;
+    }
+
+    /**
+     * Creates the request.
+     *
+     * @param sf ODataServiceFactory
+     * @return OData2RequestBuilder
+     */
+    public static OData2RequestBuilder createRequest(ODataServiceFactory sf) {
+        final OData2RequestBuilder request = new OData2RequestBuilder();
+        return request.serviceFactory(sf);
+    }
+
+    /**
+     * Service factory.
+     *
+     * @param serviceFactory serviceFactory
+     * @return OData2RequestBuilder
+     */
+    public OData2RequestBuilder serviceFactory(ODataServiceFactory serviceFactory) {
+        this.serviceFactory = serviceFactory;
+        return this;
+    }
+
+    /**
+     * Execute batch request.
+     *
+     * @param batch the batch
+     * @return the o data response
+     * @throws IOException Signals that an I/O exception has occurred.
+     * @throws URISyntaxException the URI syntax exception
+     * @throws ODataException the o data exception
+     */
+    public ODataResponse executeBatchRequest(List<BatchPart> batch) throws IOException, URISyntaxException, ODataException {
+        InputStream body = EntityProvider.writeBatchRequest(batch, "batch_1");
+        String batchRequestBody = IOUtils.toString(body);
+
+        PathInfoImpl pathInfo = new PathInfoImpl();
+        pathInfo.setServiceRoot(new URI("https://localhost:8080/odata/v2"));
+        pathInfo.setODataPathSegment(Collections.singletonList(new ODataPathSegmentImpl("$batch", null)));
+        ODataRequest batchRequest = ODataRequest.method(POST)
+                                                .contentType("application/json")
+                                                .pathInfo(pathInfo)
+                                                .acceptableLanguages(Collections.singletonList(Locale.ENGLISH))
+                                                .build();
+
+        ODataContext testContext = new ODataContextImpl(batchRequest, serviceFactory);
+
+        ODataSingleProcessorService service = (ODataSingleProcessorService) serviceFactory.createService(testContext);
+        DefaultSQLProcessor proc = (DefaultSQLProcessor) service.getProcessor();
+        proc.setContext(testContext);
+        BatchHandlerImpl handler = new BatchHandlerImpl(serviceFactory, service);
+
+        return proc.executeBatch(handler, "multipart/mixed; boundary=batch_1",
+                new ByteArrayInputStream(batchRequestBody.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    /**
+     * Content.
+     *
+     * @param content the content
+     * @return OData2RequestBuilder
+     */
+    public OData2RequestBuilder content(@SuppressWarnings("unused") final String content) { // NOSONAR to be overridden by subclasses
+        return this;
     }
 
 }
