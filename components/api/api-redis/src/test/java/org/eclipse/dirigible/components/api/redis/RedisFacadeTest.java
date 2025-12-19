@@ -3,6 +3,8 @@ package org.eclipse.dirigible.components.api.redis;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -11,6 +13,7 @@ import redis.clients.jedis.Jedis;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+@DisabledOnOs(OS.WINDOWS)
 @Testcontainers
 public class RedisFacadeTest {
 
