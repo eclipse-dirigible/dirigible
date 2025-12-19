@@ -9,17 +9,7 @@
  */
 package org.eclipse.dirigible.components.openapi.synchronizer;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
-import java.io.IOException;
-import java.nio.file.Path;
-import java.text.ParseException;
-import java.util.List;
-
 import jakarta.persistence.EntityManager;
-
 import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
@@ -34,9 +24,16 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.text.ParseException;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * The Class OpenAPISynchronizerTest.
@@ -49,29 +46,34 @@ import org.springframework.transaction.annotation.Transactional;
 class OpenAPISynchronizerTest {
 
     /**
+     * The entity manager.
+     */
+    @Autowired
+    EntityManager entityManager;
+    /**
      * The openapi repository.
      */
     @Autowired
     private OpenAPIRepository openAPIRepository;
-
     /**
      * The openapi synchronizer.
      */
     @Autowired
     private OpenAPISynchronizer openAPISynchronizer;
-
-    /**
-     * The entity manager.
-     */
-    @Autowired
-    EntityManager entityManager;
-
-    @MockBean
+    @MockitoBean
     private TenantContext tenantContext;
 
-    @MockBean
+    @MockitoBean
     @DefaultTenant
     private Tenant defaultTenant;
+
+
+    /**
+     * The Class TestConfiguration.
+     */
+    @SpringBootApplication
+    static class TestConfiguration {
+    }
 
     /**
      * Setup.
@@ -132,13 +134,6 @@ class OpenAPISynchronizerTest {
         assertNotNull(list);
         assertEquals("/META-INF/dirigible/test/test.openapi", list.get(0)
                                                                   .getLocation());
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 
 }

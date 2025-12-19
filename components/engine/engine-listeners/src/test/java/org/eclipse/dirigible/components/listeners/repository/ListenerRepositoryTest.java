@@ -23,10 +23,10 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.annotation.DirtiesContext.ClassMode;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -55,11 +55,11 @@ public class ListenerRepositoryTest {
     private EntityManager entityManager;
 
     /** The tenant context. */
-    @MockBean
+    @MockitoBean
     private TenantContext tenantContext;
 
     /** The tenant. */
-    @MockBean
+    @MockitoBean
     @DefaultTenant
     private Tenant tenant;
 
