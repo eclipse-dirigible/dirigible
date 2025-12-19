@@ -11,13 +11,15 @@ package org.eclipse.dirigible.components.api.rabbitmq;
 
 import nl.altindag.log.LogCaptor;
 import org.eclipse.dirigible.commons.config.Configuration;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+@Testcontainers
 public class RabbitMQFacadeTest {
 
     private static final String message = "testMessage";
@@ -28,13 +30,9 @@ public class RabbitMQFacadeTest {
 
     LogCaptor logCaptor = LogCaptor.forClass(RabbitMQFacade.class);
 
-    @BeforeEach
-    public void setUp() {
-        rabbit.start();
-
-        String host = rabbit.getHost();
-        Integer port = rabbit.getFirstMappedPort();
-        Configuration.set("DIRIGIBLE_RABBITMQ_CLIENT_URI", host + ":" + port);
+    @BeforeAll
+    static void setUp() {
+        Configuration.set("DIRIGIBLE_RABBITMQ_CLIENT_URI", rabbit.getHost() + ":" + rabbit.getFirstMappedPort());
     }
 
     @Test
