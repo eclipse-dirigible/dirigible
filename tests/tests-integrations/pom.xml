@@ -75,10 +75,10 @@
             <scope>compile</scope>
         </dependency>
         <dependency>
-        	<groupId>org.eclipse.dirigible</groupId>
-        	<artifactId>
-        		dirigible-components-core-initializers
-        	</artifactId>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>
+                dirigible-components-core-initializers
+            </artifactId>
         </dependency>
         <dependency>
             <groupId>org.webjars.npm</groupId>
