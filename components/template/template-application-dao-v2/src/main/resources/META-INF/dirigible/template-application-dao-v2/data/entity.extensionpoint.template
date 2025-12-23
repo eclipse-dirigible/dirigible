@@ -1,0 +1,4 @@
+{
+    "name": "${projectName}-${perspectiveName}-${name}",
+    "description": "Extension Point for the ${projectName}-${perspectiveName}-${name} entity"
+}

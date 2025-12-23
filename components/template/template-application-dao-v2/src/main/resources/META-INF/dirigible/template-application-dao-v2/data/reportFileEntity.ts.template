@@ -1,0 +1,71 @@
+#set($dollar = '$')
+import { Query, NamedQueryParameter } from "@aerokit/sdk/db";
+
+export interface ${name} {
+#foreach ($column in $columns)
+    readonly '${column.alias}': ${column.typeTypescript};
+#end
+}
+
+export interface ${name}Filter {
+#foreach ($parameter in $parameters)
+    readonly '${parameter.name}?': ${parameter.typeTypescript};
+#end
+}
+
+export interface ${name}PaginatedFilter extends ${name}Filter {
+    readonly "$limit"?: number;
+    readonly "$offset"?: number;
+}
+
+export class ${name}Repository {
+
+    private readonly datasourceName?: string;
+
+    constructor(datasourceName?: string) {
+        this.datasourceName = datasourceName;
+    }
+
+    public findAll(filter: ${name}PaginatedFilter): ${name}[] {
+        const sql = `
+#foreach($queryLine in $queryLines)
+            ${queryLine}
+#end
+            ${dollar}{Number.isInteger(filter.$limit) ? ` LIMIT ${dollar}{filter.$limit}` : ''}
+            ${dollar}{Number.isInteger(filter.$offset) ? ` OFFSET ${dollar}{filter.$offset}` : ''}
+        `;
+
+        const parameters: NamedQueryParameter[] = [];
+#foreach($parameter in $parameters)
+        parameters.push({
+            name: `${parameter.name}`,
+            type: `${parameter.type}`,
+            value: filter['${parameter.name}'] !== undefined ? #if($parameter.typeTypescript == 'string' && $parameter.isLikeCondition) `%${dollar}{filter['${parameter.name}']}%`#else filter['${parameter.name}']#end : `${parameter.initial}`
+        });
+#end
+
+        return Query.executeNamed(sql, parameters, this.datasourceName);
+    }
+
+    public count(filter: ${name}Filter): number {
+        const sql = `
+            SELECT COUNT(*) as REPORT_COUNT FROM (
+#foreach($queryLine in $queryLines)
+                ${queryLine}
+#end
+            )
+        `;
+
+        const parameters: NamedQueryParameter[] = [];
+#foreach($parameter in $parameters)
+        parameters.push({
+            name: `${parameter.name}`,
+            type: `${parameter.type}`,
+            value: filter.${parameter.name} !== undefined ? #if($parameter.typeTypescript == 'string' && $parameter.isLikeCondition) `%${dollar}{filter.${parameter.name}}%`#else filter.${parameter.name}#end : `${parameter.initial}`
+        });
+#end
+
+        return Query.executeNamed(sql, parameters, this.datasourceName)[0].REPORT_COUNT;
+    }
+
+}

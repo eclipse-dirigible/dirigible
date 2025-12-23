@@ -232,7 +232,9 @@
         <!-- Templates -->
         <module>template/template-application-angular</module>
         <module>template/template-application-dao</module>
+        <module>template/template-application-dao-v2</module>
         <module>template/template-application-data</module>
+        <module>template/template-application-data-v2</module>
         <module>template/template-application-feed</module>
         <module>template/template-application-odata</module>
         <module>template/template-application-rest</module>
@@ -1320,7 +1322,17 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-template-application-dao-v2</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-template-application-data</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-template-application-data-v2</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

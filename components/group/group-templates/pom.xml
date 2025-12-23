@@ -25,7 +25,15 @@
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-template-application-dao-v2</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-template-application-data</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-template-application-data-v2</artifactId>
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>

@@ -84,7 +84,8 @@ public class EntityToHbmMapper {
 
                               HbmXmlDescriptor.HbmPropertyDescriptor propDesc =
                                       new HbmXmlDescriptor.HbmPropertyDescriptor(field.getPropertyName(), mappedColumnName,
-                                              mapType(field.getTypeScriptType(), cd.getDatabaseType()), cd.getLength());
+                                              mapType(field.getTypeScriptType(), cd.getDatabaseType()), cd.getLength(), cd.isNullable(),
+                                              cd.getDefaultValue(), cd.getPrecision(), cd.getScale());
                               hbmDesc.addProperty(propDesc);
                           }
                       });
@@ -103,6 +104,7 @@ public class EntityToHbmMapper {
         // Clean up the TypeScript type (remove '| null' for easier matching)
         String cleanTsType = tsType.toLowerCase()
                                    .replace(" | null", "")
+                                   .replace(" | undefined", "")
                                    .trim();
         String cleanDbType = (dbType != null) ? dbType.toLowerCase()
                                                       .trim()

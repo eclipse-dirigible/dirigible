@@ -33,10 +33,10 @@ export abstract class Repository<T extends Record<string, any>> {
         // Caches entity metadata (name, table, id) onto the constructor function for static access
 		if (!this.entityConstructor.$entity_name) {
             // Assumes store methods return non-null strings
-			this.entityConstructor.$entity_name = (store as any).getEntityName(this.entityConstructor.name);
-			this.entityConstructor.$table_name = (store as any).getTableName(this.entityConstructor.name);
-			this.entityConstructor.$id_name = (store as any).getIdName(this.entityConstructor.name);
-			this.entityConstructor.$id_column = (store as any).getIdColumn(this.entityConstructor.name);
+			this.entityConstructor.$entity_name = store.getEntityName(this.entityConstructor.name);
+			this.entityConstructor.$table_name = store.getTableName(this.entityConstructor.name);
+			this.entityConstructor.$id_name = store.getIdName(this.entityConstructor.name);
+			this.entityConstructor.$id_column = store.getIdColumn(this.entityConstructor.name);
 		}
     }
 
@@ -62,8 +62,8 @@ export abstract class Repository<T extends Record<string, any>> {
      */
     public findAll(options: Options = {}): T[] {
         // Assume store.list returns T[] but we explicitly cast it to T[]
-        const list: T[] = (store as any).list(this.getEntityName(), options);
-        (translator as any).translateList(list, options.language, this.getTableName());
+        const list: T[] = store.list(this.getEntityName(), options);
+        translator.translateList(list, options.language, this.getTableName());
         return list;
     }
 
@@ -72,8 +72,8 @@ export abstract class Repository<T extends Record<string, any>> {
      */
     public findById(id: number | string, options: Options = {}): T | undefined {
         // Assume store.get returns T or null/undefined
-        const entity: T | null = (store as any).get(this.getEntityName(), id);
-        (translator as any).translateEntity(entity, id, options.language, this.getTableName());
+        const entity: T | null = store.get(this.getEntityName(), id);
+        translator.translateEntity(entity, id, options.language, this.getTableName());
         return entity ?? undefined;
     }
 
@@ -82,7 +82,7 @@ export abstract class Repository<T extends Record<string, any>> {
      * @returns The generated ID (string or number).
      */
     public create(entity: T): string | number {
-        const id = (store as any).save(this.getEntityName(), entity);
+        const id = store.save(this.getEntityName(), entity);
         this.triggerEvent({
             operation: "create",
             table: this.getTableName(),
@@ -107,7 +107,7 @@ export abstract class Repository<T extends Record<string, any>> {
         // Retrieve the entity state before update for the event payload
         const previousEntity = this.findById(id);
 
-        (store as any).update(this.getEntityName(), entity);
+        store.update(this.getEntityName(), entity);
         
         this.triggerEvent({
             operation: "update",
@@ -132,18 +132,18 @@ export abstract class Repository<T extends Record<string, any>> {
         
         // If no ID is present, save (create)
         if (id === null || id === undefined) {
-            return (store as any).save(this.getEntityName(), entity);
+            return store.save(this.getEntityName(), entity);
         }
 
         // If ID is present, check existence
-        const existingEntity = (store as any).get(this.getEntityName(), id);
+        const existingEntity = store.get(this.getEntityName(), id);
         
         if (existingEntity) {
             this.update(entity);
             return id;
         } else {
             // ID exists, but entity does not -> save (create with provided ID)
-            return (store as any).save(this.getEntityName(), entity);
+            return store.save(this.getEntityName(), entity);
         }
     }
 
@@ -152,9 +152,9 @@ export abstract class Repository<T extends Record<string, any>> {
      */
     public deleteById(id: number | string): void {
         // Retrieve entity before removal for the event payload
-        const entity = (store as any).get(this.getEntityName(), id);
+        const entity = store.get(this.getEntityName(), id);
         
-        (store as any).remove(this.getEntityName(), id);
+        store.remove(this.getEntityName(), id);
 
         this.triggerEvent({
             operation: "delete",
@@ -172,7 +172,7 @@ export abstract class Repository<T extends Record<string, any>> {
      * Counts the number of entities matching the given options.
      */
     public count(options?: Options): number {
-        return (store as any).count(this.getEntityName(), options);
+        return store.count(this.getEntityName(), options);
     }
 
     /**
