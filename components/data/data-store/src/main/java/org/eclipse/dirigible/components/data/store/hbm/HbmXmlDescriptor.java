@@ -137,6 +137,12 @@ public class HbmXmlDescriptor {
         /** The length. */
         private final Integer length;
 
+        /** The nullable. */
+        private final boolean nullable;
+
+        /** The defaultValue. */
+        private final String defaultValue;
+
         /**
          * Instantiates a new hbm property descriptor.
          *
@@ -144,12 +150,16 @@ public class HbmXmlDescriptor {
          * @param column the column
          * @param type the type
          * @param length the length
+         * @param nullable the nullable
+         * @param defaultValue the defaultValue
          */
-        public HbmPropertyDescriptor(String name, String column, String type, Integer length) {
+        public HbmPropertyDescriptor(String name, String column, String type, Integer length, boolean nullable, String defaultValue) {
             this.name = name;
             this.column = column;
             this.type = type;
             this.length = length;
+            this.nullable = nullable;
+            this.defaultValue = defaultValue;
         }
 
         /**
@@ -187,6 +197,25 @@ public class HbmXmlDescriptor {
         public Integer getLength() {
             return length;
         }
+
+        /**
+         * Gets the nullable.
+         *
+         * @return the nullable
+         */
+        public boolean isNullable() {
+            return nullable;
+        }
+
+        /**
+         * Gets the defaultValue.
+         *
+         * @return the defaultValue
+         */
+        public String getDefaultValue() {
+            return defaultValue;
+        }
+
     }
 
 
@@ -529,8 +558,9 @@ public class HbmXmlDescriptor {
         // --- Property Elements ---
         for (HbmPropertyDescriptor prop : this.properties) {
             String lengthAttr = prop.getLength() != null ? String.format(" length=\"%d\"", prop.getLength()) : "";
-            xml.append(String.format("        <property name=\"%s\" column=\"`%s`\" type=\"%s\"%s/>\n", prop.getName(), prop.getColumn(),
-                    prop.getType(), lengthAttr));
+            String nullableAttr = prop.isNullable() ? " nullable=\"true\"" : "";
+            xml.append(String.format("        <property name=\"%s\" column=\"`%s`\" type=\"%s\"%s%s/>\n", prop.getName(), prop.getColumn(),
+                    prop.getType(), lengthAttr, nullableAttr));
         }
 
         // --- Collection Elements ---
