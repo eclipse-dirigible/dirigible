@@ -54,14 +54,17 @@ export class ${name}Entity {
     #if($property.dataLength && $property.dataType != "DECIMAL")
         length: ${property.dataLength},
     #end
+    #if($property.dataPrecision)
+        precision: ${property.dataPrecision},
+    #end
+    #if($property.dataScale)
+        scale: ${property.dataScale},
+    #end
     #if(!$property.dataPrimaryKey && !$property.dataNotNull)
         nullable: true,
     #end
-    #if($property.dataDefaultValue)
-        defaultValue: `${property.dataDefaultValue}`,
-    #end
     })
-    public ${property.name}#if(!$property.dataPrimaryKey && !$property.isCalculatedProperty && !$property.dataDefaultValue && ($property.dataNotNull || $property.isRequiredProperty))!:#else?:#end ${property.dataTypeTypescript};
+    public ${property.name}#if(!$property.dataPrimaryKey && !$property.isCalculatedProperty && !$property.dataDefaultValue && ($property.dataNotNull || $property.isRequiredProperty))!:#else?:#end ${property.dataTypeTypescript}#if($property.dataDefaultValue) = ${property.dataDefaultValue}#end;
 
 #end
 }

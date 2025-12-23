@@ -83,10 +83,9 @@ public class EntityToHbmMapper {
                                              .toUpperCase();
 
                               HbmXmlDescriptor.HbmPropertyDescriptor propDesc =
-                                      // TODO: Add support for "precision" and "scale"!
                                       new HbmXmlDescriptor.HbmPropertyDescriptor(field.getPropertyName(), mappedColumnName,
                                               mapType(field.getTypeScriptType(), cd.getDatabaseType()), cd.getLength(), cd.isNullable(),
-                                              cd.getDefaultValue());
+                                              cd.getDefaultValue(), cd.getPrecision(), cd.getScale());
                               hbmDesc.addProperty(propDesc);
                           }
                       });

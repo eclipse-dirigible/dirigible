@@ -143,6 +143,12 @@ public class HbmXmlDescriptor {
         /** The defaultValue. */
         private final String defaultValue;
 
+        /** The precision. */
+        private final Integer precision;
+
+        /** The scale. */
+        private final Integer scale;
+
         /**
          * Instantiates a new hbm property descriptor.
          *
@@ -152,14 +158,19 @@ public class HbmXmlDescriptor {
          * @param length the length
          * @param nullable the nullable
          * @param defaultValue the defaultValue
+         * @param precision the precision
+         * @param scale the scale
          */
-        public HbmPropertyDescriptor(String name, String column, String type, Integer length, boolean nullable, String defaultValue) {
+        public HbmPropertyDescriptor(String name, String column, String type, Integer length, boolean nullable, String defaultValue,
+                Integer precision, Integer scale) {
             this.name = name;
             this.column = column;
             this.type = type;
             this.length = length;
             this.nullable = nullable;
             this.defaultValue = defaultValue;
+            this.precision = precision;
+            this.scale = scale;
         }
 
         /**
@@ -214,6 +225,24 @@ public class HbmXmlDescriptor {
          */
         public String getDefaultValue() {
             return defaultValue;
+        }
+
+        /**
+         * Gets the precision.
+         *
+         * @return the precision
+         */
+        public Integer getPrecision() {
+            return precision;
+        }
+
+        /**
+         * Gets the scale.
+         *
+         * @return the scale
+         */
+        public Integer getScale() {
+            return scale;
         }
 
     }
@@ -559,8 +588,10 @@ public class HbmXmlDescriptor {
         for (HbmPropertyDescriptor prop : this.properties) {
             String lengthAttr = prop.getLength() != null ? String.format(" length=\"%d\"", prop.getLength()) : "";
             String nullableAttr = prop.isNullable() ? " nullable=\"true\"" : "";
-            xml.append(String.format("        <property name=\"%s\" column=\"`%s`\" type=\"%s\"%s%s/>\n", prop.getName(), prop.getColumn(),
-                    prop.getType(), lengthAttr, nullableAttr));
+            String precisionAttr = prop.getPrecision() != null ? String.format(" precision=\"%d\"", prop.getPrecision()) : "";
+            String scaleAttr = prop.getScale() != null ? String.format(" scale=\"%d\"", prop.getScale()) : "";
+            xml.append(String.format("        <property name=\"%s\" column=\"`%s`\" type=\"%s\"%s%s%s%s/>\n", prop.getName(), prop.getColumn(),
+                    prop.getType(), lengthAttr, nullableAttr, precisionAttr, scaleAttr));
         }
 
         // --- Collection Elements ---

@@ -44,6 +44,8 @@ export interface ColumnOptions {
   length?: number;
   nullable?: boolean;
   defaultValue?: string;
+  precision?: number;
+  scale?: number;
 }
 
 export interface OneToManyOptions {
