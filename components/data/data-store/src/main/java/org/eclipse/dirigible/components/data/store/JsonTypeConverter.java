@@ -216,6 +216,32 @@ public class JsonTypeConverter {
                         continue;
                     }
 
+                    if (dbType.contains("double")) {
+                        if (value instanceof Number) {
+                            data.put(prop, Double.valueOf(value.toString()));
+                        } else if (value instanceof String) {
+                            try {
+                                data.put(prop, Double.valueOf((String) value));
+                            } catch (NumberFormatException e) {
+                                // ignore
+                            }
+                        }
+                        continue;
+                    }
+
+                    if (dbType.contains("float") || dbType.contains("real")) {
+                        if (value instanceof Number) {
+                            data.put(prop, Float.valueOf(value.toString()));
+                        } else if (value instanceof String) {
+                            try {
+                                data.put(prop, Float.valueOf((String) value));
+                            } catch (NumberFormatException e) {
+                                // ignore
+                            }
+                        }
+                        continue;
+                    }
+
                     if (dbType.contains("blob") || dbType.contains("bytea") || dbType.contains("binary")) {
                         if (value instanceof String) {
                             Object parsed = tryParseTemporalOrBinary((String) value, prop);
@@ -228,6 +254,13 @@ public class JsonTypeConverter {
 
                     // Integer types
                     if (dbType.contains("bigint")) {
+                        if (value instanceof Number) {
+                            data.put(prop, Long.valueOf(((Number) value).longValue()));
+                        }
+                        continue;
+                    }
+
+                    if (dbType.contains("long")) {
                         if (value instanceof Number) {
                             data.put(prop, Long.valueOf(((Number) value).longValue()));
                         }

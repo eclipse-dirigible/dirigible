@@ -42,7 +42,23 @@ export class ${name}Repository extends Repository<${name}Entity> {
     }
 
 #end
-    protected override async triggerEvent(data: EntityEvent<${name}Entity>) {
+#if($haveCalculatedPropertyOnCreate || $haveCalculatedPropertyOnUpdate)
+    public override upsert(entity: ${name}Entity): string | number {
+    #foreach ($property in $properties)
+        #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
+        entity.${property.name} = ${property.calculatedPropertyExpressionCreate};
+        #end
+    #end
+    #foreach ($property in $properties)
+        #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate)
+        entity.${property.name} = ${property.calculatedPropertyExpressionUpdate};
+        #end
+    #end
+        return super.upsert(entity);
+    }
+
+#end
+    protected override async triggerEvent(data: EntityEvent<${name}Entity>): Promise<void> {
         const triggerExtensions = await Extensions.loadExtensionModules('${projectName}-${perspectiveName}-${name}', ['trigger']);
         triggerExtensions.forEach(triggerExtension => {
             try {
