@@ -399,7 +399,7 @@ public class DataStore {
      * @param options the options
      * @return the list
      */
-    public List<Map> list(String type, QueryOptions options) {
+    public List<Map> list(String type, DynamicQueryFilter.QueryOptions options) {
         try (Session session = getSessionFactory().openSession()) {
             List<Map> matchingItems = DynamicQueryFilter.list(session, type, options);
             return matchingItems;
@@ -415,7 +415,7 @@ public class DataStore {
      */
     public List<Map> list(String type, String options) {
         if (options != null) {
-            QueryOptions queryOptions = JsonHelper.fromJson(options, QueryOptions.class);
+            DynamicQueryFilter.QueryOptions queryOptions = JsonHelper.fromJson(options, DynamicQueryFilter.QueryOptions.class);
             return list(type, queryOptions);
         }
         return list(type);
@@ -428,7 +428,7 @@ public class DataStore {
      * @param options the options
      * @return the count
      */
-    public long count(String type, QueryOptions options) {
+    public long count(String type, DynamicQueryFilter.QueryOptions options) {
         try (Session session = getSessionFactory().openSession()) {
             long count = DynamicQueryFilter.count(session, type, options);
             return count;
@@ -444,7 +444,7 @@ public class DataStore {
      */
     public long count(String type, String options) {
         if (options != null) {
-            QueryOptions queryOptions = JsonHelper.fromJson(options, QueryOptions.class);
+            DynamicQueryFilter.QueryOptions queryOptions = JsonHelper.fromJson(options, DynamicQueryFilter.QueryOptions.class);
             return count(type, queryOptions);
         }
         return count(type);

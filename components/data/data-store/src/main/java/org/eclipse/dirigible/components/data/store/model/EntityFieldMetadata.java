@@ -243,10 +243,10 @@ public class EntityFieldMetadata {
 
         /** The default value. */
         private String defaultValue;
-        
+
         /** The precision. */
         private Integer precision;
-        
+
         /** The scale. */
         private Integer scale;
 
@@ -344,7 +344,7 @@ public class EntityFieldMetadata {
          * Gets the precision.
          *
          * @return the precision
-         */        
+         */
         public Integer getPrecision() {
             return precision;
         }
@@ -353,7 +353,7 @@ public class EntityFieldMetadata {
          * Sets the precision.
          *
          * @param precision the new precision
-         */        
+         */
         public void setPrecision(Integer precision) {
             this.precision = precision;
         }
@@ -362,7 +362,7 @@ public class EntityFieldMetadata {
          * Gets the scale.
          *
          * @return the scale
-         */        
+         */
         public Integer getScale() {
             return scale;
         }
@@ -371,7 +371,7 @@ public class EntityFieldMetadata {
          * Sets the scale.
          *
          * @param scale the new scale
-         */        
+         */
         public void setScale(Integer scale) {
             this.scale = scale;
         }

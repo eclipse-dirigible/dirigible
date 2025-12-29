@@ -82,10 +82,9 @@ public class EntityToHbmMapper {
                                       : field.getPropertyName()
                                              .toUpperCase();
 
-                              HbmXmlDescriptor.HbmPropertyDescriptor propDesc =
-                                      new HbmXmlDescriptor.HbmPropertyDescriptor(field.getPropertyName(), mappedColumnName,
-                                              mapType(field.getTypeScriptType(), cd.getDatabaseType()), cd.getLength(), cd.isNullable(),
-                                              cd.getDefaultValue(), cd.getPrecision(), cd.getScale());
+                              HbmXmlDescriptor.HbmPropertyDescriptor propDesc = new HbmXmlDescriptor.HbmPropertyDescriptor(
+                                      field.getPropertyName(), mappedColumnName, mapType(field.getTypeScriptType(), cd.getDatabaseType()),
+                                      cd.getLength(), cd.isNullable(), cd.getDefaultValue(), cd.getPrecision(), cd.getScale());
                               hbmDesc.addProperty(propDesc);
                           }
                       });

@@ -13,135 +13,67 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
-
 import org.hibernate.Session;
-import org.hibernate.SessionFactory;
 import org.hibernate.query.Query;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import com.google.gson.annotations.Expose;
-
-import jakarta.persistence.EntityManager;
-
-/**
- * Defines the supported relational and logical operators for dynamic filtering.
- */
-enum Operator {
-    EQ("="), // Equals
-    NE("<>"), // Not Equals
-    GT(">"), // Greater Than
-    LT("<"), // Less Than
-    GE(">="), // Greater Than or Equals
-    LE("<="), // Less Than or Equals
-    LIKE("LIKE"), // SQL LIKE operator
-    BETWEEN("BETWEEN"), // SQL BETWEEN operator (requires two values)
-    IN("IN"); // SQL IN operator (requires a List or Array of values)
-
-    private final String sqlEquivalent;
-
-    Operator(String sqlEquivalent) {
-        this.sqlEquivalent = sqlEquivalent;
-    }
-
-    public String getSqlEquivalent() {
-        return sqlEquivalent;
-    }
-}
-
-
-/**
- * Encapsulates a single filtering condition for a dynamic query.
- */
-class QueryCondition {
-    @Expose
-    public final String propertyName;
-    @Expose
-    public final Operator operator;
-    @Expose
-    public final Object value; // Can be a single value, or an array/list for BETWEEN/IN
-
-    public QueryCondition(String propertyName, Operator operator, Object value) {
-        this.propertyName = propertyName;
-        this.operator = operator;
-        this.value = value;
-    }
-
-    /**
-     * Factory method for simple single-value conditions (EQ, GT, LT, etc.)
-     */
-    public static QueryCondition of(String propertyName, Operator operator, Object value) {
-        return new QueryCondition(propertyName, operator, value);
-    }
-
-    /**
-     * Factory method for BETWEEN conditions, which take two bounds.
-     */
-    public static QueryCondition between(String propertyName, Object lowerBound, Object upperBound) {
-        return new QueryCondition(propertyName, Operator.BETWEEN, new Object[] {lowerBound, upperBound});
-    }
-
-    /**
-     * Factory method for IN conditions, which take a collection of values.
-     */
-    public static QueryCondition in(String propertyName, List<?> values) {
-        return new QueryCondition(propertyName, Operator.IN, values);
-    }
-}
-
-
-/**
- * Defines the supported sorting directions.
- */
-enum SortDirection {
-    ASC, DESC
-}
-
-
-/**
- * Encapsulates a single sorting condition for a dynamic query.
- */
-class SortCondition {
-    @Expose
-    public final String propertyName;
-    @Expose
-    public final SortDirection direction;
-
-    public SortCondition(String propertyName, SortDirection direction) {
-        this.propertyName = propertyName;
-        this.direction = direction;
-    }
-
-    public static SortCondition asc(String propertyName) {
-        return new SortCondition(propertyName, SortDirection.ASC);
-    }
-
-    public static SortCondition desc(String propertyName) {
-        return new SortCondition(propertyName, SortDirection.DESC);
-    }
-}
-
-
-/**
- * Encapsulates all the parameters for a dynamic query.
- */
-class QueryOptions {
-    @Expose
-    public List<QueryCondition> conditions;
-    @Expose
-    public List<SortCondition> sorts;
-    @Expose
-    public int limit;
-    @Expose
-    public int offset;
-}
-
+import com.google.gson.annotations.SerializedName;
 
 /**
  * Utility class to build and execute a dynamic HQL query based on a list of structured
  * QueryCondition objects against a Hibernate dynamic entity (Map).
  */
 public class DynamicQueryFilter {
+
+    /**
+     * Defines the supported relational and logical operators for dynamic filtering.
+     */
+    public enum Operator {
+        @SerializedName(value = "=", alternate = {"eq", "EQ"})
+        EQ("="), // Equals
+
+        @SerializedName(value = "<>", alternate = {"ne", "NE"})
+        NE("<>"), // Not Equals
+
+        @SerializedName(value = ">", alternate = {"gt", "GT"})
+        GT(">"), // Greater Than
+
+        @SerializedName(value = "<", alternate = {"lt", "LT"})
+        LT("<"), // Less Than
+
+        @SerializedName(value = ">=", alternate = {"ge", "GE"})
+        GE(">="), // Greater Than or Equals
+
+        @SerializedName(value = "<=", alternate = {"le", "LE"})
+        LE("<="), // Less Than or Equals
+
+        @SerializedName(value = "LIKE", alternate = {"like", "LIKE"})
+        LIKE("LIKE"), // SQL LIKE operator
+
+        @SerializedName(value = "BETWEEN", alternate = {"between", "BETWEEN"})
+        BETWEEN("BETWEEN"), // SQL BETWEEN operator (requires two values)
+
+        @SerializedName(value = "IN", alternate = {"in", "IN"})
+        IN("IN"); // SQL IN operator (requires a List or Array of values)
+
+        private final String sqlEquivalent;
+
+        Operator(String sqlEquivalent) {
+            this.sqlEquivalent = sqlEquivalent;
+        }
+
+        public String getSqlEquivalent() {
+            return sqlEquivalent;
+        }
+    }
+
+    /**
+     * Defines the supported sorting directions.
+     */
+    public enum SortDirection {
+        ASC, DESC
+    }
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(DynamicQueryFilter.class);
@@ -273,6 +205,83 @@ public class DynamicQueryFilter {
         }
 
         return query;
+    }
+
+    /**
+     * Encapsulates a single filtering condition for a dynamic query.
+     */
+    public static class QueryCondition {
+        @Expose
+        public final String propertyName;
+        @Expose
+        public final Operator operator;
+        @Expose
+        public final Object value; // Can be a single value, or an array/list for BETWEEN/IN
+
+        public QueryCondition(String propertyName, Operator operator, Object value) {
+            this.propertyName = propertyName;
+            this.operator = operator;
+            this.value = value;
+        }
+
+        /**
+         * Factory method for simple single-value conditions (EQ, GT, LT, etc.)
+         */
+        public static QueryCondition of(String propertyName, Operator operator, Object value) {
+            return new QueryCondition(propertyName, operator, value);
+        }
+
+        /**
+         * Factory method for BETWEEN conditions, which take two bounds.
+         */
+        public static QueryCondition between(String propertyName, Object lowerBound, Object upperBound) {
+            return new QueryCondition(propertyName, Operator.BETWEEN, new Object[] {lowerBound, upperBound});
+        }
+
+        /**
+         * Factory method for IN conditions, which take a collection of values.
+         */
+        public static QueryCondition in(String propertyName, List<?> values) {
+            return new QueryCondition(propertyName, Operator.IN, values);
+        }
+    }
+
+
+    /**
+     * Encapsulates a single sorting condition for a dynamic query.
+     */
+    public static class SortCondition {
+        @Expose
+        public final String propertyName;
+        @Expose
+        public final SortDirection direction;
+
+        public SortCondition(String propertyName, SortDirection direction) {
+            this.propertyName = propertyName;
+            this.direction = direction;
+        }
+
+        public static SortCondition asc(String propertyName) {
+            return new SortCondition(propertyName, SortDirection.ASC);
+        }
+
+        public static SortCondition desc(String propertyName) {
+            return new SortCondition(propertyName, SortDirection.DESC);
+        }
+    }
+
+    /**
+     * Encapsulates all the parameters for a dynamic query.
+     */
+    public static class QueryOptions {
+        @Expose
+        public List<QueryCondition> conditions;
+        @Expose
+        public List<SortCondition> sorts;
+        @Expose
+        public int limit;
+        @Expose
+        public int offset;
     }
 
 }

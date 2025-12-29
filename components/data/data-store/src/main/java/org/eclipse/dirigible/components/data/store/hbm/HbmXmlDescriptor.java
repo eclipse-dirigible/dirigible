@@ -570,7 +570,8 @@ public class HbmXmlDescriptor {
         xml.append("<hibernate-mapping>\n");
 
         // --- Class Element ---
-        xml.append(String.format("    <class entity-name=\"%s\" table=\"`%s`\" dynamic-insert=\"true\">\n", this.entityName, this.tableName));
+        xml.append(
+                String.format("    <class entity-name=\"%s\" table=\"`%s`\" dynamic-insert=\"true\">\n", this.entityName, this.tableName));
 
         // --- ID Element ---
         HbmIdDescriptor idDesc = this.id;
@@ -593,13 +594,14 @@ public class HbmXmlDescriptor {
             String defaultValue = prop.getDefaultValue();
             if (defaultValue != null && !defaultValue.isEmpty()) {
                 // Use nested <column> element so we can emit a default attribute which is valid in Hibernate XML
-                xml.append(String.format("        <property name=\"%s\" type=\"%s\"%s%s%s%s>\n", prop.getName(), prop.getType(),
-                        lengthAttr, nullableAttr, precisionAttr, scaleAttr));
-                xml.append(String.format("            <column name=\"`%s`\" default=\"%s\" />\n", prop.getColumn(), escapeXml(defaultValue)));
+                xml.append(String.format("        <property name=\"%s\" type=\"%s\"%s%s%s%s>\n", prop.getName(), prop.getType(), lengthAttr,
+                        nullableAttr, precisionAttr, scaleAttr));
+                xml.append(
+                        String.format("            <column name=\"`%s`\" default=\"%s\" />\n", prop.getColumn(), escapeXml(defaultValue)));
                 xml.append("        </property>\n");
             } else {
-                xml.append(String.format("        <property name=\"%s\" column=\"`%s`\" type=\"%s\"%s%s%s%s/>\n", prop.getName(), prop.getColumn(),
-                        prop.getType(), lengthAttr, nullableAttr, precisionAttr, scaleAttr));
+                xml.append(String.format("        <property name=\"%s\" column=\"`%s`\" type=\"%s\"%s%s%s%s/>\n", prop.getName(),
+                        prop.getColumn(), prop.getType(), lengthAttr, nullableAttr, precisionAttr, scaleAttr));
             }
         }
 
