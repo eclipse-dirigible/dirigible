@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.data.store;
 
 import java.math.BigDecimal;
+import java.sql.Clob;
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
@@ -26,6 +27,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import javax.sql.rowset.serial.SerialClob;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata;
 import org.eclipse.dirigible.components.data.store.model.EntityMetadata;
 import org.eclipse.dirigible.components.data.store.parser.EntityParser;
@@ -242,11 +244,75 @@ public class JsonTypeConverter {
                         continue;
                     }
 
-                    if (dbType.contains("blob") || dbType.contains("bytea") || dbType.contains("binary")) {
+
+                    if (dbType.contains("blob")) {
+                        // For BLOB columns keep raw bytes (byte[]) to match array expectations
                         if (value instanceof String) {
                             Object parsed = tryParseTemporalOrBinary((String) value, prop);
                             if (parsed instanceof byte[]) {
                                 data.put(prop, parsed);
+                            }
+                        } else if (value instanceof List) {
+                            // Convert list of numbers to byte[]
+                            List<?> list = (List<?>) value;
+                            byte[] arr = new byte[list.size()];
+                            for (int i = 0; i < list.size(); i++) {
+                                Object elem = list.get(i);
+                                if (elem instanceof Number) {
+                                    arr[i] = ((Number) elem).byteValue();
+                                } else if (elem instanceof String) {
+                                    try {
+                                        arr[i] = (byte) Integer.parseInt((String) elem);
+                                    } catch (NumberFormatException e) {
+                                        arr[i] = 0;
+                                    }
+                                } else {
+                                    arr[i] = 0;
+                                }
+                            }
+                            data.put(prop, arr);
+                        } else if (value instanceof byte[]) {
+                            data.put(prop, value);
+                        }
+                        continue;
+                    }
+
+                    if (dbType.contains("bytea") || dbType.contains("binary")) {
+                        // Keep raw bytes for these DB types
+                        if (value instanceof String) {
+                            Object parsed = tryParseTemporalOrBinary((String) value, prop);
+                            if (parsed instanceof byte[]) {
+                                data.put(prop, parsed);
+                            }
+                        } else if (value instanceof List) {
+                            List<?> list = (List<?>) value;
+                            byte[] arr = new byte[list.size()];
+                            for (int i = 0; i < list.size(); i++) {
+                                Object elem = list.get(i);
+                                if (elem instanceof Number) {
+                                    arr[i] = ((Number) elem).byteValue();
+                                } else if (elem instanceof String) {
+                                    try {
+                                        arr[i] = (byte) Integer.parseInt((String) elem);
+                                    } catch (NumberFormatException e) {
+                                        arr[i] = 0;
+                                    }
+                                } else {
+                                    arr[i] = 0;
+                                }
+                            }
+                            data.put(prop, arr);
+                        }
+                        continue;
+                    }
+
+                    if (dbType.contains("clob")) {
+                        if (value instanceof String) {
+                            try {
+                                Clob clob = new SerialClob(((String) value).toCharArray());
+                                data.put(prop, clob);
+                            } catch (Exception e) {
+                                // best-effort: keep as original String on failure
                             }
                         }
                         continue;
@@ -274,7 +340,7 @@ public class JsonTypeConverter {
                         continue;
                     }
 
-                    if (dbType.contains("smallint")) {
+                    if (dbType.contains("smallint") || dbType.contains("short")) {
                         if (value instanceof Number) {
                             data.put(prop, Short.valueOf(((Number) value).shortValue()));
                         }
@@ -356,6 +422,16 @@ public class JsonTypeConverter {
                 }
             } catch (IllegalArgumentException e) {
                 // not base64
+            }
+        }
+
+        // Heuristic detection for CLOB/text fields
+        if (lowerKey.contains("clob")) {
+            try {
+                // SerialClob accepts a char[]; safe best-effort creation
+                return new SerialClob(s.toCharArray());
+            } catch (Exception e) {
+                // ignore and fall through to keep original String
             }
         }
 

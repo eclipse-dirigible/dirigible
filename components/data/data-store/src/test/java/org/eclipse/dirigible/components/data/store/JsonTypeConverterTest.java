@@ -13,9 +13,12 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.math.BigDecimal;
+import java.sql.Blob;
+import java.sql.Clob;
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata;
@@ -111,7 +114,19 @@ public class JsonTypeConverterTest {
     }
 
     @Test
-    public void testNormalizeForEntityUsingMetadata() {
+    public void testParseClobHeuristic() throws Exception {
+        Map<String, Object> m = new HashMap<>();
+        m.put("notesClob", "Hello Clob");
+
+        JsonTypeConverter.normalizeNumericTypes(m);
+
+        assertTrue(m.get("notesClob") instanceof Clob);
+        Clob cl = (Clob) m.get("notesClob");
+        assertEquals("Hello Clob", cl.getSubString(1, (int) cl.length()));
+    }
+
+    @Test
+    public void testNormalizeForEntityUsingMetadata() throws Exception {
         EntityMetadata meta = new EntityMetadata();
 
         EntityFieldMetadata tsField = new EntityFieldMetadata();
@@ -138,6 +153,24 @@ public class JsonTypeConverterTest {
         blobCol.setDatabaseType("bytea");
         blobField.setColumnDetails(blobCol);
 
+        EntityFieldMetadata blobField2 = new EntityFieldMetadata();
+        blobField2.setPropertyName("SomeBlob2");
+        EntityFieldMetadata.ColumnDetails blobCol2 = new EntityFieldMetadata.ColumnDetails();
+        blobCol2.setDatabaseType("blob");
+        blobField2.setColumnDetails(blobCol2);
+
+        EntityFieldMetadata blobField3 = new EntityFieldMetadata();
+        blobField3.setPropertyName("SomeBlob3");
+        EntityFieldMetadata.ColumnDetails blobCol3 = new EntityFieldMetadata.ColumnDetails();
+        blobCol3.setDatabaseType("blob");
+        blobField3.setColumnDetails(blobCol3);
+
+        EntityFieldMetadata clobField = new EntityFieldMetadata();
+        clobField.setPropertyName("SomeClob");
+        EntityFieldMetadata.ColumnDetails clobCol = new EntityFieldMetadata.ColumnDetails();
+        clobCol.setDatabaseType("clob");
+        clobField.setColumnDetails(clobCol);
+
         meta.getFields()
             .add(tsField);
         meta.getFields()
@@ -146,6 +179,12 @@ public class JsonTypeConverterTest {
             .add(uuidField);
         meta.getFields()
             .add(blobField);
+        meta.getFields()
+            .add(blobField2);
+        meta.getFields()
+            .add(blobField3);
+        meta.getFields()
+            .add(clobField);
 
         // register in parser map
         EntityParser.ENTITIES.put("TestEntity", meta);
@@ -157,6 +196,10 @@ public class JsonTypeConverterTest {
         byte[] payload = new byte[] {9, 8, 7};
         m.put("SomeBlob", java.util.Base64.getEncoder()
                                           .encodeToString(payload));
+        m.put("SomeBlob2", java.util.Base64.getEncoder()
+                                           .encodeToString(payload));
+        m.put("SomeBlob3", Arrays.asList(10, 20, 30));
+        m.put("SomeClob", "This is clob text");
 
         JsonTypeConverter.normalizeForEntity(m, "TestEntity");
 
@@ -165,5 +208,20 @@ public class JsonTypeConverterTest {
         assertTrue(m.get("UUID") instanceof java.util.UUID);
         assertTrue(m.get("SomeBlob") instanceof byte[]);
         assertArrayEquals(payload, (byte[]) m.get("SomeBlob"));
+
+        // New blob field should be converted to a byte[]
+        assertTrue(m.get("SomeBlob2") instanceof byte[]);
+        assertArrayEquals(payload, (byte[]) m.get("SomeBlob2"));
+
+        // Clob field should be converted to a Clob (SerialClob)
+        assertTrue(m.get("SomeClob") instanceof Clob);
+        Clob cl = (Clob) m.get("SomeClob");
+        assertEquals("This is clob text", cl.getSubString(1, (int) cl.length()));
+
+        // List input for blob should be converted to Blob
+        assertTrue(m.get("SomeBlob3") instanceof Blob);
+        Blob b3 = (Blob) m.get("SomeBlob3");
+        byte[] out3 = b3.getBytes(1, (int) b3.length());
+        assertArrayEquals(new byte[] {10, 20, 30}, out3);
     }
 }
