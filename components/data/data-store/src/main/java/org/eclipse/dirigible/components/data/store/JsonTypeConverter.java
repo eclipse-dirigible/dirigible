@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import javax.sql.rowset.serial.SerialBlob;
 import javax.sql.rowset.serial.SerialClob;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata;
 import org.eclipse.dirigible.components.data.store.model.EntityMetadata;
@@ -96,6 +97,66 @@ public class JsonTypeConverter {
                 }
             }
         }
+        return data;
+    }
+
+    /**
+     * Convert JDBC LOB types present in a result map into script-friendly primitives: - Blob -> byte[]
+     * - Clob -> String Recurses into nested maps and lists.
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> normalizeDbLobsToPrimitives(Map<String, Object> data) {
+        if (data == null) {
+            return null;
+        }
+
+        for (Entry<String, Object> entry : data.entrySet()) {
+            Object value = entry.getValue();
+            if (value instanceof Map) {
+                normalizeDbLobsToPrimitives((Map<String, Object>) value);
+            } else if (value instanceof List) {
+                List<Object> list = (List<Object>) value;
+                for (int i = 0; i < list.size(); i++) {
+                    Object elem = list.get(i);
+                    if (elem instanceof Map) {
+                        normalizeDbLobsToPrimitives((Map<String, Object>) elem);
+                    } else if (elem instanceof java.sql.Blob) {
+                        try {
+                            java.sql.Blob blob = (java.sql.Blob) elem;
+                            byte[] bytes = blob.getBytes(1, (int) blob.length());
+                            list.set(i, bytes);
+                        } catch (Exception e) {
+                            // leave original on error
+                        }
+                    } else if (elem instanceof java.sql.Clob) {
+                        try {
+                            java.sql.Clob clob = (java.sql.Clob) elem;
+                            String s = clob.getSubString(1, (int) clob.length());
+                            list.set(i, s);
+                        } catch (Exception e) {
+                            // leave original
+                        }
+                    }
+                }
+            } else if (value instanceof java.sql.Blob) {
+                try {
+                    java.sql.Blob blob = (java.sql.Blob) value;
+                    byte[] bytes = blob.getBytes(1, (int) blob.length());
+                    entry.setValue(bytes);
+                } catch (Exception e) {
+                    // leave original on error
+                }
+            } else if (value instanceof java.sql.Clob) {
+                try {
+                    java.sql.Clob clob = (java.sql.Clob) value;
+                    String s = clob.getSubString(1, (int) clob.length());
+                    entry.setValue(s);
+                } catch (Exception e) {
+                    // leave original
+                }
+            }
+        }
+
         return data;
     }
 
@@ -250,7 +311,7 @@ public class JsonTypeConverter {
                         if (value instanceof String) {
                             Object parsed = tryParseTemporalOrBinary((String) value, prop);
                             if (parsed instanceof byte[]) {
-                                data.put(prop, parsed);
+                                data.put(prop, new SerialBlob((byte[]) parsed));
                             }
                         } else if (value instanceof List) {
                             // Convert list of numbers to byte[]
@@ -270,9 +331,9 @@ public class JsonTypeConverter {
                                     arr[i] = 0;
                                 }
                             }
-                            data.put(prop, arr);
+                            data.put(prop, new SerialBlob(arr));
                         } else if (value instanceof byte[]) {
-                            data.put(prop, value);
+                            data.put(prop, new SerialBlob((byte[]) value));
                         }
                         continue;
                     }

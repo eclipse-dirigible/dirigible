@@ -128,7 +128,8 @@ public class EntityToHbmMapper {
                 case "time" -> "time";
                 case "datetime", "timestamp", "datetime2" -> "timestamp";
                 // Binary/LOB Types
-                case "blob", "binary", "varbinary" -> "binary";
+                case "binary", "varbinary" -> "binary";
+                case "blob" -> "blob";
                 case "clob" -> "clob";
                 // UUID
                 case "uuid" -> "uuid-char"; // Assuming string representation
