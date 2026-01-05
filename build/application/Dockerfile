@@ -14,7 +14,7 @@ RUN apk update && \
 
 # This forces npm to update itself and its internal dependencies
 # to the latest versions available on the npm registry
-RUN npm install -g npm
+# RUN npm install -g npm@latest # -> Commented, so that the ARM64 build don't timeout the GitHub Action (currently it takes ~6 hours).
 
 # Install global npm packages
 RUN npm i -g esbuild \

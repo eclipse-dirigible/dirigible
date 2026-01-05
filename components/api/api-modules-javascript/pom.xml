@@ -21,6 +21,11 @@
             <version>${requirejs.version}</version>
             <scope>runtime</scope>
         </dependency>
+        <dependency>
+            <groupId>org.webjars.npm</groupId>
+            <artifactId>stomp__stompjs</artifactId>
+            <version>${stompjs.version}</version>
+        </dependency>
     </dependencies>
 
     <profiles>
