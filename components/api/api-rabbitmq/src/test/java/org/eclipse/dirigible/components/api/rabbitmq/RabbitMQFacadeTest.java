@@ -9,41 +9,33 @@
  */
 package org.eclipse.dirigible.components.api.rabbitmq;
 
-import org.eclipse.dirigible.commons.config.Configuration;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.test.context.junit.jupiter.SpringExtension;
-import org.testcontainers.containers.RabbitMQContainer;
-
 import nl.altindag.log.LogCaptor;
+import org.eclipse.dirigible.commons.config.Configuration;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
+import org.testcontainers.containers.RabbitMQContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-@ExtendWith(SpringExtension.class)
-@SpringBootTest
-@AutoConfigureMockMvc
-@ComponentScan(basePackages = {"org.eclipse.dirigible.components.*"})
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@DisabledOnOs(OS.WINDOWS)
+@Testcontainers
 public class RabbitMQFacadeTest {
 
-    LogCaptor logCaptor = LogCaptor.forClass(RabbitMQFacade.class);
     private static final String message = "testMessage";
     private static final String queue = "test-queue";
 
+    @Container
+    static RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:3.8.19-alpine");
 
-    @Before
-    public void setUp() {
-        RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:3.8.19-alpine");
-        rabbit.start();
+    LogCaptor logCaptor = LogCaptor.forClass(RabbitMQFacade.class);
 
-        String host = rabbit.getHost();
-        Integer port = rabbit.getFirstMappedPort();
-        Configuration.set("DIRIGIBLE_RABBITMQ_CLIENT_URI", host + ":" + port);
+    @BeforeAll
+    static void setUp() {
+        Configuration.set("DIRIGIBLE_RABBITMQ_CLIENT_URI", rabbit.getHost() + ":" + rabbit.getFirstMappedPort());
     }
 
     @Test

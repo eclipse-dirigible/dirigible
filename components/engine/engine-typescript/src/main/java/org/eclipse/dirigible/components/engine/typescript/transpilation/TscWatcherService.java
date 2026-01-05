@@ -103,14 +103,14 @@ public class TscWatcherService implements ApplicationListener<ApplicationReadyEv
         }
     }
 
-    public void restart() {
+    public synchronized void restart() {
         LOGGER.info("Restarting {}...", this);
         destroy();
 
         start();
     }
 
-    private void start() {
+    private synchronized void start() {
         try {
             createOrReplaceTsConfig();
             startTscWatch();
@@ -124,7 +124,8 @@ public class TscWatcherService implements ApplicationListener<ApplicationReadyEv
 
         Path tsConfigPath = registryFolderPath.resolve("tsconfig.json");
 
-        LOGGER.info("Creating tsconfig.json file with path [{}] and content:\n{}", tsConfigPath, TS_CONFIG_CONTENT);
+        LOGGER.info("Creating tsconfig.json file with path [{}]", tsConfigPath);
+        LOGGER.debug("tsconfig.json content:\n{}", TS_CONFIG_CONTENT);
         try {
             Files.createDirectories(registryFolderPath);
             Files.writeString(tsConfigPath, TS_CONFIG_CONTENT, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
@@ -139,7 +140,7 @@ public class TscWatcherService implements ApplicationListener<ApplicationReadyEv
         return Path.of(path);
     }
 
-    private synchronized void startTscWatch() {
+    private void startTscWatch() {
         if (tscProcess != null && tscProcess.isAlive()) {
             LOGGER.info("TSC watch process is already running and will not be retriggered. Process [{}]", tscProcess);
             return;
