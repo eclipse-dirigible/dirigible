@@ -9,19 +9,12 @@
  */
 package org.eclipse.dirigible.components.data.structures.domain;
 
+import com.google.gson.annotations.Expose;
 import jakarta.annotation.Nullable;
-import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
-import jakarta.persistence.ElementCollection;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.OrderColumn;
-
+import jakarta.persistence.*;
 import org.eclipse.dirigible.components.base.converters.ArrayOfStringsToCsvConverter;
 
-import com.google.gson.annotations.Expose;
+import java.util.Arrays;
 
 /**
  * The Class TableConstraintForeignKey.
@@ -60,6 +53,23 @@ public class TableConstraintForeignKey extends TableConstraint {
     /**
      * Instantiates a new table constraint foreign key.
      *
+     * @param referencedTable the referenced table
+     * @param referencedSchema the referenced schema
+     * @param columnName the column name
+     * @param referencedColumnName the referenced column name
+     * @param constraints the constraints
+     */
+    public TableConstraintForeignKey(String referencedTable, String referencedSchema, String columnName, String referencedColumnName,
+            TableConstraints constraints) {
+        this(constraints.getTable()
+                        .getName()
+                + "_" + referencedTable, null, new String[] {columnName}, referencedTable, referencedSchema,
+                new String[] {referencedColumnName}, constraints);
+    }
+
+    /**
+     * Instantiates a new table constraint foreign key.
+     *
      * @param name the name
      * @param modifiers the modifiers
      * @param columns the columns
@@ -77,24 +87,6 @@ public class TableConstraintForeignKey extends TableConstraint {
         this.constraints.getForeignKeys()
                         .add(this);
     }
-
-    /**
-     * Instantiates a new table constraint foreign key.
-     *
-     * @param referencedTable the referenced table
-     * @param referencedSchema the referenced schema
-     * @param columnName the column name
-     * @param referencedColumnName the referenced column name
-     * @param constraints the constraints
-     */
-    public TableConstraintForeignKey(String referencedTable, String referencedSchema, String columnName, String referencedColumnName,
-            TableConstraints constraints) {
-        this(constraints.getTable()
-                        .getName()
-                + "_" + referencedTable, null, new String[] {columnName}, referencedTable, referencedSchema,
-                new String[] {referencedColumnName}, constraints);
-    }
-
 
     /**
      * Instantiates a new table constraint foreign key.
@@ -182,10 +174,28 @@ public class TableConstraintForeignKey extends TableConstraint {
      */
     @Override
     public String toString() {
-        return "TableConstraintForeignKey [id=" + id + ", referencedTable=" + referencedTable + ", referencedColumns=" + referencedColumns
-                + ", name=" + name + ", modifiers=" + modifiers + ", columns=" + columns + ", constraints.table=" + constraints.getTable()
-                                                                                                                               .getName()
+        return "TableConstraintForeignKey [id=" + id + ", referencedTable=" + referencedTable + ", referencedColumns="
+                + Arrays.toString(referencedColumns) + ", name=" + name + ", modifiers=" + Arrays.toString(modifiers) + ", columns="
+                + Arrays.toString(columns) + ", constraints.table="
+                + (null == constraints ? null
+                        : (null == constraints.getTable() ? null
+                                : constraints.getTable()
+                                             .getName()))
                 + "]";
     }
 
+    public void addReferencedColumns(String[] referencedColumns) {
+        if (referencedColumns == null || referencedColumns.length == 0) {
+            return;
+        }
+
+        if (null == this.referencedColumns) {
+            this.referencedColumns = Arrays.copyOf(referencedColumns, referencedColumns.length);
+        } else {
+            int oldLength = this.referencedColumns.length;
+            int newLength = oldLength + referencedColumns.length;
+            this.referencedColumns = Arrays.copyOf(this.referencedColumns, newLength);
+            System.arraycopy(referencedColumns, 0, this.referencedColumns, oldLength, referencedColumns.length);
+        }
+    }
 }

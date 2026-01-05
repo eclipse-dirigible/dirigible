@@ -156,7 +156,12 @@ public class MongoDBSqlDialect extends
      */
     @Override
     public void exportData(Connection connection, String table, OutputStream output) throws Exception {
-        ExportImportUtil.exportCollection(connection.unwrap(MongoDBConnection.class), table, output);
+        if (table != null && table.trim()
+                                  .startsWith("{")) {
+            ExportImportUtil.exportQuery(connection.unwrap(MongoDBConnection.class), table, output);
+        } else {
+            ExportImportUtil.exportCollection(connection.unwrap(MongoDBConnection.class), table, output);
+        }
     }
 
     /**

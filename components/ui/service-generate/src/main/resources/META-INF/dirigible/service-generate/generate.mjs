@@ -1,6 +1,6 @@
-import { request, response, rs } from "sdk/http";
-import { workspace, lifecycle } from "sdk/platform";
-import { user } from "sdk/security";
+import { request, response, rs } from "@aerokit/sdk/http";
+import { workspace, lifecycle } from "@aerokit/sdk/platform";
+import { user } from "@aerokit/sdk/security";
 
 let templatePayload = request.getJSON();
 let template;
@@ -117,8 +117,8 @@ function cleanGenFolder(workspaceName, projectName, genFolderName) {
     const genFolder = project.getFolder("gen");
     if (genFolder.exists() && genFolder.existsFolder(genFolderName)) {
         genFolder.deleteFolder(genFolderName);
+        lifecycle.unpublish(projectName + "/gen/" + genFolderName);
     }
-    lifecycle.unpublish(projectName);
 }
 
 function createFile(workspaceName, projectName, path, content) {

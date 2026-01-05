@@ -9,12 +9,14 @@
  */
 package org.eclipse.dirigible.components.engine.cms.s3.repository;
 
+import org.eclipse.dirigible.components.engine.cms.CmisObjectFactory;
+
 import java.io.InputStream;
 
 /**
  * A factory for creating Object objects.
  */
-public class CmisS3ObjectFactory {
+public class CmisS3ObjectFactory implements CmisObjectFactory {
 
     /**
      * Creates a new S3Object object.
@@ -25,6 +27,7 @@ public class CmisS3ObjectFactory {
      * @param inputStream the input stream
      * @return the content stream
      */
+    @Override
     public CmisS3ContentStream createContentStream(String filename, long length, String mimetype, InputStream inputStream) {
         return new CmisS3ContentStream(filename, length, mimetype, inputStream);
     }

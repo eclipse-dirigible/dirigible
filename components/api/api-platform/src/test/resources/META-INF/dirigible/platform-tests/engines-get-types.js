@@ -1,4 +1,4 @@
-import { Engine } from 'sdk/platform/engines';
+import { Engine } from '@aerokit/sdk/platform/engines';
 import { Assert } from 'test/assert';
 
 const result = Engine.getTypes();

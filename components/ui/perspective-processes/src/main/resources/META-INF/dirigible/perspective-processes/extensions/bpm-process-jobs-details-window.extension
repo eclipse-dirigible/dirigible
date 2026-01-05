@@ -1,0 +1,5 @@
+{
+    "module": "perspective-processes/configs/bpm-process-jobs-details-window.js",
+    "extensionPoint": "platform-windows",
+    "description": "Business Process Jobs Details"
+}

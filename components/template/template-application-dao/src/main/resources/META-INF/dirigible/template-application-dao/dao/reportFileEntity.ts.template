@@ -1,5 +1,5 @@
 #set($dollar = '$')
-import { Query, NamedQueryParameter } from "sdk/db";
+import { Query, NamedQueryParameter } from "@aerokit/sdk/db";
 
 export interface ${name} {
 #foreach ($column in $columns)

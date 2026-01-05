@@ -13,6 +13,7 @@ import org.eclipse.dirigible.commons.api.helpers.ContentTypeHelper;
 import org.eclipse.dirigible.repository.api.*;
 import org.eclipse.dirigible.repository.fs.FileSystemRepository;
 
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -440,6 +441,19 @@ public class LocalCollection extends LocalEntity implements ICollection {
     public IResource getResource(String name) throws RepositoryReadException {
         final RepositoryPath path = getRepositoryPath().append(name);
         return new LocalResource(getRepository(), path);
+    }
+
+    @Override
+    public IResource createResource(String name, InputStream contentInputStream, boolean isBinary, String contentType)
+            throws RepositoryWriteException {
+        createAncestorsAndSelfIfMissing();
+        final LocalFolder folder = getFolderSafe();
+        try {
+            folder.createFile(name, contentInputStream);
+        } catch (LocalRepositoryException ex) {
+            throw new RepositoryWriteException(format("Could not create child document {0}", name), ex);
+        }
+        return getResource(name);
     }
 
     /**

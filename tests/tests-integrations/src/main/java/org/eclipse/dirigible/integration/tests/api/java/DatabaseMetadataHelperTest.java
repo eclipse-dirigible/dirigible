@@ -9,8 +9,8 @@
  */
 package org.eclipse.dirigible.integration.tests.api.java;
 
-import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.database.helpers.DatabaseMetadataHelper;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

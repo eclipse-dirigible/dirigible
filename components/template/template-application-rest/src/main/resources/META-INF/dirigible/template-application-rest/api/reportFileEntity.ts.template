@@ -1,10 +1,10 @@
 #if($perspectiveRole || $security.roleRead)
 #set($isEntityPropertySecurityEnabled = "true")
 #end
-import { Controller, Get, Post } from "sdk/http"
+import { Controller, Get, Post } from "@aerokit/sdk/http"
 import { ${name}Repository, ${name}Filter, ${name}PaginatedFilter } from "../../dao/${perspectiveName}/${name}Repository";
 #if($perspectiveRole || $security.roleRead)
-import { user } from "sdk/security"
+import { user } from "@aerokit/sdk/security"
 import { ForbiddenError } from "../utils/ForbiddenError";
 #end
 import { HttpUtils } from "../utils/HttpUtils";

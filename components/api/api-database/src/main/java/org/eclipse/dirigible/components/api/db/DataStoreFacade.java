@@ -10,13 +10,21 @@
 package org.eclipse.dirigible.components.api.db;
 
 import java.io.Serializable;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.store.DataStore;
+import org.eclipse.dirigible.components.data.store.model.EntityMetadata;
+import org.eclipse.dirigible.components.data.store.parser.EntityParser;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import com.google.gson.JsonElement;
 
 /**
  * The Class DataStoreFacade.
@@ -73,11 +81,36 @@ public class DataStoreFacade implements InitializingBean {
      *
      * @param name the name
      * @param json the json
+     * @return the identifier
      */
-    public static void save(String name, String json) {
+    public static Object save(String name, String json) {
+        return DataStoreFacade.get()
+                              .getDataStore()
+                              .save(name, json);
+    }
+
+    /**
+     * Save or update.
+     *
+     * @param name the name
+     * @param json the json
+     */
+    public static void upsert(String name, String json) {
         DataStoreFacade.get()
                        .getDataStore()
-                       .save(name, json);
+                       .upsert(name, json);
+    }
+
+    /**
+     * Update.
+     *
+     * @param name the name
+     * @param json the json
+     */
+    public static void update(String name, String json) {
+        DataStoreFacade.get()
+                       .getDataStore()
+                       .update(name, json);
     }
 
     /**
@@ -86,10 +119,136 @@ public class DataStoreFacade implements InitializingBean {
      * @param name the name
      * @return the string
      */
-    public static String list(String name) {
+    private static String listAll(String name) {
         List list = DataStoreFacade.get()
                                    .getDataStore()
                                    .list(name);
+        return JsonHelper.toJson(list);
+    }
+
+    /**
+     * List.
+     *
+     * @param name the name
+     * @param options the options
+     * @return the string
+     */
+    public static String list(String name, String options) {
+        if (options != null) {
+            List list = DataStoreFacade.get()
+                                       .getDataStore()
+                                       .list(name, options);
+            return JsonHelper.toJson(list);
+        } else {
+            return listAll(name);
+        }
+    }
+
+    /**
+     * Count.
+     *
+     * @param name the name
+     * @param options the options
+     * @return the count
+     */
+    public static long count(String name, String options) {
+        if (options != null) {
+            long count = DataStoreFacade.get()
+                                        .getDataStore()
+                                        .count(name, options);
+            return count;
+        } else {
+            return DataStoreFacade.get()
+                                  .getDataStore()
+                                  .count(name);
+        }
+    }
+
+    /**
+     * Find.
+     *
+     * @param name the name
+     * @param example the example
+     * @param limit
+     * @param offset
+     * @return the string
+     */
+    public static String find(String name, String example, int limit, int offset) {
+        List list = DataStoreFacade.get()
+                                   .getDataStore()
+                                   .findByExample(name, example, limit, offset);
+        return JsonHelper.toJson(list);
+    }
+
+    /**
+     * Query with indexed parameters.
+     *
+     * @param query the entity query
+     * @param parameters the query parameters
+     * @param limit the limit
+     * @param offset the offset
+     * @return the string
+     * @throws SQLException
+     */
+    public static String query(String query, String parameters, int limit, int offset) throws SQLException {
+        Optional<JsonElement> parametersElement = DatabaseFacade.parseOptionalJson(parameters);
+        List list = DataStoreFacade.get()
+                                   .getDataStore()
+                                   .query(query, parametersElement, limit, offset);
+        return JsonHelper.toJson(list);
+    }
+
+    /**
+     * Query with named parameters.
+     *
+     * @param query the entity query
+     * @param parameters the query parameters
+     * @param limit the limit
+     * @param offset the offset
+     * @return the string
+     * @throws SQLException
+     */
+    public static String queryNamed(String query, String parameters, int limit, int offset) throws SQLException {
+        Optional<JsonElement> parametersElement = DatabaseFacade.parseOptionalJson(parameters);
+        List list = DataStoreFacade.get()
+                                   .getDataStore()
+                                   .queryNamed(query, parametersElement, limit, offset);
+        return JsonHelper.toJson(list);
+    }
+
+    /**
+     * Query native with indexed parameters.
+     *
+     * @param query the entity name
+     * @param parameters the native query parameters
+     * @param limit the limit
+     * @param offset the offset
+     * @return the string
+     * @throws SQLException
+     */
+    public static String queryNative(String query, String parameters, int limit, int offset) throws SQLException {
+        Optional<JsonElement> parametersElement = DatabaseFacade.parseOptionalJson(parameters);
+        List list = DataStoreFacade.get()
+                                   .getDataStore()
+                                   .queryNative(query, parametersElement, limit, offset);
+        return JsonHelper.toJson(list);
+    }
+
+    /**
+     * Query native with named parameters.
+     *
+     * @param query the entity name
+     * @param parameters the native query parameters
+     * @param limit the limit
+     * @param offset the offset
+     * @return the string
+     * @throws SQLException
+     */
+    public static String queryNativeNamed(String query, String parameters, int limit, int offset) throws SQLException {
+        Optional<JsonElement> parametersElement = DatabaseFacade.parseOptionalJson(parameters);
+        List list = DataStoreFacade.get()
+                                   .getDataStore()
+                                   .queryNativeNamed(query, parametersElement, limit, offset);
         return JsonHelper.toJson(list);
     }
 
@@ -117,6 +276,53 @@ public class DataStoreFacade implements InitializingBean {
         DataStoreFacade.get()
                        .getDataStore()
                        .delete(name, id);
+    }
+
+    public static String getEntityName(String name) {
+        EntityMetadata metadata = EntityParser.ENTITIES.get(name);
+        if (metadata == null) {
+            throw new RuntimeException(
+                    "Entity: [" + name + "] metadata does not exist. Consider to publishing it and wait a while to get registered.");
+        }
+        return metadata.getEntityName();
+    }
+
+    public static String getTableName(String name) {
+        EntityMetadata metadata = EntityParser.ENTITIES.get(name);
+        if (metadata == null) {
+            throw new RuntimeException(
+                    "Entity: [" + name + "] metadata does not exist. Consider to publishing it and wait a while to get registered.");
+        }
+        return metadata.getTableName();
+    }
+
+    public static String getIdName(String name) {
+        EntityMetadata metadata = EntityParser.ENTITIES.get(name);
+        if (metadata == null) {
+            throw new RuntimeException(
+                    "Entity: [" + name + "] metadata does not exist. Consider to publishing it and wait a while to get registered.");
+        }
+        return metadata.getFields()
+                       .stream()
+                       .filter(f -> f.isIdentifier())
+                       .collect(Collectors.toList())
+                       .getFirst()
+                       .getPropertyName();
+    }
+
+    public static String getIdColumn(String name) {
+        EntityMetadata metadata = EntityParser.ENTITIES.get(name);
+        if (metadata == null) {
+            throw new RuntimeException(
+                    "Entity: [" + name + "] metadata does not exist. Consider to publishing it and wait a while to get registered.");
+        }
+        return metadata.getFields()
+                       .stream()
+                       .filter(f -> f.isIdentifier())
+                       .collect(Collectors.toList())
+                       .getFirst()
+                       .getColumnDetails()
+                       .getColumnName();
     }
 
 }

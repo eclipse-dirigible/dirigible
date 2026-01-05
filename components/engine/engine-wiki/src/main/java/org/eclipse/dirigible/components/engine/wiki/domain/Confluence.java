@@ -9,17 +9,13 @@
  */
 package org.eclipse.dirigible.components.engine.wiki.domain;
 
-import java.util.Arrays;
-
+import org.eclipse.dirigible.components.base.artefact.Artefact;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
-
-import org.eclipse.dirigible.components.base.artefact.Artefact;
 
 /**
  * The Class Markdown.
@@ -38,9 +34,8 @@ public class Confluence extends Artefact {
     private Long id;
 
     /** The content. */
-    @Column(name = "MARKDOWN_CONTENT", columnDefinition = "CLOB")
-    @Lob
-    private byte[] content;
+    @Column(name = "MARKDOWN_CONTENT", columnDefinition = "TEXT")
+    private String content;
 
     /**
      * Instantiates a new markdown.
@@ -83,7 +78,7 @@ public class Confluence extends Artefact {
      *
      * @return the content
      */
-    public byte[] getContent() {
+    public String getContent() {
         return content;
     }
 
@@ -92,7 +87,7 @@ public class Confluence extends Artefact {
      *
      * @param content the new content
      */
-    public void setContent(byte[] content) {
+    public void setContent(String content) {
         this.content = content;
     }
 
@@ -103,8 +98,8 @@ public class Confluence extends Artefact {
      */
     @Override
     public String toString() {
-        return "Confluence [id=" + id + ", content=" + Arrays.toString(content) + ", location=" + location + ", name=" + name + ", type="
-                + type + ", description=" + description + ", key=" + key + ", dependencies=" + dependencies + ", createdBy=" + createdBy
+        return "Confluence [id=" + id + ", content=" + content + ", location=" + location + ", name=" + name + ", type=" + type
+                + ", description=" + description + ", key=" + key + ", dependencies=" + dependencies + ", createdBy=" + createdBy
                 + ", createdAt=" + createdAt + ", updatedBy=" + updatedBy + ", updatedAt=" + updatedAt + "]";
     }
 

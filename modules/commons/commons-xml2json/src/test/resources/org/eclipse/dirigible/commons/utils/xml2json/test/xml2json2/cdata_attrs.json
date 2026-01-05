@@ -1,0 +1,17 @@
+{
+  "a" : {
+    "b" : {
+      "_text" : "text_b"
+    },
+    "c" : {
+      "_text" : "text_c"
+    },
+    "d" : {
+      "e" : {
+        "e1" : "attr_e1",
+        "e2" : "attr_e2",
+        "_cdata" : "text_e"
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+    "aria": {
+        "verGen": "expand/collapse version panel",
+        "verUi": "expand/collapse ui library  panel",
+        "verEng": "expand/collapse engines panel",
+        "verSync": "expand/collapse synchronizers panel",
+        "panCont": "Panel Content"
+    },
+    "general": "General",
+    "brand": "Brand",
+    "version": "Version",
+    "commitId": "Commit Id",
+    "type": "Type",
+    "instance": "Instance",
+    "repository": "Repository",
+    "database": "Database",
+    "engines": "Engines",
+    "synchronizers": "Synchronizers",
+    "synchronizer": "Synchronizer"
+}

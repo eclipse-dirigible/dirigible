@@ -146,8 +146,8 @@ public class PublisherService {
                 next.afterPublish(sourceLocation, targetLocation, afterPublishMetadata);
             } catch (Exception e) {
                 logger.error("{} failed on after publish.", next.getClass()
-                                                                .getCanonicalName());
-                logger.error(e.getMessage(), e);
+                                                                .getCanonicalName(),
+                        e);
             }
         }
     }

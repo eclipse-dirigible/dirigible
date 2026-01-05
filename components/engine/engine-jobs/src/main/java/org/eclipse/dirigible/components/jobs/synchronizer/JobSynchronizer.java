@@ -22,9 +22,12 @@ import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.jobs.domain.Job;
 import org.eclipse.dirigible.components.jobs.domain.JobParameter;
 import org.eclipse.dirigible.components.jobs.manager.JobsManager;
+import org.eclipse.dirigible.components.jobs.parser.ScheduledMetadata;
+import org.eclipse.dirigible.components.jobs.parser.ScheduledParser;
 import org.eclipse.dirigible.components.jobs.service.JobEmailService;
 import org.eclipse.dirigible.components.jobs.service.JobLogService;
 import org.eclipse.dirigible.components.jobs.service.JobService;
+import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +35,10 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.text.ParseException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -46,6 +52,9 @@ public class JobSynchronizer extends MultitenantBaseSynchronizer<Job, Long> {
      * The Constant FILE_JOB_EXTENSION.
      */
     public static final String FILE_EXTENSION_JOB = ".job";
+
+    public static final String[] FILE_EXTENSIONS_JOB = new String[] {".job", "Job.ts", "Scheduled.ts"};
+
     /**
      * The Constant logger.
      */
@@ -63,6 +72,8 @@ public class JobSynchronizer extends MultitenantBaseSynchronizer<Job, Long> {
 
     /** The job log service. */
     private final JobLogService jobLogService;
+
+    private final ScheduledParser scheduledParser = new ScheduledParser();
 
     /**
      * The synchronization callback.
@@ -106,14 +117,32 @@ public class JobSynchronizer extends MultitenantBaseSynchronizer<Job, Long> {
      */
     @Override
     protected List<Job> parseImpl(String location, byte[] content) throws ParseException {
-        Job job = JsonHelper.fromJson(new String(content, StandardCharsets.UTF_8), Job.class);
+        Job job = null;
+        String source = new String(content, StandardCharsets.UTF_8);
+        if (location.endsWith(FILE_EXTENSION_JOB)) {
+            job = JsonHelper.fromJson(source, Job.class);
+        } else {
+            ScheduledMetadata metadata = scheduledParser.parse(location, source);
+            if (metadata.getExpression() == null) {
+                return new ArrayList<Job>();
+            }
+            job = new Job();
+            job.setExpression(metadata.getExpression());
+            job.setGroup(metadata.getGroup() != null ? metadata.getGroup() : "defined");
+            String handler = location;
+            if (handler.startsWith(IRepositoryStructure.SEPARATOR)) {
+                handler = handler.substring(1);
+            }
+            job.setHandler(handler);
+        }
         Configuration.configureObject(job);
         job.setLocation(location);
         job.setName(FilenameUtils.getBaseName(location));
         job.setType(Job.ARTEFACT_TYPE);
         job.updateKey();
-        job.getParameters()
-           .forEach(j -> j.setJob(job));
+        for (JobParameter j : job.getParameters()) {
+            j.setJob(job);
+        }
         try {
             Job maybe = getService().findByKey(job.getKey());
             if (maybe != null) {
@@ -161,7 +190,7 @@ public class JobSynchronizer extends MultitenantBaseSynchronizer<Job, Long> {
      */
     @Override
     public List<Job> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**
@@ -320,4 +349,23 @@ public class JobSynchronizer extends MultitenantBaseSynchronizer<Job, Long> {
     public String getArtefactType() {
         return Job.ARTEFACT_TYPE;
     }
+
+    /**
+     * Checks if is accepted.
+     *
+     * @param file the file
+     * @param attrs the attrs
+     * @return true, if is accepted
+     */
+    @Override
+    public boolean isAccepted(Path file, BasicFileAttributes attrs) {
+        for (String extension : FILE_EXTENSIONS_JOB) {
+            if (file.toString()
+                    .endsWith(extension)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 }

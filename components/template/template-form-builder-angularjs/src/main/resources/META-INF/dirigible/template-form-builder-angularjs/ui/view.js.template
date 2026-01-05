@@ -4,8 +4,14 @@
  * Do not modify the content as it may be re-generated again.
  */
 const viewData = {
-	id: '$projectName-form',
+	id: '$projectName-$fileName',
 	label: '$projectName Form',
+	translation: {
+		key: '$projectName:default.viewName',
+		options: {
+			name: '$projectName',
+		}
+	},
 	region: 'bottom',
 	lazyLoad: false,
 	autoFocusTab: false,

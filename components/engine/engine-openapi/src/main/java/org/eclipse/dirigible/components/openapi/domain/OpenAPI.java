@@ -10,8 +10,12 @@
 package org.eclipse.dirigible.components.openapi.domain;
 
 import org.eclipse.dirigible.components.base.artefact.Artefact;
-
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
 /**
  * The Class OpenAPI.
@@ -32,6 +36,10 @@ public class OpenAPI extends Artefact {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "OPENAPI_ID", nullable = false)
     private Long id;
+
+    /** The content. */
+    @Column(name = "OPENAPI_CONTENT", columnDefinition = "TEXT")
+    private String content;
 
     /**
      * Instantiates a new open API.
@@ -67,6 +75,24 @@ public class OpenAPI extends Artefact {
      */
     public void setId(Long id) {
         this.id = id;
+    }
+
+    /**
+     * Gets the content
+     *
+     * @return the content
+     */
+    public String getContent() {
+        return content;
+    }
+
+    /**
+     * Sets the content
+     *
+     * @param content the content
+     */
+    public void setContent(String content) {
+        this.content = content;
     }
 
     /**

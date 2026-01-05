@@ -1,4 +1,4 @@
-import { response } from "sdk/http";
+import { response } from "@aerokit/sdk/http";
 
 export class HttpUtils {
 

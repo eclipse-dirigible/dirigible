@@ -1,5 +1,5 @@
-import { test, assertEquals, assertTrue, assertFalse } from "sdk/junit"
-import { caches } from "sdk/cache";
+import { test, assertEquals, assertTrue, assertFalse } from "@aerokit/sdk/junit"
+import { caches } from "@aerokit/sdk/cache";
 
 test('cache-api-test', () => {
 

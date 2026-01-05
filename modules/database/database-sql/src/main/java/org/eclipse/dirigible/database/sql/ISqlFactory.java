@@ -10,7 +10,6 @@
 package org.eclipse.dirigible.database.sql;
 
 import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 
 import org.eclipse.dirigible.database.sql.builders.AlterBranchingBuilder;

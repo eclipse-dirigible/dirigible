@@ -1,6 +1,6 @@
-import { test, assertEquals } from "sdk/junit"
-import { producer } from "sdk/messaging"
-import { consumer } from "sdk/messaging"
+import { test, assertEquals } from "@aerokit/sdk/junit"
+import { producer } from "@aerokit/sdk/messaging"
+import { consumer } from "@aerokit/sdk/messaging"
 
 const MessageProducer = Java.type("org.eclipse.dirigible.integration.tests.api.java.messaging.MessageProducer");
 

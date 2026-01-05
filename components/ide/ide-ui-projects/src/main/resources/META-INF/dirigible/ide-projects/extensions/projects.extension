@@ -1,5 +1,0 @@
-{
-    "module": "ide-projects/services/projects-view.js",
-    "extensionPoint": "ide-view",
-    "description": "Projects View"
-}

@@ -1,5 +1,5 @@
 
-import { URL } from 'sdk/utils/url';
+import { URL } from '@aerokit/sdk/utils/url';
 import { Assert } from 'test/assert';
 
 const input = '<![CDATA[<meta http-equiv="refresh" content="0;url=javascript:document.vulnerable=true;">]]>';

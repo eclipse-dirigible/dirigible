@@ -1,5 +1,5 @@
-import { Writer } from 'sdk/indexing/writer';
-import { Searcher } from 'sdk/indexing/searcher';
+import { Writer } from '@aerokit/sdk/indexing/writer';
+import { Searcher } from '@aerokit/sdk/indexing/searcher';
 import { Assert } from 'test/assert';
 
 Writer.add("index3", "myfile1", "apache lucene", new Date(), {"name1":"value1"});

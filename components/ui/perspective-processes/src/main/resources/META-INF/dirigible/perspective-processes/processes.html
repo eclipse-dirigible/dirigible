@@ -29,9 +29,8 @@
 		<script type="text/javascript">
 			angular.module('BPMWorkspace', ['platformView', 'platformLayout', 'blimpKit']).controller('BpmWorkspaceController', ($scope) => {
                 $scope.layoutConfig = {
-                    views: ['bpm-process-definitions-view', 'bpm-process-instances-view', 'bpm-historic-process-instances-view', 'bpm-process-context-view', 'bpm-process-jobs-view', 'bpm-process-viewer', 'bpm-user-tasks'],
+                    views: ['bpm-process-instances-view', 'bpm-historic-process-instances-view', 'bpm-process-context-view', 'bpm-process-jobs-view', 'bpm-process-viewer', 'bpm-user-tasks'],
                     viewSettings: {
-						'bpm-process-definitions-view': { expanded: true },
 						'bpm-process-instances-view': { expanded: true },
 						'bpm-historic-process-instances-view': { expanded: true },
 						'bpm-process-context-view': { expanded: true },

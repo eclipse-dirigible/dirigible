@@ -10,16 +10,15 @@
 package org.eclipse.dirigible.components.engine.cms.s3.repository;
 
 import org.apache.chemistry.opencmis.commons.enums.VersioningState;
-import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.api.s3.S3Facade;
 import org.eclipse.dirigible.components.api.s3.TenantPathResolved;
 import org.eclipse.dirigible.components.base.spring.BeanProvider;
 import org.eclipse.dirigible.components.engine.cms.CmisConstants;
+import org.eclipse.dirigible.components.engine.cms.CmisContentStream;
 import org.eclipse.dirigible.components.engine.cms.CmisFolder;
 import org.eclipse.dirigible.repository.api.IRepository;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -89,15 +88,18 @@ public class CmisS3Folder extends CmisS3Object implements CmisFolder {
      * @return CmisDocument
      * @throws IOException IO Exception
      */
-    public CmisS3Document createDocument(Map<String, String> properties, CmisS3ContentStream contentStream, VersioningState versioningState)
+    @Override
+    public CmisS3Document createDocument(Map<String, String> properties, CmisContentStream contentStream, VersioningState versioningState)
             throws IOException {
+        return createDocument(properties, contentStream);
+    }
+
+    @Override
+    public CmisS3Document createDocument(Map<String, String> properties, CmisContentStream contentStream) throws IOException {
         String name = properties.get(CmisConstants.NAME);
         String folderName = this.getId() + name;
 
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        IOUtils.copy(contentStream.getStream(), out);
-
-        S3Facade.put(folderName, out.toByteArray(), contentStream.getMimeType());
+        S3Facade.put(folderName, contentStream.getInputStream(), contentStream.getLength(), contentStream.getMimeType());
         return new CmisS3Document(folderName, name);
     }
 
@@ -106,6 +108,7 @@ public class CmisS3Folder extends CmisS3Object implements CmisFolder {
      *
      * @return the children
      */
+    @Override
     public List<CmisS3Object> getChildren() {
         String path = this.getId();
         TenantPathResolved tenantPathResolved = BeanProvider.getBean(TenantPathResolved.class);
@@ -132,6 +135,7 @@ public class CmisS3Folder extends CmisS3Object implements CmisFolder {
      *
      * @return CmisS3Folder
      */
+    @Override
     public CmisS3Folder getFolderParent() {
         String parentFolder = CmisS3Utils.findParentFolder(this.getId());
         return isRootFolder() || null == parentFolder ? this

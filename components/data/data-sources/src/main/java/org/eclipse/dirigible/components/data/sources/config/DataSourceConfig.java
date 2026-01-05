@@ -17,7 +17,7 @@ import org.springframework.context.annotation.Configuration;
  * The Class DataSourceConfig.
  */
 @Configuration
-class DataSourceConfig {
+public class DataSourceConfig {
 
     /**
      * Gets the default data source name.

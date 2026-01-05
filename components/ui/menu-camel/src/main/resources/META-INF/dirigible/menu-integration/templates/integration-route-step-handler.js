@@ -11,7 +11,7 @@
  */
 export function getTemplate() {
     const fileContent = `
-import { IntegrationMessage } from "sdk/integrations"
+import { IntegrationMessage } from "@aerokit/sdk/integrations"
 
 export function onMessage(message: IntegrationMessage) {
     return message;

@@ -1,5 +1,0 @@
-{
-    "module": "ide-csvim/services/csvim-editor.js",
-    "extensionPoint": "ide-editor",
-    "description": "CSVIM Editor"
-}

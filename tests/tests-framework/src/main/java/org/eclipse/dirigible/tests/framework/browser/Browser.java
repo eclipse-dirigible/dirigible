@@ -28,6 +28,8 @@ public interface Browser {
 
     void enterTextInElementByAttributePattern(String elementType, String attribute, String pattern, String text);
 
+    void maximizeBrowser();
+
     void enterTextInElementById(String elementId, String text);
 
     void assertElementExistsByTypeAndText(HtmlElementType elementType, String text);
@@ -37,6 +39,8 @@ public interface Browser {
     void assertElementExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text);
 
     void assertElementExistsByTypeAndContainsText(String htmlElementType, String text);
+
+    void assertElementExistsByIdAndContainsText(String id, String text);
 
     void assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text);
 

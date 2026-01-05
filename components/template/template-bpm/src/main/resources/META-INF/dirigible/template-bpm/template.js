@@ -32,18 +32,15 @@ export function getTemplate() {
 			action: "generate",
 			rename: "tasks/my-service-task.ts"
 		}, {
-			location: "/template-bpm/tsconfig.json",
-			action: "generate",
-			rename: "tsconfig.json"
-		}, {
             location: "/template-bpm/project.json",
             action: "generate",
             rename: "project.json"
         }],
 		parameters: [{
 			name: "processId",
-			label: "Process Identifier"
+			label: "Process Identifier",
+			required: true
 		}],
-		"order": 35
+		order: 35
 	};
 };

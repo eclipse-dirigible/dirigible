@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.eclipse.dirigible</groupId>
         <artifactId>dirigible-build-parent</artifactId>
-        <version>12.0.0-SNAPSHOT</version>
+        <version>13.0.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -172,6 +172,10 @@
             <artifactId>dirigible-components-group-database</artifactId>
             <type>pom</type>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-data-processes</artifactId>
+        </dependency>
 
         <!-- Engine -->
         <dependency>
@@ -204,7 +208,7 @@
         <!-- Resources -->
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-group-resources</artifactId>
+            <artifactId>dirigible-components-group-resources-ui</artifactId>
             <type>pom</type>
         </dependency>
 

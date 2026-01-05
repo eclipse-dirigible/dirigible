@@ -74,10 +74,15 @@
                             <bk-textarea id="generalDescription" ng-model="dataParameters.description"></bk-textarea>
                         </div>
                     </bk-form-item>
-                    <bk-form-item class="fd-row fd-margin-top--tiny">
+					<!--<bk-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
                         <bk-checkbox id="generalGenerateReport" compact="false" ng-required="true" ng-model="dataParameters.generateReport" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
                         <bk-checkbox-label for="generalGenerateReport">Generate Report</bk-checkbox-label>
+                    </bk-form-item>-->
+					<bk-form-item class="fd-row fd-margin-top--tiny">
+                        <div class="fd-col fd-col-md--2"></div>
+                        <bk-checkbox id="generalMultilingual" compact="false" ng-required="true" ng-model="dataParameters.multilingual" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
+                        <bk-checkbox-label for="generalMultilingual">Multilingual</bk-checkbox-label>
                     </bk-form-item>
                 </bk-form-group>
                 <bk-form-group class="fd-container fd-form-layout-grid-container" ng-if="dialogType === 'property'">

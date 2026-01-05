@@ -14,6 +14,7 @@ import org.eclipse.dirigible.commons.api.helpers.ContentTypeHelper;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.ResourcesCache;
 import org.eclipse.dirigible.commons.config.ResourcesCache.Cache;
+import org.eclipse.dirigible.components.engine.web.exposure.ExposeManager;
 import org.eclipse.dirigible.components.registry.accessor.RegistryAccessor;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -58,19 +59,22 @@ public class WebService {
      * @return the resource
      */
     public ResponseEntity getResource(@PathVariable("path") String path) {
-        if (path.trim()
-                .isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Listing of web folders is forbidden.");
-        } else if (path.trim()
-                       .endsWith(IRepositoryStructure.SEPARATOR)) {
-            return getResourceByPath(path + INDEX_HTML);
+        if (ExposeManager.isPathExposed(path)) {
+            if (path.trim()
+                    .isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Listing of web folders is forbidden.");
+            } else if (path.trim()
+                           .endsWith(IRepositoryStructure.SEPARATOR)) {
+                return getResourceByPath(path + INDEX_HTML);
+            }
+            ResponseEntity resourceResponse = getResourceByPath(path);
+            if (!Configuration.isProductiveIFrameEnabled()) {
+                resourceResponse.getHeaders()
+                                .add("X-Frame-Options", "Deny");
+            }
+            return resourceResponse;
         }
-        ResponseEntity resourceResponse = getResourceByPath(path);
-        if (!Configuration.isProductiveIFrameEnabled()) {
-            resourceResponse.getHeaders()
-                            .add("X-Frame-Options", "Deny");
-        }
-        return resourceResponse;
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requested resource is not exposed.");
     }
 
     /**

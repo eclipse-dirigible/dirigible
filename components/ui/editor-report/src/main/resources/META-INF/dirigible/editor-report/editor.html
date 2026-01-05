@@ -45,7 +45,12 @@
                         </bk-panel-header>
                         <bk-panel-content aria-label="General Content" class="bk-scroll-hidden">
                             <bk-form-item horizontal="false">
-                                <bk-form-label for="Name" ng-required="true" colon="true">Name</bk-form-label>
+                                <bk-form-label for="label" ng-required="true" colon="true">Label</bk-form-label>
+                                <bk-input id="idLabel" name="label" state="{{ forms.editor['label'].$valid ? '' : 'error' }}" ng-required="true" ng-model="report.label" ng-maxlength="255" type="text" placeholder="Enter label">
+                                </bk-input>
+                            </bk-form-item>
+                            <bk-form-item horizontal="false">
+                                <bk-form-label for="name" ng-required="true" colon="true">Name</bk-form-label>
                                 <bk-form-input-message state="{{ forms.editor['name'].$valid ? '' : 'error' }}" message="::nameErrorMessage">
                                     <bk-input id="idName" name="name" state="{{ forms.editor['name'].$valid ? '' : 'error' }}" ng-required="true" ng-model="report.name" ng-maxlength="255" input-rules="nameRegex" type="text"
                                         placeholder="Enter name">
@@ -66,7 +71,7 @@
                                 <bk-button compact="true" label="Set from Tables" ng-click="setBaseTable()"></bk-button>
                             </div>
                             <bk-form-item horizontal="false">
-                                <bk-form-label for="Alias" ng-required="true" colon="true">Alias</bk-form-label>
+                                <bk-form-label for="alias" ng-required="true" colon="true">Alias</bk-form-label>
                                 <bk-form-input-message state="{{ forms.editor['alias'].$valid ? '' : 'error' }}" message="::nameErrorMessage">
                                     <bk-input id="idAlias" name="alias" state="{{ forms.editor['alias'].$valid ? '' : 'error' }}" ng-required="true" ng-model="report.alias" ng-maxlength="255" input-rules="nameRegex" type="text"
                                         placeholder="Enter alias name">
@@ -74,7 +79,7 @@
                                 </bk-form-input-message>
                             </bk-form-item>
                             <bk-form-item horizontal="false">
-                                <bk-form-label for="Table" ng-required="true" colon="true">Table</bk-form-label>
+                                <bk-form-label for="table" ng-required="true" colon="true">Table</bk-form-label>
                                 <bk-form-input-message state="{{ forms.editor['table'].$valid ? '' : 'error' }}" message="::nameErrorMessage">
                                     <bk-input id="idTable" name="table" state="{{ forms.editor['table'].$valid ? '' : 'error' }}" ng-required="true" ng-model="report.table" ng-maxlength="255" input-rules="nameRegex" type="text"
                                         placeholder="Enter table name">
@@ -92,40 +97,44 @@
                         </bk-panel-header>
                         <bk-panel-content aria-label="Columns Content">
                             <div class="bk-hbox bk-full-width bk-padding-bottom--tiny bk-flex-end bk-box--gap">
-                                <bk-button compact="true" label="Add" ng-click="addColumn()"></bk-button>
+                                <bk-button compact="true" glyph="sap-icon--add" label="Add" ng-click="addColumn()"></bk-button>
                             </div>
-                            <table bk-table outer-borders="all">
-                                <thead bk-table-header>
-                                    <tr bk-table-row>
-                                        <th bk-table-header-cell>Table Alias</th>
-                                        <th bk-table-header-cell>Column Alias</th>
-                                        <th bk-table-header-cell>Column Name</th>
-                                        <th bk-table-header-cell>Column Type</th>
-                                        <th bk-table-header-cell>Aggregate Function</th>
-                                        <th bk-table-header-cell>Select</th>
-                                        <th bk-table-header-cell>Grouping</th>
-                                        <th bk-table-header-cell></th>
-                                    </tr>
-                                </thead>
-                                <tbody bk-table-body>
-                                    <tr ng-if="!report.columns || report.columns.length === 0" bk-table-row>
-                                        <td bk-table-cell no-data="true">Report has no columns</td>
-                                    </tr>
-                                    <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in report.columns track by $index">
-                                        <td bk-table-cell>{{item.table}}</td>
-                                        <td bk-table-cell>{{item.alias}}</td>
-                                        <td bk-table-cell>{{item.name}}</td>
-                                        <td bk-table-cell>{{item.type}}</td>
-                                        <td bk-table-cell>{{item.aggregate}}</td>
-                                        <td bk-table-cell><span bk-object-status status="{{ item.select ? 'positive' : 'negative' }}" text="{{ item.select ? 'True' : 'False' }}"></span></td>
-                                        <td bk-table-cell><span bk-object-status status="{{ item.grouping ? 'positive' : 'negative' }}" text="{{ item.grouping ? 'True' : 'False' }}"></span></td>
-                                        <td bk-table-cell fit-content="true">
-                                            <bk-button compact="true" glyph="sap-icon--edit" state="transparent" aria-label="Edit" ng-click="editColumn($index)"></bk-button>
-                                            <bk-button compact="true" glyph="sap-icon--delete" state="transparent" aria-label="Delete" ng-click="deleteColumn($index)"></bk-button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                            <bk-table-fixed>
+                                <table bk-table outer-borders="all">
+                                    <thead bk-table-header>
+                                        <tr bk-table-row>
+                                            <th bk-table-header-cell>Label</th>
+                                            <th bk-table-header-cell>Table Alias</th>
+                                            <th bk-table-header-cell>Column Alias</th>
+                                            <th bk-table-header-cell>Column Name</th>
+                                            <th bk-table-header-cell>Column Type</th>
+                                            <th bk-table-header-cell>Aggregate Function</th>
+                                            <th bk-table-header-cell>Select</th>
+                                            <th bk-table-header-cell>Grouping</th>
+                                            <th bk-table-header-cell></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody bk-table-body>
+                                        <tr ng-if="!report.columns || report.columns.length === 0" bk-table-row>
+                                            <td bk-table-cell no-data="true">Report has no columns</td>
+                                        </tr>
+                                        <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in report.columns track by $index">
+                                            <td bk-table-cell>{{item.label}}</td>
+                                            <td bk-table-cell>{{item.table}}</td>
+                                            <td bk-table-cell>{{item.alias}}</td>
+                                            <td bk-table-cell>{{item.name}}</td>
+                                            <td bk-table-cell>{{item.type}}</td>
+                                            <td bk-table-cell>{{item.aggregate}}</td>
+                                            <td bk-table-cell><span bk-object-status status="{{ item.select ? 'positive' : 'negative' }}" text="{{ item.select ? 'True' : 'False' }}"></span></td>
+                                            <td bk-table-cell><span bk-object-status status="{{ item.grouping ? 'positive' : 'negative' }}" text="{{ item.grouping ? 'True' : 'False' }}"></span></td>
+                                            <td bk-table-cell fit-content="true">
+                                                <bk-button glyph="sap-icon--edit" state="transparent" aria-label="Edit" ng-click="editColumn($index)"></bk-button>
+                                                <bk-button glyph="sap-icon--delete" state="transparent" aria-label="Delete" ng-click="deleteColumn($index)"></bk-button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </bk-table-fixed>
                         </bk-panel-content>
                     </bk-panel>
                     <!-- End Columns -->
@@ -137,36 +146,38 @@
                         </bk-panel-header>
                         <bk-panel-content aria-label="Joins Content">
                             <div class="bk-hbox bk-full-width bk-padding-bottom--tiny bk-flex-end bk-box--gap">
-                                <bk-button compact="true" label="Add" ng-click="addJoin()"></bk-button>
+                                <bk-button compact="true" glyph="sap-icon--add" label="Add" ng-click="addJoin()"></bk-button>
                                 <bk-button compact="true" label="Add from Tables" ng-click="addFromTables()">
                                 </bk-button>
                             </div>
-                            <table bk-table outer-borders="all">
-                                <thead bk-table-header>
-                                    <tr bk-table-row>
-                                        <th bk-table-header-cell>Alias</th>
-                                        <th bk-table-header-cell>Name</th>
-                                        <th bk-table-header-cell>Type</th>
-                                        <th bk-table-header-cell>Condition</th>
-                                        <th bk-table-header-cell></th>
-                                    </tr>
-                                </thead>
-                                <tbody bk-table-body>
-                                    <tr ng-if="!report.joins || report.joins.length === 0" bk-table-row>
-                                        <td bk-table-cell no-data="true">Report has no joins</td>
-                                    </tr>
-                                    <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in report.joins track by $index">
-                                        <td bk-table-cell>{{item.alias}}</td>
-                                        <td bk-table-cell>{{item.name}}</td>
-                                        <td bk-table-cell>{{item.type}}</td>
-                                        <td bk-table-cell>{{item.condition}}</td>
-                                        <td bk-table-cell fit-content="true">
-                                            <bk-button compact="true" glyph="sap-icon--edit" state="transparent" aria-label="Edit" ng-click="editJoin($index)"></bk-button>
-                                            <bk-button compact="true" glyph="sap-icon--delete" state="transparent" aria-label="Delete" ng-click="deleteJoin($index)"></bk-button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                            <bk-table-fixed>
+                                <table bk-table outer-borders="all">
+                                    <thead bk-table-header>
+                                        <tr bk-table-row>
+                                            <th bk-table-header-cell>Alias</th>
+                                            <th bk-table-header-cell>Name</th>
+                                            <th bk-table-header-cell>Type</th>
+                                            <th bk-table-header-cell>Condition</th>
+                                            <th bk-table-header-cell></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody bk-table-body>
+                                        <tr ng-if="!report.joins || report.joins.length === 0" bk-table-row>
+                                            <td bk-table-cell no-data="true">Report has no joins</td>
+                                        </tr>
+                                        <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in report.joins track by $index">
+                                            <td bk-table-cell>{{item.alias}}</td>
+                                            <td bk-table-cell>{{item.name}}</td>
+                                            <td bk-table-cell>{{item.type}}</td>
+                                            <td bk-table-cell>{{item.condition}}</td>
+                                            <td bk-table-cell fit-content="true">
+                                                <bk-button compact="true" glyph="sap-icon--edit" state="transparent" aria-label="Edit" ng-click="editJoin($index)"></bk-button>
+                                                <bk-button compact="true" glyph="sap-icon--delete" state="transparent" aria-label="Delete" ng-click="deleteJoin($index)"></bk-button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </bk-table-fixed>
                         </bk-panel-content>
                     </bk-panel>
                     <!-- End Joins -->
@@ -178,32 +189,34 @@
                         </bk-panel-header>
                         <bk-panel-content aria-label="Conditions Content">
                             <div class="bk-hbox bk-full-width bk-padding-bottom--tiny bk-flex-end bk-box--gap">
-                                <bk-button compact="true" label="Add" ng-click="addCondition()"></bk-button>
+                                <bk-button compact="true" glyph="sap-icon--add" label="Add" ng-click="addCondition()"></bk-button>
                             </div>
-                            <table bk-table outer-borders="all">
-                                <thead bk-table-header>
-                                    <tr bk-table-row>
-                                        <th bk-table-header-cell>Left</th>
-                                        <th bk-table-header-cell>Operation</th>
-                                        <th bk-table-header-cell>Right</th>
-                                        <th bk-table-header-cell></th>
-                                    </tr>
-                                </thead>
-                                <tbody bk-table-body>
-                                    <tr ng-if="!report.conditions || report.conditions.length === 0" bk-table-row>
-                                        <td bk-table-cell no-data="true">Report has no conditions</td>
-                                    </tr>
-                                    <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in report.conditions track by $index">
-                                        <td bk-table-cell>{{item.left}}</td>
-                                        <td bk-table-cell>{{item.operation}}</td>
-                                        <td bk-table-cell>{{item.right}}</td>
-                                        <td bk-table-cell fit-content="true">
-                                            <bk-button compact="true" glyph="sap-icon--edit" state="transparent" aria-label="Edit" ng-click="editCondition($index)"></bk-button>
-                                            <bk-button compact="true" glyph="sap-icon--delete" state="transparent" aria-label="Delete" ng-click="deleteCondition($index)"></bk-button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                            <bk-table-fixed>
+                                <table bk-table outer-borders="all">
+                                    <thead bk-table-header>
+                                        <tr bk-table-row>
+                                            <th bk-table-header-cell>Left</th>
+                                            <th bk-table-header-cell>Operation</th>
+                                            <th bk-table-header-cell>Right</th>
+                                            <th bk-table-header-cell></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody bk-table-body>
+                                        <tr ng-if="!report.conditions || report.conditions.length === 0" bk-table-row>
+                                            <td bk-table-cell no-data="true">Report has no conditions</td>
+                                        </tr>
+                                        <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in report.conditions track by $index">
+                                            <td bk-table-cell>{{item.left}}</td>
+                                            <td bk-table-cell>{{item.operation}}</td>
+                                            <td bk-table-cell>{{item.right}}</td>
+                                            <td bk-table-cell fit-content="true">
+                                                <bk-button compact="true" glyph="sap-icon--edit" state="transparent" aria-label="Edit" ng-click="editCondition($index)"></bk-button>
+                                                <bk-button compact="true" glyph="sap-icon--delete" state="transparent" aria-label="Delete" ng-click="deleteCondition($index)"></bk-button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </bk-table-fixed>
                         </bk-panel-content>
                     </bk-panel>
                     <!-- End Conditions -->
@@ -215,32 +228,34 @@
                         </bk-panel-header>
                         <bk-panel-content aria-label="Havings Content">
                             <div class="bk-hbox bk-full-width bk-padding-bottom--tiny bk-flex-end bk-box--gap">
-                                <bk-button compact="true" label="Add" ng-click="addHaving()"></bk-button>
+                                <bk-button compact="true" glyph="sap-icon--add" label="Add" ng-click="addHaving()"></bk-button>
                             </div>
-                            <table bk-table outer-borders="all">
-                                <thead bk-table-header>
-                                    <tr bk-table-row>
-                                        <th bk-table-header-cell>Left</th>
-                                        <th bk-table-header-cell>Operation</th>
-                                        <th bk-table-header-cell>Right</th>
-                                        <th bk-table-header-cell></th>
-                                    </tr>
-                                </thead>
-                                <tbody bk-table-body>
-                                    <tr ng-if="!report.havings || report.havings.length === 0" bk-table-row>
-                                        <td bk-table-cell no-data="true">Report has no havings</td>
-                                    </tr>
-                                    <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in report.havings track by $index">
-                                        <td bk-table-cell>{{item.left}}</td>
-                                        <td bk-table-cell>{{item.operation}}</td>
-                                        <td bk-table-cell>{{item.right}}</td>
-                                        <td bk-table-cell fit-content="true">
-                                            <bk-button compact="true" glyph="sap-icon--edit" state="transparent" aria-label="Edit" ng-click="editHaving($index)"></bk-button>
-                                            <bk-button compact="true" glyph="sap-icon--delete" state="transparent" aria-label="Delete" ng-click="deleteHaving($index)"></bk-button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                            <bk-table-fixed>
+                                <table bk-table outer-borders="all">
+                                    <thead bk-table-header>
+                                        <tr bk-table-row>
+                                            <th bk-table-header-cell>Left</th>
+                                            <th bk-table-header-cell>Operation</th>
+                                            <th bk-table-header-cell>Right</th>
+                                            <th bk-table-header-cell></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody bk-table-body>
+                                        <tr ng-if="!report.havings || report.havings.length === 0" bk-table-row>
+                                            <td bk-table-cell no-data="true">Report has no havings</td>
+                                        </tr>
+                                        <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in report.havings track by $index">
+                                            <td bk-table-cell>{{item.left}}</td>
+                                            <td bk-table-cell>{{item.operation}}</td>
+                                            <td bk-table-cell>{{item.right}}</td>
+                                            <td bk-table-cell fit-content="true">
+                                                <bk-button compact="true" glyph="sap-icon--edit" state="transparent" aria-label="Edit" ng-click="editHaving($index)"></bk-button>
+                                                <bk-button compact="true" glyph="sap-icon--delete" state="transparent" aria-label="Delete" ng-click="deleteHaving($index)"></bk-button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </bk-table-fixed>
                         </bk-panel-content>
                     </bk-panel>
                     <!-- End Conditions -->
@@ -252,30 +267,32 @@
                         </bk-panel-header>
                         <bk-panel-content aria-label="Ordering Content">
                             <div class="bk-hbox bk-full-width bk-padding-bottom--tiny bk-flex-end bk-box--gap">
-                                <bk-button compact="true" label="Add" ng-click="addOrdering()"></bk-button>
+                                <bk-button compact="true" glyph="sap-icon--add" label="Add" ng-click="addOrdering()"></bk-button>
                             </div>
-                            <table bk-table outer-borders="all">
-                                <thead bk-table-header>
-                                    <tr bk-table-row>
-                                        <th bk-table-header-cell>Column</th>
-                                        <th bk-table-header-cell>Direction</th>
-                                        <th bk-table-header-cell></th>
-                                    </tr>
-                                </thead>
-                                <tbody bk-table-body>
-                                    <tr ng-if="!report.orderings || report.orderings.length === 0" bk-table-row>
-                                        <td bk-table-cell no-data="true">Report has no ordering</td>
-                                    </tr>
-                                    <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in report.orderings track by $index">
-                                        <td bk-table-cell>{{item.column}}</td>
-                                        <td bk-table-cell>{{item.direction}}</td>
-                                        <td bk-table-cell fit-content="true">
-                                            <bk-button compact="true" glyph="sap-icon--edit" status="transparent" aria-label="Edit" ng-click="editOrdering($index)"></bk-button>
-                                            <bk-button compact="true" glyph="sap-icon--delete" status="transparent" aria-label="Delete" ng-click="deleteOrdering($index)"></bk-button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                            <bk-table-fixed>
+                                <table bk-table outer-borders="all">
+                                    <thead bk-table-header>
+                                        <tr bk-table-row>
+                                            <th bk-table-header-cell>Column</th>
+                                            <th bk-table-header-cell>Direction</th>
+                                            <th bk-table-header-cell></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody bk-table-body>
+                                        <tr ng-if="!report.orderings || report.orderings.length === 0" bk-table-row>
+                                            <td bk-table-cell no-data="true">Report has no ordering</td>
+                                        </tr>
+                                        <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in report.orderings track by $index">
+                                            <td bk-table-cell>{{item.column}}</td>
+                                            <td bk-table-cell>{{item.direction}}</td>
+                                            <td bk-table-cell fit-content="true">
+                                                <bk-button compact="true" glyph="sap-icon--edit" status="transparent" aria-label="Edit" ng-click="editOrdering($index)"></bk-button>
+                                                <bk-button compact="true" glyph="sap-icon--delete" status="transparent" aria-label="Delete" ng-click="deleteOrdering($index)"></bk-button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </bk-table-fixed>
                         </bk-panel-content>
                     </bk-panel>
                     <!-- End Ordering -->
@@ -287,32 +304,34 @@
                         </bk-panel-header>
                         <bk-panel-content aria-label="Parameters Content">
                             <div class="bk-hbox bk-full-width bk-padding-bottom--tiny bk-flex-end bk-box--gap">
-                                <bk-button compact="true" label="Add" ng-click="addParameter()"></bk-button>
+                                <bk-button compact="true" glyph="sap-icon--add" label="Add" ng-click="addParameter()"></bk-button>
                             </div>
-                            <table bk-table outer-borders="all">
-                                <thead bk-table-header>
-                                    <tr bk-table-row>
-                                        <th bk-table-header-cell>Parameter Name</th>
-                                        <th bk-table-header-cell>Parameter Type</th>
-                                        <th bk-table-header-cell>Initial Value</th>
-                                        <th bk-table-header-cell></th>
-                                    </tr>
-                                </thead>
-                                <tbody bk-table-body>
-                                    <tr ng-if="!report.parameters || report.parameters.length === 0" bk-table-row>
-                                        <td bk-table-cell no-data="true">Report has no parameters</td>
-                                    </tr>
-                                    <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in report.parameters track by $index">
-                                        <td bk-table-cell>{{item.name}}</td>
-                                        <td bk-table-cell>{{item.type}}</td>
-                                        <td bk-table-cell>{{item.initial}}</td>
-                                        <td bk-table-cell fit-content="true">
-                                            <bk-button compact="true" glyph="sap-icon--edit" status="transparent" aria-label="Edit" ng-click="editParameter($index)"></bk-button>
-                                            <bk-button compact="true" glyph="sap-icon--delete" status="transparent" aria-label="Delete" ng-click="deleteParameter($index)"></bk-button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                            <bk-table-fixed>
+                                <table bk-table outer-borders="all">
+                                    <thead bk-table-header>
+                                        <tr bk-table-row>
+                                            <th bk-table-header-cell>Parameter Name</th>
+                                            <th bk-table-header-cell>Parameter Type</th>
+                                            <th bk-table-header-cell>Initial Value</th>
+                                            <th bk-table-header-cell></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody bk-table-body>
+                                        <tr ng-if="!report.parameters || report.parameters.length === 0" bk-table-row>
+                                            <td bk-table-cell no-data="true">Report has no parameters</td>
+                                        </tr>
+                                        <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in report.parameters track by $index">
+                                            <td bk-table-cell>{{item.name}}</td>
+                                            <td bk-table-cell>{{item.type}}</td>
+                                            <td bk-table-cell>{{item.initial}}</td>
+                                            <td bk-table-cell fit-content="true">
+                                                <bk-button compact="true" glyph="sap-icon--edit" status="transparent" aria-label="Edit" ng-click="editParameter($index)"></bk-button>
+                                                <bk-button compact="true" glyph="sap-icon--delete" status="transparent" aria-label="Delete" ng-click="deleteParameter($index)"></bk-button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </bk-table-fixed>
                         </bk-panel-content>
                     </bk-panel>
                     <!-- End Parameters -->
@@ -343,17 +362,13 @@
                                         <bk-form-label for="srr" colon="true">Read role</bk-form-label>
                                     </div>
                                     <div class="fd-col fd-col-md--4 fd-col-lg--3">
-                                        <bk-input id="srr" type="text" ng-model="report.security.roleRead" placeholder="role name" ng-disabled="report.security.generateDefaultRoles === 'true'">
-                                        </bk-input>
+                                        <bk-input id="srr" type="text" ng-model="report.security.roleRead" placeholder="role name" ng-disabled="report.security.generateDefaultRoles === 'true'"></bk-input>
                                     </div>
                                 </bk-form-item>
                                 <bk-form-item class="fd-row fd-margin-top--tiny">
-                                    <div class="fd-col fd-col-md--2">
-                                    </div>
-                                    <bk-checkbox id="generalGenerateDefaultRoles" ng-model="report.security.generateDefaultRoles" data-ng-true-value="'true'" data-ng-false-value="'false'"
-                                        ng-change="toggleDefaultRoles()"></bk-checkbox>
-                                    <bk-checkbox-label for="generalGenerateDefaultRoles">Generate Default Roles
-                                    </bk-checkbox-label>
+                                    <div class="fd-col fd-col-md--2"></div>
+                                    <bk-checkbox id="generalGenerateDefaultRoles" ng-model="report.security.generateDefaultRoles" data-ng-true-value="'true'" data-ng-false-value="'false'" ng-change="toggleDefaultRoles()"></bk-checkbox>
+                                    <bk-checkbox-label for="generalGenerateDefaultRoles">Generate Default Roles</bk-checkbox-label>
                                 </bk-form-item>
                             </bk-form-group>
                         </bk-panel-content>

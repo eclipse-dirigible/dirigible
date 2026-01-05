@@ -9,16 +9,6 @@
  */
 package org.eclipse.dirigible.repository.local;
 
-import java.io.File;
-import java.io.FileFilter;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-
 import org.eclipse.dirigible.commons.api.helpers.ContentTypeHelper;
 import org.eclipse.dirigible.commons.api.helpers.FileSystemUtils;
 import org.eclipse.dirigible.repository.api.IRepository;
@@ -28,31 +18,31 @@ import org.eclipse.dirigible.repository.fs.FileSystemRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.*;
+import java.nio.file.Files;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+
 /**
  * The Local Repository Dao.
  */
 public class LocalRepositoryDao {
 
-    /** The Constant logger. */
-    private static final Logger logger = LoggerFactory.getLogger(LocalRepositoryDao.class);
-
     /** The Constant OBJECT_TYPE_FOLDER. */
     static final int OBJECT_TYPE_FOLDER = 0;
-
     /** The Constant OBJECT_TYPE_DOCUMENT. */
     static final int OBJECT_TYPE_DOCUMENT = 1;
-
     /** The Constant OBJECT_TYPE_BINARY. */
     static final int OBJECT_TYPE_BINARY = 2;
-
-    /** The repository. */
-    private FileSystemRepository repository;
-
+    /** The Constant logger. */
+    private static final Logger logger = LoggerFactory.getLogger(LocalRepositoryDao.class);
     /** The cache. */
     private final RepositoryCache cache = new RepositoryCache();
-
-    private SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
-
+    /** The repository. */
+    private final FileSystemRepository repository;
+    private final SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
 
     /**
      * Instantiates a new local repository dao.
@@ -61,15 +51,6 @@ public class LocalRepositoryDao {
      */
     public LocalRepositoryDao(FileSystemRepository repository) {
         this.repository = repository;
-    }
-
-    /**
-     * Gets the repository.
-     *
-     * @return the repository
-     */
-    public FileSystemRepository getRepository() {
-        return this.repository;
     }
 
     /**
@@ -92,20 +73,47 @@ public class LocalRepositoryDao {
 
     }
 
-    public String storeFile(String path, byte[] content) throws FileNotFoundException, IOException {
+    public String storeFile(String path, byte[] content) throws IOException {
+        content = null != content ? content : new byte[0];
+
+        try (ByteArrayInputStream contentInputStream = new ByteArrayInputStream(content)) {
+            return storeFile(path, contentInputStream);
+        }
+    }
+
+    public String storeFile(String path, InputStream contentInputStream) throws IOException {
         String workspacePath = LocalWorkspaceMapper.getMappedName(getRepository(), path);
-        FileSystemUtils.saveFile(workspacePath, content);
+        FileSystemUtils.saveFile(workspacePath, contentInputStream);
         try {
             if (repository.isVersioned()) {
                 String versionsPath =
                         workspacePath.replace(IRepository.SEPARATOR + FileSystemRepository.PATH_SEGMENT_ROOT + IRepository.SEPARATOR,
                                 IRepository.SEPARATOR + FileSystemRepository.PATH_SEGMENT_VERSIONS + IRepository.SEPARATOR);
-                FileSystemUtils.saveFile(versionsPath + IRepository.SEPARATOR + formatter.format(new Date()), content);
+                FileSystemUtils.saveFile(versionsPath + IRepository.SEPARATOR + formatter.format(new Date()), contentInputStream);
             }
         } catch (Exception ev) {
             logger.warn("Error while storing version for file: {} with: {}", path, ev.getMessage());
         }
         return workspacePath;
+    }
+
+    /**
+     * Gets the repository.
+     *
+     * @return the repository
+     */
+    public FileSystemRepository getRepository() {
+        return this.repository;
+    }
+
+    public void createFile(String path, InputStream contentInputStream) throws LocalRepositoryException {
+        try {
+            storeFile(path, contentInputStream);
+            ((LocalRepository) getRepository()).setLastModified(System.currentTimeMillis());
+        } catch (IOException e) {
+            throw new LocalRepositoryException(e);
+        }
+
     }
 
     /**
@@ -147,6 +155,20 @@ public class LocalRepositoryDao {
                 cache.put(workspacePath, content);
             }
             return content;
+        } catch (IOException e) {
+            throw new LocalRepositoryException(e);
+        }
+    }
+
+    public InputStream getFileContentStream(LocalFile localFile) {
+        try {
+            String workspacePath = LocalWorkspaceMapper.getMappedName(getRepository(), localFile.getPath());
+            byte[] cachedContent = cache.get(workspacePath);
+            if (cachedContent != null) {
+                return new ByteArrayInputStream(cachedContent);
+            }
+
+            return FileSystemUtils.loadFileStream(workspacePath);
         } catch (IOException e) {
             throw new LocalRepositoryException(e);
         }
@@ -280,6 +302,31 @@ public class LocalRepositoryDao {
     }
 
     /**
+     * Gets the children by folder.
+     *
+     * @param path the path
+     * @return the children by folder
+     */
+    public List<LocalObject> getChildrenByFolder(String path) {
+        List<LocalObject> localObjects = new ArrayList<LocalObject>();
+        try {
+            String workspacePath = LocalWorkspaceMapper.getMappedName(getRepository(), path);
+            File objectFile = new File(workspacePath);
+            if (objectFile.isDirectory()) {
+                File[] children = FileSystemUtils.listFiles(objectFile);
+                if (children != null) {
+                    for (File file : children) {
+                        localObjects.add(getObjectByPath(file.getAbsolutePath()));
+                    }
+                }
+            }
+        } catch (IOException e) {
+            throw new LocalRepositoryException(e);
+        }
+        return localObjects;
+    }
+
+    /**
      * Gets the object by path.
      *
      * @param path the path
@@ -323,31 +370,6 @@ public class LocalRepositoryDao {
         }
         return localObject;
 
-    }
-
-    /**
-     * Gets the children by folder.
-     *
-     * @param path the path
-     * @return the children by folder
-     */
-    public List<LocalObject> getChildrenByFolder(String path) {
-        List<LocalObject> localObjects = new ArrayList<LocalObject>();
-        try {
-            String workspacePath = LocalWorkspaceMapper.getMappedName(getRepository(), path);
-            File objectFile = new File(workspacePath);
-            if (objectFile.isDirectory()) {
-                File[] children = FileSystemUtils.listFiles(objectFile);
-                if (children != null) {
-                    for (File file : children) {
-                        localObjects.add(getObjectByPath(file.getAbsolutePath()));
-                    }
-                }
-            }
-        } catch (IOException e) {
-            throw new LocalRepositoryException(e);
-        }
-        return localObjects;
     }
 
     /**

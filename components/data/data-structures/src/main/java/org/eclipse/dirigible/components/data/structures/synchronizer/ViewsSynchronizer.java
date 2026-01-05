@@ -139,7 +139,7 @@ public class ViewsSynchronizer extends MultitenantBaseSynchronizer<View, Long> {
      */
     @Override
     public List<View> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**

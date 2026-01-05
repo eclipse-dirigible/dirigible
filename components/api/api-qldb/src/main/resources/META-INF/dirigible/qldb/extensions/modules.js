@@ -12,7 +12,7 @@
 exports.getContent = function () {
     return [
         {
-            "name": "sdk/qldb",
+            "name": "@aerokit/sdk/qldb",
             "description": "Dirigible QLDB module",
             "isPackageDescription": true,
             "dtsPath": "qldb/extensions/qldb.d.ts"

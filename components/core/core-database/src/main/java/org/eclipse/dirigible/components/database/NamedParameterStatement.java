@@ -36,7 +36,7 @@ import java.util.*;
  * @author adam_crume
  */
 
-public class NamedParameterStatement implements AutoCloseable {
+public class NamedParameterStatement implements AutoCloseable, ParameterizedByName {
 
     /** The statement this object is wrapping. */
     private final PreparedStatement statement;
@@ -149,6 +149,7 @@ public class NamedParameterStatement implements AutoCloseable {
      * @throws IllegalArgumentException if the parameter does not exist
      * @see PreparedStatement#setObject(int, java.lang.Object)
      */
+    @Override
     public void setObject(String name, Object value) throws SQLException {
         int[] indexes = getIndexes(name);
         for (int i = 0; i < indexes.length; i++) {
@@ -180,6 +181,7 @@ public class NamedParameterStatement implements AutoCloseable {
      * @throws IllegalArgumentException if the parameter does not exist
      * @see PreparedStatement#setString(int, java.lang.String)
      */
+    @Override
     public void setString(String name, String value) throws SQLException {
         int[] indexes = getIndexes(name);
         for (int i = 0; i < indexes.length; i++) {
@@ -196,6 +198,7 @@ public class NamedParameterStatement implements AutoCloseable {
      * @throws IllegalArgumentException if the parameter does not exist
      * @see PreparedStatement#setInt(int, int)
      */
+    @Override
     public void setInt(String name, int value) throws SQLException {
         int[] indexes = getIndexes(name);
         for (int i = 0; i < indexes.length; i++) {
@@ -210,6 +213,7 @@ public class NamedParameterStatement implements AutoCloseable {
      * @param value the value
      * @throws SQLException the SQL exception
      */
+    @Override
     public void setByte(String name, byte value) throws SQLException {
         int[] indexes = getIndexes(name);
         for (int i = 0; i < indexes.length; i++) {
@@ -224,6 +228,7 @@ public class NamedParameterStatement implements AutoCloseable {
      * @param value the value
      * @throws SQLException the SQL exception
      */
+    @Override
     public void setShort(String name, short value) throws SQLException {
         int[] indexes = getIndexes(name);
         for (int i = 0; i < indexes.length; i++) {
@@ -238,6 +243,7 @@ public class NamedParameterStatement implements AutoCloseable {
      * @param value the value
      * @throws SQLException the SQL exception
      */
+    @Override
     public void setFloat(String name, float value) throws SQLException {
         int[] indexes = getIndexes(name);
         for (int i = 0; i < indexes.length; i++) {
@@ -252,6 +258,7 @@ public class NamedParameterStatement implements AutoCloseable {
      * @param value the value
      * @throws SQLException the SQL exception
      */
+    @Override
     public void setDouble(String name, double value) throws SQLException {
         int[] indexes = getIndexes(name);
         for (int i = 0; i < indexes.length; i++) {
@@ -266,6 +273,7 @@ public class NamedParameterStatement implements AutoCloseable {
      * @param value the value
      * @throws SQLException the SQL exception
      */
+    @Override
     public void setBoolean(String name, boolean value) throws SQLException {
         int[] indexes = getIndexes(name);
         for (int i = 0; i < indexes.length; i++) {
@@ -281,6 +289,7 @@ public class NamedParameterStatement implements AutoCloseable {
      * @param length the length
      * @throws SQLException the SQL exception
      */
+    @Override
     public void setBinaryStream(String name, InputStream value, int length) throws SQLException {
         int[] indexes = getIndexes(name);
         for (int i = 0; i < indexes.length; i++) {
@@ -296,6 +305,7 @@ public class NamedParameterStatement implements AutoCloseable {
      * @param length the length
      * @throws SQLException the SQL exception
      */
+    @Override
     public void setBinaryStream(String name, InputStream value, long length) throws SQLException {
         int[] indexes = getIndexes(name);
         for (int i = 0; i < indexes.length; i++) {
@@ -312,6 +322,7 @@ public class NamedParameterStatement implements AutoCloseable {
      * @throws IllegalArgumentException if the parameter does not exist
      * @see PreparedStatement#setInt(int, int)
      */
+    @Override
     public void setLong(String name, long value) throws SQLException {
         int[] indexes = getIndexes(name);
         for (int i = 0; i < indexes.length; i++) {
@@ -328,6 +339,7 @@ public class NamedParameterStatement implements AutoCloseable {
      * @throws IllegalArgumentException if the parameter does not exist
      * @see PreparedStatement#setTimestamp(int, java.sql.Timestamp)
      */
+    @Override
     public void setTimestamp(String name, Timestamp value) throws SQLException {
         int[] indexes = getIndexes(name);
         for (int i = 0; i < indexes.length; i++) {
@@ -344,6 +356,7 @@ public class NamedParameterStatement implements AutoCloseable {
      * @throws IllegalArgumentException if the parameter does not exist
      * @see PreparedStatement#setDate(int, java.sql.Date)
      */
+    @Override
     public void setDate(String name, java.sql.Date value) throws SQLException {
         int[] indexes = getIndexes(name);
         for (int i = 0; i < indexes.length; i++) {
@@ -361,6 +374,7 @@ public class NamedParameterStatement implements AutoCloseable {
      * @throws IllegalArgumentException if the parameter does not exist
      * @see PreparedStatement#setDate(int, java.sql.Date, Calendar)
      */
+    @Override
     public void setDate(String name, java.sql.Date value, Calendar cal) throws SQLException {
         int[] indexes = getIndexes(name);
         for (int i = 0; i < indexes.length; i++) {
@@ -375,6 +389,7 @@ public class NamedParameterStatement implements AutoCloseable {
      * @param value the value
      * @throws SQLException the SQL exception
      */
+    @Override
     public void setTime(String name, java.sql.Time value) throws SQLException {
         int[] indexes = getIndexes(name);
         for (int i = 0; i < indexes.length; i++) {
@@ -390,6 +405,7 @@ public class NamedParameterStatement implements AutoCloseable {
      * @param cal the cal
      * @throws SQLException the SQL exception
      */
+    @Override
     public void setTime(String name, java.sql.Time value, Calendar cal) throws SQLException {
         int[] indexes = getIndexes(name);
         for (int i = 0; i < indexes.length; i++) {
@@ -404,10 +420,29 @@ public class NamedParameterStatement implements AutoCloseable {
      * @param sqlType the sql type
      * @throws SQLException the SQL exception
      */
+    @Override
     public void setNull(String name, Integer sqlType) throws SQLException {
         int[] indexes = getIndexes(name);
         for (int i = 0; i < indexes.length; i++) {
             statement.setNull(indexes[i], sqlType);
+        }
+    }
+
+    /**
+     * Sets the array.
+     *
+     * @param name the name
+     * @param value the value
+     * @param typeName the type name
+     * @throws SQLException the SQL exception
+     */
+    @Override
+    public void setArray(String name, List<?> value, String typeName) throws SQLException {
+        Connection connection = getStatement().getConnection();
+        Array array = connection.createArrayOf(typeName, value.toArray());
+        int[] indexes = getIndexes(name);
+        for (int i = 0; i < indexes.length; i++) {
+            statement.setArray(indexes[i], array);
         }
     }
 

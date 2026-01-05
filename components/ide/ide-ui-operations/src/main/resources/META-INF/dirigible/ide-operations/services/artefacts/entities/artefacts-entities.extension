@@ -1,5 +1,0 @@
-{
-    "module": "ide-operations/services/artefacts/entities/artefacts-entities.mjs",
-    "extensionPoint": "ide-operations-artefacts",
-    "description": "Entities Artefacts Extension"
-}

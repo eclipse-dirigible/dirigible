@@ -1,0 +1,8 @@
+import { workspace } from "@aerokit/sdk/platform";
+import { response } from "@aerokit/sdk/http";
+
+let workspacesNames = workspace.getWorkspacesNames();
+
+response.println("Workspaces: " + workspacesNames);
+response.flush();
+response.close();

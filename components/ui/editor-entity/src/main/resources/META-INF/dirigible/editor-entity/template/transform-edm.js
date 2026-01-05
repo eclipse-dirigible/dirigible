@@ -10,9 +10,9 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 
-import { Workspace as workspaceManager } from "sdk/platform";
-import { Bytes } from "sdk/io";
-import { XML } from "sdk/utils";
+import { Workspace as workspaceManager } from "@aerokit/sdk/platform";
+import { Bytes } from "@aerokit/sdk/io";
+import { XML } from "@aerokit/sdk/utils";
 
 export function transform(workspaceName, projectName, filePath) {
 

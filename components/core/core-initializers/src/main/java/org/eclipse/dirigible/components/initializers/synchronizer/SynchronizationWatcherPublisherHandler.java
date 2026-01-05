@@ -11,11 +11,14 @@ package org.eclipse.dirigible.components.initializers.synchronizer;
 
 import org.eclipse.dirigible.components.base.publisher.PublisherHandler;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
  * The Class SynchronizationWatcherPublisherHandler.
  */
+
+@Order(50)
 @Component
 public class SynchronizationWatcherPublisherHandler implements PublisherHandler {
 

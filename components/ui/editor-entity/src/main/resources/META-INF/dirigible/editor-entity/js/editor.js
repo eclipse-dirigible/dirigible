@@ -285,6 +285,7 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 				cell.value.roleWrite = data.roleWrite;
 				cell.value.importsCode = data.importsCode;
 				cell.value.generateReport = data.generateReport;
+				cell.value.multilingual = data.multilingual;
 
 				$scope.graph.model.setValue(cell, cell.value.clone());
 
@@ -1003,7 +1004,8 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 									perspectives: $scope.graph.model.perspectives,
 									navigations: $scope.graph.model.navigations,
 									importsCode: cell.value.importsCode,
-									generateReport: cell.value.generateReport
+									generateReport: cell.value.generateReport,
+									multilingual: cell.value.multilingual
 								},
 								maxWidth: '1024px',
 								closeButton: false

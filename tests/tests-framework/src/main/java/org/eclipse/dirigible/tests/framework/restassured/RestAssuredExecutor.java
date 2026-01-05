@@ -14,6 +14,7 @@ import io.restassured.authentication.AuthenticationScheme;
 import io.restassured.filter.log.RequestLoggingFilter;
 import io.restassured.filter.log.ResponseLoggingFilter;
 import org.eclipse.dirigible.components.base.callable.CallableNoResultAndNoException;
+import org.eclipse.dirigible.components.base.callable.CallableResultAndNoException;
 import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -122,6 +123,33 @@ public class RestAssuredExecutor {
         String user = defaultTenant.getUsername();
         String pass = defaultTenant.getPassword();
         this.execute(callable, "localhost", user, pass);
+    }
+
+    public <R> R executeWithResult(CallableResultAndNoException<R> callable) {
+        DirigibleTestTenant defaultTenant = DirigibleTestTenant.createDefaultTenant();
+        String user = defaultTenant.getUsername();
+        String pass = defaultTenant.getPassword();
+        return this.executeWithResult(callable, "localhost", user, pass);
+    }
+
+    public <R> R executeWithResult(CallableResultAndNoException<R> callable, String host, String user, String password) {
+        String configuredBaseURI = RestAssured.baseURI;
+        int configuredPort = RestAssured.port;
+        AuthenticationScheme configuredAuthentication = RestAssured.authentication;
+
+        try {
+            RestAssured.baseURI = "http://" + host;
+            RestAssured.port = port;
+
+            RestAssured.authentication = RestAssured.preemptive()
+                                                    .basic(user, password);
+
+            return callable.call();
+        } finally {
+            RestAssured.baseURI = configuredBaseURI;
+            RestAssured.port = configuredPort;
+            RestAssured.authentication = configuredAuthentication;
+        }
     }
 
     public void execute(CallableNoResultAndNoException callable, String user, String password) {

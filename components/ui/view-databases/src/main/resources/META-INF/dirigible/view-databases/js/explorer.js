@@ -18,7 +18,7 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 	const brandingInfo = getBrandingInfo();
 	const lastSelectedDatabaseKey = `${brandingInfo.prefix}.view-db-explorer.database`;
 	$scope.selectedDatabase;
-	let lastSelectedDatabase = JSON.parse(localStorage.getItem(lastSelectedDatabaseKey) ?? 'null');
+	let lastSelectedDatabase = JSON.parse(localStorage.getItem(lastSelectedDatabaseKey) ?? '{}');
 	const jstreeWidget = angular.element('#dgDatabases');
 	$scope.spinnerColumns = {
 		text: 'Loading Columns...',
@@ -716,20 +716,22 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 			.then((data) => {
 				$scope.databases = data.data;
 				if ($scope.databases.length > 0) {
-					if (lastSelectedDatabase !== null) {
+					if (lastSelectedDatabase['type']) {
 						$scope.selectedDatabase = lastSelectedDatabase.type;
 					} else {
 						$scope.selectedDatabase = $scope.databases[0];
+						lastSelectedDatabase['type'] = $scope.selectedDatabase;
 					}
 					if ($scope.selectedDatabase) {
 						// MessageHub.postMessage({ topic: 'database.database.selection.changed', data: $scope.selectedDatabase });
 						$http.get(databasesSvcUrl + $scope.selectedDatabase + '/').then((data) => {
 							$scope.datasources = data.data;
 							if ($scope.datasources.length > 0) {
-								if (lastSelectedDatabase !== null) {
+								if (lastSelectedDatabase['name']) {
 									$scope.selectedDatasource = lastSelectedDatabase.name;
 								} else {
 									$scope.selectedDatasource = $scope.datasources[0];
+									lastSelectedDatabase['name'] = $scope.selectedDatasource;
 								}
 								if ($scope.selectedDatasource) {
 									MessageHub.postMessage({ topic: 'database.datasource.selection.changed', data: $scope.selectedDatasource });
@@ -767,8 +769,7 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 		}
 
 		jstreeWidget.jstree('delete_node', jstreeWidget.jstree(true).get_node(data.node.children[0]));
-
-		$http.get(databasesSvcUrl + $scope.selectedDatabase + '/' + $scope.selectedDatasource + '/' + schemaParent + '/' + tableParent.text + '?kind=' + tableParent.original.kind.toUpperCase())
+		$http.get(databasesSvcUrl + $scope.selectedDatabase + '/' + $scope.selectedDatasource + '/' + schemaParent + '/' + btoa(tableParent.text) + '?kind=' + tableParent.original.kind.toUpperCase())
 			.then((data) => {
 				data.data.columns.forEach((column) => {
 					expandColumn(parent, column);
@@ -858,7 +859,7 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 		}
 
 		jstreeWidget.jstree('delete_node', jstreeWidget.jstree(true).get_node(data.node.children[0]));
-		$http.get(databasesSvcUrl + $scope.selectedDatabase + '/' + $scope.selectedDatasource + '/' + schemaParent + '/' + tableParent.text)
+		$http.get(databasesSvcUrl + $scope.selectedDatabase + '/' + $scope.selectedDatasource + '/' + schemaParent + '/' + btoa(tableParent.text))
 			.then((data) => {
 				data.data.indices.forEach((index) => {
 					let nodeText = index.name;
@@ -885,7 +886,7 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 		}
 
 		jstreeWidget.jstree('delete_node', jstreeWidget.jstree(true).get_node(data.node.children[0]));
-		$http.get(databasesSvcUrl + $scope.selectedDatabase + '/' + $scope.selectedDatasource + '/' + schemaParent + '/' + tableParent.text)
+		$http.get(databasesSvcUrl + $scope.selectedDatabase + '/' + $scope.selectedDatasource + '/' + schemaParent + '/' + btoa(tableParent.text))
 			.then((data) => {
 				data.data.foreignKeys.forEach((foreignKey) => {
 					const nodeText = foreignKey.name;
@@ -994,45 +995,44 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 		return false;
 	};
 
-	$scope.switchDatabase = (name) => {
-		$scope.selectedDatabase = name;
-		$http.get(databasesSvcUrl + $scope.selectedDatabase)
-			.then((data) => {
-				$scope.datasources = data.data;
-				if ($scope.datasources[0]) {
-					$scope.selectedDatasource = $scope.datasources[0];
-					// MessageHub.postMessage({ topic: 'database.database.selection.changed', data: $scope.selectedDatabase });
-					MessageHub.postMessage({ topic: 'database.datasource.selection.changed', data: $scope.selectedDatasource });
-					$scope.switchDatasource();
-				} else {
-					$scope.selectedDatasource = undefined;
-				}
-				$scope.refreshDatabase();
-			}, (error) => {
-				console.error(error);
-				Notifications.show({
-					type: 'negative',
-					title: 'Unable to load database information',
-					description: 'There was an error while trying to load the database information.'
-				});
-			});
-	};
+	// $scope.switchDatabase = (name) => {
+	// 	$scope.selectedDatabase = name;
+	// 	$http.get(databasesSvcUrl + $scope.selectedDatabase)
+	// 		.then((data) => {
+	// 			$scope.datasources = data.data;
+	// 			if ($scope.datasources[0]) {
+	// 				$scope.selectedDatasource = $scope.datasources[0];
+	// 				// MessageHub.postMessage({ topic: 'database.database.selection.changed', data: $scope.selectedDatabase });
+	// 				MessageHub.postMessage({ topic: 'database.datasource.selection.changed', data: $scope.selectedDatasource });
+	// 				$scope.switchDatasource();
+	// 			} else {
+	// 				$scope.selectedDatasource = undefined;
+	// 			}
+	// 			$scope.refreshDatabase();
+	// 		}, (error) => {
+	// 			console.error(error);
+	// 			Notifications.show({
+	// 				type: 'negative',
+	// 				title: 'Unable to load database information',
+	// 				description: 'There was an error while trying to load the database information.'
+	// 			});
+	// 		});
+	// };
 
 	$scope.switchDatasource = (name) => {
-		if (name) $scope.selectedDatasource = name;
-		localStorage.setItem(lastSelectedDatabaseKey, JSON.stringify({ type: $scope.selectedDatabase, name: $scope.selectedDatasource }));
-		MessageHub.postMessage({ topic: 'database.datasource.selection.changed', data: $scope.selectedDatasource });
-		$scope.refreshDatabase();
+		if (name) {
+			$scope.selectedDatasource = name;
+			lastSelectedDatabase['name'] = name;
+			localStorage.setItem(lastSelectedDatabaseKey, JSON.stringify({ type: $scope.selectedDatabase, name: $scope.selectedDatasource }));
+			MessageHub.postMessage({ topic: 'database.datasource.selection.changed', data: $scope.selectedDatasource });
+			$scope.refreshDatabase();
+		}
 	};
 
-	$scope.runSQL = () => {
-		MessageHub.triggerEvent('database.sql.run');
-	};
-
-	MessageHub.addMessageListener({
+	const refreshHandler = MessageHub.addMessageListener({
 		topic: 'view-db-explorer.refresh',
 		handler: () => {
-			$scope.$evalAsync($scope.refresh());
+			$scope.$evalAsync($scope.refresh)
 		},
 	});
 
@@ -1044,4 +1044,8 @@ database.controller('DatabaseController', function ($scope, $http, MessageHub, N
 	$scope.invalidateCache = () => {
 		$http.get(databasesInvalidateSvcUrl);
 	};
+
+	$scope.$on('$destroy', () => {
+		MessageHub.removeMessageListener(refreshHandler);
+	});
 });

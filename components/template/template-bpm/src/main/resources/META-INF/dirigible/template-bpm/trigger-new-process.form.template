@@ -7,7 +7,7 @@
         {
             "controlId": "header",
             "groupId": "fb-display",
-            "title": "Trigger new process instance",
+            "label": "Trigger new process instance",
             "size": 1
         },
         {
@@ -24,7 +24,7 @@
             "minLength": 0,
             "maxLength": -1,
             "validationRegex": "",
-            "errorState": "Incorrect input"
+            "errorMessage": "Incorrect input"
         },
         {
             "controlId": "input-number",

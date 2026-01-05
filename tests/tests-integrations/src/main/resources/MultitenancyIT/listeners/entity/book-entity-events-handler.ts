@@ -1,5 +1,5 @@
 import { BookRepository } from "../../gen/edm/dao/Books/BookRepository";
-import { logging } from "sdk/log";
+import { logging } from "@aerokit/sdk/log";
 
 const logger = logging.getLogger("book-entity-events-handler.ts");
 

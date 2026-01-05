@@ -9,12 +9,23 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.config;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.engine.bpm.BpmProvider;
 import org.eclipse.dirigible.components.engine.bpm.flowable.TaskService;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActivityStatusData;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -28,20 +39,17 @@ import org.flowable.engine.history.HistoricProcessInstanceQuery;
 import org.flowable.engine.repository.Deployment;
 import org.flowable.engine.repository.ProcessDefinition;
 import org.flowable.engine.repository.ProcessDefinitionQuery;
+import org.flowable.engine.runtime.Execution;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.engine.runtime.ProcessInstanceQuery;
 import org.flowable.image.ProcessDiagramGenerator;
 import org.flowable.job.api.Job;
 import org.flowable.variable.api.history.HistoricVariableInstance;
 import org.flowable.variable.api.persistence.entity.VariableInstance;
+import org.flowable.variable.api.runtime.VariableInstanceQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
 
 /**
  * The Class BpmProviderFlowable. NOTE! - all methods in the class should be tenant aware
@@ -149,16 +157,23 @@ public class BpmProviderFlowable implements BpmProvider {
      * Start process.
      *
      * @param key the key
+     * @param businessKey the business key
      * @param parameters the parameters
-     * @return the string
+     * @return the process instance id
      */
-    public String startProcess(String key, String parameters) {
-        LOGGER.info("Starting a BPMN process by key: [{}]", key);
-        RuntimeService runtimeService = processEngine.getRuntimeService();
+    public String startProcess(String key, String businessKey, String parameters) {
         @SuppressWarnings("unchecked")
         Map<String, Object> variables = GsonHelper.fromJson(parameters, HashMap.class);
+
+        return startProcess(key, businessKey, variables);
+    }
+
+    public String startProcess(String key, String businessKey, Map<String, Object> variables) {
+        LOGGER.info("Starting a BPMN process by key: [{}]", key);
+        RuntimeService runtimeService = processEngine.getRuntimeService();
         try {
-            ProcessInstance processInstance = runtimeService.startProcessInstanceByKeyAndTenantId(key, variables, getTenantId());
+            ProcessInstance processInstance =
+                    runtimeService.startProcessInstanceByKeyAndTenantId(key, businessKey, variables, getTenantId());
             LOGGER.info("Started process instance with id [{}], key [{}] for tenant [{}]", processInstance.getId(), key,
                     processInstance.getTenantId());
             return processInstance.getId();
@@ -166,7 +181,45 @@ public class BpmProviderFlowable implements BpmProvider {
             LOGGER.error("Failed to start process with key [{}]", key, e);
             return null;
         }
+    }
 
+    /**
+     * Sets the process instance name.
+     *
+     * @param processInstanceId the process instance id
+     * @param name the name
+     */
+    public void setProcessInstanceName(String processInstanceId, String name) {
+        flowableArtefactsValidator.validateExecutionId(processInstanceId);
+
+        RuntimeService runtimeService = processEngine.getRuntimeService();
+        runtimeService.setProcessInstanceName(processInstanceId, name);
+    }
+
+    /**
+     * Updates the business key.
+     *
+     * @param processInstanceId the process instance id
+     * @param businessKey the business key
+     */
+    public void updateBusinessKey(String processInstanceId, String businessKey) {
+        flowableArtefactsValidator.validateExecutionId(processInstanceId);
+
+        RuntimeService runtimeService = processEngine.getRuntimeService();
+        runtimeService.updateBusinessKey(processInstanceId, businessKey);
+    }
+
+    /**
+     * Updates the business status.
+     *
+     * @param processInstanceId the process instance id
+     * @param businessStatus the business status
+     */
+    public void updateBusinessStatus(String processInstanceId, String businessStatus) {
+        flowableArtefactsValidator.validateExecutionId(processInstanceId);
+
+        RuntimeService runtimeService = processEngine.getRuntimeService();
+        runtimeService.updateBusinessStatus(processInstanceId, businessStatus);
     }
 
     /**
@@ -242,6 +295,27 @@ public class BpmProviderFlowable implements BpmProvider {
         runtimeService.removeVariable(executionId, variableName);
     }
 
+    /**
+     * Correlates a message event to the process instance.
+     *
+     * @param processInstanceId the process instance id
+     * @param messageName the name of the event
+     * @param variables the variables to be passed with the event
+     */
+    public void correlateMessageEvent(String processInstanceId, String messageName, Map<String, Object> variables) {
+        flowableArtefactsValidator.validateProcessInstanceId(processInstanceId);
+
+        RuntimeService runtimeService = processEngine.getRuntimeService();
+
+        Execution execution = runtimeService.createExecutionQuery()
+                                            .messageEventSubscriptionName(messageName)
+                                            .processInstanceId(processInstanceId)
+                                            .executionTenantId(getTenantId())
+                                            .singleResult();
+
+        runtimeService.messageEventReceived(messageName, execution.getId(), variables);
+    }
+
     public List<ProcessDefinition> getProcessDefinitions(Optional<String> key) {
         ProcessDefinitionQuery processDefinitionsQuery = processEngine.getRepositoryService()
                                                                       .createProcessDefinitionQuery();
@@ -264,14 +338,6 @@ public class BpmProviderFlowable implements BpmProvider {
 
     }
 
-    public ProcessDefinition getProcessDefinitionById(String processDefinitionId) {
-        return processEngine.getRepositoryService()
-                            .createProcessDefinitionQuery()
-                            .processDefinitionTenantId(getTenantId())
-                            .processDefinitionId(processDefinitionId)
-                            .singleResult();
-    }
-
     public List<HistoricVariableInstance> getProcessHistoricInstanceVariables(String processInstanceId) {
         flowableArtefactsValidator.validateHistoricProcessInstanceByProcessInstanceId(processInstanceId);
 
@@ -281,13 +347,17 @@ public class BpmProviderFlowable implements BpmProvider {
                             .list();
     }
 
-    public List<VariableInstance> getProcessInstanceVariables(String processInstanceId) {
+    public List<VariableInstance> getProcessInstanceVariables(String processInstanceId, Optional<String> variableName) {
         flowableArtefactsValidator.validateProcessInstanceId(processInstanceId);
 
-        return processEngine.getRuntimeService()
-                            .createVariableInstanceQuery()
-                            .processInstanceId(processInstanceId)
-                            .list();
+        VariableInstanceQuery processInstanceQuery = processEngine.getRuntimeService()
+                                                                  .createVariableInstanceQuery();
+        if (variableName.isPresent() && !variableName.get()
+                                                     .isEmpty()) {
+            processInstanceQuery.variableNameLike("%" + variableName.get() + "%");
+        }
+        return processInstanceQuery.processInstanceId(processInstanceId)
+                                   .list();
     }
 
     public List<Job> getDeadLetterJobs(String processInstanceId) {
@@ -406,12 +476,12 @@ public class BpmProviderFlowable implements BpmProvider {
                                            .list();
     }
 
-    public Deployment deployProcess(String deploymentKey, String resourceName, byte[] content) {
+    public Deployment deployProcess(String deploymentKey, String resourceName, String content) {
         return processEngine.getRepositoryService()
                             .createDeployment()
                             .key(deploymentKey)
                             .tenantId(getTenantId())
-                            .addBytes(resourceName, content)
+                            .addString(resourceName, content)
                             .deploy();
     }
 
@@ -498,12 +568,109 @@ public class BpmProviderFlowable implements BpmProvider {
         }
     }
 
-    public List<String> getProcessInstanceActiveActivityIds(String processInstanceId) {
+    public Map<String, ActivityStatusData> getProcessInstanceActiveActivityIds(String processInstanceId) {
         ProcessInstance processInstance = getProcessInstance(processInstanceId);
         if (null == processInstance) {
-            return Collections.emptyList();
+            return Collections.emptyMap();
         }
         RuntimeService runtimeService = processEngine.getRuntimeService();
-        return runtimeService.getActiveActivityIds(processInstance.getId());
+        List<String> positiveActiveActivityIds = runtimeService.getActiveActivityIds(processInstance.getId());
+
+        List<Job> jobs = processEngine.getManagementService()
+                                      .createDeadLetterJobQuery()
+                                      .processInstanceId(processInstanceId)
+                                      .list();
+
+        List<String> negativeActiveActivityIds = jobs.stream()
+                                                     .map(Job::getElementId)
+                                                     .collect(Collectors.toList());
+
+        Map<String, ActivityStatusData> statuses = new HashMap<>();
+        for (String positive : positiveActiveActivityIds) {
+            ActivityStatusData data = statuses.get(positive);
+            if (data == null) {
+                data = new ActivityStatusData();
+                data.positive = 1;
+                statuses.put(positive, data);
+                continue;
+            }
+            data.positive += 1;
+        }
+        for (String negative : negativeActiveActivityIds) {
+            ActivityStatusData data = statuses.get(negative);
+            if (data == null) {
+                data = new ActivityStatusData();
+                data.negative = 1;
+                statuses.put(negative, data);
+                continue;
+            }
+            data.negative += 1;
+        }
+
+        return statuses;
+    }
+
+    public Map<String, ActivityStatusData> getProcessDefinitionActiveActivityIds(String processDefinitionId) {
+        ProcessDefinition processDefinition = getProcessDefinitionById(processDefinitionId);
+        if (null == processDefinition) {
+            return Collections.emptyMap();
+        }
+
+        processEngine.getTaskService()
+                     .createTaskQuery()
+                     .processDefinitionId(processDefinitionId)
+                     .suspended()
+                     .list();
+
+        RuntimeService runtimeService = processEngine.getRuntimeService();
+        List<Execution> executions = runtimeService.createExecutionQuery()
+                                                   .onlyChildExecutions()
+                                                   .processDefinitionId(processDefinitionId)
+                                                   .list();
+        List<String> allActiveActivityIds = executions.stream()
+                                                      .map(Execution::getActivityId)
+                                                      .collect(Collectors.toList());
+
+        List<Job> jobs = processEngine.getManagementService()
+                                      .createDeadLetterJobQuery()
+                                      .processDefinitionId(processDefinitionId)
+                                      .list();
+
+        List<String> negativeActiveActivityIds = jobs.stream()
+                                                     .map(Job::getElementId)
+                                                     .collect(Collectors.toList());
+
+        Map<String, ActivityStatusData> statuses = new HashMap<>();
+        for (String each : allActiveActivityIds) {
+            ActivityStatusData data = statuses.get(each);
+            if (data == null) {
+                data = new ActivityStatusData();
+                data.positive = 1;
+                statuses.put(each, data);
+                continue;
+            }
+            data.positive += 1;
+        }
+        for (String negative : negativeActiveActivityIds) {
+            ActivityStatusData data = statuses.get(negative);
+            if (data == null) {
+                data = new ActivityStatusData();
+                data.negative = 1;
+                statuses.put(negative, data);
+                continue;
+            }
+            data.negative += 1;
+            data.positive -= 1;
+        }
+
+        return statuses;
+    }
+
+    public ProcessDefinition getProcessDefinitionById(String processDefinitionId) {
+        return processEngine.getRepositoryService()
+                            .createProcessDefinitionQuery()
+                            .processDefinitionTenantId(getTenantId())
+                            .processDefinitionId(processDefinitionId)
+                            .singleResult();
     }
 }

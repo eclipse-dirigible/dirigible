@@ -264,7 +264,7 @@ public class TablesSynchronizer extends MultitenantBaseSynchronizer<Table, Long>
      */
     @Override
     public List<Table> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**

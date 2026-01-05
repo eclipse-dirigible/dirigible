@@ -11,8 +11,6 @@ package org.eclipse.dirigible.components.engine.javascript.service;
 
 import java.util.Map;
 
-import org.eclipse.dirigible.graalium.core.JavascriptSourceProvider;
-import org.eclipse.dirigible.graalium.core.modules.DirigibleSourceProvider;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -85,11 +83,27 @@ public class JavascriptService implements InitializingBean {
      * @param projectFilePathParam the project file path param
      * @param parameters the parameters
      * @param debug the debug
+     * @param keep the keep context open
+     * @return the object
+     */
+    public Object handleRequest(String projectName, String projectFilePath, String projectFilePathParam, Map<Object, Object> parameters,
+            boolean debug, boolean keep) {
+        return handler.handleRequest(projectName, projectFilePath, projectFilePathParam, parameters, debug, keep);
+    }
+
+    /**
+     * Handle request.
+     *
+     * @param projectName the project name
+     * @param projectFilePath the project file path
+     * @param projectFilePathParam the project file path param
+     * @param parameters the parameters
+     * @param debug the debug
      * @return the object
      */
     public Object handleRequest(String projectName, String projectFilePath, String projectFilePathParam, Map<Object, Object> parameters,
             boolean debug) {
-        return handler.handleRequest(projectName, projectFilePath, projectFilePathParam, parameters, debug);
+        return handleRequest(projectName, projectFilePath, projectFilePathParam, parameters, debug, false);
     }
 
     /**

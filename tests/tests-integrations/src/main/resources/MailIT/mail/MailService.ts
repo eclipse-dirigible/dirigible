@@ -1,5 +1,5 @@
-import { Controller, Post } from "sdk/http"
-import { client as mailClient } from "sdk/mail";
+import { Controller, Post } from "@aerokit/sdk/http"
+import { client as mailClient } from "@aerokit/sdk/mail";
 
 @Controller
 class MailService {
