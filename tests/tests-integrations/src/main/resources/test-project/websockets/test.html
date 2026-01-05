@@ -11,104 +11,130 @@
     SPDX-License-Identifier: EPL-2.0
 
 -->
-<html>
+<!DOCTYPE html>
+<html lang="en">
+
 	<head>
-	    <title>JavaScript WebSocket</title>
-	    
-	    <script src="js/sockjs-0.3.4.js"></script>
-	    <script src="js/stomp.js"></script>
-	    
-	    <script type="text/javascript">
+		<meta charset="UTF-8" />
+		<link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>JavaScript WebSocket</title>
 
-	        var stompClient = null;
+		<script type="module">
+			import { Client } from "/webjars/stomp__stompjs/esm6/index.js";
 
-	        function setConnected(connected) {
+			let connectBtn;
+			let disconnectBtn;
+			let fromInput;
+			let textInput;
+			let response;
+			let conversation;
 
-	            document.getElementById('connect').disabled = connected;
-	            document.getElementById('disconnect').disabled = !connected;
-	            document.getElementById('conversationDiv').style.visibility = connected ? 'visible' : 'hidden';
-	            document.getElementById('response').innerHTML = '';
-	        }
+			const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+			const host = window.location.host;
 
-	        function connect() {
+			const brokerURL = `${protocol}://${host}/stomp`;
 
-	            var socket = new SockJS('/stomp');
-	            stompClient = Stomp.over(socket);
+			window.stompClient = new Client({
+				brokerURL: brokerURL,
+				onConnect: (frame) => {
+					window.setConnected(true);
+					console.log("Connected: " + frame);
+					window.stompClient.subscribe(
+						"/user/queue/reply/test-websocket",
+						(message) => window.showMessage(JSON.parse(message.body))
+					);
+					window.stompClient.subscribe(
+						"/user/queue/errors/test-websocket",
+						(error) => window.showError(error)
+					);
+				},
+				onDisconnect: () => {
+					console.log("Disconnected");
+				},
+				onHeartbeatLost: () => {
+					console.error("Lost connection to the broker");
+					window.showError("Lost connection to the broker");
+				},
+				onStompError: (frame) => {
+					console.error("Broker reported an error:", frame.body);
+					window.showError(`Broker reported an error: ${JSON.stringify(frame.body)}`);
+				},
+			});
 
-	            stompClient.connect({}, function(frame) {
+			window.setConnected = (connected) => {
+				connectBtn.disabled = connected;
+				disconnectBtn.disabled = !connected;
+				conversation.style.visibility = connected ? "visible" : "hidden";
+				response.innerHTML = "";
+			};
 
-	            	setConnected(true);
-	                console.log('Connected: ' + frame);
+			window.showMessage = (messageOutput) => {
+				let p = document.createElement("p");
+				p.style.wordWrap = "break-word";
+				p.appendChild(
+					document.createTextNode(
+						messageOutput.from +
+						": " +
+						messageOutput.text +
+						" (" +
+						messageOutput.time +
+						")"
+					)
+				);
+				response.appendChild(p);
+			};
 
-	                stompClient.subscribe('/user/queue/reply/test-websocket', function(messageOutput) {
-	                    showMessage(JSON.parse(messageOutput.body));
-	                });
+			window.showError = (error) => {
+				let p = document.createElement("p");
+				p.style.wordWrap = "break-word";
+				p.appendChild(document.createTextNode(error));
+				response.appendChild(p);
+			};
 
-	                stompClient.subscribe('/user/queue/errors/test-websocket', function(error) {
-	                	showError(error);
-	                });
+			window.connect = () => {
+				window.stompClient.activate();
+			};
 
-	            }, function(error) {
-	            	showError(error);
-	            });
-	        }
+			window.disconnect = () => {
+				window.stompClient.deactivate();
+				window.setConnected(false);
+				console.log("Disconnecting...");
+			};
 
-	        function disconnect() {
+			window.sendMessage = () => {
+				window.stompClient.publish({
+					destination: "/ws/stomp/test-websocket",
+					headers: {},
+					body: JSON.stringify({ from: fromInput.value, text: textInput.value }),
+				});
+			};
 
-	            if(stompClient != null) {
-	                stompClient.disconnect();
-	            }
-
-	            setConnected(false);
-	            console.log("Disconnected");
-	        }
-
-	        function sendMessage() {
-	        	var from = document.getElementById('from').value;
-	            var text = document.getElementById('text').value;
-	            stompClient.send("/ws/stomp/test-websocket", {}, JSON.stringify({'from':from, 'text':text}));
-	        }
-
-	        function showMessage(messageOutput) {
-	            var response = document.getElementById('response');
-	            var p = document.createElement('p');
-	            p.style.wordWrap = 'break-word';
-	            p.appendChild(document.createTextNode(messageOutput.from + ": " + messageOutput.text + " (" + messageOutput.time + ")"));
-	            response.appendChild(p);
-	        }
-	        
-	        function showError(error) {
-	            var response = document.getElementById('response');
-	            var p = document.createElement('p');
-	            p.style.wordWrap = 'break-word';
-	            p.appendChild(document.createTextNode(error));
-	            response.appendChild(p);
-	        }
-
-	    </script>
-	    
+			window.initPage = () => {
+				connectBtn = document.getElementById("connectBtn");
+				disconnectBtn = document.getElementById("disconnectBtn");
+				fromInput = document.getElementById("fromInput");
+				textInput = document.getElementById("textInput");
+				response = document.getElementById("response");
+				conversation = document.getElementById("conversation");
+				window.setConnected(false);
+			};
+		</script>
 	</head>
-	
-	<body onload="disconnect()">
 
+	<body onload="initPage()">
+		<input type="text" id="fromInput" placeholder="Choose a nickname" />
+		<br />
 		<div>
-		
-		
-			<div>
-				<input type="text" id="from" placeholder="Choose a nickname"/>
-			</div>
-			<br />
-		    <div>
-		        <button id="connect" onclick="connect();">Connect</button>
-		        <button id="disconnect" disabled="disabled" onclick="disconnect();">Disconnect</button>
-		    </div>
-		    <br />
-		    <div id="conversationDiv">
-		        <input type="text" id="text" placeholder="Write a message..."/>
-		        <button id="sendMessage" onclick="sendMessage();">Send</button>
-		        <p id="response"></p>
-		    </div>
+			<button id="connectBtn" onclick="connect()">Connect</button>
+			<button id="disconnectBtn" disabled="disabled" onclick="disconnect()">Disconnect</button>
 		</div>
-
+		<br />
+		<div id="conversation">
+			<input type="text" id="textInput" placeholder="Write a message..." />
+			<button id="sendMessage" onclick="sendMessage()">Send</button>
+			<p id="response"></p>
+		</div>
 	</body>
+
 </html>

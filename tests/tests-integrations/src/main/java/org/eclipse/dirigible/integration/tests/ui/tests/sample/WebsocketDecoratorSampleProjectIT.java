@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2022 codbex or an codbex affiliate company and contributors
+ * Copyright (c) 2025 codbex or an codbex affiliate company and contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v20.html
  *
- * SPDX-FileCopyrightText: 2022 codbex or an codbex affiliate company and contributors
+ * SPDX-FileCopyrightText: 2025 codbex or an codbex affiliate company and contributors
  * SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.integration.tests.ui.tests.sample;
@@ -31,10 +31,10 @@ public class WebsocketDecoratorSampleProjectIT extends SampleProjectRepositoryIT
     protected void verifyProject() {
         browser.openPath("/services/web/sample-websocket-decorator/order-websocket-page.html");
 
-        browser.enterTextInElementById("from", "Test user");
-        browser.clickOnElementById("connect");
+        browser.enterTextInElementById("fromInput", "Test user");
+        browser.clickOnElementById("connectBtn");
 
-        browser.enterTextInElementById("text", "A test message");
+        browser.enterTextInElementById("textInput", "A test message");
         browser.clickOnElementById("sendMessage");
 
         browser.assertElementExistsByIdAndContainsText("response", "Test user: Hello from OrderWebsocket! [A test message]");
