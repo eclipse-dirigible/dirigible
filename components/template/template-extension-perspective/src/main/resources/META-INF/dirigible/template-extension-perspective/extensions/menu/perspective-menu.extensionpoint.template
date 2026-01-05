@@ -1,4 +1,0 @@
-{
-	"name": "ide-{{fileName}}-menu",
-	"description": "Extension Point for the {{fileName}} Menu"
-}

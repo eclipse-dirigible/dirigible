@@ -103,13 +103,33 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 
 	angular.element($window).bind('focus', () => { statusBarHub.showLabel('') });
 
+	function getTranslationId(str) {
+		return `${str.replaceAll(' ', '').replaceAll('_', '').replaceAll('.', '').replaceAll(':', '')}`;
+	}
+	// Same migration happens in generateUtils.js
+	function migrateReport(report) {
+		if (!report.hasOwnProperty('tId')) {
+			report['tId'] = getTranslationId(report.alias);
+			report['label'] = report.alias;
+			$scope.fileChanged();
+		}
+		for (let i = 0; i < report.columns.length; i++) {
+			if (!report.columns[i].hasOwnProperty('tId')) {
+				report.columns[i]['tId'] = getTranslationId(report.columns[i]['alias']);
+				report.columns[i]['label'] = report.columns[i]['alias'];
+				$scope.fileChanged();
+			}
+		}
+		return report;
+	}
+
 	const loadFileContents = () => {
 		if (!$scope.state.error) {
 			$scope.state.isBusy = true;
 			WorkspaceService.loadContent($scope.dataParameters.filePath).then((response) => {
 				$scope.$evalAsync(() => {
 					if (response.data === '') $scope.report = {};
-					else $scope.report = response.data;
+					else $scope.report = migrateReport(response.data);
 					contents = JSON.stringify($scope.report, null, 4);
 					$scope.state.isBusy = false;
 				});
@@ -222,15 +242,21 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		}
 	});
 
+	$scope.fileChanged = () => {
+		if (!$scope.changed) {
+			$scope.changed = true;
+			layoutHub.setEditorDirty({
+				path: $scope.dataParameters.filePath,
+				dirty: $scope.changed,
+			});
+		}
+	};
+
 	$scope.$watch('report', () => {
 		if (!$scope.state.error && !$scope.state.isBusy) {
 			const isDirty = contents !== JSON.stringify($scope.report, null, 4);
 			if ($scope.changed !== isDirty) {
-				$scope.changed = isDirty;
-				layoutHub.setEditorDirty({
-					path: $scope.dataParameters.filePath,
-					dirty: isDirty,
-				});
+				$scope.fileChanged();
 				$scope.generateQuery();
 			}
 		}
@@ -252,6 +278,16 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		dialogHub.showFormDialog({
 			title: 'Add column',
 			form: {
+				'teiLabel': {
+					label: 'Label',
+					controlType: 'input',
+					placeholder: "Enter label",
+					type: 'text',
+					minlength: 1,
+					maxlength: 255,
+					focus: true,
+					required: true
+				},
 				'teiTable': {
 					label: 'Table Alias',
 					controlType: 'input',
@@ -259,7 +295,9 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 					type: 'text',
 					minlength: 1,
 					maxlength: 255,
-					focus: true,
+					inputRules: {
+						excluded: excludedAliases,
+					},
 					required: true
 				},
 				'teiAlias': {
@@ -282,7 +320,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 					minlength: 1,
 					maxlength: 255,
 					inputRules: {
-						excluded: excludedAliases,
+						excluded: excludedNames,
 					},
 					required: true
 				},
@@ -320,6 +358,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 				$scope.$evalAsync(() => {
 					if (!$scope.report.columns) $scope.report.columns = [];
 					$scope.report.columns.push({
+						tId: getTranslationId(form['teiAlias']),
+						label: form['teiLabel'],
 						table: form['teiTable'],
 						alias: form['teiAlias'],
 						name: form['teiName'],
@@ -356,6 +396,17 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		dialogHub.showFormDialog({
 			title: 'Add column',
 			form: {
+				'teiLabel': {
+					label: 'Label',
+					controlType: 'input',
+					placeholder: "Enter label",
+					type: 'text',
+					minlength: 1,
+					maxlength: 255,
+					value: $scope.report.columns[index].label,
+					focus: true,
+					required: true
+				},
 				'teiTable': {
 					label: 'Table Alias',
 					controlType: 'input',
@@ -367,7 +418,6 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 						excluded: excludedAliases,
 					},
 					value: $scope.report.columns[index].table,
-					focus: true,
 					required: true
 				},
 				'teiAlias': {
@@ -391,7 +441,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 					minlength: 1,
 					maxlength: 255,
 					inputRules: {
-						excluded: excludedAliases,
+						excluded: excludedNames,
 					},
 					value: $scope.report.columns[index].name,
 					required: true
@@ -428,6 +478,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		}).then((form) => {
 			if (form) {
 				$scope.$evalAsync(() => {
+					$scope.report.columns[$scope.editColumnIndex].tId = getTranslationId(form['teiAlias']);
+					$scope.report.columns[$scope.editColumnIndex].label = form['teiLabel'];
 					$scope.report.columns[$scope.editColumnIndex].table = form['teiTable'];
 					$scope.report.columns[$scope.editColumnIndex].alias = form['teiAlias'];
 					$scope.report.columns[$scope.editColumnIndex].name = form['teiName'];

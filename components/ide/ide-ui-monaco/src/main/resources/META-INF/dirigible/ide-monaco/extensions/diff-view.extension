@@ -1,5 +1,0 @@
-{
-    "module": "ide-monaco/services/diff-view.js",
-    "extensionPoint": "ide-view",
-    "description": "File difference viewer"
-}

@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.eclipse.dirigible</groupId>
         <artifactId>dirigible-parent</artifactId>
-        <version>12.0.0-SNAPSHOT</version>
+        <version>13.0.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -21,6 +21,7 @@
         <module>engines</module>
         <module>odata</module>
         <module>repository</module>
+        <module>parsers</module>
     </modules>
 
     <dependencies>
@@ -150,6 +151,11 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-engine-cms-s3</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-engine-javascript</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -225,6 +231,11 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-engine-proxy</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-engine-jobs</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -238,6 +249,13 @@
                 <artifactId>dirigible-engine-graalium-execution-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-engine-di</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            
+            
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-group-engines-core</artifactId>
@@ -320,6 +338,13 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-repository-local</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            
+            <!-- Parsers -->
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-parsers-typescript</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

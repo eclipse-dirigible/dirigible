@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.components.ide.workspace.project;
 
-import java.util.List;
 import org.eclipse.dirigible.components.base.publisher.PublisherHandler;
 import org.eclipse.dirigible.components.command.CommandDescriptor;
 import org.eclipse.dirigible.components.ide.workspace.domain.Project;
@@ -22,11 +21,16 @@ import org.eclipse.dirigible.repository.api.RepositoryPath;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 /**
  * The Class ProjectActionsPublisherHandler.
  */
+
+@Order(20)
 @Component
 public class ProjectActionsPublisherHandler implements PublisherHandler {
 
@@ -143,8 +147,8 @@ public class ProjectActionsPublisherHandler implements PublisherHandler {
                             actionsService.executeCommandLine(workingDir, next.getCommand());
                         }
                     } catch (Exception e) {
-                        logger.error("Failed in executing the registry action: {} of project: {} under workspace: {} with: {}", action,
-                                project, workspace, e);
+                        logger.error("Failed in executing the registry action: {} of project: {} under workspace: {}", action, project,
+                                workspace, e);
                     }
                 }
             }
@@ -152,6 +156,5 @@ public class ProjectActionsPublisherHandler implements PublisherHandler {
             logger.error(e.getMessage());
         }
     }
-
 
 }

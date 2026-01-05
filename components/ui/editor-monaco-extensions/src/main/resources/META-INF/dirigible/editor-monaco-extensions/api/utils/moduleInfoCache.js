@@ -9,8 +9,8 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { repository } from "sdk/platform";
-import { configurations as config } from "sdk/core";
+import { repository } from "@aerokit/sdk/platform";
+import { configurations as config } from "@aerokit/sdk/core";
 import * as modulesParser from "./modulesParser";
 import * as suggestionsParser from "./suggestionsParser";
 

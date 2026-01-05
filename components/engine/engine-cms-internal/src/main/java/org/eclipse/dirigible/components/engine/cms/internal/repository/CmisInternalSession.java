@@ -47,6 +47,7 @@ public class CmisInternalSession implements CmisSession {
      *
      * @return Repository Info
      */
+    @Override
     public CmisInternalRepositoryInfo getRepositoryInfo() {
         return new CmisInternalRepositoryInfo(this);
     }
@@ -56,6 +57,7 @@ public class CmisInternalSession implements CmisSession {
      *
      * @return Object Factory
      */
+    @Override
     public CmisInternalObjectFactory getObjectFactory() {
         return new CmisInternalObjectFactory(this);
     }
@@ -66,6 +68,7 @@ public class CmisInternalSession implements CmisSession {
      * @return CmisInternalFolder
      * @throws IOException IO Exception
      */
+    @Override
     public CmisInternalFolder getRootFolder() throws IOException {
         return new CmisInternalFolder(this);
     }

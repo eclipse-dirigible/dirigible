@@ -1,5 +1,0 @@
-{
-    "module": "DependsOnScenariosTestProject/gen/sales-order/ui/Product/Product/view.js",
-    "extensionPoint": "application-views",
-    "description": "DependsOnScenariosTestProject - Application View"
-}

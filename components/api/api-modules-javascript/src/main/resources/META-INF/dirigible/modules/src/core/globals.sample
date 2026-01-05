@@ -1,0 +1,10 @@
+import { globals } from "@aerokit/sdk/core";
+import { response } from "@aerokit/sdk/http";
+
+
+globals.set("attr1", "value1");
+let attr = globals.get("attr1");
+
+response.println("[Attribute]: " + attr);
+response.flush();
+response.close();

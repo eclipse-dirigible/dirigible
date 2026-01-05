@@ -23,6 +23,7 @@
         <script type="text/javascript" src="/services/web/perspective-processes/configs/bpm-process-context-view.js"></script>
         <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
         <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="/services/web/perspective-processes/js/variable-utils.js"></script>
         <script type="text/javascript" src="/services/web/perspective-processes/views/js/bpm-process-context.js"></script>
     </head>
 
@@ -30,27 +31,34 @@
         <bk-toolbar compact="true">
             <bk-toolbar-spacer></bk-toolbar-spacer>
             <bk-button state="transparent" ng-disabled="selectedVariable === null || disableModificationButtons" glyph="sap-icon--edit" title="Edit" aria-label="Edit" ng-click="openEditDialog()"></bk-button>
+            <bk-button state="transparent" ng-disabled="selectedVariable === null || disableModificationButtons" glyph="sap-icon--delete" title="Remove" aria-label="Remove" ng-click="openRemoveDialog()"></bk-button>
             <bk-button state="transparent" ng-disabled="currentProcessInstanceId === null || disableModificationButtons" glyph="sap-icon--add" title="Add" aria-label="Add" ng-click="openAddDialog()"></bk-button>
+            <bk-button toggled="displaySearch" state="transparent" ng-disabled="currentProcessInstanceId === null || disableModificationButtons" glyph="sap-icon--search" title="Toggle search" aria-label="Toggle search"
+                ng-click="toggleSearch()"></bk-button>
             <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="reload()"></bk-button>
+        </bk-toolbar>
+        <bk-toolbar ng-if="currentProcessInstanceId !== null && !disableModificationButtons && displaySearch">
+            <bk-input type="search" placeholder="Search by variable name" ng-keyup="inputSearchKeyUp($event)" ng-model="searchField.text" bk-focus="true"></bk-input>
         </bk-toolbar>
         <bk-scrollbar class="bk-fill-parent">
             <table bk-table outer-borders="bottom" display-mode="compact">
                 <thead bk-table-header sticky="true" interactive="false">
                     <tr bk-table-row>
-                        <th bk-table-header-cell>Id</th>
-                        <th bk-table-header-cell>Process Instance Id</th>
                         <th bk-table-header-cell>Name</th>
                         <th bk-table-header-cell>Type</th>
                         <th bk-table-header-cell>Value</th>
+                        <th bk-table-header-cell></th>
                     </tr>
                 </thead>
                 <tbody bk-table-body>
                     <tr bk-table-row ng-repeat="next in variablesList track by next.id" hoverable="true" activable="true" selected="selectedVariable.id === next.id" ng-click="selectionChanged(next)">
-                        <td bk-table-cell>{{next.id}}</td>
-                        <td bk-table-cell>{{next.processInstanceId}}</td>
                         <td bk-table-cell>{{next.name}}</td>
                         <td bk-table-cell>{{next.typeName ? next.typeName : next.variableTypeName}}</td>
-                        <td bk-table-cell>{{next.value}}</td>
+                        <td bk-table-cell class="bk-text--ellipsis" style="max-width: 25rem; overflow: hidden; white-space: nowrap;">{{next.value}}
+                        </td>
+                        <td bk-table-cell fit-content="true">
+                            <bk-button state="transparent" glyph="sap-icon--show" title="Show details" aria-label="Show details" ng-click="openDialog(next)"></bk-button>
+                        </td>
                     </tr>
                     <tr ng-if="variablesList.length === 0" bk-table-row>
                         <td bk-table-cell no-data="true">No variables have been detected.</td>

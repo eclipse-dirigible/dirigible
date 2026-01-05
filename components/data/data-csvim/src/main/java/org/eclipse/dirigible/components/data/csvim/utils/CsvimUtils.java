@@ -11,11 +11,12 @@ package org.eclipse.dirigible.components.data.csvim.utils;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+
 import org.eclipse.dirigible.components.api.platform.ProblemsFacade;
 import org.eclipse.dirigible.components.data.csvim.processor.CsvProcessor;
 import org.eclipse.dirigible.components.data.csvim.processor.CsvimProcessor;
-import org.eclipse.dirigible.components.data.management.domain.TableMetadata;
-import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper;
+import org.eclipse.dirigible.components.database.domain.TableMetadata;
+import org.eclipse.dirigible.components.database.helpers.DatabaseMetadataHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

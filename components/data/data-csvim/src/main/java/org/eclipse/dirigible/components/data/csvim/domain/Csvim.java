@@ -9,17 +9,27 @@
  */
 package org.eclipse.dirigible.components.data.csvim.domain;
 
-import com.google.gson.annotations.Expose;
-import jakarta.annotation.Nullable;
-import jakarta.persistence.*;
-import org.eclipse.dirigible.components.base.artefact.Artefact;
-import org.hibernate.annotations.LazyCollection;
-import org.hibernate.annotations.LazyCollectionOption;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+
+import org.eclipse.dirigible.components.base.artefact.Artefact;
+import org.hibernate.annotations.LazyCollection;
+import org.hibernate.annotations.LazyCollectionOption;
+
+import com.google.gson.annotations.Expose;
+
+import jakarta.annotation.Nullable;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
 
 /**
  * The Csvim Entity.

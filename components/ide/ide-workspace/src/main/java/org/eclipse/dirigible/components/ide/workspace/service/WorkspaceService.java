@@ -9,14 +9,6 @@
  */
 package org.eclipse.dirigible.components.ide.workspace.service;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -31,11 +23,7 @@ import org.eclipse.dirigible.components.ide.workspace.domain.File;
 import org.eclipse.dirigible.components.ide.workspace.domain.Folder;
 import org.eclipse.dirigible.components.ide.workspace.domain.Project;
 import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
-import org.eclipse.dirigible.components.ide.workspace.json.FileDescriptor;
-import org.eclipse.dirigible.components.ide.workspace.json.FolderDescriptor;
-import org.eclipse.dirigible.components.ide.workspace.json.ProjectDescriptor;
-import org.eclipse.dirigible.components.ide.workspace.json.WorkspaceDescriptor;
-import org.eclipse.dirigible.components.ide.workspace.json.WorkspaceJsonHelper;
+import org.eclipse.dirigible.components.ide.workspace.json.*;
 import org.eclipse.dirigible.repository.api.ICollection;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -44,6 +32,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * The Class WorkspaceService.
@@ -91,15 +88,6 @@ public class WorkspaceService {
     }
 
     /**
-     * Gets the repository.
-     *
-     * @return the repository
-     */
-    protected IRepository getRepository() {
-        return repository;
-    }
-
-    /**
      * Gets the javascript service.
      *
      * @return the javascript service
@@ -107,8 +95,6 @@ public class WorkspaceService {
     public JavascriptService getJavascriptService() {
         return javascriptService;
     }
-
-    // Workspace
 
     /**
      * Creates the workspace.
@@ -125,6 +111,8 @@ public class WorkspaceService {
         return new Workspace(collection);
     }
 
+    // Workspace
+
     /**
      * Gets the workspace.
      *
@@ -138,39 +126,12 @@ public class WorkspaceService {
     }
 
     /**
-     * Gets the workspaces.
+     * Gets the repository.
      *
-     * @return the workspaces
+     * @return the repository
      */
-    public List<Workspace> getWorkspaces() {
-        StringBuilder workspacePath = generateWorkspacePath(null, null, null);
-        ICollection root = getRepository().getCollection(workspacePath.toString());
-        List<Workspace> workspaces = new ArrayList<Workspace>();
-        if (!root.exists()) {
-            root.create();
-        }
-        List<ICollection> collections = root.getCollections();
-        for (ICollection collection : collections) {
-            workspaces.add(new Workspace(collection));
-        }
-        if (workspaces.isEmpty()) {
-            ICollection collection = root.createCollection(DEFAULT_WORKSPACE_NAME);
-            workspaces.add(new Workspace(collection));
-        }
-        return workspaces;
-    }
-
-    /**
-     * Delete workspace.
-     *
-     * @param name the name
-     */
-    public void deleteWorkspace(String name) {
-        ICollection collection = getWorkspace(name);
-        collection.delete();
-        if (logger.isInfoEnabled()) {
-            logger.info("Workspace deleted [{}]", collection.getPath());
-        }
+    protected IRepository getRepository() {
+        return repository;
     }
 
     /**
@@ -200,12 +161,48 @@ public class WorkspaceService {
     }
 
     /**
+     * Delete workspace.
+     *
+     * @param name the name
+     */
+    public void deleteWorkspace(String name) {
+        ICollection collection = getWorkspace(name);
+        collection.delete();
+        if (logger.isInfoEnabled()) {
+            logger.info("Workspace deleted [{}]", collection.getPath());
+        }
+    }
+
+    /**
      * List workspaces.
      *
      * @return the list
      */
     public List<Workspace> listWorkspaces() {
         return getWorkspaces();
+    }
+
+    /**
+     * Gets the workspaces.
+     *
+     * @return the workspaces
+     */
+    public List<Workspace> getWorkspaces() {
+        StringBuilder workspacePath = generateWorkspacePath(null, null, null);
+        ICollection root = getRepository().getCollection(workspacePath.toString());
+        List<Workspace> workspaces = new ArrayList<Workspace>();
+        if (!root.exists()) {
+            root.create();
+        }
+        List<ICollection> collections = root.getCollections();
+        for (ICollection collection : collections) {
+            workspaces.add(new Workspace(collection));
+        }
+        if (workspaces.isEmpty()) {
+            ICollection collection = root.createCollection(DEFAULT_WORKSPACE_NAME);
+            workspaces.add(new Workspace(collection));
+        }
+        return workspaces;
     }
 
     /**
@@ -250,10 +247,8 @@ public class WorkspaceService {
                         String.format(new String(IOUtils.toByteArray(WorkspaceService.class.getResourceAsStream("/project.json_"))),
                                 project)
                               .getBytes());
-                projectObject.createFile("tsconfig.json",
-                        IOUtils.toByteArray(WorkspaceService.class.getResourceAsStream("/tsconfig.json_")));
             } catch (IOException e) {
-                logger.error("Error on creating 'project.json' and 'tsconfig' " + e.getMessage());
+                logger.error("Error on creating 'project.json'", e);
             }
         }
         return projectObject;
@@ -416,6 +411,46 @@ public class WorkspaceService {
     }
 
     /**
+     * Triggers the post save file extensions.
+     *
+     * @param workspace the workspace
+     * @param project the project name
+     * @param path the file path
+     */
+    private void triggerOnSaveExtensions(String workspace, String project, String path) {
+        try {
+            Map<Object, Object> context = new HashMap<Object, Object>();
+            context.put(EXTENSION_PARAMETER_WORKSPACE, workspace);
+            context.put(EXTENSION_PARAMETER_PROJECT, project);
+            context.put(EXTENSION_PARAMETER_PATH, path);
+            String[] modules = ExtensionsFacade.getExtensions(EXTENSION_POINT_IDE_WORKSPACE_ON_SAVE);
+            for (String module : modules) {
+                try {
+                    if (logger.isTraceEnabled()) {
+                        logger.trace("Workspace On Save Extension: {} triggered...", module);
+                    }
+                    if (module != null) {
+                        RepositoryPath repositoryPath = new RepositoryPath(module);
+                        javascriptService.handleRequest(repositoryPath.getSegments()[0], repositoryPath.constructPathFrom(1), "", context,
+                                false);
+                    }
+                    if (logger.isTraceEnabled()) {
+                        logger.trace("Workspace On Save Extension: {} finshed.", module);
+                    }
+                } catch (Exception | Error e) {
+                    if (logger.isErrorEnabled()) {
+                        logger.error("Workspace On Save Extension {} failed with: {}.", module, e.getMessage(), e);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            if (logger.isErrorEnabled()) {
+                logger.error(e.getMessage(), e);
+            }
+        }
+    }
+
+    /**
      * Update file.
      *
      * @param workspace the workspace
@@ -506,18 +541,6 @@ public class WorkspaceService {
     }
 
     /**
-     * Render file description.
-     *
-     * @param workspace the workspace
-     * @param file the file
-     * @return the file descriptor
-     */
-    public FileDescriptor renderFileDescription(String workspace, File file) {
-        return WorkspaceJsonHelper.describeFile(workspace, file,
-                IRepositoryStructure.PATH_USERS + IRepositoryStructure.SEPARATOR + UserFacade.getName(), "");
-    }
-
-    /**
      * Render file descriptions.
      *
      * @param files the files
@@ -529,6 +552,18 @@ public class WorkspaceService {
             fileDescriptors.add(renderFileDescription("", file));
         }
         return fileDescriptors;
+    }
+
+    /**
+     * Render file description.
+     *
+     * @param workspace the workspace
+     * @param file the file
+     * @return the file descriptor
+     */
+    public FileDescriptor renderFileDescription(String workspace, File file) {
+        return WorkspaceJsonHelper.describeFile(workspace, file,
+                IRepositoryStructure.PATH_USERS + IRepositoryStructure.SEPARATOR + UserFacade.getName(), "");
     }
 
     /**
@@ -704,6 +739,8 @@ public class WorkspaceService {
         workspaceObject.moveFolder(sourceProject, sourceFolderPath, targetProject, targetFolderPath);
     }
 
+    // Search
+
     /**
      * Move file.
      *
@@ -718,7 +755,7 @@ public class WorkspaceService {
         workspaceObject.moveFile(sourceProject, sourceFilePath, targetProject, targetFilePath);
     }
 
-    // Search
+    // Find
 
     /**
      * Free-text search in the files content.
@@ -731,8 +768,6 @@ public class WorkspaceService {
         Workspace workspaceObject = getWorkspace(workspace);
         return workspaceObject.search(term);
     }
-
-    // Find
 
     /**
      * Find files by pattern.
@@ -761,46 +796,6 @@ public class WorkspaceService {
     public List<File> find(String workspace, String pattern) {
         Workspace workspaceObject = getWorkspace(workspace);
         return workspaceObject.find(pattern);
-    }
-
-    /**
-     * Triggers the post save file extensions.
-     *
-     * @param workspace the workspace
-     * @param project the project name
-     * @param path the file path
-     */
-    private void triggerOnSaveExtensions(String workspace, String project, String path) {
-        try {
-            Map<Object, Object> context = new HashMap<Object, Object>();
-            context.put(EXTENSION_PARAMETER_WORKSPACE, workspace);
-            context.put(EXTENSION_PARAMETER_PROJECT, project);
-            context.put(EXTENSION_PARAMETER_PATH, path);
-            String[] modules = ExtensionsFacade.getExtensions(EXTENSION_POINT_IDE_WORKSPACE_ON_SAVE);
-            for (String module : modules) {
-                try {
-                    if (logger.isTraceEnabled()) {
-                        logger.trace("Workspace On Save Extension: {} triggered...", module);
-                    }
-                    if (module != null) {
-                        RepositoryPath repositoryPath = new RepositoryPath(module);
-                        javascriptService.handleRequest(repositoryPath.getSegments()[0], repositoryPath.constructPathFrom(1), "", context,
-                                false);
-                    }
-                    if (logger.isTraceEnabled()) {
-                        logger.trace("Workspace On Save Extension: {} finshed.", module);
-                    }
-                } catch (Exception | Error e) {
-                    if (logger.isErrorEnabled()) {
-                        logger.error("Workspace On Save Extension {} failed with: {}.", module, e.getMessage(), e);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
-        }
     }
 
     /**

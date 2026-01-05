@@ -9,19 +9,15 @@
  */
 package org.eclipse.dirigible.components.odata.domain;
 
-import java.util.Arrays;
 import java.util.Set;
-
+import org.eclipse.dirigible.components.base.artefact.Artefact;
+import com.google.gson.annotations.Expose;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-
-import org.eclipse.dirigible.components.base.artefact.Artefact;
-
-import com.google.gson.annotations.Expose;
 
 /**
  * The OData Schema Entity.
@@ -40,9 +36,9 @@ public class ODataContainer extends Artefact {
     private Long id;
 
     /** The content. */
-    @Column(name = "ODATAC_CONTENT", columnDefinition = "BLOB", nullable = true)
+    @Column(name = "ODATAC_CONTENT", columnDefinition = "TEXT", nullable = true)
     @Expose
-    private byte[] content;
+    private String content;
 
     /**
      * Instantiates a new o data container.
@@ -53,7 +49,7 @@ public class ODataContainer extends Artefact {
      * @param dependencies the dependencies
      * @param content the content
      */
-    public ODataContainer(String location, String name, String description, Set<String> dependencies, byte[] content) {
+    public ODataContainer(String location, String name, String description, Set<String> dependencies, String content) {
         super(location, name, ARTEFACT_TYPE, description, dependencies);
         this.content = content;
     }
@@ -88,7 +84,7 @@ public class ODataContainer extends Artefact {
      *
      * @return the content
      */
-    public byte[] getContent() {
+    public String getContent() {
         return content;
     }
 
@@ -97,7 +93,7 @@ public class ODataContainer extends Artefact {
      *
      * @param content the new content
      */
-    public void setContent(byte[] content) {
+    public void setContent(String content) {
         this.content = content;
     }
 
@@ -108,9 +104,9 @@ public class ODataContainer extends Artefact {
      */
     @Override
     public String toString() {
-        return "ODataContainer [id=" + id + ", content=" + Arrays.toString(content) + ", location=" + location + ", name=" + name
-                + ", type=" + type + ", description=" + description + ", key=" + key + ", dependencies=" + dependencies + ", createdBy="
-                + createdBy + ", createdAt=" + createdAt + ", updatedBy=" + updatedBy + ", updatedAt=" + updatedAt + "]";
+        return "ODataContainer [id=" + id + ", content=" + content + ", location=" + location + ", name=" + name + ", type=" + type
+                + ", description=" + description + ", key=" + key + ", dependencies=" + dependencies + ", createdBy=" + createdBy
+                + ", createdAt=" + createdAt + ", updatedBy=" + updatedBy + ", updatedAt=" + updatedAt + "]";
     }
 
 }

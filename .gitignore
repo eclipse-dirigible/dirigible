@@ -3,7 +3,7 @@ dist/
 .settings/
 target/
 dirigible_local/
-bin/
+#bin/
 .idea
 .history
 .vscode
@@ -13,6 +13,7 @@ build/application/dirigible
 !/build
 **/build/reports
 **/logs
+**/gen
 
 # files
 .DS_Store
@@ -29,7 +30,9 @@ derby.log
 *.log
 dependency-reduced-pom.xml
 host.ser
-package.json
+#package.json
 package-lock.json
 *.tgz
 **/ttyd.sh
+**/spring-shell.log
+**/version.txt

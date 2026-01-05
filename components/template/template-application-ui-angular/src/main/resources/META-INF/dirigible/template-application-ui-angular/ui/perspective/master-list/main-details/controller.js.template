@@ -1,5 +1,5 @@
 #set($dollar = '$')
-angular.module('page', ['blimpKit', 'platformView']).controller('PageController', ($scope, Extensions) => {
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale']).controller('PageController', ($scope, Extensions, LocaleService) => {
 	const Dialogs = new DialogHub();
 	$scope.entity = {};
 
@@ -11,7 +11,7 @@ angular.module('page', ['blimpKit', 'platformView']).controller('PageController'
 	$scope.triggerEntityAction = (action) => {
 		Dialogs.showWindow({
 			hasHeader: true,
-			title: action.label,
+			title: LocaleService.t(action.translation.key, action.translation.options, action.label),
 			path: action.path,
 			params: {
 				id: $scope.entity.${primaryKeysString}

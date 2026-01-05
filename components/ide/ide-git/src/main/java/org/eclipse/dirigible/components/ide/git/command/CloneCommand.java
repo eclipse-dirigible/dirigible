@@ -113,7 +113,6 @@ public class CloneCommand {
                 cloneProject(user, repositoryUri, model.getBranch(), model.getUsername(), model.getPassword(), gitDirectory, workspace,
                         clonedProjects);
             } catch (GitConnectorException e) {
-                GitFileUtils.deleteGitDirectory(user, workspace.getName(), repositoryUri);
                 throw e;
             }
             logger.debug("Cloning repository [{}] into folder [{}] finished successfully.", repositoryUri, gitDirectory.getCanonicalPath());
@@ -218,7 +217,6 @@ public class CloneCommand {
                         cloneProject(user, projectRepositoryURI, projectRepositoryBranch, username, password, projectGitDirectory,
                                 workspace, clonedProjects); // assume
                     } catch (GitConnectorException e) {
-                        GitFileUtils.deleteGitDirectory(user, workspace.getName(), projectRepositoryURI);
                         throw e;
                     }
                 } else {
@@ -254,7 +252,11 @@ public class CloneCommand {
         String workingDirectory = root + packageJson.getParent()
                                                     .getPath();
         try {
-            commandService.executeCommandLine(workingDirectory, NPM_INSTALL, null, null, null);
+            String output = commandService.executeCommandLine(workingDirectory, NPM_INSTALL, null, null, null);
+            if (!output.isEmpty() && output.indexOf("error") >= 0) {
+                logger.error("Retrieving the NPM dependencies of the project [{}] failed: \n{}\n", projectName, output);
+                return;
+            }
             Folder nodeModules = selectedProject.getFolder(NODE_MODULES);
             if (nodeModules.exists()) {
                 for (Folder folder : nodeModules.getFolders()) {
@@ -269,8 +271,8 @@ public class CloneCommand {
                         logger.trace("Retrieving the NPM dependency [{}]", folder.getName());
                     }
                 }
+                nodeModules.delete();
             }
-            nodeModules.delete();
         } catch (Exception e) {
             logger.error("Retrieving the NPM dependencies of the project [{}] failed", projectName, e);
         }

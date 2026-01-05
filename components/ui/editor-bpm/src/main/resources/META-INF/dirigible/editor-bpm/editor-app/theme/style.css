@@ -91,21 +91,21 @@ body {
 }
 
 .editor-toolbar .btn.btn-inverse:hover {
-  color: var(--sapButton_Lite_Hover_TextColor, #0854a0);
-  background-color: var(--sapButton_Lite_Hover_Background, #ebf5fe);
-  border-color: var(--sapButton_Lite_Hover_BorderColor, #0854a0);
+  color: var(--sapButton_Lite_Hover_TextColor, #303030);
+  background-color: var(--sapButton_Lite_Hover_Background, #e6e6e6);
+  border-color: var(--sapButton_Lite_Hover_BorderColor, #d4d4d4);
 }
 
 .editor-toolbar .btn.btn-inverse.pressed {
-  background-color: var(--sapButton_Active_Background, #0854a0);
-  border-color: var(--sapButton_Active_BorderColor, #0854a0);
-  color: var(--sapButton_Active_TextColor, #fff);
+  background-color: var(--sapButton_Active_Background, #bebebe);
+  border-color: var(--sapButton_Active_BorderColor, #bebebe);
+  color: var(--sapButton_Active_TextColor, #303030);
 }
 
 .editor-toolbar .btn.btn-inverse:active {
-  background-color: var(--sapButton_Active_Background, #0854a0);
-  border-color: var(--sapButton_Active_BorderColor, #0854a0);
-  color: var(--sapButton_Active_TextColor, #fff);
+  background-color: var(--sapButton_Active_Background, #bebebe);
+  border-color: var(--sapButton_Active_BorderColor, #bebebe);
+  color: var(--sapButton_Active_TextColor, #303030);
 }
 
 .editor-toolbar .btn.btn-inverse.disabled,
@@ -114,7 +114,7 @@ body {
 .editor-toolbar .btn.btn-inverse[disabled]:hover {
   background-color: var(--sapButton_Lite_Background, transparent);
   border-color: var(--sapButton_Lite_BorderColor, transparent);
-  opacity: var(--sapContent_DisabledOpacity, 0.4);
+  opacity: var(--sapContent_DisabledOpacity, 0.5);
 }
 
 .editor-toolbar .btn.btn-inverse.separator {
@@ -132,7 +132,7 @@ body {
 }
 
 .stencils {
-  border-right: 1pt solid var(--sapList_BorderColor, #3a4552);
+  border-right: 1pt solid var(--sapList_BorderColor, #dedede);
   overflow: auto;
   z-index: 5000;
 }
@@ -158,7 +158,7 @@ body {
   background-color: transparent;
   font-family: Arial, Regular;
   /* font-size: 14px; */
-  color: var(--sapTextColor, #32363a);
+  color: var(--sapTextColor, #303030);
 }
 
 .stencil-group>li>span {
@@ -184,7 +184,7 @@ body {
 }
 
 .stencil-group.collapsed>li {
-  color: var(--sapTextColor, #32363a);
+  color: var(--sapTextColor, #303030);
 }
 
 .stencil-group.collapsed>li>ul {
@@ -202,8 +202,12 @@ body {
   padding: 5px;
 }
 
-.dark-mode .stencil-item img {
-  filter: invert(100%);
+@media (prefers-color-scheme: dark) {
+
+  .Oryx_button img,
+  .stencil-item img {
+    filter: brightness(0) invert(1);
+  }
 }
 
 .root-stencil-item {
@@ -227,7 +231,7 @@ div.canvas-wrapper {
 
 .canvas_resize_indicator i {
   font-size: 12px;
-  color: var(--sapButton_TextColor, #fff);
+  color: var(--sapButton_TextColor, #303030);
   cursor: pointer;
 }
 
@@ -235,9 +239,9 @@ div.canvas-wrapper {
 .canvas_resize_indicator.S,
 .canvas_resize_indicator.E,
 .canvas_resize_indicator.W {
-  background: var(--sapButton_Background, #0854a0);
-  border-color: var(--sapButton_BorderColor, #0854a0);
-  border-width: var(--sapButton_BorderWidth, 1px);
+  background: var(--sapButton_Background, #e6e6e6);
+  border-color: var(--sapButton_BorderColor, #d4d4d4);
+  border-width: var(--sapButton_BorderWidth, .0625rem);
   border-style: solid;
   height: 18px;
   width: 18px;
@@ -251,7 +255,7 @@ div.canvas-wrapper {
 .canvas_resize_indicator.S:hover,
 .canvas_resize_indicator.E:hover,
 .canvas_resize_indicator.W:hover {
-  background: var(--sapButton_Hover_Background, #ebf5fe);
+  background: var(--sapButton_Hover_Background, #dcdcdc);
 }
 
 #canvas-grow-N.canvas_resize_indicator,
@@ -294,8 +298,8 @@ div.canvas-wrapper {
 div.propertySection {
   height: 250px;
   background-color: var(--sapBackgroundColor, #f7f7f7);
-  border-top: solid var(--sapList_BorderWidth, 0.0625rem) var(--sapList_BorderColor, #3a4552);
-  color: var(--sapTextColor, #32363a);
+  border-top: solid var(--sapList_BorderWidth, 0.0625rem) var(--sapList_BorderColor, #dedede);
+  color: var(--sapTextColor, #303030);
   margin-bottom: 0px;
 }
 
@@ -303,13 +307,13 @@ div.propertySection {
   font-size: 25px;
   font-weight: bold;
   padding: 8px 0 8px 8px;
-  border-bottom: 1px solid var(--sapList_BorderColor, #3a4552);
+  border-bottom: 1px solid var(--sapList_BorderColor, #dedede);
   cursor: pointer;
 }
 
 .selected-item-title a {
   display: block;
-  color: var(--sapTextColor, #32363a);
+  color: var(--sapTextColor, #303030);
 }
 
 .selected-item-title .glyphicon {
@@ -319,7 +323,7 @@ div.propertySection {
 
 .selected-item-title a:hover,
 .selected-item-title a:focus {
-  color: var(--sapTextColor, #32363a);
+  color: var(--sapTextColor, #303030);
   text-decoration: none;
 }
 
@@ -340,7 +344,7 @@ div.propertySection {
 }
 
 .selected-item-body .property-row:hover {
-  background-color: var(--sapList_Hover_Background, #f5f5f5);
+  background-color: var(--sapList_Hover_Background, #f2f2f2);
 }
 
 .selected-item-body {
@@ -489,7 +493,7 @@ li.x-menu-list-item.x-menu-item-active a {
 }
 
 .Oryx_button {
-  background-color: var(--sapButton_Background, #fff);
+  background-color: var(--sapButton_Background, #e6e6e6);
 }
 
 .dark-mode .Oryx_button img {
@@ -500,7 +504,7 @@ li.x-menu-list-item.x-menu-item-active a {
   border-radius: 0;
   -webkit-border-radius: 0;
   -moz-border-radius: 3;
-  background-color: var(--sapButton_Hover_Background, #ebf5fe);
+  background-color: var(--sapButton_Hover_Background, #dcdcdc);
 }
 
 /* Editor icon font */
@@ -1197,10 +1201,10 @@ hot-table .column-header.label {
 #paletteSectionFooter {
   height: 50px;
   text-align: center;
-  background-color: var(--sapList_FooterBackground, #fafafa);
-  border-top: 1px solid var(--sapList_BorderColor, #3a4552);
-  border-right: 1px solid var(--sapList_BorderColor, #3a4552);
-  color: var(--sapList_FooterTextColor, #32363a);
+  background-color: var(--sapList_FooterBackground, #f7f7f7);
+  border-top: 1px solid var(--sapList_BorderColor, #dedede);
+  border-right: 1px solid var(--sapList_BorderColor, #dedede);
+  color: var(--sapList_FooterTextColor, #303030);
   cursor: pointer;
   bottom: 0;
 }
@@ -1212,14 +1216,14 @@ hot-table .column-header.label {
 #paletteSectionOpen {
   width: 30px;
   height: 50px;
-  background-color: var(--sapList_FooterBackground, #fafafa);
+  background-color: var(--sapList_FooterBackground, #f7f7f7);
   text-align: center;
   bottom: 1px;
   position: fixed;
   z-index: 101;
-  border-top: 1px solid var(--sapList_BorderColor, #3a4552);
-  border-right: 1px solid var(--sapList_BorderColor, #3a4552);
-  color: var(--sapList_FooterTextColor, #32363a);
+  border-top: 1px solid var(--sapList_BorderColor, #dedede);
+  border-right: 1px solid var(--sapList_BorderColor, #dedede);
+  color: var(--sapList_FooterTextColor, #303030);
   cursor: pointer;
   left: 0;
 }
@@ -1255,15 +1259,15 @@ hot-table .column-header.label {
 #process-treeview-wrapper {
   height: 200px;
   background-color: var(--sapBackgroundColor, #f7f7f7);
-  border-right: 1px solid var(--sapList_BorderColor, #3a4552);
-  color: var(--sapTextColor, #32363a);
+  border-right: 1px solid var(--sapList_BorderColor, #dedede);
+  color: var(--sapTextColor, #303030);
   overflow-y: auto;
 }
 
 .process-treeview-header {
-  background: var(--sapList_TableGroupHeaderBackground, #efefef);
-  color: var(--sapList_TableGroupHeaderTextColor, #32363a);
-  border: 1px solid var(--sapList_TableGroupHeaderBorderColor, #d9d9d9);
+  background: var(--sapList_TableGroupHeaderBackground, #ebebeb);
+  color: var(--sapList_TableGroupHeaderTextColor, #303030);
+  border: 1px solid var(--sapList_TableGroupHeaderBorderColor, #c3c3c3);
   padding: 2px;
   padding-left: 5px;
   font-size: 14px;
@@ -1293,5 +1297,5 @@ hot-table .column-header.label {
 .process-treeview-body {}
 
 .current-process {
-  border: 1px solid var(--sapPositiveColor, #107e3e);
+  border: 1px solid var(--sapPositiveColor, #26a264);
 }

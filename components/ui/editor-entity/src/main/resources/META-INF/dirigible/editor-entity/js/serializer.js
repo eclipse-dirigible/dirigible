@@ -50,6 +50,7 @@ function createModel(graph) {
 				'" perspectiveNavId="' + getPerspectiveNavId(graph, child) +
 				'" perspectiveRole="' + getPerspectiveRole(graph, child) +
 				'" generateReport="' + _.escape(child.value.generateReport) +
+				'" multilingual="' + _.escape(child.value.multilingual) +
 				'" generateDefaultRoles="' + _.escape(child.value.generateDefaultRoles) + '"';
 
 			if (child.value.feedUrl && child.value.feedUrl !== "") {

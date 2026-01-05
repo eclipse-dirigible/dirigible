@@ -1,4 +1,4 @@
-import { logging } from "sdk/log";
+import { logging } from "@aerokit/sdk/log";
 
 const logger = logging.getLogger("CustomComponentHandler");
 

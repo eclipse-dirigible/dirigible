@@ -10,41 +10,46 @@
 package org.eclipse.dirigible.components.data.csvim.domain;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 
 import org.apache.commons.csv.CSVRecord;
-import org.eclipse.dirigible.components.data.management.domain.ColumnMetadata;
-import org.eclipse.dirigible.components.data.management.domain.TableMetadata;
+import org.eclipse.dirigible.components.database.domain.ColumnMetadata;
+import org.eclipse.dirigible.components.database.domain.TableMetadata;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The Class CsvRecord.
  */
 public class CsvRecord {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(CsvRecord.class);
+
     /**
      * The csv record.
      */
-    private CSVRecord csvRecord;
+    private final CSVRecord csvRecord;
 
     /**
      * The table metadata model.
      */
-    private TableMetadata table;
+    private final TableMetadata table;
 
     /**
      * The header names.
      */
-    private List<String> headerNames;
+    private final List<String> headerNames;
 
     /**
      * The distinguish empty from null.
      */
-    private boolean distinguishEmptyFromNull;
-
+    private final boolean distinguishEmptyFromNull;
+    private final Optional<Locale> locale;
     /**
      * The pk column name.
      */
     private String pkColumnName;
-
     /**
      * The csv record pk value.
      */
@@ -59,10 +64,35 @@ public class CsvRecord {
      * @param distinguishEmptyFromNull the distinguish empty from null
      */
     public CsvRecord(CSVRecord csvRecord, TableMetadata table, List<String> headerNames, boolean distinguishEmptyFromNull) {
+        this(csvRecord, table, headerNames, distinguishEmptyFromNull, Optional.empty());
+    }
+
+    public CsvRecord(CSVRecord csvRecord, TableMetadata table, List<String> headerNames, boolean distinguishEmptyFromNull,
+            Optional<Locale> locale) {
         this.csvRecord = csvRecord;
         this.table = table;
         this.headerNames = headerNames;
         this.distinguishEmptyFromNull = distinguishEmptyFromNull;
+        this.locale = locale;
+    }
+
+    public Optional<Locale> getLocale() {
+        return locale;
+    }
+
+    /**
+     * Gets the csv record pk value.
+     *
+     * @return the csv record pk value
+     */
+    public String getCsvRecordPkValue() {
+        if (csvRecordPkValue == null && headerNames.size() > 0) {
+            csvRecordPkValue = getCsvValueForColumn(getPkColumnName());
+        } else if (csvRecordPkValue == null) {
+            csvRecordPkValue = csvRecord.get(0);
+        }
+
+        return csvRecordPkValue;
     }
 
     /**
@@ -77,6 +107,13 @@ public class CsvRecord {
             if (csvValueIndex == -1) {
                 return null;
             }
+
+            if (!csvRecord.isSet(csvValueIndex)) {
+                LOGGER.debug("Missing value with index [{}] for column [{}] in csv record {}. Will return null.", csvValueIndex, columnName,
+                        csvRecord);
+                return null;
+            }
+
             return csvRecord.get(csvValueIndex);
         }
 
@@ -99,21 +136,6 @@ public class CsvRecord {
         }
 
         return pkColumnName;
-    }
-
-    /**
-     * Gets the csv record pk value.
-     *
-     * @return the csv record pk value
-     */
-    public String getCsvRecordPkValue() {
-        if (csvRecordPkValue == null && headerNames.size() > 0) {
-            csvRecordPkValue = getCsvValueForColumn(getPkColumnName());
-        } else if (csvRecordPkValue == null) {
-            csvRecordPkValue = csvRecord.get(0);
-        }
-
-        return csvRecordPkValue;
     }
 
     /**

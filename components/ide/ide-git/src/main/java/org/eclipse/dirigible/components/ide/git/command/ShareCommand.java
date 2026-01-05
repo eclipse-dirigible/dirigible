@@ -124,7 +124,6 @@ public class ShareCommand {
                         logger.debug(String.format("Cloning repository %s finished.", model.getRepository()));
                     }
                 } catch (Throwable e) {
-                    GitFileUtils.deleteGitDirectory(user, workspace.getName(), repositoryName);
                     throw e;
                 }
             } else {
@@ -143,7 +142,6 @@ public class ShareCommand {
                 gitConnector.commit(model.getCommitMessage(), model.getUsername(), model.getEmail(), true);
                 gitConnector.push(model.getUsername(), model.getPassword());
             } catch (Throwable e) {
-                GitFileUtils.deleteGitDirectory(user, workspace.getName(), repositoryName);
                 throw e;
             }
 

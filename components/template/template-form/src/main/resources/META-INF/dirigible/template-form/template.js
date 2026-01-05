@@ -12,10 +12,6 @@ export function getTemplate() {
 			action: "generate",
 			rename: "project.json"
 		}, {
-			location: "/template-form/form/tsconfig.json.template",
-			action: "copy",
-			rename: "tsconfig.json"
-		}, {
 			location: "/template-form/form/products.ts.template",
 			action: "copy",
 			rename: "api/products.ts"

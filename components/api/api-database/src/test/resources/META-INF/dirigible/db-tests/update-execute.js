@@ -1,5 +1,5 @@
-import { Query } from 'sdk/db/query';
-import { Update } from 'sdk/db/update';
+import { Query } from '@aerokit/sdk/db/query';
+import { Update } from '@aerokit/sdk/db/update';
 import { Assert } from 'test/assert';
 
 Update.execute("CREATE TABLE U (A INT, B VARCHAR(10))");

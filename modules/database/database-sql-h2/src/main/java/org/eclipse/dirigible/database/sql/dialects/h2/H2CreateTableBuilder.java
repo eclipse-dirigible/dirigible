@@ -50,7 +50,7 @@ public class H2CreateTableBuilder extends CreateTableBuilder<H2CreateTableBuilde
      * @return the h 2 create table builder
      */
     public H2CreateTableBuilder column(String name, DataType type, Boolean isPrimaryKey, Boolean isNullable, Boolean isUnique,
-            Boolean isIdentity, Boolean isFuzzyIndexEnabled, String... args) {
+            Boolean isAutoincrement, Boolean isIdentity, Boolean isFuzzyIndexEnabled, String... args) {
         if (logger.isTraceEnabled()) {
             logger.trace("column: " + name + ", type: " + (type != null ? type.name() : null) + ", isPrimaryKey: " + isPrimaryKey
                     + ", isNullable: " + isNullable + ", isUnique: " + isUnique + ", isIdentity: " + isIdentity + ", args: "
@@ -77,6 +77,13 @@ public class H2CreateTableBuilder extends CreateTableBuilder<H2CreateTableBuilde
                            .flatMap(Stream::of)
                            .toArray(String[]::new);
         }
+
+        if (isAutoincrement) {
+            column = Stream.of(column, new String[] {getDialect().getAutoincrementArgument()})
+                           .flatMap(Stream::of)
+                           .toArray(String[]::new);
+        }
+
         if (isPrimaryKey) {
             column = Stream.of(column, new String[] {getDialect().getPrimaryKeyArgument()})
                            .flatMap(Stream::of)

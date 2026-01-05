@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { cmis } from "sdk/cms";
+import { cmis } from "@aerokit/sdk/cms";
 let cmisSession = cmis.getSession();
 
 export const getObject = (path) => {

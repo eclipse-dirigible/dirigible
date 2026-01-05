@@ -1,5 +1,5 @@
 
-import { Base64 } from 'sdk/utils/base64';
+import { Base64 } from '@aerokit/sdk/utils/base64';
 import { Assert } from 'test/assert';
 
 const input = 'PT4/';

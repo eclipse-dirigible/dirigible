@@ -58,13 +58,13 @@
             <bk-panel expanded="true" ng-show="smallWidgets.length">
                 <bk-panel-header>
                     <bk-panel-expand hint="expand metrics panel content"></bk-panel-expand>
-                    <h4 fd-panel-title>Metrics</h4>
+                    <h4 fd-panel-title>{{'dashboard:metrics' | t:'Metrics'}}</h4>
                 </bk-panel-header>
                 <bk-panel-content class="fd-container" aria-label="Small Widgets">
                     <div class="fd-row">
                         <div class="widget-sm fd-col fd-col--6 fd-col-md--3 fd-col-lg--3 fd-col-xl--3" ng-repeat="widget in smallWidgets track by widget.id">
                             <bk-tile is-container="true" class="tile-fill-parent">
-                                <iframe loading="lazy" title="{{::widget.label}}" ng-src="{{::widget.path}}" data-parameters="{{::widget.params}}"></iframe>
+                                <iframe loading="lazy" title="{{widget.translation.key | t:widget.translation.options:widget.label}}" ng-src="{{::widget.path}}" data-parameters="{{::widget.params}}"></iframe>
                             </bk-tile>
                         </div>
                     </div>
@@ -73,13 +73,13 @@
             <bk-panel expanded="true" ng-show="mediumWidgets.length">
                 <bk-panel-header>
                     <bk-panel-expand hint="expand performance panel content"></bk-panel-expand>
-                    <h4 fd-panel-title>Performance</h4>
+                    <h4 fd-panel-title>{{'dashboard:performance' | t:'Performance'}}</h4>
                 </bk-panel-header>
                 <bk-panel-content class="fd-container" aria-label="Medium Widgets">
                     <div class="fd-row">
                         <div class="widget-m fd-col fd-col--6 fd-col-md--3 fd-col-lg--3 fd-col-xl--3" ng-repeat="widget in mediumWidgets track by widget.id">
                             <bk-tile is-container="true" class="tile-fill-parent">
-                                <iframe loading="lazy" title="{{::widget.label}}" ng-src="{{::widget.path}}" data-parameters="{{::widget.params}}"></iframe>
+                                <iframe loading="lazy" title="{{widget.translation.key | t:widget.translation.options:widget.label}}" ng-src="{{::widget.path}}" data-parameters="{{::widget.params}}"></iframe>
                             </bk-tile>
                         </div>
                     </div>
@@ -88,13 +88,13 @@
             <bk-panel expanded="true" ng-show="largeWidgets.length">
                 <bk-panel-header>
                     <bk-panel-expand hint="expand statistics panel content"></bk-panel-expand>
-                    <h4 fd-panel-title>Statistics</h4>
+                    <h4 fd-panel-title>{{'dashboard:statistics' | t:'Statistics'}}</h4>
                 </bk-panel-header>
                 <bk-panel-content class="fd-container" aria-label="Large Widgets">
                     <div class="fd-row">
                         <div class="widget-lg fd-col fd-col--6 fd-col-md--3 fd-col-lg--3 fd-col-xl--3" ng-repeat="widget in largeWidgets track by widget.id">
                             <bk-tile is-container="true" class="tile-fill-parent">
-                                <iframe loading="lazy" title="{{::widget.label}}" ng-src="{{::widget.path}}" data-parameters="{{::widget.params}}"></iframe>
+                                <iframe loading="lazy" title="{{widget.translation.key | t:widget.translation.options:widget.label}}" ng-src="{{::widget.path}}" data-parameters="{{::widget.params}}"></iframe>
                             </bk-tile>
                         </div>
                     </div>
@@ -103,7 +103,7 @@
         </bk-scrollbar>
 
         <bk-message-page glyph="sap-icon--error" ng-if="state.error">
-            <bk-message-page-title>Dashboard encounterd an error!</bk-message-page-title>
+            <bk-message-page-title>{{'dashboard:errMsg.genericTitle' | t:'Dashboard encounterd an error!'}}</bk-message-page-title>
             <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
         </bk-message-page>
         <theme></theme>

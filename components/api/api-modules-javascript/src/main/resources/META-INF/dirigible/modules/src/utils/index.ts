@@ -19,3 +19,5 @@ export * from "./uuid";
 export { UUID as uuid } from "./uuid";
 export * from "./xml";
 export { XML as xml } from "./xml";
+export * from "./converter";
+export { Converter as converter } from "./converter";

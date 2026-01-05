@@ -1,0 +1,10 @@
+{
+    "aria": {
+        "showHide": "show/hide {{element}} options",
+        "options": "{{element}} options"
+    },
+    "default": {
+        "viewName": "{{name}} Form"
+    },
+    "t": {}
+}

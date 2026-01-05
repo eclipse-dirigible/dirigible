@@ -1,5 +1,5 @@
-import { sql, query, update, insert } from "sdk/db";
-import { assertEquals, test } from "sdk/junit"
+import { sql, query, update, insert } from "@aerokit/sdk/db";
+import { assertEquals, test } from "@aerokit/sdk/junit"
 
 const testName = 'create-insert-select-db-test';
 test(testName, () => {

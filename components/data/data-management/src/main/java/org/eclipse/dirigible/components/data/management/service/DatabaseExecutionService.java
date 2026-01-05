@@ -22,13 +22,13 @@ import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
-import org.eclipse.dirigible.components.data.management.helpers.DatabaseErrorHelper;
-import org.eclipse.dirigible.components.data.management.helpers.DatabaseQueryHelper;
-import org.eclipse.dirigible.components.data.management.helpers.DatabaseQueryHelper.RequestExecutionCallback;
-import org.eclipse.dirigible.components.data.management.helpers.DatabaseResultSetHelper;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.sources.service.DataSourceService;
+import org.eclipse.dirigible.components.database.helpers.DatabaseErrorHelper;
+import org.eclipse.dirigible.components.database.helpers.DatabaseQueryHelper;
+import org.eclipse.dirigible.components.database.helpers.DatabaseResultSetHelper;
+import org.eclipse.dirigible.components.database.helpers.DatabaseQueryHelper.RequestExecutionCallback;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;

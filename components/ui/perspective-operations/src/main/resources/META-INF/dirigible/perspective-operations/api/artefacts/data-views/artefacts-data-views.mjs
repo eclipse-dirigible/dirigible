@@ -1,4 +1,4 @@
-import { query } from "sdk/db";
+import { query } from "@aerokit/sdk/db";
 import { Utils } from "../Utils.mjs";
 
 export const getArtefacts = () => {

@@ -9,11 +9,11 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { repository as repositoryManager } from "sdk/platform";
+import { repository as repositoryManager } from "@aerokit/sdk/platform";
 import * as documentsUtils from "../../utils/cmis/document";
 import * as folderUtils from "../../utils/cmis/folder";
 import * as objectUtils from "../../utils/cmis/object";
-import { bytes, streams } from "sdk/io";
+import { bytes, streams } from "@aerokit/sdk/io";
 
 const INTERNAL_FOLDER = "__internal";
 const INTERNAL_FOLDER_LOCATION = INTERNAL_FOLDER;

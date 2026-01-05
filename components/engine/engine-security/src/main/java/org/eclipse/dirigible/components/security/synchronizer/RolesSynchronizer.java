@@ -141,7 +141,7 @@ public class RolesSynchronizer extends BaseSynchronizer<Role, Long> {
      */
     @Override
     public List<Role> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**

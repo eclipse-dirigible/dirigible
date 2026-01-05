@@ -177,6 +177,11 @@ public class SnowflakeSqlDialect extends
         return FUNCTIONS;
     }
 
+    @Override
+    public String getAutoincrementArgument() {
+        return "AUTOINCREMENT";
+    }
+
     /**
      * Creates the.
      *

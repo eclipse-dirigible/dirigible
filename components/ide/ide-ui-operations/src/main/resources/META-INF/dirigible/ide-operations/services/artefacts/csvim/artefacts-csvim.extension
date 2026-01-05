@@ -1,5 +1,0 @@
-{
-    "module": "ide-operations/services/artefacts/csvim/artefacts-csvim.mjs",
-    "extensionPoint": "ide-operations-artefacts",
-    "description": "CSVIM Artefacts Extension"
-}

@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { rs } from "sdk/http";
+import { rs } from "@aerokit/sdk/http";
 import * as constraintsProcessor from "./processors/constraintsProcessor";
 
 rs.service()

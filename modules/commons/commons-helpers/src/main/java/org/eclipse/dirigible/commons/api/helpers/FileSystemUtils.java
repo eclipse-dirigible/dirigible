@@ -9,38 +9,23 @@
  */
 package org.eclipse.dirigible.commons.api.helpers;
 
-import static java.nio.file.FileVisitResult.CONTINUE;
-
-import java.io.File;
-import java.io.FileFilter;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.nio.file.DirectoryNotEmptyException;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
-import java.nio.file.FileVisitOption;
-import java.nio.file.FileVisitResult;
-import java.nio.file.FileVisitor;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.PathMatcher;
-import java.nio.file.Paths;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.EnumSet;
-import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.*;
+import java.nio.file.*;
+import java.nio.file.FileSystem;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import static java.nio.file.FileVisitResult.CONTINUE;
 
 /**
  * The File System Utils.
@@ -55,33 +40,24 @@ public class FileSystemUtils {
 
     /** The Constant PROJECT_JSON. */
     public static final String PROJECT_JSON = "project.json";
-
-    /** The Constant logger. */
-    private static final Logger logger = LoggerFactory.getLogger(FileSystemUtils.class);
-
     /** The Constant SEPARATOR. */
     public static final String SEPARATOR = "/";
-
     /** The Constant DOT_GIT. */
     public static final String DOT_GIT = ".git"; //$NON-NLS-1$
-
     /** The Constant PROJECT_METADATA_FILE_NAME. */
     public static final String PROJECT_METADATA_FILE_NAME = PROJECT_JSON; // $NON-NLS-1$
-
-    /** The git root folder. */
-    private static String GIT_ROOT_FOLDER;
-
+    /** The Constant logger. */
+    private static final Logger logger = LoggerFactory.getLogger(FileSystemUtils.class);
     /** The Constant DIRIGIBLE_GIT_ROOT_FOLDER. */
     private static final String DIRIGIBLE_GIT_ROOT_FOLDER = "DIRIGIBLE_GIT_ROOT_FOLDER"; //$NON-NLS-1$
-
     /** The Constant DIRIGIBLE_REPOSITORY_LOCAL_ROOT_FOLDER. */
     private static final String DIRIGIBLE_REPOSITORY_LOCAL_ROOT_FOLDER = "DIRIGIBLE_REPOSITORY_LOCAL_ROOT_FOLDER"; //$NON-NLS-1$
-
     /** The Constant REPOSITORY_GIT_FOLDER. */
     private static final String REPOSITORY_GIT_FOLDER = "dirigible" + File.separator + "repository" + File.separator + DOT_GIT;
-
     /** The Constant DEFAULT_DIRIGIBLE_GIT_ROOT_FOLDER. */
     private static final String DEFAULT_DIRIGIBLE_GIT_ROOT_FOLDER = FOLDER_TARGET + File.separator + REPOSITORY_GIT_FOLDER; // $NON-NLS-1$
+    /** The git root folder. */
+    private static final String GIT_ROOT_FOLDER;
 
     static {
         if (!StringUtils.isEmpty(Configuration.get(DIRIGIBLE_GIT_ROOT_FOLDER))) {
@@ -90,6 +66,149 @@ public class FileSystemUtils {
             GIT_ROOT_FOLDER = Configuration.get(DIRIGIBLE_REPOSITORY_LOCAL_ROOT_FOLDER) + File.separator + REPOSITORY_GIT_FOLDER;
         } else {
             GIT_ROOT_FOLDER = DEFAULT_DIRIGIBLE_GIT_ROOT_FOLDER;
+        }
+    }
+
+
+    /**
+     * The Class ProjectsFinder.
+     */
+    private static class ProjectsFinder extends SimpleFileVisitor<Path> {
+
+        /** The projects. */
+        private final List<File> projects = new ArrayList<File>();
+
+        /**
+         * Gets the projects.
+         *
+         * @return the projects
+         */
+        public List<File> getProjects() {
+            return projects;
+        }
+
+        /**
+         * Visit file.
+         *
+         * @param path the path
+         * @param attrs the attrs
+         * @return the file visit result
+         * @throws IOException Signals that an I/O exception has occurred.
+         */
+        @Override
+        public FileVisitResult visitFile(Path path, BasicFileAttributes attrs) throws IOException {
+            File file = path.toFile();
+            if (file.exists() && file.isFile() && file.getName()
+                                                      .equals(PROJECT_METADATA_FILE_NAME)) {
+                projects.add(file.getParentFile());
+            }
+            return CONTINUE;
+        }
+
+        /**
+         * Visit file failed.
+         *
+         * @param file the file
+         * @param exc the exc
+         * @return the file visit result
+         * @throws IOException Signals that an I/O exception has occurred.
+         */
+        @Override
+        public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+            if (logger.isErrorEnabled()) {
+                logger.error(exc.getMessage(), exc);
+            }
+            return CONTINUE;
+        }
+    }
+
+
+    /**
+     * The Class Finder.
+     */
+    private static class Finder extends SimpleFileVisitor<Path> {
+
+        /** The matcher. */
+        private final PathMatcher matcher;
+
+        /** The files. */
+        private final List<String> files = new ArrayList<String>();
+
+        /**
+         * Instantiates a new finder.
+         *
+         * @param pattern the pattern
+         */
+        Finder(String pattern) {
+            matcher = FileSystems.getDefault()
+                                 .getPathMatcher("glob:" + pattern);
+        }
+
+        /**
+         * Done.
+         */
+        void done() {}
+
+        /**
+         * Visit file.
+         *
+         * @param file the file
+         * @param attrs the attrs
+         * @return the file visit result
+         */
+        @Override
+        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+            find(file);
+            return CONTINUE;
+        }
+
+        /**
+         * Find.
+         *
+         * @param file the file
+         */
+        void find(Path file) {
+            Path name = file.getFileName();
+            if (name != null && matcher.matches(name)) {
+                files.add(file.toString());
+            }
+        }
+
+        /**
+         * Pre visit directory.
+         *
+         * @param dir the dir
+         * @param attrs the attrs
+         * @return the file visit result
+         */
+        @Override
+        public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+            find(dir);
+            return CONTINUE;
+        }
+
+        /**
+         * Visit file failed.
+         *
+         * @param file the file
+         * @param exc the exc
+         * @return the file visit result
+         */
+        @Override
+        public FileVisitResult visitFileFailed(Path file, IOException exc) {
+            if (logger.isErrorEnabled()) {
+                logger.error(exc.getMessage(), exc);
+            }
+            return CONTINUE;
+        }
+
+        /**
+         * Gets the files.
+         *
+         * @return the files
+         */
+        public List<String> getFiles() {
+            return files;
         }
     }
 
@@ -112,6 +231,112 @@ public class FileSystemUtils {
     }
 
     /**
+     * Creates the folders if necessary.
+     *
+     * @param workspacePath the workspace path
+     */
+    public static void createFoldersIfNecessary(String workspacePath) {
+        String normalizedPath = FilenameUtils.normalize(workspacePath);
+        int lastIndexOf = normalizedPath.lastIndexOf(File.separator);
+        if (lastIndexOf > 0) {
+            String directory = normalizedPath.substring(0, lastIndexOf);
+            if (!directoryExists(directory)) {
+                createFolder(directory);
+            }
+        }
+    }
+
+    /**
+     * Creates the folder.
+     *
+     * @param workspacePath the workspace path
+     * @return true, if successful
+     */
+    public static boolean createFolder(String workspacePath) {
+        File folder = new File(FilenameUtils.normalize(workspacePath));
+        if (!folder.exists()) {
+            try {
+                FileUtils.forceMkdir(folder.getCanonicalFile());
+            } catch (IOException e) {
+                if (logger.isErrorEnabled()) {
+                    logger.error(e.getMessage(), e);
+                }
+                return false;
+            }
+            return true;
+        }
+        return true;
+    }
+
+    /**
+     * Directory exists.
+     *
+     * @param location the location
+     * @return true, if successful
+     */
+    public static boolean directoryExists(String location) {
+        return exists(location) && isDirectory(location);
+    }
+
+    /**
+     * Exists.
+     *
+     * @param location the location
+     * @return true, if successful
+     */
+    public static boolean exists(String location) {
+        if ((location == null) || location.length() == 0) {
+            return false;
+        }
+        Path path;
+        try {
+            String normalizedPath = FilenameUtils.normalize(location);
+            path = FileSystems.getDefault()
+                              .getPath(normalizedPath);
+            File file = path.toFile();
+            return file.exists() && file.getCanonicalFile()
+                                        .getName()
+                                        .equals(file.getName());
+        } catch (java.nio.file.InvalidPathException | IOException e) {
+            if (logger.isWarnEnabled()) {
+                logger.warn(e.getMessage());
+            }
+            return false;
+        }
+
+        // return Files.exists(path);
+    }
+
+    /**
+     * Checks if is directory.
+     *
+     * @param location the location
+     * @return true, if is directory
+     */
+    public static boolean isDirectory(String location) {
+        Path path;
+        try {
+            String normalizedPath = FilenameUtils.normalize(location);
+            path = FileSystems.getDefault()
+                              .getPath(normalizedPath);
+        } catch (java.nio.file.InvalidPathException e) {
+            return false;
+        }
+        return path.toFile()
+                   .isDirectory();
+    }
+
+    public static void saveFile(String workspacePath, InputStream contentInputStream) throws IOException {
+        createFoldersIfNecessary(workspacePath);
+        Path path = FileSystems.getDefault()
+                               .getPath(FilenameUtils.normalize(workspacePath));
+
+        try (OutputStream out = Files.newOutputStream(path)) {
+            IOUtils.copyLarge(contentInputStream, out);
+        }
+    }
+
+    /**
      * Load file.
      *
      * @param workspacePath the workspace path
@@ -127,6 +352,18 @@ public class FileSystemUtils {
         if (path.toFile()
                 .exists()) {
             return Files.readAllBytes(path);
+        }
+        return null;
+    }
+
+    public static InputStream loadFileStream(String workspacePath) throws IOException {
+        String normalizedPath = FilenameUtils.normalize(workspacePath);
+        Path path = FileSystems.getDefault()
+                               .getPath(normalizedPath);
+
+        if (path.toFile()
+                .exists()) {
+            return Files.newInputStream(path);
         }
         return null;
     }
@@ -181,6 +418,16 @@ public class FileSystemUtils {
             destFile = fileSystem.getPath(destFilePath + fileName);
         }
         FileUtils.copyFile(srcFile.toFile(), destFile.toFile());
+    }
+
+    /**
+     * File exists.
+     *
+     * @param location the location
+     * @return true, if successful
+     */
+    public static boolean fileExists(String location) {
+        return exists(location) && !isDirectory(location);
     }
 
     /**
@@ -289,28 +536,6 @@ public class FileSystemUtils {
     }
 
     /**
-     * Creates the folder.
-     *
-     * @param workspacePath the workspace path
-     * @return true, if successful
-     */
-    public static boolean createFolder(String workspacePath) {
-        File folder = new File(FilenameUtils.normalize(workspacePath));
-        if (!folder.exists()) {
-            try {
-                FileUtils.forceMkdir(folder.getCanonicalFile());
-            } catch (IOException e) {
-                if (logger.isErrorEnabled()) {
-                    logger.error(e.getMessage(), e);
-                }
-                return false;
-            }
-            return true;
-        }
-        return true;
-    }
-
-    /**
      * Creates the file.
      *
      * @param workspacePath the workspace path
@@ -366,41 +591,6 @@ public class FileSystemUtils {
     }
 
     /**
-     * Gets the modified at.
-     *
-     * @param workspacePath the workspace path
-     * @return the modified at
-     * @throws IOException Signals that an I/O exception has occurred.
-     */
-    public static Date getModifiedAt(String workspacePath) throws IOException {
-        String convertedPath = convertToWorkspacePath(workspacePath);
-        Path path = FileSystems.getDefault()
-                               .getPath(convertedPath);
-        if (new File(convertedPath).exists()) {
-            return new Date(Files.getLastModifiedTime(path)
-                                 .toMillis());
-        } else {
-            return new Date();
-        }
-    }
-
-    /**
-     * Creates the folders if necessary.
-     *
-     * @param workspacePath the workspace path
-     */
-    public static void createFoldersIfNecessary(String workspacePath) {
-        String normalizedPath = FilenameUtils.normalize(workspacePath);
-        int lastIndexOf = normalizedPath.lastIndexOf(File.separator);
-        if (lastIndexOf > 0) {
-            String directory = normalizedPath.substring(0, lastIndexOf);
-            if (!directoryExists(directory)) {
-                createFolder(directory);
-            }
-        }
-    }
-
-    /**
      * Convert to workspace path.
      *
      * @param path the path
@@ -419,71 +609,22 @@ public class FileSystemUtils {
     }
 
     /**
-     * Exists.
+     * Gets the modified at.
      *
-     * @param location the location
-     * @return true, if successful
+     * @param workspacePath the workspace path
+     * @return the modified at
+     * @throws IOException Signals that an I/O exception has occurred.
      */
-    public static boolean exists(String location) {
-        if ((location == null) || "".equals(location)) {
-            return false;
+    public static Date getModifiedAt(String workspacePath) throws IOException {
+        String convertedPath = convertToWorkspacePath(workspacePath);
+        Path path = FileSystems.getDefault()
+                               .getPath(convertedPath);
+        if (new File(convertedPath).exists()) {
+            return new Date(Files.getLastModifiedTime(path)
+                                 .toMillis());
+        } else {
+            return new Date();
         }
-        Path path;
-        try {
-            String normalizedPath = FilenameUtils.normalize(location);
-            path = FileSystems.getDefault()
-                              .getPath(normalizedPath);
-            File file = path.toFile();
-            return file.exists() && file.getCanonicalFile()
-                                        .getName()
-                                        .equals(file.getName());
-        } catch (java.nio.file.InvalidPathException | IOException e) {
-            if (logger.isWarnEnabled()) {
-                logger.warn(e.getMessage());
-            }
-            return false;
-        }
-
-        // return Files.exists(path);
-    }
-
-    /**
-     * Directory exists.
-     *
-     * @param location the location
-     * @return true, if successful
-     */
-    public static boolean directoryExists(String location) {
-        return exists(location) && isDirectory(location);
-    }
-
-    /**
-     * File exists.
-     *
-     * @param location the location
-     * @return true, if successful
-     */
-    public static boolean fileExists(String location) {
-        return exists(location) && !isDirectory(location);
-    }
-
-    /**
-     * Checks if is directory.
-     *
-     * @param location the location
-     * @return true, if is directory
-     */
-    public static boolean isDirectory(String location) {
-        Path path;
-        try {
-            String normalizedPath = FilenameUtils.normalize(location);
-            path = FileSystems.getDefault()
-                              .getPath(normalizedPath);
-        } catch (java.nio.file.InvalidPathException e) {
-            return false;
-        }
-        return path.toFile()
-                   .isDirectory();
     }
 
     /**
@@ -540,51 +681,6 @@ public class FileSystemUtils {
     }
 
     /**
-     * Returns the directory by segments.
-     *
-     * @param firstSegment the first segment
-     * @param segments the rest segments
-     * @return the resulting path
-     */
-    public static File getDirectory(String firstSegment, String... segments) {
-        Path dir = Paths.get(firstSegment, segments);
-        if (dir.toFile()
-               .exists()) {
-            return dir.toFile();
-        }
-        return null;
-    }
-
-    /**
-     * Generate the local repository name.
-     *
-     * @param repositoryURI the URI odf the repository
-     * @return the generated local name
-     */
-    public static String generateGitRepositoryName(String repositoryURI) {
-        int separatorLastIndexOf = repositoryURI.lastIndexOf(SEPARATOR) + 1;
-        int gitLastIndexOf = repositoryURI.lastIndexOf(DOT_GIT);
-        String repositoryName = repositoryURI;
-        if (separatorLastIndexOf >= 0 && gitLastIndexOf > 0) {
-            repositoryName = repositoryURI.substring(separatorLastIndexOf, gitLastIndexOf);
-        } else if (separatorLastIndexOf >= 0) {
-            repositoryName = repositoryURI.substring(separatorLastIndexOf);
-        }
-        return repositoryName;
-    }
-
-    /**
-     * Get the directory for git.
-     *
-     * @param user logged-in user
-     * @param workspace the workspace
-     * @return the directory
-     */
-    public static File getGitDirectory(String user, String workspace) {
-        return FileSystemUtils.getDirectory(GIT_ROOT_FOLDER, user, workspace);
-    }
-
-    /**
      * Gets the git repositories.
      *
      * @param user the user
@@ -608,6 +704,33 @@ public class FileSystemUtils {
      *
      * @param user logged-in user
      * @param workspace the workspace
+     * @return the directory
+     */
+    public static File getGitDirectory(String user, String workspace) {
+        return FileSystemUtils.getDirectory(GIT_ROOT_FOLDER, user, workspace);
+    }
+
+    /**
+     * Returns the directory by segments.
+     *
+     * @param firstSegment the first segment
+     * @param segments the rest segments
+     * @return the resulting path
+     */
+    public static File getDirectory(String firstSegment, String... segments) {
+        Path dir = Paths.get(firstSegment, segments);
+        if (dir.toFile()
+               .exists()) {
+            return dir.toFile();
+        }
+        return null;
+    }
+
+    /**
+     * Get the directory for git.
+     *
+     * @param user logged-in user
+     * @param workspace the workspace
      * @param repositoryURI the repository URI
      * @return the directory
      */
@@ -617,16 +740,21 @@ public class FileSystemUtils {
     }
 
     /**
-     * Get the directory for git.
+     * Generate the local repository name.
      *
-     * @param user logged-in user
-     * @param workspace the workspace
-     * @param repositoryName the repository URI
-     * @return the directory
+     * @param repositoryURI the URI odf the repository
+     * @return the generated local name
      */
-    public static File getGitDirectoryByRepositoryName(String user, String workspace, String repositoryName) {
-        File directGitDirectory = FileSystemUtils.getDirectory(GIT_ROOT_FOLDER, user, workspace, repositoryName);
-        return directGitDirectory;
+    public static String generateGitRepositoryName(String repositoryURI) {
+        int separatorLastIndexOf = repositoryURI.lastIndexOf(SEPARATOR) + 1;
+        int gitLastIndexOf = repositoryURI.lastIndexOf(DOT_GIT);
+        String repositoryName = repositoryURI;
+        if (separatorLastIndexOf >= 0 && gitLastIndexOf > 0) {
+            repositoryName = repositoryURI.substring(separatorLastIndexOf, gitLastIndexOf);
+        } else if (separatorLastIndexOf >= 0) {
+            repositoryName = repositoryURI.substring(separatorLastIndexOf);
+        }
+        return repositoryName;
     }
 
     /**
@@ -735,6 +863,19 @@ public class FileSystemUtils {
     }
 
     /**
+     * Get the directory for git.
+     *
+     * @param user logged-in user
+     * @param workspace the workspace
+     * @param repositoryName the repository URI
+     * @return the directory
+     */
+    public static File getGitDirectoryByRepositoryName(String user, String workspace, String repositoryName) {
+        File directGitDirectory = FileSystemUtils.getDirectory(GIT_ROOT_FOLDER, user, workspace, repositoryName);
+        return directGitDirectory;
+    }
+
+    /**
      * Gets the git repository projects.
      *
      * @param gitRepository the git repository
@@ -748,7 +889,7 @@ public class FileSystemUtils {
                 Files.walkFileTree(Paths.get(gitRepository.getAbsolutePath()), opts, Integer.MAX_VALUE, projectsFinder);
             } catch (IOException e) {
                 if (logger.isErrorEnabled()) {
-                    logger.error(e.getMessage(), (Throwable) e);
+                    logger.error(e.getMessage(), e);
                 }
             }
             List<File> gitProjects = projectsFinder.getProjects();
@@ -756,147 +897,6 @@ public class FileSystemUtils {
             return gitProjects;
         }
         return null;
-    }
-
-    /**
-     * The Class ProjectsFinder.
-     */
-    private static class ProjectsFinder extends SimpleFileVisitor<Path> {
-
-        /** The projects. */
-        private List<File> projects = new ArrayList<File>();
-
-        /**
-         * Gets the projects.
-         *
-         * @return the projects
-         */
-        public List<File> getProjects() {
-            return projects;
-        }
-
-        /**
-         * Visit file.
-         *
-         * @param path the path
-         * @param attrs the attrs
-         * @return the file visit result
-         * @throws IOException Signals that an I/O exception has occurred.
-         */
-        @Override
-        public FileVisitResult visitFile(Path path, BasicFileAttributes attrs) throws IOException {
-            File file = path.toFile();
-            if (file.exists() && file.isFile() && file.getName()
-                                                      .equals(PROJECT_METADATA_FILE_NAME)) {
-                projects.add(file.getParentFile());
-            }
-            return CONTINUE;
-        }
-
-        /**
-         * Visit file failed.
-         *
-         * @param file the file
-         * @param exc the exc
-         * @return the file visit result
-         * @throws IOException Signals that an I/O exception has occurred.
-         */
-        @Override
-        public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
-            if (logger.isErrorEnabled()) {
-                logger.error(exc.getMessage(), exc);
-            }
-            return CONTINUE;
-        }
-    }
-
-    /**
-     * The Class Finder.
-     */
-    private static class Finder extends SimpleFileVisitor<Path> {
-
-        /** The matcher. */
-        private final PathMatcher matcher;
-
-        /** The files. */
-        private List<String> files = new ArrayList<String>();
-
-        /**
-         * Instantiates a new finder.
-         *
-         * @param pattern the pattern
-         */
-        Finder(String pattern) {
-            matcher = FileSystems.getDefault()
-                                 .getPathMatcher("glob:" + pattern);
-        }
-
-        /**
-         * Find.
-         *
-         * @param file the file
-         */
-        void find(Path file) {
-            Path name = file.getFileName();
-            if (name != null && matcher.matches(name)) {
-                files.add(file.toString());
-            }
-        }
-
-        /**
-         * Done.
-         */
-        void done() {}
-
-        /**
-         * Visit file.
-         *
-         * @param file the file
-         * @param attrs the attrs
-         * @return the file visit result
-         */
-        @Override
-        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-            find(file);
-            return CONTINUE;
-        }
-
-        /**
-         * Pre visit directory.
-         *
-         * @param dir the dir
-         * @param attrs the attrs
-         * @return the file visit result
-         */
-        @Override
-        public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-            find(dir);
-            return CONTINUE;
-        }
-
-        /**
-         * Visit file failed.
-         *
-         * @param file the file
-         * @param exc the exc
-         * @return the file visit result
-         */
-        @Override
-        public FileVisitResult visitFileFailed(Path file, IOException exc) {
-            if (logger.isErrorEnabled()) {
-                logger.error(exc.getMessage(), exc);
-            }
-            return CONTINUE;
-        }
-
-        /**
-         * Gets the files.
-         *
-         * @return the files
-         */
-        public List<String> getFiles() {
-            return files;
-        }
     }
 
     /**

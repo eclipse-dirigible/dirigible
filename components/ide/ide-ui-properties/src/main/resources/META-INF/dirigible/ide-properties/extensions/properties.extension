@@ -1,5 +1,0 @@
-{
-    "module": "ide-properties/services/properties-view.js",
-    "extensionPoint": "ide-view",
-    "description": "File properties"
-}

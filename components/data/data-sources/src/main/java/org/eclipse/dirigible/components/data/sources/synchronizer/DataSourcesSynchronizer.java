@@ -136,7 +136,7 @@ public class DataSourcesSynchronizer extends BaseSynchronizer<DataSource, Long> 
      */
     @Override
     public List<DataSource> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**

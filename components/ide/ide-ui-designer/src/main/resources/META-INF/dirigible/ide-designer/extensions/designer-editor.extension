@@ -1,5 +1,0 @@
-{
-    "module": "ide-designer/services/designer-editor.js",
-    "extensionPoint": "ide-editor",
-    "description": "Designer Editor"
-}

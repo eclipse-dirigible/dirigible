@@ -6,6 +6,12 @@
 const viewData = {
     id: '${name}-filter',
     label: '${name} Filter',
+    translation: {
+        key: '$projectName:${tprefix}.extName',
+        options: {
+            content: '$t($projectName:${tprefix}.t.$dataName) $t($projectName:${tprefix}.defaults.filter)',
+        }
+    },
     path: '/services/web/${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${name}/dialog-filter/index.html',
     perspectiveName: '${perspectiveName}'
 };

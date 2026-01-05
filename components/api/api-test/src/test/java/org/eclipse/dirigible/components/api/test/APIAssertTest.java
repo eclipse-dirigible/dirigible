@@ -22,6 +22,7 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.context.WebApplicationContext;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
@@ -71,7 +72,9 @@ public class APIAssertTest {
             // .andExpect(status().is5xxServerError());
         } catch (Exception e) {
             // successfully failed
-            assertTrue(e.getMessage()
+            assertNotNull(e.getCause());
+            assertTrue(e.getCause()
+                        .getMessage()
                         .endsWith("Assertion 'assertTrue' failed"));
         }
     }

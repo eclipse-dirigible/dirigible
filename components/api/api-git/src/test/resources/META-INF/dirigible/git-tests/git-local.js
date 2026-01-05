@@ -1,6 +1,6 @@
-import { Client } from 'sdk/git/client';
+import { Client } from '@aerokit/sdk/git/client';
 import { Assert } from 'test/assert';
-import { Workspace } from 'sdk/platform/workspace';
+import { Workspace } from '@aerokit/sdk/platform/workspace';
 
 const user = 'dirigible';
 const email = 'dirigible@eclipse.com';

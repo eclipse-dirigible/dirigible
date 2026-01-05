@@ -1,5 +1,0 @@
-{
-    "module": "ide-operations/services/artefacts/listeners/artefacts-listeners.mjs",
-    "extensionPoint": "ide-operations-artefacts",
-    "description": "Listeners Emails Artefacts Extension"
-}

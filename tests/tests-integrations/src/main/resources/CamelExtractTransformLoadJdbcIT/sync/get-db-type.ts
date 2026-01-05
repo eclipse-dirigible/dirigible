@@ -1,4 +1,4 @@
-import { database } from "sdk/db";
+import { database } from "@aerokit/sdk/db";
 
 export function onMessage(message: any) {
     const connection = database.getConnection();
