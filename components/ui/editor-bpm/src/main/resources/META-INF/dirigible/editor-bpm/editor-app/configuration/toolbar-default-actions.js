@@ -41,20 +41,13 @@ FLOWABLE.TOOLBAR = {
                 // Update
                 $http({
                     method: 'POST',
-                    data: params,
+                    data: json,
                     ignoreErrors: true,
                     headers: {
                         'Accept': 'application/json',
-                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                        'Content-Type': 'application/json',
                         'X-Requested-With': 'Fetch',
                         'X-CSRF-Token': csrfToken
-                    },
-                    transformRequest: function (obj) {
-                        var str = [];
-                        for (var p in obj) {
-                            str.push(encodeURIComponent(p) + "=" + encodeURIComponent(obj[p]));
-                        }
-                        return str.join("&");
                     },
                     url: FLOWABLE.URL.putModel(modelMetaData.modelId)
                 })
@@ -495,18 +488,11 @@ angular
                 // Update
                 $http({
                     method: 'POST',
-                    data: params,
+                    data: json,
                     ignoreErrors: true,
                     headers: {
                         'Accept': 'application/json',
-                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                    },
-                    transformRequest: function (obj) {
-                        var str = [];
-                        for (var p in obj) {
-                            str.push(encodeURIComponent(p) + "=" + encodeURIComponent(obj[p]));
-                        }
-                        return str.join("&");
+                        'Content-Type': 'application/json'
                     },
                     url: FLOWABLE.URL.putModel(modelMetaData.modelId)
                 })
