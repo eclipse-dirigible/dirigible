@@ -118,9 +118,9 @@
         <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
         <maven-surefire-plugin.version>3.5.4</maven-surefire-plugin.version>
         <maven-failsafe-plugin.version>3.5.4</maven-failsafe-plugin.version>
-        <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
+        <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
         <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
-        <maven-jacoco-plugin.version>0.8.13</maven-jacoco-plugin.version>
+        <maven-jacoco-plugin.version>0.8.14</maven-jacoco-plugin.version>
         <maven-spotbugs-plugin.version>4.9.8.2</maven-spotbugs-plugin.version>
         <maven-formatter-plugin.version>2.29.0</maven-formatter-plugin.version>
         <maven-exec-plugin.version>3.6.2</maven-exec-plugin.version>
@@ -128,8 +128,8 @@
         <maven-license-plugin.version>5.0.0</maven-license-plugin.version>
 
         <!-- Spring -->
-        <spring.boot.version>3.5.6</spring.boot.version>
-        <spring.admin.version>3.5.5</spring.admin.version>
+        <spring.boot.version>3.5.9</spring.boot.version>
+        <spring.admin.version>3.5.6</spring.admin.version>
         <springdoc.version>2.8.13</springdoc.version>
 
         <!-- Webjars -->
@@ -141,20 +141,20 @@
 
         <!-- Commons -->
         <commons.io>2.21.0</commons.io>
-        <commons.lang3>3.19.0</commons.lang3>
-        <commons.exec>1.5.0</commons.exec>
+        <commons.lang3>3.20.0</commons.lang3>
+        <commons.exec>1.6.0</commons.exec>
         <commons-csv.version>1.14.1</commons-csv.version>
 
         <apache-httpcomponents-httpmime.version>4.5.14</apache-httpcomponents-httpmime.version>
         <apache-httpcomponents-httpclient.version>4.5.14</apache-httpcomponents-httpclient.version>
         <apache-httpcomponents-httpasyncclient.version>4.1.5</apache-httpcomponents-httpasyncclient.version>
-        <okhttp.version>5.3.0</okhttp.version>
+        <okhttp.version>5.3.2</okhttp.version>
 
         <jaxb.version>2.3.1</jaxb.version>
         <jaxws-rt.version>4.0.3</jaxws-rt.version>
 
         <!-- Lucene -->
-        <lucene.version>10.3.1</lucene.version>
+        <lucene.version>10.3.2</lucene.version>
 
         <!-- Chemistry -->
         <chemistry.version>1.1.0</chemistry.version>
@@ -171,13 +171,14 @@
         <activemq.version>6.1.0</activemq.version>
 
         <!-- Camel -->
-        <camel.version>4.14.0</camel.version>
+        <camel.version>4.16.0</camel.version>
+
 
         <!-- Velocity -->
         <velocity.version>2.4</velocity.version>
 
         <!-- JGit -->
-        <jgit.version>7.4.0.202509020913-r</jgit.version>
+        <jgit.version>7.5.0.202512021534-r</jgit.version>
 
         <!-- Flowable -->
         <flowable.version>7.2.0</flowable.version>
@@ -188,13 +189,13 @@
 
         <!-- JDBC -->
         <mongodb.version>3.12.14</mongodb.version>
-        <ngdbc.version>2.26.6</ngdbc.version>
-        <snowflake.version>3.27.0</snowflake.version>
+        <ngdbc.version>2.27.6</ngdbc.version>
+        <snowflake.version>3.28.0</snowflake.version>
         <mysql.version>8.4.0</mysql.version>
 
         <!-- QLDB -->
         <qldb.driver.version>2.3.1</qldb.driver.version>
-        <qldb.sdk.version>1.12.793</qldb.sdk.version>
+        <qldb.sdk.version>1.12.796</qldb.sdk.version>
 
         <!-- jETCD -->
         <jetcd.core.version>0.8.6</jetcd.core.version>
@@ -216,6 +217,7 @@
         <diff.version>5.1.0</diff.version>
         <monaco-editor.version>0.40.0</monaco-editor.version>
         <requirejs.version>2.3.6</requirejs.version>
+        <stompjs.version>7.2.1</stompjs.version>
         <jstree.version>3.3.12</jstree.version>
         <jquery.version>3.7.1</jquery.version>
         <jqplot.version>1.0.8r1250</jqplot.version>
@@ -227,8 +229,8 @@
         <bpmn-visualization.version>0.46.0</bpmn-visualization.version>
         <i18next.version>25.3.0</i18next.version>
         <!-- Tests -->
-        <testcontainers.version>1.21.1</testcontainers.version>
-        <selenide.version>7.12.3</selenide.version>
+        <testcontainers.version>2.0.3</testcontainers.version>
+        <selenide.version>7.13.0</selenide.version>
 
         <antlr4-maven-plugin.version>4.13.2</antlr4-maven-plugin.version>
         <antlr4-runtime.version>4.13.2</antlr4-runtime.version>
@@ -908,7 +910,7 @@
             <dependency>
                 <groupId>io.opentelemetry.instrumentation</groupId>
                 <artifactId>opentelemetry-instrumentation-bom</artifactId>
-                <version>2.20.0</version>
+                <version>2.23.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -925,16 +927,9 @@
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.junit.vintage</groupId>
-                <artifactId>junit-vintage-engine</artifactId>
-                <version>5.13.4</version>
-                <scope>test</scope>
-            </dependency>
-
-            <dependency>
                 <groupId>org.seleniumhq.selenium</groupId>
                 <artifactId>selenium-java</artifactId>
-                <version>4.38.0</version>
+                <version>4.39.0</version>
                 <scope>test</scope>
             </dependency>
             <dependency>
