@@ -11,6 +11,7 @@ package org.eclipse.dirigible.tests.framework.browser.impl;
 
 import com.codeborne.selenide.*;
 import com.codeborne.selenide.ex.ListSizeMismatch;
+import com.codeborne.selenide.impl.Screenshot;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.browser.Browser;
@@ -237,10 +238,18 @@ class BrowserImpl implements Browser {
                     "Found ZERO elements with selector [{}] and conditions [{}] but expected ONLY ONE. Consider using more precise selector and conditions.\nFound elements: {}.\nCause error message: {}",
                     by, allConditions, describeCollection(by, foundElements, conditions), ex.getMessage());
 
-            FileUtil.deleteFile(ex.getScreenshot()
-                                  .getImage());
-            FileUtil.deleteFile(ex.getScreenshot()
-                                  .getSource());
+            Screenshot exceptionScreenshot = ex.getScreenshot();
+            if (null != exceptionScreenshot && exceptionScreenshot.isPresent()) {
+
+                if (null != exceptionScreenshot.getImage()) {
+                    FileUtil.deleteFile(exceptionScreenshot.getImage());
+                }
+
+                if (null != exceptionScreenshot.getSource()) {
+                    FileUtil.deleteFile(exceptionScreenshot.getSource());
+                }
+            }
+
             return Collections.emptySet();
         }
     }
@@ -375,8 +384,12 @@ class BrowserImpl implements Browser {
                     finalExecution = false;
                     break;
                 }
-                LOGGER.debug("Element by [{}] and conditions [{}] was NOT found. Will try to reload the page and find it.", by,
-                        Arrays.toString(conditions));
+                if (LOGGER.isWarnEnabled()) {
+                    String screenshotPath = createScreenshot();
+                    LOGGER.warn(
+                            "Timeout reached! Element by [{}] and conditions [{}] was NOT found. Will try to reload the page and find it. Screenshot of the current state could be found at [{}]",
+                            by, Arrays.toString(conditions), screenshotPath);
+                }
                 reload();
                 SleepUtil.sleepSeconds(3);
                 continueExecution = false;
