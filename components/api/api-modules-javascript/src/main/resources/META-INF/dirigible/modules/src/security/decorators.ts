@@ -17,9 +17,10 @@ export function Roles(roles) {
             target.prototype[methodName] = function (...args) {
                 const allowed = roles.some(role => UserFacade.isInRole(role));
                 if (!allowed) {
-                    throw new Error(
-                        "User is not allowed to call this module: " + moduleName
-                    );
+                    const errorMessage = `Current user [${UserFacade.getName()}] is not allowed to call module [${moduleName}]. Required some of roles [${roles}]`;
+                    console.error(errorMessage);
+
+                    throw new Error(errorMessage);
                 }
                 return original.apply(this, args);
             };
