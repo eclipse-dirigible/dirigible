@@ -9,19 +9,19 @@
  */
 package org.eclipse.dirigible.components.base.artefact.topology;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.synchronizer.Synchronizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 /**
  * The Class TopologyWrapper.
- *
  */
 public class TopologyWrapper<A extends Artefact> implements TopologicallySortable, TopologicallyDepletable {
 
@@ -52,12 +52,13 @@ public class TopologyWrapper<A extends Artefact> implements TopologicallySortabl
     }
 
     /**
-     * Gets the artefact.
+     * Gets the id.
      *
-     * @return the artefact
+     * @return the id
      */
-    public A getArtefact() {
-        return artefact;
+    @Override
+    public String getId() {
+        return this.artefact.getKey();
     }
 
     /**
@@ -67,16 +68,6 @@ public class TopologyWrapper<A extends Artefact> implements TopologicallySortabl
      */
     public Synchronizer<A, ?> getSynchronizer() {
         return synchronizer;
-    }
-
-    /**
-     * Gets the id.
-     *
-     * @return the id
-     */
-    @Override
-    public String getId() {
-        return this.artefact.getKey();
     }
 
     /**
@@ -128,13 +119,22 @@ public class TopologyWrapper<A extends Artefact> implements TopologicallySortabl
     }
 
     /**
+     * Gets the artefact.
+     *
+     * @return the artefact
+     */
+    public A getArtefact() {
+        return artefact;
+    }
+
+    /**
      * To string.
      *
      * @return the string
      */
     @Override
     public String toString() {
-        return "TopologyWrapper [artefact=" + artefact + ", synchronizer=" + synchronizer.getArtefactType() + "]";
+        return "TopologyWrapper [artefact=" + artefact + ", synchronizer=" + synchronizer + "]";
     }
 
 }

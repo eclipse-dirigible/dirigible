@@ -9,6 +9,9 @@
  */
 package org.eclipse.dirigible.components.engine.camel.processor;
 
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.camel.FluentProducerTemplate;
 import org.apache.camel.component.platform.http.springboot.CamelRequestHandlerMapping;
 import org.apache.camel.impl.engine.DefaultRoutesLoader;
@@ -19,10 +22,6 @@ import org.apache.camel.support.ResourceHelper;
 import org.eclipse.dirigible.components.engine.camel.domain.Camel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * The Class CamelProcessor.
@@ -61,7 +60,7 @@ public class CamelProcessor {
      * @param camel the camel
      */
     public void onCreateOrUpdate(Camel camel) {
-        Resource resource = ResourceHelper.fromBytes("any.yaml", camel.getContent());
+        Resource resource = ResourceHelper.fromString("any.yaml", camel.getContent());
         camels.put(camel.getId(), resource);
         removeAllRoutes();
         addAllRoutes();

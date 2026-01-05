@@ -1,0 +1,104 @@
+<!--
+
+    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="jobsDetails" ng-controller="JobsDetailsController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/perspective-processes/configs/bpm-process-jobs-details-window.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <script type="text/javascript" src="/services/web/perspective-processes/js/time-utils.js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+    </head>
+
+    <body class="bk-vbox">
+        <bk-fieldset ng-if="::params.job" class="bk-padding-top-bottom--tiny fd-padding-begin-end--sm">
+            <bk-form-group>
+                <bk-form-item class="bk-hbox bk-box--gap">
+                    <div class="bk-stretch">
+                        <bk-form-label colon="true">Id</bk-form-label>
+                        <bk-input type="text" value="{{::params.job.id}}" ng-readonly="true"></bk-input>
+                    </div>
+                    <div class="bk-stretch">
+                        <bk-form-label colon="true">Process Instance Id</bk-form-label>
+                        <bk-input type="text" value="{{::params.job.processInstanceId}}" ng-readonly="true"></bk-input>
+                    </div>
+                    <div class="bk-stretch">
+                        <bk-form-label colon="true">Execution Id</bk-form-label>
+                        <bk-input type="text" value="{{::params.job.executionId}}" ng-readonly="true"></bk-input>
+                    </div>
+                    <div class="bk-stretch">
+                        <bk-form-label colon="true">Correlation Id</bk-form-label>
+                        <bk-input type="text" value="{{::params.job.correlationId}}" ng-readonly="true"></bk-input>
+                    </div>
+                </bk-form-item>
+                <bk-form-item>
+                    <bk-form-label colon="true">Exception Message</bk-form-label>
+                    <bk-textarea rows="6" ng-readonly="true">{{::params.job.exceptionMessage}}</bk-textarea>
+                </bk-form-item>
+                <bk-form-item class="bk-hbox bk-box--gap">
+                    <div class="bk-stretch">
+                        <bk-form-label colon="true">Element Name</bk-form-label>
+                        <bk-input type="text" value="{{::params.job.elementName}}" ng-readonly="true"></bk-input>
+                    </div>
+                    <div class="bk-stretch">
+                        <bk-form-label colon="true">Element Id</bk-form-label>
+                        <bk-input type="text" value="{{::params.job.elementId}}" ng-readonly="true"></bk-input>
+                    </div>
+                </bk-form-item>
+                <bk-form-item>
+                    <bk-form-label colon="true">Exception Stacktrace</bk-form-label>
+                    <bk-textarea fd-scrollbar rows="9" ng-readonly="true">{{params.job.exceptionStacktrace}}</bk-textarea>
+                </bk-form-item>
+                <bk-form-item class="bk-hbox bk-box--gap">
+                    <div class="bk-stretch">
+                        <bk-form-label colon="true">Relative Time</bk-form-label>
+                        <bk-input type="text" value="{{getRelativeTime(params.job.createTime)}}" ng-readonly="true"></bk-input>
+                    </div>
+                    <div class="bk-stretch">
+                        <bk-form-label colon="true">Create Time</bk-form-label>
+                        <bk-input type="text" value="{{::params.job.createTime | date:'medium'}}" ng-readonly="true"></bk-input>
+                    </div>
+                </bk-form-item>
+            </bk-form-group>
+        </bk-fieldset>
+
+        <bk-message-page ng-if="::!params.job" glyph="sap-icon--error">
+            <bk-message-page-title>The job parameter is missing!</bk-message-page-title>
+        </bk-message-page>
+
+        <script type="text/javascript">
+            angular.module('jobsDetails', ['platformView', 'blimpKit']).controller('JobsDetailsController', ($scope, ViewParameters) => {
+                $scope.params = ViewParameters.get();
+                if ($scope.params.hasOwnProperty('job')) {
+                    console.log(typeof $scope.params.job.createTime);
+                    $scope.params.job.exceptionStacktrace = $scope.params.job.exceptionStacktrace.replace($scope.params.job.exceptionMessage, '');
+                    $scope.params.job.exceptionStacktrace = $scope.params.job.exceptionStacktrace.replaceAll('	', '');
+                    $scope.params.job.exceptionStacktrace = $scope.params.job.exceptionStacktrace.trim();
+                } else {
+                    console.error('jobDetails: Job parameter missing');
+                }
+
+                $scope.getRelativeTime = (dateTimeString) => {
+                    return formatRelativeTime(new Date(dateTimeString));
+                };
+            });
+        </script>
+        <theme></theme>
+    </body>
+
+</html>

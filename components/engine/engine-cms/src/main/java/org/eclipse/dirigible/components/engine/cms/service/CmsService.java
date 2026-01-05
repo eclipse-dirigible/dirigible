@@ -10,116 +10,77 @@
 package org.eclipse.dirigible.components.engine.cms.service;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.io.InputStream;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 
+import org.apache.chemistry.opencmis.commons.enums.VersioningState;
 import org.apache.commons.io.IOUtils;
-import org.eclipse.dirigible.commons.api.helpers.ContentTypeHelper;
-import org.eclipse.dirigible.commons.config.ResourcesCache;
-import org.eclipse.dirigible.commons.config.ResourcesCache.Cache;
+import org.eclipse.dirigible.components.engine.cms.CmisConstants;
+import org.eclipse.dirigible.components.engine.cms.CmisContentStream;
 import org.eclipse.dirigible.components.engine.cms.CmisDocument;
+import org.eclipse.dirigible.components.engine.cms.CmisFolder;
 import org.eclipse.dirigible.components.engine.cms.CmisObject;
 import org.eclipse.dirigible.components.engine.cms.CmisSessionFactory;
 import org.eclipse.dirigible.components.engine.cms.ObjectType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.context.annotation.RequestScope;
-import org.springframework.web.server.ResponseStatusException;
 
-import jakarta.servlet.http.HttpServletRequest;
+import jakarta.transaction.Transactional;
 
 /**
  * The Class CmsService.
  */
 @Service
-@RequestScope
+@Transactional
 public class CmsService {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(CmsService.class);
 
-    /** The Constant WEB_CACHE. */
-    private static final Cache WEB_CACHE = ResourcesCache.getWebCache();
-
-    /** The request. */
-    @Autowired
-    private HttpServletRequest request;
-
     /**
-     * Gets the document by path.
+     * Gets the CMIS object by path.
      *
-     * @param path the path
-     * @return the document by path
+     * @param path the path to the document
+     * @return the CMIS object by path
+     * @throws IOException if an I/O error occurs
      */
-    public ResponseEntity getDocumentByPath(String path) {
-        if (isCached(path)) {
-            return sendResourceNotModified();
-        }
-
-        String errorMessage = "Document not found or cannot be loaded: " + path;
-        CmisObject cmisObject;
-        try {
-            cmisObject = CmisSessionFactory.getSession()
-                                           .getObjectByPath(path);
-        } catch (IOException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, errorMessage);
-        }
-        ObjectType type = cmisObject.getType();
-        if (ObjectType.DOCUMENT.equals(type) && cmisObject instanceof CmisDocument) {
-            String contentType = ContentTypeHelper.getContentType(ContentTypeHelper.getExtension(path));
-            byte[] content;
-            try {
-                content = IOUtils.toByteArray(((CmisDocument) cmisObject).getContentStream()
-                                                                         .getInputStream());
-            } catch (IOException e) {
-                logger.error(e.getMessage(), e);
-                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, errorMessage);
-            }
-            if (content == null) {
-                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Requested document not found.");
-            }
-            return sendResource(path, ContentTypeHelper.isBinary(contentType), content, contentType);
-        }
-        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Requested document not found.");
+    public CmisObject getObjectByPath(String path) throws IOException {
+        CmisObject cmisObject = CmisSessionFactory.getSession()
+                                                  .getObjectByPath(path);
+        return cmisObject;
     }
 
     /**
-     * Gets the document by path.
+     * Gets the document content.
      *
-     * @param path the path
+     * @param cmisObject the CMIS object
      * @return the document by path
+     * @throws IOException if an I/O error occurs
      */
-    public byte[] getDocument(String path) {
-        String errorMessage = "Document not found or cannot be loaded: " + path;
-        CmisObject cmisObject;
-        try {
-            cmisObject = CmisSessionFactory.getSession()
-                                           .getObjectByPath(path);
-        } catch (IOException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, errorMessage);
-        }
-        ObjectType type = cmisObject.getType();
-        if (ObjectType.DOCUMENT.equals(type) && cmisObject instanceof CmisDocument) {
-            String contentType = ContentTypeHelper.getContentType(ContentTypeHelper.getExtension(path));
+    public byte[] getDocumentContent(CmisObject cmisObject) throws IOException {
+        if (cmisObject != null && ObjectType.DOCUMENT.equals(cmisObject.getType()) && cmisObject instanceof CmisDocument) {
             byte[] content;
-            try {
-                content = IOUtils.toByteArray(((CmisDocument) cmisObject).getContentStream()
-                                                                         .getInputStream());
-            } catch (IOException e) {
-                logger.error(e.getMessage(), e);
-                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, errorMessage);
-            }
-            if (content == null) {
-                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Requested document not found.");
-            }
+            content = IOUtils.toByteArray(((CmisDocument) cmisObject).getContentStream()
+                                                                     .getInputStream());
             return content;
         }
-        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Requested document not found.");
+        return null;
+    }
+
+    /**
+     * Gets the document content.
+     *
+     * @param path the path to the document
+     * @return the document content as byte array, or null if not found
+     * @throws IOException if an I/O error occurs
+     */
+    public byte[] getDocument(String path) throws IOException {
+        CmisObject cmisObject = getObjectByPath(path);
+        return getDocumentContent(cmisObject);
     }
 
     /**
@@ -143,70 +104,78 @@ public class CmsService {
         return false;
     }
 
-    /**
-     * Send resource not modified.
-     *
-     * @return the response
-     */
-    private ResponseEntity sendResourceNotModified() {
-        final HttpHeaders httpHeaders = new HttpHeaders();
-        httpHeaders.add("ETag", getTag());
-        return new ResponseEntity(httpHeaders, HttpStatus.NOT_MODIFIED);
+    public CmisFolder getRootFolder() throws IOException {
+        return CmisSessionFactory.getSession()
+                                 .getRootFolder();
     }
 
-    /**
-     * Send resource.
-     *
-     * @param path the path
-     * @param isBinary the is binary
-     * @param content the content
-     * @param contentType the content type
-     * @return the response
-     */
-    private ResponseEntity sendResource(String path, boolean isBinary, byte[] content, String contentType) {
-        String tag = cacheResource(path);
-        final HttpHeaders httpHeaders = new HttpHeaders();
-        httpHeaders.setContentType(MediaType.valueOf(contentType));
-        httpHeaders.add("Cache-Control", "public, must-revalidate, max-age=0");
-        httpHeaders.add("ETag", tag);
-        if (isBinary) {
-            return new ResponseEntity(content, httpHeaders, HttpStatus.OK);
+    public CmisFolder createFolder(CmisFolder parent, String name) throws IOException {
+        Map<String, String> properties = new HashMap<String, String>();
+        properties.put(CmisConstants.NAME, name);
+        return parent.createFolder(properties);
+    }
+
+    public CmisFolder getChildFolderByName(CmisFolder parent, String name) throws IOException {
+        Optional<? extends CmisObject> folderOptional = parent.getChildren()
+                                                              .stream()
+                                                              .filter(obj -> obj.getName()
+                                                                                .equals(name))
+                                                              .filter(obj -> obj.getType()
+                                                                                .equals(ObjectType.FOLDER))
+                                                              .findFirst();
+        CmisFolder folder = null;
+        if (folderOptional.isPresent()) {
+            folder = (CmisFolder) folderOptional.get();
         }
-        return new ResponseEntity(new String(content, StandardCharsets.UTF_8), httpHeaders, HttpStatus.OK);
+        return folder;
     }
 
-    /**
-     * Cache resource.
-     *
-     * @param path the path
-     * @return the string
-     */
-    private String cacheResource(String path) {
-        String tag = WEB_CACHE.generateTag();
-        WEB_CACHE.setTag(path, tag);
-        return tag;
+    public CmisDocument getChildDocumentByName(CmisFolder parent, String name) throws IOException {
+        Optional<? extends CmisObject> documentOptional = parent.getChildren()
+                                                                .stream()
+                                                                .filter(obj -> obj.getName()
+                                                                                  .equals(name))
+                                                                .filter(obj -> obj.getType()
+                                                                                  .equals(ObjectType.DOCUMENT))
+                                                                .findFirst();
+        CmisDocument document = null;
+        if (documentOptional.isPresent()) {
+            document = (CmisDocument) documentOptional.get();
+        }
+        return document;
     }
 
-    /**
-     * Checks if is cached.
-     *
-     * @param path the path
-     * @return true, if is cached
-     */
-    private boolean isCached(String path) {
-        String tag = getTag();
-        String cachedTag = WEB_CACHE.getTag(path);
-        return tag != null && tag.equals(cachedTag);
-
+    public CmisDocument createDocument(CmisFolder parent, String name, String mimeType, int size, InputStream inputStream)
+            throws IOException {
+        CmisContentStream contentStream = CmisSessionFactory.getSession()
+                                                            .getObjectFactory()
+                                                            .createContentStream(name, size, mimeType, inputStream);
+        Map<String, String> properties = new HashMap<String, String>();
+        properties.put(CmisConstants.OBJECT_TYPE_ID, CmisConstants.OBJECT_TYPE_DOCUMENT);
+        properties.put(CmisConstants.NAME, name);
+        CmisDocument newDocument = parent.createDocument(properties, contentStream, VersioningState.MAJOR);
+        return newDocument;
     }
 
-    /**
-     * Gets the tag.
-     *
-     * @return the tag
-     */
-    private String getTag() {
-        return request.getHeader("If-None-Match");
+
+    public void updateDocument(CmisFolder parent, CmisDocument document, String mimeType, int size, InputStream inputStream)
+            throws IOException {
+        Date timestamp = new Date();
+        String newName = document.getName() + "-" + timestamp.getTime();
+        String oldName = document.getName();
+
+        CmisDocument newDocument = createDocument(parent, newName, mimeType, size, inputStream);
+        try {
+            document.delete();
+        } catch (Exception e) {
+            // do nothing
+        }
+        newDocument.rename(oldName);
+    };
+
+    public InputStream getDocumentStream(CmisDocument document) throws IOException {
+        return document.getContentStream()
+                       .getInputStream();
     }
 
 }

@@ -1,0 +1,54 @@
+/**
+ * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v2.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ */
+
+#embeddedEditor {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#toolbar [bk-button] {
+  flex-shrink: 0;
+}
+
+#hint {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+#exportsPopover>.bk-vbox {
+  min-width: 20rem;
+}
+
+#exportsPopover [bk-list-button]:first-of-type {
+  margin-left: 0.5rem;
+}
+
+#exportsPopover span.bk-center {
+  width: 3rem;
+  height: 3rem;
+  margin-inline-end: .75rem;
+}
+
+#exportsPopover [data-color-error] {
+  color: var(--sapNegativeColor) !important;
+}
+
+#exportsPopover li:last-child {
+  border-bottom: none !important;
+}
+
+#errorMessage {
+  word-wrap: break-word;
+  white-space: wrap;
+}

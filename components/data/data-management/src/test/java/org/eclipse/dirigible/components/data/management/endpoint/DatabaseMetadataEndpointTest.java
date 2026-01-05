@@ -32,6 +32,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.Base64;
+
 /**
  * The Class DatabaseMetadataEndpointTest.
  */
@@ -91,6 +93,22 @@ public class DatabaseMetadataEndpointTest {
     public void getDataSourceByName() throws Exception {
 
         mockMvc.perform(get("/services/data/metadata/{name}/{schema}/{structure}", "TestDB", "INFORMATION_SCHEMA", "INDEXES"))
+               .andDo(print())
+               .andExpect(status().is2xxSuccessful());
+    }
+
+    /**
+     * Gets the data source by name encoded.
+     *
+     * @return the data source by name
+     * @throws Exception the exception
+     */
+    @Test
+    public void getDataSourceByNameEncoded() throws Exception {
+
+        mockMvc.perform(get("/services/data/metadata/{name}/{schema}/{structure}", "TestDB", "INFORMATION_SCHEMA", Base64.getEncoder()
+                                                                                                                         .encodeToString(
+                                                                                                                                 "INDEXES".getBytes())))
                .andDo(print())
                .andExpect(status().is2xxSuccessful());
     }

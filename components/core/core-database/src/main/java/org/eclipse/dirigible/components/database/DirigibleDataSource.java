@@ -30,4 +30,6 @@ public interface DirigibleDataSource extends DataSource, DatabaseSystemAware {
     Optional<PlatformTransactionManager> getTransactionManager();
 
     void setTransactionManager(PlatformTransactionManager transactionManager);
+
+    boolean isInUse();
 }

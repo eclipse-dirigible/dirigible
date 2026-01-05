@@ -9,24 +9,15 @@
  */
 package org.eclipse.dirigible.components.data.structures.domain;
 
-import java.util.Arrays;
-
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.google.gson.annotations.Expose;
 import jakarta.annotation.Nullable;
-import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
-import jakarta.persistence.ElementCollection;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.MappedSuperclass;
-import jakarta.persistence.OneToOne;
-import jakarta.persistence.OrderColumn;
-
+import jakarta.persistence.*;
 import org.eclipse.dirigible.components.base.converters.ArrayOfStringsToCsvConverter;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.google.gson.annotations.Expose;
+import java.util.Arrays;
 
 /**
  * The Class TableConstraint.
@@ -167,4 +158,18 @@ public abstract class TableConstraint {
                 + ", constraints=" + constraints + "]";
     }
 
+    public void addColumns(String[] columns) {
+        if (columns == null || columns.length == 0) {
+            return;
+        }
+
+        if (null == this.columns) {
+            this.columns = Arrays.copyOf(columns, columns.length);
+        } else {
+            int oldLength = this.columns.length;
+            int newLength = oldLength + columns.length;
+            this.columns = Arrays.copyOf(this.columns, newLength);
+            System.arraycopy(columns, 0, this.columns, oldLength, columns.length);
+        }
+    }
 }

@@ -9,12 +9,11 @@
  */
 package org.eclipse.dirigible.components.api.bpm;
 
+import java.util.Map;
 import org.eclipse.dirigible.components.engine.bpm.flowable.config.BpmProviderFlowable;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-
-import java.util.Map;
 
 /**
  * The Class BpmFacade.
@@ -90,13 +89,50 @@ public class BpmFacade implements InitializingBean {
      * Starts a BPMN process by its key and initial parameters.
      *
      * @param key the BPMN id of the process
+     * @param businessKey the business key of the process
      * @param parameters the serialized in JSON process initial parameters
      * @return the process instance id
      */
-    public static String startProcess(String key, String parameters) {
+    public static String startProcess(String key, String businessKey, String parameters) {
         return BpmFacade.get()
                         .getBpmProviderFlowable()
-                        .startProcess(key, parameters);
+                        .startProcess(key, businessKey, parameters);
+    }
+
+    /**
+     * Sets the process instance name.
+     *
+     * @param processInstanceId the process instance id
+     * @param name the name
+     */
+    public static void setProcessInstanceName(String processInstanceId, String name) {
+        BpmFacade.get()
+                 .getBpmProviderFlowable()
+                 .setProcessInstanceName(processInstanceId, name);
+    }
+
+    /**
+     * Updates the business key.
+     *
+     * @param processInstanceId the process instance id
+     * @param businessKey the business key
+     */
+    public static void updateBusinessKey(String processInstanceId, String businessKey) {
+        BpmFacade.get()
+                 .getBpmProviderFlowable()
+                 .updateBusinessKey(processInstanceId, businessKey);
+    }
+
+    /**
+     * Updates the business status.
+     *
+     * @param processInstanceId the process instance id
+     * @param businessStatus the business status
+     */
+    public static void updateBusinessStatus(String processInstanceId, String businessStatus) {
+        BpmFacade.get()
+                 .getBpmProviderFlowable()
+                 .updateBusinessStatus(processInstanceId, businessStatus);
     }
 
     /**
@@ -234,4 +270,16 @@ public class BpmFacade implements InitializingBean {
                  .completeTask(taskId, variables);
     }
 
+    /**
+     * Set the task's variables.
+     *
+     * @param processInstanceId the process instance id
+     * @param messageName the name of the message event
+     * @param variables the variables to be passed with the message vent
+     */
+    public static void correlateMessageEvent(String processInstanceId, String messageName, Map<String, Object> variables) {
+        BpmFacade.get()
+                 .getBpmProviderFlowable()
+                 .correlateMessageEvent(processInstanceId, messageName, variables);
+    }
 }

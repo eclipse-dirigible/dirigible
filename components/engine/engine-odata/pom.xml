@@ -4,7 +4,7 @@
 	<parent>
 		<artifactId>dirigible-components-parent</artifactId>
 		<groupId>org.eclipse.dirigible</groupId>
-		<version>12.0.0-SNAPSHOT</version>
+		<version>13.0.0-SNAPSHOT</version>
 		<relativePath>../../pom.xml</relativePath>
 	</parent>
 
@@ -73,7 +73,7 @@
 	</dependencies>
 
 	<properties>
-		<cxf.version>4.1.2</cxf.version>
+		<cxf.version>4.1.4</cxf.version>
 		<license.header.location>../../../licensing-header.txt</license.header.location>
 		<parent.pom.folder>../../../</parent.pom.folder>
 	</properties>

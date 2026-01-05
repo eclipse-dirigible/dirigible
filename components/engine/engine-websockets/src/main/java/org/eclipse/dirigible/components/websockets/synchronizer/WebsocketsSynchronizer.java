@@ -9,6 +9,13 @@
  */
 package org.eclipse.dirigible.components.websockets.synchronizer;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.text.ParseException;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.apache.commons.io.FilenameUtils;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
@@ -20,16 +27,15 @@ import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.websockets.domain.Websocket;
+import org.eclipse.dirigible.components.websockets.parser.WebsocketMetadata;
+import org.eclipse.dirigible.components.websockets.parser.WebsocketParser;
 import org.eclipse.dirigible.components.websockets.service.WebsocketService;
+import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-
-import java.nio.charset.StandardCharsets;
-import java.text.ParseException;
-import java.util.List;
 
 /**
  * The Class WebsocketsSynchronizer.
@@ -44,12 +50,16 @@ public class WebsocketsSynchronizer extends BaseSynchronizer<Websocket, Long> {
     /** The Constant FILE_EXTENSION_WEBSOCKET. */
     private static final String FILE_EXTENSION_WEBSOCKET = ".websocket";
 
+    public static final String[] FILE_EXTENSIONS_WEBSOCKET = new String[] {".websocket", "Websocket.ts", "WebSocket.ts"};
+
     /** The websocket service. */
     @Autowired
     private WebsocketService websocketService;
 
     /** The callback. */
     private SynchronizerCallback callback;
+
+    private final WebsocketParser websocketParser = new WebsocketParser();
 
     /**
      * Checks if is accepted.
@@ -72,7 +82,24 @@ public class WebsocketsSynchronizer extends BaseSynchronizer<Websocket, Long> {
      */
     @Override
     protected List<Websocket> parseImpl(String location, byte[] content) throws ParseException {
-        Websocket websocket = JsonHelper.fromJson(new String(content, StandardCharsets.UTF_8), Websocket.class);
+        Websocket websocket = null;
+        String source = new String(content, StandardCharsets.UTF_8);
+        if (location.endsWith(FILE_EXTENSION_WEBSOCKET)) {
+            websocket = JsonHelper.fromJson(source, Websocket.class);
+        } else {
+            WebsocketMetadata metadata = websocketParser.parse(location, source);
+            if (metadata.getName() == null) {
+                return new ArrayList<Websocket>();
+            }
+            websocket = new Websocket();
+            websocket.setName(metadata.getName());
+            websocket.setEndpoint(metadata.getEndpoint());
+            String handler = location;
+            if (handler.startsWith(IRepositoryStructure.SEPARATOR)) {
+                handler = handler.substring(1);
+            }
+            websocket.setHandler(handler);
+        }
         Configuration.configureObject(websocket);
         websocket.setLocation(location);
         websocket.setName(FilenameUtils.getBaseName(location));
@@ -113,7 +140,7 @@ public class WebsocketsSynchronizer extends BaseSynchronizer<Websocket, Long> {
      */
     @Override
     public List<Websocket> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**
@@ -186,5 +213,23 @@ public class WebsocketsSynchronizer extends BaseSynchronizer<Websocket, Long> {
     @Override
     public String getArtefactType() {
         return Websocket.ARTEFACT_TYPE;
+    }
+
+    /**
+     * Checks if is accepted.
+     *
+     * @param file the file
+     * @param attrs the attrs
+     * @return true, if is accepted
+     */
+    @Override
+    public boolean isAccepted(Path file, BasicFileAttributes attrs) {
+        for (String extension : FILE_EXTENSIONS_WEBSOCKET) {
+            if (file.toString()
+                    .endsWith(extension)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

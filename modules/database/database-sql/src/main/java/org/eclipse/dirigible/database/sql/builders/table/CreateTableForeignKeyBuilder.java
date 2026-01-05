@@ -9,12 +9,12 @@
  */
 package org.eclipse.dirigible.database.sql.builders.table;
 
+import java.util.Set;
+import java.util.TreeSet;
+
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.Set;
-import java.util.TreeSet;
 
 /**
  * The Create Table Foreign Key Builder.

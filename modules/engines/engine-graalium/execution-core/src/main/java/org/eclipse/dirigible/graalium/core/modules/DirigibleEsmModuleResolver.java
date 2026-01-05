@@ -23,12 +23,12 @@ import java.util.regex.Pattern;
 public class DirigibleEsmModuleResolver implements ModuleResolver {
 
     /** The Constant DIRIGIBLE_CORE_MODULE_SIGNATURE_PATTERN. */
-    private static final Pattern DIRIGIBLE_CORE_MODULE_SIGNATURE_PATTERN = Pattern.compile("(sdk)/(\\w+)(?:/(.+))?"); // e.g.
-                                                                                                                      // sdk/core/module/submodule
-                                                                                                                      // =>
-                                                                                                                      // $1=dirigible
-                                                                                                                      // $2=core
-                                                                                                                      // $3=module/submodule
+    private static final Pattern DIRIGIBLE_CORE_MODULE_SIGNATURE_PATTERN = Pattern.compile("((?:@aerokit/)?sdk)/(\\w+)(?:/(.+))?"); // e.g.
+    // sdk/core/module/submodule
+    // =>
+    // $1=sdk # Captures either sdk or @aerokit/sdk
+    // $2=core
+    // $3=module/submodule
 
     /** The source provider. */
     private final JavascriptSourceProvider sourceProvider;

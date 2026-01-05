@@ -9,8 +9,8 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { response } from "sdk/http";
-import { request } from "sdk/http";
+import { response } from "@aerokit/sdk/http";
+import { request } from "@aerokit/sdk/http";
 import * as moduleInfoCache from "./utils/moduleInfoCache";
 let moduleInfo = moduleInfoCache.get(request.getParameter("moduleName"));
 response.setContentType("application/json");

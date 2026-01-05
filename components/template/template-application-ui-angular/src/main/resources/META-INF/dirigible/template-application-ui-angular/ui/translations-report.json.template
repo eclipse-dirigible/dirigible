@@ -1,0 +1,29 @@
+{
+    "aria": {
+        "tableRowMenu": "Table Row Menu",
+        "tableRowMenuBtn": "Table Row Menu Button"
+    },
+    "messages": {
+        "error" : {
+            "incorrectInput": "Incorrect Input",
+            "unableToLF": "Unable to list/filter {{name}}: '{{message}}'",
+            "unableToCount": "Unable to count {{name}}: '{{message}}'"
+        },
+        "inputEnter": "Enter {{name}}...",
+        "noData": "No data available."
+    },
+    "defaults": {
+        "filter": "Filter",
+        "print": "Print",
+        "reset": "Reset",
+        "cancel": "Cancel",
+        "items": "Items",
+        "formGrpFilter": "{{name}} Filter",
+        "formHeadSelect": "{{name}} Details",
+        "reportTitle": "{{name}} Report",
+        "reportFilter": "Report Filter",
+        "viewDetails": "View Details"
+    },
+    "extName": "{{content}}",
+    "t": {}
+}

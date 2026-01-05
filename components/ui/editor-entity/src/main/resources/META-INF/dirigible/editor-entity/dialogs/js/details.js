@@ -176,6 +176,7 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
                             generateDefaultRoles: $scope.dataParameters.generateDefaultRoles,
                             importsCode: $scope.dataParameters.importsCode,
                             generateReport: $scope.dataParameters.generateReport,
+							multilingual: $scope.dataParameters.multilingual
                         }
                     });
                 } else {

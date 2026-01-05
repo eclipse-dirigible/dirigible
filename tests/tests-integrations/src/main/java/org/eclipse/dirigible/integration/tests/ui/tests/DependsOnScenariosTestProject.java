@@ -37,6 +37,7 @@ class DependsOnScenariosTestProject extends BaseTestProject {
     @Override
     public void configure() {
         copyToWorkspace();
+        generateEDM("sales-order.edm");
         publish();
     }
 
@@ -88,24 +89,24 @@ class DependsOnScenariosTestProject extends BaseTestProject {
     private void assertCustomerPayment() {
         clickEmptyCustomerField();
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", "Customer A");
-        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search CustomerPayment ...");
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search CustomerPayment...");
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Payment 1");
 
         clickFilledCustomerField();
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", "Customer B");
-        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search CustomerPayment ...");
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search CustomerPayment...");
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Payment 2");
 
     }
 
     private void clickEmptyCustomerField() {
         browser.clickElementByAttributes(HtmlElementType.INPUT, Map.of(HtmlAttribute.CLASS,
-                "fd-input ng-empty ng-valid fd-input-group__input", HtmlAttribute.PLACEHOLDER, "Search Customer ..."));
+                "fd-input ng-empty ng-valid fd-input-group__input", HtmlAttribute.PLACEHOLDER, "Search Customer..."));
     }
 
     private void clickFilledCustomerField() {
         browser.clickElementByAttributes(HtmlElementType.INPUT, Map.of(HtmlAttribute.CLASS,
-                "fd-input ng-valid fd-input-group__input ng-touched ng-not-empty", HtmlAttribute.PLACEHOLDER, "Search Customer ..."));
+                "fd-input ng-valid fd-input-group__input ng-touched ng-not-empty", HtmlAttribute.PLACEHOLDER, "Search Customer..."));
     }
 
     private void verifyOrderCustomer() {
@@ -118,7 +119,7 @@ class DependsOnScenariosTestProject extends BaseTestProject {
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
 
         browser.clickElementByAttributes(HtmlElementType.INPUT, Map.of(HtmlAttribute.CLASS,
-                "fd-input ng-empty ng-valid fd-input-group__input", HtmlAttribute.PLACEHOLDER, "Search Customer ..."));
+                "fd-input ng-empty ng-valid fd-input-group__input", HtmlAttribute.PLACEHOLDER, "Search Customer..."));
 
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Customer A");
     }
@@ -137,7 +138,7 @@ class DependsOnScenariosTestProject extends BaseTestProject {
     }
 
     private void assertProductPrice(String product, String price) {
-        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Product ...");
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Product...");
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", product);
         browser.assertElementValueByAttributes(HtmlElementType.INPUT, Map.of(HtmlAttribute.ID, "idPrice"), price);
     }
@@ -156,9 +157,9 @@ class DependsOnScenariosTestProject extends BaseTestProject {
     }
 
     private void assertProductUom(String product, String uom) {
-        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Product ...");
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Product...");
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", product);
-        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search UoM ...");
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search UoM...");
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, uom);
     }
 
@@ -176,11 +177,11 @@ class DependsOnScenariosTestProject extends BaseTestProject {
     }
 
     private void asserCountryCity(String country, String city) {
-        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Country ...");
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Country...");
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-list__title", country);
         browser.clickElementByAttributes(HtmlElementType.BUTTON,
                 Map.of(HtmlAttribute.CLASS, "fd-button", HtmlAttribute.NGCLICK, "refreshCity()"));
-        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search City ...");
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search City...");
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, city);
     }
 }

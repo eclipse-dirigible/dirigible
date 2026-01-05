@@ -70,7 +70,7 @@
     <description>Dirigible Parent</description>
     <groupId>org.eclipse.dirigible</groupId>
     <artifactId>dirigible-parent</artifactId>
-    <version>12.0.0-SNAPSHOT</version>
+    <version>13.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <inceptionYear>2010</inceptionYear>
@@ -90,6 +90,17 @@
         <url>http://www.eclipse.org</url>
     </organization>
 
+    <developers>
+        <developer>
+            <id>office</id>
+            <name>Office</name>
+            <email>office@codbex.com</email>
+            <url>https://github.com/codbex</url>
+            <organization>codbex</organization>
+            <organizationUrl>https://www.codbex.com</organizationUrl>
+        </developer>
+    </developers>
+
     <properties>
         <project.title>Eclipse Dirigible</project.title>
 
@@ -98,52 +109,52 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
         <!-- Java -->
-        <java.version>17</java.version>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <java.version>21</java.version>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
 
         <!-- Maven -->
-        <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
-        <maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
-        <maven-surefire-plugin.version>3.5.3</maven-surefire-plugin.version>
-        <maven-failsafe-plugin.version>3.5.3</maven-failsafe-plugin.version>
-        <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
-        <maven-gpg-plugin.version>3.2.7</maven-gpg-plugin.version>
-        <maven-jacoco-plugin.version>0.8.13</maven-jacoco-plugin.version>
-        <maven-spotbugs-plugin.version>4.9.3.0</maven-spotbugs-plugin.version>
-        <maven-formatter-plugin.version>2.26.0</maven-formatter-plugin.version>
-        <maven-exec-plugin.version>3.5.1</maven-exec-plugin.version>
+        <maven-compiler-plugin.version>3.14.1</maven-compiler-plugin.version>
+        <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
+        <maven-surefire-plugin.version>3.5.4</maven-surefire-plugin.version>
+        <maven-failsafe-plugin.version>3.5.4</maven-failsafe-plugin.version>
+        <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
+        <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
+        <maven-jacoco-plugin.version>0.8.14</maven-jacoco-plugin.version>
+        <maven-spotbugs-plugin.version>4.9.8.2</maven-spotbugs-plugin.version>
+        <maven-formatter-plugin.version>2.29.0</maven-formatter-plugin.version>
+        <maven-exec-plugin.version>3.6.2</maven-exec-plugin.version>
         <maven-git-commit-id-plugin.version>4.9.10</maven-git-commit-id-plugin.version>
         <maven-license-plugin.version>5.0.0</maven-license-plugin.version>
 
         <!-- Spring -->
-        <spring.boot.version>3.5.0</spring.boot.version>
-        <spring.admin.version>3.4.7</spring.admin.version>
-        <springdoc.version>2.8.8</springdoc.version>
+        <spring.boot.version>3.5.9</spring.boot.version>
+        <spring.admin.version>3.5.6</spring.admin.version>
+        <springdoc.version>2.8.13</springdoc.version>
 
         <!-- Webjars -->
-        <webjars.bootstrap.version>5.3.5</webjars.bootstrap.version>
         <webjars.locator.version>0.52</webjars.locator.version>
         <webjars.locator.core.version>0.59</webjars.locator.core.version>
 
         <!-- GraalVM -->
-        <graalvm.version>24.2.1</graalvm.version>
+        <graalvm.version>25.0.1</graalvm.version>
 
         <!-- Commons -->
-        <commons.io>2.19.0</commons.io>
-        <commons.lang3>3.17.0</commons.lang3>
-        <commons.exec>1.5.0</commons.exec>
-        <commons-csv.version>1.14.0</commons-csv.version>
+        <commons.io>2.21.0</commons.io>
+        <commons.lang3>3.20.0</commons.lang3>
+        <commons.exec>1.6.0</commons.exec>
+        <commons-csv.version>1.14.1</commons-csv.version>
 
         <apache-httpcomponents-httpmime.version>4.5.14</apache-httpcomponents-httpmime.version>
         <apache-httpcomponents-httpclient.version>4.5.14</apache-httpcomponents-httpclient.version>
         <apache-httpcomponents-httpasyncclient.version>4.1.5</apache-httpcomponents-httpasyncclient.version>
-        <okhttp.version>4.12.0</okhttp.version>
+        <okhttp.version>5.3.2</okhttp.version>
 
         <jaxb.version>2.3.1</jaxb.version>
+        <jaxws-rt.version>4.0.3</jaxws-rt.version>
 
         <!-- Lucene -->
-        <lucene.version>9.12.0</lucene.version>
+        <lucene.version>10.3.2</lucene.version>
 
         <!-- Chemistry -->
         <chemistry.version>1.1.0</chemistry.version>
@@ -152,24 +163,25 @@
         <olingo.version>3.1.4</olingo.version>
 
         <!-- FTP -->
-        <mina-core.version>2.2.4</mina-core.version>
-        <sshd-core.version>2.15.0</sshd-core.version>
+        <mina-core.version>2.2.5</mina-core.version>
+        <sshd-core.version>2.16.0</sshd-core.version>
         <ftpserver.version>1.2.1</ftpserver.version>
 
         <!-- ActiveMQ -->
         <activemq.version>6.1.0</activemq.version>
 
         <!-- Camel -->
-        <camel.version>4.10.2</camel.version>
+        <camel.version>4.16.0</camel.version>
+
 
         <!-- Velocity -->
         <velocity.version>2.4</velocity.version>
 
         <!-- JGit -->
-        <jgit.version>6.10.0.202406032230-r</jgit.version>
+        <jgit.version>7.5.0.202512021534-r</jgit.version>
 
         <!-- Flowable -->
-        <flowable.version>7.1.0</flowable.version>
+        <flowable.version>7.2.0</flowable.version>
 
         <!-- Wiki -->
         <wikitext.version>3.0.48.202308291007</wikitext.version>
@@ -177,26 +189,25 @@
 
         <!-- JDBC -->
         <mongodb.version>3.12.14</mongodb.version>
-        <ngdbc.version>2.24.8</ngdbc.version>
-        <snowflake.version>3.24.1</snowflake.version>
+        <ngdbc.version>2.27.6</ngdbc.version>
+        <snowflake.version>3.28.0</snowflake.version>
         <mysql.version>8.4.0</mysql.version>
 
         <!-- QLDB -->
         <qldb.driver.version>2.3.1</qldb.driver.version>
-        <qldb.sdk.version>1.12.783</qldb.sdk.version>
+        <qldb.sdk.version>1.12.796</qldb.sdk.version>
 
         <!-- jETCD -->
-        <jetcd.core.version>0.8.5</jetcd.core.version>
+        <jetcd.core.version>0.8.6</jetcd.core.version>
 
         <!-- Various -->
-        <c3p0.version>0.11.0-pre2</c3p0.version>
-        <guava.version>33.4.8-jre</guava.version>
-        <icu4j.version>77.1</icu4j.version>
-        <classgraph.version>4.8.179</classgraph.version>
-        <logcaptor.version>2.11.0</logcaptor.version>
+        <c3p0.version>0.11.2</c3p0.version>
+        <guava.version>33.5.0-jre</guava.version>
+        <icu4j.version>78.1</icu4j.version>
+        <classgraph.version>4.8.184</classgraph.version>
+        <logcaptor.version>2.12.1</logcaptor.version>
 
         <!-- UI -->
-        <jquery-ui.version>1.13.0</jquery-ui.version>
         <sap-theming__theming-base-content.version>11.18.2</sap-theming__theming-base-content.version>
         <chart.js.version>4.4.3</chart.js.version>
         <sortablejs.version>1.15.2</sortablejs.version>
@@ -206,20 +217,23 @@
         <diff.version>5.1.0</diff.version>
         <monaco-editor.version>0.40.0</monaco-editor.version>
         <requirejs.version>2.3.6</requirejs.version>
+        <stompjs.version>7.2.1</stompjs.version>
         <jstree.version>3.3.12</jstree.version>
         <jquery.version>3.7.1</jquery.version>
         <jqplot.version>1.0.8r1250</jqplot.version>
         <es5-shim.version>4.6.7</es5-shim.version>
         <angular-file-upload.version>2.6.1</angular-file-upload.version>
         <angularjs.version>1.8.2</angularjs.version>
-        <fontawesome.version>4.7.0</fontawesome.version>
         <ag-grid.version>27.1.0</ag-grid.version>
         <papaparse.version>5.3.2</papaparse.version>
         <bpmn-visualization.version>0.46.0</bpmn-visualization.version>
-
+        <i18next.version>25.3.0</i18next.version>
         <!-- Tests -->
-        <testcontainers.version>1.21.0</testcontainers.version>
-        <selenide.version>7.9.3</selenide.version>
+        <testcontainers.version>2.0.3</testcontainers.version>
+        <selenide.version>7.13.0</selenide.version>
+
+        <antlr4-maven-plugin.version>4.13.2</antlr4-maven-plugin.version>
+        <antlr4-runtime.version>4.13.2</antlr4-runtime.version>
 
         <profile.content.phase>none</profile.content.phase>
 
@@ -488,31 +502,22 @@
                                     **/src/main/resources/META-INF/dirigible/font-dirigible/**
                                 </exclude>
                                 <exclude>
-                                    **/src/main/resources/META-INF/dirigible/ide-bpm/**
-                                </exclude>
-                                <exclude>
                                     **/src/main/resources/META-INF/dirigible/editor-bpm/**
-                                </exclude>
-                                <exclude>
-                                    **/src/main/resources/META-INF/dirigible/ide-monaco/**
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/editor-monaco/**
                                 </exclude>
                                 <exclude>
-                                    **/src/main/resources/META-INF/dirigible/ide-swagger/**
+                                    **/src/main/resources/META-INF/dirigible/view-swagger/**
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/editor-swagger/**
                                 </exclude>
                                 <exclude>
-                                    **/src/main/resources/META-INF/dirigible/resources-core/ui/**
+                                    **/src/main/resources/META-INF/dirigible/resources-locale/**
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/platform-core/ui/**
-                                </exclude>
-                                <exclude>
-                                    **/src/main/resources/META-INF/dirigible/ide-terminal/js/**
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/view-terminal/js/**
@@ -525,9 +530,6 @@
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/utils/jsonpath.js
-                                </exclude>
-                                <exclude>
-                                    **/src/main/resources/META-INF/dirigible/ide-designer/designer/**
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/editor-designer/designer/**
@@ -572,7 +574,7 @@
                             <dependency>
                                 <groupId><![CDATA[com.github.spotbugs]]></groupId>
                                 <artifactId>spotbugs</artifactId>
-                                <version>4.9.3</version>
+                                <version>4.9.8</version>
                             </dependency>
                         </dependencies>
                     </plugin>
@@ -615,6 +617,16 @@
             </activation>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.9.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>ossrh</publishingServerId>
+                            <autoPublish>true</autoPublish>
+                        </configuration>
+                    </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-source-plugin</artifactId>
@@ -778,7 +790,7 @@
     <pluginRepositories>
         <pluginRepository>
             <id>sonatype-public-repository</id>
-            <url>https://oss.sonatype.org/content/groups/public</url>
+            <url>https://ossrh-staging-api.central.sonatype.com/content/groups/public</url>
             <snapshots>
                 <enabled>false</enabled>
             </snapshots>
@@ -791,11 +803,11 @@
     <distributionManagement>
         <snapshotRepository>
             <id>ossrh</id>
-            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+            <url>https://ossrh-staging-api.central.sonatype.com/content/repositories/snapshots</url>
         </snapshotRepository>
         <repository>
             <id>ossrh</id>
-            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2</url>
+            <url>https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2</url>
         </repository>
     </distributionManagement>
 
@@ -809,6 +821,7 @@
         <module>build</module>
         <module>dependencies</module>
         <module>tests</module>
+        <module>cli</module>
     </modules>
 
     <dependencies>
@@ -857,6 +870,11 @@
             <artifactId>jakarta.xml.ws-api</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.sun.xml.ws</groupId>
+            <artifactId>jaxws-rt</artifactId>
+            <version>${jaxws-rt.version}</version>
+        </dependency>
+        <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
             <version>${guava.version}</version>
@@ -892,7 +910,7 @@
             <dependency>
                 <groupId>io.opentelemetry.instrumentation</groupId>
                 <artifactId>opentelemetry-instrumentation-bom</artifactId>
-                <version>2.16.0</version>
+                <version>2.23.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -909,16 +927,9 @@
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.junit.vintage</groupId>
-                <artifactId>junit-vintage-engine</artifactId>
-                <version>5.13.0</version>
-                <scope>test</scope>
-            </dependency>
-
-            <dependency>
                 <groupId>org.seleniumhq.selenium</groupId>
                 <artifactId>selenium-java</artifactId>
-                <version>4.33.0</version>
+                <version>4.39.0</version>
                 <scope>test</scope>
             </dependency>
             <dependency>
@@ -929,7 +940,7 @@
             <dependency>
                 <groupId>org.dom4j</groupId>
                 <artifactId>dom4j</artifactId>
-                <version>2.1.4</version>
+                <version>2.2.0</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

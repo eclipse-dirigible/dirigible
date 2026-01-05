@@ -180,43 +180,6 @@ public class DataSourceInitializer implements DisposableBean {
         return managedDataSource;
     }
 
-    private void scheduleDataSourceDestroy(String name, int duration, TimeUnit unit) {
-        TimerTask repeatedTask = new TimerTask() {
-            public void run() {
-                removeInitializedDataSource(name);
-            }
-        };
-        long delayMillis = unit.toMillis(duration);
-        timer.schedule(repeatedTask, delayMillis);
-    }
-
-    /**
-     * Removes the initialized data source.
-     *
-     * @param dataSourceName the data source name
-     */
-    public void removeInitializedDataSource(String dataSourceName) {
-        String name = tenantDataSourceNameManager.getTenantDataSourceName(dataSourceName);
-        DirigibleDataSource removedDataSource = DATASOURCES.remove(name);
-        logger.info("DataSource [{}] with name [{}] will be removed if exists...", removedDataSource, name);
-        if (null != removedDataSource) {
-            removedDataSource.close();
-
-            destroySpringBean(name);
-
-            String transactionManagerBeanName = getTransactionManagerBeanName(name);
-            destroySpringBean(transactionManagerBeanName);
-            logger.info("DataSource [{}] with name [{}] was removed", removedDataSource, name);
-        }
-    }
-
-    private void destroySpringBean(String beanName) {
-        GenericApplicationContext genericAppContext = (GenericApplicationContext) applicationContext;
-        ConfigurableListableBeanFactory beanFactory = genericAppContext.getBeanFactory();
-        beanFactory.destroyBean(beanName);
-        logger.info("Spring bean with name [{}] was destroyed", beanName);
-    }
-
     /**
      * Gets the hikari properties.
      *
@@ -282,10 +245,6 @@ public class DataSourceInitializer implements DisposableBean {
         registerSpringBean(name, dataSource);
     }
 
-    private String getTransactionManagerBeanName(String dataSourceName) {
-        return TRANSACTION_MANAGER_PREFIX + dataSourceName;
-    }
-
     private void registerSpringBean(String name, Object singletonObject) {
         GenericApplicationContext genericAppContext = (GenericApplicationContext) applicationContext;
         ConfigurableListableBeanFactory beanFactory = genericAppContext.getBeanFactory();
@@ -297,6 +256,27 @@ public class DataSourceInitializer implements DisposableBean {
         beanFactory.registerSingleton(name, singletonObject);
     }
 
+    private void scheduleDataSourceDestroy(String name, int duration, TimeUnit unit) {
+        logger.info("Scheduling destroy for data source [{}] after [{}] {}", name, duration, unit);
+        TimerTask repeatedTask = new TimerTask() {
+            public void run() {
+                if (!isInitialized(name)) {
+                    logger.info("Data source [{}] is not initialized. It will not be destroyed", name);
+                    return;
+                }
+                DirigibleDataSource dataSource = getInitializedDataSource(name);
+                if (dataSource.isInUse()) {
+                    logger.info("Data source [{}] is in use. Will reschedule its destroy.", name);
+                    scheduleDataSourceDestroy(name, duration, unit);
+                } else {
+                    removeInitializedDataSource(name);
+                }
+            }
+        };
+        long delayMillis = unit.toMillis(duration);
+        timer.schedule(repeatedTask, delayMillis);
+    }
+
     @Override
     public void destroy() {
         logger.info("Clearing datasources...");
@@ -306,5 +286,36 @@ public class DataSourceInitializer implements DisposableBean {
     public void clear() {
         Set<String> keys = new HashSet<>(DATASOURCES.keySet());
         keys.forEach(this::removeInitializedDataSource);
+    }
+
+    /**
+     * Removes the initialized data source.
+     *
+     * @param dataSourceName the data source name
+     */
+    public void removeInitializedDataSource(String dataSourceName) {
+        String name = tenantDataSourceNameManager.getTenantDataSourceName(dataSourceName);
+        DirigibleDataSource removedDataSource = DATASOURCES.remove(name);
+        logger.info("DataSource [{}] with name [{}] will be removed if exists...", removedDataSource, name);
+        if (null != removedDataSource) {
+            removedDataSource.close();
+
+            destroySpringBean(name);
+
+            String transactionManagerBeanName = getTransactionManagerBeanName(name);
+            destroySpringBean(transactionManagerBeanName);
+            logger.info("DataSource [{}] with name [{}] was removed", removedDataSource, name);
+        }
+    }
+
+    private String getTransactionManagerBeanName(String dataSourceName) {
+        return TRANSACTION_MANAGER_PREFIX + dataSourceName;
+    }
+
+    private void destroySpringBean(String beanName) {
+        GenericApplicationContext genericAppContext = (GenericApplicationContext) applicationContext;
+        ConfigurableListableBeanFactory beanFactory = genericAppContext.getBeanFactory();
+        beanFactory.destroyBean(beanName);
+        logger.info("Spring bean with name [{}] was destroyed", beanName);
     }
 }

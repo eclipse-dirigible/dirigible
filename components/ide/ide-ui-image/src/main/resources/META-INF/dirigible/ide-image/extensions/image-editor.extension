@@ -1,5 +1,0 @@
-{
-    "module": "ide-image/services/image-editor.js",
-    "extensionPoint": "ide-editor",
-    "description": "Image Viewer"
-}

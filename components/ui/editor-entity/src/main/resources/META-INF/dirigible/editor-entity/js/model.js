@@ -46,6 +46,7 @@ Entity.prototype.projectionReferencedEntity = null;
 Entity.prototype.referenceProjections = [];
 Entity.prototype.importsCode = null;
 Entity.prototype.generateReport = false;
+Entity.prototype.multilingual = false;
 
 Entity.prototype.clone = function () {
 	return mxUtils.clone(this);

@@ -1,6 +1,25 @@
 import { handlerFunction } from "./resource-common";
 
 /**
+ * Interface for the internal configuration object of a ResourceMethod.
+ */
+interface ResourceMethodConfig {
+    consumes?: string[];
+    produces?: string[];
+    before?: Function;
+    serve?: Function; // Could also be named 'handler'
+    catch?: Function;
+    finally?: Function;
+    // Add other relevant configuration properties as they become known
+    [key: string]: any;
+}
+
+/**
+ * Constructor function for ResourceMethod instances.
+ * This class handles the fluent configuration for a single HTTP method handler (e.g., GET)
+ * attached to a Resource.
+ * 
+ * /**
  * Constructor function for ResourceMethod instances.
  * All parameters of the function are optional.
  *
@@ -47,107 +66,160 @@ import { handlerFunction } from "./resource-common";
  * 	.resource('{id}')
  * 		.get(function(){})
  * .execute();
- * ```
- *
- * @class
- * @param {Object} [oConfiguration]
- * @param {HttpController} [controller] The controller instance, for which this ResourceMethod handles configuration
- * @param {Resource} [resource] The resource instance, for which this ResourceMethod handles configuration
- * @param {ResourceMappings} [mappings] The mappings instance, for which this ResourceMethod handles configuration
- * @returns {ResourceMethod}
+ * ``
+ * 
  */
 export class ResourceMethod {
-    cfg: any;
-    _resource: any;
-    resource: any;
-    resourcePath: any;
-    path: any;
-    controller: any;
+    cfg: ResourceMethodConfig;
+    _resource: any; // Reference to the parent Resource instance
+    controller: any; // Reference to the HttpController instance
 
-    constructor(oConfiguration, controller, resource, mappings) {
-        this.cfg = oConfiguration;
+    // Fluent API aliases/delegates bound to ResourceMappings/Resource
+    resource: Function;
+    resourcePath: Function;
+    path: Function;
+
+    /**
+     * @param oConfiguration Initial configuration object.
+     * @param controller The HttpController instance.
+     * @param resource The parent Resource instance.
+     * @param mappings The parent ResourceMappings instance.
+     * @returns {ResourceMethod}
+     */
+    constructor(oConfiguration: any, controller: any, resource: any, mappings: any) {
+        this.cfg = oConfiguration || {};
         this._resource = resource;
         this.controller = controller;
+
         if (mappings) {
+            // Bind the resource/path methods from ResourceMappings for method chaining
             this.resource = mappings.resource.bind(mappings);
-            this.resourcePath = this.path = this.resource;//aliases
+            this.resourcePath = this.path = this.resource; // aliases
         }
     }
 
-    execute() {
-        this.controller?.execute?.(...arguments)
+    /**
+     * Delegates to the HttpController's execute function to process the request.
+     */
+    execute(): void {
+        // Use optional chaining as controller might not be available in all setups
+        this.controller?.execute?.(...arguments);
     }
 
-    get() {
-        return this._resource?.["get"]?.(...arguments)
-    }
+    // --- Delegation to Resource HTTP Methods for Chaining ---
 
-    post() {
-        return this._resource?.["post"]?.(...arguments)
-    }
-
-    put() {
-        return this._resource?.["put"]?.(...arguments)
-    }
-
-    delete() {
-        return this._resource?.["delete"]?.(...arguments)
-    }
-
-    remove() {
-        return this._resource?.["remove"]?.(...arguments)
-    }
-
-    method() {
-        return this._resource?.["method"]?.(...arguments)
+    /**
+     * Delegates to the parent Resource's 'get' method.
+     */
+    get(): any {
+        return this._resource?.["get"]?.(...arguments);
     }
 
     /**
- * Returns the configuration for this ResourceMethod instance.
- *
- * @returns {Object}
- */
-    configuration() {
+     * Delegates to the parent Resource's 'post' method.
+     */
+    post(): any {
+        return this._resource?.["post"]?.(...arguments);
+    }
+
+    /**
+     * Delegates to the parent Resource's 'put' method.
+     */
+    put(): any {
+        return this._resource?.["put"]?.(...arguments);
+    }
+
+    /**
+     * Delegates to the parent Resource's 'delete' method.
+     */
+    delete(): any {
+        return this._resource?.["delete"]?.(...arguments);
+    }
+
+    /**
+     * Delegates to the parent Resource's 'remove' method.
+     */
+    remove(): any {
+        return this._resource?.["remove"]?.(...arguments);
+    }
+
+    /**
+     * Delegates to the parent Resource's 'method' method.
+     */
+    method(): any {
+        return this._resource?.["method"]?.(...arguments);
+    }
+
+    /**
+     * Returns the configuration object for this ResourceMethod instance.
+     *
+     * @returns The configuration object.
+     */
+    configuration(): ResourceMethodConfig {
         return this.cfg;
     };
 
-    /**
-     * Defines the content MIME type(s), which this ResourceMethod request processing function expects as input from the
-     * client request, i.e. those that it 'consumes'. At runtime, the Content-Type request header will be matched for
-     * compatibility with this setting to elicit request processing functions.
-     * Note that the matching is performed by compatibility, not strict equality, i.e. the MIME type format wildcards are
-     * considered too. For example, a request Content-Type header "text\/json" will match a consumes setting "*\/json".
-     *
-     * @example
-     * ```js
-     * rs.service()
-     *	.resource("")
-     * 		.post(function(){})
-     * 			.consumes(["*\/json"])
-     * .execute();
-     * 	.
-     * ```
-     *
-     * Although it's likely that most implementations will resort to single, or a range of compatible input MIME types, this is
-     * entirely up to the request processing function implementation. For example it may be capable of processing content with
-     * various, possibly incompatible MIME types. Take care to make sure that the consumes constraint will constrain the requests
-     * only to those that the request processing function can really process.
-     *
-     * @param {String[]} mimeTypes Sets the mime types that this ResourceMethod request processing function is capable to consume.
-     * @returns {ResourceMethod} The ResourceMethod instance to which the function invocation is bound, for mehtod chaining.
-     */
+    // --- Handler Definition Methods ---
 
-    consumes(mimeTypes) {
+    /**
+     * Applies a callback function for the **before** phase of processing a matched resource request.
+     *
+     * @param fHandler Callback function for the before phase.
+     * @returns The ResourceMethod instance for method chaining.
+     */
+    before(fHandler: Function): ResourceMethod {
+        return handlerFunction(this, this.configuration(), 'before', fHandler);
+    };
+
+    /**
+     * Applies a callback function for processing a matched resource request (**serve** phase).
+     *
+     * @param fHandler Callback function for the serve phase.
+     * @returns The ResourceMethod instance for method chaining.
+     */
+    serve(fHandler: Function): ResourceMethod {
+        return handlerFunction(this, this.configuration(), 'serve', fHandler);
+    };
+
+    /**
+     * Applies a callback function for the **catch** errors phase of processing a matched resource request.
+     *
+     * @param fHandler Callback function for the catch phase.
+     * @returns The ResourceMethod instance for method chaining.
+     */
+    catch(fHandler: Function): ResourceMethod {
+        return handlerFunction(this, this.configuration(), 'catch', fHandler);
+    };
+
+    /**
+     * Applies a callback function for the **finally** phase of processing a matched resource request.
+     *
+     * @param fHandler Callback function for the finally phase.
+     * @returns The ResourceMethod instance for method chaining.
+     */
+    finally(fHandler: Function): ResourceMethod {
+        return handlerFunction(this, this.configuration(), 'finally', fHandler);
+    };
+
+    // --- MIME Type Configuration Methods ---
+
+    /**
+     * Defines the content MIME type(s), which this ResourceMethod expects as input (**consumes**).
+     *
+     * @param mimeTypes Sets the mime types that this ResourceMethod is capable to consume.
+     * @returns The ResourceMethod instance for method chaining.
+     */
+    consumes(mimeTypes: string | string[]): ResourceMethod {
         return this.mimeSetting('consumes', mimeTypes);
     };
 
     /**
-     * Defines the HTTP response payload MIME type(s), which this ResourceMethod request processing function outputs, i.e.
-     * those that it 'produces'. At runtime, the Accept request header will be matched for compatibility with this setting
-     * to elicit request processing functions.
-     * Note that the matching is performed by compatibility, not strict equality, i.e. the MIME type format wildcards are
-     * considered too. For example, a request Accept header "*\/json" will match a produces setting "application\/json".
-     *
+	 * Defines the HTTP response payload MIME type(s), which this ResourceMethod request processing function outputs, i.e.
+	 * those that it 'produces'. At runtime, the Accept request header will be matched for compatibility with this setting
+	 * to elicit request processing functions.
+	 * Note that the matching is performed by compatibility, not strict equality, i.e. the MIME type format wildcards are
+	 * considered too. For example, a request Accept header "*\/json" will match a produces setting "application\/json".
+	 * 
      * @example
      * ```js
      * rs.service()
@@ -180,101 +252,52 @@ export class ResourceMethod {
      *
      * In any case it is responsibility of the request processing function to set the correct Content-Type header.
      *
-     * @param {String[]} mimeTypes Sets the mime type(s) that this ResourceMethod request processing function may produce.
-     * @returns {ResourceMethod} The ResourceMethod instance to which the function invocation is bound, for mehtod chaining.
+     * @param mimeTypes Sets the mime type(s) that this ResourceMethod may produce.
+     * @returns The ResourceMethod instance for method chaining.
      */
-    produces(mimeTypes) {
+    produces(mimeTypes: string | string[]): ResourceMethod {
         return this.mimeSetting('produces', mimeTypes);
     };
+
     /**
-     * Applies a callback function for the before phase of processing a matched resource request. If a callback function
-     * is supplied, it is executed right before the serve function. The before function may throw errors, which will move
-     * the processing flow to the catch and then the finally functions (if any). The before function is suitable for processing
-     * pre-conditions to the serve operation. They could implemented in the serve function just as well, but using before gives
-     * a chance for clear spearation of concerns in the code and is easier to maintain.
+     * Commmon function for initializng the 'consumes' and 'produces' arrays in the ResourceMethod instances.
+     * Before finalizing the configuration setup the function will remove duplicates with exact match filtering.
      *
-     * @example
-     * ```js
-     * rs.service()
-     * 	.resource('')
-     * 		.get(function(){})
-     * 			.before(function(){
-     *				if(request.getHeader('X-developer-key').value()===null)
-     * 					this.controller.sendError(response.FORBIDDEN, undefined, response.HttpCodeReason.getReason(response.FORBIDDEN), "X-developer-key is missing from request headers");
-     *			})
-     *	.execute();
-     * ```
-     *
-     * @param {Function} Callback function for the before phase of procesing matched resource requests
-     * @returns {ResourceMethod} The ResourceMethod instance to which the function invocation is bound, for mehtod chaining.
+     * @param mimeSettingName must be either 'consumes' or 'produces'.
+     * @param mimeTypes An array of strings formatted as mime types (type/subtype) or a single string.
+     * @returns The ResourceMethod instance to which the function is bound.
+     * @private
      */
-    before(fHandler) {
-        return handlerFunction(this, this.configuration(), 'before', fHandler);
-    };
-    /**
-     * Applies a callback function for processing a matched resource request. Mandatory for valid resource handling specifications.
-     *
-     * @param {Function} Callback function for the serve phase of procesing matched resource requests
-     * @returns {ResourceMethod} The ResourceMethod instance to which the function invocation is bound, for mehtod chaining.
-     */
-    serve(fHandler) {
-        return handlerFunction(this, this.configuration(), 'serve', fHandler);
-    };
-    /**
-     * Applies a callback function for the catch errors phase of processing a matched resource request.
-     *
-     * @param {Function} Callback function for the catch errors phase of procesing matched resource requests
-     * @returns {ResourceMethod} The ResourceMethod instance to which the function invocation is bound, for mehtod chaining.
-     */
-    catch(fHandler) {
-        return handlerFunction(this, this.configuration(), 'catch', fHandler);
-    };
-    /**
-     * Applies a callback function for the finally phase of processing a matched resource request. This function (if supplied) is always invoked
-     * regardles if the request processing yielded error or not.
-     *
-     * @param {Function} Callback function for the finally phase of procesing matched resource requests
-     * @returns {ResourceMethod} The ResourceMethod instance to which the function invocation is bound, for mehtod chaining.
-     */
-    finally(fHandler) {
-        return handlerFunction(this, this.configuration(), 'finally', fHandler);
-    };
+    private mimeSetting(mimeSettingName: 'consumes' | 'produces', mimeTypes: string | string[]): ResourceMethod {
 
-    /**
- * Commmon function for initializng the 'consumes' and 'produces' arrays in the ResourceMethod instances.
- * Before finalizing the configuration setup the function will remove duplicates with exact match filtering.
- *
- * @param {String} mimeSettingName must be either 'consumes' or 'produces' depending on
- * 				   which configuraiton property is being set with this method.
- * @param {String[]} mimeTypes An array of strings formatted as mime types (type/subtype)
- * @returns {ResourceMethod} The ResourceMethod instance to which the function is bound.
- * @private
- */
-    private mimeSetting(mimeSettingName, mimeTypes) {
+        let arrMimeTypes: string[];
 
-        if (mimeTypes !== undefined) {
-            if (typeof mimeTypes === 'string') {
-                mimeTypes = [mimeTypes];
-            } else if (!Array.isArray(mimeTypes)) {
-                throw Error('Invalid argument: ' + mimeSettingName + ' mime type argument must be valid MIME type string or array of such strings, but instead is ' + (typeof mimeTypes));
-            }
-
-            mimeTypes.forEach((mimeType) => {
-                const mt = mimeType.split('/');
-                if (mt === null || mt.length < 2)
-                    throw Error('Invalid argument. Not a valid MIME type format type/subtype: ' + mimeType);
-                //TODO: stricter checks
-            });
-
-            if (!this.configuration()[mimeSettingName])
-                this.configuration()[mimeSettingName] = [];
-            //deduplicate entries
-            mimeTypes = mimeTypes.filter((mimeType) => {
-                return this.configuration()[mimeSettingName].indexOf(mimeType) < 0;
-            });
-
-            this.configuration()[mimeSettingName] = this.configuration()[mimeSettingName].concat(mimeTypes);
+        if (typeof mimeTypes === 'string') {
+            arrMimeTypes = [mimeTypes];
+        } else if (Array.isArray(mimeTypes)) {
+            arrMimeTypes = mimeTypes;
+        } else {
+            throw new Error('Invalid argument: ' + mimeSettingName + ' mime type argument must be valid MIME type string or array of such strings, but instead is ' + (typeof mimeTypes));
         }
+
+        arrMimeTypes.forEach((mimeType) => {
+            const mt = mimeType.split('/');
+            if (mt.length !== 2 || !mt[0] || !mt[1])
+                throw new Error('Invalid argument. Not a valid MIME type format type/subtype: ' + mimeType);
+            // Basic format check is sufficient
+        });
+
+        if (!this.cfg[mimeSettingName]) {
+            this.cfg[mimeSettingName] = [];
+        }
+
+        // Deduplicate entries before concatenation
+        const existingMimes: string[] = this.cfg[mimeSettingName];
+        const newMimeTypes = arrMimeTypes.filter((mimeType) => {
+            return existingMimes.indexOf(mimeType) < 0;
+        });
+
+        this.cfg[mimeSettingName] = existingMimes.concat(newMimeTypes);
 
         return this;
     };

@@ -9,9 +9,9 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { rs } from "sdk/http";
-import { streams } from "sdk/io";
-import { upload } from 'sdk/http';
+import { rs } from "@aerokit/sdk/http";
+import { streams } from "@aerokit/sdk/io";
+import { upload } from '@aerokit/sdk/http';
 
 import * as documentsProcessor from "./processors/documentsProcessor";
 import * as imageProcessor from "./processors/imageProcessor";

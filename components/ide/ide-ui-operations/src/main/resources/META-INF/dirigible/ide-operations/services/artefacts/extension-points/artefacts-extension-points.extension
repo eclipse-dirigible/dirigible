@@ -1,5 +1,0 @@
-{
-    "module": "ide-operations/services/artefacts/extension-points/artefacts-extension-points.mjs",
-    "extensionPoint": "ide-operations-artefacts",
-    "description": "Extension Points Artefacts Extension"
-}

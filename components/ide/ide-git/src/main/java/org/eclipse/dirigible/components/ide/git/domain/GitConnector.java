@@ -9,64 +9,17 @@
  */
 package org.eclipse.dirigible.components.ide.git.domain;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Set;
-
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.ide.git.project.ProjectOriginUrls;
 import org.eclipse.dirigible.components.ide.git.utils.RemoteUrl;
-import org.eclipse.jgit.api.AddCommand;
-import org.eclipse.jgit.api.CheckoutCommand;
-import org.eclipse.jgit.api.CommitCommand;
-import org.eclipse.jgit.api.CreateBranchCommand;
+import org.eclipse.jgit.api.*;
 import org.eclipse.jgit.api.CreateBranchCommand.SetupUpstreamMode;
-import org.eclipse.jgit.api.DeleteBranchCommand;
-import org.eclipse.jgit.api.Git;
-import org.eclipse.jgit.api.LogCommand;
-import org.eclipse.jgit.api.PullCommand;
-import org.eclipse.jgit.api.PushCommand;
-import org.eclipse.jgit.api.RebaseCommand;
 import org.eclipse.jgit.api.RebaseCommand.Operation;
-import org.eclipse.jgit.api.RemoteSetUrlCommand;
-import org.eclipse.jgit.api.RenameBranchCommand;
-import org.eclipse.jgit.api.ResetCommand;
 import org.eclipse.jgit.api.ResetCommand.ResetType;
-import org.eclipse.jgit.api.RmCommand;
-import org.eclipse.jgit.api.Status;
-import org.eclipse.jgit.api.errors.CanceledException;
-import org.eclipse.jgit.api.errors.CheckoutConflictException;
-import org.eclipse.jgit.api.errors.ConcurrentRefUpdateException;
-import org.eclipse.jgit.api.errors.DetachedHeadException;
-import org.eclipse.jgit.api.errors.GitAPIException;
-import org.eclipse.jgit.api.errors.InvalidConfigurationException;
-import org.eclipse.jgit.api.errors.InvalidRefNameException;
-import org.eclipse.jgit.api.errors.InvalidRemoteException;
-import org.eclipse.jgit.api.errors.NoFilepatternException;
-import org.eclipse.jgit.api.errors.NoHeadException;
-import org.eclipse.jgit.api.errors.NoMessageException;
-import org.eclipse.jgit.api.errors.RefAlreadyExistsException;
-import org.eclipse.jgit.api.errors.RefNotFoundException;
-import org.eclipse.jgit.api.errors.TransportException;
-import org.eclipse.jgit.api.errors.UnmergedPathsException;
-import org.eclipse.jgit.api.errors.WrongRepositoryStateException;
+import org.eclipse.jgit.api.errors.*;
 import org.eclipse.jgit.errors.MissingObjectException;
 import org.eclipse.jgit.errors.NoWorkTreeException;
-import org.eclipse.jgit.lib.Constants;
-import org.eclipse.jgit.lib.ObjectId;
-import org.eclipse.jgit.lib.ObjectLoader;
-import org.eclipse.jgit.lib.PersonIdent;
-import org.eclipse.jgit.lib.Ref;
-import org.eclipse.jgit.lib.Repository;
-import org.eclipse.jgit.lib.StoredConfig;
+import org.eclipse.jgit.lib.*;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevTree;
 import org.eclipse.jgit.revwalk.RevWalk;
@@ -78,6 +31,13 @@ import org.eclipse.jgit.treewalk.filter.PathFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.*;
+
 /**
  * The GitConnector utility is used for simplified communication with Git SCM server.
  */
@@ -88,9 +48,10 @@ public class GitConnector implements IGitConnector {
 
     /** The git. */
     private final Git git;
-
+    /** The Constant format. */
+    private final SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
     /** The repository. */
-    private Repository repository;
+    private final Repository repository;
 
     /**
      * Instantiates a new git connector.
@@ -194,12 +155,11 @@ public class GitConnector implements IGitConnector {
      * Adds the deleted.
      *
      * @param filePattern the file pattern
-     * @throws IOException Signals that an I/O exception has occurred.
      * @throws NoFilepatternException the no filepattern exception
      * @throws GitAPIException the git API exception
      */
     @Override
-    public void addDeleted(String filePattern) throws IOException, NoFilepatternException, GitAPIException {
+    public void addDeleted(String filePattern) throws NoFilepatternException, GitAPIException {
         RmCommand rmCommand = git.rm();
         rmCommand.addFilepattern(filePattern);
         rmCommand.call();
@@ -232,12 +192,10 @@ public class GitConnector implements IGitConnector {
      * Revert.
      *
      * @param path the path
-     * @throws IOException Signals that an I/O exception has occurred.
-     * @throws NoFilepatternException the no filepattern exception
      * @throws GitAPIException the git API exception
      */
     @Override
-    public void revert(String path) throws IOException, NoFilepatternException, GitAPIException {
+    public void revert(String path) throws GitAPIException {
         CheckoutCommand checkoutCommand = git.checkout();
         checkoutCommand.addPath(path);
         checkoutCommand.call();
@@ -298,13 +256,10 @@ public class GitConnector implements IGitConnector {
      * Deletes the branch.
      *
      * @param name the name
-     * @throws RefAlreadyExistsException the ref already exists exception
-     * @throws RefNotFoundException the ref not found exception
-     * @throws InvalidRefNameException the invalid ref name exception
      * @throws GitAPIException the git API exception
      */
     @Override
-    public void deleteBranch(String name) throws RefAlreadyExistsException, RefNotFoundException, InvalidRefNameException, GitAPIException {
+    public void deleteBranch(String name) throws GitAPIException {
         repository.getConfig()
                   .setString(GIT_BRANCH, name, GIT_MERGE, GIT_REFS_HEADS_MASTER);
         DeleteBranchCommand deleteBranchCommand = git.branchDelete();
@@ -381,14 +336,10 @@ public class GitConnector implements IGitConnector {
      * @param name the name
      * @param username the username
      * @param password the password
-     * @throws RefAlreadyExistsException the ref already exists exception
-     * @throws RefNotFoundException the ref not found exception
-     * @throws InvalidRefNameException the invalid ref name exception
      * @throws GitAPIException the git API exception
      */
     @Override
-    public void deleteRemoteBranch(String name, String username, String password)
-            throws RefAlreadyExistsException, RefNotFoundException, InvalidRefNameException, GitAPIException {
+    public void deleteRemoteBranch(String name, String username, String password) throws GitAPIException {
 
         String remoteName = "refs/heads/" + name;
         git.branchDelete()
@@ -422,7 +373,7 @@ public class GitConnector implements IGitConnector {
             CheckoutCommand checkoutCommand = git.checkout();
             checkoutCommand.setName(name);
             checkoutCommand.setCreateBranch(true);
-            checkoutCommand.setForce(true);
+            checkoutCommand.setForced(true);
             checkoutCommand.setUpstreamMode(SetupUpstreamMode.SET_UPSTREAM);
             checkoutCommand.setStartPoint("origin/" + name);
             return checkoutCommand.call();
@@ -536,21 +487,6 @@ public class GitConnector implements IGitConnector {
     }
 
     /**
-     * Gets the branch.
-     *
-     * @return the branch
-     * @throws IOException Signals that an I/O exception has occurred.
-     */
-    @Override
-    public String getBranch() throws IOException {
-        return git.getRepository()
-                  .getBranch();
-    }
-
-    /** The Constant format. */
-    private final SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
-
-    /**
      * Gets the local branches.
      *
      * @return the local branches
@@ -559,15 +495,10 @@ public class GitConnector implements IGitConnector {
     @Override
     public List<GitBranch> getLocalBranches() throws GitConnectorException {
         try {
-            List<GitBranch> result = new ArrayList<GitBranch>();
+            List<GitBranch> result = new ArrayList<>();
             List<Ref> branches = git.branchList()
                                     .call(); // .setListMode(ListMode.ALL)
-            Collections.sort(branches, new Comparator<Ref>() {
-                @Override
-                public int compare(Ref ref1, Ref ref2) {
-                    return getShortBranchName(ref1).compareTo(getShortBranchName(ref2));
-                }
-            });
+            Collections.sort(branches, (ref1, ref2) -> getShortBranchName(ref1).compareTo(getShortBranchName(ref2)));
 
             String currentBranch = getBranch();
             RevWalk walk = new RevWalk(git.getRepository());
@@ -597,6 +528,32 @@ public class GitConnector implements IGitConnector {
     }
 
     /**
+     * Gets the branch.
+     *
+     * @return the branch
+     * @throws IOException Signals that an I/O exception has occurred.
+     */
+    @Override
+    public String getBranch() throws IOException {
+        return git.getRepository()
+                  .getBranch();
+    }
+
+    /**
+     * Returns the short branch name.
+     *
+     * @param branch the branch
+     * @return the short name
+     */
+    private String getShortBranchName(Ref branch) {
+        String name = branch.getName();
+        if (name != null && name.startsWith("refs/heads/")) {
+            return name.substring(11);
+        }
+        return name;
+    }
+
+    /**
      * Gets the remote branches.
      *
      * @return the remote branches
@@ -605,7 +562,7 @@ public class GitConnector implements IGitConnector {
     @Override
     public List<GitBranch> getRemoteBranches() throws GitConnectorException {
         try {
-            List<GitBranch> result = new ArrayList<GitBranch>();
+            List<GitBranch> result = new ArrayList<>();
             Collection<Ref> remotes = Git.lsRemoteRepository()
                                          .setHeads(true)
                                          .setRemote(git.getRepository()
@@ -613,7 +570,7 @@ public class GitConnector implements IGitConnector {
                                                        .getString("remote", "origin", "url"))
                                          .call();
 
-            List<Ref> branches = new ArrayList<Ref>(remotes);
+            List<Ref> branches = new ArrayList<>(remotes);
 
             RevWalk walk = new RevWalk(git.getRepository());
             try {
@@ -644,20 +601,6 @@ public class GitConnector implements IGitConnector {
     }
 
     /**
-     * Returns the short branch name.
-     *
-     * @param branch the branch
-     * @return the short name
-     */
-    private String getShortBranchName(Ref branch) {
-        String name = branch.getName();
-        if (name != null && name.startsWith("refs/heads/")) {
-            return name.substring(11);
-        }
-        return name;
-    }
-
-    /**
      * Gets the unstaged changes.
      *
      * @return the unstaged changes
@@ -665,7 +608,7 @@ public class GitConnector implements IGitConnector {
      */
     @Override
     public List<GitChangedFile> getUnstagedChanges() throws GitConnectorException {
-        List<GitChangedFile> list = new ArrayList<GitChangedFile>();
+        List<GitChangedFile> list = new ArrayList<>();
         try {
             Status status = git.status()
                                .call();
@@ -698,7 +641,7 @@ public class GitConnector implements IGitConnector {
      */
     @Override
     public List<GitChangedFile> getStagedChanges() throws GitConnectorException {
-        List<GitChangedFile> list = new ArrayList<GitChangedFile>();
+        List<GitChangedFile> list = new ArrayList<>();
         try {
             Status status = git.status()
                                .call();
@@ -764,7 +707,7 @@ public class GitConnector implements IGitConnector {
                 } catch (IOException e) {
                     if (logger.isErrorEnabled()) {
                         logger.error(e.getMessage(), e);
-                    } ;
+                    }
                 }
             }
             if (treeWalk != null) {
@@ -787,7 +730,7 @@ public class GitConnector implements IGitConnector {
     @Override
     public List<GitCommitInfo> getHistory(String path) throws GitConnectorException {
         try {
-            final List<GitCommitInfo> history = new ArrayList<GitCommitInfo>();
+            final List<GitCommitInfo> history = new ArrayList<>();
             if (repository.resolve(Constants.HEAD) != null) {
                 LogCommand logCommand = git.log();
                 if (path != null) {

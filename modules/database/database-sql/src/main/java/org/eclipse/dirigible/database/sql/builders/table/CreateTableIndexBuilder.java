@@ -11,8 +11,6 @@ package org.eclipse.dirigible.database.sql.builders.table;
 
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 
-import java.util.Set;
-
 /**
  * The Class CreateTableIndexBuilder.
  */

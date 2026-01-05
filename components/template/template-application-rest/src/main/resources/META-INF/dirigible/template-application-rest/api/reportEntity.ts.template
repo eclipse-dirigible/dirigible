@@ -4,10 +4,10 @@
 #break
 #end
 #end
-import { Controller, Get } from "sdk/http"
+import { Controller, Get } from "@aerokit/sdk/http"
 import { ${name}Repository, ${name}Filter, ${name}PaginatedFilter } from "../../dao/${perspectiveName}/${name}Repository";
 #if($perspectiveRole || $roleRead)
-import { user } from "sdk/security"
+import { user } from "@aerokit/sdk/security"
 import { ForbiddenError } from "../utils/ForbiddenError";
 #end
 import { HttpUtils } from "../utils/HttpUtils";

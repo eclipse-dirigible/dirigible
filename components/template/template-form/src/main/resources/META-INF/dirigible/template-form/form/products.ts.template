@@ -1,4 +1,4 @@
-import { Controller, Get } from "sdk/http"
+import { Controller, Get } from "@aerokit/sdk/http"
 
 @Controller
 class ProductsService {

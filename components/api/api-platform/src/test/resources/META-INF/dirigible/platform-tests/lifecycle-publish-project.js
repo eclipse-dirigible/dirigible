@@ -1,6 +1,6 @@
-import { Workspace } from "sdk/platform/workspace";
-import { Lifecycle } from "sdk/platform/lifecycle";
-import { Bytes } from "sdk/io/bytes";
+import { Workspace } from "@aerokit/sdk/platform/workspace";
+import { Lifecycle } from "@aerokit/sdk/platform/lifecycle";
+import { Bytes } from "@aerokit/sdk/io/bytes";
 import { Assert } from 'test/assert';
 
 const user = "dirigible";

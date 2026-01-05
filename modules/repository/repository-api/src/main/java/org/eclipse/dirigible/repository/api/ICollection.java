@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.repository.api;
 
+import java.io.InputStream;
 import java.util.List;
 
 /**
@@ -22,7 +23,7 @@ public interface ICollection extends IEntity {
      * @return a list of {@link ICollection} instances
      * @throws RepositoryReadException in case the list of {@link ICollection} cannot be retrieved
      */
-    public List<ICollection> getCollections() throws RepositoryReadException;
+    List<ICollection> getCollections() throws RepositoryReadException;
 
     /**
      * Returns a list containing the names of all the child collections directly contained within this
@@ -31,7 +32,7 @@ public interface ICollection extends IEntity {
      * @return a list of {@link ICollection} instances names
      * @throws RepositoryReadException in case the names cannot be retrieved
      */
-    public List<String> getCollectionsNames() throws RepositoryReadException;
+    List<String> getCollectionsNames() throws RepositoryReadException;
 
     /**
      * Creates a new collection with the specified name in this collection.
@@ -44,7 +45,7 @@ public interface ICollection extends IEntity {
      * @return an {@link ICollection} instance
      * @throws RepositoryReadException in the {@link ICollection} cannot be created
      */
-    public ICollection createCollection(String name) throws RepositoryReadException;
+    ICollection createCollection(String name) throws RepositoryReadException;
 
     /**
      * Returns the collection with the specified name contained in this collection.
@@ -55,7 +56,7 @@ public interface ICollection extends IEntity {
      * @return an {@link ICollection} instance.
      * @throws RepositoryReadException in case the {@link ICollection} cannot be retrieved
      */
-    public ICollection getCollection(String name) throws RepositoryReadException;
+    ICollection getCollection(String name) throws RepositoryReadException;
 
     /**
      * Removes the collection with the specified name contained in this collection.
@@ -67,7 +68,7 @@ public interface ICollection extends IEntity {
      * @param name the name of the {@link ICollection} to be removed
      * @throws RepositoryWriteException in case the {@link ICollection}cannot be removed
      */
-    public void removeCollection(String name) throws RepositoryWriteException;
+    void removeCollection(String name) throws RepositoryWriteException;
 
     /**
      * Removes the child collection represented by the parameter.
@@ -75,7 +76,7 @@ public interface ICollection extends IEntity {
      * @param collection the {@link ICollection} instance to be removed
      * @throws RepositoryWriteException in case the {@link ICollection} cannot be removed
      */
-    public void removeCollection(ICollection collection) throws RepositoryWriteException;
+    void removeCollection(ICollection collection) throws RepositoryWriteException;
 
     /**
      * Returns a list of all the resources held by this collection.
@@ -83,7 +84,7 @@ public interface ICollection extends IEntity {
      * @return a list of {@link IResource} instances
      * @throws RepositoryReadException in case the list of {@link IResource} cannot be retrieved
      */
-    public List<IResource> getResources() throws RepositoryReadException;
+    List<IResource> getResources() throws RepositoryReadException;
 
     /**
      * Returns a list containing the names of all the resources directly contained in this collection.
@@ -91,7 +92,7 @@ public interface ICollection extends IEntity {
      * @return a list of {@link IResource} instances names
      * @throws RepositoryReadException in case the list of {@link IResource} names cannot be retrieved
      */
-    public List<String> getResourcesNames() throws RepositoryReadException;
+    List<String> getResourcesNames() throws RepositoryReadException;
 
     /**
      * Returns the resource with the specified name contained in this collection.
@@ -102,7 +103,7 @@ public interface ICollection extends IEntity {
      * @return a {@link IResource} instance
      * @throws RepositoryReadException in case the {@link IResource} cannot be retrieved
      */
-    public IResource getResource(String name) throws RepositoryReadException;
+    IResource getResource(String name) throws RepositoryReadException;
 
     /**
      * Removes the resource with the specified name from this collection.
@@ -112,7 +113,7 @@ public interface ICollection extends IEntity {
      * @param name the name of the {@link IResource} instance to be removed
      * @throws RepositoryWriteException in case the {@link IResource} cannot be removed
      */
-    public void removeResource(String name) throws RepositoryWriteException;
+    void removeResource(String name) throws RepositoryWriteException;
 
     /**
      * Removes the child resource represented by the parameter.
@@ -122,7 +123,7 @@ public interface ICollection extends IEntity {
      * @param resource the {@link IResource} to be removed
      * @throws RepositoryWriteException in case the {@link IResource} cannot be removed
      */
-    public void removeResource(IResource resource) throws RepositoryWriteException;
+    void removeResource(IResource resource) throws RepositoryWriteException;
 
     /**
      * List the children of this collection.
@@ -130,7 +131,7 @@ public interface ICollection extends IEntity {
      * @return a list of {@link IEntity} instances
      * @throws RepositoryReadException in case the list of the {@link IEntity} cannot be retrieved
      */
-    public List<IEntity> getChildren() throws RepositoryReadException;
+    List<IEntity> getChildren() throws RepositoryReadException;
 
     /**
      * Create resource under this collection by specifying the binary flag.
@@ -142,7 +143,10 @@ public interface ICollection extends IEntity {
      * @return an {@link IResource} instance
      * @throws RepositoryWriteException in case the {@link IResource} cannot be created
      */
-    public IResource createResource(String name, byte[] content, boolean isBinary, String contentType) throws RepositoryWriteException;
+    IResource createResource(String name, byte[] content, boolean isBinary, String contentType) throws RepositoryWriteException;
+
+    IResource createResource(String name, InputStream contentInputStream, boolean isBinary, String contentType)
+            throws RepositoryWriteException;
 
     /**
      * Create resource under this collection by recognizing the content type and binary flag by its file
@@ -153,6 +157,6 @@ public interface ICollection extends IEntity {
      * @return an {@link IResource} instance
      * @throws RepositoryWriteException in case the {@link IResource} cannot be created
      */
-    public IResource createResource(String name, byte[] content) throws RepositoryWriteException;
+    IResource createResource(String name, byte[] content) throws RepositoryWriteException;
 
 }

@@ -1,0 +1,89 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>org.eclipse.dirigible</groupId>
+		<artifactId>dirigible-components-parent</artifactId>
+		<version>13.0.0-SNAPSHOT</version>
+		<relativePath>../../pom.xml</relativePath>
+	</parent>
+
+	<name>Components - Engine - Dependency Injection</name>
+	<artifactId>dirigible-components-engine-di</artifactId>
+    <packaging>jar</packaging>
+
+
+    <dependencies>
+    	
+    	<!-- Core -->
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-core-base</artifactId>
+    	</dependency>
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-core-database</artifactId>
+    	</dependency>
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-core-repository</artifactId>
+    	</dependency>
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-core-initializers</artifactId>
+    	</dependency>
+    	
+    	<!-- Engines -->
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-engine-javascript</artifactId>
+    	</dependency>
+    	
+    	<!-- Data -->
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-core-tenants</artifactId>
+			<scope>test</scope>
+    	</dependency>
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-data-sources</artifactId>
+    	</dependency>
+    	
+    	<!-- Graalium -->
+    	<dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-engine-graalium-execution-core</artifactId>
+        </dependency>
+        <dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-parsers-typescript</artifactId>
+    	</dependency>
+    	
+    	<!-- Libs -->
+    	<dependency>
+		    <groupId>commons-codec</groupId>
+		    <artifactId>commons-codec</artifactId>
+		</dependency>
+		
+		<!-- Test -->
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-core-extensions</artifactId>
+			<scope>test</scope>
+    	</dependency>
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-ide-git</artifactId>
+			<scope>test</scope>
+    	</dependency>
+    	
+    </dependencies>
+
+	<properties>
+		<license.header.location>../../../licensing-header.txt</license.header.location>
+		<parent.pom.folder>../../../</parent.pom.folder>
+	</properties>
+
+</project>

@@ -9,13 +9,13 @@
  */
 package org.eclipse.dirigible.database.sql.builders.records;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.builders.AbstractQuerySqlBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * The Select Builder.
@@ -128,7 +128,7 @@ public class SelectBuilder extends AbstractQuerySqlBuilder {
     public SelectBuilder from(String table, String alias) {
         logger.trace("from: [{}], alias: [{}]", table, alias);
         StringBuilder snippet = new StringBuilder();
-        snippet.append(encapsulate(table));
+        snippet.append(encapsulate(table, true));
         if (alias != null) {
             snippet.append(SPACE)
                    .append(KEYWORD_AS)

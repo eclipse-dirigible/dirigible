@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-function addSidebarIcon(graph, sidebar, prototype, image, hint, $scope) {
+function addSidebarIcon(graph, sidebar, prototype, image, hint, dialogs) {
 	// Function that is executed when the image is dropped on
 	// the graph. The cell argument points to the cell under
 	// the mousepointer if there is one.
@@ -29,12 +29,22 @@ function addSidebarIcon(graph, sidebar, prototype, image, hint, $scope) {
 			let pstate = graph.getView().getState(parent);
 
 			if (parent === null || pstate === null) {
-				$scope.showAlert('Drop', 'Drop target must be a table');
+				dialogs.showAlert({
+					title: 'Error',
+					message: 'Drop target must be a table',
+					type: AlertTypes.Error,
+					preformatted: false,
+				});
 				return;
 			}
 
 			if (pstate.cell.value.type === "VIEW") {
-				$scope.showAlert('Drop', 'Drop target must be a table not a view');
+				dialogs.showAlert({
+					title: 'Error',
+					message: 'Drop target must be a table not a view',
+					type: AlertTypes.Error,
+					preformatted: false,
+				});
 				return;
 			}
 
@@ -130,7 +140,7 @@ function configureStylesheet(graph) {
 	style[mxConstants.STYLE_PERIMETER] = mxPerimeter.RectanglePerimeter;
 	style[mxConstants.STYLE_ALIGN] = mxConstants.ALIGN_LEFT;
 	style[mxConstants.STYLE_VERTICAL_ALIGN] = mxConstants.ALIGN_MIDDLE;
-	style[mxConstants.STYLE_FONTCOLOR] = 'var(--sapTextColor, #303030)';
+	style[mxConstants.STYLE_FONTCOLOR] = 'var(--font_color, #303030)';
 	style[mxConstants.STYLE_FONTSIZE] = '12';
 	style[mxConstants.STYLE_FONTSTYLE] = 0;
 	style[mxConstants.STYLE_SPACING_LEFT] = '4';

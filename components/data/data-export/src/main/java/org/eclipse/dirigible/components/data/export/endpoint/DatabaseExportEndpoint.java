@@ -25,12 +25,15 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import jakarta.annotation.security.RolesAllowed;
+import jakarta.validation.Valid;
 
 /**
  * Front facing REST service serving the raw data.
@@ -103,12 +106,47 @@ public class DatabaseExportEndpoint {
             }
         };
 
-        String type = databaseExportService.structureExportType(datasource, schema, structure);
+        String type = databaseExportService.structureExportType(datasource);
 
         return ResponseEntity.ok()
                              .header(HttpHeaders.CONTENT_DISPOSITION,
                                      "attachment; filename=\"" + schema + "." + structure + "-"
                                              + new SimpleDateFormat("yyyyMMddhhmmss").format(new Date()) + "." + type + "\"")
+                             .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                             .body(responseBody);
+    }
+
+    /**
+     * Execute statement export.
+     *
+     * @param datasource the datasource
+     * @param statement the statement
+     * @return the response
+     * @throws SQLException the SQL exception
+     */
+    @PostMapping(value = "/{datasource}", produces = "application/octet-stream")
+    public ResponseEntity<StreamingResponseBody> exportStatement(@PathVariable("datasource") String datasource,
+            @Valid @RequestBody String statement) throws SQLException {
+
+        if (!databaseMetadataService.existsDataSourceMetadata(datasource)) {
+            String error = format("Datasource {0} does not exist.", datasource);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
+        }
+
+        StreamingResponseBody responseBody = output -> {
+            try {
+                databaseExportService.exportStatement(datasource, statement, output);
+            } catch (Exception e) {
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+            }
+        };
+
+        String type = databaseExportService.structureExportType(datasource);
+
+        return ResponseEntity.ok()
+                             .header(HttpHeaders.CONTENT_DISPOSITION,
+                                     "attachment; filename=\"statement-" + new SimpleDateFormat("yyyyMMddhhmmss").format(new Date()) + "."
+                                             + type + "\"")
                              .contentType(MediaType.APPLICATION_OCTET_STREAM)
                              .body(responseBody);
     }

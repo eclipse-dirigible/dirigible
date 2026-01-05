@@ -1,29 +1,42 @@
-/*
- * Copyright (c) 2025 Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
-
 const DatabaseFacade = Java.type("org.eclipse.dirigible.components.api.db.DatabaseFacade");
 
+/**
+ * Interface used to wrap complex or other specific values for database insertion.
+ */
 export interface InsertParameter {
 	readonly value: any;
 }
 
+/**
+ * Type alias for a single allowed parameter value in an INSERT statement.
+ */
+type ParameterValue = string | number | boolean | Date | InsertParameter;
+
+/**
+ * Provides static methods for executing INSERT SQL statements.
+ */
 export class Insert {
 
-	public static execute(sql: string, parameters?: (string | number | boolean | Date | InsertParameter)[], datasourceName?: string): Array<Record<string, any>> {
+	/**
+	 * Executes a single parameterized INSERT statement.
+	 * * @param sql The SQL query to execute, with '?' placeholders for parameters.
+	 * @param parameters An optional array of values to replace the '?' placeholders.
+	 * @param datasourceName The name of the database connection to use (optional).
+	 * @returns An array of records representing the result of the insertion (e.g., generated keys).
+	 */
+	public static execute(sql: string, parameters?: ParameterValue[], datasourceName?: string): Array<Record<string, any>> {
         const params = parameters ? JSON.stringify(parameters) : undefined;
 		return DatabaseFacade.insert(sql, params, datasourceName);
 	}
 
-	public static executeMany(sql: string, parameters?: ((string | number | boolean | Date | InsertParameter)[])[], datasourceName?: string): Array<Record<string, any>> {
+	/**
+	 * Executes multiple parameterized INSERT statements as a batch operation.
+	 * * @param sql The SQL query to execute, with '?' placeholders for parameters.
+	 * @param parameters An optional array of parameter arrays, where each inner array corresponds to one execution of the SQL statement.
+	 * @param datasourceName The name of the database connection to use (optional).
+	 * @returns An array of records representing the results of the batched insertions.
+	 */
+	public static executeMany(sql: string, parameters?: ParameterValue[][], datasourceName?: string): Array<Record<string, any>> {
 		const params = parameters ? JSON.stringify(parameters) : undefined;
 		return DatabaseFacade.insertMany(sql, params, datasourceName);
 	}

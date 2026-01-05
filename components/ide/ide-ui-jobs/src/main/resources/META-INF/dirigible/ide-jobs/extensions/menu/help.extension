@@ -1,5 +1,0 @@
-{
-    "module": "resources-core/services/menus/help.js",
-    "extensionPoint": "ide-jobs-menu",
-    "description": "Help Menu"
-}

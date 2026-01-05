@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { configurations as config } from "sdk/core";
+import { configurations as config } from "@aerokit/sdk/core";
 
 let DIRIGIBLE_DOCUMENTS_EXT_CONTENT_TYPE_MS_ENABLED = "DIRIGIBLE_DOCUMENTS_EXT_CONTENT_TYPE_MS_ENABLED";
 

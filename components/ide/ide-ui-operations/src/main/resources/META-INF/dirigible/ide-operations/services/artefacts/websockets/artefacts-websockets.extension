@@ -1,5 +1,0 @@
-{
-    "module": "ide-operations/services/artefacts/websockets/artefacts-websockets.mjs",
-    "extensionPoint": "ide-operations-artefacts",
-    "description": "WebSockets Artefacts Extension"
-}

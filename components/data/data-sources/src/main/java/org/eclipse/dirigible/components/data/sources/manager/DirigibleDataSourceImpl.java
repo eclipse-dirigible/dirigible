@@ -116,6 +116,12 @@ class DirigibleDataSourceImpl implements DirigibleDataSource {
         this.transactionManager = transactionManager;
     }
 
+    @Override
+    public boolean isInUse() {
+        return originalDataSource.getHikariPoolMXBean()
+                                 .getActiveConnections() != 0;
+    }
+
     /**
      * Gets the log writer.
      *

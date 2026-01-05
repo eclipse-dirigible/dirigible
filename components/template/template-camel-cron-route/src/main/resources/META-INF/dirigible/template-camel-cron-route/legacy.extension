@@ -1,5 +1,0 @@
-{
-	"extensionPoint": "ide-template",
-	"module": "template-camel-cron-route/template.js",
-	"description": "Camel Cron Route Project Template"
-}

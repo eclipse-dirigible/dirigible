@@ -1,0 +1,113 @@
+<!--
+
+    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="instancesDetails" ng-controller="InstancesDetailsController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/perspective-processes/configs/bpm-process-instances-details-window.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <script type="text/javascript" src="/services/web/perspective-processes/js/time-utils.js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+    </head>
+
+    <body class="bk-vbox">
+        <bk-fieldset ng-if="::params.instance" class="bk-padding-top-bottom--tiny fd-padding-begin-end--sm">
+            <bk-form-group>
+                <bk-form-item>
+                    <div class="bk-hbox bk-box--gap">
+                        <div class="bk-stretch">
+                            <bk-form-label colon="true">Id</bk-form-label>
+                            <bk-input type="text" value="{{::params.instance.id}}" ng-readonly="true"></bk-input>
+                        </div>
+                        <div class="bk-stretch">
+                            <bk-form-label colon="true">Process Instance Id</bk-form-label>
+                            <bk-input type="text" value="{{::params.instance.processInstanceId}}" ng-readonly="true"></bk-input>
+                        </div>
+                        <div class="bk-stretch">
+                            <bk-form-label colon="true">Reference Id</bk-form-label>
+                            <bk-input type="text" value="{{::params.instance.referenceId}}" ng-readonly="true"></bk-input>
+                        </div>
+                        <div class="bk-stretch">
+                            <bk-form-label colon="true">Callback Id</bk-form-label>
+                            <bk-input type="text" value="{{::params.instance.callbackId}}" ng-readonly="true"></bk-input>
+                        </div>
+                    </div>
+                </bk-form-item>
+                <bk-form-item>
+                    <div class="bk-hbox bk-box--gap">
+                        <div class="bk-stretch">
+                            <bk-form-label colon="true">Business Key</bk-form-label>
+                            <bk-input type="text" value="{{::params.instance.businessKey}}" ng-readonly="true"></bk-input>
+                        </div>
+                        <div class="bk-stretch">
+                            <bk-form-label colon="true">Business Status</bk-form-label>
+                            <bk-input type="text" value="{{::params.instance.businessStatus}}" ng-readonly="true"></bk-input>
+                        </div>
+                    </div>
+                </bk-form-item>
+                <bk-form-item>
+                    <bk-form-label colon="true">Name</bk-form-label>
+                    <bk-input type="text" value="{{::params.instance.name}}" ng-readonly="true"></bk-input>
+                </bk-form-item>
+                <bk-form-item>
+                    <div class="bk-hbox bk-box--gap">
+                        <div class="bk-stretch">
+                            <bk-form-label colon="true">Process Definition Name</bk-form-label>
+                            <bk-input type="text" value="{{::params.instance.processDefinitionName}}" ng-readonly="true"></bk-input>
+                        </div>
+                        <div class="bk-stretch">
+                            <bk-form-label colon="true">Process Definition Version</bk-form-label>
+                            <bk-input type="text" value="{{::params.instance.processDefinitionVersion}}" ng-readonly="true"></bk-input>
+                        </div>
+                        <div class="bk-stretch">
+                            <bk-form-label colon="true">Process Definition Key</bk-form-label>
+                            <bk-input type="text" value="{{::params.instance.processDefinitionKey}}" ng-readonly="true"></bk-input>
+                        </div>
+                        <div class="bk-stretch">
+                            <bk-form-label colon="true">Process Definition Id</bk-form-label>
+                            <bk-input type="text" value="{{::params.instance.processDefinitionId}}" ng-readonly="true"></bk-input>
+                        </div>
+                    </div>
+                </bk-form-item>
+                <bk-form-item>
+                    <bk-form-label colon="true">Start Time</bk-form-label>
+                    <bk-input type="text" value="{{::params.instance.startTime | date:'medium'}} ({{getRelativeTime(params.instance.startTime)}})" ng-readonly="true"></bk-input>
+                </bk-form-item>
+            </bk-form-group>
+        </bk-fieldset>
+
+        <bk-message-page ng-if="::!params.instance" glyph="sap-icon--error">
+            <bk-message-page-title>The instance parameter is missing!</bk-message-page-title>
+        </bk-message-page>
+
+        <script type="text/javascript">
+            angular.module('instancesDetails', ['platformView', 'blimpKit']).controller('InstancesDetailsController', ($scope, ViewParameters) => {
+                $scope.params = ViewParameters.get();
+                if (!$scope.params.hasOwnProperty('instance')) {
+                    console.error('instancesDetails: Instance parameter missing');
+                }
+
+                $scope.getRelativeTime = (dateTimeString) => {
+                    return formatRelativeTime(new Date(dateTimeString));
+                };
+            });
+        </script>
+        <theme></theme>
+    </body>
+
+</html>
