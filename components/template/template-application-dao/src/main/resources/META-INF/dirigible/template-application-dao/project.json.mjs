@@ -5,22 +5,7 @@ export function generate(json) {
 	
 	let projectFile = {
 		"guid": parameters.projectName,
-		"actions": [
-			{
-				"name": "Build TypeScript",
-				"commands": [
-					{
-						"os": "unix",
-						"command": "tsc"
-					},
-					{
-						"os": "windows",
-						"command": "cmd /c tsc"
-					}
-				],
-				"registry": "true"
-			}
-		]
+		"actions": []
 	}
 	const newProjectFile = JSON.stringify(projectFile);
 

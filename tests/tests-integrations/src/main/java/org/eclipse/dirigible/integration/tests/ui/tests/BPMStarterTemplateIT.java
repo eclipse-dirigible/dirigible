@@ -18,12 +18,16 @@ import org.eclipse.dirigible.tests.framework.ide.Workbench;
 import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.TimeUnit;
 
 import static org.awaitility.Awaitility.await;
 
 public class BPMStarterTemplateIT extends UserInterfaceIntegrationTest {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(BPMStarterTemplateIT.class);
 
     private static final String TEMPLATE_TITLE = "BPM Project Starter";
     private static final String TEST_PROJECT = "bpm-test-project";
@@ -50,6 +54,7 @@ public class BPMStarterTemplateIT extends UserInterfaceIntegrationTest {
 
     @Test
     void testCreateProjectFromTemplate() {
+        LOGGER.debug("Creating test project [{}] from template [{}]...", TEST_PROJECT, TEMPLATE_TITLE);
         Workbench workbench = ide.openWorkbench();
 
         WelcomeView welcomeView = workbench.openWelcomeView();
@@ -60,20 +65,29 @@ public class BPMStarterTemplateIT extends UserInterfaceIntegrationTest {
         welcomeView.typeFileName(TEST_PROCESS);
         welcomeView.typeTemplateParamById(PROCESS_IDENTIFIER_ID, PROCESS_ID);
         welcomeView.confirmTemplate();
+        LOGGER.debug("Created test project [{}] from template [{}]...", TEST_PROJECT, TEMPLATE_TITLE);
 
         workbench.expandProject(TEST_PROJECT);
         workbench.openFile(TRIGGER_PROCESS_FORM_FILENAME);
 
         FormView formView = workbench.getFormView();
+        LOGGER.debug("Regenerating form [{}]...", TRIGGER_PROCESS_FORM_FILENAME);
+
         formView.regenerateForm();
         ide.assertStatusBarMessage("Generated from model '" + TRIGGER_PROCESS_FORM_FILENAME + "'");
+        LOGGER.debug("Form [{}] has been regenerated.", TRIGGER_PROCESS_FORM_FILENAME);
 
+        LOGGER.debug("Publishing all projects...", TRIGGER_PROCESS_FORM_FILENAME);
         workbench.publishAll(true);
+        LOGGER.debug("All projects have been published and the synchronization is completed.", TRIGGER_PROCESS_FORM_FILENAME);
 
         browser.openPath(TRIGGER_PROCESS_FORM_PATH);
         browser.enterTextInElementById(PARAM_1_ID, PARAM_1_VALUE);
         browser.enterTextInElementById(PARAM_2_ID, PARAM_2_VALUE);
         browser.clickOnElementContainingText(HtmlElementType.BUTTON, TRIGGER_BUTTON_TEXT);
+
+        LOGGER.debug("Asserting that a new process instance has been triggered...");
+        browser.assertAlertWithMessage("A new process instance has been triggered");
 
         await().atMost(30, TimeUnit.SECONDS)
                .until(() -> consoleLogAsserter.containsMessage(EXPECTED_TASK_LOGGED_MESSAGE, Level.INFO));

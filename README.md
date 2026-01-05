@@ -38,37 +38,37 @@ Enterprise Services.
 
 <!-- TOC -->
 
-* [Eclipse Dirigible™](#eclipse-dirigible)
-    * [Instant Trial](#instant-trial)
-    * [Contact Us](#contact-us)
-    * [Get Started](#get-started)
-        * [Download](#download)
-        * [Build](#build)
-            * [Prerequisites](#prerequisites)
-            * [Steps](#steps)
-            * [Maven Profiles](#maven-profiles)
-        * [Run](#run)
-            * [Standalone](#standalone)
-                * [Prerequisites](#prerequisites-1)
-                * [Steps](#steps-1)
-            * [Docker](#docker)
-                * [Prerequisites](#prerequisites-2)
-                * [Steps](#steps-2)
-            * [Native image](#native-image)
-                * [Prerequisites](#prerequisites-3)
-                * [Steps](#steps-3)
-            * [PostgreSQL](#postgresql)
-                * [Steps](#steps-4)
-        * [CMS with AWS S3](#cms-with-aws-s3)
-            * [Setup:](#setup)
-            * [Usage:](#usage)
-            * [Test environment with LocalStack](#test-environment-with-localstack)
-            * [Setup:](#setup-1)
-    * [Additional Information](#additional-information)
-        * [License](#license)
-        * [Contributors](#contributors)
-        * [Attribution links](#attribution-links)
-        * [References](#references)
+- [Eclipse Dirigible™](#eclipse-dirigible)
+  - [Instant Trial](#instant-trial)
+  - [Contact Us](#contact-us)
+  - [Get Started](#get-started)
+    - [Download](#download)
+    - [Build](#build)
+      - [Prerequisites](#prerequisites)
+      - [Steps](#steps)
+      - [Maven Profiles](#maven-profiles)
+    - [Run](#run)
+      - [Standalone](#standalone)
+        - [Prerequisites](#prerequisites-1)
+        - [Steps](#steps-1)
+      - [Docker](#docker)
+        - [Prerequisites](#prerequisites-2)
+        - [Steps](#steps-2)
+      - [Native image](#native-image)
+        - [Prerequisites](#prerequisites-3)
+        - [Steps](#steps-3)
+      - [PostgreSQL](#postgresql)
+        - [Steps](#steps-4)
+    - [CMS with AWS S3](#cms-with-aws-s3)
+      - [Setup:](#setup)
+      - [Usage:](#usage)
+      - [Test environment with LocalStack](#test-environment-with-localstack)
+      - [Setup:](#setup-1)
+  - [Additional Information](#additional-information)
+    - [License](#license)
+    - [Contributors](#contributors)
+    - [Attribution links](#attribution-links)
+    - [References](#references)
 
 <!-- TOC -->
 
@@ -99,7 +99,7 @@ not available in the releases.
 - [Git](http://git-scm.com/)
 - [Java JDK 21+](https://adoptopenjdk.net/)
 - [Maven 3.8.x](http://maven.apache.org/docs/3.8.8/release-notes.html)
-- [esbuild](https://esbuild.github.io/getting-started/#install-esbuild)  - `npm i -g esbuild`
+- [esbuild](https://esbuild.github.io/getting-started/#install-esbuild) - `npm i -g esbuild`
 - [tsc](https://www.npmjs.com/package/typescript) - `npm i -g typescript`
 - [ttyd](https://github.com/tsl0922/ttyd)
 
@@ -114,12 +114,12 @@ In case there is an issue with 'Filename too long in Git for Windows' then add t
 git config --system core.longpaths true
 ```
 
-3. Go to the root folder.
-4. Build the project with:
+3.  Go to the root folder.
+4.  Build the project with:
 
-        mvn clean install
+         mvn clean install
 
-   > If you are using Windows, make sure that you open the terminal as Administrator otherwise the tests will fail
+    > If you are using Windows, make sure that you open the terminal as Administrator otherwise the tests will fail
 
 - Quick build **with unit tests**:
 
@@ -146,18 +146,20 @@ git config --system core.longpaths true
        mvn -T 1C clean install -P quick-build
 
 - If you want to **run all integration tests only**:
+
   ```shell
   export HEADLESS='true'
   mvn clean install -P integration-tests -D selenide.headless=$HEADLESS
-   ```
+  ```
 
 - If you want to **run specific integration test(s)**:
+
   ```shell
   export HEADLESS='true'
   export TEST='CsvimIT,CreateNewProjectIT'
-  
-  mvn clean install -P integration-tests - Dit.test="$TEST" -D selenide.headless=$HEADLESS
-   ```
+
+  mvn clean install -P integration-tests -Dit.test="$TEST" -D selenide.headless=$HEADLESS
+  ```
 
 > The build should pass successfully.
 
@@ -167,7 +169,7 @@ deployed. It is Spring Boot application, so it can be executed locally right awa
 ##### Maven Profiles
 
 | Profile Name      | Description                                                          |
-|-------------------|----------------------------------------------------------------------|
+| ----------------- | -------------------------------------------------------------------- |
 | tests             | Run unit and integration tests                                       |
 | unit-tests        | Run unit tests                                                       |
 | integration-tests | Run integration tests                                                |
@@ -187,41 +189,47 @@ mvn clean install -P quick-build
 ##### Prerequisites
 
 **macOS:**
+
 ```shell
         brew install ttyd
 ```
+
 **Linux:**
 
 RHEL/CentOS/Fedora:
+
 ```shell
         sudo dnf install ttyd
 ```
+
 Debian/Ubuntu:
+
 ```shell
         sudo apt install ttyd
 ```
+
 You do not need to start/enable the standard ttyd service. Dirigible starts ttyd automatically on port 9000.
 
 More info about **ttyd** can be found at: [ttyd](https://github.com/tsl0922/ttyd)
 
 ##### Steps
 
-1. From the project root directory run command:
+1.  From the project root directory run command:
 
-        java -jar build/application/target/dirigible-application-*-executable.jar
+         java -jar build/application/target/dirigible-application-*-executable.jar
 
-   > for Windows
+    > for Windows
 
-        java -jar build/application/target/$((Get-ChildItem dirigible-application-*-executable.jar -recurse -File | Sort-Object LastWriteTime | Select -Last 1).BaseName).jar
+         java -jar build/application/target/$((Get-ChildItem dirigible-application-*-executable.jar -recurse -File | Sort-Object LastWriteTime | Select -Last 1).BaseName).jar
 
-3. In case you want to debug the application run:
+2.  In case you want to debug the application run:
 
         java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=8000 -jar build/application/target/dirigible-application-*-executable.jar
 
-4. Open a web browser and go to: [http://localhost:8080](http://localhost:8080 "http://localhost:8080")
-5. Login with user: `admin` and password `admin`
-6. REST API description in an OpenAPI format can be found
-   at: [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html "http://localhost:8080/swagger-ui/index.html")
+3.  Open a web browser and go to: [http://localhost:8080](http://localhost:8080 "http://localhost:8080")
+4.  Login with user: `admin` and password `admin`
+5.  REST API description in an OpenAPI format can be found
+    at: [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html "http://localhost:8080/swagger-ui/index.html")
 
 #### Docker
 
@@ -241,15 +249,17 @@ More info about **ttyd** can be found at: [ttyd](https://github.com/tsl0922/ttyd
 
         cd build/application
         docker build -t dirigiblelabs/dirigible:latest -f Dockerfile .
+
   > prerequisite: build the project as described in step
-  4 [here](https://github.com/eclipse/dirigible/blob/master/README.md#steps)
+  > 4 [here](https://github.com/eclipse/dirigible/blob/master/README.md#steps)
 
 - Build it locally **without cache**
 
         cd build/application
         docker build --no-cache -t dirigiblelabs/dirigible:latest -f Dockerfile .
+
   > prerequisite: build the project as described in step
-  4 [here](https://github.com/eclipse/dirigible/blob/master/README.md#steps)
+  > 4 [here](https://github.com/eclipse/dirigible/blob/master/README.md#steps)
 
 2. Start the container
 
@@ -267,7 +277,7 @@ docker run --name dirigible --rm -p 8080:8080 -p 8081:8081 \
     dirigiblelabs/dirigible:latest
 ```
 
-__Note:__ we have observed performance issues on Windows when mounting a folder. To improve the perfomance, use
+**Note:** we have observed performance issues on Windows when mounting a folder. To improve the perfomance, use
 dedicated volume instead:
 
 ```
@@ -312,41 +322,42 @@ native-image -jar 'build/application/target/dirigible-application-10.0.0-SNAPSHO
 
 ##### Steps
 
-1. Install PostgreSQL e.g. for MacOS:
+1.  Install PostgreSQL e.g. for MacOS:
 
-        brew install postgresql
+         brew install postgresql
 
-   Alternatively you can use docker image
+    Alternatively you can use docker image
 
-        docker run -itd -e POSTGRES_DB=postgres -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres  -p 5432:5432 --name postgresql postgres
+         docker run -itd -e POSTGRES_DB=postgres -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres  -p 5432:5432 --name postgresql postgres
 
-2. The run it:
+2.  The run it:
 
         brew services start postgresql
 
-3. Create a default user:
+3.  Create a default user:
 
         createuser -s postgres
 
-4. And expose the following environment variables:
+4.  And expose the following environment variables:
 
         export DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER=org.postgresql.Driver
         export DIRIGIBLE_DATASOURCE_DEFAULT_URL=jdbc:postgresql://localhost:5432/postgres
         export DIRIGIBLE_DATASOURCE_DEFAULT_USERNAME=postgres
         export DIRIGIBLE_DATASOURCE_DEFAULT_PASSWORD=postgres
 
-   for Windows execute the following in the terminal with admin privileges
-   ```
-   [System.Environment]::SetEnvironmentVariable('DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER','org.postgresql.Driver', 'Machine')
-   [System.Environment]::SetEnvironmentVariable('DIRIGIBLE_DATASOURCE_DEFAULT_URL','jdbc:postgresql://localhost:5432/postgres', 'Machine')
-   [System.Environment]::SetEnvironmentVariable('DIRIGIBLE_DATASOURCE_DEFAULT_USERNAME','postgres', 'Machine')
-   [System.Environment]::SetEnvironmentVariable('DIRIGIBLE_DATASOURCE_DEFAULT_PASSWORD','postgres', 'Machine')
-   ```
+    for Windows execute the following in the terminal with admin privileges
 
-5. Then you can run Dirigible with PostgreSQL default database (DefaultDB).
+    ```
+    [System.Environment]::SetEnvironmentVariable('DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER','org.postgresql.Driver', 'Machine')
+    [System.Environment]::SetEnvironmentVariable('DIRIGIBLE_DATASOURCE_DEFAULT_URL','jdbc:postgresql://localhost:5432/postgres', 'Machine')
+    [System.Environment]::SetEnvironmentVariable('DIRIGIBLE_DATASOURCE_DEFAULT_USERNAME','postgres', 'Machine')
+    [System.Environment]::SetEnvironmentVariable('DIRIGIBLE_DATASOURCE_DEFAULT_PASSWORD','postgres', 'Machine')
+    ```
 
-   > If you have started the Dirigible before, make sure to execute `mvn clean` before starting the Dirigible with the
-   PostgreSQL
+5.  Then you can run Dirigible with PostgreSQL default database (DefaultDB).
+
+    > If you have started the Dirigible before, make sure to execute `mvn clean` before starting the Dirigible with the
+    > PostgreSQL
 
 ### CMS with AWS S3
 
@@ -372,25 +383,30 @@ If you prefer working with a test environment you can use [LocalStack](https://w
 
 - Install LocalStack on your machine using the installation
   guide [here](https://docs.localstack.cloud/getting-started/installation/) or the following commands:
-    - MacOS - `brew install localstack/tap/localstack-cli`
-    - Linux -
 
-      For `x86-64`:
-        ```
-         curl -Lo localstack-cli-3.0.2-linux-amd64-onefile.tar.gz \ 
-          https://github.com/localstack/localstack-cli/releases/download/v3.0.2/localstack-cli-3.0.2-linux-amd64-onefile.tar.gz
-        ```
-      For `ARM64`:
-        ```
-        curl -Lo localstack-cli-3.0.2-linux-arm64-onefile.tar.gz \
-          https://github.com/localstack/localstack-cli/releases/download/v3.0.2/localstack-cli-3.0.2-linux-arm64-onefile.tar.gz
-        ```
+  - MacOS - `brew install localstack/tap/localstack-cli`
+  - Linux -
 
-      Then extract the LocalStack CLI from the terminal:
+    For `x86-64`:
 
-      ```
-      sudo tar xvzf localstack-cli-3.0.2-linux-*-onefile.tar.gz -C /usr/local/bin
-      ```
+    ```
+     curl -Lo localstack-cli-3.0.2-linux-amd64-onefile.tar.gz \
+      https://github.com/localstack/localstack-cli/releases/download/v3.0.2/localstack-cli-3.0.2-linux-amd64-onefile.tar.gz
+    ```
+
+    For `ARM64`:
+
+    ```
+    curl -Lo localstack-cli-3.0.2-linux-arm64-onefile.tar.gz \
+      https://github.com/localstack/localstack-cli/releases/download/v3.0.2/localstack-cli-3.0.2-linux-arm64-onefile.tar.gz
+    ```
+
+    Then extract the LocalStack CLI from the terminal:
+
+    ```
+    sudo tar xvzf localstack-cli-3.0.2-linux-*-onefile.tar.gz -C /usr/local/bin
+    ```
+
 - Start `LocalStack` using - `localstack start -d`
 - Set up the environment variables, mainly `DIRIGIBLE_S3_PROVIDER=localstack`, exposed by Eclipse Dirigible
 
@@ -436,4 +452,3 @@ BlimpKit: [https://github.com/blimpkit/blimpkit.github.io](https://github.com/bl
   List: [https://dev.eclipse.org/mailman/listinfo/dirigible-dev](https://dev.eclipse.org/mailman/listinfo/dirigible-dev)
 - Issues: [https://github.com/eclipse/dirigible/issues](https://github.com/eclipse/dirigible/issues)
 - Eclipse Foundation Help Desk: https://gitlab.eclipse.org/eclipsefdn/helpdesk
-
