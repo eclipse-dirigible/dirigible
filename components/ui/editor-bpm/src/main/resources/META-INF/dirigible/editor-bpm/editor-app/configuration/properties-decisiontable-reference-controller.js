@@ -98,16 +98,6 @@ angular.module('flowableModeler').controller('FlowableDecisionTableReferencePopu
                 var modelMetaData = editorManager.getBaseModelData();
                 var json = editorManager.getModel();
 
-                var params = {
-                    modeltype: modelMetaData.model.modelType,
-                    json_xml: JSON.stringify(json),
-                    name: modelMetaData.name,
-                    key: modelMetaData.key,
-                    description: modelMetaData.description,
-                    newversion: false,
-                    lastUpdated: modelMetaData.lastUpdated
-                };
-
                 // Update
                 $http({
                     method: 'POST',
@@ -184,18 +174,6 @@ angular.module('flowableModeler').controller('FlowableDecisionTableReferencePopu
 
                 var modelMetaData = editorManager.getBaseModelData();
                 var json = editorManager.getModel();
-                // json = JSON.stringify(json);
-
-                // var params = {
-                //     modeltype: modelMetaData.model.modelType,
-                //     json_xml: json,
-                //     name: modelMetaData.name,
-                //     key: modelMetaData.key,
-                //     description: modelMetaData.description,
-                //     newversion: false,
-                //     lastUpdated: modelMetaData.lastUpdated,
-                //     stencilSet: stencilSetId
-                // };
 
                 // Update
                 $http({
