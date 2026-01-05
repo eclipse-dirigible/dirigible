@@ -122,7 +122,8 @@ public class EntityToHbmMapper {
                 case "double", "double precision" -> "double";
                 case "numeric", "decimal", "money", "currency" -> "big_decimal";
                 // Boolean Type
-                case "boolean", "bit" -> "boolean";
+                case "boolean" -> "boolean";
+                case "bit" -> "bit";
                 // Date/Time Types
                 case "date" -> "date";
                 case "time" -> "time";

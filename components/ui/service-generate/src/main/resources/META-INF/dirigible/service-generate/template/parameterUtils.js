@@ -289,6 +289,7 @@ export function parseDataTypes(dataType) {
             parsedDataType.ts = "Date";
             break;
         case "BOOLEAN":
+        case "BIT":
             parsedDataType.java = "boolean";
             parsedDataType.ts = "boolean";
             break;
