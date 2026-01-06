@@ -14,7 +14,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -450,6 +449,14 @@ public class EntityParser {
                     String defaultValue = extractValue.apply(argText, "defaultValue");
                     if (defaultValue != null)
                         columnDetails.setDefaultValue(defaultValue);
+
+                    String precisionValue = extractValue.apply(argText, "precision");
+                    if (precisionValue != null)
+                        columnDetails.setPrecision(Integer.valueOf(precisionValue));
+
+                    String scaleValue = extractValue.apply(argText, "scale");
+                    if (scaleValue != null)
+                        columnDetails.setScale(Integer.valueOf(scaleValue));
                 }
             } else if ("OneToMany".equals(decoratorName)) {
                 // Expects @OneToMany(() => OrderItem, { table: '...', joinColumn: '...', ... })

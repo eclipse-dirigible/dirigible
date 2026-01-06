@@ -9,18 +9,21 @@
  */
 package org.eclipse.dirigible.components.data.processes.schema.imp.tasks;
 
-import org.eclipse.dirigible.components.engine.bpm.flowable.delegate.BPMTask;
-import org.eclipse.dirigible.components.engine.bpm.flowable.delegate.TaskExecution;
-import org.eclipse.dirigible.components.engine.cms.*;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import org.eclipse.dirigible.components.engine.bpm.flowable.delegate.BPMTask;
+import org.eclipse.dirigible.components.engine.bpm.flowable.delegate.TaskExecution;
+import org.eclipse.dirigible.components.engine.cms.CmisContentStream;
+import org.eclipse.dirigible.components.engine.cms.CmisDocument;
+import org.eclipse.dirigible.components.engine.cms.CmisObject;
+import org.eclipse.dirigible.components.engine.cms.CmisSession;
+import org.eclipse.dirigible.components.engine.cms.CmisSessionFactory;
 
 abstract class BaseImportTask extends BPMTask {
 
     @Override
-    protected final void execute(TaskExecution execution) {
+    protected void execute(TaskExecution execution) {
         ImportProcessContext context = new ImportProcessContext(execution);
         execute(context);
     }

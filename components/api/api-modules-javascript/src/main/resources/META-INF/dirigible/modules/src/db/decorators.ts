@@ -23,13 +23,29 @@ type ClassDecoratorContext = {
   addInitializer(fn: () => void): void;
 };
 
+export type ColumnTypes =
+  // Numeric types
+  | 'integer' | 'long' | 'short' | 'byte' | 'float' | 'double' | 'big_integer' | 'big_decimal'
+  // String types
+  | 'string' | 'char' | 'text' | 'nstring' | 'ntext'
+  // Date/Time types
+  | 'date' | 'time' | 'timestamp' | 'calendar' | 'calendar_date' | 'instant'
+  // Boolean types
+  | 'boolean' | 'true_false' | 'yes_no' | 'numeric_boolean' 
+  // Binary types
+  | 'binary' | 'blob' | 'clob' | 'materialized_blob' | 'materialized_clob'
+  // Other types
+  | 'serializable' | 'any' | 'object' | 'uuid-char' | 'uuid-binary' | 'json' | 'jsonb' | 'xml';
+
 // --- Metadata Models ---
 export interface ColumnOptions {
   name?: string;
-  type?: string;
+  type?: ColumnTypes | (string & {});
   length?: number;
   nullable?: boolean;
   defaultValue?: string;
+  precision?: number;
+  scale?: number;
 }
 
 export interface OneToManyOptions {
@@ -61,7 +77,7 @@ interface PropertyMetadata {
 }
 
 export interface EntityConstructor extends Function {
-  new (...args: any[]): any;
+  new(...args: any[]): any;
   $entity_name: string;
   $table_name: string;
   $id_name: string;

@@ -49,4 +49,13 @@ public class TypeScriptParserTest {
         assertEquals("The extracted class name should be 'Car'.", "Car", actualClassName);
     }
 
+    @Test
+    public void shouldParseDefiniteAssignmentAssertionProperties() {
+        String code = "class Person {\n" + "  public UUID!: string;\n" + "  public Name!: string;\n" + "  public age!: number;\n"
+                + "  public Height!: number;\n" + "}";
+
+        ParseTree tree = setupParser(code);
+        assertNotNull("Parse tree should not be null.", tree);
+    }
+
 }

@@ -1,0 +1,215 @@
+import { database } from "@aerokit/sdk/db";
+
+export interface ${name} {
+#foreach ($property in $properties)
+    readonly ${property.name}: ${property.dataTypeTypescript};
+#end
+}
+
+export interface ${name}Filter {
+#foreach ($property in $filter.properties)
+#if(!$property.dataPrimaryKey)
+    readonly ${property.name}?: ${property.dataTypeTypescript};
+#end
+#end
+}
+
+export interface ${name}PaginatedFilter extends ${name}Filter {
+    readonly "$limit"?: number;
+    readonly "$offset"?: number;
+}
+
+export class ${name}Repository {
+
+    private readonly datasourceName?: string;
+
+    constructor(datasourceName?: string) {
+        this.datasourceName = datasourceName;
+    }
+
+    public findAll(filter: ${name}PaginatedFilter): ${name}[] {
+        const data: ${name}[] = [];
+        let connection;
+        try {
+            connection = database.getConnection(this.datasourceName);
+
+            const sql = `
+                ${dataQuery}
+            `;
+
+            const statement = connection.prepareStatement(sql);
+
+            let paramIndex = 1;
+#foreach ($property in $filter.properties)
+#if(!$property.dataPrimaryKey)
+#if($property.dataType == "VARCHAR" || $property.dataType == "CHAR")
+            if (filter.${property.name}) {
+                statement.setString(paramIndex++, filter.${property.name});
+            }
+#elseif($property.dataType == "INTEGER")
+            if (filter.${property.name}) {
+                statement.setInt(paramIndex++, filter.${property.name});
+            }
+#elseif($property.dataType == "BIGINT")
+            if (filter.${property.name}) {
+                statement.setLong(paramIndex++, filter.${property.name});
+            }
+#elseif($property.dataType == "SMALLINT" || $property.dataType == "TINYINT")
+            if (filter.${property.name}) {
+                statement.setShort(paramIndex++, filter.${property.name});
+            }
+#elseif($property.dataType == "REAL")
+            if (filter.${property.name}) {
+                statement.setFloat(paramIndex++, filter.${property.name});
+            }
+#elseif($property.dataType == "DOUBLE" || $property.dataType == "DECIMAL")
+            if (filter.${property.name}) {
+                statement.setDouble(paramIndex++, filter.${property.name});
+            }
+#elseif($property.dataType == "DATE")
+            if (filter.${property.name}) {
+                statement.setDate(paramIndex++, filter.${property.name});
+            }
+#elseif($property.dataType == "TIME")
+            if (filter.${property.name}) {
+                statement.setTime(paramIndex++, filter.${property.name});
+            }
+#elseif($property.dataType == "TIMESTAMP")
+            if (filter.${property.name}) {
+                statement.setTimestamp(paramIndex++, filter.${property.name});
+            }
+#elseif($property.dataType == "BOOLEAN")
+            if (filter.${property.name}) {
+                statement.setBoolean(paramIndex++, filter.${property.name});
+            }
+#else
+            if (filter.${property.name}) {
+                throw new Error("Not-Supported-Data-Type");
+            }
+#end
+#end
+#end
+            if (filter["$limit"]) {
+                statement.setInt(paramIndex++, filter["$limit"]);
+            }
+            if (filter["$offset"]) {
+                statement.setInt(paramIndex++, filter["$offset"]);
+            }
+
+            const resultSet = statement.executeQuery();
+            while (resultSet.next()) {
+                data.push({
+#foreach ($property in $properties)
+#if($property.dataTypeJava == "string")
+                    ${property.name}: resultSet.getString("${property.name}")#if($foreach.hasNext),#end
+#elseif($property.dataTypeJava == "int")
+                    ${property.name}: resultSet.getInt("${property.name}")#if($foreach.hasNext),#end
+#elseif($property.dataTypeJava == "long")
+                    ${property.name}: resultSet.getLong("${property.name}")#if($foreach.hasNext),#end
+#elseif($property.dataTypeJava == "short")
+                    ${property.name}: resultSet.getShort("${property.name}")#if($foreach.hasNext),#end
+#elseif($property.dataTypeJava == "float")
+                    ${property.name}: resultSet.getFloat("${property.name}")#if($foreach.hasNext),#end
+#elseif($property.dataTypeJava == "double")
+                    ${property.name}: resultSet.getDouble("${property.name}")#if($foreach.hasNext),#end
+#elseif($property.dataTypeJava == "date")
+                    ${property.name}: resultSet.getDate("${property.name}")#if($foreach.hasNext),#end
+#elseif($property.dataTypeJava == "time")
+                    ${property.name}: resultSet.getTime("${property.name}")#if($foreach.hasNext),#end
+#elseif($property.dataTypeJava == "timestamp")
+                    ${property.name}: resultSet.getTimestamp("${property.name}")#if($foreach.hasNext),#end
+#elseif($property.dataTypeJava == "boolean")
+                    ${property.name}: resultSet.getBoolean("${property.name}")#if($foreach.hasNext),#end
+#else
+                    ${property.name}: "Not-Supported-Data-Type"#if($foreach.hasNext),#end
+#end
+#end
+                });
+            }
+            resultSet.close();
+            statement.close();
+        } finally {
+            if (connection) {
+                connection.close();
+            }
+        }
+        return data;
+    }
+
+    public count(filter: ${name}Filter): number {
+        let count = 0;
+        let connection;
+        try {
+            connection = database.getConnection(this.datasourceName);
+
+            const sql = `
+                ${dataCount}
+            `;
+
+            const statement = connection.prepareStatement(sql);
+
+            let paramIndex = 1;
+#foreach ($property in $filter.properties)
+#if(!$property.dataPrimaryKey)
+#if($property.dataTypeJava == "string")
+            if (filter.${property.name}) {
+                statement.setString(paramIndex++, filter.${property.name});
+            }
+#elseif($property.dataTypeJava == "int")
+            if (filter.${property.name}) {
+                statement.setInt(paramIndex++, filter.${property.name});
+            }
+#elseif($property.dataTypeJava == "long")
+            if (filter.${property.name}) {
+                statement.setLong(paramIndex++, filter.${property.name});
+            }
+#elseif($property.dataTypeJava == "short")
+            if (filter.${property.name}) {
+                statement.setShort(paramIndex++, filter.${property.name});
+            }
+#elseif($property.dataTypeJava == "float")
+            if (filter.${property.name}) {
+                statement.setFloat(paramIndex++, filter.${property.name});
+            }
+#elseif($property.dataTypeJava == "double")
+            if (filter.${property.name}) {
+                statement.setDouble(paramIndex++, filter.${property.name});
+            }
+#elseif($property.dataTypeJava == "date")
+            if (filter.${property.name}) {
+                statement.setDate(paramIndex++, filter.${property.name});
+            }
+#elseif($property.dataTypeJava == "time")
+            if (filter.${property.name}) {
+                statement.setTime(paramIndex++, filter.${property.name});
+            }
+#elseif($property.dataTypeJava == "timestamp")
+            if (filter.${property.name}) {
+                statement.setTimestamp(paramIndex++, filter.${property.name});
+            }
+#elseif($property.dataTypeJava == "boolean")
+            if (filter.${property.name}) {
+                statement.setBoolean(paramIndex++, filter.${property.name});
+            }
+#else
+            if (filter.${property.name}) {
+                throw new Error("Not-Supported-Data-Type");
+            }
+#end
+#end
+#end
+
+            const resultSet = statement.executeQuery();
+            while (resultSet.next()) {
+                count = resultSet.getInt(1);
+            }
+            resultSet.close();
+            statement.close();
+        } finally {
+            if (connection) {
+                connection.close();
+            }
+        }
+        return count;
+    }
+}
