@@ -1,0 +1,5 @@
+{
+    "description": "Platform Theme - Mystic Light",
+    "extensionPoint": "platform-themes",
+    "module": "theme-mystic/extensions/theme-light.js"
+}

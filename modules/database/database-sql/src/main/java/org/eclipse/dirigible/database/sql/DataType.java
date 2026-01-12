@@ -9,10 +9,16 @@
  */
 package org.eclipse.dirigible.database.sql;
 
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * The Enum DataType.
  */
 public enum DataType {
+
+    ENUM("ENUM"),
 
     /** The varchar. */
     VARCHAR("VARCHAR"),
@@ -44,6 +50,15 @@ public enum DataType {
     /** The int. */
     INT("INT"),
 
+    /** The int2. */
+    INT2("INT2"),
+
+    /** The int4. */
+    INT4("INT4"),
+
+    /** The int8. */
+    INT8("INT8"),
+
     /** The tinyint. */
     TINYINT("TINYINT"),
 
@@ -65,6 +80,9 @@ public enum DataType {
     /** The boolean. */
     BOOLEAN("BOOLEAN"),
 
+    /** The bool. */
+    BOOL("BOOL"),
+
     /** The blob. */
     BLOB("BLOB"),
 
@@ -76,6 +94,9 @@ public enum DataType {
 
     /** The nvarchar. */
     NVARCHAR("NVARCHAR"),
+
+    /** The bpchar. */
+    BPCHAR("BPCHAR"),
 
     /** The float. */
     FLOAT("FLOAT"),
@@ -94,6 +115,9 @@ public enum DataType {
 
     /** The binary varying. */
     BINARY_VARYING("BINARY VARYING"),
+
+    /** The bytea. */
+    BYTEA("BYTEA"),
 
     /** The shorttext. */
     SHORTTEXT("SHORTTEXT"),
@@ -134,6 +158,8 @@ public enum DataType {
     /** The numeric. */
     NUMERIC("NUMERIC");
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(DataType.class);
+
     /** The name. */
     private final String name;
 
@@ -156,6 +182,28 @@ public enum DataType {
     }
 
     /**
+     * Value of by name.
+     *
+     * @param name the name
+     * @return the data type
+     */
+    public static final DataType valueOfByName(String name) {
+        for (DataType type : DataType.class.getEnumConstants()) {
+            if (type.toString()
+                    .equalsIgnoreCase(name)) {
+                return type;
+            }
+        }
+
+        if (isEnumDataType(name)) {
+            LOGGER.debug("Type [{}] will be mapped to [{}]", name, DataType.ENUM);
+            return DataType.ENUM;
+        }
+
+        throw new IllegalArgumentException("DataType not found: " + name);
+    }
+
+    /**
      * To string.
      *
      * @return the string
@@ -165,20 +213,14 @@ public enum DataType {
         return name;
     }
 
-    /**
-     * Value of by name.
-     *
-     * @param name the name
-     * @return the data type
-     */
-    public static final DataType valueOfByName(String name) {
-        for (DataType type : DataType.class.getEnumConstants()) {
-            if (type.toString()
-                    .equals(name)) {
-                return type;
-            }
+    private static boolean isEnumDataType(String name) {
+        if (StringUtils.isBlank(name)) {
+            return false;
         }
-        throw new IllegalArgumentException("DataType not found: " + name);
+
+        // more cases may need to be added for different database types
+        return name.toLowerCase()
+                   .startsWith("enum");
     }
 
     /**

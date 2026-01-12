@@ -51,17 +51,16 @@ function getTableReportBackendSources() {
             action: "generate",
             rename: "project.json",
             engine: "javascript"
-        }, {
-            location: "/template-application-rest/tsconfig.json.template",
-            action: "generate",
-            rename: "tsconfig.json",
-            engine: "velocity"
         }
     ];
 }
 
 function getTableReportUISource() {
     return [
+        {
+            location: "/template-application-ui-angular/ui/translations-report.json.template",
+            action: "translate",
+        },
         // Location: "gen/{{genFolderName}}/ui/perspective/list"
         {
             location: "/template-application-ui-angular/ui/perspective/report-file/dialog-window/controller.js.template",

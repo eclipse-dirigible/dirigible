@@ -95,6 +95,12 @@
                                                 ng-model="csvimData.files[activeItemId].version" ng-change="fileChanged()" input-rules="{ patterns: ['^[A-Za-z0-9_$.-]+$'] }" type="text"></bk-input>
                                         </bk-form-input-message>
                                     </bk-form-item>
+                                    <bk-form-item horizontal="false">
+                                        <bk-form-label for="idLocale" colon="true">Locale</bk-form-label>
+                                        <bk-combobox-input id="idLocale" filter="ContainsEach" dropdown-items="locales" is-readonly="!editEnabled" ng-model="csvimData.files[activeItemId].locale" ng-change="fileChanged()"
+                                            placeholder="Search locales..." btn-aria-label="show/hide locale options" list-aria-label="locale options">
+                                        </bk-combobox-input>
+                                    </bk-form-item>
                                     <bk-form-item>
                                         <bk-checkbox id="idHeader" compact="false" ng-change="fileChanged()" ng-model="csvimData.files[activeItemId].header" ng-disabled="!editEnabled"></bk-checkbox>
                                         <bk-checkbox-label for="idHeader">Header</bk-checkbox-label>
@@ -112,7 +118,7 @@
                                             <bk-form-label required="true" colon="true">Delimiter</bk-form-label>
                                             <bk-select placeholder="{{csvimData.files[activeItemId].delimField}}" ng-required="true" is-disabled="!editEnabled" is-readonly="!editEnabled"
                                                 state="{{ isDelimiterSupported(csvimData.files[activeItemId].delimField) ? '' : 'warning' }}" ng-change="fileChanged()" ng-model="csvimData.files[activeItemId].delimField">
-                                                <bk-option text="{{::option}}" value="option" ng-repeat="option in delimiterList track by $index"></bk-option>
+                                                <bk-option text="{{::option.label}}" value="::option.value" ng-repeat="option in delimiterList track by option.value"></bk-option>
                                             </bk-select>
                                             <span class="fd-margin-top--tiny" ng-hide="isDelimiterSupported(csvimData.files[activeItemId].delimField)" bk-object-status status="critical" glyph="sap-icon--message-warning"
                                                 text="This delimiter is not supported!"></span>

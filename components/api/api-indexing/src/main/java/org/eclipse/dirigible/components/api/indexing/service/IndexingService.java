@@ -9,33 +9,11 @@
  */
 package org.eclipse.dirigible.components.api.indexing.service;
 
-import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.LongPoint;
-import org.apache.lucene.document.StringField;
-import org.apache.lucene.document.TextField;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.document.*;
+import org.apache.lucene.index.*;
 import org.apache.lucene.index.IndexWriterConfig.OpenMode;
-import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.IndexSearcher;
@@ -47,6 +25,11 @@ import org.apache.lucene.store.FSDirectory;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.springframework.stereotype.Component;
+
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
+import java.util.*;
 
 /**
  * The Class IndexingCoreService.
@@ -82,10 +65,10 @@ public class IndexingService {
     private static final String DOT = ".";
 
     /** The root folder. */
-    private static String ROOT_FOLDER;
+    private static final String ROOT_FOLDER;
 
     /** The max results. */
-    private static int MAX_RESULTS;
+    private static final int MAX_RESULTS;
 
     static {
         Configuration.loadModuleConfig("/dirigible-indexing.properties");
@@ -138,6 +121,20 @@ public class IndexingService {
     }
 
     /**
+     * Flattenize index name.
+     *
+     * @param index the index
+     * @return the string
+     */
+    private String flattenizeIndexName(String index) {
+        String indexName = index;
+        indexName = indexName.replace(DOT, US);
+        indexName = indexName.replace(SLASH, US);
+        indexName = indexName.replace(BS, US);
+        return indexName;
+    }
+
+    /**
      * Search.
      *
      * @param index the index
@@ -159,13 +156,16 @@ public class IndexingService {
             try {
                 reader = DirectoryReader.open(dir);
                 IndexSearcher searcher = new IndexSearcher(reader);
+                StoredFields storedFields = searcher.storedFields();
+
                 Analyzer analyzer = new StandardAnalyzer();
                 String field = FIELD_CONTENTS;
                 QueryParser parser = new QueryParser(field, analyzer);
                 Query query = parser.parse(term);
+
                 TopDocs topDocs = searcher.search(query, MAX_RESULTS);
                 for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
-                    Document document = searcher.doc(scoreDoc.doc);
+                    Document document = storedFields.document(scoreDoc.doc);
                     Map<String, String> map = new HashMap<String, String>();
                     for (IndexableField indexableField : document.getFields()) {
                         map.put(indexableField.name(), indexableField.stringValue());
@@ -196,18 +196,6 @@ public class IndexingService {
     }
 
     /**
-     * After.
-     *
-     * @param index the index
-     * @param date the date
-     * @return the string
-     * @throws IOException the indexing exception
-     */
-    public String after(String index, long date) throws IOException {
-        return between(index, date, new Date().getTime());
-    }
-
-    /**
      * Between.
      *
      * @param index the index
@@ -229,10 +217,13 @@ public class IndexingService {
         try {
             reader = DirectoryReader.open(dir);
             IndexSearcher searcher = new IndexSearcher(reader);
+            StoredFields storedFields = searcher.storedFields();
+
             Query query = LongPoint.newRangeQuery(FIELD_MODIFIED, lower, upper);
             TopDocs topDocs = searcher.search(query, MAX_RESULTS);
+
             for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
-                Document document = searcher.doc(scoreDoc.doc);
+                Document document = storedFields.document(scoreDoc.doc);
                 Map<String, String> map = new HashMap<String, String>();
                 for (IndexableField indexableField : document.getFields()) {
                     map.put(indexableField.name(), indexableField.stringValue());
@@ -248,17 +239,15 @@ public class IndexingService {
     }
 
     /**
-     * Flattenize index name.
+     * After.
      *
      * @param index the index
+     * @param date the date
      * @return the string
+     * @throws IOException the indexing exception
      */
-    private String flattenizeIndexName(String index) {
-        String indexName = index;
-        indexName = indexName.replace(DOT, US);
-        indexName = indexName.replace(SLASH, US);
-        indexName = indexName.replace(BS, US);
-        return indexName;
+    public String after(String index, long date) throws IOException {
+        return between(index, date, new Date().getTime());
     }
 
 }

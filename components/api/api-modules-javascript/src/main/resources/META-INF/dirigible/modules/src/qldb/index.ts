@@ -1,1 +1,2 @@
-export const repository = Java.type("org.eclipse.dirigible.components.api.qldb.QLDBRepository");
+export * from "./qldb";
+export { QLDBRepository as qldb } from "./qldb";

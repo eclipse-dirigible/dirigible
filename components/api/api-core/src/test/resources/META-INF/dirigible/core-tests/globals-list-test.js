@@ -1,4 +1,4 @@
-import { Globals } from 'sdk/core/globals';
+import { Globals } from '@aerokit/sdk/core/globals';
 import { Assert } from 'test/assert';
 
 const result = Globals.list();

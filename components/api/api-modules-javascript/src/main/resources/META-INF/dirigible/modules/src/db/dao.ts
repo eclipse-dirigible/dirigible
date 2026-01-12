@@ -1,25 +1,14 @@
-/*
- * Copyright (c) 2025 Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
 "use strict";
 
 import { ORMDefinition, get as getORM } from "./orm";
 import { create as createORMStatements } from "./ormstatements";
 import { Sequence } from "./sequence";
 import { Database } from "./database";
-import { Query } from "sdk/db";
+import { Query } from "@aerokit/sdk/db";
 import { Update } from "./update";
 import { Insert } from "./insert";
-import { Logging } from "sdk/log";
-import { configurations, globals } from "sdk/core";
+import { Logging } from "@aerokit/sdk/log";
+import { configurations, globals } from "@aerokit/sdk/core";
 
 
 export function DAO(orm: ORMDefinition, logCtxName?: string, dataSourceName?: string) {
@@ -410,7 +399,7 @@ DAO.prototype.insert = function (_entity) {
 				try {
 					this.remove(dbEntity[this.orm.getPrimaryKey().name]);
 				} catch (err) {
-					this.$log.error('Could not rollback changes after failed {}[{}}] insert. ', err, this.orm.table, dbEntity[this.orm.getPrimaryKey().name]);
+					this.$log.error('Could not rollback changes after failed {}[{}] insert. ', this.orm.table, dbEntity[this.orm.getPrimaryKey().name], err);
 				}
 			}
 			throw e;
@@ -462,7 +451,7 @@ DAO.prototype.update = function (entity) {
 		return this;
 
 	} catch (e) {
-		this.$log.error('Updating {}[{}] failed', e, this.orm.table, entity !== undefined ? entity[this.orm.getPrimaryKey().name] : entity);
+		this.$log.error('Updating {}[{}] failed', this.orm.table, entity !== undefined ? entity[this.orm.getPrimaryKey().name] : entity, e);
 		throw e;
 	}
 };
@@ -555,7 +544,7 @@ DAO.prototype.remove = function () {
 				this.$log.trace('No changes incurred in {}', this.orm.table);
 
 		} catch (e) {
-			this.$log.error('Deleting {}[{}] entity failed', e, this.orm.table, id);
+			this.$log.error('Deleting {}[{}] entity failed',this.orm.table, id, e);
 			throw e;
 		}
 
@@ -742,7 +731,7 @@ DAO.prototype.find = function (id, expand, select) {
 		}
 		return entity;
 	} catch (e) {
-		this.$log.error("Finding {}[{}] entitiy failed.", e, this.orm.table, id);
+		this.$log.error("Finding {}[{}] entity failed.", this.orm.table, id, e);
 		throw e;
 	}
 };
@@ -762,7 +751,7 @@ DAO.prototype.count = function (settings?) {
 			count = parseInt(rs[0][key], 10);
 		}
 	} catch (e) {
-		this.$log.error('Counting {} entities failed', e, this.orm.table);
+		this.$log.error('Counting {} entities failed', this.orm.table, e);
 		e.errContext = parametericStatement.toString();
 		throw e;
 	}
@@ -863,7 +852,7 @@ DAO.prototype.list = function (settings) {
 
 		return entities;
 	} catch (e) {
-		this.$log.error("Listing {} entities failed.", e, this.orm.table);
+		this.$log.error("Listing {} entities failed.", this.orm.table, e);
 		throw e;
 	}
 };
@@ -887,7 +876,7 @@ DAO.prototype.createTable = function () {
 		this.$log.trace('{} table created', this.orm.table);
 		return this;
 	} catch (e) {
-		this.$log.error("Create table {} failed", e, this.orm.table);
+		this.$log.error("Create table {} failed", this.orm.table, e);
 		throw e;
 	}
 };
@@ -899,7 +888,7 @@ DAO.prototype.dropTable = function (dropIdSequence) {
 		this.execute(parametericStatement);
 		this.$log.trace('Table {} dropped.', this.orm.table);
 	} catch (e) {
-		this.$log.error("Dropping table {} failed.", e, this.orm.table);
+		this.$log.error("Dropping table {} failed.", this.orm.table, e);
 		throw e;
 	}
 
@@ -909,7 +898,7 @@ DAO.prototype.dropTable = function (dropIdSequence) {
 			this.dropIdGenerator();
 			this.$log.trace('Table {} sequence {} dropped.', this.orm.table, this.sequenceName);
 		} catch (e) {
-			this.$log.error("Dropping table {} sequence {} failed.", e, this.orm.table, this.sequenceName);
+			this.$log.error("Dropping table {} sequence {} failed.", this.orm.table, this.sequenceName, e);
 			throw e;
 		}
 	}

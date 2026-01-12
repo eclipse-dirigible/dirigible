@@ -1,0 +1,4 @@
+{
+	"description": "Extension Point for the platform locale providers",
+	"name": "platform-locales"
+}

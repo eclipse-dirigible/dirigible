@@ -23,23 +23,50 @@ ideBpmProcessJobsView.controller('IDEBpmProcessJobsViewController', ($scope, $ht
         $http.get('/services/bpm/bpm-processes/instance/' + processInstanceId + '/jobs', { params: { 'limit': 100 } })
             .then((response) => {
                 $scope.jobsList = response.data;
+            }, (error) => {
+                console.error(error);
             });
     };
 
+    $scope.getRelativeTime = (dateTimeString) => {
+        return formatRelativeTime(new Date(dateTimeString));
+    };
+
     $scope.openDialog = (job) => {
-        Dialogs.showAlert({
-            title: job.exceptionMessage,
-            message: job.exceptionStacktrace,
-            type: AlertTypes.Error,
-            preformatted: true,
+        Dialogs.showWindow({
+            id: 'bpm-process-jobs-details',
+            params: {
+                job: job,
+            },
+            closeButton: true,
         });
     };
 
     Dialogs.addMessageListener({
         topic: 'bpm.instance.selected',
         handler: (data) => {
-            const processInstanceId = data.instance;
-            $scope.fetchData(processInstanceId);
+            if (data.deselect) {
+                $scope.$evalAsync(() => {
+                    $scope.jobsList.length = 0;
+                    $scope.currentProcessInstanceId = null;
+                });
+            } else {
+                $scope.fetchData(data.instance);
+            }
+        }
+    });
+
+    Dialogs.addMessageListener({
+        topic: 'bpm.historic.instance.selected',
+        handler: (data) => {
+            if (data.deselect) {
+                $scope.$evalAsync(() => {
+                    $scope.jobsList.length = 0;
+                    $scope.currentProcessInstanceId = null;
+                });
+            } else {
+                $scope.fetchData(data.instance);
+            }
         }
     });
 });

@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { zip } from "sdk/io";
+import { zip } from "@aerokit/sdk/io";
 import * as folderUtils from "./folder";
 import * as documentUtils from "./document";
 import * as objectUtils from "./object";

@@ -68,6 +68,7 @@ public class HanaCreateTableBuilder extends CreateTableBuilder<HanaCreateTableBu
            .append(SPACE)
            .append(KEYWORD_TABLE)
            .append(SPACE)
+           .append(generateSchema())
            .append(tableName);
     }
 

@@ -36,7 +36,7 @@ public class HttpSecurityURIConfigurator {
             "/index.html", //
             "/logout", //
             "/index-busy.html", //
-            "/stomp", //
+            "/stomp/**", //
             "/error/**", //
             "/error.html", //
             "/favicon.ico", //
@@ -46,12 +46,10 @@ public class HttpSecurityURIConfigurator {
             "/services/core/version/**", //
             "/services/core/healthcheck/**", //
             "/services/web/resources/**", //
-            "/services/web/resources-core/**", //
+            "/services/web/resources-locale/**", //
             "/services/web/platform-core/**", //
-            "/services/web/theme-blimpkit/**", //
+            "/services/web/theme-*/**", //
             "/services/js/platform-core/**", //
-            "/services/js/resources-core/**", //
-            "/services/integrations/**", //
             "/actuator/health/liveness", //
             "/actuator/health/readiness", //
             "/actuator/health"};
@@ -59,6 +57,7 @@ public class HttpSecurityURIConfigurator {
     /** The Constant AUTHENTICATED_PATTERNS. */
     private static final String[] AUTHENTICATED_PATTERNS = { //
             "/services/**", //
+            "/services/integrations/**", //
             "/websockets/**", //
             "/api-docs/swagger-config", //
             "/api-docs/**", //

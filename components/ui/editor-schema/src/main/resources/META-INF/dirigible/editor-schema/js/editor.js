@@ -357,7 +357,7 @@ angular.module('ui.schema.modeler', ['blimpKit', 'platformView', 'WorkspaceServi
 			let table = new mxCell(tableObject, new mxGeometry(0, 0, 200, 28), 'table');
 
 			table.setVertex(true);
-			addSidebarIcon($scope.graph, sidebar, table, 'sap-icon--table-view', 'Drag this to the diagram to create a new Table', $scope);
+			addSidebarIcon($scope.graph, sidebar, table, 'sap-icon--table-view', 'Drag this to the diagram to create a new Table', dialogHub);
 
 			// Adds sidebar icon for the column object
 			let columnObject = new Column('COLUMNNAME');
@@ -366,14 +366,14 @@ angular.module('ui.schema.modeler', ['blimpKit', 'platformView', 'WorkspaceServi
 			column.setVertex(true);
 			column.setConnectable(false);
 
-			addSidebarIcon($scope.graph, sidebar, column, 'sap-icon--table-column', 'Drag this to a Table to create a new Column', $scope);
+			addSidebarIcon($scope.graph, sidebar, column, 'sap-icon--table-column', 'Drag this to a Table to create a new Column', dialogHub);
 
 			// Adds sidebar icon for the view object
 			let viewObject = new View('VIEWENAME');
 			let view = new mxCell(viewObject, new mxGeometry(0, 0, 200, 28), 'view');
 
 			view.setVertex(true);
-			addSidebarIcon($scope.graph, sidebar, view, 'sap-icon--border', 'Drag this to the diagram to create a new View', $scope);
+			addSidebarIcon($scope.graph, sidebar, view, 'sap-icon--border', 'Drag this to the diagram to create a new View', dialogHub);
 
 			// Adds primary key field into table
 			let firstColumn = column.clone();

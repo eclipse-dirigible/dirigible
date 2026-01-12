@@ -1,19 +1,9 @@
-/*
- * Copyright (c) 2025 Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
 /**
  * API Tasks
  */
 
-import { Streams } from "sdk/io";
+import { Streams } from "@aerokit/sdk/io";
+import { Values } from "@aerokit/sdk/bpm/values";
 
 const BpmFacade = Java.type("org.eclipse.dirigible.components.api.bpm.BpmFacade");
 
@@ -25,22 +15,22 @@ export class Tasks {
 	}
 
 	public static getVariable(taskId: string, variableName: string): any {
-		return parseValue(BpmFacade.getTaskVariable(taskId, variableName));
+		return Values.parseValue(BpmFacade.getTaskVariable(taskId, variableName));
 	}
 
 	/**
 	 * Returns all variables. This will include all variables of parent scopes too.
 	 */
 	public static getVariables(taskId: string): Map<string, any> {
-		return parseValuesMap(BpmFacade.getTaskVariables(taskId));
+		return Values.parseValuesMap(BpmFacade.getTaskVariables(taskId));
 	}
 
 	public static setVariable(taskId: string, variableName: string, value: any): void {
-		BpmFacade.setTaskVariable(taskId, variableName, stringifyValue(value));
+		BpmFacade.setTaskVariable(taskId, variableName, Values.stringifyValue(value));
 	}
 
 	public static setVariables(taskId: string, variables: Map<string, any>): void {
-		BpmFacade.setTaskVariables(taskId, stringifyValuesMap(variables));
+		BpmFacade.setTaskVariables(taskId, Values.stringifyValuesMap(variables));
 	}
 
 	public static complete(taskId: string, variables: { [key: string]: any } = {}): void {
@@ -48,7 +38,7 @@ export class Tasks {
 	}
 
 	public static getTaskService(): TaskService {
-		return new TaskService(BpmFacade.getEngine().getProcessEngine().getTaskService());
+		return new TaskService(BpmFacade.getBpmProviderFlowable().getTaskService());
 	}
 }
 
@@ -82,15 +72,6 @@ export class TaskService {
 	 */
 	public createTaskBuilder(): TaskBuilder {
 		return this.taskService.createTaskBuilder();
-	}
-
-	/**
-	 * Create a completion builder for the task
-	 *
-	 * @return task completion builder
-	 */
-	public createTaskCompletionBuilder(): TaskCompletionBuilder {
-		return this.taskService.createTaskCompletionBuilder();
 	}
 
 	/**
@@ -571,52 +552,38 @@ export class TaskService {
 	}
 
 	/**
-	 * Returns a new {@link TaskQuery} that can be used to dynamically query tasks.
-	 */
-	public createTaskQuery(): TaskQuery {
-		return this.taskService.createTaskQuery();
-	}
-
-	/**
-	 * Returns a new {@link NativeQuery} for tasks.
-	 */
-	public createNativeTaskQuery(): NativeTaskQuery {
-		return this.taskService.createNativeTaskQuery();
-	}
-
-	/**
 	 * set variable on a task. If the variable is not already existing, it will be created in the most outer scope. This means the process instance in case this task is related to an execution.
 	 */
 	public setVariable(taskId: string, variableName: string, value: any): void {
-		this.taskService.setVariable(taskId, variableName, stringifyValue(value));
+		this.taskService.setVariable(taskId, variableName, Values.stringifyValue(value));
 	}
 
 	/**
 	 * set variables on a task. If the variable is not already existing, it will be created in the most outer scope. This means the process instance in case this task is related to an execution.
 	 */
 	public setVariables(taskId: string, variables: Map<string, any>): void {
-		this.taskService.setVariables(taskId, stringifyValuesMap(variables));
+		this.taskService.setVariables(taskId, Values.stringifyValuesMap(variables));
 	}
 
 	/**
 	 * set variable on a task. If the variable is not already existing, it will be created in the task.
 	 */
 	public setVariableLocal(taskId: string, variableName: string, value: any): void {
-		this.taskService.setVariableLocal(taskId, variableName, stringifyValue(value));
+		this.taskService.setVariableLocal(taskId, variableName, Values.stringifyValue(value));
 	}
 
 	/**
 	 * set variables on a task. If the variable is not already existing, it will be created in the task.
 	 */
 	public setVariablesLocal(taskId: string, variables: Map<string, any>): void {
-		this.taskService.setVariablesLocal(taskId, stringifyValuesMap(variables));
+		this.taskService.setVariablesLocal(taskId, Values.stringifyValuesMap(variables));
 	}
 
 	/**
 	 * get a variables and search in the task scope and if available also the execution scopes.
 	 */
 	public getVariable(taskId: string, variableName: string): any {
-		return parseValue(this.taskService.getVariable(taskId, variableName));
+		return Values.parseValue(this.taskService.getVariable(taskId, variableName));
 	}
 
 	/**
@@ -645,7 +612,7 @@ export class TaskService {
 	 * checks whether or not the task has a variable defined with the given name.
 	 */
 	public getVariableLocal(taskId: string, variableName: string): any {
-		return parseValue(this.taskService.getVariableLocal(taskId, variableName));
+		return Values.parseValue(this.taskService.getVariableLocal(taskId, variableName));
 	}
 
 	/**
@@ -676,9 +643,9 @@ export class TaskService {
 	 */
 	public getVariables(taskId: string, variableNames?: string[]): Map<string, any> {
 		if (this.isNotNull(variableNames)) {
-			return parseValuesMap(this.taskService.getVariables(taskId, variableNames));
+			return Values.parseValuesMap(this.taskService.getVariables(taskId, variableNames));
 		} else {
-			return parseValuesMap(this.taskService.getVariables(taskId));
+			return Values.parseValuesMap(this.taskService.getVariables(taskId));
 		}
 	}
 
@@ -707,9 +674,9 @@ export class TaskService {
 	 */
 	public getVariablesLocal(taskId: string, variableNames?: string[]): Map<string, any> {
 		if (this.isNotNull(variableNames)) {
-			return parseValuesMap(this.taskService.getVariablesLocal(taskId, variableNames));
+			return Values.parseValuesMap(this.taskService.getVariablesLocal(taskId, variableNames));
 		} else {
-			return parseValuesMap(this.taskService.getVariablesLocal(taskId));
+			return Values.parseValuesMap(this.taskService.getVariablesLocal(taskId));
 		}
 	}
 
@@ -1477,74 +1444,6 @@ export interface TaskBuilder {
 	 */
 	scopeType(scopeType: string): TaskBuilder;
 	getScopeType(): string;
-}
-
-/**
- * This builder is an alternative to using any of the complete methods on the TaskService.
- *
- */
-export interface TaskCompletionBuilder {
-
-	/**
-	 * Sets variables that are added on the instance level.
-	 */
-	variables(variables: Map<string, any>): TaskCompletionBuilder;
-
-	/**
-	 * Sets task-local variables instead of instance-level variables.
-	 */
-	variablesLocal(variablesLocal: Map<string, any>): TaskCompletionBuilder;
-
-	/**
-	 * Sets non-persisted instance variables.
-	 */
-	transientVariables(transientVariables: Map<string, any>): TaskCompletionBuilder;
-
-	/**
-	 * Sets non-persisted task-local variables.
-	 */
-	transientVariablesLocal(transientVariablesLocal: Map<string, any>): TaskCompletionBuilder;
-
-	/**
-	 * Sets one instance-level variable.
-	 */
-	variable(variableName: string, variableValue: any): TaskCompletionBuilder;
-
-	/**
-	 * Sets one task-local variables instead of instance-level variables.
-	 */
-	variableLocal(variableName: string, variableValue: any): TaskCompletionBuilder;
-
-	/**
-	 * Sets one non-persisted instance variables.
-	 */
-	transientVariable(variableName: string, variableValue: any): TaskCompletionBuilder;
-
-	/**
-	 * Sets one non-persisted instance variables.
-	 */
-	transientVariableLocal(variableName: string, variableValue: any): TaskCompletionBuilder;
-
-	/**
-	 * Sets the id of the task which is completed.
-	 */
-	taskId(id: string): TaskCompletionBuilder;
-
-	/**
-	 * Sets a form definition id. Only needed when there's a form associated with the task.
-	 */
-	formDefinitionId(formDefinitionId: string): TaskCompletionBuilder;
-
-	/**
-	 * Sets an outcome for the form.
-	 */
-	outcome(outcome: string): TaskCompletionBuilder;
-
-	/**
-	 * Completes the task.
-	 */
-	complete(): void;
-
 }
 
 export interface FormInfo {
@@ -2943,99 +2842,6 @@ export interface TaskInfoQuery<T, V extends TaskInfo> extends Query<T, V> {
 	 */
 	orderByCategory(): T;
 
-}
-
-export interface TaskQuery extends TaskInfoQuery<TaskQuery, Task> {
-
-	/** Only select tasks with the given {@link DelegationState}. */
-	taskDelegationState(delegationState: DelegationState): TaskQuery;
-
-	/**
-	 * Select tasks that has been claimed or assigned to user or waiting to claim by user (candidate user or groups). You can invoke {@link TaskInfoQuery#taskCandidateGroupIn(Collection)} to include tasks that can be
-	 * claimed by a user in the given groups while set property <strong>dbIdentityUsed</strong> to <strong>false</strong> in process engine configuration or using custom session factory of
-	 * GroupIdentityManager.
-	 */
-	taskCandidateOrAssigned(userIdForCandidateAndAssignee: string): TaskQuery;
-
-	/** Only select tasks that have no parent (i.e. do not select subtasks). */
-	excludeSubtasks(): TaskQuery;
-
-	/**
-	 * Only selects tasks which are suspended, because its process instance was suspended.
-	 */
-	suspended(): TaskQuery;
-
-	/**
-	 * Only selects tasks which are active (ie. not suspended)
-	 */
-	active(): TaskQuery;
-}
-
-
-export interface NativeTaskQuery {
-
-	/**
-	 * Hand in the SQL statement you want to execute. BEWARE: if you need a count you have to hand in a count() statement yourself, otherwise the result will be treated as lost of Flowable entities.
-	 * 
-	 * If you need paging you have to insert the pagination code yourself. We skipped doing this for you as this is done really different on some databases (especially MS-SQL / DB2)
-	 */
-	sql(selectClause: string): NativeTaskQuery;
-
-	/**
-	 * Add parameter to be replaced in query for index, e.g. :param1, :myParam, ...
-	 */
-	parameter(name: string, value: any): NativeTaskQuery;
-
-	/** Executes the query and returns the number of results */
-	count(): number;
-
-	/**
-	 * Executes the query and returns the resulting entity or null if no entity matches the query criteria.
-	 * 
-	 * @throws FlowableException
-	 *             when the query results in more than one entities.
-	 */
-	singleResult(): any;
-
-	/** Executes the query and get a list of entities as the result. */
-	list(): any[];
-
-	/** Executes the query and get a list of entities as the result. */
-	listPage(firstResult: number, maxResults: number): any[];
-}
-
-
-function parseValue(value: any) {
-	try {
-		return JSON.parse(value);
-	} catch (e) {
-		// Do nothing
-	}
-	return value;
-}
-
-function parseValuesMap(variables: Map<string, any>): Map<string, any> {
-	for (const [key, value] of variables) {
-		variables.set(key, parseValue(value));
-	}
-	return variables;
-}
-
-function stringifyValue(value: any): any {
-	if (Array.isArray(value)) {
-		// @ts-ignore
-		return java.util.Arrays.asList(value.map(e => JSON.stringify(e)));
-	} else if (typeof value === 'object') {
-		return JSON.stringify(value);
-	}
-	return value;
-}
-
-function stringifyValuesMap(variables: Map<string, any>): Map<string, any> {
-	for (const [key, value] of variables) {
-		variables.set(key, stringifyValue(value));
-	}
-	return variables;
 }
 
 // @ts-ignore

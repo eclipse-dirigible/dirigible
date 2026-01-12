@@ -12,3 +12,5 @@ export * from "./session";
 export { Session as session } from "./session";
 export * from "./upload";
 export { Upload as upload } from "./upload";
+export * as errors from "./errors";
+export { HttpUtils as utils } from "./utils";

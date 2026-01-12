@@ -16,6 +16,10 @@ import * as navigation from "template-application-ui-angular/template/ui/navigat
 
 export function getSources(parameters) {
     return [
+        {
+            location: "/template-application-ui-angular/ui/translations.json.template",
+            action: "translate",
+        },
         ...listTemplate.getSources(parameters),
         ...manageTemplate.getSources(parameters),
         ...masterDetailsListTemplate.getSources(parameters),

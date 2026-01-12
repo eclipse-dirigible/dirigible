@@ -1,0 +1,3 @@
+import { producer } from "@aerokit/sdk/messaging"
+
+producer.queue("queue1").send("Text Message");

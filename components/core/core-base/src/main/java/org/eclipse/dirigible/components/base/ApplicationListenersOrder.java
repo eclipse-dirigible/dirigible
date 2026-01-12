@@ -25,6 +25,8 @@ public interface ApplicationListenersOrder {
      */
     interface ApplicationReadyEventListeners {
 
+        int TYPE_SCRIPT_TRANSPILATION_SERVICE = 5;
+
         /** The system roles initializer. */
         int SYSTEM_ROLES_INITIALIZER = 10;
 
@@ -39,6 +41,8 @@ public interface ApplicationListenersOrder {
 
         /** The jobs initializer. */
         int JOBS_INITIALIZER = 50;
+
+        int PROCESSES_INITIALIZER = 60;
 
         int TENANTS_INITIALIZER = 1000;
 

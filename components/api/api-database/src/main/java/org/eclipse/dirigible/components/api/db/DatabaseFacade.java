@@ -13,17 +13,14 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonSyntaxException;
 import org.apache.commons.io.output.WriterOutputStream;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
-import org.eclipse.dirigible.components.api.db.params.ParametersSetter;
 import org.eclipse.dirigible.components.base.logging.LoggingExecutor;
-import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper;
-import org.eclipse.dirigible.components.data.management.helpers.DatabaseResultSetHelper;
-import org.eclipse.dirigible.components.data.management.helpers.ResultParameters;
 import org.eclipse.dirigible.components.data.management.service.DatabaseDefinitionService;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
-import org.eclipse.dirigible.components.database.DatabaseParameters;
-import org.eclipse.dirigible.components.database.DirigibleConnection;
-import org.eclipse.dirigible.components.database.DirigibleDataSource;
-import org.eclipse.dirigible.components.database.NamedParameterStatement;
+import org.eclipse.dirigible.components.database.*;
+import org.eclipse.dirigible.components.database.helpers.DatabaseMetadataHelper;
+import org.eclipse.dirigible.components.database.helpers.DatabaseResultSetHelper;
+import org.eclipse.dirigible.components.database.helpers.FormattingParameters;
+import org.eclipse.dirigible.components.database.params.ParametersSetter;
 import org.eclipse.dirigible.database.persistence.processors.identity.PersistenceNextValueIdentityProcessor;
 import org.eclipse.dirigible.database.sql.SqlFactory;
 import org.slf4j.Logger;
@@ -143,7 +140,7 @@ public class DatabaseFacade implements InitializingBean {
      * @param datasourceName the datasource name
      * @return the data source
      */
-    private static DirigibleDataSource getDataSource(String datasourceName) {
+    public static DirigibleDataSource getDataSource(String datasourceName) {
         try {
             boolean defaultDB = datasourceName == null || datasourceName.trim()
                                                                         .isEmpty()
@@ -161,8 +158,8 @@ public class DatabaseFacade implements InitializingBean {
 
             return dataSource;
         } catch (RuntimeException ex) {
-            logger.error("Failed to get data source with name [{}]", datasourceName, ex);// log it here because the client may handle the
-                                                                                         // exception and hide the details.
+            logger.error("Failed to get data source with name [{}]", datasourceName, ex); // log it here because the client may handle the
+            // exception and hide the details.
             throw ex;
         }
     }
@@ -219,7 +216,7 @@ public class DatabaseFacade implements InitializingBean {
      * Executes SQL query.
      *
      * @param sql the sql
-     * @param parameters the parameters
+     * @param parameters the sql parameters
      * @param datasourceName the datasource name
      * @return the result of the query as JSON
      * @throws Exception the exception
@@ -228,18 +225,28 @@ public class DatabaseFacade implements InitializingBean {
         return query(sql, parameters, datasourceName, null);
     }
 
-    public static String query(String sql, String parametersJson, String datasourceName, String resultParametersJson) throws Throwable {
-        Optional<JsonElement> parameters = parseOptionalJson(parametersJson);
-        Optional<ResultParameters> resultParameters = getOptionalParam(resultParametersJson, ResultParameters.class);
-        DataSource dataSource = getDataSource(datasourceName);
+    /**
+     * Executes SQL query with formatting support
+     *
+     * @param sql the sql
+     * @param parameters the sql parameters
+     * @param datasource the datasource name
+     * @param formatting the formatting parameters
+     * @return the result of the query as JSON
+     * @throws Throwable
+     */
+    public static String query(String sql, String parameters, String datasource, String formatting) throws Throwable {
+        Optional<JsonElement> parametersElement = parseOptionalJson(parameters);
+        Optional<FormattingParameters> formattingPatterns = getOptionalFormatting(formatting, FormattingParameters.class);
+        DataSource dataSource = getDataSource(datasource);
 
         return LoggingExecutor.executeWithException(dataSource, () -> {
 
             try (Connection connection = dataSource.getConnection()) {
                 try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
 
-                    if (parameters.isPresent()) {
-                        ParametersSetter.setIndexedParameters(parameters.get(), preparedStatement);
+                    if (parametersElement.isPresent()) {
+                        ParametersSetter.setIndexedParameters(parametersElement.get(), new ParameterizedStatement(preparedStatement));
                     }
                     ResultSet resultSet = preparedStatement.executeQuery();
                     StringWriter sw = new StringWriter();
@@ -252,17 +259,17 @@ public class DatabaseFacade implements InitializingBean {
                     } catch (IOException e) {
                         throw new Exception(e);
                     }
-                    DatabaseResultSetHelper.toJson(resultSet, false, false, output, resultParameters);
+                    DatabaseResultSetHelper.toJson(resultSet, false, false, output, formattingPatterns);
                     return sw.toString();
                 }
             } catch (Exception ex) {
-                logger.error("Failed to execute query statement [{}] in data source [{}].", sql, datasourceName, ex);
+                logger.error("Failed to execute query statement [{}] in data source [{}].", sql, datasource, ex);
                 throw ex;
             }
         });
     }
 
-    private static <T> Optional<T> getOptionalParam(String json, Class<T> type) {
+    static <T> Optional<T> getOptionalFormatting(String json, Class<T> type) {
         try {
             return Optional.ofNullable(null == json ? null : GsonHelper.fromJson(json, type));
         } catch (JsonSyntaxException ex) {
@@ -270,7 +277,7 @@ public class DatabaseFacade implements InitializingBean {
         }
     }
 
-    private static Optional<JsonElement> parseOptionalJson(String json) {
+    static Optional<JsonElement> parseOptionalJson(String json) {
         try {
             return Optional.ofNullable(null == json ? null : GsonHelper.parseJson(json));
         } catch (JsonSyntaxException ex) {
@@ -373,7 +380,7 @@ public class DatabaseFacade implements InitializingBean {
                 try (PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
                     if (parameters.isPresent()) {
-                        ParametersSetter.setIndexedParameters(parameters.get(), preparedStatement);
+                        ParametersSetter.setIndexedParameters(parameters.get(), new ParameterizedStatement(preparedStatement));
                     }
 
                     preparedStatement.executeUpdate();
@@ -417,7 +424,7 @@ public class DatabaseFacade implements InitializingBean {
     private static void insertWithoutResult(String sql, Optional<JsonElement> parameters, Connection connection) throws SQLException {
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
             if (parameters.isPresent()) {
-                ParametersSetter.setIndexedParameters(parameters.get(), preparedStatement);
+                ParametersSetter.setIndexedParameters(parameters.get(), new ParameterizedStatement(preparedStatement));
             }
             preparedStatement.executeUpdate();
         }
@@ -441,12 +448,17 @@ public class DatabaseFacade implements InitializingBean {
                 return Collections.emptyList();
             }
 
-            try (Connection connection = dataSource.getConnection()) {
+            try (DirigibleConnection connection = dataSource.getConnection()) {
                 connection.setAutoCommit(false);
                 try (PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
                     if (parameters.isPresent()) {
-                        ParametersSetter.setManyIndexedParameters(parameters.get(), preparedStatement);
+                        if (connection.isOfType(DatabaseSystem.SNOWFLAKE)) {
+                            ParametersSetter.setManyIndexedParametersForInsert(sql, parameters.get(),
+                                    new ParameterizedStatement(preparedStatement));
+                        } else {
+                            ParametersSetter.setManyIndexedParameters(parameters.get(), new ParameterizedStatement(preparedStatement));
+                        }
                     } else {
                         preparedStatement.addBatch();
                     }
@@ -474,16 +486,22 @@ public class DatabaseFacade implements InitializingBean {
 
     private static void insertManyWithoutResult(String sql, Optional<JsonElement> parameters, DirigibleDataSource dataSource)
             throws SQLException {
-        try (Connection connection = dataSource.getConnection()) {
+        try (DirigibleConnection connection = dataSource.getConnection()) {
             insertManyWithoutResult(sql, parameters, connection);
         }
     }
 
-    private static void insertManyWithoutResult(String sql, Optional<JsonElement> parameters, Connection connection) throws SQLException {
+    private static void insertManyWithoutResult(String sql, Optional<JsonElement> parameters, DirigibleConnection connection)
+            throws SQLException {
         connection.setAutoCommit(false);
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
             if (parameters.isPresent()) {
-                ParametersSetter.setManyIndexedParameters(parameters.get(), preparedStatement);
+                if (connection.isOfType(DatabaseSystem.SNOWFLAKE)) {
+                    ParametersSetter.setManyIndexedParametersForInsert(sql, parameters.get(),
+                            new ParameterizedStatement(preparedStatement));
+                } else {
+                    ParametersSetter.setManyIndexedParameters(parameters.get(), new ParameterizedStatement(preparedStatement));
+                }
             }
             preparedStatement.executeBatch();
             connection.commit();
@@ -565,7 +583,7 @@ public class DatabaseFacade implements InitializingBean {
                 try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
 
                     if (parameters.isPresent()) {
-                        ParametersSetter.setIndexedParameters(parameters.get(), preparedStatement);
+                        ParametersSetter.setIndexedParameters(parameters.get(), new ParameterizedStatement(preparedStatement));
                     }
                     return preparedStatement.executeUpdate();
                 }
@@ -977,6 +995,10 @@ public class DatabaseFacade implements InitializingBean {
             logger.error("Failed to retreive a BLOB value of [{}].", column, e);
         }
         return baos.toByteArray();
+    }
+
+    public static void toJson(ResultSet resultSet, boolean limited, boolean stringify, OutputStream output) throws Exception {
+        DatabaseResultSetHelper.toJson(resultSet, limited, stringify, output);
     }
 
 }

@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { Cmis as cmis } from 'sdk/cms/cmis';
+import { Cmis as cmis } from '@aerokit/sdk/cms/cmis';
 import { Assert } from 'test/assert';
 
 const session = cmis.getSession();

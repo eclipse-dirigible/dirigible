@@ -1,4 +1,4 @@
-import { Sequence } from 'sdk/db/sequence';
+import { Sequence } from '@aerokit/sdk/db/sequence';
 import { Assert } from 'test/assert';
 
 Sequence.create('mysequence');

@@ -9,9 +9,9 @@
  */
 package org.eclipse.dirigible.database.sql.builders;
 
-import org.eclipse.dirigible.database.sql.ISqlDialect;
-
 import java.util.List;
+
+import org.eclipse.dirigible.database.sql.ISqlDialect;
 
 /**
  * The Abstract Query SQL Builder.

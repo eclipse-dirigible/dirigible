@@ -1,5 +1,5 @@
-import { Request } from 'sdk/http/request';
-import { Files } from 'sdk/io/files';
+import { Request } from '@aerokit/sdk/http/request';
+import { Files } from '@aerokit/sdk/io/files';
 import { Assert } from 'test/assert';
 
 const separator = Files.separator

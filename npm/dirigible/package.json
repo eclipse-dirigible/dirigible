@@ -1,0 +1,24 @@
+{
+  "name": "@dirigiblelabs/dirigible",
+  "version": "12.31.0",
+  "description": "Eclipse Dirigible jar",
+  "scripts": {
+    "postinstall": "node postinstall.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eclipse-dirigible/dirigible.git"
+  },
+  "files": [
+    "postinstall.js"
+  ],
+  "keywords": [
+    "dirigible",
+    "eclipse"
+  ],
+  "license": "EPL-2.0",
+  "bugs": {
+    "url": "https://github.com/eclipse-dirigible/dirigible/issues"
+  },
+  "homepage": "https://github.com/eclipse-dirigible/dirigible#readme"
+}

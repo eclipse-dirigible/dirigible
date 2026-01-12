@@ -138,9 +138,9 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                         <bk-form-label dg-colon="true" dg-required="props.required.value" for="{{props.id.value}}">
                             {{ props.label.value }}
                         </bk-form-label>
-                        <bk-form-input-message state="{{ props.errorState.invalid ? 'error' : '' }}" message="props.errorState.value || 'Incorrect input'">
+                        <bk-form-input-message state="{{ props.errorMessage.invalid ? 'error' : '' }}" message="props.errorMessage.value || 'Incorrect input'">
                             <bk-input id="{{props.id.value}}" type="text" placeholder="{{props.placeholder.value}}" compact="props.isCompact.value"
-                                state="{'error' : props.errorState.invalid }" name="{{props.id.value}}" ng-required="props.required.value">
+                                state="{'error' : props.errorMessage.invalid }" name="{{props.id.value}}" ng-required="props.required.value">
                             </bk-input>
                         </bk-form-input-message>
                     </bk-form-item></div>`,
@@ -233,7 +233,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                             placeholder: '^[^/]*$',
                             required: false,
                         },
-                        errorState: {
+                        errorMessage: {
                             type: 'text',
                             label: 'Error state popover message',
                             value: 'Incorrect input',
@@ -797,7 +797,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     label: 'Radio',
                     icon: 'sap-icon--record',
                     description: 'Radio select',
-                    template: `<div class="fb-control-wrapper" ng-click="showProps($event)" data-id="{{id}}"><bk-form-group label="{{props.name.value}}">
+                    template: `<div class="fb-control-wrapper" ng-click="showProps($event)" data-id="{{id}}"><bk-form-group label="{{props.label.value}}">
                     <bk-form-item ng-repeat="option in props.staticOptions.value track by $index">
                         <bk-radio id="{{ props.id.value + $index }}" name="{{ props.id.value }}" compact="props.isCompact.value" ng-model="props.staticOptions.defaultValue" ng-value="option.value" ng-required="props.required.value"></bk-radio>
                         <bk-radio-label for="{{ props.id.value + $index }}">{{option.label}}</bk-radio-label>
@@ -811,7 +811,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                             value: '',
                             required: true
                         },
-                        name: {
+                        label: {
                             type: 'text',
                             label: 'Group title',
                             value: 'Radio group',
@@ -884,9 +884,9 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     label: 'Header',
                     icon: 'sap-icon--heading-1',
                     description: 'Text header',
-                    template: `<div class="fb-control-wrapper" ng-click="showProps($event)" data-id="{{id}}"><h1 bk-title header-size="props.headerSize.value">{{props.title.value}}</h1></div>`,
+                    template: `<div class="fb-control-wrapper" ng-click="showProps($event)" data-id="{{id}}"><h1 bk-title header-size="props.headerSize.value">{{props.label.value}}</h1></div>`,
                     props: {
-                        title: {
+                        label: {
                             type: 'text',
                             label: 'Label',
                             value: 'Title',
@@ -1753,6 +1753,29 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
         }
     };
 
+    // Same migration happens in generateUtils.js
+    function migrateForm(formData) {
+        for (let i = 0; i < formData.length; i++) {
+            if (formData[i].hasOwnProperty('title')) {
+                delete Object.assign(formData[i], { 'label': formData[i]['title'] })['title'];
+                $scope.fileChanged();
+            }
+            if (formData[i].hasOwnProperty('name')) {
+                delete Object.assign(formData[i], { 'label': formData[i]['name'] })['name'];
+                $scope.fileChanged();
+            }
+            if (formData[i].hasOwnProperty('errorState')) {
+                delete Object.assign(formData[i], { 'errorMessage': formData[i]['errorState'] })['errorState'];
+                $scope.fileChanged();
+            }
+            if (formData[i].hasOwnProperty('size')) {
+                delete Object.assign(formData[i], { 'headerSize': formData[i]['size'] })['size'];
+                $scope.fileChanged();
+            }
+        }
+        return formData;
+    }
+
     const loadFileContents = () => {
         if (!$scope.state.error) {
             $scope.state.isBusy = true;
@@ -1768,7 +1791,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                         $scope.formData.scripts = response.data.scripts;
                     }
                     if (response.data.hasOwnProperty('form')) {
-                        $scope.createDomFromJson(response.data.form);
+                        $scope.createDomFromJson(migrateForm(response.data.form));
                     }
                     $scope.state.isBusy = false;
                     $scope.state.initialized = true;

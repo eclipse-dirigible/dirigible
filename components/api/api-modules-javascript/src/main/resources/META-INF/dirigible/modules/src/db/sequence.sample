@@ -1,0 +1,8 @@
+import { sequence } from "@aerokit/sdk/db";
+import { response } from "@aerokit/sdk/http";
+
+let value = sequence.nextval("MYSEQUENCE");
+
+response.println(value.toString());
+response.flush();
+response.close();

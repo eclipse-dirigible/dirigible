@@ -140,6 +140,8 @@ public interface DatabaseParameters {
     /** The Constant JDBC_COLUMN_NULLABLE_PROPERTY. */
     String JDBC_COLUMN_NULLABLE_PROPERTY = "NULLABLE";
 
+    String JDBC_COLUMN_DEFAULT_VALUE_PROPERTY = "COLUMN_DEF";
+
     /** The Constant JDBC_COLUMN_SIZE_PROPERTY. */
     String JDBC_COLUMN_SIZE_PROPERTY = "COLUMN_SIZE";
 

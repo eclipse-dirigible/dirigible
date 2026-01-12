@@ -9,14 +9,35 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.endpoint;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import jakarta.annotation.security.RolesAllowed;
+import static java.text.MessageFormat.format;
+import static org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActionData.Action.RETRY;
+import static org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActionData.Action.SKIP;
+import static org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskActionData.TaskAction.CLAIM;
+import static org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskActionData.TaskAction.COMPLETE;
+import static org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskActionData.TaskAction.UNCLAIM;
+import static org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService.DIRIGIBLE_BPM_INTERNAL_SKIP_STEP;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.engine.bpm.flowable.config.BpmProviderFlowable;
-import org.eclipse.dirigible.components.engine.bpm.flowable.dto.*;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActionData;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActivityStatusData;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessDefinitionData;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessInstanceData;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.StartProcessInstanceData;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskActionData;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskDTO;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.VariableData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.PrincipalType;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
@@ -36,20 +57,20 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.lang.Nullable;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
-
-import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.*;
-import java.util.stream.Collectors;
-
-import static java.text.MessageFormat.format;
-import static org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActionData.Action.RETRY;
-import static org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActionData.Action.SKIP;
-import static org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskActionData.TaskAction.*;
-import static org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService.DIRIGIBLE_BPM_INTERNAL_SKIP_STEP;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import jakarta.annotation.security.RolesAllowed;
 
 /**
  * Front facing REST service serving the BPM related resources and operations.
@@ -89,7 +110,7 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
      * @param id the id
      * @return the process definition xml
      */
-    @GetMapping(value = "/bpm-processes/definition/bpmn")
+    @GetMapping(value = "/bpm-processes/definition/bpmn", produces = "text/xml")
     public ResponseEntity<String> getProcessDefinitionXml(@RequestParam("id") Optional<String> id) {
         return ResponseEntity.ok(bpmProviderFlowable.getProcessDefinitionXmlById(id.get()));
     }
@@ -148,7 +169,7 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
      */
     @PostMapping(value = "/models/{workspace}/{project}/{*path}", produces = "application/json")
     public ResponseEntity<URI> saveModel(@PathVariable("workspace") String workspace, @PathVariable("project") String project,
-            @PathVariable("path") String path, @RequestParam("json_xml") String payload) throws URISyntaxException, IOException {
+            @PathVariable("path") String path, @RequestBody String payload) throws URISyntaxException, IOException {
 
         path = sanitizePath(path);
 
@@ -256,15 +277,23 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
         return ResponseEntity.ok(bpmService.getProcessInstanceById(id));
     }
 
+    @PostMapping(value = "/bpm-processes/instance")
+    public ResponseEntity<String> startProcess(@RequestBody StartProcessInstanceData processInstanceData) {
+        return ResponseEntity.ok(bpmService.startProcess(processInstanceData.getProcessDefinitionKey(),
+                processInstanceData.getBusinessKey(), processInstanceData.getParameters()));
+    }
+
     /**
      * List active process instance variables.
      *
      * @param processInstanceId the process instance id
+     * @param variableName the variable name
      * @return process variables list
      */
     @GetMapping(value = "/bpm-processes/instance/{id}/variables")
-    public ResponseEntity<List<VariableInstance>> getProcessInstanceVariables(@PathVariable("id") String processInstanceId) {
-        List<VariableInstance> variables = bpmService.getProcessInstanceVariables(processInstanceId);
+    public ResponseEntity<List<VariableInstance>> getProcessInstanceVariables(@PathVariable("id") String processInstanceId,
+            @Nullable @RequestParam("variableName") Optional<String> variableName) {
+        List<VariableInstance> variables = bpmService.getProcessInstanceVariables(processInstanceId, variableName);
 
         return ResponseEntity.ok(variables);
     }
@@ -393,6 +422,20 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
     }
 
     /**
+     * Remove variable from the execution context.
+     *
+     * @param id the execution id
+     * @param name the variable name
+     * @return the response entity
+     */
+    @DeleteMapping(value = "/bpm-processes/execution/{id}/variables/{name}")
+    public ResponseEntity<Void> removeProcessExecutionVariables(@PathVariable("id") String id, @PathVariable("name") String name) {
+        bpmService.removeVariable(id, name);
+        return ResponseEntity.noContent()
+                             .build();
+    }
+
+    /**
      * Execute action on active process instance variable.
      *
      * @param id the process instance id
@@ -483,7 +526,12 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
     }
 
     @GetMapping(value = "/bpm-processes/instance/{id}/active")
-    public ResponseEntity<List<String>> getProcessInstanceActiveActivityIds(@PathVariable("id") String id) {
+    public ResponseEntity<Map<String, ActivityStatusData>> getProcessInstanceActiveActivityIds(@PathVariable("id") String id) {
         return ResponseEntity.ok(bpmService.getProcessInstanceActiveActivityIds(id));
+    }
+
+    @GetMapping(value = "/bpm-processes/definition/{id}/active")
+    public ResponseEntity<Map<String, ActivityStatusData>> getProcessDefinitionActiveActivityIds(@PathVariable("id") String id) {
+        return ResponseEntity.ok(bpmService.getProcessDefinitionActiveActivityIds(id));
     }
 }

@@ -134,7 +134,7 @@ public class AccessSynchronizer extends BaseSynchronizer<Access, Long> {
      */
     @Override
     public List<Access> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**

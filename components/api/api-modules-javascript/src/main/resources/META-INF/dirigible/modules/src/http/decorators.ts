@@ -1,16 +1,4 @@
-/*
- * Copyright (c) 2025 Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
-
-import * as rs from "sdk/http/rs"
+import * as rs from "@aerokit/sdk/http/rs"
 
 const router = rs.service();
 let instance = null;
@@ -18,6 +6,13 @@ let instance = null;
 export function Controller(ctr: { new() }, context: ClassDecoratorContext): void {
     instance = new ctr();
     router.execute();
+}
+
+export function Documentation(documentation: string) {
+  return function (
+    value: any,
+    context: ClassDecoratorContext | ClassFieldDecoratorContext | ClassMethodDecoratorContext
+  ) {};
 }
 
 export const Get = createRequestDecorator("get")

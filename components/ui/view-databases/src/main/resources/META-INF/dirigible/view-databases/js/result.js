@@ -20,7 +20,7 @@ resultView.controller('DatabaseResultController', ($scope, $http, Dialogs, Statu
         selectedDatabase = {
             name: 'DefaultDB', // Datasource
             type: 'metadata' // Database
-        }
+        };
     }
     $scope.state = {
         isBusy: false,
@@ -147,19 +147,14 @@ resultView.controller('DatabaseResultController', ($scope, $http, Dialogs, Statu
     // const databaseChangedListener = Dialogs.addMessageListener({
     //     topic: 'database.database.selection.changed',
     //     handler: (database) => {
-    //         console.log(database);
-    //         $scope.$evalAsync(() => {
-    //             selectedDatabase.type = database;
-    //         });
+    //         selectedDatabase.type = database;
     //     },
     // });
 
     const datasourceChangedListener = Dialogs.addMessageListener({
         topic: 'database.datasource.selection.changed',
         handler: (datasource) => {
-            $scope.$evalAsync(() => {
-                selectedDatabase.name = datasource;
-            });
+            selectedDatabase.name = datasource;
         },
     });
 
@@ -370,14 +365,14 @@ resultView.controller('DatabaseResultController', ($scope, $http, Dialogs, Statu
         $scope.tableName = data.tableName;
         const sqlCommand = 'SELECT * FROM "' + data.schemaName + '"' + '.' + '"' + data.tableName + '";\n';
         executeQuery(sqlCommand);
-        $http.get('/services/data/definition/' + selectedDatabase.name + '/' + $scope.schemaName + '/' + $scope.tableName)
+        $http.get('/services/data/definition/' + selectedDatabase.name + '/' + $scope.schemaName + '/' + btoa($scope.tableName))
             .then((response) => {
                 $scope.metadata = response.data; // Set the metadata once the response is received
                 const extractedKeys = extractSpecialAndPrimaryKeys($scope.metadata);
                 $scope.primaryKeyColumns = extractedKeys.primaryKeyColumns;
                 $scope.specialColumns = extractedKeys.specialColumns;
 
-                const url = `/services/js/view-databases/js/databaseTable.js/${selectedDatabase.name}/${$scope.schemaName}/${$scope.tableName}`;
+                const url = `/services/js/view-databases/js/databaseTable.js/${selectedDatabase.name}/${$scope.schemaName}/${btoa($scope.tableName)}`;
                 $http.get(url).then(populateResultView, (reject) => {
                     cleanScope();
                     console.error(reject);
@@ -622,6 +617,7 @@ resultView.controller('DatabaseResultController', ($scope, $http, Dialogs, Statu
         Dialogs.removeMessageListener(datasourceChangedListener);
         Dialogs.removeMessageListener(showContentListener);
         Dialogs.removeMessageListener(executeListener);
+        Dialogs.removeMessageListener(exportListener);
         Dialogs.removeMessageListener(importArtifactListener);
         Dialogs.removeMessageListener(importSqlListener);
         Dialogs.removeMessageListener(exportArtifactListener);

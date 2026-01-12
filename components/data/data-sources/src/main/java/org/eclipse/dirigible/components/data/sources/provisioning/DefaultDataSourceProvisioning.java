@@ -69,7 +69,7 @@ class DefaultDataSourceProvisioning implements TenantProvisioningStep {
         LOGGER.info("Registering Default DataSource for tenant [{}]...", tenant);
 
         if (tenant.isDefault()) {
-            LOGGER.info("Default DataSoruce for the default tenant [{}] doesn't need provisioning. It will be skipped.");
+            LOGGER.info("Default DataSource for the default tenant [{}] doesn't need provisioning. It will be skipped.", tenant);
             return;
         }
 

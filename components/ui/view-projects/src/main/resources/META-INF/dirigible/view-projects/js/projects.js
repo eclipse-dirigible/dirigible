@@ -69,7 +69,7 @@ projectsView.controller('ProjectsViewController', (
         action: '',
     };
     let duplicateProjectData = {};
-    const imageFileExts = ['ico', 'bmp', 'png', 'jpg', 'jpeg', 'gif', 'svg'];
+    const imageFileExts = ['ico', 'bmp', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'];
     const modelFileExts = ['extension', 'extensionpoint', 'edm', 'model', 'dsm', 'schema', 'dmm', 'mapping', 'bpmn', 'job', 'listener', 'websocket', 'roles', 'constraints', 'table', 'view', 'report'];
 
     $scope.selectedWorkspace = WorkspaceService.getCurrentWorkspace();

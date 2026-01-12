@@ -1,5 +1,0 @@
-{
-    "extensionPoint": "ide-template",
-    "module": "template-html/template.js",
-    "description": "HTML Template"
-}

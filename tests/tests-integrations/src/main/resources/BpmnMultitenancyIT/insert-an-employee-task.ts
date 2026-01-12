@@ -1,5 +1,5 @@
-import { process } from "sdk/bpm"
-import { sql, insert } from "sdk/db";
+import { process } from "@aerokit/sdk/bpm"
+import { sql, insert } from "@aerokit/sdk/db";
 
 const execution = process.getExecutionContext();
 const processInstanceId = execution.getProcessInstanceId();

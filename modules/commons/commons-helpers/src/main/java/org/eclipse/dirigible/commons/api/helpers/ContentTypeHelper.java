@@ -320,6 +320,9 @@ public class ContentTypeHelper {
     /** The Constant IMAGE_X_ICON. */
     public static final String IMAGE_X_ICON = "image/x-icon";
 
+    /** The Constant IMAGE_WEBP. */
+    public static final String IMAGE_WEBP = "image/webp";
+
     /** The Constant APPLICATION_HTA. */
     public static final String APPLICATION_HTA = "application/hta";
 
@@ -561,6 +564,7 @@ public class ContentTypeHelper {
         BINARY_CONTENT_TYPES.put("jpe", IMAGE_JPEG); //$NON-NLS-1$
         BINARY_CONTENT_TYPES.put("jpeg", IMAGE_JPEG); //$NON-NLS-1$
         BINARY_CONTENT_TYPES.put("jpg", IMAGE_JPEG); //$NON-NLS-1$
+        BINARY_CONTENT_TYPES.put("webp", IMAGE_WEBP); //$NON-NLS-1$
         BINARY_CONTENT_TYPES.put("latex", APPLICATION_X_LATEX); //$NON-NLS-1$
         BINARY_CONTENT_TYPES.put("lha", APPLICATION_OCTET_STREAM); //$NON-NLS-1$
         BINARY_CONTENT_TYPES.put("lsf", VIDEO_X_LA_ASF); //$NON-NLS-1$

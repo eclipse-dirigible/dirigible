@@ -1,27 +1,35 @@
-/*
- * Copyright (c) 2025 Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
 /**
- * API Files
+ * Utility class for retrieving operating system information and checking OS types.
+ * It leverages the platform's access to Java's SystemUtils for system properties.
  */
 const SystemUtils = Java.type("org.apache.commons.lang3.SystemUtils")
 
+/**
+ * @class OS
+ * @description Provides static methods and constants related to the operating system
+ * the underlying Java platform is running on.
+ */
 export class OS {
 
+	/**
+	 * The full name of the operating system (e.g., "Windows 10", "Linux").
+	 * This value is read directly from the Java system property 'os.name'.
+	 * @type {string}
+	 */
 	public static readonly OS_NAME: string = SystemUtils.OS_NAME;
 
+	/**
+	 * Checks if the operating system is a variant of Windows.
+	 * @returns {boolean} True if the OS is Windows, false otherwise.
+	 */
 	public static isWindows(): boolean {
 		return SystemUtils.IS_OS_WINDOWS;
 	}
 
+	/**
+	 * Checks if the operating system is a variant of Unix (including Linux, macOS, and BSD).
+	 * @returns {boolean} True if the OS is Unix-like, false otherwise.
+	 */
 	public static isUnix(): boolean {
 		return SystemUtils.IS_OS_UNIX;
 	}

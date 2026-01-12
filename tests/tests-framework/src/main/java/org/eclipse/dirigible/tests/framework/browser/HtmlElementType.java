@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.tests.framework.browser;
 
 public enum HtmlElementType {
+    PARAGRAPH("p"), //
     BUTTON("button"), //
     INPUT("input"), //
     ANCHOR("a"), //

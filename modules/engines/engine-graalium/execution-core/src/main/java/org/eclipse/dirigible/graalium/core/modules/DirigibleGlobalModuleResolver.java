@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.graalium.core.modules;
 
 import java.nio.file.Path;
+
 import org.eclipse.dirigible.graalium.core.JavascriptSourceProvider;
 import org.eclipse.dirigible.graalium.core.javascript.modules.ModuleResolver;
 
@@ -38,8 +39,8 @@ public class DirigibleGlobalModuleResolver implements ModuleResolver {
      */
     @Override
     public boolean isResolvable(String moduleToResolve) {
-        return !moduleToResolve.startsWith("sdk/") && !Path.of(moduleToResolve)
-                                                           .isAbsolute();
+        return !moduleToResolve.startsWith("@aerokit/sdk/") && !Path.of(moduleToResolve)
+                                                                    .isAbsolute();
     }
 
     /**

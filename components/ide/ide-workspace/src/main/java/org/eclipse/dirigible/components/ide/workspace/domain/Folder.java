@@ -9,20 +9,13 @@
  */
 package org.eclipse.dirigible.components.ide.workspace.domain;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import org.eclipse.dirigible.repository.api.ICollection;
-import org.eclipse.dirigible.repository.api.IEntity;
-import org.eclipse.dirigible.repository.api.IEntityInformation;
-import org.eclipse.dirigible.repository.api.IRepository;
-import org.eclipse.dirigible.repository.api.IResource;
-import org.eclipse.dirigible.repository.api.RepositoryPath;
-import org.eclipse.dirigible.repository.api.RepositoryReadException;
-import org.eclipse.dirigible.repository.api.RepositorySearchException;
-import org.eclipse.dirigible.repository.api.RepositoryWriteException;
+import org.eclipse.dirigible.repository.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The Workspace's Folder.
@@ -33,7 +26,7 @@ public class Folder implements ICollection {
     private static final Logger logger = LoggerFactory.getLogger(Folder.class);
 
     /** The internal. */
-    private transient ICollection internal;
+    private final transient ICollection internal;
 
     /**
      * Instantiates a new folder.
@@ -51,26 +44,6 @@ public class Folder implements ICollection {
      */
     public ICollection getInternal() {
         return internal;
-    }
-
-    /**
-     * Gets the collections.
-     *
-     * @return the collections
-     * @throws RepositoryReadException the repository read exception
-     */
-    @Override
-    public List<ICollection> getCollections() throws RepositoryReadException {
-        return internal.getCollections();
-    }
-
-    /**
-     * Gets the repository.
-     *
-     * @return the repository
-     */
-    public IRepository getRepository() {
-        return internal.getRepository();
     }
 
     /**
@@ -92,16 +65,6 @@ public class Folder implements ICollection {
     @Override
     public List<String> getCollectionsNames() throws RepositoryReadException {
         return internal.getCollectionsNames();
-    }
-
-    /**
-     * Gets the path.
-     *
-     * @return the path
-     */
-    @Override
-    public String getPath() {
-        return internal.getPath();
     }
 
     /**
@@ -189,17 +152,6 @@ public class Folder implements ICollection {
     @Override
     public void delete() throws RepositoryWriteException {
         internal.delete();
-    }
-
-    /**
-     * Gets the resources.
-     *
-     * @return the resources
-     * @throws RepositoryReadException the repository read exception
-     */
-    @Override
-    public List<IResource> getResources() throws RepositoryReadException {
-        return internal.getResources();
     }
 
     /**
@@ -328,6 +280,12 @@ public class Folder implements ICollection {
         return internal.createResource(name, content, isBinary, contentType);
     }
 
+    @Override
+    public IResource createResource(String name, InputStream contentInputStream, boolean isBinary, String contentType)
+            throws RepositoryWriteException {
+        return internal.createResource(name, contentInputStream, isBinary, contentType);
+    }
+
     /**
      * Creates the resource.
      *
@@ -352,6 +310,36 @@ public class Folder implements ICollection {
         ICollection collection = this.getRepository()
                                      .createCollection(fullPath);
         return new Folder(collection);
+    }
+
+    /**
+     * Gets the repository.
+     *
+     * @return the repository
+     */
+    @Override
+    public IRepository getRepository() {
+        return internal.getRepository();
+    }
+
+    /**
+     * Construct path.
+     *
+     * @param path the path
+     * @return the string
+     */
+    protected String constructPath(String path) {
+        return new RepositoryPath(this.getPath(), path).build();
+    }
+
+    /**
+     * Gets the path.
+     *
+     * @return the path
+     */
+    @Override
+    public String getPath() {
+        return internal.getPath();
     }
 
     /**
@@ -392,6 +380,17 @@ public class Folder implements ICollection {
             folders.add(new Folder(collection));
         }
         return folders;
+    }
+
+    /**
+     * Gets the collections.
+     *
+     * @return the collections
+     * @throws RepositoryReadException the repository read exception
+     */
+    @Override
+    public List<ICollection> getCollections() throws RepositoryReadException {
+        return internal.getCollections();
     }
 
     /**
@@ -476,6 +475,17 @@ public class Folder implements ICollection {
     }
 
     /**
+     * Gets the resources.
+     *
+     * @return the resources
+     * @throws RepositoryReadException the repository read exception
+     */
+    @Override
+    public List<IResource> getResources() throws RepositoryReadException {
+        return internal.getResources();
+    }
+
+    /**
      * Delete file.
      *
      * @param path the path
@@ -484,16 +494,6 @@ public class Folder implements ICollection {
         String fullPath = constructPath(path);
         this.getRepository()
             .removeResource(fullPath);
-    }
-
-    /**
-     * Construct path.
-     *
-     * @param path the path
-     * @return the string
-     */
-    protected String constructPath(String path) {
-        return new RepositoryPath(new String[] {this.getPath(), path}).build();
     }
 
     /**
@@ -508,8 +508,7 @@ public class Folder implements ICollection {
             List<IEntity> entities = this.getRepository()
                                          .searchText(term);
             for (IEntity entity : entities) {
-                if (entity instanceof IResource) {
-                    IResource resource = (IResource) entity;
+                if (entity instanceof IResource resource) {
                     if (resource.getPath()
                                 .startsWith(this.getPath())) {
                         if (resource.exists()) {

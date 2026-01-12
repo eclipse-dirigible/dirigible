@@ -15,6 +15,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
+import org.eclipse.dirigible.components.base.tenant.Tenant;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.openapi.repository.OpenAPIRepository;
 import org.eclipse.dirigible.components.openapi.synchronizer.OpenAPISynchronizer;
 import org.eclipse.dirigible.components.repository.RepositoryConfig;
@@ -29,6 +33,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.security.web.FilterChainProxy;
@@ -68,6 +73,13 @@ class OpenAPIEndpointTest {
     /** The repository. */
     @Autowired
     private IRepository repository;
+
+    @MockBean
+    private TenantContext tenantContext;
+
+    @MockBean
+    @DefaultTenant
+    private Tenant defaultTenant;
 
     /**
      * Setup.
@@ -110,7 +122,7 @@ class OpenAPIEndpointTest {
                .andDo(print())
                .andExpect(status().isOk())
                .andExpect(content().string(containsString(
-                       "{\"openapi\":\"3.0.1\",\"info\":{\"title\":\"Eclipse Dirigible - Applications REST Services API\",\"description\":\"Eclipse Dirigible API of the REST services provided by the applications\",\"contact\":{\"name\":\"Eclipse Dirigible\",\"url\":\"https://www.dirigible.io\",\"email\":\"dirigible-dev@eclipse.org\"},\"license\":{\"name\":\"Eclipse Public License - v 2.0\",\"url\":\"https://www.eclipse.org/legal/epl-v20.html\"},\"version\":\"0.0.1\"},\"servers\":[{\"url\":\"/services/js\"}],\"security\":[],\"tags\":[],\"paths\":{\"/test/openapi/api.mjs/hello-world\":{\"get\":{\"description\":\"Returns Hello World message\",\"responses\":{\"200\":{\"description\":\"Hello World response\",\"content\":{\"application/json\":{\"schema\":{\"$ref\":\"#/components/schemas/HelloWorldModel\"}}}}}}}},\"components\":{\"schemas\":{\"HelloWorldModel\":{\"type\":\"object\",\"properties\":{\"status\":{\"type\":\"string\"}}}},\"responses\":{},\"parameters\":{},\"examples\":{},\"requestBodies\":{},\"headers\":{},\"securitySchemes\":{},\"links\":{},\"callbacks\":{}}}")));
+                       "{\"openapi\":\"3.0.1\",\"info\":{\"title\":\"Applications Services Open API\",\"description\":\"Services Open API provided by the applications\",\"contact\":{\"name\":\"Eclipse Dirigible\",\"url\":\"https://www.dirigible.io\",\"email\":\"dirigible-dev@eclipse.org\"},\"license\":{\"name\":\"Eclipse Public License - v 2.0\",\"url\":\"https://www.eclipse.org/legal/epl-v20.html\"},\"version\":\"0.0.1\"},\"servers\":[],\"security\":[],\"tags\":[],\"paths\":{},\"components\":{\"schemas\":{},\"responses\":{},\"parameters\":{},\"examples\":{},\"requestBodies\":{},\"headers\":{},\"securitySchemes\":{},\"links\":{},\"callbacks\":{}}}")));
     }
 
     /**

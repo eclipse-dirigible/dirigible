@@ -1,5 +1,5 @@
-import { Controller, Post, Put, response } from "sdk/http"
-import { process, tasks } from "sdk/bpm"
+import { Controller, Post, Put, response } from "@aerokit/sdk/http"
+import { process, tasks } from "@aerokit/sdk/bpm"
 
 @Controller
 class ProcessService {
@@ -10,7 +10,7 @@ class ProcessService {
         if (!parameters) {
             throw new Error("Missing parameters: " + parameters);
         }
-        const processInstanceId = process.start(processKey, parameters);
+        const processInstanceId = process.start(processKey, 'business-key-bpmn-multitenancy', parameters);
 
         response.setStatus(response.ACCEPTED);
         return {

@@ -324,15 +324,17 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                                                              .map(e -> e.getArtefact()
                                                                         .getKey())
                                                              .collect(Collectors.joining(", "));
-                            if (!cross.isEmpty()) {
-                                undepleted.clear();
-                                undepleted.addAll(cross);
-                                logger.warn("Retrying to deplete artefacts left after cross-processing: [{}] ", crossArtefactsLeft);
-                            }
+
+                            logger.warn("Retrying to deplete artefacts left after cross-processing: [{}] ", crossArtefactsLeft);
+
+                            undepleted.clear();
+                            undepleted.addAll(cross);
+
                             if (++retryCount == crossRetryCount) {
                                 logger.error("Final retry completed. Left artefacts after cross-processing: [{}]", crossArtefactsLeft);
                                 break;
                             }
+
                             logger.info("Retry [{}] completed - left [{}] undepleated artefacts: [{}].", retryCount, undepleted.size(),
                                     undepleted);
                         }
@@ -362,6 +364,12 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                 }
             }
             logger.trace("Cleaning up removed artefacts done.");
+
+            // finishing
+            for (Synchronizer synchronizer : synchronizers) {
+                synchronizer.finishing();
+            }
+            logger.trace("Finalization step done.");
 
             // report results
             getErrors().forEach(errMsg -> {

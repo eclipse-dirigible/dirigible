@@ -1,0 +1,29 @@
+- route:
+    id: route-d48a
+    description: Http route starter
+    nodePrefixId: route-cfc
+    from:
+      id: from-43d8
+      description: Expose path /services/integrations/http-route
+      uri: platform-http
+      parameters:
+        path: http-route
+      steps:
+        - log:
+            id: log-d711
+            description: Log execution started
+            message: Executing http route with body [${body}]...
+            loggingLevel: INFO
+            logName: HttpRouteLogger
+        - to:
+            id: to-1a81
+            description: TypeScript handler
+            uri: dirigible-java-script
+            parameters:
+              javaScriptPath: ${projectName}/handler.ts
+        - log:
+            id: log-13c5
+            description: Log execution completed
+            message: 'Execution completed! Body: ${body}'
+            loggingLevel: INFO
+            logName: HttpRouteLogger

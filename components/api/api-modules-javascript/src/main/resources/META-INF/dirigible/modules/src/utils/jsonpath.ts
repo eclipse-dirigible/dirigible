@@ -1,15 +1,4 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
- */
-/*
 * Forked from source published at https://github.com/s3u with MIT
 * license as of 5/30/2019 and adapted for Dirigible
 * Contributors:

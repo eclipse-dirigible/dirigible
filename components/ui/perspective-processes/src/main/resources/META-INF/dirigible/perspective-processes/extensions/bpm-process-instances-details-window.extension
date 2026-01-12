@@ -1,0 +1,5 @@
+{
+    "module": "perspective-processes/configs/bpm-process-instances-details-window.js",
+    "extensionPoint": "platform-windows",
+    "description": "Business Process Instances Details"
+}

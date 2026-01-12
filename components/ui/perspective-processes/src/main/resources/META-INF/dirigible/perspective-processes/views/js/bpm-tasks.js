@@ -12,7 +12,12 @@
 const tasksView = angular.module('tasks', ['platformView', 'blimpKit']);
 tasksView.constant('Notifications', new NotificationHub());
 tasksView.constant('Dialogs', new DialogHub());
-tasksView.controller('TasksController', ($scope, $http, $window, Dialogs) => {
+tasksView.controller('TasksController', ($scope, $http, $window, Dialogs, Notifications) => {
+    $scope.state = {
+        loadingGroups: false,
+        loadingAssignee: false,
+        busyText: 'Loading...',
+    };
     $scope.tasksList = [];
     $scope.tasksListAssignee = [];
     $scope.currentProcessInstanceId;
@@ -30,21 +35,36 @@ tasksView.controller('TasksController', ($scope, $http, $window, Dialogs) => {
         $http.get('/services/bpm/bpm-processes/instance/' + processInstanceId + '/tasks?type=groups', { params: { 'limit': 100 } })
             .then((response) => {
                 $scope.tasksList = response.data;
+                $scope.state.loadingGroups = false;
+            }, (error) => {
+                console.error(error);
             });
 
         $http.get('/services/bpm/bpm-processes/instance/' + processInstanceId + '/tasks?type=assignee', { params: { 'limit': 100 } })
             .then((response) => {
                 $scope.tasksListAssignee = response.data;
+                $scope.state.loadingAssignee = false;
+            }, (error) => {
+                console.error(error);
             });
     };
 
     Dialogs.addMessageListener({
         topic: 'bpm.instance.selected',
         handler: (data) => {
-            const processInstanceId = data.instance;
-            $scope.fetchData(processInstanceId);
             $scope.$evalAsync(() => {
-                $scope.currentProcessInstanceId = processInstanceId;
+                if (data.deselect) {
+                    $scope.tasksList.length = 0;
+                    $scope.tasksListAssignee.length = 0;
+                    $scope.currentProcessInstanceId = null;
+                    $scope.selectedClaimTask = null;
+                    $scope.selectedUnclaimTask = null;
+                } else {
+                    $scope.state.loadingGroups = true;
+                    $scope.state.loadingAssignee = true;
+                    $scope.currentProcessInstanceId = data.instance;
+                    $scope.fetchData(data.instance);
+                }
             });
         }
     });

@@ -1,0 +1,12 @@
+{
+  "name": "dirigible-demo-project",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "dirigible start",
+    "start:dev": "dirigible start --watch"
+  },
+  "devDependencies": {
+    "@aerokit/sdk": "latest",
+    "@dirigiblelabs/dirigible-cli": "file:../dirigible-cli"
+  }
+}

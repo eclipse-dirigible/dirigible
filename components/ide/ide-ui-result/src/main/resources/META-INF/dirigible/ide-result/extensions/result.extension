@@ -1,5 +1,0 @@
-{
-    "module": "ide-result/services/result-view.js",
-    "extensionPoint": "ide-view",
-    "description": "Results view"
-}

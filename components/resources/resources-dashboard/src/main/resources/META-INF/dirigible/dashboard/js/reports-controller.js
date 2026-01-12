@@ -9,8 +9,8 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const reports = angular.module('reports', ['platformView', 'platformSplit', 'blimpKit']);
-reports.controller('ReportsController', ($scope, Extensions) => {
+const reports = angular.module('reports', ['platformView', 'platformSplit', 'blimpKit', 'platformLocale']);
+reports.controller('ReportsController', ($scope, Extensions, LocaleService) => {
     const Dialog = new DialogHub();
     $scope.search = { text: '' };
     $scope.reports = [];
@@ -50,8 +50,8 @@ reports.controller('ReportsController', ($scope, Extensions) => {
     }, (error) => {
         console.log(error);
         Dialog.showAlert({
-            title: 'Failed to load reports',
-            message: 'There was an error while trying to load the reports list.',
+            title: LocaleService.t('dashboard:errMsg.reportLoadTitle', 'Failed to load reports'),
+            message: LocaleService.t('dashboard:errMsg.reportLoad', 'There was an error while trying to load the reports list.'),
             type: AlertTypes.Error,
             preformatted: false,
         });

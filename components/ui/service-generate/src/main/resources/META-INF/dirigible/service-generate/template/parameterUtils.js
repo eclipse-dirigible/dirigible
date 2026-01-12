@@ -9,9 +9,9 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { Configurations } from "sdk/core";
-import { Base64 } from "sdk/utils";
-import { Bytes } from "sdk/io";
+import { Configurations } from "@aerokit/sdk/core";
+import { Base64 } from "@aerokit/sdk/utils";
+import { Bytes } from "@aerokit/sdk/io";
 
 export function process(model, parameters) {
     model.entities.forEach(e => {

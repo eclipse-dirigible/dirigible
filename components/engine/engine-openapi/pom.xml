@@ -8,7 +8,7 @@
     <parent>
         <artifactId>dirigible-components-parent</artifactId>
         <groupId>org.eclipse.dirigible</groupId>
-        <version>12.0.0-SNAPSHOT</version>
+        <version>13.0.0-SNAPSHOT</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
@@ -29,11 +29,19 @@
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-core-version</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-data-store</artifactId>
+        </dependency>
+        <dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-parsers-typescript</artifactId>
+    	</dependency>
 
         <dependency>
             <groupId>io.swagger.parser.v3</groupId>
             <artifactId>swagger-parser</artifactId>
-            <version>2.1.28</version>
+            <version>2.1.37</version>
             <exclusions>
             	<exclusion>
             		<groupId>javax.validation</groupId>
@@ -61,7 +69,17 @@
 		   <artifactId>jaxb-api</artifactId>
             <version>${jaxb.version}</version>
 		 </dependency>
+		 
+		 <!-- Tests -->
+		 <dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-ide-git</artifactId>
+			<scope>test</scope>
+    	</dependency>
+
     </dependencies>
+    
+    
 
     <properties>
         <license.header.location>../../../licensing-header.txt</license.header.location>

@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { Destinations } from 'sdk/core/destinations';
+import { Destinations } from '@aerokit/sdk/core/destinations';
 import { Assert } from 'test/assert';
 
 const destination = {};

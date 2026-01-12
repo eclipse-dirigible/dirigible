@@ -10,7 +10,11 @@
 package org.eclipse.dirigible.components.data.structures.domain;
 
 import java.util.Set;
-
+import org.eclipse.dirigible.components.base.artefact.Artefact;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.google.gson.annotations.Expose;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -19,13 +23,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-
-import org.eclipse.dirigible.components.base.artefact.Artefact;
-import org.hibernate.annotations.OnDelete;
-import org.hibernate.annotations.OnDeleteAction;
-
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.google.gson.annotations.Expose;
 
 /**
  * The Class View.
@@ -54,7 +51,7 @@ public class View extends Artefact {
     protected String schema;
 
     /** The name. */
-    @Column(name = "VIEW_QUERY", columnDefinition = "CLOB", nullable = false)
+    @Column(name = "VIEW_QUERY", columnDefinition = "TEXT", nullable = false)
     @Expose
     protected String query;
 

@@ -1,5 +1,0 @@
-{
-    "module": "ide-git-branches/services/remote-view.js",
-    "extensionPoint": "ide-view",
-    "description": "Git Remote Branches View"
-}
