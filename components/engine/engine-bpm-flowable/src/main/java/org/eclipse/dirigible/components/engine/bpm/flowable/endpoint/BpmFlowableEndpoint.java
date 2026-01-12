@@ -169,7 +169,7 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
      */
     @PostMapping(value = "/models/{workspace}/{project}/{*path}", produces = "application/json")
     public ResponseEntity<URI> saveModel(@PathVariable("workspace") String workspace, @PathVariable("project") String project,
-            @PathVariable("path") String path, @RequestParam("json_xml") String payload) throws URISyntaxException, IOException {
+            @PathVariable("path") String path, @RequestBody String payload) throws URISyntaxException, IOException {
 
         path = sanitizePath(path);
 
