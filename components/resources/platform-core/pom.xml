@@ -50,14 +50,19 @@
             <version>${sap-theming__theming-base-content.version}</version>
         </dependency>
         <dependency>
-    <groupId>org.webjars.npm</groupId>
-    <artifactId>alpinejs</artifactId>
-    <version>3.15.3</version>
-</dependency>
+            <groupId>org.webjars.npm</groupId>
+            <artifactId>alpinejs</artifactId>
+            <version>${alpinejs.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.webjars.npm</groupId>
             <artifactId>codbex__harmonia</artifactId>
             <version>${harmonia.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.webjars.npm</groupId>
+            <artifactId>fontsource__open-sans</artifactId>
+            <version>${opensans.version}</version>
         </dependency>
     </dependencies>
 
