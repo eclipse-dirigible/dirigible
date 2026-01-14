@@ -4,13 +4,13 @@
  * Do not modify the content as it may be re-generated again.
  */
 export const getSources = () => ([{
-	location: '/template-application-ui-angular/ui/navigation/perspective-group.extension.template',
+	location: '/template-application-ui-angular-v2/ui/navigation/perspective-group.extension.template',
 	action: 'generate',
 	rename: 'gen/{{genFolderName}}/navigation/{{navId}}/perspective-group.extension',
 	engine: 'velocity',
 	collection: 'uiNavigations'
 }, {
-	location: '/template-application-ui-angular/ui/navigation/perspective-group.js.template',
+	location: '/template-application-ui-angular-v2/ui/navigation/perspective-group.js.template',
 	action: 'generate',
 	rename: 'gen/{{genFolderName}}/navigation/{{navId}}/perspective-group.js',
 	engine: 'velocity',

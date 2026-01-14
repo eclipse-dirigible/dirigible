@@ -3,21 +3,21 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-import * as listTemplate from "template-application-ui-angular/template/ui/list";
-import * as manageTemplate from "template-application-ui-angular/template/ui/manage";
-import * as masterDetailsListTemplate from "template-application-ui-angular/template/ui/masterDetailsList";
-import * as masterDetailsManageTemplate from "template-application-ui-angular/template/ui/masterDetailsManage";
-import * as settingTemplate from "template-application-ui-angular/template/ui/setting";
-import * as reportTemplate from "template-application-ui-angular/template/ui/report";
-import * as reportChartTemplate from "template-application-ui-angular/template/ui/reportChart";
-import * as reportTableTemplate from "template-application-ui-angular/template/ui/reportTable";
-import * as navigation from "template-application-ui-angular/template/ui/navigation";
-// import * as perspective from "template-application-ui-angular/template/ui/perspective";
+import * as listTemplate from "template-application-ui-angular-v2/template/ui/list";
+import * as manageTemplate from "template-application-ui-angular-v2/template/ui/manage";
+import * as masterDetailsListTemplate from "template-application-ui-angular-v2/template/ui/masterDetailsList";
+import * as masterDetailsManageTemplate from "template-application-ui-angular-v2/template/ui/masterDetailsManage";
+import * as settingTemplate from "template-application-ui-angular-v2/template/ui/setting";
+import * as reportTemplate from "template-application-ui-angular-v2/template/ui/report";
+import * as reportChartTemplate from "template-application-ui-angular-v2/template/ui/reportChart";
+import * as reportTableTemplate from "template-application-ui-angular-v2/template/ui/reportTable";
+import * as navigation from "template-application-ui-angular-v2/template/ui/navigation";
+// import * as perspective from "template-application-ui-angular-v2/template/ui/perspective";
 
 export function getSources(parameters) {
     return [
         {
-            location: "/template-application-ui-angular/ui/translations.json.template",
+            location: "/template-application-ui-angular-v2/ui/translations.json.template",
             action: "translate",
         },
         ...listTemplate.getSources(parameters),

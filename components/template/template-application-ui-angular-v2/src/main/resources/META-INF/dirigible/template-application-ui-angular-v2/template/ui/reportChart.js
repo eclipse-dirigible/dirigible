@@ -7,56 +7,56 @@ export function getSources(parameters) {
 	return [
 		// Location: "gen/{{genFolderName}}/ui/perspective/"
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-chart/dialog-window-filter/controller.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-chart/dialog-window-filter/controller.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window-filter/controller.js",
 			collection: "uiReportChartModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-chart/dialog-window-filter/index.html.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-chart/dialog-window-filter/index.html.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window-filter/index.html",
 			collection: "uiReportChartModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-chart/dialog-window-filter/view.extension.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-chart/dialog-window-filter/view.extension.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window-filter/view.extension",
 			collection: "uiReportChartModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-chart/dialog-window-filter/view.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-chart/dialog-window-filter/view.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window-filter/view.js",
 			collection: "uiReportChartModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-chart/controller.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-chart/controller.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/controller.js",
 			collection: "uiReportChartModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-chart/index.html.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-chart/index.html.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/index.html",
 			collection: "uiReportChartModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-chart/view.extension.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-chart/view.extension.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/view.extension",
 			collection: "uiReportChartModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-chart/view.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-chart/view.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/view.js",

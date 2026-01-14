@@ -1,7 +1,7 @@
 #set($dollar = '$')
 angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'])
 	.config(['EntityServiceProvider', (EntityServiceProvider) => {
-		EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts';
+		EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Controller.ts';
 	}])
 	.controller('PageController', (${dollar}scope, EntityService, LocaleService, Extensions) => {
 		const Dialogs = new DialogHub();

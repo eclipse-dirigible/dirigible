@@ -1,7 +1,7 @@
 #set($dollar = '$')
 angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'])
 	.config(['EntityServiceProvider', (EntityServiceProvider) => {
-		EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts';
+		EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Controller.ts';
 	}])
 	.controller('PageController', ($scope, ${dollar}http, ViewParameters, LocaleService, EntityService) => {
 		const Dialogs = new DialogHub();
@@ -120,7 +120,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 
 #foreach ($property in $properties)
 #if ($property.widgetType == "DROPDOWN")
-		${dollar}scope.service${property.name} = '${property.widgetDropdownUrl}';
+		${dollar}scope.service${property.name} = '${property.widgetDropdownControllerUrl}';
 #end
 #end
 
@@ -134,7 +134,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 					$scope.entity.${property.name} = valueFrom;
 #end
 #if($property.widgetType == "DROPDOWN")
-					${dollar}http.post('${property.widgetDropdownUrl}/search', {
+					${dollar}http.post('${property.widgetDropdownControllerUrl}/search', {
 						$filter: {
 							equals: {
 								${property.widgetDependsOnFilterBy}: valueFrom

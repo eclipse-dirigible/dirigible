@@ -14,133 +14,133 @@ function getMaster(parameters) {
 	return [
 		// Location: "gen/{{genFolderName}}/ui/perspective"
 		{
-			location: "/template-application-ui-angular/ui/perspective/index.html.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/index.html.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/index.html",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/perspective.extension.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/perspective.extension.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/perspective.extension",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/perspective.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/perspective.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/perspective.js",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/controller.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/controller.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/controller.js",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/index.html.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/index.html.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/index.html",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/view.extension.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/view.extension.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/view.extension",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/view.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/view.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/view.js",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/main-details/controller.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/main-details/controller.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/main-details/controller.js",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/main-details/index.html.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/main-details/index.html.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/main-details/index.html",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/main-details/view.extension.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/main-details/view.extension.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/main-details/view.extension",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/main-details/view.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/main-details/view.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/main-details/view.js",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/dialog-filter/controller.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/dialog-filter/controller.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-filter/controller.js",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/dialog-filter/index.html.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/dialog-filter/index.html.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-filter/index.html",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/dialog-filter/view.extension.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/dialog-filter/view.extension.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-filter/view.extension",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/dialog-filter/view.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/dialog-filter/view.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-filter/view.js",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/dialog-window/controller.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/dialog-window/controller.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/controller.js",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/dialog-window/index.html.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/dialog-window/index.html.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/index.html",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/dialog-window/view.extension.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/dialog-window/view.extension.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/view.extension",
 			collection: "uiManageMasterModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/dialog-window/view.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/dialog-window/view.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{name}}/dialog-window/view.js",
@@ -152,84 +152,84 @@ function getMaster(parameters) {
 function getDetails(parameters) {
 	return [
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/detail/controller.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/detail/controller.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{masterEntity}}/{{name}}/controller.js",
 			collection: "uiManageDetailsModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/detail/index.html.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/detail/index.html.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{masterEntity}}/{{name}}/index.html",
 			collection: "uiManageDetailsModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/detail/view.extension.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/detail/view.extension.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{masterEntity}}/{{name}}/view.extension",
 			collection: "uiManageDetailsModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/detail/view.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/detail/view.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{masterEntity}}/{{name}}/view.js",
 			collection: "uiManageDetailsModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/detail/dialog-window/controller.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/detail/dialog-window/controller.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{masterEntity}}/{{name}}/dialog-window/controller.js",
 			collection: "uiManageDetailsModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/detail/dialog-window/index.html.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/detail/dialog-window/index.html.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{masterEntity}}/{{name}}/dialog-window/index.html",
 			collection: "uiManageDetailsModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/detail/dialog-window/view.extension.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/detail/dialog-window/view.extension.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{masterEntity}}/{{name}}/dialog-window/view.extension",
 			collection: "uiManageDetailsModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/detail/dialog-window/view.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/detail/dialog-window/view.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{masterEntity}}/{{name}}/dialog-window/view.js",
 			collection: "uiManageDetailsModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/detail/dialog-filter/controller.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/detail/dialog-filter/controller.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{masterEntity}}/{{name}}/dialog-filter/controller.js",
 			collection: "uiManageDetailsModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/detail/dialog-filter/index.html.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/detail/dialog-filter/index.html.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{masterEntity}}/{{name}}/dialog-filter/index.html",
 			collection: "uiManageDetailsModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/detail/dialog-filter/view.extension.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/detail/dialog-filter/view.extension.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{masterEntity}}/{{name}}/dialog-filter/view.extension",
 			collection: "uiManageDetailsModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/master-manage/detail/dialog-filter/view.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/master-manage/detail/dialog-filter/view.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/{{perspectiveName}}/{{masterEntity}}/{{name}}/dialog-filter/view.js",

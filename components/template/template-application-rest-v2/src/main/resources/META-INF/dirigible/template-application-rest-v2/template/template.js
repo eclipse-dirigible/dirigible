@@ -18,21 +18,9 @@ export function getTemplate(parameters) {
     const daoTemplate = daoTemplateManager.getTemplate(parameters);
 
     let templateSources = [{
-        location: "/template-application-rest-v2/api/utils/HttpUtils.ts.template",
-        action: "copy",
-        rename: "gen/{{genFolderName}}/api/utils/HttpUtils.ts",
-    }, {
-        location: "/template-application-rest-v2/api/utils/ForbiddenError.ts.template",
-        action: "copy",
-        rename: "gen/{{genFolderName}}/api/utils/ForbiddenError.ts",
-    }, {
-        location: "/template-application-rest-v2/api/utils/ValidationError.ts.template",
-        action: "copy",
-        rename: "gen/{{genFolderName}}/api/utils/ValidationError.ts",
-    }, {
-        location: "/template-application-rest-v2/api/entity.ts.template",
+        location: "/template-application-rest-v2/api/EntityController.ts.template",
         action: "generate",
-        rename: "gen/{{genFolderName}}/api/{{perspectiveName}}/{{name}}Service.ts",
+        rename: "gen/{{genFolderName}}/api/{{perspectiveName}}/{{name}}Controller.ts",
         engine: "velocity",
         collection: "apiModels"
     }, {

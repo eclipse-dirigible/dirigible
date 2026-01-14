@@ -1,46 +1,49 @@
 #set($dollar = '$' )
 #foreach ($property in $properties)
-#if($property.roleRead || $property.roleWrite)
-#set($isEntityPropertySecurityEnabled = "true")
-#break
+    #if($property.roleRead || $property.roleWrite)
+        #set($isEntityPropertySecurityEnabled = "true")
+    #break
+    #end
 #end
-#end
-import { Controller, Get, Post, Put, Delete, Documentation, request, response } from "@aerokit/sdk/http"
+import { Controller, Get, Post, Put, Delete, Documentation, request, response } from '@aerokit/sdk/http'
+import { Injected, Inject } from '@aerokit/sdk/component'
+import { Options } from '@aerokit/sdk/db'
 import { Extensions } from "@aerokit/sdk/extensions"
-import { ${name}Repository } from "../../data/${perspectiveName}/${name}Repository";
-import { ${name}Entity } from "../../data/${perspectiveName}/${name}Entity";
 #if($perspectiveRole || $roleRead || $roleWrite || $isEntityPropertySecurityEnabled)
-import { user } from "@aerokit/sdk/security"
+import { user } from '@aerokit/sdk/security'
 #end
 #if($perspectiveRole || $roleRead || $roleWrite)
-import { ForbiddenError } from "../utils/ForbiddenError";
+import { ForbiddenError } from '@aerokit/sdk/http/errors'
 #end
-import { ValidationError } from "../utils/ValidationError";
-import { HttpUtils } from "../utils/HttpUtils";
+import { ValidationError } from '@aerokit/sdk/http/errors'
+import { HttpUtils } from "@aerokit/sdk/http/utils";
+import { ${name}Repository } from '../../data/${perspectiveName}/${name}Repository'
+import { ${name}Entity } from '../../data/${perspectiveName}/${name}Entity'
 #if($importsCode && $importsCode != "")
 // custom imports
 ${importsCode}
 #end
 
-const validationModules = await Extensions.loadExtensionModules("${projectName}-${perspectiveName}-${name}", ["validate"]);
+const validationModules = await Extensions.loadExtensionModules('${projectName}-${perspectiveName}-${name}', ['validate']);
 
 @Controller
-@Documentation("${name} Controller")
-class ${name}Service {
+@Documentation('${projectName} - ${name} Controller')
+@Injected()
+class ${name}Controller {
 
-    private readonly repository = new ${name}Repository();
+    @Inject('${name}Repository')
+    private readonly repository!: ${name}Repository;
 
-    @Get("/")
-    @Documentation("Get All ${name}")
-    public getAll(_: any, ctx: any): ${name}Entity[] | undefined {
+    @Get('/')
+    @Documentation('Get All ${name}')
+    public getAll(_: any, ctx: any): ${name}Entity[] {
         try {
 #if($perspectiveRole || $roleRead || $roleWrite)
-            this.checkPermissions("read");
+            this.checkPermissions('read');
 #end
-            const options: ${name}EntityOptions = {
-                $limit: ctx.queryParameters["$limit"] ? parseInt(ctx.queryParameters["$limit"]) : undefined,
-                $offset: ctx.queryParameters["$offset"] ? parseInt(ctx.queryParameters["$offset"]) : undefined,
-                $language: request.getLocale().slice(0, 2)
+            const options: Options = {
+                limit: ctx.queryParameters["$limit"] ? parseInt(ctx.queryParameters["$limit"]) : 20,
+                offset: ctx.queryParameters["$offset"] ? parseInt(ctx.queryParameters["$offset"]) : 0
             };
 #if($layoutType == "MANAGE_DETAILS" || $layoutType == "LIST_DETAILS")
 
@@ -57,99 +60,104 @@ class ${name}Service {
 #end
 
 #if($isEntityPropertySecurityEnabled)
-            return this.repository.findAll(options).map(e => this.transformEntity("read", e));
+            return this.repository.findAll(options).map(e => this.transformEntity('read', e));
 #else
             return this.repository.findAll(options);
 #end
         } catch (error: any) {
             this.handleError(error);
         }
+        return undefined as any;
     }
 
-    @Post("/")
-    @Documentation("Create ${name}")
-    public create(entity: ${name}Entity): ${name}Entity | undefined {
+    @Post('/')
+    @Documentation('Create ${name}')
+    public create(entity: ${name}Entity): ${name}Entity {
         try {
 #if($perspectiveRole || $roleRead || $roleWrite)
-            this.checkPermissions("write");
+            this.checkPermissions('write');
 #end
             this.validateEntity(entity);
 #if($isEntityPropertySecurityEnabled)
             const originalEntity = this.repository.findById(#foreach($property in $properties)#if($property.dataPrimaryKey)entity.${property.name}#end#end);
-            const modifiedEntity = this.transformEntity("write", entity);
+            const modifiedEntity = this.transformEntity('write', entity);
             entity = { ...originalEntity, ...modifiedEntity };
 #end
             entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = this.repository.create(entity);
-            response.setHeader("Content-Location", "/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts/" + entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end);
+            response.setHeader('Content-Location', '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts/' + entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end);
             response.setStatus(response.CREATED);
             return entity;
         } catch (error: any) {
             this.handleError(error);
         }
+        return undefined as any;
     }
 
-    @Get("/count")
-    @Documentation("Count ${name}")
-    public count(): number {
+    @Get('/count')
+    @Documentation('Count ${name}')
+    public count(): { count: number } {
         try {
 #if($perspectiveRole || $roleRead || $roleWrite)
-            this.checkPermissions("read");
+            this.checkPermissions('read');
 #end
             return { count: this.repository.count() };
         } catch (error: any) {
             this.handleError(error);
         }
+        return { count: -1 };
     }
 
-    @Post("/count")
-    @Documentation("Count ${name} with filter")
-    public countWithFilter(filter: any) {
+    @Post('/count')
+    @Documentation('Count ${name} with filter')
+    public countWithFilter(filter: any): { count: number } {
         try {
 #if($perspectiveRole || $roleRead || $roleWrite)
-            this.checkPermissions("read");
+            this.checkPermissions('read');
 #end
             return { count: this.repository.count(filter) };
         } catch (error: any) {
             this.handleError(error);
         }
+        return { count: -1 };
     }
 
-    @Post("/search")
-    @Documentation("Search ${name}")
-    public search(filter: any): ${name}Entity[] | undefined {
+    @Post('/search')
+    @Documentation('Search ${name}')
+    public search(filter: any): ${name}Entity[] {
         try {
 #if($perspectiveRole || $roleRead || $roleWrite)
-            this.checkPermissions("read");
+            this.checkPermissions('read');
 #end
 #if($isEntityPropertySecurityEnabled)
-            return this.repository.findAll(filter).map(e => this.transformEntity("read", e));
+            return this.repository.findAll(filter).map(e => this.transformEntity('read', e));
 #else
             return this.repository.findAll(filter);
 #end
         } catch (error: any) {
             this.handleError(error);
         }
+        return undefined as any;
     }
 
-    @Get("/:id")
-    @Documentation("Get ${name} by id")
-    public getById(_: any, ctx: any): ${name}Entity | undefined {
+    @Get('/:id')
+    @Documentation('Get ${name} by id')
+    public getById(_: any, ctx: any): ${name}Entity {
         try {
 #if($perspectiveRole || $roleRead || $roleWrite)
-            this.checkPermissions("read");
+            this.checkPermissions('read');
 #end
 #foreach ($property in $properties)
-#if($property.dataPrimaryKey)
-#if($property.dataTypeTypescript == "number")
+    #if($property.dataPrimaryKey)
+        #if($property.dataTypeTypescript == "number")
             const id = parseInt(ctx.pathParameters.id);
-#elseif($property.dataTypeTypescript == "Date")
+        #elseif($property.dataTypeTypescript == "Date")
             const id = new Date(parseInt(ctx.pathParameters.id));
-#elseif($property.dataTypeTypescript == "boolean")
-            const id = ctx.pathParameters.id === "true";
-#else
+        #elseif($property.dataTypeTypescript == "boolean")
+            const id = ctx.pathParameters.id === 'true';
+        #else
             const id = ctx.pathParameters.id;
-#end
-#end
+        #end
+    #end
 #end
             const options: ${name}EntityOptions = {
                 $language: request.getLocale().slice(0, 2)
@@ -157,30 +165,31 @@ class ${name}Service {
             const entity = this.repository.findById(id, options);
             if (entity) {
 #if($isEntityPropertySecurityEnabled)
-                return this.transformEntity("read", entity);
+                return this.transformEntity('read', entity);
 #else
                 return entity;
 #end
             } else {
-                HttpUtils.sendResponseNotFound("${name} not found");
+                HttpUtils.sendResponseNotFound('${name} not found');
             }
         } catch (error: any) {
             this.handleError(error);
         }
+        return undefined as any;
     }
 
-    @Put("/:id")
-    @Documentation("Update ${name} by id")
-    public update(entity: ${name}Entity, ctx: any): ${name}Entity | undefined {
+    @Put('/:id')
+    @Documentation('Update ${name} by id')
+    public update(entity: ${name}Entity, ctx: any): ${name}Entity {
         try {
 #if($perspectiveRole || $roleRead || $roleWrite)
-            this.checkPermissions("write");
+            this.checkPermissions('write');
 #end
             entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = ctx.pathParameters.id;
             this.validateEntity(entity);
 #if($isEntityPropertySecurityEnabled)
             const originalEntity = this.repository.findById(#foreach($property in $properties)#if($property.dataPrimaryKey)entity.${property.name}#end#end);
-            const modifiedEntity = this.transformEntity("write", entity);
+            const modifiedEntity = this.transformEntity('write', entity);
             entity = { ...originalEntity, ...modifiedEntity };
 #end
             this.repository.update(entity);
@@ -188,14 +197,15 @@ class ${name}Service {
         } catch (error: any) {
             this.handleError(error);
         }
+        return undefined as any;
     }
 
-    @Delete("/:id")
-    @Documentation("Delete ${name} by id")
+    @Delete('/:id')
+    @Documentation('Delete ${name} by id')
     public deleteById(_: any, ctx: any): void {
         try {
 #if($perspectiveRole || $roleRead || $roleWrite)
-            this.checkPermissions("write");
+            this.checkPermissions('write');
 #end
             const id = ctx.pathParameters.id;
             const entity = this.repository.findById(id);
@@ -203,7 +213,7 @@ class ${name}Service {
                 this.repository.deleteById(id);
                 HttpUtils.sendResponseNoContent();
             } else {
-                HttpUtils.sendResponseNotFound("${name} not found");
+                HttpUtils.sendResponseNotFound('${name} not found');
             }
         } catch (error: any) {
             this.handleError(error);
@@ -211,9 +221,9 @@ class ${name}Service {
     }
 
     private handleError(error: any) {
-        if (error.name === "ForbiddenError") {
+        if (error.name === 'ForbiddenError') {
             HttpUtils.sendForbiddenRequest(error.message);
-        } else if (error.name === "ValidationError") {
+        } else if (error.name === 'ValidationError') {
             HttpUtils.sendResponseBadRequest(error.message);
         } else {
             HttpUtils.sendInternalServerError(error.message);
@@ -223,17 +233,17 @@ class ${name}Service {
 
     private checkPermissions(operationType: string) {
 #if($perspectiveRole)
-        if (!user.isInRole("${perspectiveRole}")) {
+        if (!user.isInRole('${perspectiveRole}')) {
             throw new ForbiddenError();
         }
 #end
 #if($roleRead)
-        if (operationType === "read" && !(user.isInRole("${roleRead}")#if($roleWrite) || user.isInRole("${roleWrite}")#end)) {
+        if (operationType === 'read' && !(user.isInRole('${roleRead}')#if($roleWrite) || user.isInRole('${roleWrite}')#end)) {
             throw new ForbiddenError();
         }
 #end
 #if($roleWrite)
-        if (operationType === "write" && !user.isInRole("${roleWrite}")) {
+        if (operationType === 'write' && !user.isInRole('${roleWrite}')) {
             throw new ForbiddenError();
         }
 #end
@@ -268,12 +278,12 @@ class ${name}Service {
         const entity = { ...originalEntity };
 #foreach ($property in $properties)
 #if($property.roleRead)
-        if (operationType === "read" && !user.isInRole("${property.roleRead}")) {
+        if (operationType === 'read' && !user.isInRole('${property.roleRead}')) {
             delete entity.${property.name};
         }
 #end
 #if($property.roleWrite)
-        if (operationType === "write" && !user.isInRole("${property.roleWrite}")) {
+        if (operationType === 'write' && !user.isInRole('${property.roleWrite}')) {
             delete entity.${property.name};
         }
 #end

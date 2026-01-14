@@ -1,7 +1,7 @@
 #set($dollar = '$')
 angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'])
 	.config(['EntityServiceProvider', (EntityServiceProvider) => {
-		EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts';
+		EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Controller.ts';
 	}])
 	.controller('PageController', (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end EntityService, Extensions, LocaleService) => {
 		const Dialogs = new DialogHub();
@@ -157,7 +157,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
 
-		${dollar}http.get('${property.widgetDropdownUrl}').then((response) => {
+		${dollar}http.get('${property.widgetDropdownControllerUrl}').then((response) => {
 			${dollar}scope.options${property.name} = response.data.map(e => ({
 				value: e.${property.widgetDropDownKey},
 				text: e.${property.widgetDropDownValue}

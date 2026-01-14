@@ -1,7 +1,8 @@
-import { Repository, EntityEvent, EntityConstructor } from '@aerokit/sdk/db';
-import { Producer } from '@aerokit/sdk/messaging';
-import { Extensions } from '@aerokit/sdk/extensions';
-import { ${name}Entity } from './${name}Entity';
+import { Repository, EntityEvent, EntityConstructor } from '@aerokit/sdk/db'
+import { Component } from '@aerokit/sdk/component'
+import { Producer } from '@aerokit/sdk/messaging'
+import { Extensions } from '@aerokit/sdk/extensions'
+import { ${name}Entity } from './${name}Entity'
 #if($importsCode && $importsCode != "")
 // custom imports
 ${importsCode}
@@ -14,6 +15,7 @@ ${importsCode}
     #end
 #end
 
+@Component('${name}Repository')
 export class ${name}Repository extends Repository<${name}Entity> {
 
     constructor() {

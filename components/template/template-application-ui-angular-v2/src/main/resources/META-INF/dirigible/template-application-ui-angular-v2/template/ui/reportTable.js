@@ -7,84 +7,84 @@ export function getSources(parameters) {
 	return [
 		// Location: "gen/{{genFolderName}}/ui/perspective/"
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/dialog-window/controller.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-table/dialog-window/controller.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window/controller.js",
 			collection: "uiReportTableModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/dialog-window/index.html.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-table/dialog-window/index.html.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window/index.html",
 			collection: "uiReportTableModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/dialog-window/view.extension.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-table/dialog-window/view.extension.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window/view.extension",
 			collection: "uiReportTableModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/dialog-window/view.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-table/dialog-window/view.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window/view.js",
 			collection: "uiReportTableModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/dialog-window-filter/controller.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-table/dialog-window-filter/controller.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window-filter/controller.js",
 			collection: "uiReportTableModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/dialog-window-filter/index.html.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-table/dialog-window-filter/index.html.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window-filter/index.html",
 			collection: "uiReportTableModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/dialog-window-filter/view.extension.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-table/dialog-window-filter/view.extension.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window-filter/view.extension",
 			collection: "uiReportTableModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/dialog-window-filter/view.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-table/dialog-window-filter/view.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-window-filter/view.js",
 			collection: "uiReportTableModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/controller.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-table/controller.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/controller.js",
 			collection: "uiReportTableModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/index.html.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-table/index.html.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/index.html",
 			collection: "uiReportTableModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/view.extension.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-table/view.extension.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/view.extension",
 			collection: "uiReportTableModels"
 		},
 		{
-			location: "/template-application-ui-angular/ui/perspective/report-table/view.js.template",
+			location: "/template-application-ui-angular-v2/ui/perspective/report-table/view.js.template",
 			action: "generate",
 			engine: "velocity",
 			rename: "gen/{{genFolderName}}/ui/Reports/{{name}}/view.js",
