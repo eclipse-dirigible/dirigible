@@ -1,0 +1,85 @@
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
+
+	<head>
+		<meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+		<script type="text/javascript" src="/services/web/dashboard/services/entity.js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="controller.js"></script>
+	</head>
+
+	<body class="bk-vbox">
+		<bk-toolbar has-title="true">
+			<bk-toolbar-title>{{'$projectName:${tprefix}.defaults.items' | t}} <span bk-object-status text="{{dataCount}}" inverted="true"></bk-toolbar-title>
+			<bk-toolbar-spacer></bk-toolbar-spacer>
+			<bk-popover>
+				<bk-popover-control>
+					<bk-button compact="true" glyph="sap-icon--overflow" state="transparent" aria-label="{{ '$projectName:${tprefix}.aria.headerMenuBtn' | t }}"></bk-button>
+				</bk-popover-control>
+				<bk-popover-body align="bottom-right">
+					<bk-menu aria-label="{{ '$projectName:${tprefix}.aria.headerMenu' | t }}" no-backdrop="true" no-shadow="true">
+						<bk-menu-item title="{{ '$projectName:${tprefix}.defaults.filter' | t }}" ng-click="openFilter()"></bk-menu-item>
+						<bk-menu-item ng-repeat="action in pageActions track by $index" title="{{action.translation.key | t:action.translation.options:action.label}}" ng-click="triggerPageAction(action)"></bk-menu-item>
+					</bk-menu>
+				</bk-popover-body>
+			</bk-popover>
+		</bk-toolbar>
+		<bk-scrollbar>
+			<bk-list list-type="navigation-indication" byline="true">
+				<bk-list-item ng-repeat="next in data track by $index">
+					<bk-list-link navigation-indicator="true" selected="next.${primaryKeysString} === selectedEntity.${primaryKeysString}"
+						navigated="next.${primaryKeysString} === selectedEntity.${primaryKeysString}" ng-click="selectEntity(next)">
+						<bk-list-content
+#if($masterProperties.title.widgetType == "DROPDOWN")
+							item-title="{{options${masterProperties.title.name}Value(next.${masterProperties.title.name})}}">
+#elseif($masterProperties.title.widgetType == "DATE")
+							item-title="{{next.${masterProperties.title.name} | date: 'dd/MMM/yyyy'}}">
+#elseif($masterProperties.title.widgetType == "DATETIME-LOCAL")
+							item-title="{{next.${masterProperties.title.name} | date: 'dd/MMM/yyyy HH:MM'}}">
+#elseif($masterProperties.title.widgetType == "TIME")
+							item-title="{{next.${masterProperties.title.name} | date: 'HH:MM:ss'}}">
+#elseif($masterProperties.title.widgetType == "WEEK")
+							item-title="Week {{next.${masterProperties.title.name} | date: 'ww'}}">
+#else
+							item-title="{{next.${masterProperties.title.name}}}">
+#end
+							<bk-list-byline align="left">
+#foreach ($property in $masterProperties.properties)
+#if($property.widgetType == "DROPDOWN")
+								{{options${property.name}Value(next.${property.name})}}#if(!$foreach.isLast()) |#end
+#elseif($property.widgetType == "DATE")
+								{{next.${property.name} | date: "dd/MMM/yyyy"}}#if(!$foreach.isLast()) |#end
+#elseif($property.widgetType == "DATETIME-LOCAL")
+								{{next.${property.name} | date: "dd/MMM/yyyy HH:MM"}}#if(!$foreach.isLast()) |#end
+#elseif($property.widgetType == "TIME")
+								{{next.${property.name} | date: "HH:MM:ss"}}#if(!$foreach.isLast()) |#end
+#elseif($property.widgetType == "WEEK")
+								Week {{next.${property.name} | date: "ww"}}#if(!$foreach.isLast()) |#end
+#elseif($property.widgetType == "EMAIL")
+								<bk-link href="mailto:{{next.${property.name}}}">{{next.${property.name}}}</bk-link>#if(!$foreach.isLast()) |#end
+#elseif($property.widgetType == "URL")
+								<bk-link href="{{next.${property.name}}}" target="_blank">{{next.${property.name}}}</bk-link>#if(!$foreach.isLast()) |#end
+#elseif($property.widgetType == "TEL")
+								<bk-link href="tel:{{next.${property.name}}}">{{next.${property.name}}}</bk-link>#if(!$foreach.isLast()) |#end
+#else
+								{{next.${property.name}}}#if(!$foreach.isLast()) |#end
+#end
+#end
+							</bk-list-byline>
+						</bk-list-content>
+					</bk-list-link>
+				</bk-list-item>
+			</bk-list>
+			<bk-list-action-item ng-show="dataPage <= dataPages && dataCount > dataLimit" ng-click="loadPage()">
+				{{ '$projectName:${tprefix}.defaults.loadMore' | t }}
+			</bk-list-action-item>
+		</bk-scrollbar>
+		<theme></theme>
+	</body>
+
+</html>

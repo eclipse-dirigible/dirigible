@@ -1,0 +1,149 @@
+#if($perspectiveRole || $security.roleRead)
+#set($isEntityPropertySecurityEnabled = "true")
+#end
+import { Controller, Get, Post } from "@aerokit/sdk/http"
+import { ${name}Repository, ${name}Filter, ${name}PaginatedFilter } from "../../dao/${perspectiveName}/${name}Repository";
+#if($perspectiveRole || $security.roleRead)
+import { user } from "@aerokit/sdk/security"
+import { ForbiddenError } from "../utils/ForbiddenError";
+#end
+import { HttpUtils } from "../utils/HttpUtils";
+
+@Controller
+class ${name}Service {
+
+    private readonly repository = new ${name}Repository();
+
+    @Get("/")
+    public filter(_: any, ctx: any) {
+        try {
+#if($perspectiveRole || $security.roleRead)
+            this.checkPermissions("read");
+
+#end
+            const filter: ${name}PaginatedFilter = {
+#foreach ($parameter in $parameters)
+#if($parameter.typeTypescript == "string")
+                ${parameter.name}: ctx.queryParameters.${parameter.name} ? ctx.queryParameters.${parameter.name} : undefined,
+#elseif($parameter.typeTypescript == "number")
+                ${parameter.name}: ctx.queryParameters.${parameter.name} ? parseInt(ctx.queryParameters.${parameter.name}) : undefined,
+#elseif($parameter.typeTypescript == "Date")
+                ${parameter.name}: ctx.queryParameters.${parameter.name} ? new Date(parseInt(ctx.queryParameters.${parameter.name})) : undefined,
+#elseif($parameter.typeTypescript == "boolean")
+                ${parameter.name}: ctx.queryParameters.${parameter.name} !== undefined && ctx.queryParameters.${parameter.name} !== null ? ctx.queryParameters.${column.alias} === "true" : undefined,
+#else
+                ${parameter.name}: ctx.queryParameters.${parameter.name} ? ctx.queryParameters.${parameter.name} as unknown: undefined,
+#end
+#end
+                "$limit": ctx.queryParameters["$limit"] ? parseInt(ctx.queryParameters["$limit"]) : undefined,
+                "$offset": ctx.queryParameters["$offset"] ? parseInt(ctx.queryParameters["$offset"]) : undefined
+            };
+
+#if($isEntityPropertySecurityEnabled)
+            return this.repository.findAll(filter).map(e => this.transformEntity("read", e));
+#else
+            return this.repository.findAll(filter);
+#end
+        } catch (error: any) {
+            this.handleError(error);
+        }
+    }
+
+    @Get("/count")
+    public count(_: any, ctx: any) {
+        try {
+#if($perspectiveRole || $security.roleRead)
+            this.checkPermissions("read");
+
+#end
+            const filter: ${name}Filter = {
+#foreach ($parameter in $parameters)
+#if($parameter.typeTypescript == "string")
+                ${parameter.name}: ctx.queryParameters.${parameter.name} ? ctx.queryParameters.${parameter.name} : undefined,
+#elseif($parameter.typeTypescript == "number")
+                ${parameter.name}: ctx.queryParameters.${parameter.name} ? parseInt(ctx.queryParameters.${parameter.name}) : undefined,
+#elseif($parameter.typeTypescript == "Date")
+                ${parameter.name}: ctx.queryParameters.${parameter.name} ? new Date(parseInt(ctx.queryParameters.${parameter.name})) : undefined,
+#elseif($parameter.typeTypescript == "boolean")
+                ${parameter.name}: ctx.queryParameters.${parameter.name} !== undefined && ctx.queryParameters.${parameter.name} !== null ? ctx.queryParameters.${column.alias} === "true" : undefined,
+#else
+                ${parameter.name}: ctx.queryParameters.${parameter.name} ? ctx.queryParameters.${parameter.name} as unknown: undefined,
+#end
+#end
+            };
+            return { count: this.repository.count(filter) };
+        } catch (error: any) {
+            this.handleError(error);
+        }
+    }
+
+    @Post("/count")
+    public countWithFilter(filter: any) {
+        try {
+#if($perspectiveRole || $security.roleRead)
+            this.checkPermissions("read");
+
+#end
+            return { count: this.repository.count(filter) };
+        } catch (error: any) {
+            this.handleError(error);
+        }
+    }
+
+    @Post("/search")
+    public search(filter: any) {
+        try {
+#if($perspectiveRole || $security.roleRead)
+            this.checkPermissions("read");
+
+#end
+#if($isEntityPropertySecurityEnabled)
+            return this.repository.findAll(filter).map(e => this.transformEntity("read", e));
+#else
+            return this.repository.findAll(filter);
+#end
+        } catch (error: any) {
+            this.handleError(error);
+        }
+    }
+
+    private handleError(error: any) {
+        if (error.name === "ForbiddenError") {
+            HttpUtils.sendForbiddenRequest(error.message);
+        } else if (error.name === "ValidationError") {
+            HttpUtils.sendResponseBadRequest(error.message);
+        } else {
+            HttpUtils.sendInternalServerError(error.message);
+        }
+    }
+
+#if($perspectiveRole || $security.roleRead)
+    private checkPermissions(operationType: string) {
+#if($perspectiveRole)
+        if (!user.isInRole("${perspectiveRole}")) {
+            throw new ForbiddenError();
+        }
+#end
+#if($security.roleRead)
+        if (operationType === "read" && !(user.isInRole("${security.roleRead}"))) {
+            throw new ForbiddenError();
+        }
+#end
+    }
+
+#end
+#if($isEntityPropertySecurityEnabled)
+    private transformEntity(operationType: string, originalEntity: any) {
+        const entity = { ...originalEntity };
+#foreach ($column in $columns)
+#if($column.roleRead)
+        if (operationType === "read" && !user.isInRole("${property.roleRead}")) {
+            delete entity.${column.alias};
+        }
+#end
+#end
+        return entity;
+    }
+
+#end
+}

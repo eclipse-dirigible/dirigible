@@ -1,0 +1,56 @@
+#set($dollar = '$')
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale']).controller('PageController', ($scope, ViewParameters) => {
+	const Dialogs = new DialogHub();
+	$scope.entity = {};
+	$scope.forms = {
+		details: {},
+	};
+
+	let params = ViewParameters.get();
+	if (Object.keys(params).length) {
+#foreach ($parameter in $parameters)
+#if($parameter.typeTypescript == 'Date')
+		if (params?.entity?.${parameter.name}) {
+			params.entity.${parameter.name} = new Date(params.entity.${parameter.name});
+		}
+#end
+#end
+		$scope.entity = params.entity ?? {};
+		$scope.selectedMainEntityKey = params.selectedMainEntityKey;
+		$scope.selectedMainEntityId = params.selectedMainEntityId;
+	}
+
+	$scope.filter = () => {
+		let entity = $scope.entity;
+		const filter = {
+
+		};
+#foreach($parameter in $parameters)
+		if (entity.${parameter.name}) {
+#if($parameter.typeTypescript == 'Date')
+			filter.${parameter.name} = entity.${parameter.name}?.getTime();
+#else
+			filter.${parameter.name} = entity.${parameter.name};
+#end
+		}
+#end
+		Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entitySearch', data: {
+			entity: entity,
+			filter: filter
+		} });
+		$scope.cancel();
+	};
+
+	$scope.resetFilter = () => {
+		$scope.entity = {};
+		$scope.filter();
+	};
+
+	$scope.cancel = () => {
+		Dialogs.closeWindow({ id: '${name}-Report-filter' });
+	};
+
+	$scope.clearErrorMessage = () => {
+		$scope.errorMessage = null;
+	};
+});
