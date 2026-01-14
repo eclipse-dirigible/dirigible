@@ -143,9 +143,13 @@ public class JavascriptHandler {
                 logger.error(ex.getMessage());
                 return ex.getMessage();
             }
+            if (ex.getMessage() != null) {
+                logger.error(ex.getMessage(), ex);
+            }
             String errorMessage = String.format(
-                    "Error on processing JavaScript service from project: [%s], path: [%s], project file path param [%s] with parameters: [%s]",
-                    projectName, projectFilePath, projectFilePathParam, parameters);
+                    "Error on processing JavaScript service from project: [%s], path: [%s], project file path param [%s] with parameters: [%s] - %s",
+                    projectName, projectFilePath, projectFilePathParam != null ? projectFilePathParam : "none",
+                    parameters != null ? parameters : "none", ex.getMessage());
             throw new RuntimeException(errorMessage, ex);
         }
     }

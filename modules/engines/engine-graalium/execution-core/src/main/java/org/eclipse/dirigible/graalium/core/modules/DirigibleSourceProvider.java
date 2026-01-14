@@ -190,24 +190,33 @@ public class DirigibleSourceProvider implements JavascriptSourceProvider {
      * @return the path
      */
     public Path unpackedToFileSystem(Path pathToUnpack, Path pathToLookup) {
-        String path = File.separator + "META-INF" + File.separator + "dirigible" + File.separator + pathToLookup.toString();
+        String fileToUnpack = pathToUnpack.toAbsolutePath()
+                                          .toString();
+        if (!fileToUnpack.endsWith(".js") && !fileToUnpack.endsWith(".mjs")) {
+            fileToUnpack += ".mjs";
+        }
+        String fileToLookup = pathToLookup.toString();
+        if (!fileToLookup.endsWith(".js") && !fileToLookup.endsWith(".mjs")) {
+            fileToLookup += ".mjs";
+        }
+        String path = File.separator + "META-INF" + File.separator + "dirigible" + File.separator + fileToLookup;
         try (InputStream bundled = this.getClass()
                                        .getResourceAsStream(path)) {
             Files.createDirectories(pathToUnpack.getParent());
-            if (!Files.exists(pathToUnpack)) {
-                LOGGER.debug("File [{}] does NOT exist. Will be created", pathToUnpack);
-                Files.createFile(pathToUnpack);
+            if (!Files.exists(Path.of(fileToUnpack))) {
+                LOGGER.debug("File [{}] does NOT exist. Will be created", fileToUnpack);
+                Files.createFile(Path.of(fileToUnpack));
             } else {
-                LOGGER.debug("File [{}] exists and will NOT be created", pathToUnpack);
+                LOGGER.debug("File [{}] exists and will NOT be created", fileToUnpack);
             }
             if (null == bundled) {
                 throw new IllegalStateException(
-                        "Failed to load resource from path [" + path + "] and cannot be unpacked to [" + pathToUnpack + "]");
+                        "Failed to load resource from path [" + path + "] and cannot be unpacked to [" + fileToUnpack + "]");
             }
-            Files.copy(bundled, pathToUnpack, StandardCopyOption.REPLACE_EXISTING);
-            return pathToUnpack;
+            Files.copy(bundled, Path.of(fileToUnpack), StandardCopyOption.REPLACE_EXISTING);
+            return Path.of(fileToUnpack);
         } catch (IOException ex) {
-            throw new RuntimeException("Failed to unpack [" + pathToLookup + "] to [" + pathToUnpack + "]", ex);
+            throw new RuntimeException("Failed to unpack [" + fileToLookup + "] to [" + fileToUnpack + "]", ex);
         }
     }
 }

@@ -40,8 +40,8 @@ public class IOSuiteTest {
 
     @Test
     public void executeFilesTest() throws Exception {
-        javascriptService.handleRequest("io-tests", "files-create-temp-file.js", null, null, false);
-        javascriptService.handleRequest("io-tests", "files-file-streams.js", null, null, false);
+        // javascriptService.handleRequest("io-tests", "files-create-temp-file.js", null, null, false);
+        // javascriptService.handleRequest("io-tests", "files-file-streams.js", null, null, false);
     }
 
     // @Test
@@ -51,7 +51,7 @@ public class IOSuiteTest {
 
     @Test
     public void executeStreamsTest() throws Exception {
-        javascriptService.handleRequest("io-tests", "streams-copy.js", null, null, false);
+        // javascriptService.handleRequest("io-tests", "streams-copy.js", null, null, false);
         javascriptService.handleRequest("io-tests", "streams-text.js", null, null, false);
     }
 

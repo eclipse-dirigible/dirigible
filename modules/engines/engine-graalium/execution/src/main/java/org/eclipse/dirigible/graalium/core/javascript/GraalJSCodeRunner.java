@@ -9,9 +9,15 @@
  */
 package org.eclipse.dirigible.graalium.core.javascript;
 
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.Tracer;
-import io.opentelemetry.context.Scope;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
 import org.eclipse.dirigible.components.open.telemetry.OpenTelemetryProvider;
 import org.eclipse.dirigible.graalium.core.CodeRunner;
 import org.eclipse.dirigible.graalium.core.graal.ContextCreator;
@@ -23,16 +29,16 @@ import org.eclipse.dirigible.graalium.core.javascript.modules.ModuleResolver;
 import org.eclipse.dirigible.graalium.core.javascript.modules.ModuleType;
 import org.eclipse.dirigible.graalium.core.javascript.modules.downloadable.DownloadableModuleResolver;
 import org.eclipse.dirigible.graalium.core.javascript.polyfills.JavascriptPolyfill;
-import org.graalvm.polyglot.*;
+import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Engine;
+import org.graalvm.polyglot.PolyglotException;
+import org.graalvm.polyglot.Source;
+import org.graalvm.polyglot.Value;
+import org.slf4j.LoggerFactory;
 
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Scope;
 
 /**
  * The Class GraalJSCodeRunner.
@@ -395,6 +401,9 @@ public class GraalJSCodeRunner implements CodeRunner<Source, Value> {
                 Value guestObject = e.getGuestObject();
                 if (guestObject.isException()) {
                     String exMessage = getExceptionMessage(guestObject);
+                    if (exMessage == null) {
+                        e.getMessage();
+                    }
                     String exClassName = getExceptionClass(guestObject);
                     Throwable exCause = getExceptionCause(guestObject);
                     StackTraceElement[] stackTrace = getExceptionStackTrace(guestObject);
