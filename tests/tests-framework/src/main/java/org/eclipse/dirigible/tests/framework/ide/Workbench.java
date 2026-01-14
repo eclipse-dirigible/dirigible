@@ -13,6 +13,8 @@ import org.eclipse.dirigible.tests.framework.browser.Browser;
 import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.util.SynchronizationUtil;
+import org.apache.commons.lang3.SystemUtils;
+import org.openqa.selenium.Keys;
 
 public class Workbench {
 
@@ -20,6 +22,8 @@ public class Workbench {
     public static final String PROJECT_NAME_INPUT_ID = "pgfi1";
     private static final String PROJECTS_CONTEXT_MENU_NEW_PROJECT = "New Project";
     private static final String CREATE_PROJECT_BUTTON_TEXT = "Create";
+    public static final String FILE_NAME_INPUT_ID = "fdti1";
+    private static final String CREATE_BUTTON_TEXT = "Create";
 
     private final Browser browser;
     private final WelcomeViewFactory welcomeViewFactory;
@@ -74,7 +78,12 @@ public class Workbench {
         browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
 
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", newFileType);
-        browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
+        browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_BUTTON_TEXT);
+    }
+
+    public void publishFile(String fileAnchorId) {
+        browser.rightClickOnElementById(fileAnchorId);
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", "Publish");
     }
 
     public void expandProject(String projectName) {
@@ -93,6 +102,36 @@ public class Workbench {
     public Terminal openTerminal() {
         browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Terminal");
         return terminalFactory.create(browser);
+    }
+
+    public void createCustomElement(String fileName, String elementType) {
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", elementType);
+
+        browser.enterTextInElementById(FILE_NAME_INPUT_ID, fileName);
+        browser.clickOnElementWithText(HtmlElementType.BUTTON, CREATE_BUTTON_TEXT);
+    }
+
+    public void createCustomElementInProject(String projectName, String fileName, String elementType) {
+        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
+        createCustomElement(fileName, elementType);
+    }
+
+    public void saveAll() {
+        browser.clickOnElementByAttributeValue(HtmlElementType.BUTTON, HtmlAttribute.GLYPH, "sap-icon--save");
+    }
+
+    private void selectAll() {
+        if (SystemUtils.IS_OS_MAC)
+            browser.pressMultipleKeys(Keys.COMMAND, "a");
+        else
+            browser.pressMultipleKeys(Keys.CONTROL, "a");
+
+    }
+
+    public void addContentToHTMLFile(String fileContent) {
+        browser.clickOnElementByAttributePattern(HtmlElementType.DIV, HtmlAttribute.CLASS, "view-lines monaco-mouse-cursor-text");
+        selectAll();
+        browser.type(fileContent);
     }
 
 }
