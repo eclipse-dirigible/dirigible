@@ -6,7 +6,7 @@ import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.ide.Workbench;
 import org.junit.jupiter.api.Test;
 
-public class CreateHTML5PageIT extends UserInterfaceIntegrationTest{
+public class CreateHTML5PageIT extends UserInterfaceIntegrationTest {
     private static final String FILE_NAME = "test1.html";
     private static final String PROJECT_NAME = "CreateHTML5PageIT";
     private static final String PREVIEW_ID = "preview";
@@ -17,7 +17,7 @@ public class CreateHTML5PageIT extends UserInterfaceIntegrationTest{
     void test() {
         Workbench workbench = ide.openWorkbench();
         workbench.createNewProject(this.getClass()
-                .getSimpleName());
+                                       .getSimpleName());
 
         workbench.createCustomElementInProject(PROJECT_NAME, FILE_NAME, "HTML5 Page");
         workbench.openFile(FILE_NAME);
