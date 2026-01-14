@@ -2,7 +2,7 @@
  * A utility class providing static methods to standardize and send
  * common HTTP responses (success and error) with application/json content type.
  */
-import { response } from "@aerokit/sdk/http";
+import { Response } from "./response";
 
 /**
  * Provides convenient static methods for sending standard HTTP responses.
@@ -91,10 +91,10 @@ export class HttpUtils {
      * @param body The JavaScript object or string to be serialized as the response body (optional).
      */
     private static sendResponse(status: number, body?: any): void {
-        response.setContentType("application/json");
-        response.setStatus(status);
+        Response.setContentType("application/json");
+        Response.setStatus(status);
         if (body) {
-            response.println(JSON.stringify(body));
+            Response.println(JSON.stringify(body));
         }
     }
 }

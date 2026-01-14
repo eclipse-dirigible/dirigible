@@ -2,7 +2,7 @@
  * Provides a wrapper for the platform's WorkspaceFacade to manage Workspaces,
  * Projects, Folders, and Files.
  */
-import { Bytes } from "@aerokit/sdk/io/bytes";
+import { Bytes } from "../io/bytes";
 
 const WorkspaceFacade = Java.type("org.eclipse.dirigible.components.api.platform.WorkspaceFacade");
 

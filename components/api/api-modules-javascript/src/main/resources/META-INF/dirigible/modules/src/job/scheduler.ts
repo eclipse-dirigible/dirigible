@@ -3,7 +3,7 @@
  * allowing users to retrieve, enable, disable, and trigger jobs, as well as log output.
  */
 
-import { configurations } from "@aerokit/sdk/core";
+import { configurations } from "../core";
 
 const JobFacade = Java.type("org.eclipse.dirigible.components.api.job.JobFacade");
 

@@ -1,4 +1,4 @@
-import { Repository } from "@aerokit/sdk/platform/repository";
+import { Repository } from "../platform/repository";
 
 const REGISTRY_PUBLIC = "/registry/public/";
 const MUSTACHE_FILE_EXTENSION = ".mustache";

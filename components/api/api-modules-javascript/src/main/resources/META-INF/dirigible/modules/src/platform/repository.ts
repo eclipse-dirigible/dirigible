@@ -2,7 +2,7 @@
  * Provides a wrapper for the platform's RepositoryFacade to manage files (Resources)
  * and folders (Collections), including CRUD operations, movement, and content handling.
  */
-import { Bytes } from "@aerokit/sdk/io/bytes";
+import { Bytes } from "../io/bytes";
 
 const RepositoryFacade = Java.type("org.eclipse.dirigible.components.api.platform.RepositoryFacade");
 

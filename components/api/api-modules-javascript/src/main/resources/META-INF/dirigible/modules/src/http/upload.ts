@@ -2,8 +2,8 @@
  * Provides a static façade (`Upload` class) for checking and parsing
  * multipart/form-data HTTP requests, typically used for file uploads.
  */
-import { InputStream } from "@aerokit/sdk/io/streams"
-import { Bytes } from "@aerokit/sdk/io/bytes"
+import { InputStream } from "../io/streams"
+import { Bytes } from "../io/bytes"
 
 const HttpUploadFacade = Java.type("org.eclipse.dirigible.components.api.http.HttpUploadFacade");
 

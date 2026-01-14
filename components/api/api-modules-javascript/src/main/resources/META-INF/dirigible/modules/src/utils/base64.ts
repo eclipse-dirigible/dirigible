@@ -1,5 +1,5 @@
-import { Streams } from "@aerokit/sdk/io/streams";
-import { Bytes } from "@aerokit/sdk/io/bytes";
+import { Streams } from "../io/streams";
+import { Bytes } from "../io/bytes";
 
 const Base64Facade = Java.type("org.eclipse.dirigible.components.api.utils.Base64Facade");
 

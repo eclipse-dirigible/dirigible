@@ -2,7 +2,7 @@
  * Provides a static façade for image manipulation operations,
  * primarily focusing on resizing image streams.
  */
-import { InputStream } from "@aerokit/sdk/io/streams";
+import { InputStream } from "./streams";
 
 const ImageFacade = Java.type("org.eclipse.dirigible.components.api.io.ImageFacade");
 

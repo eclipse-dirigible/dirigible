@@ -4,7 +4,7 @@
  * * Provides static access to the CMIS (Content Management Interoperability Services) repository session and utility constants.
  */
 
-import * as streams from "@aerokit/sdk/io/streams";
+import * as streams from "../io/streams";
 const CmisFacade = Java.type("org.eclipse.dirigible.components.api.cms.CmisFacade");
 const Gson = Java.type("com.google.gson.Gson");
 const HashMap = Java.type("java.util.HashMap");

@@ -4,7 +4,7 @@
  * including starting, updating metadata, and managing variables.
  */
 
-import { Values } from "@aerokit/sdk/bpm/values";
+import { Values } from "./values";
 
 const BpmFacade = Java.type("org.eclipse.dirigible.components.api.bpm.BpmFacade");
 

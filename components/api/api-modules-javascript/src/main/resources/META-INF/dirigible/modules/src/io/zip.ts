@@ -2,8 +2,8 @@
  * Provides a façade for handling ZIP archive operations, including
  * file compression, decompression, and stream-based entry processing.
  */
-import { Bytes } from "@aerokit/sdk/io/bytes";
-import { InputStream, OutputStream } from "@aerokit/sdk/io/streams";
+import { Bytes } from "./bytes";
+import { InputStream, OutputStream } from "./streams";
 
 const ZipFacade = Java.type("org.eclipse.dirigible.components.api.io.ZipFacade");
 

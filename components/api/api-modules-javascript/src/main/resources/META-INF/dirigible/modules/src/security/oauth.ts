@@ -1,5 +1,5 @@
-import { client as httpClient} from "@aerokit/sdk/http"
-import { url } from "@aerokit/sdk/utils"
+import { client as httpClient} from "../http"
+import { url } from "../utils"
 
 /**
  * Configuration structure for the OAuth client.

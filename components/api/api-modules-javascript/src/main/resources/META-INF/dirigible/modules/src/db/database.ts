@@ -2,8 +2,8 @@
  * API Database
  *
  */
-import { Bytes } from "@aerokit/sdk/io/bytes";
-import { InputStream } from "@aerokit/sdk/io/streams";
+import { Bytes } from "../io/bytes";
+import { InputStream } from "../io/streams";
 
 const DatabaseFacade = Java.type("org.eclipse.dirigible.components.api.db.DatabaseFacade");
 const JSqlDate = Java.type("java.sql.Date");

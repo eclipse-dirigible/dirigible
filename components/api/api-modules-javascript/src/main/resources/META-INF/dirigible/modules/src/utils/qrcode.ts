@@ -1,4 +1,4 @@
-import { Bytes } from "@aerokit/sdk/io/bytes";
+import { Bytes } from "../io/bytes";
 const QRCodeFacade = Java.type("org.eclipse.dirigible.components.api.utils.QRCodeFacade");
 
 /**
