@@ -15,7 +15,7 @@ export function generate(model, parameters) {
         e.typeJava = parsedDataType.java;
         e.typeTypescript = parsedDataType.ts;
         if (e.typeTypescript === "Date") {
-            model.hasDates = true
+            model.hasDates = true;
         }
     });
     model?.parameters?.forEach(e => {
@@ -40,7 +40,7 @@ export function generate(model, parameters) {
     parameters.roles = [];
 
     if (model.security.generateDefaultRoles === "true") {
-        const roleData = {}
+        const roleData = {};
         roleData["entityName"] = model.name;
 
         if (model.security.roleRead && model.security.roleRead != "") {

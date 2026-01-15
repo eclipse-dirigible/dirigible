@@ -6,17 +6,17 @@
     #end
 #end
 import { Controller, Get, Post, Put, Delete, Documentation, request, response } from '@aerokit/sdk/http'
-import { Injected, Inject } from '@aerokit/sdk/component'
-import { Options } from '@aerokit/sdk/db'
-import { Extensions } from "@aerokit/sdk/extensions"
-#if($perspectiveRole || $roleRead || $roleWrite || $isEntityPropertySecurityEnabled)
-import { user } from '@aerokit/sdk/security'
-#end
+import { HttpUtils } from "@aerokit/sdk/http/utils";
+import { ValidationError } from '@aerokit/sdk/http/errors'
 #if($perspectiveRole || $roleRead || $roleWrite)
 import { ForbiddenError } from '@aerokit/sdk/http/errors'
 #end
-import { ValidationError } from '@aerokit/sdk/http/errors'
-import { HttpUtils } from "@aerokit/sdk/http/utils";
+#if($perspectiveRole || $roleRead || $roleWrite || $isEntityPropertySecurityEnabled)
+import { user } from '@aerokit/sdk/security'
+#end
+import { Options } from '@aerokit/sdk/db'
+import { Extensions } from "@aerokit/sdk/extensions"
+// import { Injected, Inject } from '@aerokit/sdk/component'
 import { ${name}Repository } from '../../data/${perspectiveName}/${name}Repository'
 import { ${name}Entity } from '../../data/${perspectiveName}/${name}Entity'
 #if($importsCode && $importsCode != "")
@@ -28,11 +28,12 @@ const validationModules = await Extensions.loadExtensionModules('${projectName}-
 
 @Controller
 @Documentation('${projectName} - ${name} Controller')
-@Injected()
+// @Injected()
 class ${name}Controller {
 
-    @Inject('${name}Repository')
-    private readonly repository!: ${name}Repository;
+    // @Inject('${name}Repository')
+    // private readonly repository!: ${name}Repository;
+    private readonly repository = new ${name}Repository();
 
     @Get('/')
     @Documentation('Get All ${name}')
@@ -43,7 +44,8 @@ class ${name}Controller {
 #end
             const options: Options = {
                 limit: ctx.queryParameters["$limit"] ? parseInt(ctx.queryParameters["$limit"]) : 20,
-                offset: ctx.queryParameters["$offset"] ? parseInt(ctx.queryParameters["$offset"]) : 0
+                offset: ctx.queryParameters["$offset"] ? parseInt(ctx.queryParameters["$offset"]) : 0,
+                language: request.getLocale().slice(0, 2)
             };
 #if($layoutType == "MANAGE_DETAILS" || $layoutType == "LIST_DETAILS")
 
@@ -83,7 +85,7 @@ class ${name}Controller {
             const modifiedEntity = this.transformEntity('write', entity);
             entity = { ...originalEntity, ...modifiedEntity };
 #end
-            entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = this.repository.create(entity);
+            entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = this.repository.create(entity) as any;
             response.setHeader('Content-Location', '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Service.ts/' + entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end);
             response.setStatus(response.CREATED);
             return entity;
@@ -104,7 +106,7 @@ class ${name}Controller {
         } catch (error: any) {
             this.handleError(error);
         }
-        return { count: -1 };
+        return undefined as any;
     }
 
     @Post('/count')
@@ -118,7 +120,7 @@ class ${name}Controller {
         } catch (error: any) {
             this.handleError(error);
         }
-        return { count: -1 };
+        return undefined as any;
     }
 
     @Post('/search')
@@ -159,8 +161,8 @@ class ${name}Controller {
         #end
     #end
 #end
-            const options: ${name}EntityOptions = {
-                $language: request.getLocale().slice(0, 2)
+            const options: Options = {
+                language: request.getLocale().slice(0, 2)
             };
             const entity = this.repository.findById(id, options);
             if (entity) {
@@ -185,7 +187,20 @@ class ${name}Controller {
 #if($perspectiveRole || $roleRead || $roleWrite)
             this.checkPermissions('write');
 #end
-            entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = ctx.pathParameters.id;
+#foreach ($property in $properties)
+    #if($property.dataPrimaryKey)
+        #if($property.dataTypeTypescript == "number")
+            const id = parseInt(ctx.pathParameters.id);
+        #elseif($property.dataTypeTypescript == "Date")
+            const id = new Date(parseInt(ctx.pathParameters.id));
+        #elseif($property.dataTypeTypescript == "boolean")
+            const id = ctx.pathParameters.id === 'true';
+        #else
+            const id = ctx.pathParameters.id;
+        #end
+    #end
+#end
+            entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = id;
             this.validateEntity(entity);
 #if($isEntityPropertySecurityEnabled)
             const originalEntity = this.repository.findById(#foreach($property in $properties)#if($property.dataPrimaryKey)entity.${property.name}#end#end);
@@ -207,7 +222,19 @@ class ${name}Controller {
 #if($perspectiveRole || $roleRead || $roleWrite)
             this.checkPermissions('write');
 #end
+#foreach ($property in $properties)
+    #if($property.dataPrimaryKey)
+        #if($property.dataTypeTypescript == "number")
+            const id = parseInt(ctx.pathParameters.id);
+        #elseif($property.dataTypeTypescript == "Date")
+            const id = new Date(parseInt(ctx.pathParameters.id));
+        #elseif($property.dataTypeTypescript == "boolean")
+            const id = ctx.pathParameters.id === 'true';
+        #else
             const id = ctx.pathParameters.id;
+        #end
+    #end
+#end
             const entity = this.repository.findById(id);
             if (entity) {
                 this.repository.deleteById(id);

@@ -6,7 +6,7 @@ export function generate(json) {
 	let projectFile = {
 		"guid": parameters.projectName,
 		"actions": []
-	}
+	};
 	const newProjectFile = JSON.stringify(projectFile);
 
 	let currenctWorkspace = workspace.getWorkspace(parameters.workspaceName);
