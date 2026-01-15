@@ -39,7 +39,8 @@ public class JavascriptHandler {
     /** The repository. */
     private final IRepository repository;
 
-    private DirigibleJavascriptCodeRunner systemRunner;
+    /** The Constant systemRunner. */
+    private static final ThreadLocal<DirigibleJavascriptCodeRunner> systemRunner = new ThreadLocal<>();
 
     /**
      * Instantiates a new javascript handler.
@@ -71,10 +72,11 @@ public class JavascriptHandler {
     }
 
     public DirigibleJavascriptCodeRunner getSystemRunner() {
-        if (systemRunner == null) {
-            this.systemRunner = new DirigibleJavascriptCodeRunner(null, false);
+        DirigibleJavascriptCodeRunner localSystemRunner = systemRunner.get();
+        if (localSystemRunner == null) {
+            systemRunner.set(new DirigibleJavascriptCodeRunner(null, false));
         }
-        return systemRunner;
+        return systemRunner.get();
     }
 
     /**

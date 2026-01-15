@@ -11,6 +11,8 @@ package org.eclipse.dirigible.components.api.component;
 
 import org.eclipse.dirigible.components.engine.di.parser.ComponentContext;
 import org.eclipse.dirigible.components.engine.di.parser.ComponentContextRegistry;
+import org.eclipse.dirigible.components.engine.di.parser.ComponentFileMetadata;
+import org.eclipse.dirigible.components.engine.di.parser.ComponentRegister;
 import org.graalvm.polyglot.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,16 +68,21 @@ public class ComponentFacade implements InitializingBean {
             injectionsMap = constructor.getMember("__injections_map");
         }
 
-        if (!constructor.hasMember("__injections_map")) {
-            // Fallback: retrieve from context
-            String contextId = ComponentContextHolder.get();
-            ComponentContext context = ComponentContextRegistry.getContext(contextId);
-            if (constructor.hasMember("__component_name")) {
-                String cname = constructor.getMember("__component_name")
-                                          .asString();
-                injectionsMap = context.getMetadata(cname);
-            }
-        }
+        // if (!constructor.hasMember("__injections_map")) {
+        // // Fallback: retrieve from context
+        // String contextId = ComponentContextHolder.get();
+        // ComponentContext context = ComponentContextRegistry.getContext(contextId);
+        //
+        //
+        //
+        //
+        //
+        // if (constructor.hasMember("__component_name")) {
+        // String cname = constructor.getMember("__component_name")
+        // .asString();
+        // injectionsMap = context.getMetadata(cname);
+        // }
+        // }
 
         if (injectionsMap == null || injectionsMap.isNull()) {
             logger.error("Metadata is null for: {}", name);
@@ -102,10 +109,15 @@ public class ComponentFacade implements InitializingBean {
 
             String contextId = "default"; // or dynamic
             ComponentContext context = ComponentContextRegistry.getContext(contextId);
-            Value dependency = context.getComponent(lookupName);
+
+            ComponentFileMetadata componentFileMetadata = context.getComponentFileMetadata(lookupName);
+            Value dependency = ComponentRegister.createComponentInstance(componentFileMetadata.getLocation(),
+                    componentFileMetadata.getProjectName(), componentFileMetadata.getFilePath(), componentFileMetadata.getContextId());
+
+            // Value dependency = context.getComponent(lookupName);
 
             if (dependency != null && !dependency.isNull()) {
-                instance.putMember(propertyKey, dependency.newInstance());
+                instance.putMember(propertyKey, dependency);
             } else {
                 logger.warn("Dependency not found for property [{}] in context [{}]", lookupName, contextId);
             }
