@@ -35,9 +35,11 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 
 		$scope.loadPage = (pageNumber) => {
 			const listFilter = {
-				$offset: (pageNumber - 1) * $scope.dataLimit,
-				$limit: $scope.dataLimit,
-				...$scope.filter
+				$filter: {
+					offset: (pageNumber - 1) * $scope.dataLimit,
+					limit: $scope.dataLimit,
+					...$scope.filter
+				}
 			};
 			$scope.dataPage = pageNumber;
 			EntityService.count($scope.filter).then((resp) => {

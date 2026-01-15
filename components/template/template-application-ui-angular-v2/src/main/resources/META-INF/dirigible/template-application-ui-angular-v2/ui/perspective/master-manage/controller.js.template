@@ -81,7 +81,9 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 				filter = $scope.filter;
 			}
 			if (!filter) {
-				filter = {};
+				filter = {
+					$filter: {}
+				};
 			}
 			$scope.selectedEntity = null;
 			EntityService.count(filter).then((resp) => {
@@ -89,11 +91,11 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 					$scope.dataCount = resp.data.count;
 				}
 				$scope.dataPages = Math.ceil($scope.dataCount / $scope.dataLimit);
-				filter.$offset = ($scope.dataPage - 1) * $scope.dataLimit;
-				filter.$limit = $scope.dataLimit;
+				filter.$filter.offset = ($scope.dataPage - 1) * $scope.dataLimit;
+				filter.$filter.limit = $scope.dataLimit;
 				if ($scope.dataReset) {
-					filter.$offset = 0;
-					filter.$limit = $scope.dataPage * $scope.dataLimit;
+					filter.$filter.offset = 0;
+					filter.$filter.limit = $scope.dataPage * $scope.dataLimit;
 				}
 
 				EntityService.search(filter).then((response) => {

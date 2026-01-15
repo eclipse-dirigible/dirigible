@@ -11,30 +11,36 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 
 			const filter = {
 				$filter: {
-					equals: {},
-					notEquals: {},
-					contains: {},
-					greaterThan: {},
-					greaterThanOrEqual: {},
-					lessThan: {},
-					lessThanOrEqual: {}
-				},
+					conditions: [],
+					sorts: [],
+					limit: 20,
+					offset: 0
+				}
 			};
 #foreach ($property in $properties)
-#if($property.dataTypeTypescript == 'number' || $property.dataTypeTypescript == 'boolean')
-			if (filterEntity.${property.name}) {
-				filter.${dollar}filter.equals.${property.name} = filterEntity.${property.name};
+#if($property.dataTypeTypescript == 'number')
+			if (entity.${property.name} !== undefined) {
+				const condition = { propertyName: '${property.name}', operator: 'EQ', value: entity.${property.name} };
+				filter.$filter.conditions.push(condition);
+			}
+#elseif($property.dataTypeTypescript == 'boolean')
+			if (entity.${property.name} !== undefined && entity.is${property.name}Indeterminate === false) {
+				const condition = { propertyName: '${property.name}', operator: 'EQ', value: entity.${property.name} };
+				filter.$filter.conditions.push(condition);
 			}
 #elseif($property.dataTypeTypescript == 'string')
-			if (filterEntity.${property.name}) {
-				filter.${dollar}filter.contains.${property.name} = filterEntity.${property.name};
+			if (entity.${property.name}) {
+				const condition = { propertyName: '${property.name}', operator: 'LIKE', value: `%$dollar{entity.${property.name}}%` };
+				filter.$filter.conditions.push(condition);
 			}
 #elseif($property.dataTypeTypescript == 'Date')
-			if (filterEntity.${property.name}From) {
-				filter.${dollar}filter.greaterThanOrEqual.${property.name} = filterEntity.${property.name}From;
+			if (entity.${property.name}From) {
+				const condition = { propertyName: '${property.name}', operator: 'GE', value: entity.${property.name}From };
+				filter.$filter.conditions.push(condition);
 			}
-			if (filterEntity.${property.name}To) {
-				filter.${dollar}filter.lessThanOrEqual.${property.name} = filterEntity.${property.name}To;
+			if (entity.${property.name}To) {
+				const condition = { propertyName: '${property.name}', operator: 'LE', value: entity.${property.name}To };
+				filter.$filter.conditions.push(condition);
 			}
 #end
 #end

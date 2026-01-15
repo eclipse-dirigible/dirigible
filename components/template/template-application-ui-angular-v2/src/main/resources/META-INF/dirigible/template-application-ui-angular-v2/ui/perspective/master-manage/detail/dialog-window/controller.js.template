@@ -135,11 +135,9 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 #end
 #if($property.widgetType == "DROPDOWN")
 					${dollar}http.post('${property.widgetDropdownControllerUrl}/search', {
-						$filter: {
-							equals: {
-								${property.widgetDependsOnFilterBy}: valueFrom
-							}
-						}
+						conditions: [
+							{ propertyName: '${property.widgetDependsOnFilterBy}', operator: 'EQ', value: valueFrom }
+						]
 					}).then((response) => {
 						${dollar}scope.options${property.name} = response.data.map(e => ({
 							value: e.${property.widgetDropDownKey},
