@@ -81,9 +81,10 @@ public class ComponentRegister implements InitializingBean {
             if (filePath.endsWith(".ts")) {
                 filePath = filePath.substring(0, filePath.length() - 3) + ".js";
             }
+            // createComponentInstance(location, path.projectName, filePath, contextId);
             Value moduleValue = ComponentRegister.get()
                                                  .getComponentService()
-                                                 .executeJavaScript(path.projectName, filePath);
+                                                 .executeJavaScript(path.projectName, filePath, true);
 
             Value componentValue = moduleValue.getMember(moduleValue.getMemberKeys()
                                                                     .iterator()
@@ -92,30 +93,47 @@ public class ComponentRegister implements InitializingBean {
             if (componentValue.hasMember("__component_name")) {
                 String name = componentValue.getMember("__component_name")
                                             .asString();
-
-                Value injections = null;
-                if (componentValue.hasMember("__injections_map")) {
-                    injections = componentValue.getMember("__injections_map");
-                }
-
                 ComponentContext context = ComponentContextRegistry.getContext(contextId);
-
-                context.registerComponentMetadata(name, injections);
-
-                if (add) {
-                    // Value instance = componentValue.newInstance();
-                    context.registerComponent(name, componentValue, injections);
-                    logger.info("Registered component [{}] in context [{}]", name, contextId);
-                } else {
-                    context.unregisterComponent(name);
-                    logger.info("Unregistered component [{}] from context [{}]", name, contextId);
-                }
+                context.registerComponentFileMetadata(name, location, path.projectName, filePath, contextId);
             } else {
                 logger.warn("Class does not have @Component metadata: {}", location);
             }
+
         } catch (PolyglotException e) {
             logger.error("Error evaluating script [{}]: {}", location, e.getMessage());
         }
+    }
+
+    public static Value createComponentInstance(String location, String projectName, String filePath, String contextId) {
+        Value moduleValue = ComponentRegister.get()
+                                             .getComponentService()
+                                             .executeJavaScript(projectName, filePath, true);
+
+        Value componentValue = moduleValue.getMember(moduleValue.getMemberKeys()
+                                                                .iterator()
+                                                                .next());
+
+        if (componentValue.hasMember("__component_name")) {
+            String name = componentValue.getMember("__component_name")
+                                        .asString();
+
+            Value injections = null;
+            if (componentValue.hasMember("__injections_map")) {
+                injections = componentValue.getMember("__injections_map");
+            }
+
+            // ComponentContext context = ComponentContextRegistry.getContext(contextId);
+            //
+            // context.registerComponentMetadata(name, injections);
+
+            Value instance = componentValue.newInstance();
+            // context.registerComponent(name, instance, injections);
+            logger.info("Registered component [{}] in context [{}]", name, contextId);
+            return instance;
+        } else {
+            logger.warn("Class does not have @Component metadata: {}", location);
+        }
+        return null;
     }
 
     // // on project undeploy:
