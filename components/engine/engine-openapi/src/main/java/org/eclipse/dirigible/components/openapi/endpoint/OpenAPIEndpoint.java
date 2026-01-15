@@ -12,14 +12,14 @@ package org.eclipse.dirigible.components.openapi.endpoint;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.openapi.service.OpenAPIService;
 import org.eclipse.dirigible.components.version.domain.Version;
 import org.eclipse.dirigible.components.version.service.VersionService;
-import org.eclipse.dirigible.repository.api.IRepositoryStructure;
-import org.eclipse.dirigible.repository.api.IResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +38,7 @@ import io.swagger.v3.oas.models.Paths;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
+import io.swagger.v3.oas.models.servers.Server;
 import io.swagger.v3.parser.OpenAPIV3Parser;
 import io.swagger.v3.parser.core.models.SwaggerParseResult;
 import jakarta.annotation.security.RolesAllowed;
@@ -279,8 +280,9 @@ public class OpenAPIEndpoint extends BaseEndpoint {
                        .addAll(contributionOpenApi.getSecurity());
             }
             if (contributionOpenApi.getServers() != null) {
+                Set<Server> servers = new LinkedHashSet<>(contributionOpenApi.getServers());
                 openApi.getServers()
-                       .addAll(contributionOpenApi.getServers());
+                       .addAll(servers);
             }
             if (contributionOpenApi.getTags() != null) {
                 openApi.getTags()

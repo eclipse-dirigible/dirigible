@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.components.data.store.synchronizer;
 
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.text.ParseException;
 import java.util.List;
@@ -23,6 +22,7 @@ import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.data.store.DataStore;
 import org.eclipse.dirigible.components.data.store.domain.Entity;
+import org.eclipse.dirigible.components.data.store.parser.EntityParser;
 import org.eclipse.dirigible.components.data.store.service.EntityService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -109,6 +109,8 @@ public class EntitySynchronizer extends BaseSynchronizer<Entity, Long> {
             }
             entity = getService().save(entity);
             entity.setContent(new String(content));
+            EntityParser parser = new EntityParser();
+            parser.parse(location, new String(content)); // register the Entity metadata at this point
         } catch (Exception e) {
             if (logger.isErrorEnabled()) {
                 logger.error(e.getMessage(), e);

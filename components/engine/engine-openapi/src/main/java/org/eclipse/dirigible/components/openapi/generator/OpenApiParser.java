@@ -84,6 +84,10 @@ public class OpenApiParser {
                     }
                     SCHEMAS.put(entityMetadata.getEntityName(),
                             map("type", "object", "properties", entityProperties, "description", entityMetadata.getDocumentation()));
+                } else if (relative.toLowerCase()
+                                   .endsWith("entity.ts")) {
+                    throw new RuntimeException("OpenAPI generator failed to load [" + location + "], because it depends on [" + relative
+                            + "] which is not loaded yet.");
                 }
             });
         }

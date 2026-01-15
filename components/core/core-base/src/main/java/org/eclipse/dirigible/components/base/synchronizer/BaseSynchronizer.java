@@ -222,7 +222,8 @@ public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchr
      */
     @Override
     public boolean isAccepted(Path file, BasicFileAttributes attrs) {
-        return file.toString().toLowerCase()
+        return file.toString()
+                   .toLowerCase()
                    .endsWith(getFileExtension().toLowerCase());
     }
 
