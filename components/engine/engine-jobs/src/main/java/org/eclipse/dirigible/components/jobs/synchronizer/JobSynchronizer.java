@@ -53,7 +53,7 @@ public class JobSynchronizer extends MultitenantBaseSynchronizer<Job, Long> {
      */
     public static final String FILE_EXTENSION_JOB = ".job";
 
-    public static final String[] FILE_EXTENSIONS_JOB = new String[] {".job", "Job.ts", "Scheduled.ts"};
+    public static final String[] FILE_EXTENSIONS_JOB = new String[] {".job", "job.ts", "scheduled.ts"};
 
     /**
      * The Constant logger.
@@ -361,6 +361,7 @@ public class JobSynchronizer extends MultitenantBaseSynchronizer<Job, Long> {
     public boolean isAccepted(Path file, BasicFileAttributes attrs) {
         for (String extension : FILE_EXTENSIONS_JOB) {
             if (file.toString()
+                    .toLowerCase()
                     .endsWith(extension)) {
                 return true;
             }

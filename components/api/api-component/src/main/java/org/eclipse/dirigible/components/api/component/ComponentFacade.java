@@ -50,7 +50,7 @@ public class ComponentFacade implements InitializingBean {
         return INSTANCE;
     }
 
-    public static void injectDependencies(Value instance) {
+    public static synchronized void injectDependencies(Value instance) {
         Value constructor = instance.getMember("constructor");
         String componentName = null;
         Value injectionsMap = null;

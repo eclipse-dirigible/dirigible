@@ -47,7 +47,7 @@ public class ExtensionsSynchronizer extends BaseSynchronizer<Extension, Long> {
     /** The Constant FILE_EXTENSION_EXTENSION. */
     public static final String FILE_EXTENSION_EXTENSION = ".extension";
 
-    public static final String[] FILE_EXTENSIONS_EXTENSION = new String[] {".extension", "Extension.ts"};
+    public static final String[] FILE_EXTENSIONS_EXTENSION = new String[] {".extension", "extension.ts"};
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(ExtensionsSynchronizer.class);
@@ -269,6 +269,7 @@ public class ExtensionsSynchronizer extends BaseSynchronizer<Extension, Long> {
     public boolean isAccepted(Path file, BasicFileAttributes attrs) {
         for (String extension : FILE_EXTENSIONS_EXTENSION) {
             if (file.toString()
+                    .toLowerCase()
                     .endsWith(extension)) {
                 return true;
             }
