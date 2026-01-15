@@ -105,7 +105,7 @@ public class ComponentFacade implements InitializingBean {
             Value dependency = context.getComponent(lookupName);
 
             if (dependency != null && !dependency.isNull()) {
-                instance.putMember(propertyKey, dependency);
+                instance.putMember(propertyKey, dependency.newInstance());
             } else {
                 logger.warn("Dependency not found for property [{}] in context [{}]", lookupName, contextId);
             }

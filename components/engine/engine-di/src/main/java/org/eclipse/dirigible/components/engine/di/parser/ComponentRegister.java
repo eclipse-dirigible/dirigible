@@ -103,8 +103,8 @@ public class ComponentRegister implements InitializingBean {
                 context.registerComponentMetadata(name, injections);
 
                 if (add) {
-                    Value instance = componentValue.newInstance();
-                    context.registerComponent(name, instance, injections);
+                    // Value instance = componentValue.newInstance();
+                    context.registerComponent(name, componentValue, injections);
                     logger.info("Registered component [{}] in context [{}]", name, contextId);
                 } else {
                     context.unregisterComponent(name);
