@@ -33,9 +33,6 @@ import java.util.Map;
 @Component("cms-provider-internal")
 class CmsProviderInternalFactory implements CmsProviderFactory, DisposableBean {
 
-    /** The Constant DIRIGIBLE_CMS_INTERNAL_ROOT_FOLDER. */
-    private static final String DIRIGIBLE_CMS_INTERNAL_ROOT_FOLDER = "DIRIGIBLE_CMS_INTERNAL_ROOT_FOLDER";
-
     /** The Constant PROVIDERS. */
     private static final Map<String, CmsProvider> PROVIDERS = new HashMap<String, CmsProvider>();
 

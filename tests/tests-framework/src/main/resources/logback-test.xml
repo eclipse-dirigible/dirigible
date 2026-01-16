@@ -91,5 +91,6 @@
     <!--    Reduce logging to remove the logging noise during tests execution -->
     <logger name="org.flowable.job.service.impl.asyncexecutor" level="ERROR"/>
     <logger name="com.codeborne.selenide.impl.AttachmentPrinter" level="ERROR"/>
+    <logger name="org.openqa.selenium.devtools.Connection" level="ERROR"/>
 
 </configuration>

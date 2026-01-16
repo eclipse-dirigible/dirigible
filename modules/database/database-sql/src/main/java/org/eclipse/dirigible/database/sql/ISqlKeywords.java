@@ -48,6 +48,8 @@ public interface ISqlKeywords {
      */
     String KEYWORD_OUTER = "OUTER"; //$NON-NLS-1$
 
+    String KEYWORD_FULL_OUTER = "FULL OUTER"; //$NON-NLS-1$
+
     /**
      * The Constant KEYWORD_LEFT.
      */
@@ -167,6 +169,8 @@ public interface ISqlKeywords {
      * The Constant KEYWORD_TABLE.
      */
     String KEYWORD_TABLE = "TABLE"; //$NON-NLS-1$
+
+    String KEYWORD_TOP = "TOP";
 
     /**
      * The Constant KEYWORD_PRIMARY.

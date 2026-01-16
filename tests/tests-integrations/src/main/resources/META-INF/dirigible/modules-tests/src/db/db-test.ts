@@ -18,7 +18,7 @@ test(testName, () => {
         .create()
         .table(tableName)
         .column('Id', 'INTEGER')
-        .column('Name', 'VARCHAR')
+        .columnVarchar("Name", 50)
         .column('Birthday', 'DATE')
         .build();
 

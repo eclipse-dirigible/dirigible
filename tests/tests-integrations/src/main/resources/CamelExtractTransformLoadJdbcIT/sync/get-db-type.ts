@@ -1,4 +1,4 @@
-import { database } from "@aerokit/sdk/db";
+import { database, DatabaseSystem } from "@aerokit/sdk/db";
 
 export function onMessage(message: any) {
     const connection = database.getConnection();
@@ -6,7 +6,25 @@ export function onMessage(message: any) {
 
     console.log("JDBC Database type: " + databaseType);
 
-    message.setExchangeProperty("db_type", databaseType == 3 ? 'H2' : 'Postgres');
+    let databaseTypeString;
+
+    switch (databaseType) {
+        case DatabaseSystem.H2:
+            databaseTypeString = 'H2';
+            break;
+        case DatabaseSystem.POSTGRESQL:
+            databaseTypeString = 'Postgres';
+            break;
+        case DatabaseSystem.MSSQL:
+            databaseTypeString = 'MSSQL';
+            break;
+        default:
+            throw new Error(`Unsupported connection of type ${databaseType}`);
+    }
+
+    console.log("db_type: " + databaseTypeString);
+
+    message.setExchangeProperty("db_type", databaseTypeString);
 
     return message;
 }

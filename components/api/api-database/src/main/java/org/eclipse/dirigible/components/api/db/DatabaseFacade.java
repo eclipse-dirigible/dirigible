@@ -66,6 +66,10 @@ public class DatabaseFacade implements InitializingBean {
     private static final Logger logger = LoggerFactory.getLogger(DatabaseFacade.class);
 
     private static final Set<String> DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE = new HashSet<>();
+    private static final Set<DatabaseSystem> DATABASES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE = Set.of(//
+            // executeBatch() + getGeneratedKeys() is unsupported in MSSQL,
+            // possible refactoring with INSERT … OUTPUT INSERTED
+            DatabaseSystem.MSSQL);
 
     /** The database facade. */
     private static DatabaseFacade INSTANCE;
@@ -390,7 +394,8 @@ public class DatabaseFacade implements InitializingBean {
 
         return LoggingExecutor.executeWithException(dataSource, () -> {
 
-            if (DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.contains(dataSource.getName())) {
+            if (DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.contains(dataSource.getName())
+                    || DATABASES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.contains(dataSource.getDatabaseSystem())) {
                 logger.debug("RETURN_GENERATED_KEYS not supported for data source [{}]. Will execute insert without this option.",
                         dataSource);
                 try (Connection connection = dataSource.getConnection()) {
@@ -465,7 +470,8 @@ public class DatabaseFacade implements InitializingBean {
             throws Throwable {
         return LoggingExecutor.executeWithException(dataSource, () -> {
 
-            if (DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.contains(dataSource.getName())) {
+            if (DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.contains(dataSource.getName())
+                    || DATABASES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.contains(dataSource.getDatabaseSystem())) {
                 logger.debug("RETURN_GENERATED_KEYS not supported for data source [{}]. Will execute insert without this option.",
                         dataSource);
                 insertManyWithoutResult(sql, parameters, dataSource);
@@ -527,6 +533,9 @@ public class DatabaseFacade implements InitializingBean {
                 } else {
                     ParametersSetter.setManyIndexedParameters(parameters.get(), new ParameterizedStatement(preparedStatement));
                 }
+            } else {
+                // required for DBs like MSSQL, DBs like H2 and Postgresql doesn't need it
+                preparedStatement.addBatch();
             }
             preparedStatement.executeBatch();
             connection.commit();

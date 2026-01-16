@@ -41,7 +41,7 @@ export const SQLTypes = Object.freeze({
 });
 
 export enum DatabaseSystem {
-	UNKNOWN, DERBY, POSTGRESQL, H2, MARIADB, HANA, SNOWFLAKE, MYSQL, MONGODB, SYBASE
+	UNKNOWN, DERBY, POSTGRESQL, H2, MARIADB, HANA, SNOWFLAKE, MYSQL, MONGODB, SYBASE, MSSQL
 }
 
 // --- Metadata Interfaces ---
@@ -1201,6 +1201,8 @@ export class Connection {
 				return DatabaseSystem.HANA;
 			case "SNOWFLAKE":
 				return DatabaseSystem.SNOWFLAKE;
+			case "MSSQL":
+				return DatabaseSystem.MSSQL;
 			case "MYSQL":
 				return DatabaseSystem.MYSQL;
 			case "MONGODB":
