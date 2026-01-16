@@ -14,8 +14,6 @@
             message: Replicating orders from OpenCart using JDBC...
             loggingLevel: INFO
             logName: OpenCartOrdersReplication
-
-        # Set resource to JavaScript file path
         - setProperty:
             id: set-db-type-resource
             description: Set JavaScript resource property
@@ -24,16 +22,12 @@
               simple:
                 id: simple-db-type
                 expression: CamelExtractTransformLoadJdbcIT/sync/get-db-type.ts
-
-        # Invoke JavaScript to determine the database type
         - to:
             id: invoke-db-type-script
             description: Execute JavaScript to determine database type
             uri: class
             parameters:
               beanName: org.eclipse.dirigible.components.engine.camel.invoke.Invoker
-
-        # Store the database type in an exchange property
         - setProperty:
             id: set-database-type
             description: Set Database Type Property
@@ -41,16 +35,15 @@
             expression:
               simple:
                 id: simple-set-db-type
-                expression: "${exchangeProperty.db_type}"
-
-        # Log the detected database type
+                expression: ${exchangeProperty.db_type}
         - log:
             id: log-database-type
             description: Log detected database type
-            message: "Detected Database Type (via JavaScript): ${exchangeProperty.databaseType}"
+            message: >-
+              Detected Database Type (via JavaScript):
+              ${exchangeProperty.databaseType}
             loggingLevel: INFO
             logName: DatabaseTypeCheck
-
         - setProperty:
             id: set-rate-property
             description: Set USD to EU exchange rate property
@@ -59,7 +52,6 @@
               simple:
                 id: simple-exchange-rate
                 expression: '0.92'
-
         - setBody:
             id: create-order-select-statement
             description: Create orders SELECT statement
@@ -67,14 +59,12 @@
               simple:
                 id: simple-select-orders
                 expression: SELECT * FROM "OC_ORDER"
-
         - to:
             id: execute-get-orders
             description: Get all orders
             uri: spring-jdbc
             parameters:
               dataSourceName: DefaultDB
-
         - split:
             id: split-to-single-order
             description: Split to single order
@@ -92,12 +82,12 @@
                       expression:
                         simple:
                           id: simple-check-h2
-                          expression: "${exchangeProperty.databaseType} == 'H2'"
+                          expression: ${exchangeProperty.databaseType} == 'H2'
                       steps:
                         - log:
                             id: log-h2-detected
                             description: Log using H2
-                            message: "Using H2 database syntax for merging orders."
+                            message: Using H2 database syntax for merging orders.
                             loggingLevel: INFO
                             logName: SQLTypeCheck
                         - setBody:
@@ -108,26 +98,59 @@
                                 id: simple-merge-h2
                                 expression: |
                                   MERGE INTO ORDERS
-                                      (ID, TOTAL, DATEADDED) 
+                                      (ID, TOTAL, DATEADDED)
                                   KEY(ID)
-                                  VALUES 
+                                  VALUES
                                       (
                                           ${body['ORDER_ID']},
                                           ${body['TOTAL']} * ${exchangeProperty.currencyExchangeRate},
                                           '${body['DATE_ADDED']}'
                                       );
-
+                    - id: when-mssql
+                      description: If database is MSSQL
+                      expression:
+                        simple:
+                          id: simple-check-mssql
+                          expression: ${exchangeProperty.databaseType} == 'MSSQL'
+                      steps:
+                        - log:
+                            id: log-mssql-detected
+                            description: Log using MSSQL
+                            message: Using MSSQL database syntax for merging orders.
+                            loggingLevel: INFO
+                            logName: SQLTypeCheck
+                        - setBody:
+                            id: create-order-merge-statement-mssql
+                            description: Create MERGE statement for MSSQL
+                            expression:
+                              simple:
+                                id: simple-merge-mssql
+                                expression: |-
+                                  MERGE INTO ORDERS AS target
+                                  USING (
+                                      VALUES (${body['ORDER_ID']}, ${body['TOTAL']} * ${exchangeProperty.currencyExchangeRate}, '${body['DATE_ADDED']}')
+                                  ) AS source (ID, TOTAL, DATEADDED)
+                                  ON target.ID = source.ID
+                                  WHEN MATCHED THEN
+                                      UPDATE SET
+                                          target.TOTAL     = source.TOTAL,
+                                          target.DATEADDED = source.DATEADDED
+                                  WHEN NOT MATCHED THEN
+                                      INSERT (ID, TOTAL, DATEADDED)
+                                      VALUES (source.ID, source.TOTAL, source.DATEADDED);
                     - id: when-postgresql
                       description: If database is PostgreSQL
                       expression:
                         simple:
                           id: simple-check-postgresql
-                          expression: "${exchangeProperty.databaseType} == 'Postgres'"
+                          expression: ${exchangeProperty.databaseType} == 'Postgres'
                       steps:
                         - log:
                             id: log-postgresql-detected
                             description: Log using PostgreSQL
-                            message: "Using PostgreSQL database syntax for merging orders."
+                            message: >-
+                              Using PostgreSQL database syntax for merging
+                              orders.
                             loggingLevel: INFO
                             logName: SQLTypeCheck
                         - setBody:
@@ -136,18 +159,21 @@
                             expression:
                               simple:
                                 id: simple-merge-postgresql
-                                expression: |-
-                                  INSERT INTO "ORDERS" ("ID", "TOTAL", "DATEADDED")
+                                expression: >-
+                                  INSERT INTO "ORDERS" ("ID", "TOTAL",
+                                  "DATEADDED")
+
                                   VALUES (
                                       ${body['ORDER_ID']},
                                       ${body['TOTAL']} * ${exchangeProperty.currencyExchangeRate},
                                       '${body['DATE_ADDED']}'
                                   )
+
                                   ON CONFLICT ("ID")
-                                  DO UPDATE SET 
+
+                                  DO UPDATE SET
                                       "TOTAL" = EXCLUDED."TOTAL",
                                       "DATEADDED" = EXCLUDED."DATEADDED";
-
                   otherwise:
                     id: otherwise-unsupported
                     description: Log unsupported database
@@ -155,17 +181,23 @@
                       - log:
                           id: log-unsupported-db
                           description: Log unsupported database
-                          message: "Unsupported database type: ${exchangeProperty.databaseType}"
+                          message: >-
+                            Unsupported database type:
+                            ${exchangeProperty.databaseType}
                           loggingLevel: ERROR
                           logName: DatabaseTypeCheck
-
+              - log:
+                  id: log-e93a
+                  description: Log SQL
+                  message: 'Merge SQL: ${body}'
+                  loggingLevel: INFO
+                  logName: MergeSQLLogger
               - to:
                   id: merge-order
                   description: Merge order
                   uri: spring-jdbc
                   parameters:
                     dataSourceName: DefaultDB
-
         - log:
             id: log-orders-replication-completed
             description: Log completed

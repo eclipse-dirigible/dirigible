@@ -20,6 +20,7 @@ import org.apache.olingo.odata2.api.uri.UriInfo;
 import org.apache.olingo.odata2.api.uri.expression.FilterExpression;
 import org.apache.olingo.odata2.api.uri.expression.OrderByExpression;
 import org.apache.olingo.odata2.api.uri.expression.OrderExpression;
+import org.eclipse.dirigible.components.database.DatabaseSystem;
 import org.eclipse.dirigible.engine.odata2.sql.api.OData2Exception;
 import org.eclipse.dirigible.engine.odata2.sql.api.SQLStatement;
 import org.eclipse.dirigible.engine.odata2.sql.api.SQLStatementParam;
@@ -152,15 +153,6 @@ public class SQLSelectBuilder extends AbstractQueryBuilder {
     }
 
     /**
-     * Gets the order by clause.
-     *
-     * @return the order by clause
-     */
-    public SQLOrderByClause getOrderByClause() {
-        return orderByClause;
-    }
-
-    /**
      * Group by.
      *
      * @param entityType the entity type
@@ -171,15 +163,6 @@ public class SQLSelectBuilder extends AbstractQueryBuilder {
             this.groupByClause = new SQLGroupByClause(this, entityType);
         }
         return this;
-    }
-
-    /**
-     * Gets the group by clause.
-     *
-     * @return the group by clause
-     */
-    public SQLGroupByClause getGroupByClause() {
-        return groupByClause;
     }
 
     /**
@@ -271,12 +254,17 @@ public class SQLSelectBuilder extends AbstractQueryBuilder {
     }
 
     /**
-     * Gets the select expression.
+     * Join.
      *
-     * @return the select expression
+     * @param start the start
+     * @param target the target
+     * @param expands the expands
+     * @return the SQL join clause
+     * @throws ODataException the o data exception
      */
-    public SQLSelectClause getSelectExpression() {
-        return selectExpression;
+    public SQLJoinClause join(final EdmEntitySet start, final EdmEntitySet target, final List<NavigationSegment> expands)
+            throws ODataException {
+        return this.join(start.getEntityType(), target.getEntityType());
     }
 
     /**
@@ -300,20 +288,6 @@ public class SQLSelectBuilder extends AbstractQueryBuilder {
     }
 
     /**
-     * Join.
-     *
-     * @param start the start
-     * @param target the target
-     * @param expands the expands
-     * @return the SQL join clause
-     * @throws ODataException the o data exception
-     */
-    public SQLJoinClause join(final EdmEntitySet start, final EdmEntitySet target, final List<NavigationSegment> expands)
-            throws ODataException {
-        return this.join(start.getEntityType(), target.getEntityType());
-    }
-
-    /**
      * Gets the join where clauses.
      *
      * @return the join where clauses
@@ -321,106 +295,6 @@ public class SQLSelectBuilder extends AbstractQueryBuilder {
     // Do NOT use this method; For Unit testing purposes ONLY
     Iterator<SQLJoinClause> getJoinWhereClauses() {
         return joinExpressions.iterator();
-    }
-
-    /**
-     * Gets the statement params.
-     *
-     * @return the statement params
-     */
-    @Override
-    public List<SQLStatementParam> getStatementParams() {
-        List<SQLStatementParam> selectClauseStatementParams = getSelectExpression().getStatementParams();
-        List<SQLStatementParam> whereClauseStatementParams = getWhereClause().getStatementParams();
-
-        return Stream.concat(selectClauseStatementParams.stream(), whereClauseStatementParams.stream())
-                     .collect(Collectors.toList());
-    }
-
-    /**
-     * Evaluate joins.
-     *
-     * @param context the context
-     * @return the string
-     * @throws ODataException the o data exception
-     */
-    private String evaluateJoins(final SQLContext context) throws ODataException {
-        StringBuilder builder = new StringBuilder();
-        for (SQLJoinClause join : joinExpressions) {
-            if (join.isEmpty()) {
-                continue;
-            }
-            builder.append(join.evaluate(context))
-                   .append(SPACE);
-        }
-        return builder.toString();
-    }
-
-    /**
-     * Build select clause.
-     *
-     * @param context the context
-     * @return the clause
-     * @throws ODataException in case of an error
-     */
-    public String buildSelect(final SQLContext context) throws ODataException {
-        // TODO make immutable
-
-        StringBuilder builder = new StringBuilder();
-        if (selectExpression == null)
-            throw new IllegalStateException("Please initialize the select clause!");
-        builder.append("SELECT ");
-        builder.append(selectExpression.evaluate(context, SELECT_COLUMN_LIST));
-        builder.append(" FROM ");
-        builder.append(selectExpression.evaluate(context, FROM))
-               .append(SPACE);
-        builder.append(evaluateJoins(context));
-        if (!getWhereClause().isEmpty()) {
-            builder.append(" WHERE ");
-            builder.append(getWhereClause().evaluate(context))
-                   .append(SPACE);
-        }
-
-        SQLGroupByClause gb = getGroupByClause();
-        if (gb != null) {
-            String groupByExpression = gb.evaluate(context);
-            if (!groupByExpression.isEmpty()) {
-                builder.append("GROUP BY ")
-                       .append(groupByExpression)
-                       .append(SPACE);
-            }
-        }
-
-        SQLOrderByClause ob = getOrderByClause();
-        if (null != ob) {
-            String orderByExpression = ob.evaluate(context);
-            if (!orderByExpression.isEmpty()) {
-                builder.append("ORDER BY ")
-                       .append(orderByExpression)
-                       .append(SPACE);
-            }
-        }
-
-        addSelectOption(context, builder, SELECT_LIMIT);
-        addSelectOption(context, builder, SELECT_OFFSET);
-
-        return SQLUtils.normalizeSQLExpression(builder);
-    }
-
-    /**
-     * Adds the select option.
-     *
-     * @param context the context
-     * @param statementBuilder the statement builder
-     * @param option the option
-     * @throws EdmException the edm exception
-     */
-    private void addSelectOption(SQLContext context, StringBuilder statementBuilder, EvaluationType option) throws EdmException {
-        String optionSupplement = selectExpression.evaluate(context, option);
-        if (!optionSupplement.isEmpty()) {
-            statementBuilder.append(optionSupplement)
-                            .append(SPACE);
-        }
     }
 
     /**
@@ -468,6 +342,151 @@ public class SQLSelectBuilder extends AbstractQueryBuilder {
                 return false;
             }
         };
+    }
+
+    /**
+     * Gets the statement params.
+     *
+     * @return the statement params
+     */
+    @Override
+    public List<SQLStatementParam> getStatementParams() {
+        List<SQLStatementParam> selectClauseStatementParams = getSelectExpression().getStatementParams();
+        List<SQLStatementParam> whereClauseStatementParams = getWhereClause().getStatementParams();
+
+        return Stream.concat(selectClauseStatementParams.stream(), whereClauseStatementParams.stream())
+                     .collect(Collectors.toList());
+    }
+
+    /**
+     * Gets the select expression.
+     *
+     * @return the select expression
+     */
+    public SQLSelectClause getSelectExpression() {
+        return selectExpression;
+    }
+
+    /**
+     * Build select clause.
+     *
+     * @param context the context
+     * @return the clause
+     * @throws ODataException in case of an error
+     */
+    public String buildSelect(final SQLContext context) throws ODataException {
+        // TODO make immutable
+
+        StringBuilder builder = new StringBuilder();
+        if (selectExpression == null)
+            throw new IllegalStateException("Please initialize the select clause!");
+        builder.append("SELECT ");
+
+        String limit = selectExpression.evaluate(context, SELECT_LIMIT);
+        String offset = selectExpression.evaluate(context, SELECT_OFFSET);
+
+        if (context.getDatabaseSystem()
+                   .isOfType(DatabaseSystem.MSSQL)) {
+            if (!limit.isBlank() && offset.isBlank()) {
+                builder.append(" TOP " + limit + " ");
+            }
+        }
+
+        builder.append(selectExpression.evaluate(context, SELECT_COLUMN_LIST));
+        builder.append(" FROM ");
+        builder.append(selectExpression.evaluate(context, FROM))
+               .append(SPACE);
+        builder.append(evaluateJoins(context));
+        if (!getWhereClause().isEmpty()) {
+            builder.append(" WHERE ");
+            builder.append(getWhereClause().evaluate(context))
+                   .append(SPACE);
+        }
+
+        SQLGroupByClause gb = getGroupByClause();
+        if (gb != null) {
+            String groupByExpression = gb.evaluate(context);
+            if (!groupByExpression.isEmpty()) {
+                builder.append("GROUP BY ")
+                       .append(groupByExpression)
+                       .append(SPACE);
+            }
+        }
+
+        SQLOrderByClause ob = getOrderByClause();
+        if (null != ob) {
+            String orderByExpression = ob.evaluate(context);
+            if (!orderByExpression.isEmpty()) {
+                builder.append("ORDER BY ")
+                       .append(orderByExpression)
+                       .append(SPACE);
+            }
+        }
+
+        if (context.getDatabaseSystem()
+                   .isOfType(DatabaseSystem.MSSQL)) {
+            if (!limit.isBlank() && !offset.isBlank()) {
+                builder.append(" OFFSET " + offset + " ROWS FETCH NEXT " + limit + " ROWS ONLY ");
+            }
+        } else {
+            addSelectOption(context, builder, SELECT_LIMIT);
+            addSelectOption(context, builder, SELECT_OFFSET);
+        }
+
+        return SQLUtils.normalizeSQLExpression(builder);
+    }
+
+    /**
+     * Gets the order by clause.
+     *
+     * @return the order by clause
+     */
+    public SQLOrderByClause getOrderByClause() {
+        return orderByClause;
+    }
+
+    /**
+     * Gets the group by clause.
+     *
+     * @return the group by clause
+     */
+    public SQLGroupByClause getGroupByClause() {
+        return groupByClause;
+    }
+
+    /**
+     * Evaluate joins.
+     *
+     * @param context the context
+     * @return the string
+     * @throws ODataException the o data exception
+     */
+    private String evaluateJoins(final SQLContext context) throws ODataException {
+        StringBuilder builder = new StringBuilder();
+        for (SQLJoinClause join : joinExpressions) {
+            if (join.isEmpty()) {
+                continue;
+            }
+            builder.append(join.evaluate(context))
+                   .append(SPACE);
+        }
+        return builder.toString();
+    }
+
+    /**
+     * Adds the select option.
+     *
+     * @param context the context
+     * @param statementBuilder the statement builder
+     * @param option the option
+     * @throws EdmException the edm exception
+     */
+    private void addSelectOption(SQLContext context, StringBuilder statementBuilder, EvaluationType option) throws EdmException {
+        String optionSupplement = selectExpression.evaluate(context, option);
+        if (!optionSupplement.isEmpty()) {
+            statementBuilder.append(optionSupplement)
+                            .append(SPACE);
+        }
     }
 
 }

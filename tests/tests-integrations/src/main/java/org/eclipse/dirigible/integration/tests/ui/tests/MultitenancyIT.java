@@ -34,8 +34,15 @@ public class MultitenancyIT extends MultitenancyUserInterfaceIntegrationTest {
     }
 
     @Test
-    void verifyTestProject() {
+    void verifyTestProjectWithMultipleTenants() {
         List<DirigibleTestTenant> tenants = provisionTenants();
+
+        testProject.test(tenants);
+    }
+
+    @Test
+    void verifyTestProjectWithDefaultTenantOnly() {
+        List<DirigibleTestTenant> tenants = List.of(DirigibleTestTenant.createDefaultTenant());
 
         testProject.test(tenants);
     }

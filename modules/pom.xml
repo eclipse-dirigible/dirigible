@@ -99,6 +99,11 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-database-sql-mssql</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-database-sql-mysql</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -254,8 +259,8 @@
                 <artifactId>dirigible-components-engine-di</artifactId>
                 <version>${project.version}</version>
             </dependency>
-            
-            
+
+
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-group-engines-core</artifactId>
@@ -340,7 +345,7 @@
                 <artifactId>dirigible-repository-local</artifactId>
                 <version>${project.version}</version>
             </dependency>
-            
+
             <!-- Parsers -->
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>

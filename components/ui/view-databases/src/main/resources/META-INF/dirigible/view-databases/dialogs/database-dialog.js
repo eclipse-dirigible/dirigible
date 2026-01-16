@@ -31,6 +31,7 @@ dbdialog.controller('DBDialogController', ($scope, ViewParameters, Dialogs) => {
         "org.postgresql.Driver": "jdbc:postgresql://<host>:<port>/<database>",
         "com.mysql.cj.jdbc.Driver": "jdbc:mysql://<host>:<port>/<database>",
         "org.mariadb.jdbc.Driver": "jdbc:mariadb://<host>:<port>/<database>",
+        "com.microsoft.sqlserver.jdbc.SQLServerDriver": "jdbc:sqlserver://<host>:<port>;databaseName=<database>;encrypt=true;trustServerCertificate=true",
         "com.sap.db.jdbc.Driver": "jdbc:sap://<host>:<port>/?encrypt=true&validateCertificate=false",
         "net.snowflake.client.jdbc.SnowflakeDriver": "jdbc:snowflake://<account_identifier>.snowflakecomputing.com",
         "org.eclipse.dirigible.mongodb.jdbc.Driver": "jdbc:mongodb://<host>:<port>/<database>",
@@ -41,6 +42,7 @@ dbdialog.controller('DBDialogController', ($scope, ViewParameters, Dialogs) => {
         'org.postgresql.Driver': '',
         'com.mysql.cj.jdbc.Driver': '',
         'org.mariadb.jdbc.Driver': '',
+        'com.microsoft.sqlserver.jdbc.SQLServerDriver': '',
         'com.sap.db.jdbc.Driver': '',
         'net.snowflake.client.jdbc.SnowflakeDriver': 'db=<database>,schema=<schema>',
         'org.eclipse.dirigible.mongodb.jdbc.Driver': '',
@@ -51,6 +53,7 @@ dbdialog.controller('DBDialogController', ($scope, ViewParameters, Dialogs) => {
         { text: 'PostgreSQL - org.postgresql.Driver', value: 'org.postgresql.Driver' },
         { text: 'MySQL - com.mysql.cj.jdbc.Driver', value: 'com.mysql.cj.jdbc.Driver' },
         { text: 'MariaDB - org.mariadb.jdbc.Driver', value: 'org.mariadb.jdbc.Driver' },
+        { text: 'MSSQL - com.microsoft.sqlserver.jdbc.SQLServerDriver', value: 'com.microsoft.sqlserver.jdbc.SQLServerDriver' },
         { text: 'SAP HANA - com.sap.db.jdbc.Driver', value: 'com.sap.db.jdbc.Driver' },
         { text: 'Snowflake - net.snowflake.client.jdbc.SnowflakeDriver', value: 'net.snowflake.client.jdbc.SnowflakeDriver' },
         { text: 'MongoDB - org.eclipse.dirigible.mongodb.jdbc.Driver', value: 'org.eclipse.dirigible.mongodb.jdbc.Driver' }

@@ -13,14 +13,22 @@ public enum DatabaseSystem {
     // when adding or changing enum values do NOT forget to
     // update the JavaScript API in the connection class located at:
     // dirigible/modules/src/db/database.ts
-    UNKNOWN, DERBY, POSTGRESQL, H2, MARIADB, HANA, SNOWFLAKE, MYSQL, MONGODB;
+    UNKNOWN, DERBY, POSTGRESQL, H2, MARIADB, HANA, SNOWFLAKE, MYSQL, MONGODB, MSSQL;
 
     public boolean isH2() {
         return isOfType(H2);
     }
 
+    public boolean isOfType(DatabaseSystem databaseSystem) {
+        return this == databaseSystem;
+    }
+
     public boolean isSnowflake() {
         return isOfType(SNOWFLAKE);
+    }
+
+    public boolean isMSSQL() {
+        return isOfType(MSSQL);
     }
 
     public boolean isHANA() {
@@ -49,9 +57,5 @@ public enum DatabaseSystem {
 
     public boolean isDerby() {
         return isOfType(DERBY);
-    }
-
-    public boolean isOfType(DatabaseSystem databaseSystem) {
-        return this == databaseSystem;
     }
 }

@@ -1,0 +1,42 @@
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.eclipse.dirigible</groupId>
+        <artifactId>dirigible-database-parent</artifactId>
+        <version>13.0.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <name>Database - SQL Builders - MSSQL</name>
+    <artifactId>dirigible-database-sql-mssql</artifactId>
+    <packaging>jar</packaging>
+
+    <build>
+        <finalName>${project.artifactId}</finalName>
+    </build>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-commons-config</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-database-sql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.microsoft.sqlserver</groupId>
+            <artifactId>mssql-jdbc</artifactId>
+            <version>13.2.1.jre11</version>
+        </dependency>
+    </dependencies>
+
+    <properties>
+        <license.header.location>../../../licensing-header.txt</license.header.location>
+        <parent.pom.folder>../../../</parent.pom.folder>
+    </properties>
+
+</project>

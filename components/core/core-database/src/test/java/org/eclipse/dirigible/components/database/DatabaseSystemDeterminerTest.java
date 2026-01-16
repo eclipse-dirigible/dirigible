@@ -23,6 +23,28 @@ class DatabaseSystemDeterminerTest {
     private DatabaseSystemDeterminer databaseSystemDeterminer;
 
     @Test
+    void testDetermineMSSQL_withUrl() {
+        testDetermine_withUrl("jdbc:sqlserver://localhost:1433;databaseName=master", DatabaseSystem.MSSQL);
+    }
+
+    private void testDetermine_withUrl(String jdbcUrl, DatabaseSystem expectedType) {
+        DatabaseSystem result = DatabaseSystemDeterminer.determine(jdbcUrl, null);
+
+        assertEquals(expectedType, result);
+    }
+
+    @Test
+    void testDetermineMSSQL_withDriverUrl() {
+        testDetermine_withDriver("com.microsoft.sqlserver.jdbc.SQLServerDriver", DatabaseSystem.MSSQL);
+    }
+
+    private void testDetermine_withDriver(String driverClass, DatabaseSystem expectedType) {
+        DatabaseSystem result = DatabaseSystemDeterminer.determine(null, driverClass);
+
+        assertEquals(expectedType, result);
+    }
+
+    @Test
     void testDetermineDerby_withUrl() {
         testDetermine_withUrl("jdbc:derby://localhost:1527/databaseName;create=true", DatabaseSystem.DERBY);
     }
@@ -115,18 +137,6 @@ class DatabaseSystemDeterminerTest {
     @Test
     void testDetermineUnknown_withDriver() {
         testDetermine_withDriver("com.unknown.Driver", DatabaseSystem.UNKNOWN);
-    }
-
-    private void testDetermine_withUrl(String jdbcUrl, DatabaseSystem expectedType) {
-        DatabaseSystem result = DatabaseSystemDeterminer.determine(jdbcUrl, null);
-
-        assertEquals(expectedType, result);
-    }
-
-    private void testDetermine_withDriver(String driverClass, DatabaseSystem expectedType) {
-        DatabaseSystem result = DatabaseSystemDeterminer.determine(null, driverClass);
-
-        assertEquals(expectedType, result);
     }
 
 }

@@ -182,6 +182,38 @@ class MultitenancyITTestProject extends BaseMultitenantTestProject {
         verifyMessageLogged(expectedMessage, eventListenerLogsAsserter);
     }
 
+    private void verifyDocumentsAPI(DirigibleTestTenant tenant) {
+        restAssuredExecutor.execute(tenant, () -> {
+            given().when()
+                   .get(DOCUMENTS_SERVICE_PATH)
+                   .then()
+                   .statusCode(200)
+                   .body("$", hasSize(0));
+
+            String documentName = "DOC_NAME_" + tenant.getId() + ".txt";
+            String documentContent = "DOC_CONTENT_" + tenant.getId();
+            String jsonPayload = String.format("""
+                    {
+                        "documentName": "%s",
+                        "content": "%s"
+                    }
+                    """, documentName, documentContent);
+
+            given().contentType(ContentType.JSON)
+                   .body(jsonPayload)
+                   .when()
+                   .post(DOCUMENTS_SERVICE_PATH)
+                   .then()
+                   .statusCode(200);
+
+            given().when()
+                   .get(DOCUMENTS_SERVICE_PATH + "/" + documentName)
+                   .then()
+                   .statusCode(200)
+                   .body(equalTo(JsonHelper.toJson(documentContent)));
+        });
+    }
+
     /**
      * Verifies indirectly:<br>
      * - MultitenancyIT/tables/reader.table is created<br>
@@ -239,38 +271,6 @@ class MultitenancyITTestProject extends BaseMultitenantTestProject {
                .body("d.results[2].ReaderId", equalTo(3))
                .body("d.results[2].ReaderFirstName", equalTo(firstName))
                .body("d.results[2].ReaderLastName", equalTo(lastName));
-    }
-
-    private void verifyDocumentsAPI(DirigibleTestTenant tenant) {
-        restAssuredExecutor.execute(tenant, () -> {
-            given().when()
-                   .get(DOCUMENTS_SERVICE_PATH)
-                   .then()
-                   .statusCode(200)
-                   .body("$", hasSize(0));
-
-            String documentName = "DOC_NAME_" + tenant.getId() + ".txt";
-            String documentContent = "DOC_CONTENT_" + tenant.getId();
-            String jsonPayload = String.format("""
-                    {
-                        "documentName": "%s",
-                        "content": "%s"
-                    }
-                    """, documentName, documentContent);
-
-            given().contentType(ContentType.JSON)
-                   .body(jsonPayload)
-                   .when()
-                   .post(DOCUMENTS_SERVICE_PATH)
-                   .then()
-                   .statusCode(200);
-
-            given().when()
-                   .get(DOCUMENTS_SERVICE_PATH + "/" + documentName)
-                   .then()
-                   .statusCode(200)
-                   .body(equalTo(JsonHelper.toJson(documentContent)));
-        });
     }
 
 }
