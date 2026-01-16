@@ -205,7 +205,7 @@
         <guava.version>33.5.0-jre</guava.version>
         <icu4j.version>78.1</icu4j.version>
         <classgraph.version>4.8.184</classgraph.version>
-        <logcaptor.version>2.12.1</logcaptor.version>
+        <logcaptor.version>2.12.2</logcaptor.version>
 
         <!-- UI -->
         <sap-theming__theming-base-content.version>11.18.2</sap-theming__theming-base-content.version>
