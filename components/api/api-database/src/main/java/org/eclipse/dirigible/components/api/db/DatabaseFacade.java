@@ -67,10 +67,9 @@ public class DatabaseFacade implements InitializingBean {
 
     private static final Set<String> DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE = new HashSet<>();
     private static final Set<DatabaseSystem> DATABASES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE = Set.of(//
-            DatabaseSystem.MSSQL
-    // executeBatch() + getGeneratedKeys() is unsupported in MSSQL, possible refactoring with INSERT …
-    // OUTPUT INSERTED
-    );
+            // executeBatch() + getGeneratedKeys() is unsupported in MSSQL,
+            // possible refactoring with INSERT … OUTPUT INSERTED
+            DatabaseSystem.MSSQL);
 
     /** The database facade. */
     private static DatabaseFacade INSTANCE;
