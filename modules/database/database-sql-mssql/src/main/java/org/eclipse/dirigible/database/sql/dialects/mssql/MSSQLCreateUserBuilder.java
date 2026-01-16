@@ -9,6 +9,7 @@ public class MSSQLCreateUserBuilder extends CreateUserBuilder {
         super(dialect, userId, password);
     }
 
+    @Override
     protected String generateCreateUserStatement(String user, String pass) {
         // create server login
         return "CREATE LOGIN " + getEscapeSymbol() + user + getEscapeSymbol() + SPACE + "WITH PASSWORD =" + getPasswordEscapeSymbol() + pass

@@ -22,6 +22,7 @@ public class MSSQLSelectBuilder extends SelectBuilder {
         super(dialect);
     }
 
+    @Override
     public SelectBuilder outerJoin(String table, String on, String alias) {
         LOGGER.warn("In MSSQL, the term OUTER JOIN is incomplete. It will be treated as FULL OUTER JOIN");
         return genericJoin(KEYWORD_FULL_OUTER, table, on, alias);
@@ -75,13 +76,10 @@ public class MSSQLSelectBuilder extends SelectBuilder {
         // FOR UPDATE
         generateForUpdate(sql);
 
-        String generated = sql.toString();
-
-        LOGGER.trace("generated: {}", generated);
-
-        return generated;
+        return sql.toString();
     }
 
+    @Override
     protected void generateLimitAndOffset(StringBuilder sql, int limit, int offset) {
         if (limit > -1 && offset > -1) {
             if (getOrders().isEmpty()) {

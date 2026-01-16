@@ -66,9 +66,9 @@ function upsertOrder(openCartOrder: oc_orderEntity, exchangeRate: number) {
             throw new Error(`Unsupported connection of type ${databaseType}`);
     }
 
-    console.log(("mergeSQL:" + mergeSQL));
+    console.log("mergeSQL:" + mergeSQL);
 
-    const statement = connection.prepareStatement(mergeSQL)
+    const statement = connection.prepareStatement(mergeSQL);
     try {
         statement.setLong(1, openCartOrder.ORDER_ID);
         statement.setDouble(2, totalEuro);
