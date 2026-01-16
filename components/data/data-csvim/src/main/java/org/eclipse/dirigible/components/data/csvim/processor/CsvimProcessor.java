@@ -9,21 +9,6 @@
  */
 package org.eclipse.dirigible.components.data.csvim.processor;
 
-import static org.eclipse.dirigible.components.api.platform.RepositoryFacade.getResource;
-
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.stream.Collectors;
-
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -51,6 +36,21 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
+
+import static org.eclipse.dirigible.components.api.platform.RepositoryFacade.getResource;
 
 /**
  * The Class CsvimProcessor.
@@ -154,6 +154,7 @@ public class CsvimProcessor {
             if (defaultDataSource) {
                 if (("PUBLIC".equals(fileSchema) && dataSource.isOfType(DatabaseSystem.H2))//
                         || ("public".equals(fileSchema) && dataSource.isOfType(DatabaseSystem.POSTGRESQL))//
+                        || ("dbo".equals(fileSchema) && dataSource.isOfType(DatabaseSystem.MSSQL))//
                         || (dataSourceName == null && "public".equalsIgnoreCase(fileSchema))) {
                     // 1. needed for the multitenancy logic - change the schema to the default db schema for this tenant
                     // 2. when datasource is not specified but the import is for default schema - import into defaultdb

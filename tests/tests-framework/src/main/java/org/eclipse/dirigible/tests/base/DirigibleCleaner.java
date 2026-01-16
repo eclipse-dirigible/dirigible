@@ -47,23 +47,86 @@ class DirigibleCleaner {
         try {
             clearEntityManagerCaches();
 
+            // clean up SystemDB
             DirigibleDataSource systemDataSource = dataSourcesManager.getSystemDataSource();
             if (systemDataSource.isOfType(DatabaseSystem.H2)) {
                 dropAllObjects(systemDataSource);
             }
 
+            // clean up DefaultDB
             DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
+
             if (defaultDataSource.isOfType(DatabaseSystem.H2)) {
                 dropAllObjects(defaultDataSource);
+                return;
             }
 
             if (defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
                 deleteSchemas(defaultDataSource);
-                String schema = defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL) ? "public" : "PUBLIC";
-                createSchema(defaultDataSource, schema);
+                createSchema(defaultDataSource, "public");
+                return;
             }
+
+            if (defaultDataSource.isOfType(DatabaseSystem.MSSQL)) {
+                cleanupMSSQL(defaultDataSource);
+                return;
+            }
+
+            throw new IllegalStateException("Missing cleanup logic for default datasource " + defaultDataSource);
         } finally {
+            deleteCMSFolder();
             deleteDirigibleFolder();
+        }
+    }
+
+    private void cleanupMSSQL(DirigibleDataSource dataSource) {
+        LOGGER.info("Will cleanup MSSQL default datasource [{}]...", dataSource);
+        String cleanUpSql = """
+                /* 1. Break Foreign Key Dependencies */
+                DECLARE @sql NVARCHAR(MAX) = N'';
+                SELECT @sql += 'ALTER TABLE ' + QUOTENAME(s.name) + '.' + QUOTENAME(t.name) +\s
+                               ' DROP CONSTRAINT ' + QUOTENAME(f.name) + ';'
+                FROM sys.foreign_keys AS f
+                INNER JOIN sys.tables AS t ON f.parent_object_id = t.object_id
+                INNER JOIN sys.schemas AS s ON t.schema_id = s.schema_id
+                WHERE t.is_ms_shipped = 0; -- Only target your tables
+                EXEC sp_executesql @sql;
+
+                /* 2. Drop User-Created Objects (Tables, Views, Procs, etc.) */
+                SET @sql = N'';
+                SELECT @sql += 'DROP ' +\s
+                    CASE type\s
+                        WHEN 'U' THEN 'TABLE '\s
+                        WHEN 'V' THEN 'VIEW '\s
+                        WHEN 'P' THEN 'PROCEDURE '\s
+                        WHEN 'FN' THEN 'FUNCTION '\s
+                        WHEN 'IF' THEN 'FUNCTION '\s
+                        WHEN 'TF' THEN 'FUNCTION '\s
+                        WHEN 'SO' THEN 'SEQUENCE '
+                    END + QUOTENAME(s.name) + '.' + QUOTENAME(o.name) + ';'
+                FROM sys.objects AS o
+                INNER JOIN sys.schemas AS s ON o.schema_id = s.schema_id
+                WHERE o.is_ms_shipped = 0 -- IMPORTANT: Avoid system objects
+                  AND s.name NOT IN ('sys', 'information_schema')
+                  AND o.type IN ('U', 'V', 'P', 'FN', 'IF', 'TF', 'SO');
+                EXEC sp_executesql @sql;
+
+                /* 3. Drop Custom Schemas (excluding dbo and system defaults) */
+                SET @sql = N'';
+                SELECT @sql += 'DROP SCHEMA ' + QUOTENAME(name) + ';'
+                FROM sys.schemas
+                WHERE name NOT IN ('dbo', 'guest', 'INFORMATION_SCHEMA', 'sys', 'db_owner',\s
+                                  'db_accessadmin', 'db_securityadmin', 'db_ddladmin',\s
+                                  'db_backupoperator', 'db_datareader', 'db_datawriter',\s
+                                  'db_denydatareader', 'db_denydatawriter');
+                EXEC sp_executesql @sql;
+                """;
+        try (Connection connection = dataSource.getConnection()) {
+            try (PreparedStatement preparedStatement = connection.prepareStatement(cleanUpSql)) {
+                preparedStatement.executeUpdate();
+            }
+        } catch (Exception ex) {
+            LOGGER.warn("Failed to cleanup MSSQL datasource [{}] using sql:\n{}", dataSource, cleanUpSql, ex);
         }
     }
 
@@ -103,15 +166,25 @@ class DirigibleCleaner {
 
     private Set<String> getSchemas(DirigibleDataSource dataSource) {
         try {
-            if (dataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
-                return getSchemas(dataSource, "SELECT nspname FROM pg_catalog.pg_namespace");
-            } else {
+            if (dataSource.isOfType(DatabaseSystem.H2)) {
                 return getSchemas(dataSource, "SHOW SCHEMAS");
             }
+
+            if (dataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
+                return getSchemas(dataSource, "SELECT nspname FROM pg_catalog.pg_namespace");
+            }
+
+            if (dataSource.isOfType(DatabaseSystem.MSSQL)) {
+                return getSchemas(dataSource, "SELECT name FROM sys.schemas");
+            }
+
+            throw new IllegalStateException("Missing implementation for getting schemas for datasource " + dataSource);
+
         } catch (SQLException ex) {
             try {
                 return getSchemas(dataSource, "SELECT nspname FROM pg_catalog.pg_namespace");
             } catch (SQLException e) {
+                e.addSuppressed(ex);
                 throw new IllegalStateException("Failed to get all schemas from data source: " + dataSource, e);
             }
         }
@@ -168,6 +241,16 @@ class DirigibleCleaner {
             FileUtil.deleteFolder(dirigibleFolder, skippedDirPath);
         } catch (RuntimeException ex) {
             LOGGER.warn("Failed to delete dirigible folder [{}] by skipping [{}]", dirigibleFolder, skippedDirPath, ex);
+        }
+    }
+
+    public static void deleteCMSFolder() {
+        String cmsFolder = DirigibleConfig.CMS_INTERNAL_ROOT_FOLDER.getStringValue();
+        LOGGER.info("Deleting CMS folder [{}]...", cmsFolder);
+        try {
+            FileUtil.deleteFolder(cmsFolder);
+        } catch (RuntimeException ex) {
+            LOGGER.warn("Failed to delete CMS folder [{}]", cmsFolder, ex);
         }
     }
 }

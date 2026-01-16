@@ -33,7 +33,8 @@ public class DatabaseSystemDeterminer {
             DatabaseSystem.MARIADB, "jdbc:mariadb", //
             DatabaseSystem.MYSQL, "jdbc:mysql", //
             DatabaseSystem.MONGODB, "jdbc:mongodb", //
-            DatabaseSystem.DERBY, "jdbc:derby"//
+            DatabaseSystem.DERBY, "jdbc:derby", //
+            DatabaseSystem.MSSQL, "jdbc:sqlserver"//
     );
 
     private static final Map<DatabaseSystem, List<String>> DB_DRIVERS = Map.of(//
@@ -44,6 +45,7 @@ public class DatabaseSystemDeterminer {
             DatabaseSystem.MARIADB, List.of("org.mariadb.jdbc.Driver"), //
             DatabaseSystem.MYSQL, List.of("com.mysql.cj.jdbc.Driver"), //
             DatabaseSystem.MONGODB, List.of("com.mongodb.jdbc.MongoDriver"), //
+            DatabaseSystem.MSSQL, List.of("com.microsoft.sqlserver.jdbc.SQLServerDriver"), //
             DatabaseSystem.DERBY, List.of("org.apache.derby.jdbc.ClientDriver", "org.apache.derby.jdbc.EmbeddedDriver")//
     );
 
@@ -89,15 +91,6 @@ public class DatabaseSystemDeterminer {
                               .map(Map.Entry::getKey);
     }
 
-    private static DatabaseSystem determineSystemByDriverClass(String driverClass) {
-        return DB_DRIVERS.entrySet()
-                         .stream()
-                         .filter(entry -> usedOneOfDrivers(driverClass, entry.getValue()))
-                         .findFirst()
-                         .map(Map.Entry::getKey)
-                         .orElse(DatabaseSystem.UNKNOWN);
-    }
-
     private static boolean isJdbcUrlStartWithString(String jdbcUrl, String prefix) {
         if (StringUtils.isBlank(jdbcUrl)) {
             LOGGER.warn("Received blank JDBC URL [{}]", jdbcUrl, jdbcUrl);
@@ -106,6 +99,15 @@ public class DatabaseSystemDeterminer {
         return jdbcUrl.trim()
                       .toLowerCase()
                       .startsWith(prefix);
+    }
+
+    private static DatabaseSystem determineSystemByDriverClass(String driverClass) {
+        return DB_DRIVERS.entrySet()
+                         .stream()
+                         .filter(entry -> usedOneOfDrivers(driverClass, entry.getValue()))
+                         .findFirst()
+                         .map(Map.Entry::getKey)
+                         .orElse(DatabaseSystem.UNKNOWN);
     }
 
     private static boolean usedOneOfDrivers(String driverClass, List<String> drivers) {

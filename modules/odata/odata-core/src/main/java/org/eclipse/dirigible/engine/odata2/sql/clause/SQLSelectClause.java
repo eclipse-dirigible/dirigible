@@ -307,7 +307,7 @@ public final class SQLSelectClause {
             case SELECT_LIMIT:
                 return buildLimit(context);
             case SELECT_OFFSET:
-                return buildOffset();
+                return buildOffset(context);
             default:
                 throw new OData2Exception("Unable to evaluate the SQLSelect to type " + type, HttpStatusCodes.INTERNAL_SERVER_ERROR);
         }
@@ -318,9 +318,14 @@ public final class SQLSelectClause {
      *
      * @return the string
      */
-    private String buildOffset() {
+    private String buildOffset(SQLContext context) {
         if (skip <= 0) {
             return EMPTY_STRING;
+        }
+
+        if (context.getDatabaseSystem()
+                   .isMSSQL()) {
+            return Integer.toString(skip);
         }
 
         return "OFFSET " + skip;
@@ -529,10 +534,13 @@ public final class SQLSelectClause {
                        .isDerby()) {
                 // Derby: FETCH { FIRST | NEXT } [integer-literal] {ROW | ROWS} ONLY
                 return String.format("FETCH FIRST %d ROWS ONLY", top);
-            } else {
-                // PostgreSQL: [LIMIT { number | ALL }] [OFFSET number]
-                return String.format("LIMIT %d", top);
             }
+            if (context.getDatabaseSystem()
+                       .isMSSQL()) {
+                return Integer.toString(top);
+            }
+            // PostgreSQL: [LIMIT { number | ALL }] [OFFSET number]
+            return String.format("LIMIT %d", top);
         }
 
         return selectPredicate;
@@ -660,12 +668,11 @@ public final class SQLSelectClause {
                 EdmStructuralType type = getTargetTypeFromColumnMapping(column);
                 String propertyName = getPropertyNameFromColumnMapping(column);
                 EdmTyped p = type.getProperty(propertyName);
-                if (!(p instanceof EdmProperty))
+                if (!(p instanceof EdmProperty prop))
                     throw new OData2Exception("You must map the column " + column + " to a EDM property! The current type of property "
                             + propertyName + " is " + p, HttpStatusCodes.INTERNAL_SERVER_ERROR);
                 if (p.getType()
                      .getKind() == EdmTypeKind.SIMPLE) {
-                    EdmProperty prop = (EdmProperty) p;
                     if (query.hasAggregationTypePresent(target) && !query.isAggregationTypeExplicit(target)
                             && query.isColumnContainedInAggregationProp(target, query.getPureSQLColumnName(target, prop))) {
 

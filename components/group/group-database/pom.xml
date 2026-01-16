@@ -15,7 +15,7 @@
     <packaging>pom</packaging>
 
     <dependencies>
-    	<dependency>
+        <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-data-core</artifactId>
         </dependency>
@@ -64,6 +64,10 @@
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-database-sql-postgres</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-database-sql-mssql</artifactId>
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
