@@ -37,6 +37,7 @@ public class MSSQLCreateBranchingBuilder extends CreateBranchingBuilder {
         return new MSSQLCreateViewBuilder(this.getDialect(), view);
     }
 
+    @Override
     public MSSQLCreateUserBuilder user(String userId, String password) {
         return new MSSQLCreateUserBuilder(getDialect(), userId, password);
     }
