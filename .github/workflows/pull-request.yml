@@ -237,7 +237,6 @@ jobs:
   integration-tests-mssql:
     runs-on: ubuntu-latest
     env:
-      ACCEPT_EULA: Y
       MSSQL_PASS: 'mYPass1234!'
     services:
       mssql:
@@ -246,6 +245,7 @@ jobs:
           - 1433:1433
         env:
           MSSQL_SA_PASSWORD: ${{ env.MSSQL_PASS }}
+          ACCEPT_EULA: Y
     steps:
       - uses: actions/checkout@v4
         with:
