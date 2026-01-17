@@ -6,8 +6,6 @@ const GLOBAL_ROUTES: any[] =
     (globalThis as any)[ROUTES_KEY] ??
     ((globalThis as any)[ROUTES_KEY] = []);
 
-let controllerInstance: any = null;
-
 const router = rs.service();
 
 export function Controller(ctr: { new(): any }) {
