@@ -114,7 +114,7 @@ public class JavascriptHandler {
     public Object handleRequest(String projectName, String projectFilePath, String projectFilePathParam, Map<Object, Object> parameters,
             boolean debug, boolean keep) {
         try {
-            if (UserRequestVerifier.isValid()) {
+            if (UserRequestVerifier.isValid() && projectFilePathParam != null) {
                 UserRequestVerifier.getRequest()
                                    .setAttribute("dirigible-rest-resource-path", projectFilePathParam);
             }
