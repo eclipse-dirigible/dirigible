@@ -64,6 +64,11 @@
             <artifactId>fontsource__open-sans</artifactId>
             <version>${opensans.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.webjars.npm</groupId>
+            <artifactId>lucide</artifactId>
+            <version>${lucide.version}</version>
+        </dependency>
     </dependencies>
 
     <properties>

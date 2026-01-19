@@ -229,8 +229,9 @@
         <bpmn-visualization.version>0.46.0</bpmn-visualization.version>
         <i18next.version>25.3.0</i18next.version>
         <alpinejs.version>3.15.3</alpinejs.version>
-        <harmonia.version>0.8.0</harmonia.version>
+        <harmonia.version>0.9.0</harmonia.version>
         <opensans.version>5.2.7</opensans.version>
+        <lucide.version>0.562.0</lucide.version>
         <!-- Tests -->
         <testcontainers.version>2.0.3</testcontainers.version>
         <selenide.version>7.13.0</selenide.version>
