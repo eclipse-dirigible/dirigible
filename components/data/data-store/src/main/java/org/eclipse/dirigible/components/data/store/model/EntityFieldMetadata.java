@@ -239,10 +239,16 @@ public class EntityFieldMetadata {
         private Integer length;
 
         /** The is nullable. */
-        private boolean isNullable;
+        private boolean nullable;
 
         /** The default value. */
         private String defaultValue;
+
+        /** The precision. */
+        private Integer precision;
+
+        /** The scale. */
+        private Integer scale;
 
         /**
          * Gets the column name.
@@ -304,7 +310,7 @@ public class EntityFieldMetadata {
          * @return true, if is nullable
          */
         public boolean isNullable() {
-            return isNullable;
+            return nullable;
         }
 
         /**
@@ -313,7 +319,7 @@ public class EntityFieldMetadata {
          * @param nullable the new nullable
          */
         public void setNullable(boolean nullable) {
-            this.isNullable = nullable;
+            this.nullable = nullable;
         }
 
         /**
@@ -332,6 +338,42 @@ public class EntityFieldMetadata {
          */
         public void setDefaultValue(String defaultValue) {
             this.defaultValue = defaultValue;
+        }
+
+        /**
+         * Gets the precision.
+         *
+         * @return the precision
+         */
+        public Integer getPrecision() {
+            return precision;
+        }
+
+        /**
+         * Sets the precision.
+         *
+         * @param precision the new precision
+         */
+        public void setPrecision(Integer precision) {
+            this.precision = precision;
+        }
+
+        /**
+         * Gets the scale.
+         *
+         * @return the scale
+         */
+        public Integer getScale() {
+            return scale;
+        }
+
+        /**
+         * Sets the scale.
+         *
+         * @param scale the new scale
+         */
+        public void setScale(Integer scale) {
+            this.scale = scale;
         }
     }
 

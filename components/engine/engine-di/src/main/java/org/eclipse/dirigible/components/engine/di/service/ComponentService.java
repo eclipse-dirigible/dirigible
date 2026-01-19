@@ -53,9 +53,9 @@ public class ComponentService extends BaseArtefactService<Component, Long> {
      * @param projectFilePath the project file path
      * @return the response
      */
-    public Value executeJavaScript(String projectName, String projectFilePath) {
+    public Value executeJavaScript(String projectName, String projectFilePath, boolean keep) {
         try {
-            Object object = getJavascriptService().handleRequest(projectName, projectFilePath, null, null, false, true);
+            Object object = getJavascriptService().handleRequest(projectName, projectFilePath, null, null, false, keep);
             if (object instanceof Value) {
                 return (Value) object;
             }

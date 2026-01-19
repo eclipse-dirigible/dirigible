@@ -46,7 +46,11 @@
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-database-sql-postgres</artifactId>
         </dependency>
-        
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-database-sql-mssql</artifactId>
+        </dependency>
+
         <!-- External -->
         <dependency>
             <groupId>com.github.jsqlparser</groupId>

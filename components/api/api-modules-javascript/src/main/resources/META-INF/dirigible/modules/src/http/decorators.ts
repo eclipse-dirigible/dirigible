@@ -1,43 +1,60 @@
-import * as rs from "@aerokit/sdk/http/rs"
+import * as rs from "@aerokit/sdk/http/rs";
+
+const ROUTES_KEY = Symbol.for("dirigible.controller.routes");
+
+const GLOBAL_ROUTES: any[] =
+    (globalThis as any)[ROUTES_KEY] ??
+    ((globalThis as any)[ROUTES_KEY] = []);
 
 const router = rs.service();
-let instance = null;
 
-export function Controller(ctr: { new() }, context: ClassDecoratorContext): void {
-    instance = new ctr();
+export function Controller(ctr: { new(): any }) {
+    const instance = new ctr();
+    const routes = GLOBAL_ROUTES;
+    for (const route of routes) {
+        const fn = instance[route.propertyKey.name];
+        if (typeof fn === "function") {
+			((fn, instance) => {
+		        router.resource(route.path)[route.method]((ctx, req, res) => {
+		            const body = req.json ? req.json() : null;
+		            const result = fn.call(instance, body, ctx, req, res);
+		            if (result !== undefined) {
+		                res.json(result);
+		            }
+		        });
+		    })(fn, instance);
+        }
+    }
+
     router.execute();
+	GLOBAL_ROUTES.length = 0;
 }
+
 
 export function Documentation(documentation: string) {
-  return function (
-    value: any,
-    context: ClassDecoratorContext | ClassFieldDecoratorContext | ClassMethodDecoratorContext
-  ) {};
+    return function (
+        value: any,
+        context: ClassDecoratorContext | ClassFieldDecoratorContext | ClassMethodDecoratorContext
+    ) {};
 }
 
-export const Get = createRequestDecorator("get")
-export const Post = createRequestDecorator("post")
-export const Put = createRequestDecorator("put")
-export const Patch = createRequestDecorator("patch")
-export const Delete = createRequestDecorator("delete")
-export const Head = createRequestDecorator("head")
-export const Options = createRequestDecorator("options")
-
-function createRequestDecorator(httpMethod) {
-    return function (path: string, consumesMimeTypes: undefined | string | string[] = ['*/*'], producesMimeTypes: undefined | string | string[] = ['application/json']): any {
-        return function (target, propertyKey, descriptor) {
-            const handler = descriptor ? descriptor.value : target;
-            router.resource(path)[httpMethod]((ctx, req, res) => {
-                handleRequest(req, res, ctx, handler);
-            }).consumes(consumesMimeTypes).produces(producesMimeTypes);
+function createRequestDecorator(httpMethod: string) {
+    return function (path: string) {
+        return function (target: any, propertyKey: string) {
+            GLOBAL_ROUTES.push({
+                controller: target.constructor,
+                method: httpMethod,
+                path: path || "/",
+                propertyKey
+            });
         };
-    }
+    };
 }
 
-function handleRequest(req, res, ctx, handler) {
-    const body = req.json();
-    const maybeResponseBody = handler.apply(instance || {}, [body, ctx, req, res]);
-    if (maybeResponseBody) {
-        res.json(maybeResponseBody);
-    }
-}
+export const Get = createRequestDecorator("get");
+export const Post = createRequestDecorator("post");
+export const Put = createRequestDecorator("put");
+export const Patch = createRequestDecorator("patch");
+export const Delete = createRequestDecorator("delete");
+export const Head = createRequestDecorator("head");
+export const Options = createRequestDecorator("options");

@@ -18,9 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
-
 import javax.sql.DataSource;
-
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
@@ -45,7 +43,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
-
 import com.google.gson.JsonElement;
 
 /**
@@ -139,11 +136,9 @@ public class DataStore {
      * @return the identifier
      */
     public Object save(String type, String json) {
-        Map object = JsonHelper.fromJson(json, Map.class);
+        Map<String, Object> object = JsonHelper.fromJson(json, Map.class);
 
-        Map<String, Object> data = JsonTypeConverter.normalizeNumericTypes(object);
-
-        return save(type, data);
+        return save(type, object);
     }
 
     /**
@@ -153,10 +148,11 @@ public class DataStore {
      * @param object the object
      * @return the identifier
      */
-    public Object save(String type, Map object) {
+    public Object save(String type, Map<String, Object> object) {
+        Map<String, Object> data = JsonTypeConverter.normalizeForEntity(object, type);
         try (Session session = getSessionFactory().openSession()) {
             Transaction transaction = session.beginTransaction();
-            Object id = session.save(type, object);
+            Object id = session.save(type, data);
             transaction.commit();
             return id;
         }
@@ -291,9 +287,11 @@ public class DataStore {
      * @param object the object
      */
     public void upsert(String type, Map object) {
+        Map<String, Object> data = JsonTypeConverter.normalizeForEntity(object, type);
+
         try (Session session = getSessionFactory().openSession()) {
             Transaction transaction = session.beginTransaction();
-            session.saveOrUpdate(type, object);
+            session.saveOrUpdate(type, data);
             transaction.commit();
         }
     }
@@ -316,9 +314,11 @@ public class DataStore {
      * @param object the object
      */
     public void update(String type, Map object) {
+        Map<String, Object> data = JsonTypeConverter.normalizeForEntity(object, type);
+
         try (Session session = getSessionFactory().openSession()) {
             Transaction transaction = session.beginTransaction();
-            session.update(type, object);
+            session.update(type, data);
             transaction.commit();
         }
     }
@@ -399,7 +399,7 @@ public class DataStore {
      * @param options the options
      * @return the list
      */
-    public List<Map> list(String type, QueryOptions options) {
+    public List<Map> list(String type, DynamicQueryFilter.QueryOptions options) {
         try (Session session = getSessionFactory().openSession()) {
             List<Map> matchingItems = DynamicQueryFilter.list(session, type, options);
             return matchingItems;
@@ -415,7 +415,7 @@ public class DataStore {
      */
     public List<Map> list(String type, String options) {
         if (options != null) {
-            QueryOptions queryOptions = JsonHelper.fromJson(options, QueryOptions.class);
+            DynamicQueryFilter.QueryOptions queryOptions = JsonHelper.fromJson(options, DynamicQueryFilter.QueryOptions.class);
             return list(type, queryOptions);
         }
         return list(type);
@@ -428,7 +428,7 @@ public class DataStore {
      * @param options the options
      * @return the count
      */
-    public long count(String type, QueryOptions options) {
+    public long count(String type, DynamicQueryFilter.QueryOptions options) {
         try (Session session = getSessionFactory().openSession()) {
             long count = DynamicQueryFilter.count(session, type, options);
             return count;
@@ -444,7 +444,7 @@ public class DataStore {
      */
     public long count(String type, String options) {
         if (options != null) {
-            QueryOptions queryOptions = JsonHelper.fromJson(options, QueryOptions.class);
+            DynamicQueryFilter.QueryOptions queryOptions = JsonHelper.fromJson(options, DynamicQueryFilter.QueryOptions.class);
             return count(type, queryOptions);
         }
         return count(type);

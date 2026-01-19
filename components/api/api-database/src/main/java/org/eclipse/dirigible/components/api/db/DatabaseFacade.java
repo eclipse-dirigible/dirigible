@@ -9,14 +9,39 @@
  */
 package org.eclipse.dirigible.components.api.db;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonSyntaxException;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import javax.sql.DataSource;
 import org.apache.commons.io.output.WriterOutputStream;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.base.logging.LoggingExecutor;
 import org.eclipse.dirigible.components.data.management.service.DatabaseDefinitionService;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
-import org.eclipse.dirigible.components.database.*;
+import org.eclipse.dirigible.components.database.DatabaseParameters;
+import org.eclipse.dirigible.components.database.DatabaseSystem;
+import org.eclipse.dirigible.components.database.DirigibleConnection;
+import org.eclipse.dirigible.components.database.DirigibleDataSource;
+import org.eclipse.dirigible.components.database.NamedParameterStatement;
+import org.eclipse.dirigible.components.database.ParameterizedStatement;
 import org.eclipse.dirigible.components.database.helpers.DatabaseMetadataHelper;
 import org.eclipse.dirigible.components.database.helpers.DatabaseResultSetHelper;
 import org.eclipse.dirigible.components.database.helpers.FormattingParameters;
@@ -28,12 +53,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-
-import javax.sql.DataSource;
-import java.io.*;
-import java.nio.charset.StandardCharsets;
-import java.sql.*;
-import java.util.*;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonSyntaxException;
 
 /**
  * The Class DatabaseFacade.
@@ -45,6 +66,10 @@ public class DatabaseFacade implements InitializingBean {
     private static final Logger logger = LoggerFactory.getLogger(DatabaseFacade.class);
 
     private static final Set<String> DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE = new HashSet<>();
+    private static final Set<DatabaseSystem> DATABASES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE = Set.of(//
+            // executeBatch() + getGeneratedKeys() is unsupported in MSSQL,
+            // possible refactoring with INSERT … OUTPUT INSERTED
+            DatabaseSystem.MSSQL);
 
     /** The database facade. */
     private static DatabaseFacade INSTANCE;
@@ -263,7 +288,8 @@ public class DatabaseFacade implements InitializingBean {
                     return sw.toString();
                 }
             } catch (Exception ex) {
-                logger.error("Failed to execute query statement [{}] in data source [{}].", sql, datasource, ex);
+                logger.error("Failed to execute query statement [{}] in data source [{}] with message [{}].", sql, datasource,
+                        ex.getMessage());
                 throw ex;
             }
         });
@@ -344,7 +370,8 @@ public class DatabaseFacade implements InitializingBean {
                     return sw.toString();
                 }
             } catch (Exception ex) {
-                logger.error("Failed to execute query statement [{}] in data source [{}].", sql, dataSource, ex);
+                logger.error("Failed to execute query statement [{}] in data source [{}] with message [{}].", sql, dataSource,
+                        ex.getMessage());
                 throw ex;
             }
         });
@@ -367,7 +394,8 @@ public class DatabaseFacade implements InitializingBean {
 
         return LoggingExecutor.executeWithException(dataSource, () -> {
 
-            if (DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.contains(dataSource.getName())) {
+            if (DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.contains(dataSource.getName())
+                    || DATABASES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.contains(dataSource.getDatabaseSystem())) {
                 logger.debug("RETURN_GENERATED_KEYS not supported for data source [{}]. Will execute insert without this option.",
                         dataSource);
                 try (Connection connection = dataSource.getConnection()) {
@@ -394,7 +422,8 @@ public class DatabaseFacade implements InitializingBean {
                     return Collections.emptyList();
                 }
             } catch (SQLException | RuntimeException ex) {
-                logger.error("Failed to execute insert statement [{}] in data source [{}].", sql, datasourceName, ex);
+                logger.error("Failed to execute insert statement [{}] in data source [{}] with message [{}].", sql, datasourceName,
+                        ex.getMessage());
                 throw ex;
             }
         });
@@ -441,7 +470,8 @@ public class DatabaseFacade implements InitializingBean {
             throws Throwable {
         return LoggingExecutor.executeWithException(dataSource, () -> {
 
-            if (DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.contains(dataSource.getName())) {
+            if (DATA_SOURCES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.contains(dataSource.getName())
+                    || DATABASES_NOT_SUPPORTING_RETURN_GENERATED_KEYS_FEATURE.contains(dataSource.getDatabaseSystem())) {
                 logger.debug("RETURN_GENERATED_KEYS not supported for data source [{}]. Will execute insert without this option.",
                         dataSource);
                 insertManyWithoutResult(sql, parameters, dataSource);
@@ -478,7 +508,8 @@ public class DatabaseFacade implements InitializingBean {
                     return Collections.emptyList();
                 }
             } catch (SQLException | RuntimeException ex) {
-                logger.error("Failed to execute insert statement [{}] in data source [{}].", sql, dataSource, ex);
+                logger.error("Failed to execute insert statement [{}] in data source [{}] with message [{}].", sql, dataSource,
+                        ex.getMessage());
                 throw ex;
             }
         });
@@ -502,6 +533,9 @@ public class DatabaseFacade implements InitializingBean {
                 } else {
                     ParametersSetter.setManyIndexedParameters(parameters.get(), new ParameterizedStatement(preparedStatement));
                 }
+            } else {
+                // required for DBs like MSSQL, DBs like H2 and Postgresql doesn't need it
+                preparedStatement.addBatch();
             }
             preparedStatement.executeBatch();
             connection.commit();
@@ -543,7 +577,8 @@ public class DatabaseFacade implements InitializingBean {
                     return generatedIds;
                 }
             } catch (SQLException | RuntimeException ex) {
-                logger.error("Failed to execute insert statement [{}] in data source [{}].", sql, datasourceName, ex);
+                logger.error("Failed to execute insert statement [{}] in data source [{}] with message [{}].", sql, datasourceName,
+                        ex.getMessage());
                 throw ex;
             }
         });
@@ -588,7 +623,8 @@ public class DatabaseFacade implements InitializingBean {
                     return preparedStatement.executeUpdate();
                 }
             } catch (Exception ex) {
-                logger.error("Failed to execute update statement [{}] in data source [{}].", sql, datasourceName, ex);
+                logger.error("Failed to execute update statement [{}] in data source [{}] with message [{}].", sql, datasourceName,
+                        ex.getMessage());
                 throw ex;
             }
         });
@@ -640,7 +676,8 @@ public class DatabaseFacade implements InitializingBean {
                     return preparedStatement.executeUpdate();
                 }
             } catch (Exception ex) {
-                logger.error("Failed to execute update statement [{}] in data source [{}].", sql, datasourceName, ex);
+                logger.error("Failed to execute update statement [{}] in data source [{}] with message [{}].", sql, datasourceName,
+                        ex.getMessage());
                 throw ex;
             }
         });
@@ -870,7 +907,8 @@ public class DatabaseFacade implements InitializingBean {
                 createSequenceInternal(sequence, start, connection, null);
 
             } catch (Exception ex) {
-                logger.error("Failed to create sequence [{}] in data source [{}].", sequence, datasourceName, ex);
+                logger.error("Failed to create sequence [{}] in data source [{}] with message [{}].", sequence, datasourceName,
+                        ex.getMessage());
                 throw ex;
             }
         });
@@ -917,7 +955,8 @@ public class DatabaseFacade implements InitializingBean {
                     preparedStatement.executeUpdate();
                 }
             } catch (Exception ex) {
-                logger.error("Failed to drop sequence [{}] in data source [{}].", sequence, datasourceName, ex);
+                logger.error("Failed to drop sequence [{}] in data source [{}] with message [{}].", sequence, datasourceName,
+                        ex.getMessage());
                 throw ex;
             }
         });

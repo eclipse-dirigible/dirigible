@@ -1,0 +1,63 @@
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="print.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <script type="text/javascript" src="/services/web/dashboard/services/entity.js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="controller.js"></script>
+    </head>
+
+    <body>
+		<bk-toolbar has-title="true">
+			<bk-toolbar-title>{{ '$projectName:${tprefix}.defaults.reportTitle' | t:{'name':'$t($projectName:${tprefix}.t.${tId})'}:'${label}' }}</bk-toolbar-title>
+		</bk-toolbar>
+        <bk-scrollbar ng-hide="data == null">
+            <table bk-table display-mode="compact" inner-borders="top" outer-borders="none">
+                <thead bk-table-header sticky="true">
+                    <tr bk-table-row>
+                #foreach ($column in $columns)
+						<th bk-table-header-cell>{{ '$projectName:${tprefix}.t.${column.tId}' | t:'${column.label}' }}</th>
+                #end
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row hoverable="true" ng-show="data.length == 0">
+                        <td bk-table-cell no-data="true">{{'$projectName:${tprefix}.messages.noData' | t}}</td>
+                    </tr>
+                    <tr bk-table-row hoverable="true" ng-repeat="next in data">
+            #foreach ($column in $columns) 
+				#if($column.typeJava == 'time')
+						<td bk-table-cell hoverable="true" activable="true">
+							<bk-input type="time" ng-model="next['${column.alias}']" ng-readonly="true"></bk-input>
+						</td>
+				#elseif($column.typeJava == 'timestamp')
+						<td bk-table-cell hoverable="true" activable="true">
+							<bk-input type="datetime-local" ng-model="next['${column.alias}']" ng-readonly="true"></bk-input>
+						</td>
+				#elseif($column.typeJava == 'date')
+						<td bk-table-cell hoverable="true" activable="true">
+							<bk-input type="date" ng-model="next['${column.alias}']" ng-readonly="true"></bk-input>
+						</td>
+				#elseif($column.typeTypescript == 'boolean')
+						<td bk-table-cell hoverable="true" activable="true">
+							<bk-checkbox id="id${column.alias}" compact="false" ng-readonly="true" ng-model="next['${column.alias}']"></bk-checkbox>
+							<bk-checkbox-label for="id${column.alias}" empty="true"></bk-checkbox-label>
+						</td>
+				#else
+						<td bk-table-cell hoverable="true" activable="true">{{next['${column.alias}']}}</td>
+				#end
+            #end
+                    </tr>
+                </tbody>
+            </table>
+        </bk-scrollbar>
+        <theme></theme>
+    </body>
+
+</html>

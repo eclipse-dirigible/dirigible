@@ -9,16 +9,7 @@
  */
 package org.eclipse.dirigible.integration.tests.api.java.db;
 
-import static io.restassured.RestAssured.given;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
-import static org.hamcrest.Matchers.notNullValue;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
+import io.restassured.http.ContentType;
 import org.assertj.db.api.Assertions;
 import org.assertj.db.type.Table;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
@@ -34,13 +25,26 @@ import org.eclipse.dirigible.tests.framework.awaitility.AwaitilityExecutor;
 import org.eclipse.dirigible.tests.framework.db.DBAsserter;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.framework.util.ResourceUtil;
+import org.eclipse.dirigible.tests.framework.util.TestConditionsChecker;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.history.HistoricProcessInstance;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import io.restassured.http.ContentType;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+import static io.restassured.RestAssured.given;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 public class SchemaExportImportIT extends IntegrationTest {
 
@@ -64,8 +68,13 @@ public class SchemaExportImportIT extends IntegrationTest {
     @Autowired
     private DBAsserter dbAssserter;
 
+    @Autowired
+    private TestConditionsChecker testConditionsChecker;
+
     @Test
     void testExportImportOfTestingTables() throws SQLException {
+        assumeTrue(testConditionsChecker.isH2OrPostgresDefaultDB(), "Skipping the test since the DefaultDB DB type is not supported");
+
         createH2DataSource(SOURCE_DATA_SOURCE_NAME);
         createTestingTables(SOURCE_DATA_SOURCE_NAME);
 
@@ -160,6 +169,8 @@ public class SchemaExportImportIT extends IntegrationTest {
                     PreparedStatement ps = connection.prepareStatement(createTargetSchemaSql)) {
                 ps.executeUpdate();
             }
+        } else {
+            LOGGER.info("Missing logic for target schema preparation for default datasource {}", defaultDataSource);
         }
     }
 

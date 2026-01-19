@@ -15,15 +15,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
-
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.store.DataStore;
+import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata;
 import org.eclipse.dirigible.components.data.store.model.EntityMetadata;
 import org.eclipse.dirigible.components.data.store.parser.EntityParser;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-
 import com.google.gson.JsonElement;
 
 /**
@@ -123,6 +122,7 @@ public class DataStoreFacade implements InitializingBean {
         List list = DataStoreFacade.get()
                                    .getDataStore()
                                    .list(name);
+        convertBlob(name, list);
         return JsonHelper.toJson(list);
     }
 
@@ -138,6 +138,7 @@ public class DataStoreFacade implements InitializingBean {
             List list = DataStoreFacade.get()
                                        .getDataStore()
                                        .list(name, options);
+            convertBlob(name, list);
             return JsonHelper.toJson(list);
         } else {
             return listAll(name);
@@ -177,6 +178,7 @@ public class DataStoreFacade implements InitializingBean {
         List list = DataStoreFacade.get()
                                    .getDataStore()
                                    .findByExample(name, example, limit, offset);
+        convertBlob(name, list);
         return JsonHelper.toJson(list);
     }
 
@@ -263,6 +265,7 @@ public class DataStoreFacade implements InitializingBean {
         Map object = DataStoreFacade.get()
                                     .getDataStore()
                                     .get(name, id);
+        convertBlob(name, object);
         return JsonHelper.toJson(object);
     }
 
@@ -324,5 +327,62 @@ public class DataStoreFacade implements InitializingBean {
                        .getColumnDetails()
                        .getColumnName();
     }
+
+    private static void convertBlob(String entityName, List<Map> data) {
+        EntityMetadata metadata = EntityParser.ENTITIES.get(entityName);
+
+        if (metadata == null) {
+            return;
+        }
+
+        for (EntityFieldMetadata field : metadata.getFields()) {
+            if (field.getColumnDetails()
+                     .getDatabaseType()
+                     .toLowerCase()
+                     .contains("blob")) {
+                for (Map next : data) {
+                    String propertyName = field.getPropertyName();
+                    Object value = next.get(propertyName);
+                    if (value instanceof java.sql.Blob) {
+                        try {
+                            java.sql.Blob blob = (java.sql.Blob) value;
+                            byte[] bytes = blob.getBytes(1, (int) blob.length());
+                            next.put(propertyName, bytes);
+                        } catch (SQLException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private static void convertBlob(String entityName, Map data) {
+        EntityMetadata metadata = EntityParser.ENTITIES.get(entityName);
+
+        if (metadata == null) {
+            return;
+        }
+
+        for (EntityFieldMetadata field : metadata.getFields()) {
+            if (field.getColumnDetails()
+                     .getDatabaseType()
+                     .toLowerCase()
+                     .contains("blob")) {
+                String propertyName = field.getPropertyName();
+                Object value = data.get(propertyName);
+                if (value instanceof java.sql.Blob) {
+                    try {
+                        java.sql.Blob blob = (java.sql.Blob) value;
+                        byte[] bytes = blob.getBytes(1, (int) blob.length());
+                        data.put(propertyName, bytes);
+                    } catch (SQLException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            }
+        }
+    }
+
 
 }

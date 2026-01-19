@@ -50,7 +50,7 @@ public class WebsocketsSynchronizer extends BaseSynchronizer<Websocket, Long> {
     /** The Constant FILE_EXTENSION_WEBSOCKET. */
     private static final String FILE_EXTENSION_WEBSOCKET = ".websocket";
 
-    public static final String[] FILE_EXTENSIONS_WEBSOCKET = new String[] {".websocket", "Websocket.ts", "WebSocket.ts"};
+    public static final String[] FILE_EXTENSIONS_WEBSOCKET = new String[] {".websocket", "websocket.ts"};
 
     /** The websocket service. */
     @Autowired
@@ -226,6 +226,7 @@ public class WebsocketsSynchronizer extends BaseSynchronizer<Websocket, Long> {
     public boolean isAccepted(Path file, BasicFileAttributes attrs) {
         for (String extension : FILE_EXTENSIONS_WEBSOCKET) {
             if (file.toString()
+                    .toLowerCase()
                     .endsWith(extension)) {
                 return true;
             }

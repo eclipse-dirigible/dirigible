@@ -331,7 +331,14 @@ public class HttpRequestFacade {
             throw new InvalidStateException(NO_VALID_REQUEST);
         }
         Object resourcePathParameter = request.getAttribute(ATTRIBUTE_REST_RESOURCE_PATH);
-        return (resourcePathParameter != null ? resourcePathParameter.toString() : "");
+        String resourcePath = "";
+        if (resourcePathParameter != null) {
+            resourcePath = resourcePathParameter.toString();
+        } else {
+            String uri = request.getRequestURI();
+            resourcePath = uri.substring(uri.lastIndexOf('/') + 1);
+        }
+        return resourcePath;
     }
 
     /**

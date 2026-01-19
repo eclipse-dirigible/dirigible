@@ -1,5 +1,5 @@
 import { oc_orderEntity } from "../dao/oc_orderRepository";
-import { database } from "@aerokit/sdk/db";
+import { database, DatabaseSystem } from "@aerokit/sdk/db";
 
 export function onMessage(message: any) {
     const openCartOrder: oc_orderEntity = message.getBody();
@@ -13,22 +13,36 @@ export function onMessage(message: any) {
     return message;
 }
 
-const MERGE_SQL = `
+const H2_MERGE_SQL = `
     MERGE INTO ORDERS
-        (ID, TOTAL, DATEADDED) 
+        (ID, TOTAL, DATEADDED)
     KEY(ID)
     VALUES (?, ?, ?)
 `;
 
 const POSTGRES_SQL = `
     INSERT INTO "ORDERS"
-        ("ID", "TOTAL", "DATEADDED") 
+        ("ID", "TOTAL", "DATEADDED")
     VALUES (?, ?, ?)
     ON CONFLICT ("ID") DO UPDATE SET
         "TOTAL" = EXCLUDED."TOTAL",
         "DATEADDED" = EXCLUDED."DATEADDED"
 `;
 
+const MSSQL_MERGE = `
+    MERGE INTO ORDERS AS target
+    USING (
+        VALUES (?, ?, ?)
+    ) AS source (ID, TOTAL, DATEADDED)
+    ON target.ID = source.ID
+    WHEN MATCHED THEN
+        UPDATE SET
+            target.TOTAL     = source.TOTAL,
+            target.DATEADDED = source.DATEADDED
+    WHEN NOT MATCHED THEN
+        INSERT (ID, TOTAL, DATEADDED)
+        VALUES (source.ID, source.TOTAL, source.DATEADDED);
+`;
 function upsertOrder(openCartOrder: oc_orderEntity, exchangeRate: number) {
     const totalEuro = openCartOrder.TOTAL * exchangeRate;
 
@@ -36,8 +50,25 @@ function upsertOrder(openCartOrder: oc_orderEntity, exchangeRate: number) {
     const databaseType = connection.getDatabaseSystem();
     console.log("TypeScript Database type: " + databaseType);
 
-    // 3 is Enum for H2 databasse
-    const statement = databaseType == 3 ? connection.prepareStatement(MERGE_SQL) : connection.prepareStatement(POSTGRES_SQL);
+    let mergeSQL: string;
+
+    switch (databaseType) {
+        case DatabaseSystem.H2:
+            mergeSQL = H2_MERGE_SQL;
+            break;
+        case DatabaseSystem.POSTGRESQL:
+            mergeSQL = POSTGRES_SQL;
+            break;
+        case DatabaseSystem.MSSQL:
+            mergeSQL = MSSQL_MERGE;
+            break;
+        default:
+            throw new Error(`Unsupported connection of type ${databaseType}`);
+    }
+
+    console.log("mergeSQL:" + mergeSQL);
+
+    const statement = connection.prepareStatement(mergeSQL);
     try {
         statement.setLong(1, openCartOrder.ORDER_ID);
         statement.setDouble(2, totalEuro);

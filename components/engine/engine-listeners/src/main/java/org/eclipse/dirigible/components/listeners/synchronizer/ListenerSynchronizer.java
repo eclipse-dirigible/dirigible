@@ -51,7 +51,7 @@ public class ListenerSynchronizer extends MultitenantBaseSynchronizer<Listener, 
     /** The Constant FILE_EXTENSION_LISTENER. */
     private static final String FILE_EXTENSION_LISTENER = ".listener";
 
-    public static final String[] FILE_EXTENSIONS_LISTENER = new String[] {".listener", "Listener.ts"};
+    public static final String[] FILE_EXTENSIONS_LISTENER = new String[] {".listener", "listener.ts"};
 
     /** The callback. */
     private SynchronizerCallback callback;
@@ -326,6 +326,7 @@ public class ListenerSynchronizer extends MultitenantBaseSynchronizer<Listener, 
     public boolean isAccepted(Path file, BasicFileAttributes attrs) {
         for (String extension : FILE_EXTENSIONS_LISTENER) {
             if (file.toString()
+                    .toLowerCase()
                     .endsWith(extension)) {
                 return true;
             }

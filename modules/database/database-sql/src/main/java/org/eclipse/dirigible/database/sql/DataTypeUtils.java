@@ -9,8 +9,6 @@
  */
 package org.eclipse.dirigible.database.sql;
 
-import static java.text.MessageFormat.format;
-
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
@@ -20,6 +18,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+
+import static java.text.MessageFormat.format;
 
 /**
  * The Class DataTypeUtils.
@@ -169,6 +169,8 @@ public class DataTypeUtils {
         STRING_TO_DATABASE_TYPE.put("TIMESTAMPNTZ", Types.TIMESTAMP);
         STRING_TO_DATABASE_TYPE.put("TIMESTAMP WITHOUT TIME ZONE", Types.TIMESTAMP);
         STRING_TO_DATABASE_TYPE.put("DATETIME", Types.TIMESTAMP);
+
+        STRING_TO_DATABASE_TYPE.put("DATETIME2", Types.TIMESTAMP); // MSSQL
 
         // ints
         STRING_TO_DATABASE_TYPE.put(BIT, Types.BIT);

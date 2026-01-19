@@ -39,10 +39,26 @@ public class DBAsserter {
     }
 
     public Table getDefaultDbTable(String tableName) {
-        DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
-        String schemaName = dataSource.isOfType(DatabaseSystem.H2) ? "PUBLIC" : "public";
-
+        String schemaName = getDefaultDBDefaultSchema();
         return getDefaultDbTable(schemaName, tableName);
+    }
+
+    private String getDefaultDBDefaultSchema() {
+        DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
+
+        if (dataSource.isOfType(DatabaseSystem.H2)) {
+            return "PUBLIC";
+        }
+
+        if (dataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
+            return "public";
+        }
+
+        if (dataSource.isOfType(DatabaseSystem.MSSQL)) {
+            return "dbo";
+        }
+
+        throw new IllegalStateException("Missing default schema for datasource " + dataSource);
     }
 
     public Table getDefaultDbTable(String schemaName, String tableName) {

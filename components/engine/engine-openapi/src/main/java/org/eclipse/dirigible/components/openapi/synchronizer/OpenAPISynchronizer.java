@@ -27,6 +27,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.text.ParseException;
 import java.util.List;
 
@@ -46,6 +48,7 @@ public class OpenAPISynchronizer extends BaseSynchronizer<OpenAPI, Long> {
      * The Constant FILE_EXTENSION_OPENAPI.
      */
     private static final String FILE_EXTENSION_OPENAPI = "Controller.ts";
+    public static final String[] FILE_EXTENSIONS_OPENAPI = new String[] {"controller.ts", "service.ts"};
 
     /**
      * The openAPI service.
@@ -210,5 +213,24 @@ public class OpenAPISynchronizer extends BaseSynchronizer<OpenAPI, Long> {
     @Override
     public String getArtefactType() {
         return OpenAPI.ARTEFACT_TYPE;
+    }
+
+    /**
+     * Checks if is accepted.
+     *
+     * @param file the file
+     * @param attrs the attrs
+     * @return true, if is accepted
+     */
+    @Override
+    public boolean isAccepted(Path file, BasicFileAttributes attrs) {
+        for (String extension : FILE_EXTENSIONS_OPENAPI) {
+            if (file.toString()
+                    .toLowerCase()
+                    .endsWith(extension)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

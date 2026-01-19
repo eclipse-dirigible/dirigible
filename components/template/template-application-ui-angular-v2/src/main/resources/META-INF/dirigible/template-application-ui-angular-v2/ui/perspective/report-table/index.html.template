@@ -1,0 +1,115 @@
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
+
+	<head>
+		<meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+		<script type="text/javascript" src="/services/web/dashboard/services/entity.js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="controller.js"></script>
+	</head>
+
+	<body class="bk-vbox">
+		<bk-toolbar has-title="true">
+			<bk-toolbar-title>{{'$projectName:${tprefix}.defaults.items' | t}} <span bk-object-status text="{{dataCount}}" inverted="true"></bk-toolbar-title>
+			<bk-button state="transparent" label="{{ '$projectName:${tprefix}.defaults.filter' | t }}" ng-click="openFilter()"></bk-button>
+		</bk-toolbar>
+
+		<bk-scrollbar class="bk-full-height" ng-hide="data == null">
+			<table bk-table display-mode="compact" inner-borders="top" outer-borders="none">
+				<thead bk-table-header sticky="true">
+					<tr bk-table-row>
+#foreach ($property in $properties)
+#if($property.widgetIsMajor)
+						<th bk-table-header-cell>{{ '$projectName:${tprefix}.t.$property.dataName' | t:'$property.name' }}</th>
+#end
+#end
+						<th bk-table-header-cell></th>
+					</tr>
+				</thead>
+				<tbody bk-table-body>
+					<tr bk-table-row hoverable="true" ng-show="data.length == 0">
+						<td bk-table-cell no-data="true">{{'$projectName:${tprefix}.messages.noData' | t}}</td>
+					</tr>
+					<tr bk-table-row hoverable="true" ng-repeat="next in data"
+						selected="next.${primaryKeysString} === selectedEntity.${primaryKeysString}" ng-click="selectEntity(next)">
+#foreach ($property in $properties) 
+#if($property.widgetIsMajor)
+#if($property.widgetType == "DROPDOWN")
+						<td bk-table-cell ng-click="openDetails(next)" hoverable="true" activable="true">
+							{{options${property.name}Value(next.${property.name})}}
+						</td>
+#elseif($property.widgetType == "EMAIL")
+						<td bk-table-cell>
+							<bk-link href="mailto:{{next.${property.name}}}">{{next.${property.name}}}</bk-link>
+						</td>
+#elseif($property.widgetType == "URL")
+						<td bk-table-cell>
+							<a href="{{next.${property.name}}}" target="_blank" class="bk-link">{{next.${property.name}}}</a>
+						</td>
+#elseif($property.widgetType == "TEL")
+						<td bk-table-cell>
+							<a href="tel:{{next.${property.name}}}" class="bk-link">{{next.${property.name}}}</a>
+						</td>
+#elseif($property.widgetType == "COLOR")
+						<td bk-table-cell ng-click="openDetails(next)" hoverable="true" activable="true">
+							<bk-input type="color" ng-model="next.${property.name}" ng-readonly="true"></bk-input>
+						</td>
+#elseif($property.widgetType == "WEEK")
+						<td bk-table-cell ng-click="openDetails(next)" hoverable="true" activable="true">
+							<bk-input type="week" ng-model="next.${property.name}" ng-readonly="true"></bk-input>
+						</td>
+#elseif($property.widgetType == "MONTH")
+						<td bk-table-cell ng-click="openDetails(next)" hoverable="true" activable="true">
+							<bk-input type="month" ng-model="next.${property.name}" ng-readonly="true"></bk-input>
+						</td>
+#elseif($property.widgetType == "TIME")
+						<td bk-table-cell ng-click="openDetails(next)" hoverable="true" activable="true">
+							<bk-input type="time" ng-model="next.${property.name}" ng-readonly="true"></bk-input>
+						</td>
+#elseif($property.widgetType == "DATETIME-LOCAL")
+						<td bk-table-cell ng-click="openDetails(next)" hoverable="true" activable="true">
+							<bk-input type="datetime-local" ng-model="next.${property.name}" ng-readonly="true"></bk-input>
+						</td>
+#elseif($property.widgetType == "DATE")
+						<td bk-table-cell ng-click="openDetails(next)" hoverable="true" activable="true">
+							<bk-input type="date" ng-model="next.${property.name}" ng-readonly="true"></bk-input>
+						</td>
+#elseif($property.widgetType == "CHECKBOX")
+						<td bk-table-cell ng-click="openDetails(next)" hoverable="true" activable="true">
+							<bk-checkbox id="id${property.name}" compact="false" ng-readonly="true" ng-model="next.${property.name}"></bk-checkbox>
+							<bk-checkbox-label for="id${property.name}" empty="true"></bk-checkbox-label>
+						</td>
+#else
+						<td bk-table-cell ng-click="openDetails(next)" hoverable="true" activable="true">{{next.${property.name}}}</td>
+#end
+#end
+#end
+						<td bk-table-cell fit-content="true">
+							<bk-popover>
+								<bk-popover-control>
+									<bk-button compact="true" glyph="sap-icon--overflow" state="transparent" aria-label="{{'$projectName:${tprefix}.aria.tableRowMenuBtn' | t}}" ng-click="setTristate()"></bk-button>
+								</bk-popover-control>
+								<bk-popover-body align="bottom-right">
+									<bk-menu aria-label="{{'$projectName:${tprefix}.aria.tableRowMenu' | t}}" no-backdrop="true" no-shadow="true">
+										<bk-menu-item title="{{ '$projectName:${tprefix}.defaults.viewDetails' | t }}" ng-click="openDetails(next)"></bk-menu-item>
+									</bk-menu>
+								</bk-popover-body>
+							</bk-popover>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+		</bk-scrollbar>
+
+		<bk-pagination total-items="dataCount" items-per-page="dataLimit" items-per-page-options="[10, 20, 50]" page-change="loadPage(pageNumber)"
+			items-per-page-change="loadPage(pageNumber)" items-per-page-placement="top-start" compact="true" display-total-items="true" ng-hide="dataCount == 0">
+		</bk-pagination>
+		<theme></theme>
+	</body>
+
+</html>

@@ -9,21 +9,6 @@
  */
 package org.eclipse.dirigible.components.data.csvim.processor;
 
-import java.io.ByteArrayInputStream;
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Types;
-import java.text.NumberFormat;
-import java.text.ParseException;
-import java.util.Base64;
-import java.util.List;
-import java.util.Locale;
-import java.util.Optional;
-import java.util.stream.Collectors;
-
 import org.apache.commons.csv.CSVRecord;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.dirigible.commons.api.helpers.DateTimeUtils;
@@ -43,6 +28,21 @@ import org.postgresql.util.PGobject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+
+import java.io.ByteArrayInputStream;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Types;
+import java.text.NumberFormat;
+import java.text.ParseException;
+import java.util.Base64;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * The Class CsvProcessor.
@@ -407,6 +407,9 @@ public class CsvProcessor {
         } else if (Types.DOUBLE == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             value = numberize(value, locale);
             preparedStatement.setDouble(paramIdx, parseDouble(value));
+        } else if (Types.FLOAT == DataTypeUtils.getSqlTypeByDataType(dataType)) {
+            value = numberize(value, locale);
+            preparedStatement.setFloat(paramIdx, parseFloat(value));
         } else if (Types.BOOLEAN == DataTypeUtils.getSqlTypeByDataType(dataType)
                 || Types.BIT == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             preparedStatement.setBoolean(paramIdx, parseBoolean(value));

@@ -39,7 +39,8 @@ public class JavascriptHandler {
     /** The repository. */
     private final IRepository repository;
 
-    private DirigibleJavascriptCodeRunner systemRunner;
+    /** The Constant systemRunner. */
+    private static final ThreadLocal<DirigibleJavascriptCodeRunner> systemRunner = new ThreadLocal<>();
 
     /**
      * Instantiates a new javascript handler.
@@ -71,10 +72,11 @@ public class JavascriptHandler {
     }
 
     public DirigibleJavascriptCodeRunner getSystemRunner() {
-        if (systemRunner == null) {
-            this.systemRunner = new DirigibleJavascriptCodeRunner(null, false);
+        DirigibleJavascriptCodeRunner localSystemRunner = systemRunner.get();
+        if (localSystemRunner == null) {
+            systemRunner.set(new DirigibleJavascriptCodeRunner(null, false));
         }
-        return systemRunner;
+        return systemRunner.get();
     }
 
     /**
@@ -112,7 +114,7 @@ public class JavascriptHandler {
     public Object handleRequest(String projectName, String projectFilePath, String projectFilePathParam, Map<Object, Object> parameters,
             boolean debug, boolean keep) {
         try {
-            if (UserRequestVerifier.isValid()) {
+            if (UserRequestVerifier.isValid() && projectFilePathParam != null) {
                 UserRequestVerifier.getRequest()
                                    .setAttribute("dirigible-rest-resource-path", projectFilePathParam);
             }
@@ -143,9 +145,13 @@ public class JavascriptHandler {
                 logger.error(ex.getMessage());
                 return ex.getMessage();
             }
+            if (ex.getMessage() != null) {
+                logger.error(ex.getMessage(), ex);
+            }
             String errorMessage = String.format(
-                    "Error on processing JavaScript service from project: [%s], path: [%s], project file path param [%s] with parameters: [%s]",
-                    projectName, projectFilePath, projectFilePathParam, parameters);
+                    "Error on processing JavaScript service from project: [%s], path: [%s], project file path param [%s] with parameters: [%s] - %s",
+                    projectName, projectFilePath, projectFilePathParam != null ? projectFilePathParam : "none",
+                    parameters != null ? parameters : "none", ex.getMessage());
             throw new RuntimeException(errorMessage, ex);
         }
     }

@@ -20,6 +20,8 @@ import org.eclipse.dirigible.components.data.sources.domain.DataSourceProperty;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.sources.manager.TenantDataSourceNameManager;
 import org.eclipse.dirigible.components.data.sources.service.DataSourceService;
+import org.eclipse.dirigible.components.database.DatabaseSystem;
+import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.database.sql.SqlFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,11 +83,16 @@ class DefaultDataSourceProvisioning implements TenantProvisioningStep {
         String schema = createSchema(tenant, userId);
         LOGGER.info("Created schema [{}] for tenant [{}] and user [{}]", schema, tenant, userId);
 
+        DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
+        if (defaultDataSource.isOfType(DatabaseSystem.MSSQL)) {
+            assignUserDefaultSchemaInMSSQL(userId, schema);
+            grantUserPermissionsInMSSQL(userId);
+        }
+
         DataSource dataSource = registerDataSource(tenant, userId, password, schema);
         LOGGER.info("Registered data source [{}] for tenant [{}]", dataSource, tenant);
 
         LOGGER.info("Default DataSource for tenant [{}] has been registered.", tenant);
-
     }
 
     /**
@@ -131,17 +138,18 @@ class DefaultDataSourceProvisioning implements TenantProvisioningStep {
      * @throws TenantProvisioningException the tenant provisioning exception
      */
     private String createSchema(Tenant tenant, String userId) throws TenantProvisioningException {
-        javax.sql.DataSource dataSource = dataSourcesManager.getDefaultDataSource();
+        DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
         try (Connection connection = dataSource.getConnection()) {
             String schemaName = getSchemaName(tenant);
-            String sql = SqlFactory.getNative(connection)
-                                   .create()
-                                   .schema(schemaName)
-                                   .authorization(userId)
-                                   .build();
+            String createSchemaSql = SqlFactory.getNative(connection)
+                                               .create()
+                                               .schema(schemaName)
+                                               .authorization(userId)
+                                               .build();
 
-            try (PreparedStatement prepareStatement = connection.prepareStatement(sql)) {
+            try (PreparedStatement prepareStatement = connection.prepareStatement(createSchemaSql)) {
                 prepareStatement.execute();
+                LOGGER.debug("Created schema [{}] with owner [{}]", schemaName, userId);
             }
 
             return schemaName;
@@ -159,6 +167,52 @@ class DefaultDataSourceProvisioning implements TenantProvisioningStep {
     private String getSchemaName(Tenant tenant) {
         return tenant.getId()
                      .toUpperCase();
+    }
+
+    private void assignUserDefaultSchemaInMSSQL(String userId, String schemaName) {
+        DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
+
+        // ALTER USER <user> WITH DEFAULT_SCHEMA = <schema>
+        String alterUserSql = """
+                    DECLARE @sql nvarchar(max);
+                    SET @sql = N'ALTER USER ' + QUOTENAME(?) +
+                               N' WITH DEFAULT_SCHEMA = ' + QUOTENAME(?);
+                    EXEC sp_executesql @sql;
+                """;
+
+        try (Connection connection = dataSource.getConnection(); PreparedStatement ps = connection.prepareStatement(alterUserSql)) {
+            ps.setString(1, userId);
+            ps.setString(2, schemaName);
+            ps.execute();
+
+            LOGGER.info("Set default schema [{}] for user [{}]", schemaName, userId);
+        } catch (SQLException ex) {
+            throw new TenantProvisioningException("Failed to set default schema [" + schemaName + "] for user " + userId, ex);
+        }
+    }
+
+    private void grantUserPermissionsInMSSQL(String userId) {
+        DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
+
+        // GRANT CREATE TABLE, CREATE VIEW, CREATE PROCEDURE, CREATE TYPE TO <user>
+        String grantSql = """
+                    DECLARE @sql nvarchar(max);
+
+                    SET @sql =
+                        N'GRANT CREATE TABLE, CREATE VIEW, CREATE PROCEDURE, CREATE TYPE TO '
+                        + QUOTENAME(?);
+
+                    EXEC sp_executesql @sql;
+                """;
+
+        try (Connection connection = dataSource.getConnection(); PreparedStatement ps = connection.prepareStatement(grantSql)) {
+            ps.setString(1, userId);
+            ps.execute();
+
+            LOGGER.info("Granted permissions to user [{}] with sql [{}]", userId, grantSql);
+        } catch (SQLException ex) {
+            throw new TenantProvisioningException("Failed to grant permissions to user " + userId, ex);
+        }
     }
 
     /**

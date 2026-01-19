@@ -1,0 +1,268 @@
+#set($dollar = '$')
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'])
+	.config(["EntityServiceProvider", (EntityServiceProvider) => {
+		EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Controller.ts';
+	}])
+	.controller('PageController', ($scope, ${dollar}http, Extensions, LocaleService, EntityService) => {
+		const Dialogs = new DialogHub();
+		const Notifications = new NotificationHub();
+		let description = 'Description';
+		let propertySuccessfullyCreated = '${name} successfully created';
+		let propertySuccessfullyUpdated = '${name} successfully updated';
+		$scope.entity = {};
+		$scope.forms = {
+			details: {},
+		};
+		$scope.formHeaders = {
+			select: '${name} Details',
+			create: 'Create ${name}',
+			update: 'Update ${name}'
+		};
+		$scope.action = 'select';
+
+		LocaleService.onInit(() => {
+			description = LocaleService.t('$projectName:${tprefix}.defaults.description');
+			$scope.formHeaders.select = LocaleService.t('$projectName:${tprefix}.defaults.formHeadSelect', { name: '$t($projectName:${tprefix}.t.${dataName})' });
+			$scope.formHeaders.create = LocaleService.t('$projectName:${tprefix}.defaults.formHeadCreate', { name: '$t($projectName:${tprefix}.t.${dataName})' });
+			$scope.formHeaders.update = LocaleService.t('$projectName:${tprefix}.defaults.formHeadUpdate', { name: '$t($projectName:${tprefix}.t.${dataName})' });
+			propertySuccessfullyCreated = LocaleService.t('$projectName:${tprefix}.messages.propertySuccessfullyCreated', { name: '$t($projectName:${tprefix}.t.${dataName})' });
+			propertySuccessfullyUpdated = LocaleService.t('$projectName:${tprefix}.messages.propertySuccessfullyUpdated', { name: '$t($projectName:${tprefix}.t.${dataName})' });
+		});
+
+		//-----------------Custom Actions-------------------//
+		Extensions.getWindows(['${projectName}-custom-action']).then((response) => {
+			$scope.entityActions = response.data.filter(e => e.perspective === '${perspectiveName}' && e.view === '${name}' && e.type === 'entity');
+		});
+
+		$scope.triggerEntityAction = (action) => {
+			Dialogs.showWindow({
+				hasHeader: true,
+        		title: LocaleService.t(action.translation.key, action.translation.options, action.label),
+				path: action.path,
+				params: {
+					id: $scope.entity.${primaryKeysString}
+				},
+				closeButton: true
+			});
+		};
+		//-----------------Custom Actions-------------------//
+
+		//-----------------Events-------------------//
+		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.clearDetails', handler: () => {
+			$scope.$evalAsync(() => {
+				$scope.entity = {};
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+				$scope.options${property.name} = [];
+#end
+#end
+				$scope.action = 'select';
+			});
+		}});
+		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.entitySelected', handler: (data) => {
+			$scope.$evalAsync(() => {
+				#foreach ($property in $properties)
+#if($property.isDateType)
+				if (data.entity.${property.name}) {
+					data.entity.${property.name} = new Date(data.entity.${property.name});
+				}
+#end
+#end
+				$scope.entity = data.entity;
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+				$scope.options${property.name} = data.options${property.name};
+#end
+#end
+				$scope.action = 'select';
+			});
+		}});
+		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.createEntity', handler: (data) => {
+			$scope.$evalAsync(() => {
+				$scope.entity = {};
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+				$scope.options${property.name} = data.options${property.name};
+#end
+#end
+				$scope.action = 'create';
+			});
+		}});
+		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.updateEntity', handler: (data) => {
+			$scope.$evalAsync(() => {
+#foreach ($property in $properties)
+#if($property.isDateType)
+				if (data.entity.${property.name}) {
+					data.entity.${property.name} = new Date(data.entity.${property.name});
+				}
+#end
+#end
+				$scope.entity = data.entity;
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+				$scope.options${property.name} = data.options${property.name};
+#end
+#end
+				$scope.action = 'update';
+			});
+		}});
+
+#foreach ($property in $properties)
+#if ($property.widgetType == "DROPDOWN")
+		${dollar}scope.service${property.name} = '${property.widgetDropdownControllerUrl}';
+#end
+#end
+
+#foreach ($property in $properties)
+#if($property.widgetDependsOnProperty)
+
+		${dollar}scope.${dollar}watch('entity.${property.widgetDependsOnProperty}', (newValue, oldValue) => {
+			if (newValue !== undefined && newValue !== null) {
+				${dollar}http.get(${dollar}scope.service${property.widgetDependsOnProperty} + '/' + newValue).then((response) => {
+					let valueFrom = response.data.${property.widgetDependsOnValueFrom};
+#if($property.widgetType != "DROPDOWN")
+					$scope.entity.${property.name} = valueFrom;
+#end
+#if($property.widgetType == "DROPDOWN")
+					${dollar}http.post('${property.widgetDropdownControllerUrl}/search', {
+						conditions: [
+							{ propertyName: '${property.widgetDependsOnFilterBy}', operator: 'EQ', value: valueFrom }
+						]
+					}).then((response) => {
+						${dollar}scope.options${property.name} = response.data.map(e => ({
+							value: e.${property.widgetDropDownKey},
+							text: e.${property.widgetDropDownValue}
+						}));
+						if ($scope.action !== 'select' && newValue !== oldValue) {
+							if (${dollar}scope.options${property.name}.length == 1) {
+								$scope.entity.${property.name} = ${dollar}scope.options${property.name}[0].value;
+							} else {
+								$scope.entity.${property.name} = undefined;
+							}
+						}
+					}, (error) => {
+						console.error(error);
+					});
+#end
+				}, (error) => {
+					console.error(error);
+				});
+			}
+		});
+#end
+#end
+		//-----------------Events-------------------//
+
+		$scope.create = () => {
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN" && $property.widgetDropDownMultiSelect)
+			${dollar}scope.entity.${property.name} = ${dollar}scope.entity.${property.name}.join();
+#end
+#end
+			EntityService.create($scope.entity).then((response) => {
+				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityCreated', data: response.data });
+				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.clearDetails' , data: response.data });
+				Notifications.show({
+					title: LocaleService.t('$projectName:${tprefix}.t.${dataName}'),
+					description: propertySuccessfullyCreated,
+					type: 'positive'
+				});
+			}, (error) => {
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: LocaleService.t('$projectName:${tprefix}.t.${dataName}'),
+					message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToCreate', { name: '$t($projectName:${tprefix}.t.${dataName})', message: message }),
+					type: AlertTypes.Error
+				});
+				console.error('EntityService:', error);
+			});
+		};
+
+		$scope.update = () => {
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN" && $property.widgetDropDownMultiSelect)
+			${dollar}scope.entity.${property.name} = ${dollar}scope.entity.${property.name}.join();
+#end
+#end
+			EntityService.update($scope.entity.${primaryKeysString}, $scope.entity).then((response) => {
+				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entityUpdated', data: response.data });
+				Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.clearDetails', data: response.data });
+				Notifications.show({
+					title: LocaleService.t('$projectName:${tprefix}.t.${dataName}'),
+					description: propertySuccessfullyUpdated,
+					type: 'positive'
+				});
+			}, (error) => {
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: LocaleService.t('$projectName:${tprefix}.t.${dataName}'),
+					message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToCreate', { name: '$t($projectName:${tprefix}.t.${dataName})', message: message }),
+					type: AlertTypes.Error
+				});
+				console.error('EntityService:', error);
+			});
+		};
+
+		$scope.cancel = () => {
+			Dialogs.triggerEvent('${projectName}.${perspectiveName}.${name}.clearDetails');
+		};
+		
+		//-----------------Dialogs-------------------//
+		$scope.alert = (message) => {
+			if (message) Dialogs.showAlert({
+				title: description,
+				message: message,
+				type: AlertTypes.Information,
+				preformatted: true,
+			});
+		};
+		
+#if($hasDropdowns)
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+		$scope.create${property.name} = () => {
+			Dialogs.showWindow({
+				id: '${property.relationshipEntityName}-details',
+				params: {
+					action: 'create',
+					entity: {},
+				},
+				closeButton: false
+			});
+		};
+#end
+#end
+#end
+
+		//-----------------Dialogs-------------------//
+
+
+
+		//----------------Dropdowns-----------------//
+
+#if($hasDropdowns)
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+		$scope.refresh${property.name} = () => {
+			$scope.options${property.name} = [];
+			${dollar}http.get('${property.widgetDropdownControllerUrl}').then((response) => {
+				${dollar}scope.options${property.name} = response.data.map(e => ({
+					value: e.${property.widgetDropDownKey},
+					text: e.${property.widgetDropDownValue}
+				}));
+			}, (error) => {
+				console.error(error);
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: '${property.name}',
+					message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLoad', { message: message }),
+					type: AlertTypes.Error
+				});
+			});
+		};
+#end
+#end
+#end
+
+		//----------------Dropdowns-----------------//	
+	});

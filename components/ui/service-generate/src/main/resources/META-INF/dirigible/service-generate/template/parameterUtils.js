@@ -68,6 +68,7 @@ export function process(model, parameters) {
             p.widgetIsMajor = p.widgetIsMajor === "true";
             p.widgetLabel = p.widgetLabel ? p.widgetLabel : p.name;
             p.widgetDropdownUrl = "";
+            p.widgetDropdownControllerUrl = "";
 
             const parsedDataType = parseDataTypes(p.dataType);
             p.dataTypeJava = parsedDataType.java;
@@ -131,6 +132,7 @@ export function process(model, parameters) {
 
             if (p.widgetType == "DROPDOWN") {
                 let projectNameString = `/services/ts/${parameters.projectName}/gen/${parameters.genFolderName}/api/${p.relationshipEntityPerspectiveName}/${p.relationshipEntityName}Service.ts`;
+                let projectNameControllerString = `/services/ts/${parameters.projectName}/gen/${parameters.genFolderName}/api/${p.relationshipEntityPerspectiveName}/${p.relationshipEntityName}Controller.ts`;
 
                 e.hasDropdowns = true;
 
@@ -139,14 +141,17 @@ export function process(model, parameters) {
                     e.referencedProjections.forEach(referencedProjection => {
                         if (referencedProjection.name === p.relationshipEntityName && !foundReferenceProjection) {
                             p.widgetDropdownUrl = `/services/ts/${referencedProjection.project}/gen/${referencedProjection.genFolderName}/api/${p.relationshipEntityPerspectiveName}/${p.relationshipEntityName}Service.ts`;
+                            p.widgetDropdownControllerUrl = `/services/ts/${referencedProjection.project}/gen/${referencedProjection.genFolderName}/api/${p.relationshipEntityPerspectiveName}/${p.relationshipEntityName}Controller.ts`;
                             foundReferenceProjection = true;
                         }
                     });
                     if (!foundReferenceProjection) {
                         p.widgetDropdownUrl = projectNameString;
+                        p.widgetDropdownControllerUrl = projectNameControllerString;
                     }
                 } else {
-                    p.widgetDropdownUrl = projectNameString
+                    p.widgetDropdownUrl = projectNameString;
+                    p.widgetDropdownControllerUrl = projectNameControllerString;
                 }
             }
         });
@@ -289,6 +294,7 @@ export function parseDataTypes(dataType) {
             parsedDataType.ts = "Date";
             break;
         case "BOOLEAN":
+        case "BIT":
             parsedDataType.java = "boolean";
             parsedDataType.ts = "boolean";
             break;

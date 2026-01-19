@@ -1,0 +1,26 @@
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
+
+	<head>
+		<meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="view.js"></script>
+        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+		<script type="text/javascript" src="/services/web/dashboard/services/entity.js"></script>
+		<script type="text/javascript" src="/webjars/chart.js/dist/chart.umd.js"></script>
+        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <script type="text/javascript" src="controller.js"></script>
+	</head>
+
+	<body class="bk-vbox">
+		<bk-toolbar has-title="true">
+			<bk-toolbar-title>{{'$projectName:${tprefix}.defaults.items' | t}} <span bk-object-status text="{{dataCount}}" inverted="true"></bk-toolbar-title>
+			<bk-button state="transparent" label="{{ '$projectName:${tprefix}.defaults.filter' | t }}" ng-click="openFilter()"></bk-button>
+		</bk-toolbar>
+		<canvas id="myChart" ng-non-bindable></canvas>
+		<theme></theme>
+	</body>
+
+</html>

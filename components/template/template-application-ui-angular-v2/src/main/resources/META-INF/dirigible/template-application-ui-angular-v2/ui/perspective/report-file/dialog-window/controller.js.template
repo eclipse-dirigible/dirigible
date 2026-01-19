@@ -1,0 +1,18 @@
+#set($dollar = '$')
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale']).controller('PageController', ($scope, ViewParameters) => {
+	$scope.entity = {};
+
+	let params = ViewParameters.get();
+	if (Object.keys(params).length) {
+		$scope.action = 'select';
+
+#foreach ($column in $columns)
+#if($column.typeTypescript == 'Date')
+		if (params.entity['${column.alias}']) {
+			params.entity['${column.alias}'] = new Date(params.entity['${column.alias}']);
+		}
+#end
+#end
+		$scope.entity = params.entity;
+	}
+});

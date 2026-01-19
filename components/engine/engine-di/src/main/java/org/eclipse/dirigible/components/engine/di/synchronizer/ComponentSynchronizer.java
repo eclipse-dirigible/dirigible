@@ -43,7 +43,7 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
 
     /** The Constant FILE_EXTENSION_COMPONENT. */
     public static final String FILE_EXTENSION_COMPONENT = "Component.ts";
-    public static final String[] FILE_EXTENSIONS_COMPONENT = new String[] {"Component.ts", "Repository.ts", "Service.ts"};
+    public static final String[] FILE_EXTENSIONS_COMPONENT = new String[] {"component.ts", "repository.ts", "service.ts"};
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(ComponentSynchronizer.class);
     /** The component service. */
@@ -287,6 +287,7 @@ public class ComponentSynchronizer extends BaseSynchronizer<org.eclipse.dirigibl
     public boolean isAccepted(Path file, BasicFileAttributes attrs) {
         for (String extension : FILE_EXTENSIONS_COMPONENT) {
             if (file.toString()
+                    .toLowerCase()
                     .endsWith(extension)) {
                 return true;
             }

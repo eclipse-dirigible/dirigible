@@ -1,0 +1,130 @@
+#set($dollar = '$')
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'])
+    .config(['EntityServiceProvider', (EntityServiceProvider) => {
+        EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Controller.ts';
+    }])
+    .controller('PageController', ($scope, EntityService, LocaleService, ViewParameters) => {
+        const Dialogs = new DialogHub();
+		let params = ViewParameters.get();
+		if (Object.keys(params).length) {         
+            const filterEntity = params.filterEntity ?? {};
+
+			const filter = {
+				$filter: {
+					conditions: [],
+					sorts: [],
+					limit: 20,
+					offset: 0
+				}
+			};
+#foreach ($property in $properties)
+#if($property.dataTypeTypescript == 'number')
+			if (entity.${property.name} !== undefined) {
+				const condition = { propertyName: '${property.name}', operator: 'EQ', value: entity.${property.name} };
+				filter.$filter.conditions.push(condition);
+			}
+#elseif($property.dataTypeTypescript == 'boolean')
+			if (entity.${property.name} !== undefined && entity.is${property.name}Indeterminate === false) {
+				const condition = { propertyName: '${property.name}', operator: 'EQ', value: entity.${property.name} };
+				filter.$filter.conditions.push(condition);
+			}
+#elseif($property.dataTypeTypescript == 'string')
+			if (entity.${property.name}) {
+				const condition = { propertyName: '${property.name}', operator: 'LIKE', value: `%$dollar{entity.${property.name}}%` };
+				filter.$filter.conditions.push(condition);
+			}
+#elseif($property.dataTypeTypescript == 'Date')
+			if (entity.${property.name}From) {
+				const condition = { propertyName: '${property.name}', operator: 'GE', value: entity.${property.name}From };
+				filter.$filter.conditions.push(condition);
+			}
+			if (entity.${property.name}To) {
+				const condition = { propertyName: '${property.name}', operator: 'LE', value: entity.${property.name}To };
+				filter.$filter.conditions.push(condition);
+			}
+#end
+#end
+
+            $scope.filter = filter;
+
+    #foreach ($property in $properties)
+        #if($property.widgetType == "DROPDOWN")
+			$scope.options${property.name} = params.options${property.name};
+			#if($property.widgetDropDownMultiSelect)
+			if (${dollar}scope.entity.${property.name}) {
+				${dollar}scope.entity.${property.name} = ${dollar}scope.entity.${property.name}.split(',').map(e => parseInt(e));
+			}
+			#end
+        #end
+    #end
+		}
+
+        $scope.loadPage = (filter) => {
+            if (!filter && $scope.filter) {
+                filter = $scope.filter;
+            }
+            let request;
+            if (filter) {
+                request = EntityService.search(filter);
+            } else {
+                request = EntityService.list();
+            }
+            request.then((response) => {
+#if($hasDates)
+					response.data.forEach(e => {
+#foreach ($property in $properties)
+#if($property.isDateType)
+						if (e.${property.name}) {
+							e.${property.name} = new Date(e.${property.name});
+						}
+#end
+#end
+					});
+
+#end
+                $scope.data = response.data;
+                setTimeout(() => {
+                    window.print();
+                }, 250);
+            }, (error) => {
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: LocaleService.t('$projectName:${tprefix}.t.${dataName}'),
+					message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLF', { name: '$t($projectName:${tprefix}.t.${dataName})', message: message }),
+					type: AlertTypes.Error
+				});
+				console.error('EntityService:', error);
+			});
+        };
+        $scope.loadPage($scope.filter);
+
+#foreach ($property in $properties)
+    #if($property.widgetType == "DROPDOWN")
+		${dollar}scope.options${property.name}Value = (optionKey) => {
+		#if($property.widgetDropDownMultiSelect)
+			const values = [];
+			if (Array.isArray(optionKey)) {
+				optionKey = optionKey.join();
+			}
+			optionKey.split(',').map(e => parseInt(e)).forEach(key => {
+				const found = ${dollar}scope.options${property.name}.find(e => e.value === key);
+				if (found) {
+					values.push(found.text);
+				}
+			});
+			return values.join(', ');
+		#else
+			for (let i = 0; i < ${dollar}scope.options${property.name}.length; i++) {
+				if (${dollar}scope.options${property.name}[i].value === optionKey) {
+					return ${dollar}scope.options${property.name}[i].text;
+				}
+			}
+			return null;
+    	#end
+		};
+    #end
+#end
+        window.onafterprint = () => {
+            Dialogs.closeWindow({ path: viewData.path });
+        }
+    });

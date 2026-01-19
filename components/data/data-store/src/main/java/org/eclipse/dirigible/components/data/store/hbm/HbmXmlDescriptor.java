@@ -137,6 +137,18 @@ public class HbmXmlDescriptor {
         /** The length. */
         private final Integer length;
 
+        /** The nullable. */
+        private final boolean nullable;
+
+        /** The defaultValue. */
+        private final String defaultValue;
+
+        /** The precision. */
+        private final Integer precision;
+
+        /** The scale. */
+        private final Integer scale;
+
         /**
          * Instantiates a new hbm property descriptor.
          *
@@ -144,12 +156,21 @@ public class HbmXmlDescriptor {
          * @param column the column
          * @param type the type
          * @param length the length
+         * @param nullable the nullable
+         * @param defaultValue the defaultValue
+         * @param precision the precision
+         * @param scale the scale
          */
-        public HbmPropertyDescriptor(String name, String column, String type, Integer length) {
+        public HbmPropertyDescriptor(String name, String column, String type, Integer length, boolean nullable, String defaultValue,
+                Integer precision, Integer scale) {
             this.name = name;
             this.column = column;
             this.type = type;
             this.length = length;
+            this.nullable = nullable;
+            this.defaultValue = defaultValue;
+            this.precision = precision;
+            this.scale = scale;
         }
 
         /**
@@ -187,6 +208,43 @@ public class HbmXmlDescriptor {
         public Integer getLength() {
             return length;
         }
+
+        /**
+         * Gets the nullable.
+         *
+         * @return the nullable
+         */
+        public boolean isNullable() {
+            return nullable;
+        }
+
+        /**
+         * Gets the defaultValue.
+         *
+         * @return the defaultValue
+         */
+        public String getDefaultValue() {
+            return defaultValue;
+        }
+
+        /**
+         * Gets the precision.
+         *
+         * @return the precision
+         */
+        public Integer getPrecision() {
+            return precision;
+        }
+
+        /**
+         * Gets the scale.
+         *
+         * @return the scale
+         */
+        public Integer getScale() {
+            return scale;
+        }
+
     }
 
 
@@ -512,7 +570,8 @@ public class HbmXmlDescriptor {
         xml.append("<hibernate-mapping>\n");
 
         // --- Class Element ---
-        xml.append(String.format("    <class entity-name=\"%s\" table=\"`%s`\">\n", this.entityName, this.tableName));
+        xml.append(
+                String.format("    <class entity-name=\"%s\" table=\"`%s`\" dynamic-insert=\"true\">\n", this.entityName, this.tableName));
 
         // --- ID Element ---
         HbmIdDescriptor idDesc = this.id;
@@ -529,8 +588,21 @@ public class HbmXmlDescriptor {
         // --- Property Elements ---
         for (HbmPropertyDescriptor prop : this.properties) {
             String lengthAttr = prop.getLength() != null ? String.format(" length=\"%d\"", prop.getLength()) : "";
-            xml.append(String.format("        <property name=\"%s\" column=\"`%s`\" type=\"%s\"%s/>\n", prop.getName(), prop.getColumn(),
-                    prop.getType(), lengthAttr));
+            String nullableAttr = prop.isNullable() ? " nullable=\"true\"" : "";
+            String precisionAttr = prop.getPrecision() != null ? String.format(" precision=\"%d\"", prop.getPrecision()) : "";
+            String scaleAttr = prop.getScale() != null ? String.format(" scale=\"%d\"", prop.getScale()) : "";
+            String defaultValue = prop.getDefaultValue();
+            if (defaultValue != null && !defaultValue.isEmpty()) {
+                // Use nested <column> element so we can emit a default attribute which is valid in Hibernate XML
+                xml.append(String.format("        <property name=\"%s\" type=\"%s\"%s%s%s%s>\n", prop.getName(), prop.getType(), lengthAttr,
+                        nullableAttr, precisionAttr, scaleAttr));
+                xml.append(
+                        String.format("            <column name=\"`%s`\" default=\"%s\" />\n", prop.getColumn(), escapeXml(defaultValue)));
+                xml.append("        </property>\n");
+            } else {
+                xml.append(String.format("        <property name=\"%s\" column=\"`%s`\" type=\"%s\"%s%s%s%s/>\n", prop.getName(),
+                        prop.getColumn(), prop.getType(), lengthAttr, nullableAttr, precisionAttr, scaleAttr));
+            }
         }
 
         // --- Collection Elements ---
@@ -542,6 +614,22 @@ public class HbmXmlDescriptor {
         xml.append("</hibernate-mapping>\n");
 
         return xml.toString();
+    }
+
+    /**
+     * Escapes characters that are special in XML attributes.
+     *
+     * @param s the input string
+     * @return the escaped string
+     */
+    private static String escapeXml(String s) {
+        if (s == null) {
+            return null;
+        }
+        return s.replace("&", "&amp;")
+                .replace("\"", "&quot;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;");
     }
 
 }

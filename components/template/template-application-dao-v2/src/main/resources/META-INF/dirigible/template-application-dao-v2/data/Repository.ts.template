@@ -1,0 +1,74 @@
+import { Repository, EntityEvent, EntityConstructor } from '@aerokit/sdk/db'
+import { Component } from '@aerokit/sdk/component'
+import { Producer } from '@aerokit/sdk/messaging'
+import { Extensions } from '@aerokit/sdk/extensions'
+import { ${name}Entity } from './${name}Entity'
+#if($importsCode && $importsCode != "")
+// custom imports
+${importsCode}
+#end
+#foreach ($property in $properties)
+    #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
+        #set($haveCalculatedPropertyOnCreate = "true")
+    #elseif($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate)
+        #set($haveCalculatedPropertyOnUpdate = "true")
+    #end
+#end
+
+@Component('${name}Repository')
+export class ${name}Repository extends Repository<${name}Entity> {
+
+    constructor() {
+        super((${name}Entity as EntityConstructor));
+    }
+
+#if($haveCalculatedPropertyOnCreate)
+    public override create(entity: ${name}Entity): string | number {
+    #foreach ($property in $properties)
+        #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
+        entity.${property.name} = ${property.calculatedPropertyExpressionCreate};
+        #end
+    #end
+        return super.create(entity);
+    }
+
+#end
+#if($haveCalculatedPropertyOnUpdate)
+    public override update(entity: ${name}Entity): void {
+    #foreach ($property in $properties)
+        #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate)
+        entity.${property.name} = ${property.calculatedPropertyExpressionUpdate};
+        #end
+    #end
+        super.update(entity);
+    }
+
+#end
+#if($haveCalculatedPropertyOnCreate || $haveCalculatedPropertyOnUpdate)
+    public override upsert(entity: ${name}Entity): string | number {
+    #foreach ($property in $properties)
+        #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
+        entity.${property.name} = ${property.calculatedPropertyExpressionCreate};
+        #end
+    #end
+    #foreach ($property in $properties)
+        #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate)
+        entity.${property.name} = ${property.calculatedPropertyExpressionUpdate};
+        #end
+    #end
+        return super.upsert(entity);
+    }
+
+#end
+    protected override async triggerEvent(data: EntityEvent<${name}Entity>): Promise<void> {
+        const triggerExtensions = await Extensions.loadExtensionModules('${projectName}-${perspectiveName}-${name}', ['trigger']);
+        triggerExtensions.forEach(triggerExtension => {
+            try {
+                triggerExtension.trigger(data);
+            } catch (error) {
+                console.error(error);
+            }
+        });
+        Producer.topic('${projectName}-${perspectiveName}-${name}').send(JSON.stringify(data));
+    }
+}

@@ -1,0 +1,106 @@
+#set($dollar = '$')
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale']).controller('PageController', ($scope, ViewParameters, LocaleService) => {
+	const Dialogs = new DialogHub();
+	let description = 'Description';
+	$scope.entity = {};
+	$scope.forms = {
+		details: {},
+	};
+
+	LocaleService.onInit(() => {
+		description = LocaleService.t('$projectName:${tprefix}.defaults.description');
+	});
+
+	let params = ViewParameters.get();
+	if (Object.keys(params).length) {
+#foreach ($property in $properties)
+#if($property.isDateType)
+		if (params?.entity?.${property.name}From) {
+			params.entity.${property.name}From = new Date(params.entity.${property.name}From);
+		}
+		if (params?.entity?.${property.name}To) {
+			params.entity.${property.name}To = new Date(params.entity.${property.name}To);
+		}
+#end
+#end
+		$scope.entity = params.entity ?? {};
+		$scope.selectedMainEntityKey = params.selectedMainEntityKey;
+		$scope.selectedMainEntityId = params.selectedMainEntityId;
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+		$scope.options${property.name} = params.options${property.name};
+#if($property.widgetDropDownMultiSelect)
+		if (${dollar}scope.entity.${property.name}) {
+			${dollar}scope.entity.${property.name} = ${dollar}scope.entity.${property.name}.split(',').map(e => parseInt(e));
+		}
+#end
+#end
+#end
+	}
+
+	$scope.filter = () => {
+		let entity = $scope.entity;
+		const filter = {
+			$filter: {
+				conditions: [],
+				sorts: [],
+				limit: 20,
+				offset: 0
+			}
+		};
+#foreach ($property in $properties)
+#if($property.dataTypeTypescript == 'number')
+		if (entity.${property.name} !== undefined) {
+			const condition = { propertyName: '${property.name}', operator: 'EQ', value: entity.${property.name} };
+			filter.$filter.conditions.push(condition);
+		}
+#elseif($property.dataTypeTypescript == 'boolean')
+		if (entity.${property.name} !== undefined && entity.is${property.name}Indeterminate === false) {
+			const condition = { propertyName: '${property.name}', operator: 'EQ', value: entity.${property.name} };
+			filter.$filter.conditions.push(condition);
+		}
+#elseif($property.dataTypeTypescript == 'string')
+		if (entity.${property.name}) {
+			const condition = { propertyName: '${property.name}', operator: 'LIKE', value: `%$dollar{entity.${property.name}}%` };
+			filter.$filter.conditions.push(condition);
+		}
+#elseif($property.dataTypeTypescript == 'Date')
+		if (entity.${property.name}From) {
+			const condition = { propertyName: '${property.name}', operator: 'GE', value: entity.${property.name}From };
+			filter.$filter.conditions.push(condition);
+		}
+		if (entity.${property.name}To) {
+			const condition = { propertyName: '${property.name}', operator: 'LE', value: entity.${property.name}To };
+			filter.$filter.conditions.push(condition);
+		}
+#end
+#end
+		Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.entitySearch', data: {
+			entity: entity,
+			filter: filter
+		}});
+		$scope.cancel();
+	};
+
+	$scope.resetFilter = () => {
+		$scope.entity = {};
+		$scope.filter();
+	};
+
+	$scope.alert = (message) => {
+		if (message) Dialogs.showAlert({
+			title: description,
+			message: message,
+			type: AlertTypes.Information,
+			preformatted: true,
+		});
+	};
+
+	$scope.cancel = () => {
+		Dialogs.closeWindow({ id: '${name}-filter' });
+	};
+
+	$scope.clearErrorMessage = () => {
+		$scope.errorMessage = null;
+	};
+});

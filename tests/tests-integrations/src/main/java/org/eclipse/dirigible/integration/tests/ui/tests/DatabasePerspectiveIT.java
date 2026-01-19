@@ -16,6 +16,7 @@ import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.db.DBAsserter;
 import org.eclipse.dirigible.tests.framework.ide.DatabasePerspective;
+import org.eclipse.dirigible.tests.framework.util.SleepUtil;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -35,7 +36,7 @@ public class DatabasePerspectiveIT extends UserInterfaceIntegrationTest {
     void testDatabaseFunctionality() throws SQLException {
         DatabasePerspective databasePerspective = ide.openDatabasePerspective();
 
-        createTestTable(databasePerspective); // Creating test table first to show in the database view
+        createTestTable(databasePerspective);
 
         String schema = getSchema();
         expandSubviews(schema, databasePerspective);
@@ -48,12 +49,23 @@ public class DatabasePerspectiveIT extends UserInterfaceIntegrationTest {
     }
 
     private String getSchema() {
-        boolean postgreSQL = dataSourcesManager.getDefaultDataSource()
-                                               .isOfType(DatabaseSystem.POSTGRESQL);
-        return postgreSQL ? "public" : "PUBLIC";
+        if (dataSourcesManager.getDefaultDataSource()
+                              .isOfType(DatabaseSystem.POSTGRESQL)) {
+            return "public";
+        }
+
+        if (dataSourcesManager.getDefaultDataSource()
+                              .isOfType(DatabaseSystem.MSSQL)) {
+            return "dbo";
+        }
+
+        return "PUBLIC";
     }
 
     private void expandSubviews(String schema, DatabasePerspective databasePerspective) {
+        // some time is needed so that the tables is returned by the db metadata
+        // this is applicable for databases like MSSQL
+        SleepUtil.sleepSeconds(10);
         databasePerspective.refreshTables();
 
         databasePerspective.expandSubmenu(schema);

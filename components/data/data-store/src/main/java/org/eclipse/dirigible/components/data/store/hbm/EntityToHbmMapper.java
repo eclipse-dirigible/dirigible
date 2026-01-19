@@ -82,9 +82,9 @@ public class EntityToHbmMapper {
                                       : field.getPropertyName()
                                              .toUpperCase();
 
-                              HbmXmlDescriptor.HbmPropertyDescriptor propDesc =
-                                      new HbmXmlDescriptor.HbmPropertyDescriptor(field.getPropertyName(), mappedColumnName,
-                                              mapType(field.getTypeScriptType(), cd.getDatabaseType()), cd.getLength());
+                              HbmXmlDescriptor.HbmPropertyDescriptor propDesc = new HbmXmlDescriptor.HbmPropertyDescriptor(
+                                      field.getPropertyName(), mappedColumnName, mapType(field.getTypeScriptType(), cd.getDatabaseType()),
+                                      cd.getLength(), cd.isNullable(), cd.getDefaultValue(), cd.getPrecision(), cd.getScale());
                               hbmDesc.addProperty(propDesc);
                           }
                       });
@@ -103,6 +103,7 @@ public class EntityToHbmMapper {
         // Clean up the TypeScript type (remove '| null' for easier matching)
         String cleanTsType = tsType.toLowerCase()
                                    .replace(" | null", "")
+                                   .replace(" | undefined", "")
                                    .trim();
         String cleanDbType = (dbType != null) ? dbType.toLowerCase()
                                                       .trim()
@@ -121,13 +122,15 @@ public class EntityToHbmMapper {
                 case "double", "double precision" -> "double";
                 case "numeric", "decimal", "money", "currency" -> "big_decimal";
                 // Boolean Type
-                case "boolean", "bit" -> "boolean";
+                case "boolean" -> "boolean";
+                case "bit" -> "bit";
                 // Date/Time Types
                 case "date" -> "date";
                 case "time" -> "time";
                 case "datetime", "timestamp", "datetime2" -> "timestamp";
                 // Binary/LOB Types
-                case "blob", "binary", "varbinary" -> "binary";
+                case "binary", "varbinary" -> "binary";
+                case "blob" -> "blob";
                 case "clob" -> "clob";
                 // UUID
                 case "uuid" -> "uuid-char"; // Assuming string representation

@@ -199,6 +199,7 @@ export class HttpController {
             }
         } else {
             logger.error('No suitable resource handler for Resource[{}], Method[{}], Content-Type[{}], Accept[{}] found', resourcePath, method.toUpperCase(), contentTypeHeader, acceptsHeader);
+			logger.error('Registered resource handlers for Resource[{}] are [{}]', resourcePath, JSON.stringify(_oConfiguration));
             this.sendError(response.BAD_REQUEST, undefined, 'Bad Request', 'No suitable processor for this request.');
         }
     }

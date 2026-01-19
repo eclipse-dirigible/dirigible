@@ -1,0 +1,12 @@
+{
+    "guid": "template-application-data",
+    "dependencies": [
+        {
+            "guid": "template-application-schema"
+        },
+        {
+            "guid": "template-application-dao"
+        }
+    ],
+    "actions": []
+}
