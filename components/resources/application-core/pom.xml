@@ -10,25 +10,10 @@
     </parent>
 
     <name>Components - UI - Platform - Core</name>
-    <artifactId>dirigible-components-resources-platform-core</artifactId>
+    <artifactId>dirigible-components-resources-application-core</artifactId>
     <packaging>jar</packaging>
 
     <dependencies>
-        <dependency>
-            <groupId>org.webjars</groupId>
-            <artifactId>angularjs</artifactId>
-            <version>${angularjs.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.webjars.npm</groupId>
-            <artifactId>angular-aria</artifactId>
-            <version>${angular-aria.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.webjars</groupId>
-            <artifactId>jquery</artifactId>
-            <version>${jquery.version}</version>
-        </dependency>
         <dependency>
             <groupId>org.webjars.npm</groupId>
             <artifactId>split.js</artifactId>
@@ -41,13 +26,23 @@
         </dependency>
         <dependency>
             <groupId>org.webjars.npm</groupId>
-            <artifactId>fundamental-styles</artifactId>
-            <version>${fundamental-styles.version}</version>
+            <artifactId>alpinejs</artifactId>
+            <version>${alpinejs.version}</version>
         </dependency>
         <dependency>
             <groupId>org.webjars.npm</groupId>
-            <artifactId>sap-theming__theming-base-content</artifactId>
-            <version>${sap-theming__theming-base-content.version}</version>
+            <artifactId>codbex__harmonia</artifactId>
+            <version>${harmonia.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.webjars.npm</groupId>
+            <artifactId>fontsource__open-sans</artifactId>
+            <version>${opensans.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.webjars.npm</groupId>
+            <artifactId>lucide</artifactId>
+            <version>${lucide.version}</version>
         </dependency>
     </dependencies>
 

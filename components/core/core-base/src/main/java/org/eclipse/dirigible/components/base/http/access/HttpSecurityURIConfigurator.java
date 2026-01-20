@@ -48,8 +48,10 @@ public class HttpSecurityURIConfigurator {
             "/services/web/resources/**", //
             "/services/web/resources-locale/**", //
             "/services/web/platform-core/**", //
+            "/services/web/application-core/**", //
             "/services/web/theme-*/**", //
             "/services/js/platform-core/**", //
+            "/services/js/application-core/**", //
             "/actuator/health/liveness", //
             "/actuator/health/readiness", //
             "/actuator/health"};

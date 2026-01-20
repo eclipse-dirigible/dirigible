@@ -214,6 +214,7 @@
 
         <!-- Resources -->
         <module>resources/platform-core</module>
+        <module>resources/application-core</module>
         <module>resources/platform-branding</module>
         <module>resources/resources-dev-tools</module>
         <module>resources/resources-flowable-libs</module>
@@ -1198,6 +1199,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-resources-platform-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-application-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
