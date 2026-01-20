@@ -107,6 +107,14 @@ public class BpmFlowableConfig {
         String user = DirigibleConfig.FLOWABLE_DATABASE_USER.getStringValue();
         String password = DirigibleConfig.FLOWABLE_DATABASE_PASSWORD.getStringValue();
 
+        String mailServerHost = DirigibleConfig.FLOWABLE_MAIL_SERVER_HOST.getStringValue();
+        int mailServerPort = DirigibleConfig.FLOWABLE_MAIL_SERVER_PORT.getIntValue();
+        String mailServerUsername = DirigibleConfig.FLOWABLE_MAIL_SERVER_USERNAME.getStringValue();
+        String mailServerPassword = DirigibleConfig.FLOWABLE_MAIL_SERVER_PASSWORD.getStringValue();
+        boolean mailServerUseTLS = DirigibleConfig.FLOWABLE_MAIL_SERVER_USE_TLS.getBooleanValue();
+        boolean mailServerUseSSL = DirigibleConfig.FLOWABLE_MAIL_SERVER_USE_SSL.getBooleanValue();
+        String mailServerDefaultFrom = DirigibleConfig.FLOWABLE_MAIL_SERVER_DEFAULT_FROM.getStringValue();
+
         if (dataSourceName != null) {
             LOGGER.info("Initializing the Flowable Process Engine with datasource name");
             DataSource customDataSource = this.datasourceManager.getDataSource(dataSourceName);
@@ -123,5 +131,16 @@ public class BpmFlowableConfig {
             config.setDataSource(datasource);
         }
         config.setTransactionManager(transactionManager);
+
+        if (mailServerHost != null) {
+            LOGGER.info("Configuring Flowable Mail Server Host: {}", mailServerHost);
+            config.setMailServerHost(mailServerHost);
+            config.setMailServerPort(mailServerPort);
+            config.setMailServerUsername(mailServerUsername);
+            config.setMailServerPassword(mailServerPassword);
+            config.setMailServerUseTLS(mailServerUseTLS);
+            config.setMailServerUseSSL(mailServerUseSSL);
+            config.setMailServerDefaultFrom(mailServerDefaultFrom);
+        }
     }
 }
