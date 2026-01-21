@@ -57,7 +57,7 @@
                         <bk-form-input-message state="{{formDialog.form['n' + id].$valid ? '' : 'error'}}" message="item.errorMsg || 'Invalid input'" message-fixed="true">
                             <bk-input id="{{id}}" type="{{item.type}}" ng-attr-placeholder="{{item.placeholder}}" name="{{ 'n' + id }}" ng-trim="false" ng-model="item.value" bk-focus="{{item.focus}}"
                                 state="{{ formDialog.form['n' + id].$valid ? '' : 'error' }}" ng-required="item.required" ng-minlength="item.minlength || 0" ng-disabled="formItemDisabled(item.enabledOn, item.disabledOn)"
-                                ng-maxlength="item.maxlength || -1" ng-attr-min="{{item.min}}" ng-attr-max="{{item.max}}" input-rules="item.inputRules || {}"
+                                ng-maxlength="item.maxlength || -1" ng-attr-min="{{item.min}}" ng-attr-max="{{item.max}}" ng-attr-autocomplete="{{item.type === 'password' ? 'new-password' : undefined}}" input-rules="item.inputRules || {}"
                                 ng-keyup="$event.keyCode == 13 && item.submitOnEnter && formDialog.form.$valid && closeFormDialog(true)">
                             </bk-input>
                         </bk-form-input-message>

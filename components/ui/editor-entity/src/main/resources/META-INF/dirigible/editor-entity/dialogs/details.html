@@ -472,7 +472,7 @@
                             <bk-form-label for="fun" colon="true">Username</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="fun" type="text" ng-model="dataParameters.feedUsername"></bk-input>
+                            <bk-input id="fun" name="feedUsername" type="text" ng-model="dataParameters.feedUsername" autocomplete="off" ng-readonly="selectedTab !== 'feed'"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -480,7 +480,7 @@
                             <bk-form-label for="fp" colon="true">Password</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="fp" type="password" ng-model="dataParameters.feedPassword"></bk-input>
+                            <bk-input id="fp" name="feedPassword" type="password" ng-model="dataParameters.feedPassword" autocomplete="new-password" ng-readonly="selectedTab !== 'feed'"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
