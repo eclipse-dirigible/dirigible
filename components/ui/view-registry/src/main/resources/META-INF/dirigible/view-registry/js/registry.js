@@ -167,7 +167,7 @@ registryView.controller('RegistryController', ($scope, $document, clientOS, Stat
 			StatusBar.showMessage(`Deleted '${path}'.`);
 			if (callback) callback();
 		}, (error) => {
-			console.log(error);
+			console.error(error);
 			StatusBar.showError(`Unable to delete '${path}'.`);
 		});
 	};
