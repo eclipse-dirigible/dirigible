@@ -93,7 +93,7 @@
                         <td bk-table-cell>{{next.processInstanceId}}</td>
                         <td bk-table-cell>{{next.createTime}}</td>
                         <td bk-table-cell>
-                            <bk-button label="Open Form" title="Open Form" aria-label="Open Form" ng-click="openForm($window.location.origin + next.formKey + '?taskId=' + next.id)"></bk-button>
+                            <bk-button label="Open Form" title="Open Form" aria-label="Open Form" ng-click="openForm($window.location.origin + next.formKey + '?taskId=' + next.id + '&processInstanceId=' + next.processInstanceId)"></bk-button>
                         </td>
                     </tr>
                     <tr ng-if="tasksListAssignee.length === 0" bk-table-row>
