@@ -1,0 +1,5 @@
+{
+    "module": "template-form-builder-alpinejs/template/template.js",
+    "extensionPoint": "platform-templates",
+    "description": "The generator template from form to AlpineJS format"
+}

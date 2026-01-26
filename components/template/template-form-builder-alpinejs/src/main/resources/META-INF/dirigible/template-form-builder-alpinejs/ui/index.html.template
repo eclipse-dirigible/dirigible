@@ -1,0 +1,365 @@
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" x-data="formData">
+
+    <head>
+        <meta charset="UTF-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        ## <title x-text="$t('$projectName:${tprefix}.default.viewName', { name: $metadata.name })"></title>
+        <title>Form</title>
+
+        <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
+        <script src="/webjars/lucide/dist/umd/lucide.min.js"></script>
+        <script src="/webjars/codbex__harmonia/dist/harmonia.min.js"></script>
+        <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
+        <link href="/services/web/application-core/styles/fonts.css" rel="stylesheet" />
+
+        <!-- View Config -->
+        <script src="view.js"></script>
+
+        <script src="/services/js/application-core/services/branding.js"></script>
+        <script src="/services/web/platform-core/utilities/view.js"></script>
+        <script src="/services/web/application-core/js/http.js"></script>
+        <script src="/webjars/i18next/dist/umd/i18next.min.js"></script>
+        <script src="/services/web/application-core/js/translations.js"></script>
+
+        #foreach($script in $scripts)
+            <script type="text/javascript" src="$script.url"></script>
+        #end
+    </head>
+
+    <body class="vbox p-2">
+        <form @submit.prevent="onSubmit">
+            <fieldset x-h-fieldset>
+                <div x-h-field-group="x-h-field-group">
+#macro(iif $condition $trueValue $falseValue)#if($condition)$trueValue#else$falseValue#end#end
+#macro(cssProp $name $value)#if($value)$name: $value;#end#end
+#macro(getOrientation $horizontal)#if($horizontal)horizontal#{else}vertical#end#end
+#macro(selectFilter $filter)#if($filter == 'Contains')contains#elseif($filter == 'ContainsEach')contains-each#{else}starts-with#end#end
+#macro(formWidgets $elements)
+#foreach($element in $elements)
+	#if($element.controlId == "header")
+                    <h$element.headerSize.intValue() x-h-text.h$element.headerSize.intValue() x-text="$t('$projectName:${tprefix}.t.$element.translation', '$element.label')"></h$element.headerSize.intValue()>
+	#elseif($element.controlId == "image")
+		#if($element.link)
+                    <a href="$element.link">
+                        <img
+                            src="$element.imageLink" 
+                            alt="$element.desc"
+                            style="#cssProp('width', $element.width) #cssProp('height', $element.height)"
+                        />
+                    </a>
+		#else
+                    <img
+                        src="$element.imageLink" 
+                        alt="$element.desc"
+                        style="#cssProp('width', $element.width) #cssProp('height', $element.height)"
+                    />
+        #end
+	#elseif($element.controlId == "input-textarea")
+                    <div x-h-field data-orientation="#getOrientation($element.horizontal)">
+                        <label x-h-label.field for="$element.id" x-text="$t('$projectName:${tprefix}.t.$element.translation', '$element.label')"></label>
+                        <textarea x-h-textarea                         
+                            id="$element.id" 
+                            name="$element.id" 
+                            x-model="form.$element.model" 
+                            placeholder="$element.placeholder" 
+                            minLength="$element.minLength.intValue()"
+                            maxLength="$element.maxLength.intValue()"
+                            class="resize-none"
+                        #if($element.required)
+                            required 
+                        #end
+                        ></textarea>
+                    </div>
+	#elseif($element.controlId == "input-textfield")
+                    <div x-h-field data-orientation="#getOrientation($element.horizontal)">
+                        <label x-h-label.field for="$element.id" x-text="$t('$projectName:${tprefix}.t.$element.translation', '$element.label')"></label>
+                        <input x-h-input 
+                            id="$element.id"
+                            name="$element.id"
+                            x-model="form.$element.model"                        
+                            type="$element.type"
+                        #if($element.isCompact)
+                            data-size="sm"
+                        #end
+                            placeholder="$element.placeholder"
+                            minLength="$element.minLength.intValue()"
+                            maxLength="$element.maxLength.intValue()"
+                        #if($element.required)  
+                            required 
+                        #end
+                        #if($element.validationRegex)  
+                            pattern="$element.validationRegex"
+                        #end
+                        />
+                    #if($element.validationRegex && $element.errorMessage)
+                        <p x-h-field-error x-text="$t('$projectName:${tprefix}.t.$element.errorTranslation', '$element.errorMessage')"></p>
+                    #end
+                    </div>				
+	#elseif($element.controlId == "input-number")
+                    <div x-h-field data-orientation="#getOrientation($element.horizontal)">
+                        <label x-h-label.field for="$element.id" x-text="$t('$projectName:${tprefix}.t.$element.translation', '$element.label')"></label>
+                        <div x-h-input-number #if($element.isCompact)data-size="sm"#end>
+                            <input
+                                id="$element.id"
+                                name="$element.id"
+                                x-ref="$element.id" 
+                                x-model.number="form.$element.model"                        
+                                type="number"
+                            #if($element.isCompact)
+                                data-size="sm"
+                            #end
+                                placeholder="$element.placeholder"
+                            #if($element.minNum < $element.maxNum)
+                                min="$element.minNum"
+                                max="$element.maxNum"
+                                step="$element.step"
+                            #end
+                            #if($element.required)  
+                                required 
+                            #end
+                            />
+                        </div>                       
+                    </div>   
+	#elseif($element.controlId == "input-checkbox")
+                    <div x-h-field data-orientation="horizontal">
+                        <span x-h-checkbox>
+                            <input type="checkbox" x-model="form.$element.model" id="$element.id" name="$element.id" />
+                        </span>
+                        <label x-h-label.field for="$element.id" class="font-normal" x-text="$t('$projectName:${tprefix}.t.$element.translation', '$element.label')"></label>
+                    </div>
+	#elseif($element.controlId == "input-time")
+                    <div x-h-field data-orientation="#getOrientation($element.horizontal)">
+                        <label x-h-label.field for="$element.id" x-text="$t('$projectName:${tprefix}.t.$element.translation', '$element.label')"></label>
+                        <div x-h-time-picker #if($element.isCompact)data-size="sm"#end>
+                            <input x-h-time-picker-input
+                                type="text"
+                                id="$element.id"
+                                name="$element.id"
+                                x-model="form.$element.model"
+                            #if($element.required)  
+                                required 
+                            #end
+                            />
+                            <div x-h-time-picker-popup></div>
+                        </div>
+                    </div>
+	#elseif($element.controlId == "input-date")
+                    <div x-h-field data-orientation="#getOrientation($element.horizontal)">
+                        <label x-h-label.field for="$element.id" x-text="$t('$projectName:${tprefix}.t.$element.translation', '$element.label')"></label>
+                        <div x-h-date-picker #if($element.isCompact)data-size="sm"#end>
+                            <input 
+                                type="text" 
+                                id="$element.id" 
+                                name="$element.id"
+                            #if($element.required)  
+                                required 
+                            #end
+                            />
+                            <button x-h-button x-h-date-picker-trigger aria-label="Choose date"></button>
+                            <div x-h-calendar x-model="form.$element.model"></div>
+                        </div>
+                    </div>
+	#elseif($element.controlId == "input-color")
+                    <div x-h-field data-orientation="#getOrientation($element.horizontal)">
+                        <label x-h-label.field for="$element.id" x-text="$t('$projectName:${tprefix}.t.$element.translation', '$element.label')"></label>
+                        <input x-h-input
+                            id="$element.id"
+                            name="$element.id"
+                            x-model="form.$element.model"                        
+                            type="color"
+                        #if($element.required)  
+                            required 
+                        #end
+                        />
+                    </div>
+	#elseif($element.controlId == "input-combobox")
+                    <div x-h-field data-orientation="#getOrientation($element.horizontal)">
+                        <label x-h-label.field for="$element.id" x-text="$t('$projectName:${tprefix}.t.$element.translation', '$element.label')"></label>
+                        <div x-h-select #if($element.isCompact)data-size="sm"#end>
+                            <input x-h-select-input 
+                                placeholder="$element.placeholder" 
+                                x-model="form.$element.model"
+                                data-id="$element.id" 
+                                name="$element.id" 
+                            #if($element.required)  
+                                required 
+                            #end
+                            />
+                            <div x-h-select-content>
+                                <div x-h-select-search data-filter="#selectFilter($element.filter)"></div>
+                                <div x-h-select-group>
+                                    <div x-h-select-label x-text="$t('$projectName:${tprefix}.t.$element.translation', '$element.label')"></div>
+                                    <template x-for="option in $element.items">
+                                        <div x-h-select-option="option.label" :data-value="option.value"></div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+	#elseif($element.controlId == "input-select" && $element.staticData != true)
+                    <div x-h-field data-orientation="#getOrientation($element.horizontal)">
+                        <label x-h-label.field for="$element.id" x-text="$t('$projectName:${tprefix}.t.$element.translation', '$element.label')"></label>
+                        <div x-h-select #if($element.isCompact)data-size="sm"#end>
+                            <input x-h-select-input 
+                                x-model="form.$element.model"
+                                data-id="$element.id" 
+                                name="$element.id"
+                            #if($element.required)  
+                                required 
+                            #end
+                            />
+                            <div x-h-select-content>
+                                <template x-for="option in $element.options">
+                                    <div x-h-select-option="option.$element.optionLabel" :data-value="option.$element.optionValue"></div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+	#elseif($element.controlId == "input-select" && $element.staticData)
+                    <div x-h-field data-orientation="#getOrientation($element.horizontal)">
+                        <label x-h-label.field for="$element.id" x-text="$t('$projectName:${tprefix}.t.$element.translation', '$element.label')"></label>
+                        <div x-h-select #if($element.isCompact)data-size="sm"#end>
+                            <input x-h-select-input 
+                                x-model="form.$element.model"
+                                data-id="$element.id" 
+                                name="$element.id"
+                            #if($element.required)  
+                                required 
+                            #end
+                            />
+                            <div x-h-select-content>
+                            #foreach($option in $element.staticOptions)
+                                <div x-h-select-option="$t('$projectName:${tprefix}.t.$option.translation', '$option.label')" data-value="$option.value"></div>
+                            #end
+                            </div>
+                        </div>
+                    </div>
+	#elseif($element.controlId == "input-radio" && $element.staticData != true)
+                    <div x-h-field data-orientation="vertical">
+                        <span x-h-label.field>$element.label</span>
+                        <div class="flex flex-col gap-3">
+                            <template x-for="(option, index) in $element.options">
+                                <div x-h-field data-orientation="horizontal">
+                                    <span x-h-radio>
+                                        <input type="radio" x-model="form.$element.model" name="$element.id" :id="`$element.id.${index}`" :value="option.$element.optionValue"/>
+                                    </span>
+                                    <label x-h-label :for="`$element.id.${index}`" x-text="option.$element.optionLabel"></label>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+	#elseif($element.controlId == "input-radio" && $element.staticData)
+                    <div x-h-field data-orientation="vertical">
+                        <span x-h-label.field x-text="$t('$projectName:${tprefix}.t.$element.translation', '$element.label')"></span>
+                        <div class="flex flex-col gap-3">
+                        #foreach($option in $element.staticOptions)
+                            <div x-h-field data-orientation="horizontal">
+                                <span x-h-radio>
+                                    <input type="radio" x-model="form.$element.model" name="$element.id" id="$element.id.$foreach.index" value="$option.value"/>
+                                </span>
+                                <label x-h-label for="$element.id.$foreach.index" x-text="$t('$projectName:${tprefix}.t.$option.translation', '$option.label')"></label>
+                            </div>
+                        #end
+                        </div>
+                    </div>
+	#elseif($element.controlId == "table")
+                    <div x-h-table-container data-border="#if($element.outerBorders == 'none')false#{else}true#end">
+                        <table x-h-table #if($element.innerBorders != 'none')data-borders="#if($element.innerBorders == 'horizontal')rows#elseif($element.innerBorders == 'vertical')columns#{else}both#end"#end data-fixed="$element.isFixed">
+                            <thead x-h-table-header>
+                                <tr x-h-table-row>
+                                #foreach($header in $element.headers)
+                                    <th x-h-table-head scope="col" x-text="$t('$projectName:${tprefix}.t.$header.translation', '$header.label')"></th>
+                                #end
+                                </tr>
+                            </thead>
+                            <tbody x-h-table-body>
+                                <template x-for="row in $element.model">
+                                    <tr x-h-table-row>
+                                    #foreach($header in $element.headers)
+                                        <td x-h-table-head x-text="row['$header.value']"></td>
+                                    #end
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>				
+	#elseif($element.controlId == "button")
+                    <div class="#iif($element.sizeToText, 'flex justify-end', 'flex')">
+                        <button x-h-button
+                        #if($element.type)
+                            data-variant="#if($element.type == 'emphasized')primary#elseif($element.type == 'ghost')outline#elseif($element.type == 'attention')warning#{else}$element.type#end"
+                        #end
+                        #if(!$element.sizeToText)
+                            class="flex-1"
+                        #end 
+                        #if($element.isSubmit)
+                            type="submit"
+                        #else
+                            type="button"
+                        #end
+                        #if($element.isCompact)
+                            data-size="sm"
+                        #end
+                        #if($element.callback)
+                            @click="$element.callback"
+                        #end
+                            x-text="$t('$projectName:${tprefix}.t.$element.translation', '$element.label')"></button>
+                    </div>
+	#elseif($element.controlId == "paragraph")
+                    <p x-h-text
+                    #if($element.format)
+                        class="whitespace-pre-wrap"
+                    #end
+                    #if($element.model)
+                        x-text="form.$element.model"
+                    #end
+                    >#if(!$element.model)$element.text#end</p>
+	#end
+    #if($element.children)
+        #set( $vbox = $element.controlId == 'container-vbox')
+                    <div class="#iif($vbox, 'vbox', 'hbox') gap-4 items-stretch">
+        #formWidgets($element.children)
+                    </div>
+    #end
+#end
+#end
+
+#formWidgets($form)
+                </div>
+            </fieldset>
+        </form>
+        <script>
+            lucide.createIcons();
+            const httpClient = new HttpApi();
+            
+            document.addEventListener('alpine:init', () => {
+                Alpine.data('formData', () => ({
+                    form: {},
+                    onSubmit(event) {
+                        if(this.onFormSubmit && event.target.checkValidity()) {
+                            this.onFormSubmit(this.form);
+                        }
+                    },
+                    init() {
+                    #foreach($feed in $feeds)
+                        httpClient.fetch('$feed.url')
+                            .then(res => res.json())
+                            .then(response => {
+                                this.$feed.name = response;
+                        }).catch(e => {
+                            console.error(e);
+                        });
+                    #end
+
+                    #if($code)
+                        $code
+                    #end    
+                    },
+                }));
+            });
+        </script>
+    </body>
+
+</html>

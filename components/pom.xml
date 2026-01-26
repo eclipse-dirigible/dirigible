@@ -253,6 +253,7 @@
         <module>template/template-database-view</module>
         <module>template/template-form</module>
         <module>template/template-form-builder-angularjs</module>
+        <module>template/template-form-builder-alpinejs</module>        
         <module>template/template-hello-world</module>
         <module>template/template-react</module>
         <module>template/template-html</module>
@@ -1427,6 +1428,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-template-form-builder-angularjs</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-template-form-builder-alpinejs</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
