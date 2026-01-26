@@ -107,9 +107,6 @@
                                 x-ref="$element.id" 
                                 x-model.number="form.$element.model"                        
                                 type="number"
-                            #if($element.isCompact)
-                                data-size="sm"
-                            #end
                                 placeholder="$element.placeholder"
                             #if($element.minNum < $element.maxNum)
                                 min="$element.minNum"
@@ -157,7 +154,7 @@
                                 required 
                             #end
                             />
-                            <button x-h-button x-h-date-picker-trigger aria-label="Choose date"></button>
+                            <button x-h-date-picker-trigger aria-label="Choose date"></button>
                             <div x-h-calendar x-model="form.$element.model"></div>
                         </div>
                     </div>

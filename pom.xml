@@ -229,7 +229,7 @@
         <bpmn-visualization.version>0.46.0</bpmn-visualization.version>
         <i18next.version>25.3.0</i18next.version>
         <alpinejs.version>3.15.4</alpinejs.version>
-        <harmonia.version>1.0.0</harmonia.version>
+        <harmonia.version>1.1.0</harmonia.version>
         <opensans.version>5.2.7</opensans.version>
         <lucide.version>0.562.0</lucide.version>
         <!-- Tests -->
