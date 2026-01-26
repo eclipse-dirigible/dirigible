@@ -40,7 +40,7 @@
                     <bk-form-item>
                         <bk-form-label for="password" required colon="true">Password</bk-form-label>
                         <bk-input id="password" name="password" type="password" placeholder="Enter password" ng-model="user.password" input-rules="inputRules" ng-trim="false" state="{{ forms.userForm['password'].$valid ? '' : 'error' }}"
-                            ng-required="true">
+                            ng-required="true" autocomplete="new-password">
                         </bk-input>
                     </bk-form-item>
                 </bk-form-group>

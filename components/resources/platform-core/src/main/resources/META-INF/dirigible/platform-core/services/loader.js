@@ -31,21 +31,18 @@ response.flush();
 response.close();
 
 function setETag(scriptId) {
-    // let maxAge = 30 * 24 * 60 * 60;
-    let maxAge = 3600; // Temp
-    let etag = uuid.random();
+    let etag = uuid.random().replaceAll('-', '');
+    // @ts-ignore
     response.addCookie({
         'name': getCacheKey(scriptId),
-        'value': etag,
-        'path': '/',
-        'maxAge': maxAge
+        'value': etag
     });
     response.setHeader('ETag', etag);
-    response.setHeader('Cache-Control', `private, must-revalidate, max-age=${maxAge}`);
+    response.setHeader('Cache-Control', 'private, must-revalidate, max-age=3600');
 }
 
 function getCacheKey(scriptId) {
-    return COOKIE_PREFIX + scriptId.replaceAll(',', '.');
+    return COOKIE_PREFIX + scriptId.replaceAll(',', '').replaceAll('-', '');
 }
 
 function isCached(scriptId) {

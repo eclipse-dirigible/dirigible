@@ -82,14 +82,14 @@ tasksView.controller('TasksController', ($scope, $http, $window, Dialogs, Notifi
     };
 
     $scope.claimTask = () => {
-        $scope.executeAction($scope.selectedClaimTask.id, { 'action': 'CLAIM' }, 'claimed', () => { $scope.selectedClaimTask = null });
+        $scope.executeAction($scope.selectedClaimTask.id, { 'action': 'CLAIM' }, true, () => { $scope.selectedClaimTask = null });
     };
 
     $scope.unclaimTask = () => {
-        $scope.executeAction($scope.selectedUnclaimTask.id, { 'action': 'UNCLAIM' }, 'unclaimed', () => { $scope.selectedUnclaimTask = null });
+        $scope.executeAction($scope.selectedUnclaimTask.id, { 'action': 'UNCLAIM' }, false, () => { $scope.selectedUnclaimTask = null });
     };
 
-    $scope.executeAction = (taskId, requestBody, actionName, clearCallback) => {
+    $scope.executeAction = (taskId, requestBody, claimed, clearCallback) => {
         const apiUrl = '/services/bpm/bpm-processes/tasks/' + taskId;
 
         $http({
@@ -100,17 +100,16 @@ tasksView.controller('TasksController', ($scope, $http, $window, Dialogs, Notifi
         }).then(() => {
             Notifications.show({
                 title: 'Action confirmation',
-                description: "Task " + actionName + " successfully!",
+                description: `Task ${claimed ? 'claimed' : 'unclaimed'} successfully!`,
                 type: 'positive'
             });
             $scope.reload();
-            // console.log('Successfully ' + actionName + ' task with id ' + taskId);
             clearCallback();
         }).catch((error) => {
             console.error('Error making POST request:', error);
             Dialogs.showAlert({
                 title: 'Action failed',
-                message: "Failed to " + actionName + " task " + error.message,
+                message: `Failed to ${claimed ? 'claim' : 'unclaim'} task ${error.message}`,
                 type: AlertTypes.Error,
                 preformatted: false,
             });

@@ -5,11 +5,11 @@
  */
 const viewData = {
 	id: '$projectName-$fileName',
-	label: '$projectName Form',
+	label: '$fileName Form',
 	translation: {
-		key: '$projectName:default.viewName',
+		key: '$projectName:${tprefix}.default.viewName',
 		options: {
-			name: '$projectName',
+			name: '$metadata.name',
 		}
 	},
 	region: 'bottom',

@@ -85,7 +85,6 @@
             angular.module('jobsDetails', ['platformView', 'blimpKit']).controller('JobsDetailsController', ($scope, ViewParameters) => {
                 $scope.params = ViewParameters.get();
                 if ($scope.params.hasOwnProperty('job')) {
-                    console.log(typeof $scope.params.job.createTime);
                     $scope.params.job.exceptionStacktrace = $scope.params.job.exceptionStacktrace.replace($scope.params.job.exceptionMessage, '');
                     $scope.params.job.exceptionStacktrace = $scope.params.job.exceptionStacktrace.replaceAll('	', '');
                     $scope.params.job.exceptionStacktrace = $scope.params.job.exceptionStacktrace.trim();

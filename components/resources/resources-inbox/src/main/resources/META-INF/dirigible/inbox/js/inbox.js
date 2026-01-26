@@ -77,7 +77,6 @@ angular.module('app', ['platformView', 'blimpKit', 'platformLocale']).controller
                 type: AlertTypes.Success
             });
             $scope.reload();
-            console.log('Successfully ' + actionName + ' task with id ' + taskId);
             clearCallback();
         }).catch((error) => {
             Dialogs.showAlert({

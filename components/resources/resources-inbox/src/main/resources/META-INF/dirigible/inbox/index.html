@@ -14,105 +14,115 @@
 <!DOCTYPE html>
 <html lang="en" ng-app="app" ng-controller="ApplicationController" xmlns="http://www.w3.org/1999/xhtml">
 
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title config-title></title>
-        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
-        <script type="text/javascript" src="/services/web/inbox/configs/inbox.js"></script>
-        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=perspective-js"></script>
-        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=perspective-css" />
-        <script type="text/javascript" src="/services/web/inbox/js/inbox.js"></script>
-        <style>
-            .bk-table--no-outer-vertical-borders .fd-table__cell:first-of-type {
-                border-left: hidden;
-            }
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1" name="viewport">
+    <title config-title></title>
+    <link href="data:;base64,iVBORw0KGgo=" rel="icon" sizes="any"/>
+    <script src="/services/web/inbox/configs/inbox.js" type="text/javascript"></script>
+    <script src="/services/js/platform-core/services/loader.js?id=perspective-js" type="text/javascript"></script>
+    <link href="/services/js/platform-core/services/loader.js?id=perspective-css" rel="stylesheet" type="text/css"/>
+    <script src="/services/web/inbox/js/inbox.js" type="text/javascript"></script>
+    <style>
+        .bk-table--no-outer-vertical-borders .fd-table__cell:first-of-type {
+            border-left: hidden;
+        }
 
-        </style>
-    </head>
+    </style>
+</head>
 
-    <body class="bk-vbox">
-        <bk-toolbar has-title="false">
-            <span>{{'inbox:userTasksListed' | t:'All the user tasks on this instance, for your role, are listed below'}}</span>
-            <bk-toolbar-spacer></bk-toolbar-spacer>
-            <bk-button state="transparent" compact="true" glyph="sap-icon--refresh" title="{{'refresh' | t:'Refresh'}}" aria-label="{{'refresh' | t:'Refresh'}}" ng-click="reload()"></bk-button>
-            <bk-button state="emphasized" compact="true" ng-disabled="selectedClaimTask === null" label="{{'inbox:claim' | t:'Claim'}}" title="{{'inbox:claim' | t:'Claim'}}" aria-label="{{'inbox:claim' | t:'Claim'}}" ng-click="claimTask()">
-            </bk-button>
-            <bk-button state="negative" compact="true" ng-disabled="selectedUnclaimTask === null" label="{{'inbox:unclaim' | t:'Unclaim'}}" title="{{'inbox:unclaim' | t:'Unclaim'}}" aria-label="{{'inbox:unclaim' | t:'Unclaim'}}"
-                ng-click="unclaimTask()">
-            </bk-button>
-        </bk-toolbar>
-        <div class="fd-margin-begin--sm bk-padding-top-bottom--tiny">
-            <h6 bk-title wrap="true" header-size="6"><b>{{'inbox:candidateTasks' | t:'Candidate tasks'}}</b></h6>
-        </div>
-        <bk-scrollbar class="bk-fill-parent bk-border--bottom">
-            <table bk-table outer-borders="horizontal" display-mode="compact">
-                <thead bk-table-header sticky="true">
-                    <tr bk-table-row>
-                        <th bk-table-header-cell>{{'inbox:taskId' | t:'Task Id'}}</th>
-                        <th bk-table-header-cell>{{'inbox:taskName' | t:'Task Name'}}</th>
-                        <th bk-table-header-cell>{{'inbox:assignee' | t:'Assignee'}}</th>
-                        <th bk-table-header-cell>{{'inbox:candidateUsers' | t:'Candidate Users'}}</th>
-                        <th bk-table-header-cell>{{'inbox:candidateGroups' | t:'Candidate Groups'}}</th>
-                        <th bk-table-header-cell>{{'inbox:processInstanceId' | t:'Process Instance Id'}}</th>
-                        <th bk-table-header-cell>{{'inbox:createTime' | t:'Create Time'}}</th>
-                    </tr>
-                </thead>
-                <tbody bk-table-body>
-                    <tr bk-table-row ng-repeat="next in tasksList track by next.id" hoverable="true" activable="true" dg-selected="next.selected" ng-click="selectionClaimChanged(next)">
-                        <td bk-table-cell>{{next.id}}</td>
-                        <td bk-table-cell>{{next.name}}</td>
-                        <td bk-table-cell>{{next.assignee}}</td>
-                        <td bk-table-cell>{{next.candidateUsers}}</td>
-                        <td bk-table-cell>{{next.candidateGroups}}</td>
-                        <td bk-table-cell>{{next.processInstanceId}}</td>
-                        <td bk-table-cell>{{next.createTime}}</td>
-                    </tr>
-                    <tr ng-if="tasksList.length === 0" bk-table-row>
-                        <td bk-table-cell no-data="true">{{'inbox:noTasks' | t:'No tasks found.'}}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </bk-scrollbar>
-        <div class="fd-margin-begin--sm bk-padding-top-bottom--tiny">
-            <h6 bk-title wrap="true" header-size="6"><b>{{'inbox:assignedTasks' | t:'Assigned tasks'}}</b></h6>
-        </div>
-        <bk-scrollbar class="bk-fill-parent">
-            <table bk-table outer-borders="horizontal" display-mode="compact">
-                <thead bk-table-header sticky="true">
-                    <tr bk-table-row>
-                        <th bk-table-header-cell>{{'inbox:taskId' | t:'Task Id'}}</th>
-                        <th bk-table-header-cell>{{'inbox:taskName' | t:'Task Name'}}</th>
-                        <th bk-table-header-cell>{{'inbox:assignee' | t:'Assignee'}}</th>
-                        <th bk-table-header-cell>{{'inbox:candidateUsers' | t:'Candidate Users'}}</th>
-                        <th bk-table-header-cell>{{'inbox:candidateGroups' | t:'Candidate Groups'}}</th>
-                        <th bk-table-header-cell>{{'inbox:processInstanceId' | t:'Process Instance Id'}}</th>
-                        <th bk-table-header-cell>{{'inbox:createTime' | t:'Create Time'}}</th>
-                        <th bk-table-header-cell>{{'inbox:formKey' | t:'Form Key'}}</th>
-                    </tr>
-                </thead>
-                <tbody bk-table-body>
-                    <tr bk-table-row ng-repeat="next in tasksListAssignee track by next.id" hoverable="true" activable="true" ng-click="selectionUnclaimChanged(next)">
-                        <td bk-table-cell>{{next.id}}</td>
-                        <td bk-table-cell>{{next.name}}</td>
-                        <td bk-table-cell>{{next.assignee}}</td>
-                        <td bk-table-cell>{{next.candidateUsers}}</td>
-                        <td bk-table-cell>{{next.candidateGroups}}</td>
-                        <td bk-table-cell>{{next.processInstanceId}}</td>
-                        <td bk-table-cell>{{next.createTime}}</td>
-                        <td bk-table-cell>
-                            <bk-button state="emphasized" label="{{'inbox:openForm' | t:'Open Form'}}" title="{{'inbox:openForm' | t:'Open Form'}}" aria-label="{{'inbox:openForm' | t:'Open Form'}}"
-                                ng-click="openForm(next.formKey + '?taskId=' + next.id)">
-                            </bk-button>
-                        </td>
-                    </tr>
-                    <tr ng-if="tasksListAssignee.length === 0" bk-table-row>
-                        <td bk-table-cell no-data="true">{{'inbox:noTasks' | t:'No tasks found.'}}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </bk-scrollbar>
-        <theme></theme>
-    </body>
+<body class="bk-vbox">
+<bk-toolbar has-title="false">
+    <span>{{'inbox:userTasksListed' | t:'All the user tasks on this instance, for your role, are listed below'}}</span>
+    <bk-toolbar-spacer></bk-toolbar-spacer>
+    <bk-button aria-label="{{'refresh' | t:'Refresh'}}" compact="true" glyph="sap-icon--refresh" ng-click="reload()"
+               state="transparent" title="{{'refresh' | t:'Refresh'}}"></bk-button>
+    <bk-button aria-label="{{'inbox:claim' | t:'Claim'}}" compact="true" label="{{'inbox:claim' | t:'Claim'}}"
+               ng-click="claimTask()" ng-disabled="selectedClaimTask === null"
+               state="emphasized" title="{{'inbox:claim' | t:'Claim'}}">
+    </bk-button>
+    <bk-button aria-label="{{'inbox:unclaim' | t:'Unclaim'}}" compact="true" label="{{'inbox:unclaim' | t:'Unclaim'}}"
+               ng-click="unclaimTask()" ng-disabled="selectedUnclaimTask === null"
+               state="negative"
+               title="{{'inbox:unclaim' | t:'Unclaim'}}">
+    </bk-button>
+</bk-toolbar>
+<div class="fd-margin-begin--sm bk-padding-top-bottom--tiny">
+    <h6 bk-title header-size="6" wrap="true"><b>{{'inbox:candidateTasks' | t:'Candidate tasks'}}</b></h6>
+</div>
+<bk-scrollbar class="bk-fill-parent bk-border--bottom">
+    <table bk-table display-mode="compact" outer-borders="horizontal">
+        <thead bk-table-header sticky="true">
+        <tr bk-table-row>
+            <th bk-table-header-cell>{{'inbox:taskId' | t:'Task Id'}}</th>
+            <th bk-table-header-cell>{{'inbox:taskName' | t:'Task Name'}}</th>
+            <th bk-table-header-cell>{{'inbox:assignee' | t:'Assignee'}}</th>
+            <th bk-table-header-cell>{{'inbox:candidateUsers' | t:'Candidate Users'}}</th>
+            <th bk-table-header-cell>{{'inbox:candidateGroups' | t:'Candidate Groups'}}</th>
+            <th bk-table-header-cell>{{'inbox:processInstanceId' | t:'Process Instance Id'}}</th>
+            <th bk-table-header-cell>{{'inbox:createTime' | t:'Create Time'}}</th>
+        </tr>
+        </thead>
+        <tbody bk-table-body>
+        <tr activable="true" bk-table-row dg-selected="next.selected" hoverable="true"
+            ng-click="selectionClaimChanged(next)" ng-repeat="next in tasksList track by next.id">
+            <td bk-table-cell>{{next.id}}</td>
+            <td bk-table-cell>{{next.name}}</td>
+            <td bk-table-cell>{{next.assignee}}</td>
+            <td bk-table-cell>{{next.candidateUsers}}</td>
+            <td bk-table-cell>{{next.candidateGroups}}</td>
+            <td bk-table-cell>{{next.processInstanceId}}</td>
+            <td bk-table-cell>{{next.createTime}}</td>
+        </tr>
+        <tr bk-table-row ng-if="tasksList.length === 0">
+            <td bk-table-cell no-data="true">{{'inbox:noTasks' | t:'No tasks found.'}}</td>
+        </tr>
+        </tbody>
+    </table>
+</bk-scrollbar>
+<div class="fd-margin-begin--sm bk-padding-top-bottom--tiny">
+    <h6 bk-title header-size="6" wrap="true"><b>{{'inbox:assignedTasks' | t:'Assigned tasks'}}</b></h6>
+</div>
+<bk-scrollbar class="bk-fill-parent">
+    <table bk-table display-mode="compact" outer-borders="horizontal">
+        <thead bk-table-header sticky="true">
+        <tr bk-table-row>
+            <th bk-table-header-cell>{{'inbox:taskId' | t:'Task Id'}}</th>
+            <th bk-table-header-cell>{{'inbox:taskName' | t:'Task Name'}}</th>
+            <th bk-table-header-cell>{{'inbox:assignee' | t:'Assignee'}}</th>
+            <th bk-table-header-cell>{{'inbox:candidateUsers' | t:'Candidate Users'}}</th>
+            <th bk-table-header-cell>{{'inbox:candidateGroups' | t:'Candidate Groups'}}</th>
+            <th bk-table-header-cell>{{'inbox:processInstanceId' | t:'Process Instance Id'}}</th>
+            <th bk-table-header-cell>{{'inbox:createTime' | t:'Create Time'}}</th>
+            <th bk-table-header-cell>{{'inbox:formKey' | t:'Form Key'}}</th>
+        </tr>
+        </thead>
+        <tbody bk-table-body>
+        <tr activable="true" bk-table-row hoverable="true" ng-click="selectionUnclaimChanged(next)"
+            ng-repeat="next in tasksListAssignee track by next.id">
+            <td bk-table-cell>{{next.id}}</td>
+            <td bk-table-cell>{{next.name}}</td>
+            <td bk-table-cell>{{next.assignee}}</td>
+            <td bk-table-cell>{{next.candidateUsers}}</td>
+            <td bk-table-cell>{{next.candidateGroups}}</td>
+            <td bk-table-cell>{{next.processInstanceId}}</td>
+            <td bk-table-cell>{{next.createTime}}</td>
+            <td bk-table-cell>
+                <bk-button aria-label="{{'inbox:openForm' | t:'Open Form'}}"
+                           label="{{'inbox:openForm' | t:'Open Form'}}"
+                           ng-click="openForm(next.formKey + '?taskId=' + next.id + '&processInstanceId=' + next.processInstanceId)"
+                           state="emphasized"
+                           title="{{'inbox:openForm' | t:'Open Form'}}">
+                </bk-button>
+            </td>
+        </tr>
+        <tr bk-table-row ng-if="tasksListAssignee.length === 0">
+            <td bk-table-cell no-data="true">{{'inbox:noTasks' | t:'No tasks found.'}}</td>
+        </tr>
+        </tbody>
+    </table>
+</bk-scrollbar>
+<theme></theme>
+</body>
 
 </html>

@@ -205,7 +205,7 @@ remoteBranchesView.controller('RemoteBranchesViewController', ($scope, GitServic
             statusBarHub.showMessage(`Switched to branch '${$scope.activeBranch.name}'`);
             if (branch) $scope.loadBranches();
         }, (response) => {
-            console.log(response);
+            console.error(response);
             dialogHub.showAlert({
                 title: 'Could not checkout to branch',
                 message: response.message || 'There was an error while switching branches.',

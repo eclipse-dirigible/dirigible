@@ -61,6 +61,15 @@ function migrateForm(formData) {
     }
 }
 
+function getFormName(formData) {
+    for (let i = 0; i < formData.length; i++) {
+        if (formData[i].controlId === 'header' && formData[i].headerSize === 1) {
+            return `${formData[i].label} Form`;
+        }
+    }
+    return '';
+}
+
 function migrateReport(report) {
     if (!report.hasOwnProperty('tId')) {
         report['tId'] = getTranslationId(report.alias);
@@ -78,8 +87,15 @@ export function generateGeneric(model, parameters, templateSources) {
     let isReport = false;
     const generatedFiles = []
     const templateParameters = {};
-    if (parameters.filePath.endsWith('.form')) migrateForm(model.form);
-    else if (parameters.filePath.endsWith('.report')) {
+    if (parameters.filePath.endsWith('.form')) {
+        migrateForm(model.form);
+        if (!model.hasOwnProperty('metadata')) {
+            model['metadata'] = {
+                name: getFormName(model.form) || `${parameters['fileName']} Form`
+            }
+        }
+
+    } else if (parameters.filePath.endsWith('.report')) {
         migrateReport(model);
         isReport = true;
     }

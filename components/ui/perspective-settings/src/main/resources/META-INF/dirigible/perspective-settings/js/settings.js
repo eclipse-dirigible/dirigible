@@ -22,7 +22,7 @@ settings.controller('SettingsController', ($scope, Extensions, Dialog) => {
         $scope.settings.push(...response.data);
         $scope.activeId = $scope.settings[0].id;
     }, (error) => {
-        console.log(error);
+        console.error(error);
         Dialog.showAlert({
             title: 'Failed to load settings',
             message: 'There was an error while trying to load the settings list.',

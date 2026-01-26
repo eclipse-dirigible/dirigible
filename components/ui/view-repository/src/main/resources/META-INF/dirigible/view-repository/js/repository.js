@@ -179,7 +179,7 @@ repositoryView.controller('RepositoryViewController', ($scope, $document, client
             StatusBar.showMessage(`Deleted '${path}'.`);
             if (callback) callback();
         }, (error) => {
-            console.log(error);
+            console.error(error);
             StatusBar.showError(`Unable to delete '${path}'.`);
         });
     };

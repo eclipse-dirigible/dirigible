@@ -8,7 +8,7 @@ const GLOBAL_ROUTES: any[] =
 
 const router = rs.service();
 
-export function Controller(ctr: { new(): any }) {
+export function Controller(ctr: { new(): any }, _context?: ClassDecoratorContext) {
     const instance = new ctr();
     const routes = GLOBAL_ROUTES;
     for (const route of routes) {
@@ -40,7 +40,7 @@ export function Documentation(documentation: string) {
 
 function createRequestDecorator(httpMethod: string) {
     return function (path: string) {
-        return function (target: any, propertyKey: string) {
+        return function (target: any, propertyKey: string | ClassMethodDecoratorContext, descriptor?: PropertyDescriptor) {
             GLOBAL_ROUTES.push({
                 controller: target.constructor,
                 method: httpMethod,
