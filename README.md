@@ -445,7 +445,7 @@ BlimpKit: [https://github.com/blimpkit/blimpkit.github.io](https://github.com/bl
 
 - Project Home: [https://www.dirigible.io](https://www.dirigible.io)
 - Help Portal: [https://help.dirigible.io](https://www.dirigible.io/help)
-- Samples: [https://samples.dirigible.io](https://samples.dirigible.io)
+- Samples: [https://github.com/eclipse-dirigible/dirigible-samples](https://github.com/eclipse-dirigible/dirigible-samples)
 - Trial Instance: [https://trial.dirigible.io](https://trial.dirigible.io)
 - Slack: [https://slack.dirigible.io](https://slack.dirigible.io)
 - Mailing
