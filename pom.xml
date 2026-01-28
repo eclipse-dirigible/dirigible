@@ -195,7 +195,7 @@
 
         <!-- QLDB -->
         <qldb.driver.version>2.3.1</qldb.driver.version>
-        <qldb.sdk.version>1.12.796</qldb.sdk.version>
+        <qldb.sdk.version>1.12.797</qldb.sdk.version>
 
         <!-- jETCD -->
         <jetcd.core.version>0.8.6</jetcd.core.version>
