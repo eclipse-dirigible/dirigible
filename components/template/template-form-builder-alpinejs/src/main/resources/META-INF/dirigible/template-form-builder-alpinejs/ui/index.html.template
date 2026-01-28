@@ -5,8 +5,7 @@
         <meta charset="UTF-8"/>
         <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
-        ## <title x-text="$t('$projectName:${tprefix}.default.viewName', { name: $metadata.name })"></title>
-        <title>Form</title>
+        <title x-text="$t('$projectName:${tprefix}.default.viewName', { name: '$metadata.name' })"></title>
 
         <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
         <script src="/webjars/lucide/dist/umd/lucide.min.js"></script>
