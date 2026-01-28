@@ -1,6 +1,6 @@
 {
     "general": "Общи",
-    "resetAll": "Нулиране на всичко",
+    "resetAll": "$t(reset) на всичко",
     "theme": "Тема",
     "dashboard": "Табло",
     "reports": "Отчети",

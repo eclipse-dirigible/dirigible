@@ -39,6 +39,7 @@
                 <bk-icon-tab-bar-tab label="Scripts" tab-id="scripts" ng-click="switchTab('scripts')"></bk-icon-tab-bar-tab>
                 <bk-icon-tab-bar-buttons align-right="true">
                     <bk-button state="transparent" glyph="sap-icon--save" label="Save" aria-label="save" ng-click="shortcuts()" ng-disabled="!(isFormValid() && changed)"></bk-button>
+                    <bk-button state="transparent" glyph="sap-icon-TNT--operations" aria-label="Regenerate" title="Regenerate" label="Regenerate" ng-click="regenerate()" ng-disabled="!canRegenerate"></bk-button>
                 </bk-icon-tab-bar-buttons>
             </bk-icon-tab-bar-tablist>
             <bk-icon-tab-bar-panel class="bk-hbox bk-fill-parent fb-panel" tab-id="designer" ng-show="selectedTab === 'designer'">
@@ -63,8 +64,6 @@
                     <bk-toolbar type="transparent" has-title="false">
                         <bk-toolbar-spacer></bk-toolbar-spacer>
                         <bk-button state="transparent" toggled="state.preview" glyph="sap-icon--show" title="Toggle preview" label="Preview" aria-label="Toggle preview" ng-click="togglePreview()"></bk-button>
-                        <bk-toolbar-separator></bk-toolbar-separator>
-                        <bk-button state="transparent" glyph="sap-icon-TNT--operations" aria-label="Regenerate" title="Regenerate" label="Regenerate" ng-click="regenerate()" ng-disabled="!canRegenerate"></bk-button>
                     </bk-toolbar>
                     <bk-scrollbar style="flex:1">
                         <div id="formContainer" class="bk-checkered-bg bk-vbox fb-main-container bk-restrict-width" ng-attr-disabled="{{state.canSave === false || undefined}}" data-preview="{{state.preview}}" data-type="container-main"
