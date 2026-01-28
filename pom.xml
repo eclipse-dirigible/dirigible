@@ -137,7 +137,7 @@
         <webjars.locator.core.version>0.59</webjars.locator.core.version>
 
         <!-- GraalVM -->
-        <graalvm.version>25.0.1</graalvm.version>
+        <graalvm.version>25.0.2</graalvm.version>
 
         <!-- Commons -->
         <commons.io>2.21.0</commons.io>
