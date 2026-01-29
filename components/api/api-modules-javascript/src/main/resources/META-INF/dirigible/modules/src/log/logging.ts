@@ -27,7 +27,7 @@ export class Logging {
 /**
  * Represents a named logger instance used for emitting log messages at various levels.
  */
-class Logger {
+export class Logger {
 
 	private loggerName: string;
 
