@@ -6,3 +6,5 @@ export { Tasks as tasks } from "./tasks";
 export * from "./tasks";
 export { Values as values } from "./values";
 export * from "./values";
+export * from "./tracer";
+export { Tracer as tracer } from "./tracer";

@@ -18,6 +18,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
     const contextMenuHub = new ContextMenuHub();
     let genFile = '';
     let workspace = '';
+    let metadata;
     $scope.canRegenerate = false
     $scope.selectedTab = 'designer';
     $scope.changed = false;
@@ -250,9 +251,9 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     description: 'Text Area',
                     template: `<div class="fb-control-wrapper" ng-click="showProps($event)" data-id="{{id}}"><bk-form-item horizontal="props.horizontal.value">
                         <bk-form-label colon="true" ng-required="props.required.value" for="{{props.id.value}}">{{ props.label.value }}</bk-form-label>
-                        <bk-form-input-message state="{{ props.errorState.invalid ? 'error' : '' }}" message="props.errorState.value || 'Incorrect input'">
+                        <bk-form-input-message state="{{ props.errorMessage.invalid ? 'error' : '' }}" message="props.errorMessage.value || 'Incorrect input'">
                             <bk-textarea id="{{props.id.value}}" type="text" placeholder="{{props.placeholder.value}}" compact="props.isCompact.value"
-                                state="{'error' : props.errorState.invalid }" name="{{props.id.value}}" ng-required="props.required.value">
+                                state="{'error' : props.errorMessage.invalid }" name="{{props.id.value}}" ng-required="props.required.value">
                             </bk-textarea>
                         </bk-form-input-message>
                     </bk-form-item></div>`,
@@ -345,7 +346,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                             placeholder: 'Regular expression',
                             required: false,
                         },
-                        errorState: {
+                        errorMessage: {
                             type: 'text',
                             label: 'Error state popover message',
                             value: 'Incorrect input',
@@ -1780,6 +1781,9 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
         if (!$scope.state.error) {
             $scope.state.isBusy = true;
             WorkspaceService.loadContent($scope.dataParameters.filePath).then((response) => {
+                if (response.data.hasOwnProperty('metadata')) {
+                    metadata = response.data.metadata;
+                }
                 $scope.$evalAsync(() => {
                     if (response.data.hasOwnProperty('feeds')) {
                         $scope.formData.feeds = response.data.feeds;
@@ -1841,6 +1845,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
 
     function saveContents() {
         const formFile = {
+            metadata: metadata,
             feeds: $scope.formData.feeds,
             scripts: $scope.formData.scripts,
             code: $scope.formData.code,

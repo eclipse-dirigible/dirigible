@@ -39,6 +39,34 @@ bpmProcessViewer.controller('BpmProcessViewerController', ($scope, $http, Dialog
     style[bpmnvisu.mxgraph.mxConstants.STYLE_ARCSIZE] = '12';
     style[bpmnvisu.mxgraph.mxConstants.STYLE_ROUNDED] = true;
 
+    function convertMailServiceTasksToSendTasks(xmlDoc) {
+        const serviceTasks = Array.from(xmlDoc.getElementsByTagName('serviceTask'));
+
+        for (let task of serviceTasks) {
+            if (task.getAttribute('flowable:type') === 'mail') {
+                const receiveTask = xmlDoc.createElementNS(
+                    task.namespaceURI,
+                    'receiveTask'
+                );
+
+                for (const attr of task.attributes) {
+                    if (attr.name !== 'flowable:type') {
+                        receiveTask.setAttribute(attr.name, attr.value);
+                    }
+                }
+
+                while (task.firstChild) {
+                    receiveTask.appendChild(task.firstChild);
+                }
+
+                task.parentNode.replaceChild(receiveTask, task);
+            }
+        };
+
+        return xmlDoc;
+    }
+
+
     function loadActivities(historic = false) {
         let endpoint;
         if (historic) endpoint = `/services/bpm/bpm-processes/historic-instances/${instanceId}/variables`;
@@ -67,7 +95,7 @@ bpmProcessViewer.controller('BpmProcessViewerController', ($scope, $http, Dialog
             let bpmnElement = bpmn.querySelector(`[bpmnElement="${subprocesses[i].id}"]`);
             bpmnElement.setAttribute('isExpanded', 'true');
         }
-        return new XMLSerializer().serializeToString(bpmn);
+        return new XMLSerializer().serializeToString(convertMailServiceTasksToSendTasks(bpmn));
     }
 
     function loadBpmnFromApi() {
