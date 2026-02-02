@@ -1,0 +1,4 @@
+{
+    "name": "window-about",
+    "description": "Extension point for modules/applications to register a section for the about window."
+}

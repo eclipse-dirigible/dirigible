@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -63,6 +63,12 @@ function removeExtPoints({ perspective, shell, view, subview, editor, menu, wind
     if (locale && top.PlatformExtPoints.locales.includes(locale)) top.PlatformExtPoints.locales.splice(top.PlatformExtPoints.locales.indexOf(locale), 1);
 }
 angular.module('platformExtensions', []).factory('Extensions', ($http) => ({
+    getGeneric: (exPoints) => {
+        if (!exPoints) {
+            throw Error('getGeneric: extension point list parameter is required');
+        }
+        return $http.get('/services/js/platform-core/extension-services/generic.js', { params: { extensionPoints: exPoints } });
+    },
     getViews: (exPoints = top.PlatformExtPoints.views) => {
         return $http.get('/services/js/platform-core/extension-services/views.js', { params: { extensionPoints: exPoints } });
     },

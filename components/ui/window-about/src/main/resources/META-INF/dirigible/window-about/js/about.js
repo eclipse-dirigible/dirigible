@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -9,10 +9,16 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-angular.module('about', ['blimpKit', 'platformView', 'platformLocale']).controller('AboutController', ($scope, $http) => {
+angular.module('about', ['blimpKit', 'platformView', 'platformLocale']).controller('AboutController', ($scope, $http, Extensions) => {
     $scope.branding = getBrandingInfo();
     $scope.blimpKitVersion = angular.module('blimpKit').info().version;
     $scope.jobs = [];
+
+    Extensions.getGeneric(['window-about']).then((response) => {
+        console.log(response.data);
+    }, (error) => {
+        console.log(error);
+    });
 
     function getHealthStatus() {
         $http({
