@@ -43,7 +43,7 @@ public class SecurityIT extends IntegrationTest {
 
     @Test
     void testProtectedEndpointWithoutAuthentication() throws Exception {
-        Set<String> paths = Set.of("/spring-admin", "/actuator/info");
+        Set<String> paths = Set.of("/spring-admin", "/actuator/info", "/actuator/sbom", "/actuator/sbom/application");
         for (String path : paths) {
             mvc.perform(get(path))
                .andExpect(status().isUnauthorized());
@@ -53,7 +53,7 @@ public class SecurityIT extends IntegrationTest {
     @Test
     @WithMockUser(username = "user_without_roles", roles = {"SOME_UNUSED_ROLE"})
     void testProtectedEndpointsWithUnauthorizedUser() throws Exception {
-        Set<String> paths = Set.of("/actuator/info");
+        Set<String> paths = Set.of("/actuator/info", "/actuator/sbom", "/actuator/sbom/application");
         for (String path : paths) {
             mvc.perform(get(path))
                .andExpect(status().isForbidden());
@@ -63,7 +63,8 @@ public class SecurityIT extends IntegrationTest {
     @Test
     @WithMockUser(username = "operator", roles = {Roles.RoleNames.OPERATOR})
     void testOperatorEndpointIsAccessible() throws Exception {
-        Map<String, HttpStatus> paths = Map.of("/spring-admin", HttpStatus.NOT_FOUND, "/actuator/info", HttpStatus.OK);
+        Map<String, HttpStatus> paths = Map.of("/spring-admin", HttpStatus.NOT_FOUND, "/actuator/info", HttpStatus.OK, "/actuator/sbom",
+                HttpStatus.OK, "/actuator/sbom/application", HttpStatus.OK);
         for (Map.Entry<String, HttpStatus> entry : paths.entrySet()) {
             mvc.perform(get(entry.getKey()))
                .andExpect(status().is(entry.getValue()
