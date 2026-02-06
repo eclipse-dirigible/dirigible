@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -19,10 +20,11 @@ public class HtmlPlatformLinksInjector {
 
     private static final Logger logger = LoggerFactory.getLogger(HtmlPlatformLinksInjector.class);
 
-    private final List<PlatformAsset> assets;
+    Map<String, List<PlatformAsset>> assetsByCategory;
 
     public HtmlPlatformLinksInjector(List<PlatformAsset> assets) {
-        this.assets = assets;
+        this.assetsByCategory = assets.stream()
+                                      .collect(Collectors.groupingBy(PlatformAsset::getCategory));
     }
 
     public String processHtml(String html) {
@@ -48,20 +50,18 @@ public class HtmlPlatformLinksInjector {
                                                     .filter(s -> !s.isEmpty())
                                                     .collect(Collectors.toSet());
 
-            Set<String> knownCategories = assets.stream()
-                                                .map(PlatformAsset::getCategory)
-                                                .collect(Collectors.toSet());
+            List<PlatformAsset> selectedAssets = new ArrayList<>();
 
-            requestedCategories.forEach(cat -> {
-                if (!knownCategories.contains(cat)) {
+            for (String cat : requestedCategories) {
+                List<PlatformAsset> catAssets = assetsByCategory.get(cat);
+                if (catAssets == null) {
                     logger.error("Unknown platform category: {}", cat);
+                } else {
+                    selectedAssets.addAll(catAssets);
                 }
-            });
+            }
 
-            List<PlatformAsset> selectedAssets = assets.stream()
-                                                       .filter(a -> requestedCategories.contains(a.getCategory()))
-                                                       .sorted(Comparator.comparing(PlatformAsset::getPath))
-                                                       .collect(Collectors.toList());
+            selectedAssets.sort(Comparator.comparing(PlatformAsset::getPath));
 
             List<Node> nodes = buildNodes(doc, selectedAssets);
 

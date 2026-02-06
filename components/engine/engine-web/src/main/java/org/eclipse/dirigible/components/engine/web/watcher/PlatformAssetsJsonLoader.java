@@ -8,50 +8,36 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class PlatformAssetsJsonLoader {
-	
-	public static List<PlatformAsset> loadAssetsFromJson() {
 
-	    try (InputStream is =
-	    		PlatformAssetsJsonLoader.class.getResourceAsStream("/platform-links.json")) {
+    public static List<PlatformAsset> loadAssetsFromJson() {
 
-	        if (is == null) {
-	            throw new IllegalStateException(
-	                "platform-links.json not found on classpath");
-	        }
+        try (InputStream is = PlatformAssetsJsonLoader.class.getResourceAsStream("/platform-links.json")) {
 
-	        ObjectMapper mapper = new ObjectMapper();
+            if (is == null) {
+                throw new IllegalStateException("platform-links.json not found on classpath");
+            }
 
-	        List<PlatformAssetJson> raw =
-	            mapper.readValue(is,
-	                new TypeReference<List<PlatformAssetJson>>() {});
+            ObjectMapper mapper = new ObjectMapper();
 
-	        List<PlatformAsset> assets = new ArrayList<>();
+            List<PlatformAssetJson> raw = mapper.readValue(is, new TypeReference<List<PlatformAssetJson>>() {});
 
-	        for (PlatformAssetJson r : raw) {
+            List<PlatformAsset> assets = new ArrayList<>();
 
-	            PlatformAsset.Type type =
-	                PlatformAsset.Type.valueOf(r.type);
+            for (PlatformAssetJson r : raw) {
 
-	            boolean module = Boolean.TRUE.equals(r.module);
-	            boolean defer  = Boolean.TRUE.equals(r.defer);
+                PlatformAsset.Type type = PlatformAsset.Type.valueOf(r.type);
 
-	            assets.add(
-	                new PlatformAsset(
-	                    type,
-	                    r.path,
-	                    r.category,
-	                    module,
-	                    defer
-	                )
-	            );
-	        }
+                boolean module = Boolean.TRUE.equals(r.module);
+                boolean defer = Boolean.TRUE.equals(r.defer);
 
-	        return assets;
+                assets.add(new PlatformAsset(type, r.path, r.category, module, defer));
+            }
 
-	    } catch (Exception e) {
-	        throw new RuntimeException(
-	            "Failed to load platform-links.json", e);
-	    }
-	}
+            return assets;
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load platform-links.json", e);
+        }
+    }
 
 }
