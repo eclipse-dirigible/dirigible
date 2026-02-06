@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * The Class HtmlPublicLinksLocalRegistryWatcherHandler.
+ *
  */
 @Component
 @Scope("singleton")
@@ -32,18 +33,7 @@ public class HtmlPublicLinksLocalRegistryWatcherHandler implements LocalRegistry
      * Instantiates a new html public links local registry watcher handler.
      */
     public HtmlPublicLinksLocalRegistryWatcherHandler() {
-        List<PlatformAsset> assets =
-                List.of(new PlatformAsset(PlatformAsset.Type.CSS, "/services/platform/css/platform.css", "view-css", false, false),
-                        new PlatformAsset(PlatformAsset.Type.CSS, "/services/platform/css/view.css", "view-css", false, false),
-                        new PlatformAsset(PlatformAsset.Type.CSS, "/services/platform/css/perspective.css", "perspective-css", false,
-                                false),
-                        new PlatformAsset(PlatformAsset.Type.CSS, "/services/platform/css/dashboard.css", "dashboard-css", false, false),
-                        new PlatformAsset(PlatformAsset.Type.SCRIPT, "/services/platform/js/platform.js", "platform-js", false, true),
-                        new PlatformAsset(PlatformAsset.Type.SCRIPT, "/services/platform/js/platform-view.js", "view-js", false, true),
-                        new PlatformAsset(PlatformAsset.Type.SCRIPT, "/services/platform/js/platform-viewer.js", "view-js", false, true),
-                        new PlatformAsset(PlatformAsset.Type.SCRIPT, "/services/platform/js/platform-perspective.js", "perspective-js",
-                                false, true),
-                        new PlatformAsset(PlatformAsset.Type.SCRIPT, "/services/platform/js/components.js", "platform-js", true, true));
+        List<PlatformAsset> assets = PlatformAssetsJsonLoader.loadAssetsFromJson();
         this.injector = new HtmlPlatformLinksInjector(assets);
     }
 

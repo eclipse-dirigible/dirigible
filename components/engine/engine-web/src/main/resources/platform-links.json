@@ -1,0 +1,53 @@
+[
+  {
+    "type": "CSS",
+    "path": "/services/platform/css/platform.css",
+    "category": "view-css"
+  },
+  {
+    "type": "CSS",
+    "path": "/services/platform/css/view.css",
+    "category": "view-css"
+  },
+  {
+    "type": "CSS",
+    "path": "/services/platform/css/perspective.css",
+    "category": "perspective-css"
+  },
+  {
+    "type": "CSS",
+    "path": "/services/platform/css/dashboard.css",
+    "category": "dashboard-css"
+  },
+  {
+    "type": "SCRIPT",
+    "path": "/services/platform/js/platform.js",
+    "category": "platform-js",
+    "defer": true
+  },
+  {
+    "type": "SCRIPT",
+    "path": "/services/platform/js/platform-view.js",
+    "category": "view-js",
+    "defer": true
+  },
+  {
+    "type": "SCRIPT",
+    "path": "/services/platform/js/platform-viewer.js",
+    "category": "view-js",
+    "defer": true
+  },
+  {
+    "type": "SCRIPT",
+    "path": "/services/platform/js/platform-perspective.js",
+    "category": "perspective-js",
+    "defer": true
+  },
+  {
+    "type": "SCRIPT",
+    "path": "/services/platform/js/components.js",
+    "category": "platform-js",
+    "module": true,
+    "defer": true
+  }
+]
