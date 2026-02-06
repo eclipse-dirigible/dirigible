@@ -34,6 +34,13 @@
 			<artifactId>dirigible-components-core-registry</artifactId>
     	</dependency>
     	
+    	<!-- Jsoup -->
+		<dependency>
+		    <groupId>org.jsoup</groupId>
+		    <artifactId>jsoup</artifactId>
+		    <version>1.22.1</version>
+		</dependency>
+    	
     	<!-- Test -->
     	<dependency>
 	    	<groupId>org.eclipse.dirigible</groupId>
