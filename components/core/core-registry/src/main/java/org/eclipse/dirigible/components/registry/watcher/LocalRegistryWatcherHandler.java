@@ -1,0 +1,52 @@
+package org.eclipse.dirigible.components.registry.watcher;
+
+import java.nio.file.Path;
+
+/**
+ * The Interface LocalRegistryWatcherHandler.
+ */
+public interface LocalRegistryWatcherHandler {
+
+    /**
+     * Directory registered.
+     *
+     * @param path the path
+     */
+    public void directoryRegistered(Path path);
+
+    /**
+     * Directory created.
+     *
+     * @param path the path
+     */
+    public void directoryCreated(Path path);
+
+    /**
+     * File registered.
+     *
+     * @param path the path
+     */
+    public void fileRegistered(Path path);
+
+    /**
+     * File created.
+     *
+     * @param path the path
+     */
+    public void fileCreated(Path path);
+
+    /**
+     * File modified.
+     *
+     * @param path the path
+     */
+    public void fileModified(Path path);
+
+    /**
+     * File deleted.
+     *
+     * @param path the path
+     */
+    public void fileDeleted(Path path);
+
+}

@@ -14,6 +14,6 @@ export function getTemplate() {
         name: "html",
         label: "HTML5 Page",
         extension: "html",
-        data: "<!DOCTYPE html>\n<head>\n</head>\n<body>\n</body>\n</html>"
+        data: "<!DOCTYPE html>\n<html>\n<head>\n</head>\n<body>\n</body>\n</html>"
     }
 }
