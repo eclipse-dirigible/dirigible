@@ -142,8 +142,24 @@ public class LocalRegistryWatcher implements DisposableBean {
         String[] folders = ignoredFolders.split(",");
         return Arrays.stream(folders)
                      .map(String::trim)
+                     .map(LocalRegistryWatcher::sanitizeFolderName)
                      .collect(Collectors.toSet());
 
+    }
+
+    /**
+     * Sanitizes a folder name loaded from configuration to prevent log injection.
+     *
+     * @param folderName the original folder name
+     * @return the sanitized folder name
+     */
+    private static String sanitizeFolderName(String folderName) {
+        if (folderName == null) {
+            return null;
+        }
+        // Remove carriage return and newline characters to prevent log forging
+        return folderName.replace("\r", "")
+                         .replace("\n", "");
     }
 
     /**
