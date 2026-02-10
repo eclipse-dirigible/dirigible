@@ -52,6 +52,7 @@
             <plugin>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>flowable-bpmn-docs-maven-plugin</artifactId>
+                <version>${project.version}</version>
                 <executions>
                     <execution>
                         <goals>
