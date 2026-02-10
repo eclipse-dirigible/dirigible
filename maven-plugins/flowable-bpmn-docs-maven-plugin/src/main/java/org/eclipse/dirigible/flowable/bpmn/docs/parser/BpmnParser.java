@@ -56,7 +56,7 @@ public class BpmnParser {
             String name = element.getName();
 
             // Handle ServiceTask specifically
-            if (element instanceof UserTask userTask) {
+            if (element instanceof UserTask) {
                 doc.addElement(id, type, name, null);
             } else if (element instanceof ServiceTask serviceTask) {
                 String implType = serviceTask.getImplementationType();
