@@ -73,7 +73,7 @@ public class PdfExporter {
 
         try (OutputStream os = new FileOutputStream(pdfFile)) {
             PdfRendererBuilder builder = new PdfRendererBuilder();
-            
+
             String baseDocumentUri = mdFile.getParentFile()
                                            .toURI()
                                            .toString();
