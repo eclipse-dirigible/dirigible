@@ -47,4 +47,20 @@
         <parent.pom.folder>../../../</parent.pom.folder>
     </properties>
 
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>flowable-bpmn-docs-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
 </project>
