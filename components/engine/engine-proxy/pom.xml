@@ -17,7 +17,7 @@
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-gateway-server-webmvc</artifactId>
-            <version>4.3.3</version>
+            <version>5.0.1</version>
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
