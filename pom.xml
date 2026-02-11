@@ -848,6 +848,7 @@
     </issueManagement>
 
     <modules>
+        <module>maven-plugins</module>
         <module>modules</module>
         <module>components</module>
         <module>build</module>
