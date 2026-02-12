@@ -38,7 +38,8 @@ public class HtmlPlatformLinksInjector {
     public String processHtml(String html) {
 
         Document doc = Jsoup.parse(html);
-        doc.outputSettings().prettyPrint(true);
+        doc.outputSettings()
+           .prettyPrint(true);
 
         // VALID HTML placeholder
         Elements placeholders = doc.select("meta[name=platform-links]");

@@ -108,7 +108,8 @@ public class HtmlPublicLinksLocalRegistryWatcherHandler implements LocalRegistry
      */
     private void findAndReplace(Path path) {
         try {
-            if (path.toString().endsWith(".html")) {
+            if (path.toString()
+                    .endsWith(".html")) {
                 try (FileInputStream fis = new FileInputStream(path.toFile())) {
                     String originalHtml = IOUtils.toString(fis, StandardCharsets.UTF_8);
                     if (!originalHtml.contains("platform-links")) {

@@ -28,41 +28,11 @@ class HtmlPlatformLinksInjectorTest {
     void setup() {
         // Example assets (could be loaded from JSON)
         Map<String, List<PlatformAsset>> assets = Map.ofEntries(
-            Map.entry(
-                "head-css",
-                List.of(
-                    new PlatformAsset(
-                        PlatformAsset.Type.CSS,
-                        "/services/platform/css/platform.css",
-                        false,
-                        false
-                    ),
-                    new PlatformAsset(
-                        PlatformAsset.Type.CSS,
-                        "/services/platform/css/theme.css",
-                        false,
-                        false
-                    )
-                )
-            ),
-            Map.entry(
-                "body-js",
-                List.of(
-                    new PlatformAsset(
-                        PlatformAsset.Type.SCRIPT,
-                        "/services/platform/js/platform.js",
-                        false,
-                        true
-                    ),
-                    new PlatformAsset(
-                        PlatformAsset.Type.SCRIPT,
-                        "/services/platform/js/components.js",
-                        true,
-                        true
-                    )
-                )
-            )
-        );
+                Map.entry("head-css",
+                        List.of(new PlatformAsset(PlatformAsset.Type.CSS, "/services/platform/css/platform.css", false, false),
+                                new PlatformAsset(PlatformAsset.Type.CSS, "/services/platform/css/theme.css", false, false))),
+                Map.entry("body-js", List.of(new PlatformAsset(PlatformAsset.Type.SCRIPT, "/services/platform/js/platform.js", false, true),
+                        new PlatformAsset(PlatformAsset.Type.SCRIPT, "/services/platform/js/components.js", true, true))));
 
         injector = new HtmlPlatformLinksInjector(assets);
     }
