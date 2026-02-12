@@ -12,7 +12,7 @@
 import { request, response } from '@aerokit/sdk/http';
 import { registry } from '@aerokit/sdk/platform';
 import { uuid } from '@aerokit/sdk/utils';
-import { getBrandingJs, getKeyPrefix, getAnalyticsLink } from '/platform-branding/branding.mjs';
+import { getBrandingJs, getKeyPrefix } from '/platform-branding/branding.mjs';
 
 const COOKIE_PREFIX = `${getKeyPrefix()}.ljs.`;
 
@@ -196,9 +196,7 @@ function getScriptList(scriptId) {
                 ...baseJs,
                 cookies,
                 '/platform-core/ui/platform/shell.js',
-                getAnalyticsLink(),
             ];
-            if (!shell[shell.length - 1]) shell.pop();
             return shell;
         case 'file-upload-js':
             return [

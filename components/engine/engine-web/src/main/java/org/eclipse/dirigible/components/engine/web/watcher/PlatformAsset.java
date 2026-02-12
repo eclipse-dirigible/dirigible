@@ -17,15 +17,13 @@ public class PlatformAsset {
 
     private final Type type;
     private final String path;
-    private final String category;
     private final boolean module;
     private final boolean defer;
 
-    public PlatformAsset(Type type, String path, String category, boolean module, boolean defer) {
+    public PlatformAsset(Type type, String path, boolean module, boolean defer) {
 
         this.type = type;
         this.path = path;
-        this.category = category;
         this.module = module;
         this.defer = defer;
     }
@@ -36,10 +34,6 @@ public class PlatformAsset {
 
     public String getPath() {
         return path;
-    }
-
-    public String getCategory() {
-        return category;
     }
 
     public boolean isModule() {

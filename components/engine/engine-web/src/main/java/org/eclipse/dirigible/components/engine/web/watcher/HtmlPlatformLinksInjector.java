@@ -14,6 +14,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.LinkedHashSet;
 import java.util.stream.Collectors;
 
 import org.jsoup.Jsoup;
@@ -30,16 +31,14 @@ public class HtmlPlatformLinksInjector {
 
     Map<String, List<PlatformAsset>> assetsByCategory;
 
-    public HtmlPlatformLinksInjector(List<PlatformAsset> assets) {
-        this.assetsByCategory = assets.stream()
-                                      .collect(Collectors.groupingBy(PlatformAsset::getCategory));
+    public HtmlPlatformLinksInjector(Map<String, List<PlatformAsset>> assets) {
+        this.assetsByCategory = assets;
     }
 
     public String processHtml(String html) {
 
         Document doc = Jsoup.parse(html);
-        doc.outputSettings()
-           .prettyPrint(true);
+        doc.outputSettings().prettyPrint(true);
 
         // VALID HTML placeholder
         Elements placeholders = doc.select("meta[name=platform-links]");
@@ -56,7 +55,7 @@ public class HtmlPlatformLinksInjector {
             Set<String> requestedCategories = Arrays.stream(categoryAttr.split(","))
                                                     .map(String::trim)
                                                     .filter(s -> !s.isEmpty())
-                                                    .collect(Collectors.toSet());
+                                                    .collect(Collectors.toCollection(LinkedHashSet::new));
 
             List<PlatformAsset> selectedAssets = new ArrayList<>();
 

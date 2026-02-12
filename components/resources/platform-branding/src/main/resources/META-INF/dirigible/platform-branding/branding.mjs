@@ -19,7 +19,7 @@ const BRANDING_FAVICON = 'DIRIGIBLE_BRANDING_FAVICON';
 const BRANDING_LOGO = 'DIRIGIBLE_BRANDING_LOGO';
 const BRANDING_THEME = 'DIRIGIBLE_BRANDING_THEME';
 const BRANDING_PREFIX = 'DIRIGIBLE_BRANDING_PREFIX';
-const BRANDING_ANALYTICS = 'DIRIGIBLE_BRANDING_ANALYTICS';
+// const BRANDING_ANALYTICS = 'DIRIGIBLE_BRANDING_ANALYTICS';
 
 const BRANDING_NAME_DEFAULT = 'Dirigible';
 const BRANDING_BRAND_DEFAULT = 'Eclipse';
@@ -47,6 +47,6 @@ export function getKeyPrefix() {
     return Configurations.get(BRANDING_PREFIX, BRANDING_PREFIX_DEFAULT);
 }
 
-export function getAnalyticsLink() {
-    return Configurations.get(BRANDING_ANALYTICS, '');
-}
+// export function getAnalyticsLink() {
+//     return Configurations.get(BRANDING_ANALYTICS, '');
+// }
