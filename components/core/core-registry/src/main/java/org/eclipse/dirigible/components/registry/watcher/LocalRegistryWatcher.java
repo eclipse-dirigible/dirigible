@@ -421,7 +421,7 @@ public class LocalRegistryWatcher implements DisposableBean {
         }
         for (LocalRegistryWatcherHandler handler : handlers) {
             try {
-                handler.fileRegistered(path);
+                handler.fileDeleted(path);
             } catch (Exception e) {
                 logger.error("Failed to handle deletion of a file: " + path, e);
             }
