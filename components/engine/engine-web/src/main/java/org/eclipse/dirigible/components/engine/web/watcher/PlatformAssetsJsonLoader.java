@@ -11,14 +11,16 @@ package org.eclipse.dirigible.components.engine.web.watcher;
 
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class PlatformAssetsJsonLoader {
 
-    public static List<PlatformAsset> loadAssetsFromJson() {
+    public static Map<String, List<PlatformAsset>> loadAssetsFromJson() {
 
         try (InputStream is = PlatformAssetsJsonLoader.class.getResourceAsStream("/platform-links.json")) {
 
@@ -28,22 +30,24 @@ public class PlatformAssetsJsonLoader {
 
             ObjectMapper mapper = new ObjectMapper();
 
-            List<PlatformAssetJson> raw = mapper.readValue(is, new TypeReference<List<PlatformAssetJson>>() {});
+            Map<String, List<PlatformAssetJson>> raw = mapper.readValue(is, new TypeReference<Map<String, List<PlatformAssetJson>>>() {});
 
-            List<PlatformAsset> assets = new ArrayList<>();
+            Map<String, List<PlatformAsset>> assets = new HashMap<>();
 
-            for (PlatformAssetJson r : raw) {
+            for (Map.Entry<String, List<PlatformAssetJson>> entry : raw.entrySet()) {
+                List<PlatformAsset> converted = new ArrayList<>();
 
-                PlatformAsset.Type type = PlatformAsset.Type.valueOf(r.type);
+                for (PlatformAssetJson r : entry.getValue()) {
+                    PlatformAsset.Type type = PlatformAsset.Type.valueOf(r.type);
+                    boolean module = Boolean.TRUE.equals(r.module);
+                    boolean defer = Boolean.TRUE.equals(r.defer);
+                    converted.add(new PlatformAsset(type, r.path, module, defer));
+                }
 
-                boolean module = Boolean.TRUE.equals(r.module);
-                boolean defer = Boolean.TRUE.equals(r.defer);
-
-                assets.add(new PlatformAsset(type, r.path, r.category, module, defer));
+                assets.put(entry.getKey(), converted);
             }
 
             return assets;
-
         } catch (Exception e) {
             throw new RuntimeException("Failed to load platform-links.json", e);
         }

@@ -385,7 +385,7 @@ public class LocalRegistryWatcher implements DisposableBean {
         }
         for (LocalRegistryWatcherHandler handler : handlers) {
             try {
-                handler.fileRegistered(path);
+                handler.fileCreated(path);
             } catch (Exception e) {
                 logger.error("Failed to handle creation of a file: " + path, e);
             }
@@ -403,7 +403,7 @@ public class LocalRegistryWatcher implements DisposableBean {
         }
         for (LocalRegistryWatcherHandler handler : handlers) {
             try {
-                handler.fileRegistered(path);
+                handler.fileModified(path);
             } catch (Exception e) {
                 logger.error("Failed to handle modification of a file: " + path, e);
             }
@@ -421,7 +421,7 @@ public class LocalRegistryWatcher implements DisposableBean {
         }
         for (LocalRegistryWatcherHandler handler : handlers) {
             try {
-                handler.fileRegistered(path);
+                handler.fileDeleted(path);
             } catch (Exception e) {
                 logger.error("Failed to handle deletion of a file: " + path, e);
             }

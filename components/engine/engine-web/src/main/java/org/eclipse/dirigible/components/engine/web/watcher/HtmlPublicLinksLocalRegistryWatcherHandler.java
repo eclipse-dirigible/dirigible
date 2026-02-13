@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
@@ -42,7 +43,7 @@ public class HtmlPublicLinksLocalRegistryWatcherHandler implements LocalRegistry
      * Instantiates a new html public links local registry watcher handler.
      */
     public HtmlPublicLinksLocalRegistryWatcherHandler() {
-        List<PlatformAsset> assets = PlatformAssetsJsonLoader.loadAssetsFromJson();
+        Map<String, List<PlatformAsset>> assets = PlatformAssetsJsonLoader.loadAssetsFromJson();
         this.injector = new HtmlPlatformLinksInjector(assets);
     }
 

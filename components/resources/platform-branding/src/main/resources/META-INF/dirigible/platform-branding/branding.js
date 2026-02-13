@@ -15,7 +15,7 @@ import { getBrandingJs } from './branding.mjs';
 rs.service()
     .resource('')
     .get(function (_ctx, _request, response) {
-        response.setContentType("text/javascript");
+        response.setContentType("text/javascript;charset=UTF-8");
         response.println(getBrandingJs());
     })
     .execute();

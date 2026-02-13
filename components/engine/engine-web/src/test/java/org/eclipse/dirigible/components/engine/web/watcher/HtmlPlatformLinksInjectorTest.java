@@ -14,6 +14,7 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import java.util.Map;
 
 import java.util.List;
 
@@ -26,11 +27,12 @@ class HtmlPlatformLinksInjectorTest {
     @BeforeEach
     void setup() {
         // Example assets (could be loaded from JSON)
-        List<PlatformAsset> assets =
-                List.of(new PlatformAsset(PlatformAsset.Type.CSS, "/services/platform/css/platform.css", "head-css", false, false),
-                        new PlatformAsset(PlatformAsset.Type.CSS, "/services/platform/css/theme.css", "head-css", false, false),
-                        new PlatformAsset(PlatformAsset.Type.SCRIPT, "/services/platform/js/platform.js", "body-js", false, true),
-                        new PlatformAsset(PlatformAsset.Type.SCRIPT, "/services/platform/js/components.js", "body-js", true, true));
+        Map<String, List<PlatformAsset>> assets = Map.ofEntries(
+                Map.entry("head-css",
+                        List.of(new PlatformAsset(PlatformAsset.Type.CSS, "/services/platform/css/platform.css", false, false),
+                                new PlatformAsset(PlatformAsset.Type.CSS, "/services/platform/css/theme.css", false, false))),
+                Map.entry("body-js", List.of(new PlatformAsset(PlatformAsset.Type.SCRIPT, "/services/platform/js/platform.js", false, true),
+                        new PlatformAsset(PlatformAsset.Type.SCRIPT, "/services/platform/js/components.js", true, true))));
 
         injector = new HtmlPlatformLinksInjector(assets);
     }
