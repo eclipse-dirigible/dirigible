@@ -16,6 +16,7 @@ import org.eclipse.dirigible.tests.framework.ide.EdmView;
 import org.eclipse.dirigible.tests.framework.ide.IDE;
 import org.eclipse.dirigible.tests.framework.ide.IDEFactory;
 import org.eclipse.dirigible.tests.framework.security.SecurityUtil;
+import org.eclipse.dirigible.tests.framework.util.SleepUtil;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -45,6 +46,7 @@ class CustomSecurityTestProject extends BaseTestProject {
 
     @Override
     public void verify() {
+    	SleepUtil.sleepSeconds(10000);
         testAccessProtectedPageWithUserWithoutRole();
         testAccessProtectedPageWithUserWithRole();
     }
