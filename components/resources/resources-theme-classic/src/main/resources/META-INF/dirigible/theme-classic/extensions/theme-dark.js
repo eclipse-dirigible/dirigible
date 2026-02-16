@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -13,9 +13,9 @@ exports.getTheme = () => ({
 	id: 'classic-dark',
 	name: 'Classic Dark',
 	type: 'dark',
-	version: 1,
+	version: 2,
 	links: [
-		'/services/web/theme-classic/css/classic-dark-variables.css',
-		'/services/web/theme-classic/css/classic-dark.css',
+		'/webjars/blimpkit__blimpkit/dist/css/themes/classic-dark-variables.css',
+		'/webjars/blimpkit__blimpkit/dist/css/themes/classic-dark.css',
 	]
 });

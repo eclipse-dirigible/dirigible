@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -13,9 +13,9 @@ exports.getTheme = () => ({
 	id: 'blimpkit-dark',
 	name: 'BlimpKit Dark',
 	type: 'dark',
-	version: 1,
+	version: 2,
 	links: [
-		'/services/web/theme-blimpkit/css/blimpkit-dark-variables.css',
-		'/services/web/theme-blimpkit/css/blimpkit-dark.css',
+		'/webjars/blimpkit__blimpkit/dist/css/themes/blimpkit-dark-variables.css',
+		'/webjars/blimpkit__blimpkit/dist/css/themes/blimpkit-dark.css',
 	]
 });
