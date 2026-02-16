@@ -106,7 +106,7 @@
     },
     {
       "type": "CSS",
-      "path": "/services/web/platform-core/ui/styles/blimpkit.css"
+      "path": "/webjars/blimpkit__blimpkit/dist/css/blimpkit.css"
     },
     {
       "type": "CSS",
