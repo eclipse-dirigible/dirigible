@@ -53,7 +53,7 @@ public class HttpSecurityURIConfigurator {
             "/services/web/service-repository/**", //
             "/services/web/theme-*/**", //
             "/services/js/platform-core/**", //
-            "/services/js/platform-branding/branding.js", //
+            "/services/js/platform-branding/**", //
             "/actuator/health/liveness", //
             "/actuator/health/readiness", //
             "/actuator/health"};
