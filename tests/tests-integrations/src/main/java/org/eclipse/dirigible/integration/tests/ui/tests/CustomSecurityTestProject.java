@@ -46,7 +46,7 @@ class CustomSecurityTestProject extends BaseTestProject {
 
     @Override
     public void verify() {
-    	// SleepUtil.sleepSeconds(10000);
+        // SleepUtil.sleepSeconds(10000);
         testAccessProtectedPageWithUserWithoutRole();
         testAccessProtectedPageWithUserWithRole();
     }
