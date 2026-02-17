@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.store.DataStore;
 import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata;
@@ -23,6 +24,7 @@ import org.eclipse.dirigible.components.data.store.parser.EntityParser;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
 import com.google.gson.JsonElement;
 
 /**
@@ -383,6 +385,5 @@ public class DataStoreFacade implements InitializingBean {
             }
         }
     }
-
 
 }

@@ -357,7 +357,18 @@ public class EntityParser {
 
             if ("Id".equals(decoratorName)) {
                 fieldMetadata.setIdentifier(true);
-
+            }
+            if ("CreatedAt".equals(decoratorName)) {
+                fieldMetadata.setCreatedAt(true);
+            }
+            if ("UpdatedAt".equals(decoratorName)) {
+                fieldMetadata.setUpdatedAt(true);
+            }
+            if ("CreatedBy".equals(decoratorName)) {
+                fieldMetadata.setCreatedBy(true);
+            }
+            if ("UpdatedBy".equals(decoratorName)) {
+                fieldMetadata.setUpdatedBy(true);
             } else if ("Generated".equals(decoratorName)) {
                 // Expects @Generated('sequence')
                 if (ctx.decoratorCallExpression() != null && ctx.decoratorCallExpression()

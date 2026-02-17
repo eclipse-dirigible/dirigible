@@ -69,6 +69,10 @@ export interface ManyToOneOptions {
 interface PropertyMetadata {
   propertyName: string;
   isId: boolean;
+  isCreatedAt: boolean;
+  isUpdatedAt: boolean;
+  isCreatedBy: boolean;
+  isUpdatedBy: boolean;
   isGenerated: boolean;
   documentation?: string;
   columnOptions?: ColumnOptions;
@@ -106,7 +110,7 @@ function defer(fn: () => void): void {
 
 // --- Core Property Decorator Factory ---
 function createPropertyDecorator(
-  kind: "column" | "id" | "generated",
+  kind: "column" | "id" | "generated" | "createdAt" | "updatedAt" | "createdBy" | "updatedBy",
   options?: ColumnOptions
 ) {
   return function (_: any, context: ClassFieldDecoratorContext) {
@@ -127,12 +131,20 @@ function createPropertyDecorator(
         metadata = {
           propertyName: propertyName,
           isId: false,
+		  isCreatedAt: false,
+		  isUpdatedAt: false,
+		  isCreatedBy: false,
+		  isUpdatedBy: false,
           isGenerated: false,
         };
         metadataArray.push(metadata);
       }
 
       if (kind === "id") metadata.isId = true;
+	  if (kind === "createdAt") metadata.isCreatedAt = true;
+	  if (kind === "updatedAt") metadata.isUpdatedAt = true;
+	  if (kind === "createdBy") metadata.isCreatedBy = true;
+	  if (kind === "updatedBy") metadata.isUpdatedBy = true;
       if (kind === "generated") metadata.isGenerated = true;
       if (kind === "column") metadata.columnOptions = options;
     });
@@ -167,6 +179,10 @@ export function Documentation(description: string) {
           metadata = {
             propertyName: propertyName,
             isId: false,
+			isCreatedAt: false,
+			isUpdatedAt: false,
+			isCreatedBy: false,
+			isUpdatedBy: false,
             isGenerated: false,
           };
           metadataArray.push(metadata);
@@ -246,6 +262,26 @@ export const Column = (options?: ColumnOptions) =>
 export const Id = () => createPropertyDecorator("id");
 
 /**
+ * Marks a property as the entity's created at timestamp.
+ */
+export const CreatedAt = () => createPropertyDecorator("createdAt");
+
+/**
+ * Marks a property as the entity's update at timestamp.
+ */
+export const UpdatedAt = () => createPropertyDecorator("updatedAt");
+
+/**
+ * Marks a property as the entity's creation actor.
+ */
+export const CreatedBy = () => createPropertyDecorator("createdBy");
+
+/**
+ * Marks a property as the entity's update actor.
+ */
+export const UpdatedBy = () => createPropertyDecorator("updatedBy");
+
+/**
  * Marks a property as a generated value (e.g., auto-increment).
  * @param strategy The generation strategy (e.g., "IDENTITY"). Parameter is currently unused in logic.
  */
@@ -275,6 +311,10 @@ export function OneToMany(
         metadata = {
           propertyName: propertyName,
           isId: false,
+		  isCreatedAt: false,
+		  isUpdatedAt: false,
+		  isCreatedBy: false,
+		  isUpdatedBy: false,
           isGenerated: false,
         };
         metadataArray.push(metadata);
@@ -308,6 +348,10 @@ export function ManyToOne(
         metadata = {
           propertyName: propertyName,
           isId: false,
+		  isCreatedAt: false,
+		  isUpdatedAt: false,
+		  isCreatedBy: false,
+		  isUpdatedBy: false,
           isGenerated: false,
         };
         metadataArray.push(metadata);

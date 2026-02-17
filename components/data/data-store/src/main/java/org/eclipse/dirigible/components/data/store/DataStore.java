@@ -13,6 +13,9 @@ import java.io.InputStream;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,12 +23,14 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.DataSource;
 import org.apache.commons.io.IOUtils;
+import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.store.config.CurrentTenantIdentifierResolverImpl;
 import org.eclipse.dirigible.components.data.store.config.MultiTenantConnectionProviderImpl;
 import org.eclipse.dirigible.components.data.store.hbm.EntityToHbmMapper;
 import org.eclipse.dirigible.components.data.store.hbm.HbmXmlDescriptor;
+import org.eclipse.dirigible.components.data.store.model.EntityFieldMetadata;
 import org.eclipse.dirigible.components.data.store.model.EntityMetadata;
 import org.eclipse.dirigible.components.data.store.parser.EntityParser;
 import org.eclipse.dirigible.components.database.params.ParametersSetter;
@@ -137,7 +142,6 @@ public class DataStore {
      */
     public Object save(String type, String json) {
         Map<String, Object> object = JsonHelper.fromJson(json, Map.class);
-
         return save(type, object);
     }
 
@@ -149,6 +153,7 @@ public class DataStore {
      * @return the identifier
      */
     public Object save(String type, Map<String, Object> object) {
+        setAuditFieldsCreate(type, object);
         Map<String, Object> data = JsonTypeConverter.normalizeForEntity(object, type);
         try (Session session = getSessionFactory().openSession()) {
             Transaction transaction = session.beginTransaction();
@@ -287,8 +292,8 @@ public class DataStore {
      * @param object the object
      */
     public void upsert(String type, Map object) {
+        setAuditFieldsUpdate(type, object);
         Map<String, Object> data = JsonTypeConverter.normalizeForEntity(object, type);
-
         try (Session session = getSessionFactory().openSession()) {
             Transaction transaction = session.beginTransaction();
             session.saveOrUpdate(type, data);
@@ -314,8 +319,8 @@ public class DataStore {
      * @param object the object
      */
     public void update(String type, Map object) {
+        setAuditFieldsUpdate(type, object);
         Map<String, Object> data = JsonTypeConverter.normalizeForEntity(object, type);
-
         try (Session session = getSessionFactory().openSession()) {
             Transaction transaction = session.beginTransaction();
             session.update(type, data);
@@ -566,6 +571,43 @@ public class DataStore {
                 nativeQuery.setFirstResult(offset);
             }
             return nativeQuery.list();
+        }
+    }
+
+    private static void setAuditFieldsCreate(String entityName, Map data) {
+        EntityMetadata metadata = EntityParser.ENTITIES.get(entityName);
+
+        if (metadata == null) {
+            return;
+        }
+
+        for (EntityFieldMetadata field : metadata.getFields()) {
+            if (field.isCreatedAt()) {
+                String propertyName = field.getPropertyName();
+                Object value = data.get(propertyName);
+                data.put(propertyName, Timestamp.from(Instant.now()));
+            } else if (field.isCreatedBy()) {
+                String propertyName = field.getPropertyName();
+                data.put(propertyName, UserFacade.getName());
+            }
+        }
+    }
+
+    private static void setAuditFieldsUpdate(String entityName, Map data) {
+        EntityMetadata metadata = EntityParser.ENTITIES.get(entityName);
+
+        if (metadata == null) {
+            return;
+        }
+
+        for (EntityFieldMetadata field : metadata.getFields()) {
+            if (field.isUpdatedAt()) {
+                String propertyName = field.getPropertyName();
+                data.put(propertyName, Timestamp.from(Instant.now()));
+            } else if (field.isUpdatedBy()) {
+                String propertyName = field.getPropertyName();
+                data.put(propertyName, UserFacade.getName());
+            }
         }
     }
 

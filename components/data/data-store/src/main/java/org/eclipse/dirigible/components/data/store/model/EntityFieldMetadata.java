@@ -29,6 +29,18 @@ public class EntityFieldMetadata {
     /** The is identifier. */
     private boolean isIdentifier = false;
 
+    /** The is creation timestamp. */
+    private boolean isCreatedAt = false;
+
+    /** The is update timestamp. */
+    private boolean isUpdatedAt = false;
+
+    /** The is creation actor. */
+    private boolean isCreatedBy = false;
+
+    /** The is update actor. */
+    private boolean isUpdatedBy = false;
+
     /** The is collection. */
     private boolean isCollection = false;
 
@@ -132,6 +144,78 @@ public class EntityFieldMetadata {
      */
     public void setIdentifier(boolean isIdentifier) {
         this.isIdentifier = isIdentifier;
+    }
+
+    /**
+     * Checks if is created at.
+     *
+     * @return true, if is created at
+     */
+    public boolean isCreatedAt() {
+        return isCreatedAt;
+    }
+
+    /**
+     * Sets the created at.
+     *
+     * @param isCreatedAt the new created at
+     */
+    public void setCreatedAt(boolean isCreatedAt) {
+        this.isCreatedAt = isCreatedAt;
+    }
+
+    /**
+     * Checks if is updated at.
+     *
+     * @return true, if is updated at
+     */
+    public boolean isUpdatedAt() {
+        return isUpdatedAt;
+    }
+
+    /**
+     * Sets the updated at.
+     *
+     * @param isUpdatedAt the new updated at
+     */
+    public void setUpdatedAt(boolean isUpdatedAt) {
+        this.isUpdatedAt = isUpdatedAt;
+    }
+
+    /**
+     * Checks if is created by.
+     *
+     * @return true, if is created by
+     */
+    public boolean isCreatedBy() {
+        return isCreatedBy;
+    }
+
+    /**
+     * Sets the created by.
+     *
+     * @param isCreatedBy the new created by
+     */
+    public void setCreatedBy(boolean isCreatedBy) {
+        this.isCreatedBy = isCreatedBy;
+    }
+
+    /**
+     * Checks if is updated by.
+     *
+     * @return true, if is updated by
+     */
+    public boolean isUpdatedBy() {
+        return isUpdatedBy;
+    }
+
+    /**
+     * Sets the updated by.
+     *
+     * @param isUpdatedBy the new updated by
+     */
+    public void setUpdatedBy(boolean isUpdatedBy) {
+        this.isUpdatedBy = isUpdatedBy;
     }
 
     /**
