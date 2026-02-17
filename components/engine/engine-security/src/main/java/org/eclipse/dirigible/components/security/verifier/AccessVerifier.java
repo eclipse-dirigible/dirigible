@@ -43,6 +43,7 @@ public class AccessVerifier {
     AccessVerifier(AccessService accessService) {
         this.accessService = accessService;
         this.antPathMatcher = new AntPathMatcher();
+        refreshCache();
     }
 
     @PostConstruct
