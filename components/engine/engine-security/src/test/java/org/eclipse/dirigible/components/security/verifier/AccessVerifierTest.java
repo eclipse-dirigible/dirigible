@@ -75,6 +75,7 @@ class AccessVerifierTest {
                 createSecurityAccess("/a/b/c/test.access", "test1", "description", "HTTP", "/a" + "/b/c/test.txt", "GET", "test1"));
         securityAccessRepository.save(
                 createSecurityAccess("/a/b/c/test.access", "test2", "description", "HTTP", "/a" + "/b/c/test.txt", "GET", "test2"));
+        securityAccessVerifier.refreshCache();
     }
 
     /**
