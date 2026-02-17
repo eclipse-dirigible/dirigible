@@ -30,11 +30,11 @@ export class CountryEntity {
     
     @Column({ name: "COUNTRY_CREATED_AT", type: "timestamp" })
     @CreatedAt()
-    public createdBy?: Date;
+    public createdAt?: Date;
 
     @Column({ name: "COUNTRY_CREATED_BY", type: "string" })
     @CreatedBy()
-    public createdAt?: string;
+    public createdBy?: string;
 
 }
 
