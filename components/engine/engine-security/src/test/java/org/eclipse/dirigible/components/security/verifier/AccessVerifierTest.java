@@ -105,6 +105,7 @@ class AccessVerifierTest {
     void testGetMatchingSecurityAccessesWithAntPatterns() {
         securityAccessRepository.save(createSecurityAccess("/ant/pattern/access.access", "antPattern", "description", "HTTP",
                 "/this/is/ant/pattern/*/test/**", "GET", "somerole"));
+        securityAccessVerifier.refreshCache();
         List<Access> matchingSecurityAccesses =
                 securityAccessVerifier.getMatchingSecurityAccesses("HTTP", "/this/is/ant/pattern/1234/test/api/v2/123", "GET");
         assertThat(matchingSecurityAccesses).hasSize(1);
