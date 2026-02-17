@@ -9,15 +9,20 @@
  */
 package org.eclipse.dirigible.components.security.verifier;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 import org.eclipse.dirigible.components.security.domain.Access;
 import org.eclipse.dirigible.components.security.service.AccessService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.util.AntPathMatcher;
 
-import java.util.ArrayList;
-import java.util.List;
+import jakarta.annotation.PostConstruct;
 
 /**
  * Utility class that checks whether the location is secured via the *.access file
@@ -33,10 +38,23 @@ public class AccessVerifier {
 
     private final AccessService accessService;
     private final AntPathMatcher antPathMatcher;
+    private volatile Map<String, Map<String, List<Access>>> cache = Map.of();
 
     AccessVerifier(AccessService accessService) {
         this.accessService = accessService;
         this.antPathMatcher = new AntPathMatcher();
+    }
+
+    @PostConstruct
+    @Scheduled(fixedRate = 30_000)
+    public void refreshCache() {
+        List<Access> all = accessService.getAll();
+        Map<String, Map<String, List<Access>>> newCache = all.stream()
+                                                             .collect(Collectors.groupingBy(a -> a.getScope()
+                                                                                                  .toLowerCase(),
+                                                                     Collectors.groupingBy(a -> a.getMethod()
+                                                                                                 .toUpperCase())));
+        this.cache = newCache;
     }
 
     /**
@@ -48,31 +66,59 @@ public class AccessVerifier {
      * @return all the most specific security access entry matching the URI if any
      */
     public List<Access> getMatchingSecurityAccesses(String scope, String path, String method) {
-        List<Access> securityAccesses = new ArrayList<>();
+
+        Map<String, Map<String, List<Access>>> localCache = this.cache;
+
+        Map<String, List<Access>> methodMap = localCache.get(scope.toLowerCase());
+
+        if (methodMap == null) {
+            return List.of();
+        }
+
+        List<Access> candidates = new ArrayList<>();
+
+        List<Access> specificMethod = methodMap.get(method.toUpperCase());
+        List<Access> wildcardMethod = methodMap.get("*");
+
+        if (specificMethod != null) {
+            candidates.addAll(specificMethod);
+        }
+
+        if (wildcardMethod != null) {
+            candidates.addAll(wildcardMethod);
+        }
+
+        if (candidates.isEmpty()) {
+            return List.of();
+        }
+
         Access currentSecurityAccess = null;
-        List<Access> existingSecurityAccesses = accessService.getAll();
-        for (Access securityAccess : existingSecurityAccesses) {
-            if (scope.equalsIgnoreCase(securityAccess.getScope()) //
-                    && ("*".equals(securityAccess.getMethod()) || method.equals(securityAccess.getMethod()))//
-                    && antPathMatcher.match(securityAccess.getPath(), path)) {
+        List<Access> result = new ArrayList<>();
+
+        for (Access securityAccess : candidates) {
+
+            if (antPathMatcher.match(securityAccess.getPath(), path)) {
                 logger.debug("Path [{}] and HTTP method [{}] is secured by definition [{}]", path, method, securityAccess.getLocation());
-                if ((currentSecurityAccess == null) || (securityAccess.getPath()
-                                                                      .length() > currentSecurityAccess.getPath()
-                                                                                                       .length())) {
+                if (currentSecurityAccess == null || securityAccess.getPath()
+                                                                   .length() > currentSecurityAccess.getPath()
+                                                                                                    .length()) {
+
                     currentSecurityAccess = securityAccess;
-                    securityAccesses.clear();
-                    securityAccesses.add(securityAccess);
+                    result.clear();
+                    result.add(securityAccess);
                 } else if (securityAccess.getPath()
                                          .length() == currentSecurityAccess.getPath()
                                                                            .length()) {
-                    securityAccesses.add(securityAccess);
+                    result.add(securityAccess);
                 }
             }
         }
-        if (securityAccesses.isEmpty()) {
+
+        if (result.isEmpty()) {
             logger.trace("URI [{}] with HTTP method {}] is NOT secured", path, method);
         }
-        return securityAccesses;
+
+        return result;
     }
 
 }
