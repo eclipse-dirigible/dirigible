@@ -584,7 +584,6 @@ public class DataStore {
         for (EntityFieldMetadata field : metadata.getFields()) {
             if (field.isCreatedAt()) {
                 String propertyName = field.getPropertyName();
-                Object value = data.get(propertyName);
                 data.put(propertyName, Timestamp.from(Instant.now()));
             } else if (field.isCreatedBy()) {
                 String propertyName = field.getPropertyName();
