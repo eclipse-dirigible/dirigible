@@ -10,10 +10,10 @@
 package org.eclipse.dirigible.components.engine.web.endpoint;
 
 import org.apache.commons.io.FileUtils;
+import org.eclipse.dirigible.components.base.synchronizer.SynchronizationWatcher;
 import org.eclipse.dirigible.components.initializers.classpath.ClasspathExpander;
 import org.eclipse.dirigible.components.initializers.definition.DefinitionRepository;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
-import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationWatcher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;

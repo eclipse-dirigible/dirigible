@@ -12,8 +12,10 @@ package org.eclipse.dirigible.components.security.verifier;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
+import org.eclipse.dirigible.components.base.synchronizer.SynchronizationWatcher;
 import org.eclipse.dirigible.components.security.domain.Access;
 import org.eclipse.dirigible.components.security.service.AccessService;
 import org.slf4j.Logger;
@@ -36,19 +38,33 @@ public class AccessVerifier {
      */
     private static final Logger logger = LoggerFactory.getLogger(AccessVerifier.class);
 
-    private final AccessService accessService;
     private final AntPathMatcher antPathMatcher;
     private volatile Map<String, Map<String, List<Access>>> cache = Map.of();
+    private final AtomicBoolean modified;
 
-    AccessVerifier(AccessService accessService) {
+    private final AccessService accessService;
+    private final SynchronizationWatcher synchronizationWatcher;
+
+    AccessVerifier(AccessService accessService, SynchronizationWatcher synchronizationWatcher) {
         this.accessService = accessService;
+        this.synchronizationWatcher = synchronizationWatcher;
         this.antPathMatcher = new AntPathMatcher();
-        refreshCache();
+        this.modified = new AtomicBoolean(false);
+        refreshCache(true);
     }
 
     @PostConstruct
     @Scheduled(fixedRate = 30_000)
-    public void refreshCache() {
+    public void scheduledRefreshCache() {
+        refreshCache(false);
+    }
+
+    public void refreshCache(boolean force) {
+        if (!force) {
+            if (!this.isModified()) {
+                return;
+            }
+        }
         List<Access> all = accessService.getAll();
         Map<String, Map<String, List<Access>>> newCache = all.stream()
                                                              .collect(Collectors.groupingBy(a -> a.getScope()
@@ -56,6 +72,35 @@ public class AccessVerifier {
                                                                      Collectors.groupingBy(a -> a.getMethod()
                                                                                                  .toUpperCase())));
         this.cache = newCache;
+        setModified(false);
+        logger.debug("Access constraints reloaded");
+    }
+
+    @PostConstruct
+    @Scheduled(fixedRate = 5_000)
+    public void scheduledRefreshModified() {
+        if (!this.isModified()) {
+            if (this.synchronizationWatcher.isModified()) {
+                setModified(true);
+                logger.debug("Access constraints is scheduled for reloading...");
+            }
+        }
+    }
+
+    /**
+     * Checks if is modified.
+     *
+     * @return true, if is modified
+     */
+    public boolean isModified() {
+        return this.modified.get();
+    }
+
+    /**
+     * set modified flag.
+     */
+    public void setModified(boolean modified) {
+        this.modified.set(modified);
     }
 
     /**

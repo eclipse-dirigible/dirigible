@@ -14,6 +14,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import javax.sql.DataSource;
 import org.apache.commons.io.IOUtils;
+import org.eclipse.dirigible.components.base.synchronizer.SynchronizationWatcher;
 import org.eclipse.dirigible.components.initializers.SynchronousSpringEventsConfig;
 import org.eclipse.dirigible.components.repository.RepositoryConfig;
 import org.eclipse.dirigible.repository.api.IRepository;

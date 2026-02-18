@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.initializers.synchronizer;
+package org.eclipse.dirigible.components.base.synchronizer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

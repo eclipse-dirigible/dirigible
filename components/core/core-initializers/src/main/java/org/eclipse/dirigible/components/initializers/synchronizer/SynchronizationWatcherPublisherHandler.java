@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.initializers.synchronizer;
 
 import org.eclipse.dirigible.components.base.publisher.PublisherHandler;
+import org.eclipse.dirigible.components.base.synchronizer.SynchronizationWatcher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
