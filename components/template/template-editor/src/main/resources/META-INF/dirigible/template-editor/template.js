@@ -5,7 +5,7 @@
  */
 export const getTemplate = () => ({
   name: "Editor (UI)",
-  description: "Minimal txt File Editor",
+  description: "Minimal Text File Editor",
   image: "/services/web/template-editor/template-image/template.svg",
   sources: [
     {
