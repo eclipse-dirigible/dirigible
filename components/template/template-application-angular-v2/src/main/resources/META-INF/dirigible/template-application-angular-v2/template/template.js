@@ -47,7 +47,7 @@ export function getTemplate(parameters) {
 
     return {
         name: "Application - Full Stack - v2",
-        description: "Application - full stack with a Database Schema, a set of REST Services and an AngularJS User Interfaces",
+        description: "Full stack application with a Database Schema, a set of REST Services and an AngularJS User Interface",
         extension: "model",
         sources: templateSources,
         parameters: parameterUtils.getUniqueParameters(schemaTemplate.parameters, feedTemplate.parameters, uiAngularjsTemplate.parameters, odataTemplate.parameters)

@@ -22,7 +22,7 @@ import static org.hamcrest.Matchers.containsString;
 
 public class CamelHttpRouteStarterTemplateIT extends UserInterfaceIntegrationTest {
 
-    private static final String TEMPLATE_TITLE = "Http Route Project Starter";
+    private static final String TEMPLATE_TITLE = "HTTP Route Project Starter";
     private static final String TEST_PROJECT = CamelHttpRouteStarterTemplateIT.class.getSimpleName();
 
     @Autowired

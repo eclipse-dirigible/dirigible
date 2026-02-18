@@ -3,21 +3,22 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-export function getTemplate() {
-	return {
-		name: 'TypeScript (API)',
-		description: 'TypeScript Sample Template',
-		image: '/services/web/template-typescript/template.svg',
-		sources: [{
-			location: '/template-typescript/project.json.template',
-			action: 'generate',
-			rename: 'project.json'
-		}, {
-			location: '/template-typescript/service.ts.template',
-			action: 'copy',
-			rename: '{{fileName}}.ts'
-		}],
-		parameters: [],
-		order: 1
-	};
-};
+export const getTemplate = () => ({
+  name: "TypeScript (API)",
+  description: "TypeScript Service Sample",
+  image: "/services/web/template-typescript/template.svg",
+  sources: [
+    {
+      location: "/template-typescript/project.json.template",
+      action: "generate",
+      rename: "project.json",
+    },
+    {
+      location: "/template-typescript/service.ts.template",
+      action: "copy",
+      rename: "{{fileName}}.ts",
+    },
+  ],
+  parameters: [],
+  order: 1,
+});
