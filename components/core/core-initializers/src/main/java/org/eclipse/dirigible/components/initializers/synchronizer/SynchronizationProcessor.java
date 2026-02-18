@@ -11,7 +11,7 @@ package org.eclipse.dirigible.components.initializers.synchronizer;
 
 import org.apache.commons.io.FilenameUtils;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
-// import org.eclipse.dirigible.components.api.platform.ProblemsFacade;
+import org.eclipse.dirigible.components.api.platform.ProblemsFacade;
 import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
@@ -24,7 +24,7 @@ import org.eclipse.dirigible.components.base.healthcheck.status.HealthCheckStatu
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizationWatcher;
 import org.eclipse.dirigible.components.base.synchronizer.Synchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
-// import org.eclipse.dirigible.components.ide.problems.domain.Problem;
+import org.eclipse.dirigible.components.ide.problems.domain.Problem;
 import org.eclipse.dirigible.components.initializers.definition.Definition;
 import org.eclipse.dirigible.components.initializers.definition.DefinitionService;
 import org.eclipse.dirigible.components.initializers.definition.DefinitionState;
@@ -794,12 +794,12 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
 
                 Synchronizer synchronizer = wrapper.getSynchronizer();
                 synchronizer.setStatus(artefact, ArtefactLifecycle.FAILED, errorMessage);
-                // Problem problem = ProblemsFacade.getArtefactSynchronizationProblem(artefact);
-                // if (problem != null) {
-                // ProblemsFacade.updateArtefactSynchronizationProblem(artefact, errorMessage);
-                // } else {
-                // ProblemsFacade.saveArtefactSynchronizationProblem(artefact, errorMessage);
-                // }
+                Problem problem = ProblemsFacade.getArtefactSynchronizationProblem(artefact);
+                if (problem != null) {
+                    ProblemsFacade.updateArtefactSynchronizationProblem(artefact, errorMessage);
+                } else {
+                    ProblemsFacade.saveArtefactSynchronizationProblem(artefact, errorMessage);
+                }
             }
         }
     }
