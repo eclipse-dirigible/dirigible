@@ -3,48 +3,59 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-export function getTemplate() {
-	return {
-		name: 'Perspective (UI)',
-		description: 'Basic Dirigible Perspective',
-		image: '/services/web/template-perspective/template-image/perspective.svg',
-		sources: [{
-			location: '/template-perspective/index.html.template',
-			action: 'generate',
-			engine: 'velocity',
-			rename: '{{fileName}}.html'
-		}, {
-			location: '/template-perspective/js/perspective.js.template',
-			action: 'generate',
-			rename: 'js/{{fileName}}.js'
-		}, {
-			location: '/template-perspective/configs/perspective.js.template',
-			action: 'generate',
-			rename: 'configs/{{fileName}}-perspective.js'
-		}, {
-			location: '/template-perspective/configs/perspective-menu.js.template',
-			action: 'generate',
-			rename: 'configs/{{fileName}}-perspective-menu.js'
-		}, {
-			location: '/template-perspective/extensions/perspective.extension.template',
-			action: 'generate',
-			rename: 'extensions/{{fileName}}-perspective.extension'
-		}, {
-			location: '/template-perspective/extensions/perspective-menu.extension.template',
-			action: 'generate',
-			rename: 'extensions/{{fileName}}-perspective-menu.extension'
-		}, {
-			location: "/template-perspective/images/perspective.svg",
-			action: "copy",
-			rename: 'images/{{fileName}}.svg'
-		}],
-		parameters: [{
-			name: 'perspectiveId',
-			label: 'Unique Perspective Id'
-		}, {
-			name: 'perspectiveName',
-			label: 'Name'
-		}],
-		order: 14
-	};
-};
+export const getTemplate = () => ({
+  name: "Perspective (UI)",
+  description: "Minimal Perspective Sample With Layout",
+  image: "/services/web/template-perspective/template-image/perspective.svg",
+  sources: [
+    {
+      location: "/template-perspective/index.html.template",
+      action: "generate",
+      engine: "velocity",
+      rename: "{{fileName}}.html",
+    },
+    {
+      location: "/template-perspective/js/perspective.js.template",
+      action: "generate",
+      rename: "js/{{fileName}}.js",
+    },
+    {
+      location: "/template-perspective/configs/perspective.js.template",
+      action: "generate",
+      rename: "configs/{{fileName}}-perspective.js",
+    },
+    {
+      location: "/template-perspective/configs/perspective-menu.js.template",
+      action: "generate",
+      rename: "configs/{{fileName}}-perspective-menu.js",
+    },
+    {
+      location:
+        "/template-perspective/extensions/perspective.extension.template",
+      action: "generate",
+      rename: "extensions/{{fileName}}-perspective.extension",
+    },
+    {
+      location:
+        "/template-perspective/extensions/perspective-menu.extension.template",
+      action: "generate",
+      rename: "extensions/{{fileName}}-perspective-menu.extension",
+    },
+    {
+      location: "/template-perspective/images/perspective.svg",
+      action: "copy",
+      rename: "images/{{fileName}}.svg",
+    },
+  ],
+  parameters: [
+    {
+      name: "perspectiveId",
+      label: "Unique Perspective Id",
+    },
+    {
+      name: "perspectiveName",
+      label: "Name",
+    },
+  ],
+  order: 14,
+});

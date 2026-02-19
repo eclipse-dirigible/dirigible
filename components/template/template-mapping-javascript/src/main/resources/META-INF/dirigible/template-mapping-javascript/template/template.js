@@ -15,7 +15,7 @@ export function generate(model, parameters) {
 export function getTemplate(parameters) {
     return {
         name: "Generator from Mapping Model",
-        description: "Mapping Model generator template",
+        description: "Mapping Model Generator Template",
         extension: "mapping",
         sources: [
             {

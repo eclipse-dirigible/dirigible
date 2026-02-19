@@ -3,32 +3,36 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-export function getTemplate() {
-	return {
-		name: "Form Definition (UI)",
-		description: "Form Sample Template",
-		sources: [{
-			location: "/template-form/form/project.json.template",
-			action: "generate",
-			rename: "project.json"
-		}, {
-			location: "/template-form/form/products.ts.template",
-			action: "copy",
-			rename: "api/products.ts"
-		}, {
-			location: "/template-form/form/orders.ts.template",
-			action: "copy",
-			rename: "api/orders.ts"
-		}, {
-			location: "/template-form/form/shippingOptions.json.template",
-			action: "copy",
-			rename: "api/shippingOptions.json"
-		}, {
-			location: "/template-form/form/order.form.template",
-			action: "generate",
-			rename: "order.form"
-		}],
-		parameters: [],
-		order: 2
-	};
-};
+export const getTemplate = () => ({
+  name: "Form Definition (UI)",
+  description: "Form With Dynamic Data Sample",
+  sources: [
+    {
+      location: "/template-form/form/project.json.template",
+      action: "generate",
+      rename: "project.json",
+    },
+    {
+      location: "/template-form/form/products.ts.template",
+      action: "copy",
+      rename: "api/products.ts",
+    },
+    {
+      location: "/template-form/form/orders.ts.template",
+      action: "copy",
+      rename: "api/orders.ts",
+    },
+    {
+      location: "/template-form/form/shippingOptions.json.template",
+      action: "copy",
+      rename: "api/shippingOptions.json",
+    },
+    {
+      location: "/template-form/form/order.form.template",
+      action: "generate",
+      rename: "order.form",
+    },
+  ],
+  parameters: [],
+  order: 2,
+});

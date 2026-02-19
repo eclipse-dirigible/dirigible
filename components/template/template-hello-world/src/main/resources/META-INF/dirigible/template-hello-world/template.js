@@ -3,16 +3,14 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-export function getTemplate() {
-	return {
-		name: 'Hello World',
-		description: 'Basic Dirigible service',
-		sources: [{
-			location: '/template-hello-world/service.mjs.template',
-			action: 'copy',
-			rename: '{{fileName}}.mjs'
-		}],
-		parameters: [],
-		order: 0,
-	};
-};
+export const getTemplate = () => ({
+	name: 'Hello World',
+	description: 'Basic Service Sample',
+	sources: [{
+		location: '/template-hello-world/service.mjs.template',
+		action: 'copy',
+		rename: '{{fileName}}.mjs'
+	}],
+	parameters: [],
+	order: 0,
+});
