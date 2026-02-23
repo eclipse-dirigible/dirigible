@@ -318,6 +318,7 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 				cell.value.tooltip = data.tooltip;
 				cell.value.isRequiredProperty = data.isRequiredProperty;
 				cell.value.isCalculatedProperty = data.isCalculatedProperty;
+				cell.value.auditType = data.auditType;
 				cell.value.calculatedPropertyExpressionCreate = data.calculatedPropertyExpressionCreate;
 				cell.value.calculatedPropertyExpressionUpdate = data.calculatedPropertyExpressionUpdate;
 				cell.value.dataName = data.dataName;
@@ -636,9 +637,9 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 							label += '<i class="dsm-table-spacer"></i>';
 						}
 
-						let suffix = mxUtils.htmlEntities(cell.value.dataType, false) + (cell.value.dataLength && (cell.value.dataType === 'CHAR' || cell.value.dataType === 'VARCHAR') ? 
-						'(' + cell.value.dataLength + ')' : '') + (cell.value.dataType === 'DECIMAL' && cell.value.dataPrecision && cell.value.dataScale ?
-							'(' + cell.value.dataPrecision + ',' + cell.value.dataScale + ')' : '');
+						let suffix = mxUtils.htmlEntities(cell.value.dataType, false) + (cell.value.dataLength && (cell.value.dataType === 'CHAR' || cell.value.dataType === 'VARCHAR') ?
+							'(' + cell.value.dataLength + ')' : '') + (cell.value.dataType === 'DECIMAL' && cell.value.dataPrecision && cell.value.dataScale ?
+								'(' + cell.value.dataPrecision + ',' + cell.value.dataScale + ')' : '');
 						return label + mxUtils.htmlEntities(cell.value.name, false) + ":" + suffix;
 					}
 
@@ -919,6 +920,7 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 									tooltip: cell.value.tooltip,
 									isRequiredProperty: cell.value.isRequiredProperty,
 									isCalculatedProperty: cell.value.isCalculatedProperty,
+									auditType: cell.value.auditType,
 									calculatedPropertyExpressionCreate: cell.value.calculatedPropertyExpressionCreate,
 									calculatedPropertyExpressionUpdate: cell.value.calculatedPropertyExpressionUpdate,
 									dataName: cell.value.dataName,

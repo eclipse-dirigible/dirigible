@@ -236,13 +236,13 @@ export function Entity(entityName?: string) {
  * @param tableName The table name (defaults to uppercase class name).
  */
 export function Table(tableName?: string) {
-  return function <T extends EntityConstructor>(
+  return function <T extends abstract new (...args: any[]) => any>(
     value: T,
     context: ClassDecoratorContext
   ) {
     context.addInitializer(function () {
-      (value as EntityConstructor).$table_name =
-        tableName || (context.name?.toString() ?? value.name.toUpperCase());
+      const target = value as any;
+      target.$table_name = tableName || context.name?.toString() || value.name.toUpperCase();
     });
 
     return value;

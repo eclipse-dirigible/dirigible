@@ -111,6 +111,9 @@ public class ComponentFacade implements InitializingBean {
             ComponentContext context = ComponentContextRegistry.getContext(contextId);
 
             ComponentFileMetadata componentFileMetadata = context.getComponentFileMetadata(lookupName);
+            if (componentFileMetadata == null) {
+                throw new RuntimeException("Component dos not exist for injection: " + lookupName);
+            }
             Value dependency = ComponentRegister.createComponentInstance(componentFileMetadata.getLocation(),
                     componentFileMetadata.getProjectName(), componentFileMetadata.getFilePath(), componentFileMetadata.getContextId());
 

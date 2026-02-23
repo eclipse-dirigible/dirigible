@@ -73,12 +73,12 @@
                             <bk-textarea id="generalDescription" ng-model="dataParameters.description"></bk-textarea>
                         </div>
                     </bk-form-item>
-					<!--<bk-form-item class="fd-row fd-margin-top--tiny">
+                    <!--<bk-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
                         <bk-checkbox id="generalGenerateReport" compact="false" ng-required="true" ng-model="dataParameters.generateReport" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
                         <bk-checkbox-label for="generalGenerateReport">Generate Report</bk-checkbox-label>
                     </bk-form-item>-->
-					<bk-form-item class="fd-row fd-margin-top--tiny">
+                    <bk-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
                         <bk-checkbox id="generalMultilingual" compact="false" ng-required="true" ng-model="dataParameters.multilingual" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
                         <bk-checkbox-label for="generalMultilingual">Multilingual</bk-checkbox-label>
@@ -129,6 +129,16 @@
                         <div class="fd-col fd-col-md--2"></div>
                         <div class="fd-col fd-col-md--8">
                             <bk-textarea id="generalCpeU" placeholder="update calculated property expression" ng-model="dataParameters.calculatedPropertyExpressionUpdate" rows="5"></bk-textarea>
+                        </div>
+                    </bk-form-item>
+                    <bk-form-item class="fd-row">
+                        <div class="fd-col fd-col-md--2">
+                            <bk-form-label for="generalAuditType" required="true" colon="true">Audit type</bk-form-label>
+                        </div>
+                        <div class="fd-col fd-col-md--2">
+                            <bk-select placeholder="Select an audit type" label-id="generalAuditType" ng-required="false" ng-model="dataParameters.auditType" dropdown-fixed="true">
+                                <bk-option text="{{ type.label }}" value="type.value" ng-repeat="type in auditTypes track by $index"></bk-option>
+                            </bk-select>
                         </div>
                     </bk-form-item>
                 </bk-form-group>
@@ -185,7 +195,7 @@
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <bk-combobox-input input-id="dborder" ng-model="dataParameters.dataOrderBy" dropdown-items="dataOrderByOptions" placeholder="Select an order by option">
-	                        </bk-combobox-input>
+                            </bk-combobox-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">

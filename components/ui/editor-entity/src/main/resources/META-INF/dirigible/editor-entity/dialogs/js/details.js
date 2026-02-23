@@ -112,6 +112,13 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
             { value: 'true', label: 'Show in table header' },
             { value: 'false', label: 'Show in form only' }
         ];
+        $scope.auditTypes = [
+            { value: 'NONE', label: 'None' },
+            { value: 'CREATED_AT', label: 'Created At' },
+            { value: 'CREATED_BY', label: 'Created By' },
+            { value: 'UPDATED_AT', label: 'Updated At' },
+            { value: 'UPDATED_BY', label: 'Updated By' }
+        ];
         $scope.icons = [];
         $scope.loadIcons = () => {
             $http({
@@ -176,7 +183,7 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
                             generateDefaultRoles: $scope.dataParameters.generateDefaultRoles,
                             importsCode: $scope.dataParameters.importsCode,
                             generateReport: $scope.dataParameters.generateReport,
-							multilingual: $scope.dataParameters.multilingual
+                            multilingual: $scope.dataParameters.multilingual
                         }
                     });
                 } else {
@@ -191,6 +198,7 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
                             isCalculatedProperty: $scope.dataParameters.isCalculatedProperty,
                             calculatedPropertyExpressionCreate: $scope.dataParameters.calculatedPropertyExpressionCreate,
                             calculatedPropertyExpressionUpdate: $scope.dataParameters.calculatedPropertyExpressionUpdate,
+                            auditType: $scope.dataParameters.auditType,
                             dataName: $scope.dataParameters.dataName,
                             dataType: $scope.dataParameters.dataType,
                             dataOrderBy: $scope.dataParameters.dataOrderBy,

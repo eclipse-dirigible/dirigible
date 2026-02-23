@@ -60,6 +60,7 @@ Property.prototype.description = '';
 Property.prototype.tooltip = '';
 Property.prototype.isRequiredProperty = false;
 Property.prototype.isCalculatedProperty = false;
+Property.prototype.auditType = 'NONE';
 Property.prototype.calculatedPropertyExpressionCreate = null;
 Property.prototype.calculatedPropertyExpressionUpdate = null;
 Property.prototype.dataName = null;

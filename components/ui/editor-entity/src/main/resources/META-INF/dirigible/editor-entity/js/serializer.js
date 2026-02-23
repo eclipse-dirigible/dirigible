@@ -148,6 +148,9 @@ function createModel(graph) {
 					if (property.calculatedPropertyExpressionUpdate != null) {
 						model.push(' calculatedPropertyExpressionUpdate="' + _.escape(property.calculatedPropertyExpressionUpdate) + '"');
 					}
+					if (property.auditType) {
+						model.push(' auditType="' + _.escape(property.auditType) + '"');
+					}
 					if (property.relationshipType !== null) {
 						model.push(' relationshipType="' + _.escape(property.relationshipType ? property.relationshipType : 'ASSOCIATION') + '"');
 					}

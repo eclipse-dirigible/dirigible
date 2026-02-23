@@ -34,7 +34,7 @@
 	                            ng-required="${property.isRequiredProperty}"
 	#end
 	                            ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
 	                            is-readonly="true"
 	#else
 	                            is-readonly="action === 'select'"
@@ -57,7 +57,7 @@
 	#if(!$property.isCalculatedProperty)
 	                            ng-required="${property.isRequiredProperty}"
 	#end
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
 	                            ng-readonly="true"
 	#else
 	                            ng-readonly="action === 'select'"
@@ -88,7 +88,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -117,7 +117,7 @@
 								ng-required="${property.isRequiredProperty}"
 	#end
 								ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
 								is-readonly="true"
 	#else
 								is-readonly="action === 'select'"
@@ -145,7 +145,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -176,7 +176,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -207,7 +207,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -238,7 +238,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -269,7 +269,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -300,7 +300,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 									ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
 	                            	ng-readonly="true"
 	#else
 	                            	ng-readonly="action === 'select'"
@@ -345,7 +345,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -389,7 +389,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -433,7 +433,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -474,7 +474,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"

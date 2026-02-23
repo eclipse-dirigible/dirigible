@@ -32,7 +32,7 @@
                             ng-required="${property.isRequiredProperty}"
 #end
                             ng-model="entity.${property.name}"
-#if($property.isCalculatedProperty == "true")
+#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
                             is-readonly="true"
 #end
                             dropdown-items="options${property.name}"
@@ -48,7 +48,7 @@
 #if(!$property.isCalculatedProperty)
                             ng-required="${property.isRequiredProperty}"
 #end
-#if($property.isCalculatedProperty == "true")
+#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
                             ng-readonly="true"
 #end
                             ng-model="entity.${property.name}">
@@ -70,7 +70,7 @@
 								ng-required="${property.isRequiredProperty}"
 #end
                                 ng-model="entity.${property.name}"
-#if($property.isCalculatedProperty == "true")
+#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
                                 ng-readonly="true"
 #end
                                 type="color"
@@ -93,7 +93,7 @@
                             ng-required="${property.isRequiredProperty}"
 #end
                             ng-model="entity.${property.name}"
-#if($property.isCalculatedProperty == "true")
+#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
                             is-readonly="true"
 #end
                             placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
@@ -114,7 +114,7 @@
 								ng-required="${property.isRequiredProperty}"
 #end
                                 ng-model="entity.${property.name}"
-#if($property.isCalculatedProperty == "true")
+#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
                                 ng-readonly="true"
 #end
                                 type="month">
@@ -138,7 +138,7 @@
 								ng-required="${property.isRequiredProperty}"
 #end
                                 ng-model="entity.${property.name}"
-#if($property.isCalculatedProperty == "true")
+#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
                                 ng-readonly="true"
 #end
                                 type="week">
@@ -162,7 +162,7 @@
 								ng-required="${property.isRequiredProperty}"
 #end
                                 ng-model="entity.${property.name}"
-#if($property.isCalculatedProperty == "true")
+#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
                                 ng-readonly="true"
 #end
                                 type="time">
@@ -186,7 +186,7 @@
 								ng-required="${property.isRequiredProperty}"
 #end
                                 ng-model="entity.${property.name}"
-#if($property.isCalculatedProperty == "true")
+#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
                                 ng-readonly="true"
 #end
                                 type="datetime-local">
@@ -210,7 +210,7 @@
 								ng-required="${property.isRequiredProperty}"
 #end
                                 ng-model="entity.${property.name}"
-#if($property.isCalculatedProperty == "true")
+#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
                                 ng-readonly="true"
 #end
                                 type="date">
@@ -234,7 +234,7 @@
                                 ng-required="${property.isRequiredProperty}"
 #end
                                 ng-model="entity.${property.name}"
-#if($property.isCalculatedProperty == "true")
+#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
                                 ng-readonly="true"
 #end
 	#if($property.minLength && !$property.isCalculatedProperty)
@@ -267,7 +267,7 @@
 								ng-required="${property.isRequiredProperty}"
 #end
                                 ng-model="entity.${property.name}"
-#if($property.isCalculatedProperty == "true")
+#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
                                 ng-readonly="true"
 #end
 	#if($property.minLength && !$property.isCalculatedProperty)
@@ -301,7 +301,7 @@
 								ng-required="${property.isRequiredProperty}"
 #end
                                 ng-model="entity.${property.name}"
-#if($property.isCalculatedProperty == "true")
+#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
                                 ng-readonly="true"
 #end
 	#if($property.minLength && !$property.isCalculatedProperty)
@@ -335,7 +335,7 @@
 								ng-required="${property.isRequiredProperty}"
 #end
                                 ng-model="entity.${property.name}"
-#if($property.isCalculatedProperty == "true")
+#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
                                 ng-readonly="true"
 #end
 	#if($property.minLength && !$property.isCalculatedProperty)
@@ -369,7 +369,7 @@
 								ng-required="${property.isRequiredProperty}"
 #end
                                 ng-model="entity.${property.name}"
-#if($property.isCalculatedProperty == "true")
+#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE")
                                 ng-readonly="true"
 #end
 	#if($property.minLength && !$property.isCalculatedProperty)

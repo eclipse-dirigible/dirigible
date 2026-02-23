@@ -1,4 +1,4 @@
-import { Entity, Table, Id, Generated, Column, Documentation } from '@aerokit/sdk/db'
+import { Entity, Table, Id, Generated, Column, Documentation, CreatedAt, CreatedBy, UpdatedAt, UpdatedBy} from '@aerokit/sdk/db'
 
 @Entity('${name}Entity')
 @Table('${tablePrefix}${dataName}')
@@ -60,6 +60,15 @@ export class ${name}Entity {
         nullable: true,
     #end
     })
+    #if($property.auditType == "CREATED_AT")
+    @CreatedAt()
+    #elseif($property.auditType == "CREATED_BY")
+    @CreatedBy()
+    #elseif($property.auditType == "UPDATED_AT")
+    @UpdatedAt()
+    #elseif($property.auditType == "UPDATED_BY")
+    @UpdatedBy()
+    #end
     public ${property.name}#if(!$property.dataPrimaryKey && !$property.isCalculatedProperty && !$property.dataDefaultValue && ($property.dataNotNull || $property.isRequiredProperty))!:#else?:#end ${property.dataTypeTypescript};
 
 #end
