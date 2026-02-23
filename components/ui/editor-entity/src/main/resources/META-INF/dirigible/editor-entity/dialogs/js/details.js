@@ -259,4 +259,12 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
             $scope.dialogType = 'property';
             $scope.state.isBusy = false;
         }
+        $scope.adaptAuditDataType = () => {
+            debugger
+            if ($scope.dataParameters.auditType === 'CREATED_AT' || $scope.dataParameters.auditType === 'UPDATED_AT') {
+                $scope.dataParameters.dataType = "TIMESTAMP";
+            } else {
+                $scope.dataParameters.dataType = "VARCHAR";
+            }
+        };
     });
