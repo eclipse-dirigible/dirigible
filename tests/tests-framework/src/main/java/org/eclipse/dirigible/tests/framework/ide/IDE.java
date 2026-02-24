@@ -42,19 +42,22 @@ public class IDE {
     private final WorkbenchFactory workbenchFactory;
     private final DatabasePerspectiveFactory databasePerspectiveFactory;
     private final GitPerspectiveFactory gitPerspectiveFactory;
+    private final BpmWorkspacePerspectiveFactory bpmWorkspacePerspectiveFactory;
 
     @Autowired
     IDE(Browser browser, RestAssuredExecutor restAssuredExecutor, WorkbenchFactory workbenchFactory,
-            DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory) {
+            DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory,
+            BpmWorkspacePerspectiveFactory bpmWorkspacePerspectiveFactory) {
         this(browser, DirigibleTestTenant.createDefaultTenant()
                                          .getUsername(),
                 DirigibleTestTenant.createDefaultTenant()
                                    .getPassword(),
-                restAssuredExecutor, workbenchFactory, databasePerspectiveFactory, gitPerspectiveFactory);
+                restAssuredExecutor, workbenchFactory, databasePerspectiveFactory, gitPerspectiveFactory, bpmWorkspacePerspectiveFactory);
     }
 
     IDE(Browser browser, String username, String password, RestAssuredExecutor restAssuredExecutor, WorkbenchFactory workbenchFactory,
-            DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory) {
+            DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory,
+            BpmWorkspacePerspectiveFactory bpmWorkspacePerspectiveFactory) {
         this.browser = browser;
         this.restAssuredExecutor = restAssuredExecutor;
         this.username = username;
@@ -62,6 +65,7 @@ public class IDE {
         this.workbenchFactory = workbenchFactory;
         this.databasePerspectiveFactory = databasePerspectiveFactory;
         this.gitPerspectiveFactory = gitPerspectiveFactory;
+        this.bpmWorkspacePerspectiveFactory = bpmWorkspacePerspectiveFactory;
     }
 
     public Browser getBrowser() {
@@ -123,6 +127,14 @@ public class IDE {
         browser.clickOnElementById("perspective-git");
 
         return gitPerspectiveFactory.create(browser);
+    }
+
+    public BpmWorkspacePerspective openBpmPerspective() {
+        openHomePage();
+
+        browser.clickOnElementById("perspective-bpm-workspace");
+
+        return bpmWorkspacePerspectiveFactory.create(browser);
     }
 
     public void createNewBlankProject(String projectName) {
