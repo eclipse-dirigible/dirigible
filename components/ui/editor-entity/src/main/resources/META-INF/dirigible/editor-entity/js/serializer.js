@@ -151,6 +151,9 @@ function createModel(graph) {
 					if (property.auditType) {
 						model.push(' auditType="' + _.escape(property.auditType) + '"');
 					}
+					if (property.isReadOnlyProperty == "true") {
+						model.push(' isReadOnlyProperty="true"');
+					}
 					if (property.relationshipType !== null) {
 						model.push(' relationshipType="' + _.escape(property.relationshipType ? property.relationshipType : 'ASSOCIATION') + '"');
 					}

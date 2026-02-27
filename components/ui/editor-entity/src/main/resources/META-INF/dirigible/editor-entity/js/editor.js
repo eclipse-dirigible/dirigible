@@ -318,9 +318,10 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 				cell.value.tooltip = data.tooltip;
 				cell.value.isRequiredProperty = data.isRequiredProperty;
 				cell.value.isCalculatedProperty = data.isCalculatedProperty;
-				cell.value.auditType = data.auditType;
 				cell.value.calculatedPropertyExpressionCreate = data.calculatedPropertyExpressionCreate;
 				cell.value.calculatedPropertyExpressionUpdate = data.calculatedPropertyExpressionUpdate;
+				cell.value.auditType = data.auditType;
+				cell.value.isReadOnlyProperty = data.isReadOnlyProperty;
 				cell.value.dataName = data.dataName;
 				cell.value.dataType = data.dataType;
 				cell.value.dataOrderBy = data.dataOrderBy;
@@ -920,9 +921,10 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 									tooltip: cell.value.tooltip,
 									isRequiredProperty: cell.value.isRequiredProperty,
 									isCalculatedProperty: cell.value.isCalculatedProperty,
-									auditType: cell.value.auditType,
 									calculatedPropertyExpressionCreate: cell.value.calculatedPropertyExpressionCreate,
 									calculatedPropertyExpressionUpdate: cell.value.calculatedPropertyExpressionUpdate,
+									auditType: cell.value.auditType,
+									isReadOnlyProperty: cell.value.isReadOnlyProperty,
 									dataName: cell.value.dataName,
 									dataType: cell.value.dataType,
 									dataOrderBy: cell.value.dataOrderBy,
