@@ -44,7 +44,7 @@
                             <bk-form-label for="generalName" required="true" colon="true">Name</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="generalName" type="text" ng-required="true" ng-model="dataParameters.name" placeholder="Entity name"></bk-input>
+                            <bk-input id="generalName" type="text" ng-required="true" ng-model="dataParameters.name" placeholder="Entity name" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -52,7 +52,7 @@
                             <bk-form-label for="generalType" required="true" colon="true">Type</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-select placeholder="Select a type" label-id="generalType" ng-required="true" ng-model="dataParameters.entityType" dropdown-fixed="true">
+                            <bk-select placeholder="Select a type" label-id="generalType" ng-required="true" ng-model="dataParameters.entityType" dropdown-fixed="true" is-readonly="::dataParameters.readOnly">
                                 <bk-option text="{{ type.label }}" value="type.value" ng-repeat="type in entityTypes track by $index"></bk-option>
                             </bk-select>
                         </div>
@@ -62,7 +62,7 @@
                             <bk-form-label for="generalCaption" colon="true">Caption</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--6">
-                            <bk-input id="generalCaption" type="text" ng-model="dataParameters.caption" placeholder="Entity caption"></bk-input>
+                            <bk-input id="generalCaption" type="text" ng-model="dataParameters.caption" placeholder="Entity caption" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row">
@@ -70,7 +70,7 @@
                             <bk-form-label for="generalDescription" colon="true">Description</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--6">
-                            <bk-textarea id="generalDescription" ng-model="dataParameters.description"></bk-textarea>
+                            <bk-textarea id="generalDescription" ng-model="dataParameters.description" ng-readonly="::dataParameters.readOnly"></bk-textarea>
                         </div>
                     </bk-form-item>
                     <!--<bk-form-item class="fd-row fd-margin-top--tiny">
@@ -80,7 +80,8 @@
                     </bk-form-item>-->
                     <bk-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
-                        <bk-checkbox id="generalMultilingual" compact="false" ng-required="true" ng-model="dataParameters.multilingual" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
+                        <bk-checkbox id="generalMultilingual" compact="false" ng-required="true" ng-model="dataParameters.multilingual" data-ng-true-value="'true'" data-ng-false-value="'false'" ng-readonly="::dataParameters.readOnly">
+                        </bk-checkbox>
                         <bk-checkbox-label for="generalMultilingual">Multilingual</bk-checkbox-label>
                     </bk-form-item>
                 </bk-form-group>
@@ -90,7 +91,7 @@
                             <bk-form-label for="generalName" required="true" colon="true">Name</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="generalName" type="text" ng-required="true" ng-model="dataParameters.name" placeholder="Property name"></bk-input>
+                            <bk-input id="generalName" type="text" ng-required="true" ng-model="dataParameters.name" placeholder="Property name" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row">
@@ -98,17 +99,18 @@
                             <bk-form-label for="generalDescription" colon="true">Description</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--6">
-                            <bk-textarea id="generalDescription" ng-model="dataParameters.description"></bk-textarea>
+                            <bk-textarea id="generalDescription" ng-model="dataParameters.description" ng-readonly="::dataParameters.readOnly"></bk-textarea>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
-                        <bk-checkbox id="generalRequired" compact="false" ng-required="true" ng-model="dataParameters.isRequiredProperty" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
+                        <bk-checkbox id="generalRequired" compact="false" ng-required="true" ng-model="dataParameters.isRequiredProperty" data-ng-true-value="'true'" data-ng-false-value="'false'" ng-readonly="::dataParameters.readOnly">
+                        </bk-checkbox>
                         <bk-checkbox-label for="generalRequired" required="true">Required</bk-checkbox-label>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
-                        <bk-checkbox id="generalCalc" compact="false" ng-model="dataParameters.isCalculatedProperty" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
+                        <bk-checkbox id="generalCalc" compact="false" ng-model="dataParameters.isCalculatedProperty" data-ng-true-value="'true'" data-ng-false-value="'false'" ng-readonly="::dataParameters.readOnly"></bk-checkbox>
                         <bk-checkbox-label for="generalCalc">Calculated</bk-checkbox-label>
                     </bk-form-item>
                     <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'" class="fd-row fd-margin-top--tiny">
@@ -118,7 +120,7 @@
                     <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'" class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
                         <div class="fd-col fd-col-md--8">
-                            <bk-textarea id="generalCpeC" placeholder="create calculated property expression" ng-model="dataParameters.calculatedPropertyExpressionCreate" rows="5"></bk-textarea>
+                            <bk-textarea id="generalCpeC" placeholder="create calculated property expression" ng-model="dataParameters.calculatedPropertyExpressionCreate" rows="5" ng-readonly="::dataParameters.readOnly"></bk-textarea>
                         </div>
                     </bk-form-item>
                     <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'" class="fd-row fd-margin-top--tiny">
@@ -128,7 +130,7 @@
                     <bk-form-item ng-show="dataParameters.isCalculatedProperty === 'true'" class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
                         <div class="fd-col fd-col-md--8">
-                            <bk-textarea id="generalCpeU" placeholder="update calculated property expression" ng-model="dataParameters.calculatedPropertyExpressionUpdate" rows="5"></bk-textarea>
+                            <bk-textarea id="generalCpeU" placeholder="update calculated property expression" ng-model="dataParameters.calculatedPropertyExpressionUpdate" rows="5" ng-readonly="::dataParameters.readOnly"></bk-textarea>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row">
@@ -136,7 +138,8 @@
                             <bk-form-label for="generalAuditType" required="true" colon="true">Audit type</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-select placeholder="Select an audit type" label-id="generalAuditType" ng-required="false" ng-model="dataParameters.auditType" dropdown-fixed="true" ng-change="adaptAuditDataType()">
+                            <bk-select placeholder="Select an audit type" label-id="generalAuditType" ng-required="false" ng-model="dataParameters.auditType" dropdown-fixed="true" ng-change="adaptAuditDataType()"
+                                is-readonly="::dataParameters.readOnly">
                                 <bk-option text="{{ type.label }}" value="type.value" ng-repeat="type in auditTypes track by $index"></bk-option>
                             </bk-select>
                         </div>
@@ -150,7 +153,7 @@
                             <bk-form-label for="ddn" required="true" colon="true">Database name</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="ddn" type="text" ng-required="true" ng-model="dataParameters.dataName" placeholder="Data name"></bk-input>
+                            <bk-input id="ddn" type="text" ng-required="true" ng-model="dataParameters.dataName" placeholder="Data name" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -158,7 +161,7 @@
                             <bk-form-label for="ddc" colon="true">Databse count</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--10">
-                            <bk-textarea id="ddc" ng-model="dataParameters.dataCount" rows="5"></bk-textarea>
+                            <bk-textarea id="ddc" ng-model="dataParameters.dataCount" rows="5" ng-readonly="::dataParameters.readOnly"></bk-textarea>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -166,7 +169,7 @@
                             <bk-form-label for="ddq" colon="true">Databse query</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--10">
-                            <bk-textarea id="ddq" ng-model="dataParameters.dataQuery" rows="5"></bk-textarea>
+                            <bk-textarea id="ddq" ng-model="dataParameters.dataQuery" rows="5" ng-readonly="::dataParameters.readOnly"></bk-textarea>
                         </div>
                     </bk-form-item>
                 </bk-form-group>
@@ -176,7 +179,7 @@
                             <bk-form-label for="ddn" required="true" colon="true">Database name</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="ddn" type="text" ng-required="true" ng-model="dataParameters.dataName" placeholder="Data name"></bk-input>
+                            <bk-input id="ddn" type="text" ng-required="true" ng-model="dataParameters.dataName" placeholder="Data name" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row">
@@ -184,7 +187,7 @@
                             <bk-form-label for="dbtype" required="true" colon="true">Data type</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-select placeholder="Select an data type" label-id="dbtype" ng-required="true" ng-model="dataParameters.dataType" dropdown-fixed="true">
+                            <bk-select placeholder="Select an data type" label-id="dbtype" ng-required="true" ng-model="dataParameters.dataType" dropdown-fixed="true" is-readonly="::dataParameters.readOnly">
                                 <bk-option text="{{ type.label }}" value="type.value" ng-repeat="type in dataTypes track by $index"></bk-option>
                             </bk-select>
                         </div>
@@ -194,7 +197,8 @@
                             <bk-form-label for="dbtype" colon="true">Order by</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-combobox-input input-id="dborder" ng-model="dataParameters.dataOrderBy" dropdown-items="dataOrderByOptions" placeholder="Select an order by option">
+                            <bk-combobox-input input-id="dborder" ng-model="dataParameters.dataOrderBy" dropdown-items="dataOrderByOptions" placeholder="Select an order by option" btn-aria-label="order by options"
+                                list-aria-label="order options" is-readonly="::dataParameters.readOnly">
                             </bk-combobox-input>
                         </div>
                     </bk-form-item>
@@ -203,39 +207,41 @@
                             <bk-form-label for="dblen" required="true" colon="true">Length</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.dataType === 'VARCHAR' || dataParameters.dataType === 'CHAR'">
-                            <bk-step-input input-id="dblen" name="dblen" string-to-number ng-required="true" ng-model="dataParameters.dataLength" placeholder="20" style="max-width: 320px"></bk-step-input>
+                            <bk-step-input input-id="dblen" name="dblen" string-to-number ng-required="true" ng-model="dataParameters.dataLength" placeholder="20" style="max-width: 320px" is-readonly="::dataParameters.readOnly">
+                            </bk-step-input>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.dataType === 'DECIMAL'">
                             <bk-form-label for="dbprecision" colon="true">Precision</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.dataType === 'DECIMAL'">
-                            <bk-step-input input-id="dbprecision" name="dbprecision" string-to-number ng-required="true" ng-model="dataParameters.dataPrecision" placeholder="0" style="max-width: 320px">
+                            <bk-step-input input-id="dbprecision" name="dbprecision" string-to-number ng-required="true" ng-model="dataParameters.dataPrecision" placeholder="0" style="max-width: 320px"
+                                is-readonly="::dataParameters.readOnly">
                             </bk-step-input>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.dataType === 'DECIMAL'">
                             <bk-form-label for="dbscale" colon="true">Scale</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.dataType === 'DECIMAL'">
-                            <bk-step-input input-id="dbscale" name="dbscale" string-to-number ng-required="true" ng-model="dataParameters.dataScale" placeholder="0" style="max-width: 320px">
+                            <bk-step-input input-id="dbscale" name="dbscale" string-to-number ng-required="true" ng-model="dataParameters.dataScale" placeholder="0" style="max-width: 320px" is-readonly="::dataParameters.readOnly">
                             </bk-step-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-checkbox id="dbpk" compact="false" ng-model="dataParameters.dataPrimaryKey" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
+                            <bk-checkbox id="dbpk" compact="false" ng-model="dataParameters.dataPrimaryKey" data-ng-true-value="'true'" data-ng-false-value="'false'" ng-readonly="::dataParameters.readOnly"></bk-checkbox>
                             <bk-checkbox-label for="dbpk">Primary key</bk-checkbox-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-checkbox id="dbkk" compact="false" ng-model="dataParameters.dataAutoIncrement" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
+                            <bk-checkbox id="dbkk" compact="false" ng-model="dataParameters.dataAutoIncrement" data-ng-true-value="'true'" data-ng-false-value="'false'" ng-readonly="::dataParameters.readOnly"></bk-checkbox>
                             <bk-checkbox-label for="dbkk">Auto increment</bk-checkbox-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-checkbox id="dbnn" compact="false" ng-model="dataParameters.dataNotNull" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
+                            <bk-checkbox id="dbnn" compact="false" ng-model="dataParameters.dataNotNull" data-ng-true-value="'true'" data-ng-false-value="'false'" ng-readonly="::dataParameters.readOnly"></bk-checkbox>
                             <bk-checkbox-label for="dbnn">Not null</bk-checkbox-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-checkbox id="dbu" compact="false" ng-model="dataParameters.dataUnique" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
+                            <bk-checkbox id="dbu" compact="false" ng-model="dataParameters.dataUnique" data-ng-true-value="'true'" data-ng-false-value="'false'" ng-readonly="::dataParameters.readOnly"></bk-checkbox>
                             <bk-checkbox-label for="dbu">Unique</bk-checkbox-label>
                         </div>
                     </bk-form-item>
@@ -244,7 +250,7 @@
                             <bk-form-label for="dbdv" colon="true">Default value</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-input id="dbdv" type="text" ng-model="dataParameters.dataDefaultValue"></bk-input>
+                            <bk-input id="dbdv" type="text" ng-model="dataParameters.dataDefaultValue" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                     </bk-form-item>
                 </bk-form-group>
@@ -256,7 +262,7 @@
                             <bk-form-label for="uit" colon="true">Title</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="uit" type="text" ng-model="dataParameters.title"></bk-input>
+                            <bk-input id="uit" type="text" ng-model="dataParameters.title" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -264,7 +270,7 @@
                             <bk-form-label for="uith" colon="true">Tooltip</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--6">
-                            <bk-input id="uith" type="text" ng-model="dataParameters.tooltip" placeholder="Tooltip hint"></bk-input>
+                            <bk-input id="uith" type="text" ng-model="dataParameters.tooltip" placeholder="Tooltip hint" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -272,7 +278,7 @@
                             <bk-form-label for="uii" colon="true">Icon</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--3">
-                            <bk-select placeholder="Select an icon" label-id="uui" ng-model="dataParameters.icon" dropdown-fixed="true">
+                            <bk-select placeholder="Select an icon" label-id="uui" ng-model="dataParameters.icon" dropdown-fixed="true" is-readonly="::dataParameters.readOnly">
                                 <bk-option text="{{ ::icon.name }}" value="::icon.url" icon="{{::icon.url}}" ng-repeat="icon in icons track by $index"></bk-option>
                             </bk-select>
                         </div>
@@ -282,19 +288,19 @@
                             <bk-form-label for="uimk" colon="true">Menu key</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-input id="uimk" type="text" ng-model="dataParameters.menuKey"></bk-input>
+                            <bk-input id="uimk" type="text" ng-model="dataParameters.menuKey" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="uiml" colon="true">Menu label</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-input id="uiml" type="text" ng-model="dataParameters.menuLabel"></bk-input>
+                            <bk-input id="uiml" type="text" ng-model="dataParameters.menuLabel" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="uimi" colon="true">Menu index</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-step-input input-id="uimi" name="manuIndex" ng-model="dataParameters.menuIndex" style="max-width: 320px"></bk-step-input>
+                            <bk-step-input input-id="uimi" name="manuIndex" ng-model="dataParameters.menuIndex" style="max-width: 320px" is-readonly="::dataParameters.readOnly"></bk-step-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny" ng-if="dataParameters.entityType !== 'SETTING' && dataParameters.entityType !== 'REPORT'">
@@ -302,7 +308,7 @@
                             <bk-form-label for="uilt" required="true" colon="true">Layout type</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-select placeholder="Select a layout" label-id="uilt" ng-required="true" ng-model="dataParameters.layoutType" dropdown-fixed="true">
+                            <bk-select placeholder="Select a layout" label-id="uilt" ng-required="true" ng-model="dataParameters.layoutType" dropdown-fixed="true" is-readonly="::dataParameters.readOnly">
                                 <bk-option text="{{ type.label }}" value="type.value" ng-repeat="type in layoutTypes track by $index"></bk-option>
                             </bk-select>
                         </div>
@@ -312,7 +318,7 @@
                             <bk-form-label for="uip" colon="true">Perspective</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-select placeholder="Select a perspective" label-id="uip" ng-model="dataParameters.perspectiveName" dropdown-fixed="true">
+                            <bk-select placeholder="Select a perspective" label-id="uip" ng-model="dataParameters.perspectiveName" dropdown-fixed="true" is-readonly="::dataParameters.readOnly">
                                 <bk-option text="{{ perspective.label }}" value="perspective.id" ng-repeat="perspective in dataParameters.perspectives track by $index"></bk-option>
                             </bk-select>
                         </div>
@@ -322,7 +328,7 @@
                             <bk-form-label for="uip" colon="true">Navigation</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--6">
-                            <bk-select placeholder="Select a navigation" label-id="uip" ng-model="dataParameters.navigationPath" dropdown-fixed="true">
+                            <bk-select placeholder="Select a navigation" label-id="uip" ng-model="dataParameters.navigationPath" dropdown-fixed="true" is-readonly="::dataParameters.readOnly">
                                 <bk-option text="{{ navigation.label }}" value="navigation.path" ng-repeat="navigation in dataParameters.navigations track by $index"></bk-option>
                             </bk-select>
                         </div>
@@ -334,7 +340,7 @@
                             <bk-form-label for="uiwt" required="true" colon="true">Widget type</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--10">
-                            <bk-select placeholder="Select a type" label-id="uiwt" ng-required="true" ng-model="dataParameters.widgetType" dropdown-fixed="true">
+                            <bk-select placeholder="Select a type" label-id="uiwt" ng-required="true" ng-model="dataParameters.widgetType" dropdown-fixed="true" is-readonly="::dataParameters.readOnly">
                                 <bk-option text="{{ type.label }}" value="type.value" ng-repeat="type in widgetTypes track by $index"></bk-option>
                             </bk-select>
                         </div>
@@ -342,16 +348,16 @@
                             <bk-form-label for="uidk" required="true" colon="true">Dropdown key</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.widgetType === 'DROPDOWN'">
-                            <bk-input id="uidk" type="text" ng-required="true" ng-model="dataParameters.widgetDropDownKey"></bk-input>
+                            <bk-input id="uidk" type="text" ng-required="true" ng-model="dataParameters.widgetDropDownKey" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.widgetType === 'DROPDOWN'">
                             <bk-form-label for="uidv" required="true" colon="true">Dropdown value</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2" ng-show="dataParameters.widgetType === 'DROPDOWN'">
-                            <bk-input id="uidv" type="text" ng-required="true" ng-model="dataParameters.widgetDropDownValue"></bk-input>
+                            <bk-input id="uidv" type="text" ng-required="true" ng-model="dataParameters.widgetDropDownValue" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                         <bk-checkbox id="uidms" compact="false" ng-required="false" ng-model="dataParameters.widgetDropDownMultiSelect" data-ng-true-value="'true'" data-ng-false-value="'false'"
-                            ng-show="dataParameters.widgetType === 'DROPDOWN'"></bk-checkbox>
+                            ng-show="dataParameters.widgetType === 'DROPDOWN'" ng-readonly="::dataParameters.readOnly"></bk-checkbox>
                         <bk-checkbox-label for="uidms" ng-show="dataParameters.widgetType === 'DROPDOWN'">Multi-Select</bk-checkbox-label>
                     </bk-form-item>
 
@@ -360,27 +366,27 @@
                             <bk-form-label for="dependsonproperty" colon="true">Depends on Property</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="dependsonproperty" type="text" ng-model="dataParameters.widgetDependsOnProperty" placeholder="Property depending on">
+                            <bk-input id="dependsonproperty" type="text" ng-model="dataParameters.widgetDependsOnProperty" placeholder="Property depending on" ng-readonly="::dataParameters.readOnly">
                             </bk-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="dependsonentity" colon="true">Depends on Entity</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="dependsonentity" type="text" ng-model="dataParameters.widgetDependsOnEntity" placeholder="Entity depending on">
+                            <bk-input id="dependsonentity" type="text" ng-model="dataParameters.widgetDependsOnEntity" placeholder="Entity depending on" ng-readonly="::dataParameters.readOnly">
                             </bk-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="dependsonvaluefrom" colon="true">Value From</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="dependsonvaluefrom" type="text" ng-model="dataParameters.widgetDependsOnValueFrom" placeholder="Property used to get value from"></bk-input>
+                            <bk-input id="dependsonvaluefrom" type="text" ng-model="dataParameters.widgetDependsOnValueFrom" placeholder="Property used to get value from" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="dependsonfilterby" colon="true">Filter By</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="dependsonfilterby" type="text" ng-model="dataParameters.widgetDependsOnFilterBy" placeholder="Property to set value to or filter by"></bk-input>
+                            <bk-input id="dependsonfilterby" type="text" ng-model="dataParameters.widgetDependsOnFilterBy" placeholder="Property to set value to or filter by" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                     </bk-form-item>
 
@@ -389,7 +395,7 @@
                             <bk-form-label for="uiws" colon="true">Widget size</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-select placeholder="Select a size" label-id="uiws" ng-model="dataParameters.widgetSize" dropdown-fixed="true">
+                            <bk-select placeholder="Select a size" label-id="uiws" ng-model="dataParameters.widgetSize" dropdown-fixed="true" is-readonly="::dataParameters.readOnly">
                                 <bk-option text="{{ size.label }}" value="size.value" ng-repeat="size in widgetSizes track by $index"></bk-option>
                             </bk-select>
                         </div>
@@ -397,7 +403,7 @@
                             <bk-form-label for="uilen" colon="true">Length</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-step-input index-id="uilen" name="uilen" string-to-number ng-required="true" ng-model="dataParameters.widgetLength" placeholder="20" style="max-width: 320px">
+                            <bk-step-input input-id="uilen" name="uilen" string-to-number ng-required="true" ng-model="dataParameters.widgetLength" placeholder="20" style="max-width: 320px" is-readonly="::dataParameters.readOnly">
                             </bk-step-input>
                         </div>
                     </bk-form-item>
@@ -406,13 +412,13 @@
                             <bk-form-label for="uilab" colon="true">Label</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--6">
-                            <bk-input id="uilab" type="text" ng-model="dataParameters.widgetLabel" placeholder="Label text"></bk-input>
+                            <bk-input id="uilab" type="text" ng-model="dataParameters.widgetLabel" placeholder="Label text" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="uislab" colon="true">Short label</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-input id="uislab" type="text" ng-model="dataParameters.widgetShortLabel" placeholder="Short label text"></bk-input>
+                            <bk-input id="uislab" type="text" ng-model="dataParameters.widgetShortLabel" placeholder="Short label text" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -420,19 +426,19 @@
                             <bk-form-label for="uipat" colon="true">Pattern</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-input id="uipat" type="text" ng-model="dataParameters.widgetPattern" placeholder="Input pattern"></bk-input>
+                            <bk-input id="uipat" type="text" ng-model="dataParameters.widgetPattern" placeholder="Input pattern" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="uif" colon="true">Format</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-input id="uif" type="text" ng-model="dataParameters.widgetFormat" placeholder="Rendering format"></bk-input>
+                            <bk-input id="uif" type="text" ng-model="dataParameters.widgetFormat" placeholder="Rendering format" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                         <div class="fd-col fd-col-md--2">
                             <bk-form-label for="uith" colon="true">Tooltip</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-                            <bk-input id="uith" type="text" ng-model="dataParameters.tooltip" placeholder="Tooltip hint"></bk-input>
+                            <bk-input id="uith" type="text" ng-model="dataParameters.tooltip" placeholder="Tooltip hint" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                     </bk-form-item>
                     <!-- 
@@ -450,7 +456,7 @@
                             <bk-form-label for="uisec" colon="true">Section</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--6">
-                            <bk-input id="uisec" type="text" ng-model="dataParameters.widgetSection" placeholder="Section to be placed in"></bk-input>
+                            <bk-input id="uisec" type="text" ng-model="dataParameters.widgetSection" placeholder="Section to be placed in" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -458,7 +464,7 @@
                             <bk-form-label for="uimt" colon="true">Major type</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--3">
-                            <bk-select placeholder="Select a type" label-id="uimt" ng-model="dataParameters.widgetIsMajor" dropdown-fixed="true">
+                            <bk-select placeholder="Select a type" label-id="uimt" ng-model="dataParameters.widgetIsMajor" dropdown-fixed="true" is-readonly="::dataParameters.readOnly">
                                 <bk-option text="{{ type.label }}" value="type.value" ng-repeat="type in majorTypes track by $index"></bk-option>
                             </bk-select>
                         </div>
@@ -472,8 +478,7 @@
                             <bk-form-label for="furl" required="true" colon="true">Feed URL</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="furl" type="text" ng-required="true" ng-model="dataParameters.feedUrl">
-                            </bk-input>
+                            <bk-input id="furl" type="text" ng-required="true" ng-model="dataParameters.feedUrl" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -481,7 +486,7 @@
                             <bk-form-label for="fun" colon="true">Username</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="fun" name="feedUsername" type="text" ng-model="dataParameters.feedUsername" autocomplete="off" ng-readonly="selectedTab !== 'feed'"></bk-input>
+                            <bk-input id="fun" name="feedUsername" type="text" ng-model="dataParameters.feedUsername" autocomplete="off" ng-readonly="selectedTab !== 'feed' || dataParameters.readOnly"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -489,7 +494,7 @@
                             <bk-form-label for="fp" colon="true">Password</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="fp" name="feedPassword" type="password" ng-model="dataParameters.feedPassword" autocomplete="new-password" ng-readonly="selectedTab !== 'feed'"></bk-input>
+                            <bk-input id="fp" name="feedPassword" type="password" ng-model="dataParameters.feedPassword" autocomplete="new-password" ng-readonly="selectedTab !== 'feed' || dataParameters.readOnly"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -497,8 +502,7 @@
                             <bk-form-label for="fs" required="true" colon="true">Schedule</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="fs" type="text" ng-required="true" ng-model="dataParameters.feedSchedule">
-                            </bk-input>
+                            <bk-input id="fs" type="text" ng-required="true" ng-model="dataParameters.feedSchedule" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
@@ -506,7 +510,7 @@
                             <bk-form-label for="fpth" colon="true">Path</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="fpth" type="text" ng-model="dataParameters.feedPath"></bk-input>
+                            <bk-input id="fpth" type="text" ng-model="dataParameters.feedPath" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                     </bk-form-item>
                 </bk-form-group>
@@ -516,7 +520,7 @@
                             <bk-form-label for="furl" colon="true">Property name</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-                            <bk-input id="furl" type="text" ng-model="dataParameters.feedPropertyName"></bk-input>
+                            <bk-input id="furl" type="text" ng-model="dataParameters.feedPropertyName" ng-readonly="::dataParameters.readOnly"></bk-input>
                         </div>
                     </bk-form-item>
                 </bk-form-group>
@@ -528,7 +532,8 @@
                             <bk-form-label for="srr" colon="true">Read role</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4 fd-col-lg--3">
-                            <bk-input id="srr" type="text" ng-model="dataParameters.roleRead" placeholder="role name" ng-disabled="dataParameters.generateDefaultRoles === 'true'"></bk-input>
+                            <bk-input id="srr" type="text" ng-model="dataParameters.roleRead" placeholder="role name" ng-disabled="dataParameters.generateDefaultRoles === 'true'" ng-readonly="::dataParameters.readOnly">
+                            </bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny" ng-hide="dataParameters.entityType === 'REPORT' || dataParameters.entityType === 'FILTER'">
@@ -536,13 +541,14 @@
                             <bk-form-label for="swr" colon="true">Write role</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4 fd-col-lg--3">
-                            <bk-input id="swr" type="text" ng-model="dataParameters.roleWrite" placeholder="role name" ng-disabled="dataParameters.generateDefaultRoles === 'true'"></bk-input>
+                            <bk-input id="swr" type="text" ng-model="dataParameters.roleWrite" placeholder="role name" ng-disabled="dataParameters.generateDefaultRoles === 'true'" ng-readonly="::dataParameters.readOnly">
+                            </bk-input>
                         </div>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
                         <bk-checkbox id="generalGenerateDefaultRoles" compact="false" ng-required="false" ng-model="dataParameters.generateDefaultRoles" data-ng-true-value="'true'" data-ng-false-value="'false'"
-                            ng-change="toggleDefaultRoles()"></bk-checkbox>
+                            ng-change="toggleDefaultRoles()" ng-readonly="::dataParameters.readOnly"></bk-checkbox>
                         <bk-checkbox-label for="generalGenerateDefaultRoles">Generate Default Roles</bk-checkbox-label>
                     </bk-form-item>
                 </bk-form-group>
@@ -554,27 +560,31 @@
                             <bk-form-label for="importscode" colon="true">Imports</bk-form-label>
                         </div>
                         <div class="fd-col">
-                            <bk-textarea id="importscode" placeholder="imports code" ng-model="dataParameters.importsCode" rows="10"></bk-textarea>
+                            <bk-textarea id="importscode" placeholder="imports code" ng-model="dataParameters.importsCode" rows="10" ng-readonly="::dataParameters.readOnly"></bk-textarea>
                         </div>
                     </bk-form-item>
                 </bk-form-group>
                 <bk-form-group class="fd-container fd-form-layout-grid-container" ng-if="dialogType === 'property'">
                     <bk-form-item class="fd-row">
                         <div class="fd-col fd-col-md--4">
-                            <div for="importscode" colon="true">Imports can be set at the <strong>Entity</strong> level
-                            </div>
+                            <div for="importscode" colon="true">Imports can be set at the <strong>Entity</strong> level</div>
                         </div>
                     </bk-form-item>
                 </bk-form-group>
             </bk-icon-tab-bar-panel>
         </bk-icon-tab-bar>
         <bk-bar bar-design="footer" in-page="true" padding="s" ng-show="!state.error && !state.isBusy">
-            <bk-bar-right>
+            <bk-bar-right ng-if="!dataParameters.readOnly">
                 <bk-bar-element>
                     <bk-button label="Save" state="emphasized" compact="true" ng-click="save()"></bk-button>
                 </bk-bar-element>
                 <bk-bar-element>
                     <bk-button label="Cancel" state="transparent" ng-click="cancel()" compact="true"></bk-button>
+                </bk-bar-element>
+            </bk-bar-right>
+            <bk-bar-right ng-if="dataParameters.readOnly">
+                <bk-bar-element>
+                    <bk-button label="Close" ng-click="cancel()" compact="true"></bk-button>
                 </bk-bar-element>
             </bk-bar-right>
         </bk-bar>

@@ -10,8 +10,8 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const viewData = {
-    id: 'edmReference',
-    label: 'Import Entity from External Model',
+    id: 'edmCopy',
+    label: 'Copy Entity from External Model',
     path: '/services/web/editor-entity/dialogs/reference.html'
 };
 if (typeof exports !== 'undefined') {

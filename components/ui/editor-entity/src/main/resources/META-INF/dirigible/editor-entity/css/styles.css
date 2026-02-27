@@ -116,6 +116,7 @@ td.mxPopupMenuIcon>i.sap-icon {
 }
 
 .dsm-table-icon {
+  fill: var(--sapTextColor, #303030);
   color: var(--sapTextColor, #303030);
   margin-right: 0.125rem;
   font-family: var(--sapFontFamily, "72", "72full", Arial, Helvetica);
@@ -130,6 +131,16 @@ td.mxPopupMenuIcon>i.sap-icon {
   width: 1rem;
   height: 1px;
   margin-right: 0.125rem;
+}
+
+foreignObject>div {
+  display: inline-flex !important;
+  align-items: center;
+}
+
+foreignObject>div>div {
+  display: inline-flex !important;
+  align-items: center;
 }
 
 @media only screen and (min-width: 853px) {

@@ -46,14 +46,14 @@
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="transparent" glyph="sap-icon-TNT--operations" aria-label="Regenerate" title="Regenerate" ng-click="regenerate()" ng-disabled="!canRegenerate"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
-            <bk-button state="transparent" glyph="sap-icon--copy" aria-label="Copy" title="Copy" ng-click="copy()"></bk-button>
-            <bk-button state="transparent" glyph="sap-icon--paste" aria-label="Paste" title="Paste" ng-click="paste()"></bk-button>
+            <bk-button state="transparent" glyph="sap-icon--copy" aria-label="Copy" title="Copy" ng-click="copy()" ng-disabled="selection.projection || selection.projectionProp"></bk-button>
+            <bk-button state="transparent" glyph="sap-icon--paste" aria-label="Paste" title="Paste" ng-click="paste()" ng-disabled="selection.projection || selection.projectionProp"></bk-button>
             <bk-toolbar-spacer></bk-toolbar-spacer>
             <bk-button state="transparent" glyph="sap-icon--list" aria-label="Properties" title="Properties" ng-click="properties()"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="transparent" glyph="sap-icon--tree" aria-label="Navigation" title="Navigation" ng-click="navigation()"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
-            <bk-button state="transparent" glyph="sap-icon--delete" aria-label="Delete" title="Delete" ng-click="delete()"></bk-button>
+            <bk-button state="transparent" glyph="sap-icon--delete" aria-label="Delete" title="Delete" ng-click="delete()" ng-disabled="selection.projectionProp"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="transparent" glyph="sap-icon--show" aria-label="Show" title="Show" ng-click="show()"></bk-button>
             <bk-button state="transparent" glyph="sap-icon--print" aria-label="Print" title="Print" ng-click="print()"></bk-button>

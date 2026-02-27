@@ -30,15 +30,13 @@
             <bk-fieldset ng-form="forms.newForm">
                 <bk-form-group>
                     <bk-form-item>
-                        <bk-form-label for="referencedModel" required="true" colon="true">Model Location
-                        </bk-form-label>
+                        <bk-form-label for="referencedModel" required="true" colon="true">Model Location</bk-form-label>
                         <bk-select placeholder="Select a model" label-id="referencedModel" ng-required="true" ng-model="dropdowns.model" ng-change="modelSelected()" dropdown-fixed="true">
                             <bk-option text="{{ model.name + ' - ' + model.path }}" value="model.path" ng-repeat="model in availableModels track by $index"></bk-option>
                         </bk-select>
                     </bk-form-item>
                     <bk-form-item class="bk-margin-top--tiny">
-                        <bk-form-label for="referencedEntity" required="true" colon="true">Entity Name
-                        </bk-form-label>
+                        <bk-form-label for="referencedEntity" required="true" colon="true">Entity Name</bk-form-label>
                         <bk-select placeholder="Select an entity" is-disabled="dropdowns.model ? false : true" label-id="referencedEntity" ng-required="true" ng-model="dropdowns.entity" dropdown-fixed="true">
                             <bk-option text="{{ entity.name }}" value="entity.name" ng-repeat="entity in availableEntities track by $index"></bk-option>
                         </bk-select>
@@ -49,7 +47,7 @@
         <bk-bar bar-design="footer" in-page="true" padding="s" ng-show="!state.error && !state.isBusy">
             <bk-bar-right>
                 <bk-bar-element>
-                    <bk-button label="Save" ng-disabled="!forms.newForm.$valid" state="emphasized" compact="true" ng-click="save()"></bk-button>
+                    <bk-button label="{{ dataParameters.dialogType === 'copiedEntity' ? 'Copy' : 'Save' }}" ng-disabled="!forms.newForm.$valid" state="emphasized" compact="true" ng-click="save()"></bk-button>
                 </bk-bar-element>
                 <bk-bar-element>
                     <bk-button label="Cancel" state="transparent" ng-click="cancel()" compact="true">

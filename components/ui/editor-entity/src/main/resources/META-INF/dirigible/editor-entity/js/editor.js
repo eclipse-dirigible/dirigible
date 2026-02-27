@@ -30,6 +30,11 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 			busyText: "Loading...",
 		};
 
+		$scope.selection = {
+			projection: false,
+			projectionProp: false,
+		};
+
 		$scope.relationshipTypes = [
 			{ value: "ASSOCIATION", label: "Association" },
 			{ value: "AGGREGATION", label: "Aggregation" },
@@ -421,7 +426,9 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 				model.beginUpdate();
 				try {
 					let cell = $scope.graph.model.getCell(data.cellId);
-					cell.value.name = data.entity;
+					cell.value.name = `${data.entity}Copy`;
+					cell.value.dataName = data.dataName;
+					cell.value.dataCount = data.dataCount;
 					cell.value.entityType = "COPIED";
 					cell.value.projectionReferencedModel = data.model;
 					cell.value.projectionReferencedEntity = data.entity;
@@ -623,7 +630,11 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 					if (this.isHtmlLabel(cell)) {
 						let label = '';
 
-						if (cell.value.dataPrimaryKey === 'true') {
+						if (cell.value.isCalculatedProperty === 'true') {
+							label += '<svg class="dsm-table-icon" width="16" height="16" version="1.1" viewBox="0 0 16 16" xml:space="preserve" xmlns="http://www.w3.org/2000/svg"><title>Calculated</title><path d="m3.85 2.4c-0.63333 0-1.1667 0.21667-1.6 0.65-0.43333 0.43333-0.65 0.96667-0.65 1.6v2.55h-0.95c-0.18333 0-0.3375 0.062497-0.4625 0.1875-0.125 0.125-0.1875 0.27917-0.1875 0.4625 0 0.18333 0.062497 0.33333 0.1875 0.45 0.125 0.11667 0.27917 0.175 0.4625 0.175h0.95v4.475c0 0.18333 0.062497 0.3375 0.1875 0.4625 0.125 0.125 0.27917 0.1875 0.4625 0.1875 0.18333 0 0.33333-0.0625 0.45-0.1875 0.11667-0.125 0.175-0.27917 0.175-0.4625v-4.475h1.275c0.18333 0 0.3375-0.058335 0.4625-0.175 0.125-0.11667 0.1875-0.26667 0.1875-0.45 0-0.18333-0.062498-0.3375-0.1875-0.4625-0.125-0.125-0.27917-0.1875-0.4625-0.1875h-1.275v-2.55c0-0.28333 0.091667-0.51667 0.275-0.7 0.18333-0.18333 0.41667-0.275 0.7-0.275h1.1c0.18333 0 0.3375-0.058335 0.4625-0.175 0.125-0.11667 0.1875-0.26667 0.1875-0.45 0-0.18333-0.062498-0.3375-0.1875-0.4625-0.125-0.125-0.27917-0.1875-0.4625-0.1875zm2.5 4.8c-0.23333 0-0.41667 0.062497-0.55 0.1875-0.13333 0.125-0.2 0.27917-0.2 0.4625 0 0.18333 0.062497 0.33333 0.1875 0.45 0.125 0.11667 0.27917 0.175 0.4625 0.175 0.2 0 0.36667 0.091667 0.5 0.275l1.275 1.675-1.275 1.7c-0.03333 0.05-0.091667 0.09583-0.175 0.1375-0.083333 0.04167-0.15 0.0625-0.2 0.0625h-0.125c-0.18333 0-0.3375 0.05833-0.4625 0.175-0.125 0.11667-0.1875 0.26667-0.1875 0.45s0.062497 0.3375 0.1875 0.4625c0.125 0.125 0.27917 0.1875 0.4625 0.1875h0.125c0.25 0 0.50833-0.06667 0.775-0.2 0.26667-0.13333 0.475-0.3 0.625-0.5l1.05-1.425 1.075 1.425c0.16667 0.21667 0.37083 0.3875 0.6125 0.5125 0.24167 0.125 0.50417 0.1875 0.7875 0.1875h0.05c0.18333 0 0.3375-0.0625 0.4625-0.1875 0.125-0.125 0.1875-0.27917 0.1875-0.4625 0-0.18333-0.0625-0.33333-0.1875-0.45-0.125-0.11667-0.27917-0.175-0.4625-0.175h-0.05c-0.11667 0-0.20417-0.025-0.2625-0.075-0.05833-0.05-0.10417-0.09167-0.1375-0.125l-1.275-1.7 1.275-1.75c0.03333-0.033338 0.07917-0.075 0.1375-0.125 0.05833-0.050002 0.14583-0.075 0.2625-0.075h0.05c0.18333 0 0.3375-0.058335 0.4625-0.175 0.125-0.11667 0.1875-0.26667 0.1875-0.45 0-0.18333-0.0625-0.3375-0.1875-0.4625-0.125-0.125-0.27917-0.1875-0.4625-0.1875h-0.05c-0.28333 0-0.54583 0.058335-0.7875 0.175-0.24167 0.11667-0.44583 0.29167-0.6125 0.525l-1.075 1.45-1.05-1.4c-0.18333-0.23333-0.40833-0.41667-0.675-0.55-0.26667-0.13333-0.51667-0.2-0.75-0.2z" /></svg>';
+						} else if (cell.value.dataNotNull === 'true') {
+							label += '<svg class="dsm-table-icon" width="16" height="16" version="1.1" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><title>Not Null</title><path d="m5.297 2c-0.17187 0-0.3164 0.05469-0.43359 0.16406-0.11719 0.10938-0.17578 0.25-0.17578 0.42188v4.3828l-3.7949-2.1914c-0.14884-0.08594-0.29981-0.10838-0.44922-0.06836-0.14942 0.04004-0.26562 0.13435-0.35156 0.2832-0.08593 0.14884-0.1123 0.30281-0.076172 0.45898 0.03613 0.15618 0.13044 0.27539 0.2793 0.36133l3.7871 2.1875-3.7871 2.1875c-0.14885 0.08594-0.24316 0.20711-0.2793 0.36328-0.03613 0.15618-0.00976 0.30819 0.076172 0.45703 0.08594 0.14885 0.20215 0.24316 0.35156 0.2832 0.14942 0.04004 0.30037 0.01758 0.44922-0.06836l3.7949-2.1914v4.3828c0 0.17188 0.0586 0.31249 0.17578 0.42188 0.11719 0.10938 0.26172 0.16406 0.43359 0.16406 0.17188 0 0.3125-0.05469 0.42188-0.16406 0.10938-0.10938 0.16406-0.25 0.16406-0.42188v-4.375l3.7891 2.1875c0.14885 0.08594 0.29981 0.10734 0.45313 0.06055 0.15333-0.04678 0.27344-0.14608 0.35938-0.29492 0.08594-0.14885 0.10839-0.29785 0.06836-0.44727-0.04004-0.14942-0.13435-0.26758-0.2832-0.35352l-3.7949-2.1914 3.7949-2.1914c0.14884-0.08594 0.24316-0.20412 0.2832-0.35352 0.04003-0.14942 0.01758-0.29841-0.06836-0.44727-0.08593-0.14884-0.20606-0.24616-0.35938-0.29297-0.15332-0.0468-0.30427-0.02735-0.45313 0.05859l-3.7891 2.1875v-4.375c0-0.17187-0.0547-0.3125-0.16406-0.42188-0.10938-0.10938-0.25-0.16406-0.42188-0.16406z" /></svg>';
+						} else if (cell.value.dataPrimaryKey === 'true') {
 							label += '<i title="Primary Key" class="dsm-table-icon sap-icon--key"></i>';
 						} else {
 							label += '<i class="dsm-table-spacer"></i>';
@@ -645,6 +656,28 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 
 					return mxGraph.prototype.getLabel.apply(this, arguments); // "supercall"
 				};
+
+				$scope.graph.getSelectionModel().addListener(mxEvent.CHANGE, function () {
+					const cells = $scope.graph.getSelectionCells();
+					$scope.selection.projection = false;
+					$scope.selection.projectionProp = false;
+
+					if (cells.length > 0) {
+						for (let i = 0; i < cells.length; i++) {
+							if (cells[i].style === 'projection') {
+								$scope.$evalAsync(() => {
+									$scope.selection.projection = true;
+								});
+								return;
+							} else if (cells[i].style === 'projectionproperty') {
+								$scope.$evalAsync(() => {
+									$scope.selection.projectionProp = true;
+								});
+								return;
+							}
+						}
+					}
+				});
 
 				// Removes the source vertex if edges are removed
 				$scope.graph.addListener(mxEvent.REMOVE_CELLS, function (sender, evt) {
@@ -838,7 +871,7 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 				addSidebarIcon($scope.graph, sidebar, copied, ICON_COPIED, 'Drag this to the diagram to create a copy to an Entity from external model', $scope, dialogHub);
 				$scope.showCopiedEntityDialog = (cellId) => {
 					dialogHub.showWindow({
-						id: 'edmReference',
+						id: 'edmCopy',
 						hasHeader: true,
 						params: { cellId: cellId, dialogType: 'copiedEntity' },
 						maxWidth: '640px',
@@ -908,11 +941,11 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 					if ($scope.graph.isHtmlLabel(cell)) {
 						if (cell) {
 							// assume Entity's property
-							//showProperties($scope.graph, cell);
 							dialogHub.showWindow({
 								id: 'edmDetails',
 								hasHeader: false,
 								params: {
+									readOnly: cell.style === 'projectionproperty',
 									dialogType: 'property',
 									cellId: cell.id,
 									name: cell.value.name,
@@ -970,11 +1003,11 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 						// assume Entity or Connector
 						if (cell.value && Entity.prototype.isPrototypeOf(cell.value)) {
 							// assume Entity
-							//showEntityProperties($scope.graph, cell);
 							dialogHub.showWindow({
 								id: 'edmDetails',
 								hasHeader: false,
 								params: {
+									readOnly: cell.style === 'projection',
 									projectName: modelFile.split("/")[2],
 									dialogType: 'entity',
 									cellId: cell.id,

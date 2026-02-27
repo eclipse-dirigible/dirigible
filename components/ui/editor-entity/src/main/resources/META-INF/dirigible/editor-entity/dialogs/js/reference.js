@@ -112,6 +112,8 @@ angular.module('edmReference', ['blimpKit', 'platformView'])
                     cellId: $scope.dataParameters.cellId,
                     model: $scope.dropdowns.model,
                     entity: $scope.dropdowns.entity,
+                    dataName: `${referencedEntity.dataName}COPY`,
+                    dataCount: "SELECT COUNT(*) AS COUNT FROM \"${tablePrefix}" + `${referencedEntity.dataName}COPY` + "\"",
                     perspectiveName: referencedEntity.perspectiveName,
                     perspectiveLabel: referencedEntity.perspectiveLabel,
                     perspectiveIcon: referencedEntity.perspectiveIcon,
