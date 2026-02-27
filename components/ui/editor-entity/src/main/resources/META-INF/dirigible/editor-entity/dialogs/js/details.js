@@ -199,6 +199,7 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
                             calculatedPropertyExpressionCreate: $scope.dataParameters.calculatedPropertyExpressionCreate,
                             calculatedPropertyExpressionUpdate: $scope.dataParameters.calculatedPropertyExpressionUpdate,
                             auditType: $scope.dataParameters.auditType,
+							isReadOnlyProperty: $scope.dataParameters.isReadOnlyProperty,
                             dataName: $scope.dataParameters.dataName,
                             dataType: $scope.dataParameters.dataType,
                             dataOrderBy: $scope.dataParameters.dataOrderBy,
@@ -260,11 +261,15 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
             $scope.state.isBusy = false;
         }
         $scope.adaptAuditDataType = () => {
-            debugger
             if ($scope.dataParameters.auditType === 'CREATED_AT' || $scope.dataParameters.auditType === 'UPDATED_AT') {
                 $scope.dataParameters.dataType = "TIMESTAMP";
-            } else {
+				$scope.dataParameters.isReadOnlyProperty = "true";
+            } else if ($scope.dataParameters.auditType === 'CREATED_BY' || $scope.dataParameters.auditType === 'UPDATED_BY') {
                 $scope.dataParameters.dataType = "VARCHAR";
-            }
+				$scope.dataParameters.isReadOnlyProperty = "true";
+            } else {
+				$scope.dataParameters.dataType = "VARCHAR";
+				$scope.dataParameters.isReadOnlyProperty = "false";
+			}
         };
     });
