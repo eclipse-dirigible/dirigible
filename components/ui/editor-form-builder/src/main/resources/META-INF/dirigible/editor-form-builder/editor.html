@@ -69,7 +69,7 @@
                             ng-on-contextmenu="showContextMenu($event)"></div>
                     </bk-scrollbar>
                 </div>
-                <bk-scrollbar class="bk-border--left" ng-show="selectedCtrlId !== undefined">
+                <bk-scrollbar class="bk-border--left" ng-show="selectedCtrlId !== undefined || selectedContainerId !== undefined">
                     <bk-panel expanded="true">
                         <bk-panel-header>
                             <h4 bk-panel-title>

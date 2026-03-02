@@ -212,7 +212,7 @@ body {
 }
 
 .notification-popover {
-    --bkPopoverBody_BackgroundColor: var(--sapGroup_TitleBackground);
+    --bkPopoverBody_BackgroundColor: var(--sapBackgroundColor);
     width: 35rem;
     height: auto;
     max-width: 35rem;

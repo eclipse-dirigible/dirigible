@@ -885,7 +885,26 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     label: 'Header',
                     icon: 'sap-icon--heading-1',
                     description: 'Text header',
-                    template: `<div class="fb-control-wrapper" ng-click="showProps($event)" data-id="{{id}}"><h1 bk-title header-size="props.headerSize.value">{{props.label.value}}</h1></div>`,
+                    template: `<div class="fb-control-wrapper" ng-click="showProps($event)" data-id="{{id}}"><h1 bk-title header-size="props.headerSize.value"
+                        ng-class="{
+                            'bk-padding-bottom--tiny': props.padding.value === 'tiny' && props.side.value === '-bottom',
+                            'bk-padding-bottom--sm': props.padding.value === 'sm' && props.side.value === '-bottom',
+                            'bk-padding-bottom--md': props.padding.value === 'md' && props.side.value === '-bottom',
+                            'bk-padding-bottom--lg': props.padding.value === 'lg' && props.side.value === '-bottom',
+                            'bk-padding-top--tiny': props.padding.value === 'tiny' && props.side.value === '-top',
+                            'bk-padding-top--sm': props.padding.value === 'sm' && props.side.value === '-top',
+                            'bk-padding-top--md': props.padding.value === 'md' && props.side.value === '-top',
+                            'bk-padding-top--lg': props.padding.value === 'lg' && props.side.value === '-top',
+                            'bk-padding-top-bottom--tiny': props.padding.value === 'tiny' && props.side.value === '-top-bottom',
+                            'bk-padding-top-bottom--sm': props.padding.value === 'sm' && props.side.value === '-top-bottom',
+                            'bk-padding-top-bottom--md': props.padding.value === 'md' && props.side.value === '-top-bottom',
+                            'bk-padding-top-bottom--lg': props.padding.value === 'lg' && props.side.value === '-top-bottom',
+                            'bk-padding--tiny': props.padding.value === 'tiny' && props.side.value === '',
+                            'bk-padding--sm': props.padding.value === 'sm' && props.side.value === '',
+                            'bk-padding--md': props.padding.value === 'md' && props.side.value === '',
+                            'bk-padding--lg': props.padding.value === 'lg' && props.side.value === '',
+                        }"
+                        >{{props.label.value}}</h1></div>`,
                     props: {
                         label: {
                             type: 'text',
@@ -901,7 +920,57 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                             min: 1,
                             step: 1,
                             required: true
-                        }
+                        },
+                        padding: {
+                            type: 'dropdown',
+                            label: 'Padding',
+                            value: '',
+                            items: [
+                                {
+                                    label: 'Default',
+                                    value: '',
+                                },
+                                {
+                                    label: 'Tiny',
+                                    value: 'tiny',
+                                },
+                                {
+                                    label: 'Small',
+                                    value: 'sm',
+                                },
+                                {
+                                    label: 'Medium',
+                                    value: 'md',
+                                },
+                                {
+                                    label: 'Large',
+                                    value: 'lg',
+                                },
+                            ]
+                        },
+                        side: {
+                            type: 'dropdown',
+                            label: 'Padding side',
+                            value: '',
+                            items: [
+                                {
+                                    label: 'All',
+                                    value: '',
+                                },
+                                {
+                                    label: 'Top',
+                                    value: '-top',
+                                },
+                                {
+                                    label: 'Bottom',
+                                    value: '-bottom',
+                                },
+                                {
+                                    label: 'Top & Bottom',
+                                    value: '-top-bottom',
+                                },
+                            ]
+                        },
                     }
                 },
                 {

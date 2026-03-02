@@ -14,13 +14,13 @@
 #end
 	</head>
 
-	<body class="bk-vbox">
-		<bk-fieldset class="fd-margin--tiny" ng-form="forms.form">
+	<body class="bk-center--horizontal bk-box--items-start" ng-class="{'bk-padding':!_is_view}">
+		<bk-fieldset class="bk-padding bk-full-width bk-restrict-width--lg" ng-class="{'fd-card':!_is_view}" ng-style="!_is_view && { 'min-height': 'auto' }" ng-form="forms.form">
 			<bk-form-group>
 #macro(formWidgets $elements)
 #foreach($element in $elements)
 	#if($element.controlId == "header")
-				<h$element.headerSize.intValue() bk-title header-size="$element.headerSize.intValue()">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</h$element.headerSize.intValue()>
+				<h$element.headerSize.intValue() bk-title header-size="$element.headerSize.intValue()" #if($element.padding == "tiny") class="bk-padding$element.side--tiny"#elseif($element.padding == "sm") class="bk-padding$element.side--sm"#elseif($element.padding == "md") class="bk-padding$element.side--md"#elseif($element.padding == "lg") class="bk-padding$element.side--lg"#end>{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</h$element.headerSize.intValue()>
 	#elseif($element.controlId == "image")
 		#if($element.link)
 				<a href="$element.link">
@@ -151,9 +151,7 @@
 					</tbody>
 				</table>
 	#elseif($element.controlId == "button")
-				<div>
-					<bk-button#if($element.sizeToText) class="bk-float-right"#else class="bk-full-width"#end #if($element.isSubmit)type="submit" ng-disabled="!forms.form.$valid"#end label="{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}" compact="$element.isCompact" state="$element.type"#if($element.callback) ng-click="$element.callback"#end></bk-button>
-				</div>
+				<bk-button#if($element.sizeToText) class="bk-float-right"#else class="bk-full-width"#end #if($element.isSubmit)type="submit" ng-disabled="!forms.form.$valid"#end label="{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}" compact="$element.isCompact" state="$element.type"#if($element.callback) ng-click="$element.callback"#end></bk-button>
 	#elseif($element.controlId == "paragraph")
 				<p class="fd-text" ng-class="{'bk-pre-wrap' : $element.format}">#if($element.model){{ model.$element.model }}#else$element.text#end</p>
 	#end
