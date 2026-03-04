@@ -65,6 +65,7 @@ export function process(model, parameters) {
             p.dataUnique = p.dataUnique === "true";
             p.isRequiredProperty = p.isRequiredProperty === "true";
             p.isCalculatedProperty = p.isCalculatedProperty === "true";
+			p.isReadOnlyProperty = p.isReadOnlyProperty === "true";
             p.widgetIsMajor = p.widgetIsMajor === "true";
             p.widgetLabel = p.widgetLabel ? p.widgetLabel : p.name;
             p.widgetDropdownUrl = "";
