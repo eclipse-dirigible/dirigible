@@ -104,7 +104,7 @@
                     <bk-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
                         <bk-checkbox id="generalRequired" compact="false" ng-required="true" ng-model="dataParameters.isRequiredProperty" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
-                        <bk-checkbox-label for="generalRequired" required="true">Required</bk-checkbox-label>
+                        <bk-checkbox-label for="generalRequired">Required</bk-checkbox-label>
                     </bk-form-item>
                     <bk-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
@@ -140,6 +140,11 @@
                                 <bk-option text="{{ type.label }}" value="type.value" ng-repeat="type in auditTypes track by $index"></bk-option>
                             </bk-select>
                         </div>
+                    </bk-form-item>
+					<bk-form-item class="fd-row fd-margin-top--tiny">
+                        <div class="fd-col fd-col-md--2"></div>
+                        <bk-checkbox id="generalReadOnly" compact="false" ng-required="true" ng-model="dataParameters.isReadOnlyProperty" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
+                        <bk-checkbox-label for="generalReadOnly">Read Only</bk-checkbox-label>
                     </bk-form-item>
                 </bk-form-group>
             </bk-icon-tab-bar-panel>
