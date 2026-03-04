@@ -144,9 +144,10 @@
                             </bk-select>
                         </div>
                     </bk-form-item>
-					<bk-form-item class="fd-row fd-margin-top--tiny">
+                    <bk-form-item class="fd-row fd-margin-top--tiny">
                         <div class="fd-col fd-col-md--2"></div>
-                        <bk-checkbox id="generalReadOnly" compact="false" ng-required="true" ng-model="dataParameters.isReadOnlyProperty" data-ng-true-value="'true'" data-ng-false-value="'false'"></bk-checkbox>
+                        <bk-checkbox id="generalReadOnly" compact="false" ng-required="true" ng-model="dataParameters.isReadOnlyProperty" data-ng-true-value="'true'" data-ng-false-value="'false'" ng-readonly="::dataParameters.readOnly">
+                        </bk-checkbox>
                         <bk-checkbox-label for="generalReadOnly">Read Only</bk-checkbox-label>
                     </bk-form-item>
                 </bk-form-group>
