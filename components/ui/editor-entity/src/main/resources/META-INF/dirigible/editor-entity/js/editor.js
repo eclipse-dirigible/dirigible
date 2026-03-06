@@ -293,19 +293,21 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 				cell.value.multilingual = data.multilingual;
 
 				$scope.graph.model.setValue(cell, cell.value.clone());
-
-				if (cell.entityType === 'DEPENDENT') {
+				if (cell.value.entityType === 'DEPENDENT') {
 					$scope.graph.getSelectionCell().style = 'dependent';
 					$scope.graph.refresh();
-				} else if (cell.entityType === 'COPIED') {
+				} else if (cell.value.entityType === 'SETTING') {
+					$scope.graph.getSelectionCell().style = 'setting';
+					$scope.graph.refresh();
+				} else if (cell.value.entityType === 'COPIED') {
 					$scope.graph.getSelectionCell().style = 'copied';
 					$scope.graph.getSelectionCell().children.forEach(cell => cell.style = 'copiedproperty');
 					$scope.graph.refresh();
-				} else if (cell.entityType === 'PROJECTION') {
+				} else if (cell.value.entityType === 'PROJECTION') {
 					$scope.graph.getSelectionCell().style = 'projection';
 					$scope.graph.getSelectionCell().children.forEach(cell => cell.style = 'projectionproperty');
 					$scope.graph.refresh();
-				} else if (cell.entityType === 'EXTENSION') {
+				} else if (cell.value.entityType === 'EXTENSION') {
 					$scope.graph.getSelectionCell().style = 'extension';
 					$scope.graph.getSelectionCell().children.forEach(cell => cell.style = 'extensionproperty');
 					$scope.graph.refresh();
