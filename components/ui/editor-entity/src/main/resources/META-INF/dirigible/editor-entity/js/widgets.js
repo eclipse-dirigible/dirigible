@@ -61,12 +61,16 @@ function addSidebarIcon(graph, sidebar, prototype, image, hint, $scope, dialogs)
 			} else if (prototype.style === 'report') {
 				$scope.$cell = graph.getSelectionCell();
 				$scope.$cell.value.entityType = "REPORT";
+				$scope.$cell.value.perspectiveName = "Reports";
+				$scope.$cell.value.perspectiveLabel = "Reports";
 			} else if (prototype.style === 'filter') {
 				$scope.$cell = graph.getSelectionCell();
 				$scope.$cell.value.entityType = "FILTER";
 			} else if (prototype.style === 'setting') {
 				$scope.$cell = graph.getSelectionCell();
 				$scope.$cell.value.entityType = "SETTING";
+				$scope.$cell.value.perspectiveName = "Settings";
+				$scope.$cell.value.perspectiveLabel = "Settings";
 			} else if (prototype.style === 'copied') {
 				$scope.$cell = graph.getSelectionCell();
 				$scope.showCopiedEntityDialog($scope.$cell.id);
