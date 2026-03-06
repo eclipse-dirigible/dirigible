@@ -289,7 +289,19 @@
 						</div>
 						<div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
+							<bk-form-input-message
+								state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
+							#if($property.inputRule)
+								text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
+							#elseif($property.maxLength && $property.minLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMinMax' | t:{'min':'${property.minLength}','max':'${property.maxLength}'} }}">
+							#elseif($property.maxLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMax' | t:{'max':'${property.maxLength}'} }}">
+							#elseif($property.minLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMin' | t:{'min':'${property.minLength}'} }}">
+							#else
+								text="{{ '$projectName:${tprefix}.messages.error.incorrectInput' | t }}">
+							#end
 	#end
 								<bk-textarea id="id${property.name}"
 									name="${property.name}"
@@ -309,7 +321,7 @@
 	#if($property.maxLength && !$property.isCalculatedProperty)
 									ng-maxlength="${property.maxLength}"
 	#end
-	#if(!$property.isCalculatedProperty)
+	#if($property.inputRule && !$property.isCalculatedProperty)
 									input-rules="{ patterns: ['${property.inputRule}'] }"
 	#end
 									placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
@@ -334,7 +346,7 @@
 						</div>
                         <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'#if($property.inputRule == "")^[0-9]{0,14}$#else ${property.inputRule}#end'} }}">
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -355,7 +367,7 @@
 									ng-maxlength="${property.maxLength}"
 	#end
 	#if(!$property.isCalculatedProperty)
-	                                input-rules="{ patterns:#if($property.inputRule == "")['^[0-9]{0,14}$']#else ['${property.inputRule}']#end }"
+									input-rules="{ patterns:#if($property.inputRule == "")['^[0-9]{0,14}$']#else ['${property.inputRule}']#end }"
 	#end
 	                                type="tel"
 	                                placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
@@ -378,7 +390,19 @@
 						</div>
                         <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
+							<bk-form-input-message
+								state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
+							#if($property.inputRule)
+								text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
+							#elseif($property.maxLength && $property.minLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMinMax' | t:{'min':'${property.minLength}','max':'${property.maxLength}'} }}">
+							#elseif($property.maxLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMax' | t:{'max':'${property.maxLength}'} }}">
+							#elseif($property.minLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMin' | t:{'min':'${property.minLength}'} }}">
+							#else
+								text="{{ '$projectName:${tprefix}.messages.error.incorrectInput' | t }}">
+							#end
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -398,11 +422,11 @@
 	#if($property.maxLength && !$property.isCalculatedProperty)
 									ng-maxlength="${property.maxLength}"
 	#end
-	#if(!$property.isCalculatedProperty)
-	                                input-rules="{ patterns: ['${property.inputRule}'] }"
+	#if($property.inputRule && !$property.isCalculatedProperty)
+									input-rules="{ patterns: ['${property.inputRule}'] }"
 	#end
 	                                type="url"
-	                                placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
+	                                placeholder="https://...">
 	                            </bk-input>
 	#if(!$property.isCalculatedProperty)
 							</bk-form-input-message>
@@ -422,7 +446,19 @@
 						</div>
                         <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
+							<bk-form-input-message
+								state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
+							#if($property.inputRule)
+								text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
+							#elseif($property.maxLength && $property.minLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMinMax' | t:{'min':'${property.minLength}','max':'${property.maxLength}'} }}">
+							#elseif($property.maxLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMax' | t:{'max':'${property.maxLength}'} }}">
+							#elseif($property.minLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMin' | t:{'min':'${property.minLength}'} }}">
+							#else
+								text="{{ '$projectName:${tprefix}.messages.error.incorrectInput' | t }}">
+							#end
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -442,8 +478,8 @@
 	#if($property.maxLength && !$property.isCalculatedProperty)
 									ng-maxlength="${property.maxLength}"
 	#end
-	#if(!$property.isCalculatedProperty)
-	                                input-rules="{ patterns: ['${property.inputRule}'] }"
+	#if($property.inputRule && !$property.isCalculatedProperty)
+									input-rules="{ patterns: ['${property.inputRule}'] }"
 	#end
 	                                type="email"
 	                                placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
@@ -463,7 +499,19 @@
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
+							<bk-form-input-message
+								state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
+							#if($property.inputRule)
+								text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
+							#elseif($property.maxLength && $property.minLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMinMax' | t:{'min':'${property.minLength}','max':'${property.maxLength}'} }}">
+							#elseif($property.maxLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMax' | t:{'max':'${property.maxLength}'} }}">
+							#elseif($property.minLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMin' | t:{'min':'${property.minLength}'} }}">
+							#else
+								text="{{ '$projectName:${tprefix}.messages.error.incorrectInput' | t }}">
+							#end
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -483,8 +531,8 @@
 	#if($property.maxLength && !$property.isCalculatedProperty)
 									ng-maxlength="${property.maxLength}"
 	#end
-	#if(!$property.isCalculatedProperty)
-	                                input-rules="{ patterns: ['${property.inputRule}'] }"
+	#if($property.inputRule && !$property.isCalculatedProperty)
+									input-rules="{ patterns: ['${property.inputRule}'] }"
 	#end
 	                                type="text"
 	                                placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
