@@ -252,7 +252,7 @@
 									ng-maxlength="${property.maxLength}"
 	#end
 	                                type="url"
-	                                placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
+	                                placeholder="https://...">
 	                            </bk-input>
 							</bk-form-input-message>
 	                    </div>
