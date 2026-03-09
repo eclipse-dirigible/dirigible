@@ -40,11 +40,12 @@ class CustomSecurityTestProject extends BaseTestProject {
 
     private final SecurityUtil securityUtil;
     private final IDEFactory ideFactory;
-    
+
     @Autowired
     private AccessVerifier securityAccessVerifier;
 
-    CustomSecurityTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, SecurityUtil securityUtil, IDEFactory ideFactory, AccessVerifier securityAccessVerifier) {
+    CustomSecurityTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, SecurityUtil securityUtil, IDEFactory ideFactory,
+            AccessVerifier securityAccessVerifier) {
         super("CustomSecurityIT", ide, projectUtil, edmView);
         this.securityUtil = securityUtil;
         this.ideFactory = ideFactory;
