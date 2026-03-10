@@ -6,7 +6,14 @@
 
 import { Values } from "@aerokit/sdk/bpm/values";
 
+const JBpmnError = Java.type('org.flowable.engine.delegate.BpmnError');
 const BpmFacade = Java.type("org.eclipse.dirigible.components.api.bpm.BpmFacade");
+
+export class BpmnError {
+    constructor(code: string, message?: string) {
+        return new JBpmnError(code, message);
+    }
+}
 
 export class Process {
 
