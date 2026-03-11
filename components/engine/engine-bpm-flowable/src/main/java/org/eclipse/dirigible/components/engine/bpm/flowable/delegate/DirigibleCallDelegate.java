@@ -105,8 +105,8 @@ public class DirigibleCallDelegate implements JavaDelegate {
         static JSTask fromRepositoryPath(RepositoryPath repositoryPath) {
             var matcher = JS_EXPRESSION_REGEX.matcher(repositoryPath.getPath());
             if (!matcher.matches()) {
-                throw new BpmnError("Invalid JS expression provided for task! Path [" + repositoryPath.getPath() + "] doesn't match "
-                        + JS_EXPRESSION_REGEX);
+                throw new BpmnRuntimeException("Invalid JS expression provided for task! Path [" + repositoryPath.getPath()
+                        + "] doesn't match " + JS_EXPRESSION_REGEX);
             }
 
             String maybeClassName;
@@ -290,7 +290,7 @@ public class DirigibleCallDelegate implements JavaDelegate {
             type = new FixedValue("javascript");
         }
         if (handler == null) {
-            throw new BpmnError("Handler cannot be null at the call delegate.");
+            throw new BpmnRuntimeException("Handler cannot be null at the call delegate.");
         }
         String tenantId = getTenantId(execution);
         executeJSHandlerInTenantContext(tenantId, context);

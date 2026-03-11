@@ -160,7 +160,7 @@ public class DirigibleTaskListener implements TaskListener {
             type = new FixedValue("javascript");
         }
         if (handler == null) {
-            throw new BpmnError("Handler cannot be null at the task delegate.");
+            throw new BpmnRuntimeException("Handler cannot be null at the task delegate.");
         }
         String tenantId = getTenantId(task);
         executeJSHandlerInTenantContext(tenantId, context);
