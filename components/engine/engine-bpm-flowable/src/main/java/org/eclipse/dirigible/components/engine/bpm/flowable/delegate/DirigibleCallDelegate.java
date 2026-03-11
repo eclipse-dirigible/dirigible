@@ -9,10 +9,12 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.delegate;
 
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.Tracer;
-import io.opentelemetry.context.Scope;
-import jakarta.annotation.Nullable;
+import static org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActionData.Action.SKIP;
+import static org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService.DIRIGIBLE_BPM_INTERNAL_SKIP_STEP;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Pattern;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.open.telemetry.OpenTelemetryProvider;
 import org.eclipse.dirigible.components.tracing.TaskState;
@@ -25,18 +27,15 @@ import org.flowable.common.engine.impl.el.FixedValue;
 import org.flowable.engine.delegate.BpmnError;
 import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.delegate.JavaDelegate;
+import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Source;
 import org.graalvm.polyglot.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.regex.Pattern;
-
-import static org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActionData.Action.SKIP;
-import static org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService.DIRIGIBLE_BPM_INTERNAL_SKIP_STEP;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Scope;
+import jakarta.annotation.Nullable;
 
 /**
  * The Class DirigibleCallDelegate.
@@ -212,7 +211,6 @@ public class DirigibleCallDelegate implements JavaDelegate {
      *
      * @param execution the execution
      */
-    @Transactional
     @Override
     public void execute(DelegateExecution execution) {
         TaskState taskState = null;
@@ -242,6 +240,15 @@ public class DirigibleCallDelegate implements JavaDelegate {
                 TracingFacade.taskSuccessful(taskState, output);
             }
         } catch (RuntimeException e) {
+            if (e instanceof PolyglotException) {
+                if (((PolyglotException) e).isHostException()) {
+                    Throwable hostException = ((PolyglotException) e).asHostException();
+                    if (hostException instanceof BpmnError) {
+                        throw (BpmnError) hostException;
+                    }
+                }
+            }
+
             if (TracingFacade.isTracingEnabled()) {
                 Map<String, String> output = TaskStateUtil.getVariables(execution.getVariables());
                 TracingFacade.taskFailed(taskState, output, e.getMessage());
@@ -301,6 +308,7 @@ public class DirigibleCallDelegate implements JavaDelegate {
         return tenantId;
     }
 
+    @Transactional
     private void executeJSHandlerInTenantContext(String tenantId, Map<Object, Object> context) {
         tenantContext.execute(tenantId, () -> {
             executeJSHandler(context);
