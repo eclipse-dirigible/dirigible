@@ -286,7 +286,7 @@ export function parseDataTypes(dataType) {
         case "TIME":
         case "TIME WITH TIME ZONE":
             parsedDataType.java = "time";
-            parsedDataType.ts = "Date";
+            parsedDataType.ts = "string";
             break;
         case "DATETIME":
         case "TIMESTAMP":

@@ -1,4 +1,4 @@
-import { Repository, EntityEvent, EntityConstructor } from '@aerokit/sdk/db'
+import { Repository, EntityEvent, EntityConstructor, Options } from '@aerokit/sdk/db'
 import { Component } from '@aerokit/sdk/component'
 import { Producer } from '@aerokit/sdk/messaging'
 import { Extensions } from '@aerokit/sdk/extensions'
@@ -13,6 +13,9 @@ ${importsCode}
     #elseif($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate)
         #set($haveCalculatedPropertyOnUpdate = "true")
     #end
+    #if($property.dataType == "DATE" || $property.dataType == "TIMESTAMP")
+        #set($haveDateProperty = "true")
+    #end
 #end
 
 @Component('${name}Repository')
@@ -22,6 +25,32 @@ export class ${name}Repository extends Repository<${name}Entity> {
         super((${name}Entity as EntityConstructor));
     }
 
+#if($haveDateProperty)
+    public override findById(id: string | number, options?: Options): ${name}Entity | undefined {
+        const entity = super.findById(id, options);
+        if (entity) {
+#foreach ($property in $properties)
+    #if($property.dataType == "DATE" || $property.dataType == "TIMESTAMP")
+            entity.${property.name} = entity.${property.name} ? new Date(entity.${property.name}) : undefined;
+    #end
+#end
+        }
+        return entity;
+    }
+
+    public override findAll(options?: Options): ${name}Entity[] {
+        const entities = super.findAll(options);
+        entities.forEach(entity => {
+#foreach ($property in $properties)
+    #if($property.dataType == "DATE" || $property.dataType == "TIMESTAMP")
+            entity.${property.name} = entity.${property.name} ? new Date(entity.${property.name}) : undefined;
+    #end
+#end
+        });
+        return entities;
+    }
+
+#end
 #if($haveCalculatedPropertyOnCreate)
     public override create(entity: ${name}Entity): string | number {
     #foreach ($property in $properties)
