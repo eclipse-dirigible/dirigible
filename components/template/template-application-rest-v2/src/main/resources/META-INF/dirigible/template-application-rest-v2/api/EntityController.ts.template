@@ -283,7 +283,7 @@ class ${name}Controller {
             throw new ValidationError(`The '${property.name}' property is required, provide a valid value`);
         }
 #end
-#if($property.dataTypeTypescript == "string")
+#if($property.dataTypeTypescript == "string" && $property.dataTypeJava != "time")
         if (entity.${property.name}?.length > ${property.dataLength}) {
             throw new ValidationError(`The '${property.name}' exceeds the maximum length of [${property.dataLength}] characters`);
         }

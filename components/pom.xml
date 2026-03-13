@@ -237,6 +237,7 @@
         <module>template/template-application-data</module>
         <module>template/template-application-data-v2</module>
         <module>template/template-application-feed</module>
+        <module>template/template-application-feed-v2</module>
         <module>template/template-application-odata</module>
         <module>template/template-application-rest</module>
         <module>template/template-application-rest-v2</module>
@@ -1346,6 +1347,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-template-application-feed</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-template-application-feed-v2</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
