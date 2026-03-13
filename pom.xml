@@ -154,7 +154,7 @@
         <jaxws-rt.version>4.0.3</jaxws-rt.version>
 
         <!-- Lucene -->
-        <lucene.version>10.3.2</lucene.version>
+        <lucene.version>10.4.0</lucene.version>
 
         <!-- Chemistry -->
         <chemistry.version>1.1.0</chemistry.version>
@@ -181,7 +181,7 @@
         <jgit.version>7.5.0.202512021534-r</jgit.version>
 
         <!-- Flowable -->
-        <flowable.version>7.2.0</flowable.version>
+        <flowable.version>8.0.0</flowable.version>
 
         <!-- Wiki -->
         <wikitext.version>3.0.48.202308291007</wikitext.version>
@@ -205,7 +205,7 @@
         <guava.version>33.5.0-jre</guava.version>
         <icu4j.version>78.2</icu4j.version>
         <classgraph.version>4.8.184</classgraph.version>
-        <logcaptor.version>2.12.2</logcaptor.version>
+        <logcaptor.version>2.12.5</logcaptor.version>
 
         <!-- UI -->
         <blimpkit.version>1.8.7</blimpkit.version>
@@ -231,7 +231,7 @@
         <i18next.version>25.3.0</i18next.version>
         <!-- Tests -->
         <testcontainers.version>2.0.3</testcontainers.version>
-        <selenide.version>7.14.0</selenide.version>
+        <selenide.version>7.15.0</selenide.version>
 
         <antlr4-maven-plugin.version>4.13.2</antlr4-maven-plugin.version>
         <antlr4-runtime.version>4.13.2</antlr4-runtime.version>

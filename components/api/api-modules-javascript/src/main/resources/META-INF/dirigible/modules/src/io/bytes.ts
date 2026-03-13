@@ -4,6 +4,7 @@
  */
 
 const JString = Java.type("java.lang.String");
+const Charset = Java.type("java.nio.charset.Charset");
 const JByte = Java.type("java.lang.Byte");
 const JArray = Java.type("java.lang.reflect.Array");
 const BytesFacade = Java.type("org.eclipse.dirigible.components.api.io.BytesFacade");
@@ -64,8 +65,7 @@ export class Bytes {
 	 * @returns The reconstructed text string.
 	 */
 	public static byteArrayToText(data: any[]): string {
-		const native = Bytes.toJavaBytes(data);
-		return String.fromCharCode.apply(String, Bytes.toJavaScriptBytes(native));
+		return new JString(data, Charset.forName("UTF8"));
 	}
 
 	/**
