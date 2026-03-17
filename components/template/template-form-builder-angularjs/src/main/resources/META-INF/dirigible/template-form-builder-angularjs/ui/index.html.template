@@ -151,7 +151,7 @@
 					</tbody>
 				</table>
 	#elseif($element.controlId == "button")
-				<bk-button#if($element.sizeToText) class="bk-float-right"#else class="bk-full-width"#end #if($element.isSubmit)type="submit" ng-disabled="!forms.form.$valid"#end label="{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}" compact="$element.isCompact" state="$element.type"#if($element.callback) ng-click="$element.callback"#end></bk-button>
+				<bk-button#if($element.sizeToText) class="bk-float-right"#else class="bk-full-width"#end #if($element.isSubmit)type="submit" ng-disabled="!forms.form.$valid"#end label="{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}" compact="$element.isCompact" state="$element.type"#if($element.callback) ng-click="$element.callback"#end style="margin-right: 1em;"></bk-button>
 	#elseif($element.controlId == "paragraph")
 				<p class="fd-text" ng-class="{'bk-pre-wrap' : $element.format}">#if($element.model){{ model.$element.model }}#else$element.text#end</p>
 	#end
