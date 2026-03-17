@@ -1,6 +1,6 @@
 <!--
 
-    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
 
     All rights reserved. This program and the accompanying materials
     are made available under the terms of the Eclipse Public License v2.0
@@ -21,6 +21,7 @@
         <title config-title></title>
         <script type="text/javascript" src="/services/web/editor-report/configs/report-editor.js"></script>
         <meta name="platform-links" category="ng-view,ng-editor">
+        <script type="text/javascript" src="/services/web/service-generate/generate.js"></script>
         <script type="text/javascript" src="/services/web/editor-report/js/editor.js"></script>
     </head>
 
@@ -31,7 +32,8 @@
         <bk-toolbar class="bk-full-width" has-title="true" ng-show="!state.error && !state.isBusy">
             <bk-toolbar-title>Report:</bk-toolbar-title>
             <bk-toolbar-spacer></bk-toolbar-spacer>
-            <bk-button compact="true" label="Save" state="emphasized" ng-click="save()" ng-disabled="!(forms.editor.$valid && changed)"></bk-button>
+            <bk-button compact="true" title="Regenerate" label="Regenerate" ng-click="regenerate()" ng-disabled="!(forms.editor.$valid && canRegenerate)"></bk-button>
+            <bk-button compact="true" title="Save" label="Save" state="emphasized" ng-click="save()" ng-disabled="!(forms.editor.$valid && changed)"></bk-button>
         </bk-toolbar>
         <bk-scrollbar class="bk-full-width" ng-show="!state.error && !state.isBusy">
             <bk-fieldset ng-form="forms.editor">
@@ -50,7 +52,7 @@
                             </bk-form-item>
                             <bk-form-item horizontal="false">
                                 <bk-form-label for="name" ng-required="true" colon="true">Name</bk-form-label>
-                                <bk-form-input-message state="{{ forms.editor['name'].$valid ? '' : 'error' }}" message="::nameErrorMessage">
+                                <bk-form-input-message state="{{ forms.editor['name'].$valid ? '' : 'error' }}" text="{{::nameErrorMessage}}" message-fixed="true">
                                     <bk-input id="idName" name="name" state="{{ forms.editor['name'].$valid ? '' : 'error' }}" ng-required="true" ng-model="report.name" ng-maxlength="255" input-rules="nameRegex" type="text"
                                         placeholder="Enter name">
                                     </bk-input>
@@ -72,7 +74,7 @@
                             </div>
                             <bk-form-item horizontal="false">
                                 <bk-form-label for="alias" ng-required="true" colon="true">Alias</bk-form-label>
-                                <bk-form-input-message state="{{ forms.editor['alias'].$valid ? '' : 'error' }}" message="::nameErrorMessage">
+                                <bk-form-input-message state="{{ forms.editor['alias'].$valid ? '' : 'error' }}" text="{{::nameErrorMessage}}" message-fixed="true">
                                     <bk-input id="idAlias" name="alias" state="{{ forms.editor['alias'].$valid ? '' : 'error' }}" ng-required="true" ng-model="report.alias" ng-maxlength="255" input-rules="nameRegex" type="text"
                                         placeholder="Enter alias name">
                                     </bk-input>
@@ -80,7 +82,7 @@
                             </bk-form-item>
                             <bk-form-item horizontal="false">
                                 <bk-form-label for="table" ng-required="true" colon="true">Table</bk-form-label>
-                                <bk-form-input-message state="{{ forms.editor['table'].$valid ? '' : 'error' }}" message="::nameErrorMessage">
+                                <bk-form-input-message state="{{ forms.editor['table'].$valid ? '' : 'error' }}" text="{{::nameErrorMessage}}" message-fixed="true">
                                     <bk-input id="idTable" name="table" state="{{ forms.editor['table'].$valid ? '' : 'error' }}" ng-required="true" ng-model="report.table" ng-maxlength="255" input-rules="nameRegex" type="text"
                                         placeholder="Enter table name">
                                     </bk-input>

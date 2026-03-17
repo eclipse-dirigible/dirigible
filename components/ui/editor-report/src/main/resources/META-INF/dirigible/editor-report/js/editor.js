@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -9,11 +9,13 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'WorkspaceService']).controller('PageController', ($scope, $window, $http, WorkspaceService, ViewParameters, ButtonStates) => {
+angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'WorkspaceService', 'GenerateService']).controller('PageController', ($scope, $window, $http, WorkspaceService, GenerateService, ViewParameters, ButtonStates) => {
 	const statusBarHub = new StatusBarHub();
 	const workspaceHub = new WorkspaceHub();
 	const layoutHub = new LayoutHub();
 	const dialogHub = new DialogHub();
+	let genFile = '';
+	let workspace = '';
 	let contents;
 	$scope.changed = false;
 	$scope.nameErrorMessage = 'Allowed characters include all letters, numbers, \'_\', \'-\', \'.\', \':\' and \'"\'. Maximum length is 255.';
@@ -148,7 +150,64 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 
 	$scope.refreshTables = function () {
 		loadDatabasesMetadata();
-	}
+	};
+
+	$scope.regenerate = () => {
+		$scope.save();
+		dialogHub.showBusyDialog('Loading data');
+		WorkspaceService.loadContent(genFile).then((response) => {
+			let { models, perspectives, templateId, filePath, workspaceName, projectName, ...params } = response.data;
+			if (!response.data.templateId) {
+				$scope.chooseTemplate(response.data.projectName, response.data.filePath, params);
+			} else {
+				dialogHub.showBusyDialog('Regenerating');
+				$scope.generateFromModel(response.data.projectName, response.data.filePath, response.data.templateId, params);
+			}
+		}, (error) => {
+			console.error(error);
+			dialogHub.closeBusyDialog();
+			dialogHub.showAlert({
+				title: 'Unable to load gen file',
+				message: 'There was an error while loading the gen file.\nPlease look at the console for more information.',
+				type: AlertTypes.Error,
+				preformatted: true,
+			});
+		});
+	};
+
+	$scope.generateFromModel = (project, filePath, templateId, params) => {
+		GenerateService.generateFromModel(
+			workspace,
+			project,
+			filePath,
+			templateId,
+			params
+		).then(() => {
+			dialogHub.closeBusyDialog();
+			statusBarHub.showMessage(`Generated from model '${filePath}'`);
+			dialogHub.postMessage({ topic: 'projects.tree.refresh', data: { partial: true, project: project, workspace: workspace } });
+		}, (error) => {
+			console.error(error);
+			dialogHub.showAlert({
+				title: 'Failed to generate',
+				message: 'Please look at the console for more information',
+				type: AlertTypes.Error,
+				preformatted: false,
+			});
+		});
+	};
+
+	$scope.checkGenFile = () => {
+		WorkspaceService.resourceExists(genFile).then(() => {
+			$scope.$evalAsync(() => {
+				$scope.canRegenerate = true;
+			});
+		}, () => {
+			$scope.$evalAsync(() => {
+				$scope.canRegenerate = false;
+			});
+		});
+	};
 
 	function loadDatabasesMetadata() {
 		$http.get(databasesSvcUrl)
@@ -229,6 +288,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		if (data.path === $scope.dataParameters.filePath) {
 			$scope.$evalAsync(() => {
 				$scope.dataParameters = ViewParameters.get();
+				genFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.gen';
+				workspace = $scope.dataParameters.filePath.substring($scope.dataParameters.filePath.indexOf('/', 1), 1);
 			});
 		};
 	});
@@ -258,8 +319,13 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 	};
 
 	$scope.$watch('report', () => {
-		if (!$scope.state.error && !$scope.state.isBusy) {
-			$scope.fileChanged();
+		if (!$scope.state.isBusy) {
+			if (!$scope.state.error) {
+				const isDirty = contents !== JSON.stringify($scope.report, null, 4);
+				if ($scope.changed !== isDirty) {
+					$scope.fileChanged();
+				}
+			}
 			$scope.generateQuery();
 		}
 	}, true);
@@ -1321,7 +1387,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 			}
 		}
 		$scope.report.query = $scope.query;
-	}
+	};
 
 	$scope.dataParameters = ViewParameters.get();
 	if (!$scope.dataParameters.hasOwnProperty('filePath')) {
@@ -1330,7 +1396,12 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 	} else if (!$scope.dataParameters.hasOwnProperty('contentType')) {
 		$scope.state.error = true;
 		$scope.errorMessage = 'The \'contentType\' data parameter is missing.';
-	} else loadFileContents();
+	} else {
+		genFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.gen';
+		workspace = $scope.dataParameters.filePath.substring($scope.dataParameters.filePath.indexOf('/', 1), 1);
+		loadFileContents();
+		$scope.checkGenFile();
+	}
 
 	// Begin Base Table Section -------------------------------------------------------------------------------
 	$scope.setBaseTable = () => {
