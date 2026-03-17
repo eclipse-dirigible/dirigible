@@ -4,7 +4,7 @@
  * Do not modify the content as it may be re-generated again.
  */
 import * as schemaTemplateManager from "template-application-schema/template/template";
-import * as feedTemplateManager from "template-application-feed/template/template";
+import * as feedTemplateManager from "template-application-feed-v2/template/template";
 import * as uiAngularjsTemplateManager from "template-application-ui-angular-v2/template/template";
 import * as odataTemplateManager from "template-application-odata/template/template";
 import * as generateUtils from "service-generate/template/generateUtils";

@@ -12,6 +12,129 @@
  */
 'use strict';
 
+const AddMidpointDockerCommand = this.ORYX.Core.Command.extend({
+    construct: function (edge) {
+        this.edge = edge;
+        this.docker = null;
+        this.index = null;
+        this.position = null;
+    },
+
+    execute: function () {
+        const dockers = this.edge.dockers;
+
+        let maxLength = 0;
+        let insertIndex = 1;
+        let midpoint = null;
+
+        for (let i = 0; i < dockers.length - 1; i++) {
+
+            const path1 = dockers[i].bounds.center();
+            const path2 = dockers[i + 1].bounds.center();
+
+            const dx = path2.x - path1.x;
+            const dy = path2.y - path1.y;
+
+            let length = Math.sqrt(dx * dx + dy * dy);
+
+            if (length > maxLength) {
+                maxLength = length;
+
+                midpoint = {
+                    x: ((path1.x + path2.x) / 2) - 10,
+                    y: ((path1.y + path2.y) / 2) + 10
+                };
+
+                insertIndex = i + 1;
+            }
+        }
+
+        this.position = midpoint;
+
+        if (!this.docker) {
+            this.docker = this.edge.createDocker();
+        }
+
+        this.docker.bounds.centerMoveTo(this.position);
+
+        this.index = insertIndex;
+
+        this.edge.dockers = this.edge.dockers.without(this.docker);
+        this.edge.dockers.splice(insertIndex, 0, this.docker);
+
+        this.edge._update(true);
+        this.edge.getCanvas().update();
+    },
+
+    rollback: function () {
+        if (!this.docker) return;
+        this.edge.removeDocker(this.docker);
+        this.edge._update(true);
+        this.edge.getCanvas().update();
+    }
+
+});
+const RemoveMidpointDockerCommand = this.ORYX.Core.Command.extend({
+    construct: function (edge) {
+        this.edge = edge;
+        this.docker = null;
+        this.index = null;
+        this.position = null;
+    },
+
+    execute: function () {
+        const dockers = this.edge.dockers;
+
+        // Must have at least one intermediate docker to remove
+        if (dockers.length <= 2) return;
+
+        // Compute approximate visual midpoint of the edge (average of all points)
+        let totalX = 0, totalY = 0;
+        dockers.forEach(function (d) {
+            var c = d.bounds.center();
+            totalX += c.x;
+            totalY += c.y;
+        });
+        let midpoint = { x: totalX / dockers.length, y: totalY / dockers.length };
+
+        // Find intermediate docker closest to midpoint (skip first/last)
+        let minDist = Infinity;
+        let closestIndex = -1;
+
+        for (var i = 1; i < dockers.length - 1; i++) {
+            let c = dockers[i].bounds.center();
+            let dx = c.x - midpoint.x;
+            let dy = c.y - midpoint.y;
+            let dist = dx * dx + dy * dy; // squared distance
+            if (dist < minDist) {
+                minDist = dist;
+                closestIndex = i;
+            }
+        }
+
+        // Remove the closest docker
+        this.docker = dockers[closestIndex];
+        this.index = closestIndex;
+        this.position = this.docker.bounds.center();
+
+        this.edge.removeDocker(this.docker);
+
+        this.edge._update(true);
+        this.edge.getCanvas().update();
+    },
+
+    rollback: function () {
+        if (!this.docker) return;
+
+        // Re-insert docker at its original index
+        this.edge.dockers.splice(this.index, 0, this.docker);
+        this.docker.bounds.centerMoveTo(this.position);
+
+        this.edge._update(true);
+        this.edge.getCanvas().update();
+    }
+
+});
 var FLOWABLE = FLOWABLE || {};
 FLOWABLE.TOOLBAR = {
     ACTIONS: {
@@ -265,39 +388,19 @@ FLOWABLE.TOOLBAR = {
         addBendPoint: function (services) {
             setEditorDirtyState(true);
 
-            // Show the tutorial the first time
-            FLOWABLE_EDITOR_TOUR.sequenceFlowBendpoint(services.$scope, services.$translate, services.$q, true);
-
-            var dockerPlugin = FLOWABLE.TOOLBAR.ACTIONS._getOryxDockerPlugin(services);
-
-            var enableAdd = !dockerPlugin.enabledAdd();
-            dockerPlugin.setEnableAdd(enableAdd);
-            if (enableAdd) {
-                dockerPlugin.setEnableRemove(false);
-                document.body.style.cursor = 'pointer';
-            }
-            else {
-                document.body.style.cursor = 'default';
-            }
+            const edge = services.editorManager.getSelection()[0];
+            const command = new AddMidpointDockerCommand(edge);
+            services.editorManager.executeCommands([command]);
+            services.editorManager.updateSelection();
         },
 
         removeBendPoint: function (services) {
             setEditorDirtyState(true);
 
-            // Show the tutorial the first time
-            FLOWABLE_EDITOR_TOUR.sequenceFlowBendpoint(services.$scope, services.$translate, services.$q, true);
-
-            var dockerPlugin = FLOWABLE.TOOLBAR.ACTIONS._getOryxDockerPlugin(services);
-
-            var enableRemove = !dockerPlugin.enabledRemove();
-            dockerPlugin.setEnableRemove(enableRemove);
-            if (enableRemove) {
-                dockerPlugin.setEnableAdd(false);
-                document.body.style.cursor = 'pointer';
-            }
-            else {
-                document.body.style.cursor = 'default';
-            }
+            const edge = services.editorManager.getSelection()[0];
+            const command = new RemoveMidpointDockerCommand(edge);
+            services.editorManager.executeCommands([command]);
+            services.editorManager.updateSelection();
         },
 
         /**

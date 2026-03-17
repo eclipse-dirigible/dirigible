@@ -44,7 +44,7 @@ class ${name}Controller {
             const options: Options = {
                 limit: ctx.queryParameters["$limit"] ? parseInt(ctx.queryParameters["$limit"]) : 20,
                 offset: ctx.queryParameters["$offset"] ? parseInt(ctx.queryParameters["$offset"]) : 0,
-                language: request.getLocale().slice(0, 2)
+                language: request.getLocale().split("_")[0]
             };
 #if($layoutType == "MANAGE_DETAILS" || $layoutType == "LIST_DETAILS")
 
@@ -161,7 +161,7 @@ class ${name}Controller {
     #end
 #end
             const options: Options = {
-                language: request.getLocale().slice(0, 2)
+                language: request.getLocale().split("_")[0]
             };
             const entity = this.repository.findById(id, options);
             if (entity) {
@@ -283,7 +283,7 @@ class ${name}Controller {
             throw new ValidationError(`The '${property.name}' property is required, provide a valid value`);
         }
 #end
-#if($property.dataTypeTypescript == "string")
+#if($property.dataTypeTypescript == "string" && $property.dataTypeJava != "time")
         if (entity.${property.name}?.length > ${property.dataLength}) {
             throw new ValidationError(`The '${property.name}' exceeds the maximum length of [${property.dataLength}] characters`);
         }

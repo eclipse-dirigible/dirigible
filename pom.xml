@@ -154,7 +154,7 @@
         <jaxws-rt.version>4.0.3</jaxws-rt.version>
 
         <!-- Lucene -->
-        <lucene.version>10.3.2</lucene.version>
+        <lucene.version>10.4.0</lucene.version>
 
         <!-- Chemistry -->
         <chemistry.version>1.1.0</chemistry.version>
@@ -178,10 +178,10 @@
         <velocity.version>2.4</velocity.version>
 
         <!-- JGit -->
-        <jgit.version>7.5.0.202512021534-r</jgit.version>
+        <jgit.version>7.6.0.202603022253-r</jgit.version>
 
         <!-- Flowable -->
-        <flowable.version>7.2.0</flowable.version>
+        <flowable.version>8.0.0</flowable.version>
 
         <!-- Wiki -->
         <wikitext.version>3.0.48.202308291007</wikitext.version>
@@ -190,7 +190,7 @@
         <!-- JDBC -->
         <mongodb.version>3.12.14</mongodb.version>
         <ngdbc.version>2.27.7</ngdbc.version>
-        <snowflake.version>4.0.1</snowflake.version>
+        <snowflake.version>4.0.2</snowflake.version>
         <mysql.version>8.4.0</mysql.version>
 
         <!-- QLDB -->
@@ -205,10 +205,10 @@
         <guava.version>33.5.0-jre</guava.version>
         <icu4j.version>78.2</icu4j.version>
         <classgraph.version>4.8.184</classgraph.version>
-        <logcaptor.version>2.12.2</logcaptor.version>
+        <logcaptor.version>2.12.5</logcaptor.version>
 
         <!-- UI -->
-        <blimpkit.version>1.8.6</blimpkit.version>
+        <blimpkit.version>1.8.7</blimpkit.version>
         <sap-theming__theming-base-content.version>11.18.2</sap-theming__theming-base-content.version>
         <chart.js.version>4.4.3</chart.js.version>
         <sortablejs.version>1.15.7</sortablejs.version>
@@ -231,7 +231,7 @@
         <i18next.version>25.3.0</i18next.version>
         <!-- Tests -->
         <testcontainers.version>2.0.3</testcontainers.version>
-        <selenide.version>7.14.0</selenide.version>
+        <selenide.version>7.15.0</selenide.version>
 
         <antlr4-maven-plugin.version>4.13.2</antlr4-maven-plugin.version>
         <antlr4-runtime.version>4.13.2</antlr4-runtime.version>
@@ -943,7 +943,7 @@
             <dependency>
                 <groupId>io.opentelemetry.instrumentation</groupId>
                 <artifactId>opentelemetry-instrumentation-bom</artifactId>
-                <version>2.25.0</version>
+                <version>2.26.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

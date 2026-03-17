@@ -194,7 +194,7 @@
 	                            ng-model="entity.${property.name}"
 	                            ng-readonly="true"
 	                            type="url"
-	                            placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
+	                            placeholder="https://...">
 	                        </bk-input>
 	                     </div>
                     </bk-form-item>

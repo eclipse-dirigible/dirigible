@@ -9,8 +9,8 @@
 		<relativePath>../../pom.xml</relativePath>
 	</parent>
 
-	<name>Components - Template - Application - Feed - v2</name>
-	<artifactId>dirigible-components-template-application-feed-v2</artifactId>
+	<name>Components - Template - Application - Feed</name>
+	<artifactId>dirigible-components-template-application-feed</artifactId>
     <packaging>jar</packaging>
 
 	<properties>

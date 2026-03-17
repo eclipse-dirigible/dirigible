@@ -306,8 +306,7 @@ export class Store {
 	}
 
 	/**
-	 * Parse a JSON string and revive ISO date strings into JS Date objects.
-	 * It handles both full ISO timestamps (with timezone) and date-only strings (YYYY-MM-DD).
+	 * Parse a JSON string.
 	 * Returns undefined for null/empty inputs.
 	 */
 	private static parseResult(result: any): any {
@@ -319,74 +318,7 @@ export class Store {
 			return result;
 		}
 
-		// Accept timezone offsets with or without colon (e.g. +00:00 or +0000)
-		const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:?\d{2})$/;
-		const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
-		const TZ_NO_COLON = /([+\-]\d{2})(\d{2})$/;
-		// Space-separated datetime: "YYYY-MM-DD HH:MM:SS" (optionally with fractional seconds and timezone)
-		const SPACE_DATETIME = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:?\d{2})?$/;
-		// Time-only strings like "11:29:33" or "11:29:33.123"
-		const TIME_ONLY = /^\d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
-		// Epoch strings: 13-digit ms or 10-digit seconds
-		const EPOCH_MS = /^[+\-]?\d{13}$/;
-		const EPOCH_S = /^[+\-]?\d{10}$/;
-
-		return JSON.parse(result, (key, value) => {
-			if (typeof value === 'string') {
-				const s = value.trim();
-
-				// Epoch millisecond/second strings
-				if (EPOCH_MS.test(s)) {
-					const ms = parseInt(s, 10);
-					return new Date(ms);
-				}
-				if (EPOCH_S.test(s)) {
-					const ms = parseInt(s, 10) * 1000;
-					return new Date(ms);
-				}
-
-				// Space-separated datetimes: normalize to ISO and parse
-				if (SPACE_DATETIME.test(s)) {
-					let v = s.replace(' ', 'T');
-					if (TZ_NO_COLON.test(v)) {
-						v = v.replace(TZ_NO_COLON, '$1:$2');
-					}
-					const d = new Date(v);
-					if (!isNaN(d.getTime())) {
-						return d;
-					}
-				}
-
-				// Time-only strings: attach current UTC date and parse as UTC
-				if (TIME_ONLY.test(s)) {
-					const m = s.match(/(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?/);
-					if (m) {
-						const hh = parseInt(m[1], 10);
-						const mm = parseInt(m[2], 10);
-						const ss = parseInt(m[3], 10);
-						const frac = m[4] ? (m[4] + '000').substring(0, 3) : '000';
-						const ms = parseInt(frac, 10);
-						const now = new Date();
-						const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hh, mm, ss, ms));
-						return d;
-					}
-				}
-
-				if (ISO_DATETIME.test(s) || DATE_ONLY.test(s)) {
-					// normalize timezone without colon (e.g. +0000 -> +00:00) because Date parsing
-					// prefers the colon-separated offset in many JS engines
-					let v = s;
-					if (TZ_NO_COLON.test(v)) {
-						v = v.replace(TZ_NO_COLON, '$1:$2');
-					}
-					const d = new Date(v);
-					if (!isNaN(d.getTime())) {
-						return d;
-					}
-				}
-			}
-			return value;
-		});
+		return JSON.parse(result);
 	}
 
 }
