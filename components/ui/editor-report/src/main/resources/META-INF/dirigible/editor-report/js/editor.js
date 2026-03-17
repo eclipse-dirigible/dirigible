@@ -131,6 +131,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 					if (response.data === '') $scope.report = {};
 					else $scope.report = migrateReport(response.data);
 					contents = JSON.stringify($scope.report, null, 4);
+					$scope.query = $scope.report.query;
 					$scope.state.isBusy = false;
 				});
 			}, (response) => {
@@ -144,6 +145,10 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		}
 		loadDatabasesMetadata();
 	};
+
+	$scope.refreshTables = function () {
+		loadDatabasesMetadata();
+	}
 
 	function loadDatabasesMetadata() {
 		$http.get(databasesSvcUrl)
@@ -198,7 +203,6 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		}, (response) => {
 			console.error(response);
 			$scope.$evalAsync(() => {
-				$scope.state.error = true;
 				$scope.errorMessage = `Error saving '${$scope.dataParameters.filePath}'. Please look at the console for more information.`;
 				$scope.state.isBusy = false;
 			});
@@ -208,9 +212,10 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 	$scope.save = (keySet = 'ctrl+s', event) => {
 		event?.preventDefault();
 		if (keySet === 'ctrl+s') {
-			if ($scope.changed && $scope.forms.editor.$valid && !$scope.state.error) {
+			if ($scope.changed && $scope.forms.editor.$valid) {
 				$scope.state.busyText = 'Saving...';
 				$scope.state.isBusy = true;
+				$scope.state.error = false;
 				saveContents(JSON.stringify($scope.report, null, 4));
 			}
 		}
@@ -254,11 +259,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 
 	$scope.$watch('report', () => {
 		if (!$scope.state.error && !$scope.state.isBusy) {
-			const isDirty = contents !== JSON.stringify($scope.report, null, 4);
-			if ($scope.changed !== isDirty) {
-				$scope.fileChanged();
-				$scope.generateQuery();
-			}
+			$scope.fileChanged();
+			$scope.generateQuery();
 		}
 	}, true);
 

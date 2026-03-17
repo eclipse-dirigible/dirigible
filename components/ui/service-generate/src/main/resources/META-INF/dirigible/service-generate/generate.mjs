@@ -56,6 +56,7 @@ function onErrorOccurred(ctx, err, request, response) {
         status: status,
         message: message
     }));
+	console.error(message);
 }
 
 function onGenerateModel(context, request, response) {

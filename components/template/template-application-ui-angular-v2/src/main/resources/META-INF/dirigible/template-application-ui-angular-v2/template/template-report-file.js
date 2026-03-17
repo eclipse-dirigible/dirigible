@@ -39,7 +39,7 @@ export function generate(model, parameters) {
 
     parameters.roles = [];
 
-    if (model.security.generateDefaultRoles === "true") {
+    if (model.security && model.security.generateDefaultRoles === "true") {
         const roleData = {};
         roleData["entityName"] = model.name;
 

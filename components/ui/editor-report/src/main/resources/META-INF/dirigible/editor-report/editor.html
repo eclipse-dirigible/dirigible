@@ -68,6 +68,7 @@
                         <bk-panel-content aria-label="Base Table Content" class="bk-scroll-hidden">
                             <div class="bk-hbox bk-full-width bk-padding-bottom--tiny bk-flex-end bk-box--gap">
                                 <bk-button compact="true" label="Set from Tables" ng-click="setBaseTable()"></bk-button>
+                                <bk-button compact="true" label="Refresh Tables" ng-click="refreshTables()"></bk-button>
                             </div>
                             <bk-form-item horizontal="false">
                                 <bk-form-label for="alias" ng-required="true" colon="true">Alias</bk-form-label>
@@ -148,6 +149,7 @@
                                 <bk-button compact="true" glyph="sap-icon--add" label="Add" ng-click="addJoin()"></bk-button>
                                 <bk-button compact="true" label="Add from Tables" ng-click="addFromTables()">
                                 </bk-button>
+                                <bk-button compact="true" label="Refresh Tables" ng-click="refreshTables()"></bk-button>
                             </div>
                             <bk-table-fixed>
                                 <table bk-table outer-borders="all">
