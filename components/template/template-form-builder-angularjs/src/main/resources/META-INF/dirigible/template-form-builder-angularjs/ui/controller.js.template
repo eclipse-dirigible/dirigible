@@ -1,9 +1,63 @@
 #set($dollar = '$')
-angular.module('forms', ['blimpKit', 'platformView', 'platformLocale']).controller('FormController', ($scope, $http, LocaleService, ViewParameters) => {
+angular.module('forms', ['blimpKit', 'platformView', 'platformLocale', 'platformDialogs']).directive('modelToNumber', () => ({
+    require: 'ngModel',
+    link: (_scope, _element, _attrs, ngModel) => {
+        ngModel.${dollar}formatters.push((value) => {
+            return parseFloat(value);
+        });
+    }
+})).directive('modelToDate', () => ({
+    require: 'ngModel',
+    link: (_scope, _element, _attrs, ngModel) => {
+        ngModel.${dollar}parsers.push((value) => {
+            const date = new Date(value);
+            return date.toISOString();
+        });
+        ngModel.${dollar}formatters.push((value) => {
+            return new Date(value);
+        });
+    }
+})).constant('Dialogs', new DialogHub()).controller('FormController', ($scope, $http, Dialogs, LocaleService, ViewParameters) => {
     $scope._is_view = ViewParameters.get().container !== undefined;
     $scope.forms = {
         form: {}
     };
+#if($metadata.url)
+    $scope._submit = () => {
+        const payload = {};
+        angular.forEach($scope.forms.form, (control, name) => {
+            if (name[0] === '$') return;
+            payload[name] = control.$modelValue;
+        });
+        Dialogs.showBusyDialog('Sending...');
+        ${dollar}http({
+            method:#if($metadata.method == 'post') 'POST'#else 'GET'#end,
+            url: '$metadata.url',
+            #if($metadata.method == 'post')
+            headers: { 'Content-Type': 'application/json' },
+            data: JSON.stringify(payload)
+            #else
+            params: payload
+            #end
+        }).then((response) => {
+            Dialogs.showAlert({
+                title: 'Submited',
+                message: 'Successfully submited the form!',
+                type: AlertTypes.Success,
+            });
+        }, (error) => {
+            console.error(error);
+            Dialogs.showAlert({
+                title: 'Submit failed',
+                message: JSON.stringify(error),
+                type: AlertTypes.Error,
+                preformatted: true,
+            });
+        }).finally(() => {
+            Dialogs.closeBusyDialog();
+        });
+    };
+#end
 
 #foreach($feed in $feeds)
     ${dollar}http.get('$feed.url').then(response => {
@@ -51,11 +105,11 @@ angular.module('forms', ['blimpKit', 'platformView', 'platformLocale']).controll
 	#elseif($element.controlId == "input-color")
     $scope.model.$element.model = '#ffbe6f';
 	#elseif($element.controlId == "paragraph")
-    #if($element.model && $element.text)
+        #if($element.model && $element.text)
     $scope.model.$element.model = `$element.text`;
-    #elseif($element.model)
+        #elseif($element.model)
     $scope.model.$element.model = null;
-    #end
+        #end
 	#end
     #if($element.children)
         #formWidgets($element.children)

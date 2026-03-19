@@ -91,8 +91,10 @@ export function generateGeneric(model, parameters, templateSources) {
         migrateForm(model.form);
         if (!model.hasOwnProperty('metadata')) {
             model['metadata'] = {
-                name: getFormName(model.form) || `${parameters['fileName']} Form`
+                name: getFormName(model.form) || `${parameters['fileName']}`
             }
+        } else if (!model.metadata.hasOwnProperty('name')) {
+            model.metadata['name'] = getFormName(model.form) || `${parameters['fileName']}`;
         }
 
     } else if (parameters.filePath.endsWith('.report')) {

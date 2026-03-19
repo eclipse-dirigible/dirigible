@@ -1,3 +1,22 @@
+#macro(getPaddingClass $padding $side)##
+#set($result = '')##
+#if($padding)##
+	#if($side)##
+		#if($side == "bottom")##
+			#set($result = "bk-padding-bottom--$padding")##
+		#elseif($side == "top")##
+			#set($result = "bk-padding-top--$padding")##
+		#elseif($side == "top-bottom")##
+			#set($result = "bk-padding-top-bottom--$padding")##
+		#elseif($side == "begin-end")##
+			#set($result = "fd-padding-begin-end--$padding")##
+		#end##
+	#else##
+		#set($result = "bk-padding--$padding")##
+	#end##
+#end##
+$result##
+#end
 <!DOCTYPE HTML>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="forms" ng-controller="FormController">
 
@@ -15,32 +34,37 @@
 	</head>
 
 	<body class="bk-center--horizontal bk-box--items-start" ng-class="{'bk-padding':!_is_view}">
-		<bk-fieldset class="bk-padding bk-full-width bk-restrict-width--lg" ng-class="{'fd-card':!_is_view}" ng-style="!_is_view && { 'min-height': 'auto' }" ng-form="forms.form">
+		<bk-fieldset class="bk-full-width bk-restrict-width--lg #if($metadata.padding)#getPaddingClass($metadata.padding $metadata.side)#else bk-padding#end" ng-class="{'fd-card':!_is_view}" ng-style="!_is_view && { 'min-height': 'auto' }" ng-form="forms.form">
 			<bk-form-group>
 #macro(formWidgets $elements)
 #foreach($element in $elements)
 	#if($element.controlId == "header")
-				<h$element.headerSize.intValue() bk-title header-size="$element.headerSize.intValue()" #if($element.padding == "tiny") class="bk-padding$element.side--tiny"#elseif($element.padding == "sm") class="bk-padding$element.side--sm"#elseif($element.padding == "md") class="bk-padding$element.side--md"#elseif($element.padding == "lg") class="bk-padding$element.side--lg"#end>{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</h$element.headerSize.intValue()>
+				<h$element.headerSize.intValue() class="#getPaddingClass($element.padding $element.side)" bk-title header-size="$element.headerSize.intValue()">#if($element.model){{model.$element.model}}#else{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}#end</h$element.headerSize.intValue()>
 	#elseif($element.controlId == "image")
 		#if($element.link)
 				<a href="$element.link">
-					<img class="bk-contain-image"#if($element.width) width="$element.width"#end#if($element.height) height="$element.height"#end src="$element.imageLink" alt="$element.desc"/>
+					<img class="bk-contain-image bk-border-box #getPaddingClass($element.padding $element.side)"#if($element.width) width="$element.width"#end#if($element.height) height="$element.height"#end src="$element.imageLink" alt="$element.desc"/>
 				</a>
 		#else
-				<img class="bk-contain-image"#if($element.width) width="$element.width"#end#if($element.height) height="$element.height"#end src="$element.imageLink" alt="$element.desc"/>
+				<img class="bk-contain-image bk-border-box #getPaddingClass($element.padding $element.side)"#if($element.width) width="$element.width"#end#if($element.height) height="$element.height"#end src="$element.imageLink" alt="$element.desc"/>
 		#end
 	#elseif($element.controlId == "input-textarea")
 				<bk-form-item horizontal="$element.horizontal">
 					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
 					<bk-form-input-message state="{{ forms.form['$element.id'].$valid ? '' : 'error' }}" text="{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.errorMessage' }}">
-						<bk-textarea id="$element.id"
-							name="$element.id"
-							ng-model="model.$element.model"
-							ng-required="$element.required"
-							type="text"
-							compact="$element.isCompact"
+						<bk-textarea id="$element.id" name="$element.id" type="text" ng-model="model.$element.model" state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}"
+							#if($element.required)
+							ng-required="true"
+							#end
+							#if($element.readonly)
+							ng-readonly="true"
+							#end
+							#if($element.isCompact)
+							compact="true"
+							#end
+							#if($element.placeholder)
 							placeholder="$element.placeholder"
-							state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}"
+							#end
 							ng-trim="false"
 							ng-minlength="$element.minLength"
 							ng-maxlength="$element.maxLength">
@@ -49,19 +73,24 @@
 				</bk-form-item>
 	#elseif($element.controlId == "input-textfield")
 				<bk-form-item horizontal="$element.horizontal">
-					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
+					<bk-form-label colon="true" #if($element.required)ng-required="true"#end for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
 					<bk-form-input-message state="{{ forms.form['$element.id'].$valid ? '' : 'error' }}" text="{{ '$projectName:${tprefix}.t.$element.errorTranslation' | t:'$element.errorMessage' }}">
-						<bk-input id="$element.id"
-							name="$element.id"
-							ng-model="model.$element.model"
-							ng-required="$element.required"
-							type="$element.type"
-							compact="$element.isCompact"
+						<bk-input id="$element.id" name="$element.id" type="$element.type" ng-model="model.$element.model" state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}"
+							#if($element.required)
+							ng-required="true"
+							#end
+							#if($element.readonly)
+							ng-readonly="true"
+							#end
+							#if($element.isCompact)
+							compact="true"
+							#end
+							#if($element.placeholder)
 							placeholder="$element.placeholder"
-							state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}"
-		#if($element.validationRegex)
+							#end
+							#if($element.validationRegex)
 							input-rules="{ patterns: ['$element.validationRegex'] }"
-		#end
+							#end
 							ng-trim="false"
 							ng-minlength="$element.minLength"
 							ng-maxlength="$element.maxLength">
@@ -70,48 +99,133 @@
 				</bk-form-item>
 	#elseif($element.controlId == "input-number")
 				<bk-form-item horizontal="$element.horizontal">
-					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
-					<bk-step-input input-id="$element.id" name="$element.id" ng-model="model.$element.model" ng-required="$element.required" min="$element.minNum"
-						max="$element.maxNum" step="$element.step" state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}" compact="$element.isCompact">
+					<bk-form-label colon="true" #if($element.required)ng-required="true"#end for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
+					<bk-step-input input-id="$element.id" name="$element.id" state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}" model-to-number ng-model="model.$element.model"
+						#if($element.required)
+						ng-required="true"
+						#end
+						#if($element.readonly)
+						is-readonly="true"
+						#end
+						#if($element.isCompact)
+						compact="true"
+						#end
+						#if($element.minNum != $null)
+						min="$element.minNum"
+						#end
+						#if($element.maxNum != $null)
+						max="$element.maxNum"
+						#end
+						#if($element.step != $null)
+						step="$element.step"
+						#end
+					>
 					</bk-step-input>
 				</bk-form-item>
 	#elseif($element.controlId == "input-checkbox")
 				<bk-form-item>
-					<bk-checkbox id="$element.id" ng-model="model.$element.model" compact="$element.isCompact"></bk-checkbox>
+					<bk-checkbox id="$element.id" name="$element.id" ng-model="model.$element.model" #if($element.isCompact)compact="true"#end></bk-checkbox>
 					<bk-checkbox-label for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-checkbox-label>
 				</bk-form-item>
 	#elseif($element.controlId == "input-time")
 				<bk-form-item horizontal="$element.horizontal">
-					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
-					<bk-input id="$element.id" name="$element.id" compact="$element.isCompact" ng-model="model.$element.model" ng-required="$element.required" type="time"></bk-input>
+					<bk-form-label colon="true" #if($element.required)ng-required="true"#end for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
+					<bk-input id="$element.id" name="$element.id" type="time" state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}" ng-model="model.$element.model"
+						#if($element.required)
+						ng-required="true"
+						#end
+						#if($element.readonly)
+						ng-readonly="true"
+						#end
+						#if($element.isCompact)
+						compact="true"
+						#end
+					></bk-input>
 				</bk-form-item>
 	#elseif($element.controlId == "input-date")
 				<bk-form-item horizontal="$element.horizontal">
-					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
-					<bk-input id="$element.id" name="$element.id" compact="$element.isCompact" ng-model="model.$element.model" ng-required="$element.required" type="$element.type"></bk-input>
+					<bk-form-label colon="true" #if($element.required)ng-required="true"#end for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
+					<bk-input id="$element.id" name="$element.id" type="$element.type" state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}" model-to-date ng-model="model.$element.model"
+						#if($element.required)
+						ng-required="true"
+						#end
+						#if($element.readonly)
+						ng-readonly="true"
+						#end
+						#if($element.isCompact)
+						compact="true"
+						#end
+					></bk-input>
 				</bk-form-item>
 	#elseif($element.controlId == "input-color")
 				<bk-form-item horizontal="$element.horizontal">
-					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
-					<bk-input id="$element.id" name="$element.id" compact="$element.isCompact" ng-model="model.$element.model" ng-required="$element.required" type="color"></bk-input>
+					<bk-form-label colon="true" #if($element.required)ng-required="true"#end for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
+					<bk-input id="$element.id" name="$element.id" type="color"state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}" ng-model="model.$element.model"
+						#if($element.required)
+						ng-required="true"
+						#end
+						#if($element.readonly)
+						ng-readonly="true"
+						onclick="return false;"
+						#end
+						#if($element.isCompact)
+						compact="true"
+						#end
+					></bk-input>
 				</bk-form-item>
 	#elseif($element.controlId == "input-combobox")
 				<bk-form-item horizontal="$element.horizontal">
-					<bk-form-label id="$element.id" colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
-					<bk-combobox-input compact="$element.isCompact"#if($element.filter) filter="$element.filter"#end dropdown-items="$element.items" ng-model="model.$element.model" ng-required="$element.required" placeholder="$element.placeholder"
-						btn-aria-label="{{'$projectName:${tprefix}.aria.showHide' | t:{element:'$t($projectName:${tprefix}.t.$element.translation)'} }}" list-aria-label="{{'$projectName:${tprefix}.aria.options' | t:{element:'$t($projectName:${tprefix}.t.$element.translation)'} }}"></bk-combobox-input>
+					<bk-form-label id="$element.id" colon="true" #if($element.required)ng-required="true"#end for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
+					<bk-combobox-input name="$element.id" dropdown-items="$element.items" state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}" ng-model="model.$element.model"
+						#if($element.filter)
+						filter="$element.filter"
+						#end
+						#if($element.required)
+						ng-required="true"
+						#end
+						#if($element.readonly)
+						is-readonly="true"
+						#end
+						#if($element.isCompact)
+						compact="true"
+						#end
+						#if($element.placeholder)
+						placeholder="$element.placeholder"
+						#end
+						btn-aria-label="{{'$projectName:${tprefix}.aria.showHide' | t:{element:'$t($projectName:${tprefix}.t.$element.translation)'} }}"
+						list-aria-label="{{'$projectName:${tprefix}.aria.options' | t:{element:'$t($projectName:${tprefix}.t.$element.translation)'} }}"></bk-combobox-input>
 				</bk-form-item>
 	#elseif($element.controlId == "input-select" && $element.staticData != true)
 				<bk-form-item horizontal="$element.horizontal">
-					<bk-form-label id="$element.id" colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
-					<bk-select name="$element.id" label-id="$element.id" compact="$element.isCompact" ng-required="$element.required" ng-model="model.$element.model">
+					<bk-form-label id="$element.id" colon="true" #if($element.required)ng-required="true"#end for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
+					<bk-select name="$element.id" label-id="$element.id" state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}" ng-model="model.$element.model"
+						#if($element.required)
+						ng-required="true"
+						#end
+						#if($element.readonly)
+						is-readonly="true"
+						#end
+						#if($element.isCompact)
+						compact="true"
+						#end
+					>
 						<bk-option text="{{ option.$element.optionLabel }}" value="option.$element.optionValue" ng-repeat="option in $element.options track by $index"></bk-option>
 					</bk-select>
 				</bk-form-item>
 	#elseif($element.controlId == "input-select" && $element.staticData)
 				<bk-form-item horizontal="$element.horizontal">
-					<bk-form-label id="$element.id" colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
-					<bk-select name="$element.id" label-id="$element.id" compact="$element.isCompact" ng-required="$element.required" ng-model="model.$element.model">
+					<bk-form-label id="$element.id" colon="true" #if($element.required)ng-required="true"#end for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
+					<bk-select name="$element.id" label-id="$element.id" state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}" ng-model="model.$element.model"
+						#if($element.required)
+						ng-required="true"
+						#end
+						#if($element.readonly)
+						is-readonly="true"
+						#end
+						#if($element.isCompact)
+						compact="true"
+						#end
+					>
 		#foreach($option in $element.staticOptions)
 						<bk-option text="{{ '$projectName:${tprefix}.t.$option.translation' | t:'$option.label' }}" value="'$option.value'"></bk-option>
 		#end
@@ -120,7 +234,18 @@
 	#elseif($element.controlId == "input-radio" && $element.staticData != true)
 				<bk-form-group label="{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}">
 					<bk-form-item ng-repeat="option in $element.options track by $index">
-						<bk-radio id="$element.id-{{$index}}" name="$element.id" compact="$element.isCompact" ng-model="model.$element.model" ng-value="'{{option.$element.optionValue}}'" ng-required="$element.required"></bk-radio>
+						<bk-radio id="$element.id-{{$index}}" name="$element.id" state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}" ng-value="'{{option.$element.optionValue}}'" ng-model="model.$element.model"
+							#if($element.required)
+							ng-required="true"
+							#end
+							#if($element.readonly)
+							ng-readonly="true"
+							onclick="return false;"
+							#end
+							#if($element.isCompact)
+							compact="true"
+							#end
+						></bk-radio>
 						<bk-radio-label for="$element.id-{{$index}}">{{option.$element.optionLabel}}</bk-radio-label>
 					</bk-form-item>
 				</bk-form-group>
@@ -128,13 +253,24 @@
 				<bk-form-group label="{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}">
 		#foreach($option in $element.staticOptions)
 					<bk-form-item>
-						<bk-radio id="$element.id-$foreach.count" name="$element.id" compact="$element.isCompact" ng-model="model.$element.model" value="$option.value" ng-required="$element.required"></bk-radio>
+						<bk-radio id="$element.id-$foreach.count" name="$element.id" state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}" value="$option.value" ng-model="model.$element.model"
+							#if($element.required)
+							ng-required="true"
+							#end
+							#if($element.readonly)
+							ng-readonly="true"
+							onclick="return false;"
+							#end
+							#if($element.isCompact)
+							compact="true"
+							#end
+						></bk-radio>
 						<bk-radio-label for="$element.id-$foreach.count">{{ '$projectName:${tprefix}.t.$option.translation' | t:'$option.label' }}</bk-radio-label>
 					</bk-form-item>
 		#end
 				</bk-form-group>
 	#elseif($element.controlId == "table")
-				<table bk-table fixed="$element.isFixed" display-mode="$element.displayMode" outer-borders="$element.outerBorders" inner-borders="$element.innerBorders">
+				<table class="#getPaddingClass($element.padding $element.side)" bk-table fixed="$element.isFixed" display-mode="$element.displayMode" outer-borders="$element.outerBorders" inner-borders="$element.innerBorders">
 					<thead bk-table-header interactive="false">
 						<tr bk-table-row>
 		#foreach($header in $element.headers)
@@ -151,21 +287,25 @@
 					</tbody>
 				</table>
 	#elseif($element.controlId == "button")
-				<bk-button#if($element.sizeToText) class="bk-float-right"#else class="bk-full-width"#end #if($element.isSubmit)type="submit" ng-disabled="!forms.form.$valid"#end label="{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}" compact="$element.isCompact" state="$element.type"#if($element.callback) ng-click="$element.callback"#end style="margin-right: 1em;"></bk-button>
+				<bk-button#if($element.isSubmit) type="submit" ng-disabled="!forms.form.$valid"#else type="button"#end label="{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}" compact="$element.isCompact"#if($element.type) state="$element.type"#end #if($element.callback) ng-click="$element.callback"#elseif($element.isSubmit && $metadata.url) ng-click="_submit()"#end></bk-button>
 	#elseif($element.controlId == "paragraph")
-				<p class="fd-text" ng-class="{'bk-pre-wrap' : $element.format}">#if($element.model){{ model.$element.model }}#else$element.text#end</p>
+				<p class="fd-text #getPaddingClass($element.padding $element.side)" ng-class="{'bk-pre-wrap' : $element.format}">#if($element.model){{ model.$element.model }}#else$element.text#end</p>
+	#elseif($element.controlId == "line")
+				<div class="#if($element.orientation == "h")bk-border--top#else bk-border--left#end" role="presentation"></div>
+	#elseif($element.controlId == "spacer")
+				<div#if($element.stretch) class="bk-stretch"#else style="#if($element.width)width: ${element.width.intValue()}px;#end#if($element.height)height: ${element.height.intValue()}px#end"#end aria-hidden="true"></div>
 	#end
 #if($element.children)
-				<div class="#if($element.controlId == "container-vbox") bk-vbox#else bk-hbox#end bk-box--gap bk-box--items-stretch">
+				<bk-form-item class="#getPaddingClass($element.padding $element.side)#if($element.controlId == "container-vbox") bk-vbox#else bk-hbox#end #if($element.gap) bk-box--gap-$element.gap#else bk-box--gap#end #if($element.justify == "center") bk-box--center#elseif($element.justify == "end") bk-box--end#elseif($element.justify == "stretch") bk-box--items-stretch#elseif($element.justify == "between") bk-box--space-between#end">
 #formWidgets($element.children)
-				</div>
+				</bk-form-item>
 #end
 #end
 #end
-
 #formWidgets($form)
 			</bk-form-group>
 		</bk-fieldset>
+		<dialogs ng-if="!_is_view"></dialogs>
 		<theme></theme>
 	</body>
 
