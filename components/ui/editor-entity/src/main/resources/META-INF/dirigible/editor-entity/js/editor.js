@@ -818,6 +818,8 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 
 				// Adds sidebar icon for the report entity object
 				let reportObject = new Entity('ReportEntityName');
+				reportObject.perspectiveName = 'Reports';
+				reportObject.perspectiveLabel = 'Reports';
 				let report = new mxCell(reportObject, new mxGeometry(0, 0, 200, 28), 'report');
 				report.setVertex(true);
 				addSidebarIcon($scope.graph, sidebar, report, ICON_REPORT, 'Drag this to the diagram to create a new Report Entity', $scope, dialogHub);
@@ -852,6 +854,8 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 
 				// Adds sidebar icon for the setting entity object
 				let settingObject = new Entity('SettingEntityName');
+				settingObject.perspectiveName = 'Settings';
+				settingObject.perspectiveLabel = 'Settings';
 				let setting = new mxCell(settingObject, new mxGeometry(0, 0, 200, 28), 'setting');
 				setting.setVertex(true);
 				addSidebarIcon($scope.graph, sidebar, setting, ICON_SETTING, 'Drag this to the diagram to create a new Setting Entity', $scope, dialogHub);
@@ -1282,6 +1286,16 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 					}
 					if (child.value.importsCode && child.value.importsCode !== "") {
 						child.value.importsCode = atob(child.value.importsCode);
+					}
+					
+					// Backward compatibility with old models
+					if (child.value.entityType && child.value.entityType === "SETTING") {
+						child.value.perspectiveName = "Settings";
+						child.value.perspectiveLabel = "Settings";
+					}
+					if (child.value.entityType && child.value.entityType === "REPORT") {
+						child.value.perspectiveName = "Reports";
+						child.value.perspectiveLabel = "Reports";
 					}
 				}
 			}
