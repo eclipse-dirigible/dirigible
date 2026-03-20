@@ -17,6 +17,13 @@
 #end##
 $result##
 #end
+#macro(getPTag $format)##
+#set($result = 'p')##
+#if($format)##
+	#set($result = "pre")##
+#end##
+$result##
+#end
 <!DOCTYPE HTML>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="forms" ng-controller="FormController">
 
@@ -289,7 +296,7 @@ $result##
 	#elseif($element.controlId == "button")
 				<bk-button#if($element.isSubmit) type="submit" ng-disabled="!forms.form.$valid"#else type="button"#end label="{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}" compact="$element.isCompact"#if($element.type) state="$element.type"#end #if($element.callback) ng-click="$element.callback"#elseif($element.isSubmit && $metadata.url) ng-click="_submit()"#end></bk-button>
 	#elseif($element.controlId == "paragraph")
-				<p class="fd-text #getPaddingClass($element.padding $element.side)" ng-class="{'bk-pre-wrap' : $element.format, 'bk-text--subtitle': $element.subtitle, 'bk-text--ellipsis': $element.ellipsis, 'bk-font--italic': $element.italic, 'bk-font--small': $element.fontSize === 'sm', 'bk-font--large': $element.fontSize === 'lg'}">#if($element.model){{ model.$element.model }}#else$element.text#end</p>
+				<#getPTag($element.format) class="fd-text#if($element.format) bk-pre-wrap#end#if($element.subtitle) bk-text--subtitle#end#if($element.ellipsis) bk-scroll-hidden bk-text--ellipsis#end#if($element.italic) bk-font--italic#end#if($element.fontSize == 'sm') bk-font--small#end#if($element.fontSize == 'lg') bk-font--large#end #getPaddingClass($element.padding $element.side)">#if($element.model){{ model.$element.model }}#else$element.text#end</#getPTag($element.format)>
 	#elseif($element.controlId == "line")
 				<div class="#if($element.orientation == "h")bk-border--top#else bk-border--left#end" role="presentation"></div>
 	#elseif($element.controlId == "spacer")
