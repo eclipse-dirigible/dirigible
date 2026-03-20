@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -44,19 +44,29 @@ function generateTranslationPrefix(prefix) {
 }
 
 // Migrates the old form data to the new one. Should be deleted in the future
-function migrateForm(formData) {
-    for (let i = 0; i < formData.length; i++) {
-        if (formData[i].hasOwnProperty('title')) {
-            delete Object.assign(formData[i], { 'label': formData[i]['title'] })['title'];
+function migrateForm(model, fileName) {
+    if (!model.hasOwnProperty('metadata')) {
+        model['metadata'] = {
+            name: getFormName(model.form) || fileName
         }
-        if (formData[i].hasOwnProperty('name')) {
-            delete Object.assign(formData[i], { 'label': formData[i]['name'] })['name'];
+    } else if (!model.metadata.hasOwnProperty('name')) {
+        model.metadata['name'] = getFormName(model.form) || fileName;
+    }
+    for (let i = 0; i < model.form.length; i++) {
+        if (model.form[i].hasOwnProperty('title')) {
+            delete Object.assign(model.form[i], { 'label': model.form[i]['title'] })['title'];
         }
-        if (formData[i].hasOwnProperty('errorState')) {
-            delete Object.assign(formData[i], { 'errorMessage': formData[i]['errorState'] })['errorState'];
+        if (model.form[i].hasOwnProperty('name')) {
+            delete Object.assign(model.form[i], { 'label': model.form[i]['name'] })['name'];
         }
-        if (formData[i].hasOwnProperty('size')) {
-            delete Object.assign(formData[i], { 'headerSize': formData[i]['size'] })['size'];
+        if (model.form[i].hasOwnProperty('errorState')) {
+            delete Object.assign(model.form[i], { 'errorMessage': model.form[i]['errorState'] })['errorState'];
+        }
+        if (model.form[i].hasOwnProperty('size')) {
+            delete Object.assign(model.form[i], { 'headerSize': model.form[i]['size'] })['size'];
+        }
+        if (model.form[i].controlId === 'header' && !model.form[i].hasOwnProperty('level')) {
+            model.form[i]['level'] = 1;
         }
     }
 }
@@ -85,21 +95,15 @@ function migrateReport(report) {
 
 export function generateGeneric(model, parameters, templateSources) {
     let isReport = false;
+    let isForm = false;
     const generatedFiles = []
     const templateParameters = {};
     if (parameters.filePath.endsWith('.form')) {
-        migrateForm(model.form);
-        if (!model.hasOwnProperty('metadata')) {
-            model['metadata'] = {
-                name: getFormName(model.form) || `${parameters['fileName']}`
-            }
-        } else if (!model.metadata.hasOwnProperty('name')) {
-            model.metadata['name'] = getFormName(model.form) || `${parameters['fileName']}`;
-        }
-
+        isForm = true;
+        migrateForm(model, `${parameters['fileName']}`);
     } else if (parameters.filePath.endsWith('.report')) {
-        migrateReport(model);
         isReport = true;
+        migrateReport(model);
     }
     Object.assign(templateParameters, model, parameters);
     templateParameters['tprefix'] = generateTranslationPrefix(parameters.filePath);
@@ -123,7 +127,12 @@ export function generateGeneric(model, parameters, templateSources) {
         } else if (template.action === "translate") {
             let translations = JSON.parse(content);
             if (isReport) translations.t = { ...getReportTranslations(model) };
-            else translations.t = { ...getTranslations(model) };
+            else {
+                if (isForm && model.metadata['successMsg']) {
+                    translations.dialogs.successMsg = model.metadata['successMsg'];
+                }
+                translations.t = { ...getTranslations(model) };
+            }
             generatedFiles.push({
                 content: JSON.stringify({ [cleanTemplateParameters['tprefix']]: translations }, null, 2),
                 path: `translations/en-US/${parameters.filePath.substring(parameters.filePath.lastIndexOf('/') + 1)}.json`

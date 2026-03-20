@@ -9,11 +9,8 @@ angular.module('forms', ['blimpKit', 'platformView', 'platformLocale', 'platform
 })).directive('modelToDate', () => ({
     require: 'ngModel',
     link: (_scope, _element, _attrs, ngModel) => {
-        ngModel.${dollar}parsers.push((value) => {
-            const date = new Date(value);
-            return date.toISOString();
-        });
         ngModel.${dollar}formatters.push((value) => {
+            if (value instanceof Date) return value;
             return new Date(value);
         });
     }
@@ -39,16 +36,16 @@ angular.module('forms', ['blimpKit', 'platformView', 'platformLocale', 'platform
             #else
             params: payload
             #end
-        }).then((response) => {
+        }).then(() => {
             Dialogs.showAlert({
-                title: 'Submited',
-                message: 'Successfully submited the form!',
+                title: LocaleService.t('$projectName:${tprefix}.dialogs.successTitle', 'Submited'),
+                message: LocaleService.t('$projectName:${tprefix}.dialogs.successMsg', 'Form submited successfully!'),
                 type: AlertTypes.Success,
             });
         }, (error) => {
             console.error(error);
             Dialogs.showAlert({
-                title: 'Submit failed',
+                title: LocaleService.t('$projectName:${tprefix}.dialogs.errorTitle', 'Submit failed'),
                 message: JSON.stringify(error),
                 type: AlertTypes.Error,
                 preformatted: true,

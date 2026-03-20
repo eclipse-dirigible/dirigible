@@ -190,7 +190,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
         name: {
             type: 'text',
             label: 'Title',
-            value: undefined,
+            value: '',
             required: false
         },
         url: {
@@ -213,6 +213,12 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     value: 'post',
                 },
             ]
+        },
+        successMsg: {
+            type: 'text',
+            label: 'Success Message',
+            value: '',
+            required: false
         },
         ...JSON.parse(JSON.stringify(paddingProps))
     };
@@ -1102,6 +1108,15 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                             step: 1,
                             required: true
                         },
+                        level: {
+                            type: 'number',
+                            label: 'Level',
+                            value: 1,
+                            max: 6,
+                            min: 1,
+                            step: 1,
+                            required: true
+                        },
                         ...paddingProps
                     }
                 },
@@ -1409,12 +1424,12 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     iconRotate: true,
                     description: 'Vertical box container',
                     template: `<bk-form-item id="{{id}}" class="bk-vbox ${gapClasses} {{getPaddingClass(props.padding.value, props.side.value)}} ${justifyClasses}" data-type="container" ng-click="showContainerProps(id, $event)"></bk-form-item>`,
-                    children: [],
                     props: {
                         ...gapProps,
                         ...justifyProps,
                         ...paddingProps
-                    }
+                    },
+                    children: []
                 },
                 {
                     controlId: 'container-hbox',
@@ -1422,12 +1437,12 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     icon: 'sap-icon--screen-split-two',
                     description: 'Horizontal box container',
                     template: `<bk-form-item id="{{id}}" class="bk-hbox ${gapClasses} {{getPaddingClass(props.padding.value, props.side.value)}} ${justifyClasses}" data-type="container" ng-click="showContainerProps(id, $event)"></bk-form-item>`,
-                    children: [],
                     props: {
                         ...gapProps,
                         ...justifyProps,
                         ...paddingProps
-                    }
+                    },
+                    children: []
                 },
             ]
         }
@@ -1588,7 +1603,9 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
             $(event.item).replaceWith(element);
             if (isContainer) createSublist(element, control.$scope.id);
             requestAnimationFrame(() => {
-                element.click();
+                $scope.$evalAsync(() => {
+                    element.click();
+                });
             });
         } else {
             const control = popFromModel($scope.formModel, event.item.getAttribute('data-id'));
@@ -2134,6 +2151,9 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                 metadata[key] = value.value;
             }
         }
+        if (!metadata['url']) {
+            delete metadata['method'];
+        }
         return metadata;
     };
 
@@ -2162,6 +2182,8 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
             } else if ((formData[i].controlId === 'container-hbox' || formData[i].controlId === 'container-vbox') && !formData[i].hasOwnProperty('justify')) {
                 formData[i]['justify'] = 'start';
                 $scope.fileChanged();
+            } else if (formData[i].controlId === 'header' && !formData[i].hasOwnProperty('level')) {
+                formData[i]['level'] = 1;
             }
         }
         return formData;

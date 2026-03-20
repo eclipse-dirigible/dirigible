@@ -6,5 +6,10 @@
     "default": {
         "viewName": "{{name}} Form"
     },
+    "dialogs": {
+        "successTitle": "Submited",
+        "errorTitle": "Submit failed",
+        "successMsg": "Form submited successfully!"
+    },
     "t": {}
 }

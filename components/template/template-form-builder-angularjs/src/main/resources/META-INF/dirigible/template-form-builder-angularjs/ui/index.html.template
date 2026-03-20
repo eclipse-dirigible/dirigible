@@ -34,12 +34,12 @@ $result##
 	</head>
 
 	<body class="bk-center--horizontal bk-box--items-start" ng-class="{'bk-padding':!_is_view}">
-		<bk-fieldset class="bk-full-width bk-restrict-width--lg #if($metadata.padding)#getPaddingClass($metadata.padding $metadata.side)#else bk-padding#end" ng-class="{'fd-card':!_is_view}" ng-style="!_is_view && { 'min-height': 'auto' }" ng-form="forms.form">
+		<bk-fieldset class="bk-full-width bk-restrict-width #if($metadata.padding)#getPaddingClass($metadata.padding $metadata.side)#else bk-padding#end" ng-class="{'fd-card':!_is_view}" ng-style="!_is_view && { 'min-height': 'auto' }" ng-form="forms.form">
 			<bk-form-group>
 #macro(formWidgets $elements)
 #foreach($element in $elements)
 	#if($element.controlId == "header")
-				<h$element.headerSize.intValue() class="#getPaddingClass($element.padding $element.side)" bk-title header-size="$element.headerSize.intValue()">#if($element.model){{model.$element.model}}#else{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}#end</h$element.headerSize.intValue()>
+				<h$element.level.intValue() class="#getPaddingClass($element.padding $element.side)" bk-title header-size="$element.headerSize.intValue()">#if($element.model){{model.$element.model}}#else{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}#end</h$element.level.intValue()>
 	#elseif($element.controlId == "image")
 		#if($element.link)
 				<a href="$element.link">
@@ -130,7 +130,7 @@ $result##
 	#elseif($element.controlId == "input-time")
 				<bk-form-item horizontal="$element.horizontal">
 					<bk-form-label colon="true" #if($element.required)ng-required="true"#end for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
-					<bk-input id="$element.id" name="$element.id" type="time" state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}" ng-model="model.$element.model"
+					<bk-input id="$element.id" name="$element.id" type="time" state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}" model-to-date ng-model="model.$element.model"
 						#if($element.required)
 						ng-required="true"
 						#end
