@@ -15,14 +15,21 @@
         {
             "controlId": "header",
             "groupId": "fb-display",
-            "title": "Easy Order Form",
-            "size": 1
+            "label": "Easy Order Form",
+            "headerSize": 2,
+            "level": 1
         },
         {
-            "controlId": "header",
+            "controlId": "paragraph",
             "groupId": "fb-display",
-            "title": "Complete the form below to place your order hassle-free",
-            "size": 4
+            "format": false,
+            "subtitle": true,
+            "ellipsis": false,
+            "italic": false,
+            "fontSize": "lg",
+            "text": "Complete the form below to place your order hassle-free",
+            "padding": "sm",
+            "side": "top-bottom"
         },
         {
             "controlId": "input-textfield",
@@ -31,6 +38,7 @@
             "label": "Customer Name",
             "horizontal": true,
             "isCompact": false,
+            "readonly": false,
             "placeholder": "The name of the customer",
             "type": "text",
             "model": "customerName",
@@ -38,7 +46,7 @@
             "minLength": 1,
             "maxLength": 50,
             "validationRegex": "^[a-zA-Z]+(?:-[a-zA-Z]+)?(?: [a-zA-Z]+(?:-[a-zA-Z]+)?)*$",
-            "errorState": "Incorrect input"
+            "errorMessage": "Incorrect input"
         },
         {
             "controlId": "input-textfield",
@@ -47,14 +55,13 @@
             "label": "Customer Email",
             "horizontal": true,
             "isCompact": false,
-            "placeholder": "",
+            "readonly": false,
             "type": "email",
             "model": "customerEmail",
             "required": true,
             "minLength": 0,
             "maxLength": -1,
-            "validationRegex": "",
-            "errorState": "Incorrect input"
+            "errorMessage": "Incorrect input"
         },
         {
             "controlId": "input-textarea",
@@ -63,14 +70,12 @@
             "label": "Shipping Address",
             "horizontal": false,
             "isCompact": false,
-            "placeholder": "",
-            "type": "text",
+            "readonly": false,
             "model": "shippingAddress",
             "required": true,
             "minLength": 0,
             "maxLength": -1,
-            "validationRegex": "",
-            "errorState": "Incorrect input"
+            "errorMessage": "Incorrect input"
         },
         {
             "controlId": "container-hbox",
@@ -83,6 +88,7 @@
                     "label": "Order Date",
                     "horizontal": false,
                     "isCompact": false,
+                    "readonly": false,
                     "type": "date",
                     "model": "orderDate",
                     "required": true
@@ -94,6 +100,7 @@
                     "label": "Product",
                     "horizontal": false,
                     "isCompact": false,
+                    "readonly": false,
                     "staticData": false,
                     "model": "product",
                     "options": "productOptions",
@@ -108,14 +115,15 @@
                     "label": "Quantity",
                     "horizontal": false,
                     "isCompact": false,
-                    "placeholder": "",
+                    "readonly": false,
                     "model": "quantity",
                     "required": true,
                     "minNum": 1,
                     "maxNum": 99,
                     "step": 1
                 }
-            ]
+            ],
+            "justify": "stretch"
         },
         {
             "controlId": "container-hbox",
@@ -125,7 +133,7 @@
                     "controlId": "input-radio",
                     "groupId": "fb-controls",
                     "id": "payment-method",
-                    "name": "Payment Method",
+                    "label": "Radio group",
                     "staticData": true,
                     "model": "paymentMethod",
                     "staticOptions": [
@@ -142,49 +150,70 @@
                             "value": "payment-method-bt"
                         }
                     ],
-                    "required": true,
-                    "isCompact": false
-                },
-                {
-                    "controlId": "input-select",
-                    "groupId": "fb-controls",
-                    "id": "shipping-method",
-                    "label": "Shipping Method",
-                    "horizontal": true,
                     "isCompact": false,
-                    "staticData": false,
-                    "model": "shippingMethod",
-                    "options": "shippingOptions",
-                    "optionLabel": "name",
-                    "optionValue": "id",
+                    "readonly": false,
                     "required": true
                 },
                 {
-                    "controlId": "input-checkbox",
-                    "groupId": "fb-controls",
-                    "id": "priority-processing",
-                    "label": "Priority Processing (Additional charges may apply) ",
-                    "model": "priorityProcessing",
-                    "isCompact": false
+                    "controlId": "container-vbox",
+                    "groupId": "fb-containers",
+                    "children": [
+                        {
+                            "controlId": "input-select",
+                            "groupId": "fb-controls",
+                            "id": "shipping-method",
+                            "label": "Shipping Method",
+                            "horizontal": false,
+                            "isCompact": false,
+                            "readonly": false,
+                            "staticData": false,
+                            "model": "shippingMethod",
+                            "options": "shippingOptions",
+                            "optionLabel": "name",
+                            "optionValue": "id",
+                            "required": true
+                        },
+                        {
+                            "controlId": "input-checkbox",
+                            "groupId": "fb-controls",
+                            "id": "priority-processing",
+                            "label": "Priority Processing (Additional charges may apply) ",
+                            "model": "priorityProcessing",
+                            "isCompact": false,
+                            "readonly": false
+                        }
+                    ],
+                    "justify": "end"
                 }
-            ]
+            ],
+            "justify": "stretch"
         },
         {
-            "controlId": "button",
-            "groupId": "fb-controls",
-            "label": "Button",
-            "type": "emphasized",
-            "sizeToText": true,
-            "isSubmit": true,
-            "isCompact": false,
-            "callback": "submitOrder()"
+            "controlId": "container-hbox",
+            "groupId": "fb-containers",
+            "children": [
+                {
+                    "controlId": "button",
+                    "groupId": "fb-controls",
+                    "label": "Submit",
+                    "type": "emphasized",
+                    "isSubmit": true,
+                    "isCompact": false,
+                    "callback": "submitOrder()"
+                }
+            ],
+            "justify": "end"
         },
         {
             "controlId": "paragraph",
             "groupId": "fb-display",
             "format": true,
+            "subtitle": false,
+            "ellipsis": true,
+            "italic": false,
             "text": "Note: By placing this order, you agree to our Terms and Conditions:\n\n1. By placing an order, you agree to abide by the terms and conditions outlined herein.\n2. All orders are subject to availability and confirmation of the order price.\n3. We reserve the right to refuse any order placed with us.\n4. The customer must provide accurate and complete information for processing the order.\n5. Prices for our products are subject to change without notice.\n6. We are not liable for any delay or failure to deliver due to unforeseen circumstances beyond our control.\n7. All sales are final. No refunds or exchanges unless explicitly stated.\n8. Payment must be made in full at the time of placing the order.\n9. We reserve the right to cancel or suspend accounts at our discretion.\n10. By providing your email address, you consent to receive communication related to your order and promotional offers.",
-            "model": ""
+            "padding": "sm",
+            "side": "top"
         }
     ]
 }

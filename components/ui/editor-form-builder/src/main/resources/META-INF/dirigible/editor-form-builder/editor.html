@@ -1,6 +1,6 @@
 <!--
 
-    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
 
     All rights reserved. This program and the accompanying materials
     are made available under the terms of the Eclipse Public License v2.0
@@ -38,7 +38,7 @@
                 <bk-icon-tab-bar-tab label="Scripts" tab-id="scripts" ng-click="switchTab('scripts')"></bk-icon-tab-bar-tab>
                 <bk-icon-tab-bar-buttons align-right="true">
                     <bk-button state="transparent" glyph="sap-icon--save" label="Save" aria-label="save" ng-click="shortcuts()" ng-disabled="!(isFormValid() && changed)"></bk-button>
-                    <bk-button state="transparent" glyph="sap-icon-TNT--operations" aria-label="Regenerate" title="Regenerate" label="Regenerate" ng-click="regenerate()" ng-disabled="!canRegenerate"></bk-button>
+                    <bk-button state="transparent" glyph="sap-icon-TNT--operations" aria-label="Regenerate" title="Regenerate" label="Regenerate" ng-click="regenerate()" ng-disabled="changed || !canRegenerate"></bk-button>
                 </bk-icon-tab-bar-buttons>
             </bk-icon-tab-bar-tablist>
             <bk-icon-tab-bar-panel class="bk-hbox bk-fill-parent fb-panel" tab-id="designer" ng-show="selectedTab === 'designer'">
@@ -64,12 +64,12 @@
                         <bk-toolbar-spacer></bk-toolbar-spacer>
                         <bk-button state="transparent" toggled="state.preview" glyph="sap-icon--show" title="Toggle preview" label="Preview" aria-label="Toggle preview" ng-click="togglePreview()"></bk-button>
                     </bk-toolbar>
-                    <bk-scrollbar style="flex:1">
+                    <bk-scrollbar style="flex:1" ng-click="clearSelection($event)">
                         <div id="formContainer" class="bk-checkered-bg bk-vbox fb-main-container bk-restrict-width" ng-attr-disabled="{{state.canSave === false || undefined}}" data-preview="{{state.preview}}" data-type="container-main"
-                            ng-on-contextmenu="showContextMenu($event)"></div>
+                            ng-on-contextmenu="showContextMenu($event)" ng-click="showFormProps($event)" ng-class="getPaddingClass(formProps.padding.value, formProps.side.value)"></div>
                     </bk-scrollbar>
                 </div>
-                <bk-scrollbar class="bk-border--left" ng-show="selectedCtrlId !== undefined || selectedContainerId !== undefined">
+                <bk-scrollbar class="bk-border--left" ng-show="formSelected || selectedCtrl !== undefined || selectedContainer !== undefined">
                     <bk-panel expanded="true">
                         <bk-panel-header>
                             <h4 bk-panel-title>
@@ -77,23 +77,23 @@
                             </h4>
                         </bk-panel-header>
                         <bk-panel-content aria-label="Control properties" class="bk-no-border--bottom">
-                            <bk-fieldset ng-if="selectedCtrlId !== undefined" ng-form="forms.formProperties">
+                            <bk-fieldset ng-if="formSelected || selectedCtrl !== undefined || selectedContainer !== undefined" ng-form="forms.formProperties">
                                 <bk-form-group>
-                                    <bk-form-item ng-repeat-start="(key, item) in selectedCtrlProps track by $index" ng-if="item.type === 'text' && isPropEnabled(item.enabledOn)">
+                                    <bk-form-item ng-repeat-start="(key, item) in availableProps track by $index" ng-if="item.type === 'text' && isPropEnabled(item.enabledOn)">
                                         <bk-form-label colon="true" required="item.required" for="{{ 'p' + key }}">{{ item.label }}</bk-form-label>
-                                        <bk-form-input-message state="{{ item.error ? 'error' : '' }}" message="'Incorrect input'">
-                                            <bk-input id="{{ 'p' + key }}" type="text" placeholder="{{ item.placeholder}}" state="{{ item.error ? 'error' : '' }}" name="{{ 'p' + key }}" ng-required="item.required" ng-model="item.value"
-                                                ng-trim="false" ng-minlength="item.minlength || 0" ng-maxlength="item.maxlength || -1" input-rules="item.inputRules || {}"
+                                        <bk-form-input-message state="{{ !forms.formProperties['p' + key].$valid ? 'error' : '' }}" message="'Incorrect input'">
+                                            <bk-input id="{{ 'p' + key }}" type="text" placeholder="{{ item.placeholder}}" state="{{ !forms.formProperties['p' + key].$valid ? 'error' : '' }}" name="{{ 'p' + key }}"
+                                                ng-required="item.required" ng-model="item.value" ng-trim="false" ng-minlength="item.minlength || 0" ng-maxlength="item.maxlength || -1" input-rules="item.inputRules || {}"
                                                 ng-change="item.error = !forms.formProperties['p' + key].$valid; fileChanged()"></bk-input>
                                         </bk-form-input-message>
                                     </bk-form-item>
 
                                     <bk-form-item ng-if="item.type === 'textarea' && isPropEnabled(item.enabledOn)">
                                         <bk-form-label colon="true" required="item.required" for="{{ 'p' + key }}">{{ item.label }}</bk-form-label>
-                                        <bk-form-input-message state="{{ item.error ? 'error' : '' }}" message="'Incorrect input'">
-                                            <bk-textarea id="{{ item.id }}" style="min-height:13rem" placeholder="{{ item.placeholder}}" state="{{ item.error ? 'error' : '' }}" name="{{ 'p' + key }}" ng-required="item.required"
-                                                ng-model="item.value" ng-trim="false" ng-minlength="item.minlength || 0" ng-attr-rows="{{item.rows || '1'}}" ng-maxlength="item.maxlength || -1" input-rules="item.inputRules || {}"
-                                                ng-change="item.error = !forms.formProperties['p' + key].$valid; fileChanged()"></bk-textarea>
+                                        <bk-form-input-message state="{{ !forms.formProperties['p' + key].$valid ? 'error' : '' }}" message="'Incorrect input'">
+                                            <bk-textarea id="{{ item.id }}" style="min-height:13rem" placeholder="{{ item.placeholder}}" state="{{ !forms.formProperties['p' + key].$valid ? 'error' : '' }}" name="{{ 'p' + key }}"
+                                                ng-required="item.required" ng-model="item.value" ng-trim="false" ng-minlength="item.minlength || 0" ng-attr-rows="{{item.rows || '1'}}" ng-maxlength="item.maxlength || -1"
+                                                input-rules="item.inputRules || {}" ng-change="item.error = !forms.formProperties['p' + key].$valid; fileChanged()"></bk-textarea>
                                         </bk-form-input-message>
                                     </bk-form-item>
 
@@ -104,19 +104,20 @@
 
                                     <bk-form-item ng-if="item.type === 'number' && isPropEnabled(item.enabledOn)">
                                         <bk-form-label colon="true" required="item.required" for="{{ 'p' + key }}">{{ item.label }}</bk-form-label>
-                                        <bk-step-input input-id="{{ 'p' + key }}" ng-model="item.value" state="{{ item.error ? 'error' : '' }}" name="{{ 'p' + key }}" ng-required="item.required" ng-attr-min="item.min" ng-attr-max="item.max"
-                                            ng-attr-placeholder="{{ item.placeholder}}" ng-change="item.error = !forms.formProperties['p' + key].$valid; fileChanged()" ng-attr-step="item.step">
+                                        <bk-step-input input-id="{{ 'p' + key }}" ng-model="item.value" state="{{ !forms.formProperties['p' + key].$valid ? 'error' : '' }}" name="{{ 'p' + key }}" ng-required="item.required"
+                                            ng-attr-min="item.min" ng-attr-max="item.max" ng-attr-placeholder="{{ item.placeholder}}" ng-change="item.error = !forms.formProperties['p' + key].$valid; fileChanged()" ng-attr-step="item.step">
                                         </bk-step-input>
                                     </bk-form-item>
 
                                     <bk-form-item ng-if="item.type === 'checkbox' && isPropEnabled(item.enabledOn)">
-                                        <bk-checkbox id="{{ 'p' + key }}" ng-model="item.value" state="{'error' : item.error }" ng-change="fileChanged()"></bk-checkbox>
+                                        <bk-checkbox id="{{ 'p' + key }}" ng-model="item.value" ng-change="fileChanged()"></bk-checkbox>
                                         <bk-checkbox-label for="{{ 'p' + key }}">{{ item.label }}</bk-checkbox-label>
                                     </bk-form-item>
 
                                     <bk-form-item ng-if="item.type === 'dropdown' && isPropEnabled(item.enabledOn)">
                                         <bk-form-label colon="true" required="item.required" for="{{ 'p' + key }}">{{ item.label }}</bk-form-label>
-                                        <bk-select placeholder="{{ item.placeholder }}" label-id="{{ 'p' + key }}" ng-required="item.required" ng-model="item.value" ng-change="fileChanged()" dropdown-fixed="true">
+                                        <bk-select name="{{ 'p' + key }}" placeholder="{{ item.placeholder }}" label-id="{{ 'p' + key }}" ng-required="item.required" state="{{ !forms.formProperties['p' + key].$valid ? 'error' : '' }}"
+                                            ng-model="item.value" ng-change="fileChanged()" dropdown-fixed="true">
                                             <bk-option text="{{ menuItem.label }}" value="menuItem.value" ng-repeat="menuItem in item.items"></bk-option>
                                         </bk-select>
                                     </bk-form-item>
@@ -154,13 +155,17 @@
                                 </bk-form-group>
                                 <bk-form-group class="fd-margin-top--sm">
                                     <bk-form-item>
-                                        <bk-button glyph="sap-icon--delete" label="Delete control" title="Delete control" state="negative" aria-label="Delete control" ng-click="deleteControl(selectedCtrlId)"></bk-button>
+                                        <bk-button ng-if="selectedContainer !== undefined" glyph="sap-icon--delete" label="Delete container" title="Delete container" state="negative" aria-label="Delete container"
+                                            ng-click="deleteControl(selectedContainer.getAttribute('id'), true)">
+                                        </bk-button>
+                                        <bk-button ng-if="selectedCtrl !== undefined" glyph="sap-icon--delete" label="Delete control" title="Delete control" state="negative" aria-label="Delete control"
+                                            ng-click="deleteControl(selectedCtrl.getAttribute('data-id'))">
+                                        </bk-button>
+                                        <bk-button ng-if="formSelected" glyph="sap-icon--reset" label="Clear form" title="Clear form" state="negative" aria-label="Clear form" ng-click="clearForm()">
+                                        </bk-button>
                                     </bk-form-item>
                                 </bk-form-group>
                             </bk-fieldset>
-                            <bk-button ng-show="selectedContainerId" glyph="sap-icon--delete" label="Delete container" title="Delete container" state="negative" aria-label="Delete container"
-                                ng-click="deleteControl(selectedContainerId, true)">
-                            </bk-button>
                         </bk-panel-content>
                     </bk-panel>
                 </bk-scrollbar>
