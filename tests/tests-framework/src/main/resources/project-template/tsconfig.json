@@ -22,6 +22,11 @@
     },
     "types": [
       "../modules/types"
-    ]
+    ],
+  	"strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "noImplicitThis": false,
+    "skipLibCheck": true
   }
 }

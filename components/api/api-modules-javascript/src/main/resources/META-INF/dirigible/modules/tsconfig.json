@@ -21,7 +21,12 @@
       "sdk/*": [
         "./src/*"
       ]
-    }
+    },
+	"strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "noImplicitThis": false,
+    "skipLibCheck": true
   },
   "include": [
     "src/**/*"
