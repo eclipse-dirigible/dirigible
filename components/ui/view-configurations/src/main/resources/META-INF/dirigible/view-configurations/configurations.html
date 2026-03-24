@@ -86,7 +86,8 @@
                     }
                     to = $timeout(() => {
                         for (let i = 0; i < $scope.configurations.length; i++) {
-                            if ($scope.configurations[i].name.toLowerCase().includes($scope.searchField.text.toLowerCase())) {
+                            const allValues = Object.values($scope.configurations[i]).join('').toLowerCase();
+                            if (allValues.includes($scope.searchField.text.toLowerCase())) {
                                 $scope.configurations[i].hidden = false;
                             } else {
                                 $scope.configurations[i].hidden = true;
