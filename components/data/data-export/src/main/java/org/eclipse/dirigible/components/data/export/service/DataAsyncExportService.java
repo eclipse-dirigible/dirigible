@@ -36,7 +36,7 @@ public class DataAsyncExportService {
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(DataAsyncExportService.class);
 
-    static final String EXPORTS_FOLDER_NAME = "__EXPORTS";
+    public static final String EXPORTS_FOLDER_NAME = "__EXPORTS";
 
     /** The database export service. */
     private final DatabaseExportService databaseExportService;
