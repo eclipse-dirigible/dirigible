@@ -1,8 +1,9 @@
 {
   "compilerOptions": {
     "module": "ESNext",
-    "target": "ES6",
-    "moduleResolution": "Node",
+	"target": "ES2022",
+	"rootDir": "./src",
+    "moduleResolution": "bundler",
     "baseUrl": "../",
     "lib": [
       "ESNext",
