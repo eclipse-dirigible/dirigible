@@ -9,6 +9,8 @@
     "dialogs": {
         "successTitle": "Submited",
         "errorTitle": "Submit failed",
+        "feedErrorTitle": "Feed request failed",
+        "feedError": "Could not retrive data from feed '{{feed}}'. See console for more information.",
         "successMsg": "Form submited successfully!"
     },
     "t": {}

@@ -126,9 +126,17 @@ $code
         $scope.$feed.name = response.data;
         #end
     #end
-    }).catch(e => {
-        console.error(e);
+    }, error => {
+        console.error('$feed.name', error);
+        const errorData = JSON.stringify(error);
+        LocaleService.onInit(() => {
+            Dialogs.showAlert({
+                title: LocaleService.t('$projectName:${tprefix}.dialogs.feedErrorTitle', 'Feed request failed'),
+                message: errorData && errorData !== '{}' ? errorData : LocaleService.t('$projectName:${tprefix}.dialogs.feedError', { feed: '$feed.name' }, "Could not retrive data from the feed '$feed.name'. See console for more information."),
+                type: AlertTypes.Error,
+                preformatted: false,
+            });
+        });
     });
-
 #end
 });
