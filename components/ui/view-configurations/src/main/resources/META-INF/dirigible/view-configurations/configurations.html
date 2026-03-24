@@ -23,7 +23,7 @@
         <meta name="platform-links" category="ng-view">
     </head>
 
-    <body class="bk-vbox" shortcut="'ctrl+f'" shortcut-action="toggleSearch">
+    <body class="bk-vbox">
         <div bk-scrollbar class="bk-full-height">
             <table bk-table display-mode="compact" outer-borders="none">
                 <thead bk-table-header sticky="true" interactive="false">
@@ -48,19 +48,15 @@
                 </tbody>
             </table>
         </div>
-        <bk-bar bar-design="footer" ng-if="searchVisible">
+        <bk-bar bar-design="footer">
             <bk-bar-middle>
                 <bk-bar-element full-width="true" style="max-width: 480px">
-                    <bk-input type="search" placeholder="Search" ng-keyup="search($event)" bk-focus="true" ng-model="searchField.text"></bk-input>
-                </bk-bar-element>
-                <bk-bar-element>
-                    <bk-button glyph="sap-icon--decline" aria-label="close search" state="transparent" ng-click="toggleSearch()"></bk-button>
+                    <bk-input type="search" placeholder="Search" ng-keyup="search($event)" ng-model="searchField.text"></bk-input>
                 </bk-bar-element>
             </bk-bar-middle>
         </bk-bar>
         <script type="text/javascript">
-            angular.module('configurations', ['platformView', 'platformShortcuts', 'blimpKit']).controller('ConfigurationsController', ($timeout, $scope, $http) => {
-                $scope.searchVisible = false;
+            angular.module('configurations', ['platformView', 'blimpKit']).controller('ConfigurationsController', ($timeout, $scope, $http) => {
                 $scope.searchField = { text: '' };
                 $scope.configurations = [];
                 $scope.showAll = () => {
@@ -68,20 +64,12 @@
                         $scope.configurations[i].hidden = false;
                     }
                 };
-                $scope.toggleSearch = (_, event) => {
-                    if (event) event.preventDefault();
-                    $scope.$evalAsync(() => {
-                        $scope.searchField.text = '';
-                        $scope.searchVisible = !$scope.searchVisible;
-                        $scope.showAll();
-                    });
-                };
 
                 let to = 0;
                 $scope.search = (event) => {
                     if (to) $timeout.cancel(to);
                     if (event.originalEvent.key === 'Escape') {
-                        $scope.toggleSearch();
+                        $scope.showAll();
                         return;
                     }
                     to = $timeout(() => {
