@@ -174,6 +174,7 @@
                 <bk-toolbar has-title="false">
                     <bk-toolbar-spacer></bk-toolbar-spacer>
                     <bk-button glyph="sap-icon--add" title="Add feed to list" state="transparent" label="Add" aria-label="Add feed to list" ng-click="addFeed()"></bk-button>
+                    <bk-button glyph="sap-icon--question-mark" title="Feed help" state="transparent" aria-label="Feed help" ng-click="feedHelp()"></bk-button>
                 </bk-toolbar>
                 <bk-scrollbar class="bk-fill-parent">
                     <table bk-table display-mode="compact" outer-borders="bottom">
@@ -181,6 +182,7 @@
                             <tr bk-table-row>
                                 <th bk-table-header-cell>Name</th>
                                 <th bk-table-header-cell>URL</th>
+                                <th bk-table-header-cell>Function</th>
                                 <th bk-table-header-cell></th>
                             </tr>
                         </thead>
@@ -191,6 +193,7 @@
                             <tr bk-table-row hoverable="false" ng-repeat="feed in formData.feeds track by $index">
                                 <td bk-table-cell>{{feed.name}}</td>
                                 <td bk-table-cell>{{feed.url}}</td>
+                                <td bk-table-cell>{{feed.func}}</td>
                                 <td bk-table-cell fit-content="true">
                                     <bk-button glyph="sap-icon--edit" title="Edit feed" state="transparent" aria-label="Edit feed" ng-click="editFeed(feed)"></bk-button>
                                     <bk-button glyph="sap-icon--delete" title="Delete feed" state="transparent" aria-label="Delete feed" ng-click="deleteFeed($index)"></bk-button>

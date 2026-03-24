@@ -1871,6 +1871,14 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     minlength: 1,
                     required: true
                 },
+                'afFunc': {
+                    label: 'Function Name',
+                    controlType: 'input',
+                    placeholder: '',
+                    type: 'text',
+                    minlength: 1,
+                    required: false
+                },
             },
             submitLabel: 'Add',
             cancelLabel: 'Cancel'
@@ -1879,7 +1887,8 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                 $scope.$evalAsync(() => {
                     $scope.formData.feeds.push({
                         name: form['afName'],
-                        url: form['afUrl']
+                        url: form['afUrl'],
+                        func: form['afFunc']
                     });
                     $scope.fileChanged();
                 });
@@ -1918,6 +1927,15 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     value: feed.url,
                     required: true
                 },
+                'afFunc': {
+                    label: 'Function Name',
+                    controlType: 'input',
+                    placeholder: '',
+                    type: 'text',
+                    minlength: 1,
+                    value: feed.func,
+                    required: false
+                },
             },
             submitLabel: 'Save',
             cancelLabel: 'Cancel'
@@ -1926,6 +1944,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                 $scope.$evalAsync(() => {
                     feed.name = form['afName'];
                     feed.url = form['afUrl'];
+                    feed.func = form['afFunc'];
                     $scope.fileChanged();
                 });
             }
@@ -2057,6 +2076,12 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
     $scope.switchTab = (tabId) => {
         removeSelection();
         $scope.selectedTab = tabId;
+    };
+
+    $scope.feedHelp = () => {
+        dialogHub.showWindow({
+            id: 'formBuilderHelp'
+        });
     };
 
     const createDomFromJson = (model, containerId) => {

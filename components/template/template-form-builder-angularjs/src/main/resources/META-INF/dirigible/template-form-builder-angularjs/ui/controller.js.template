@@ -56,14 +56,6 @@ angular.module('forms', ['blimpKit', 'platformView', 'platformLocale', 'platform
     };
 #end
 
-#foreach($feed in $feeds)
-    ${dollar}http.get('$feed.url').then(response => {
-        $scope.$feed.name = response.data;
-    }).catch(e => {
-        console.error(e);
-    });
-
-#end
     $scope.model = {};
 #macro(formWidgets $elements)
 #foreach($element in $elements)
@@ -117,6 +109,26 @@ angular.module('forms', ['blimpKit', 'platformView', 'platformLocale', 'platform
 #if($code)
 
 $code
+
+#end
+#foreach($feed in $feeds)
+    ${dollar}http.get(`$feed.url`).then(response => {
+    #if($feed.func)
+        #if($feed.name == 'model')
+        Object.assign($scope.model, ${feed.func}(response.data));
+        #else
+        $scope.$feed.name = ${feed.func}(response.data);
+        #end
+    #else
+        #if($feed.name == 'model')
+        Object.assign($scope.model, response.data);
+        #else
+        $scope.$feed.name = response.data;
+        #end
+    #end
+    }).catch(e => {
+        console.error(e);
+    });
 
 #end
 });
