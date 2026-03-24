@@ -1,6 +1,6 @@
 <!--
 
-    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
 
     All rights reserved. This program and the accompanying materials
     are made available under the terms of the Eclipse Public License v2.0
@@ -23,31 +23,64 @@
         <meta name="platform-links" category="ng-view">
     </head>
 
-    <body bk-scrollbar>
-        <table bk-table display-mode="compact" outer-borders="bottom">
-            <thead bk-table-header sticky="true" interactive="false">
-                <tr bk-table-row>
-                    <th bk-table-header-cell>#</th>
-                    <th bk-table-header-cell>Type</th>
-                    <th bk-table-header-cell>Location</th>
-                    <th bk-table-header-cell>Name</th>
-                    <th bk-table-header-cell>Phase</th>
-                    <th bk-table-header-cell>Status</th>
-                </tr>
-            </thead>
-            <tbody bk-table-body>
-                <tr bk-table-row ng-repeat="artefact in artefacts track by $index" hoverable="true" activable="false">
-                    <td bk-table-cell fit-content="true">{{::$index + 1}}</td>
-                    <td bk-table-cell>{{::artefact.type}}</td>
-                    <td bk-table-cell>{{::artefact.location}}</td>
-                    <td bk-table-cell>{{::artefact.name}}</td>
-                    <td bk-table-cell>{{::artefact.phase}}</td>
-                    <td bk-table-cell>{{::artefact.status}}</td>
-                </tr>
-            </tbody>
-        </table>
+    <body class="bk-vbox">
+        <bk-bar compact="true">
+            <bk-bar-middle>
+                <bk-bar-element full-width="true" style="max-width: 480px">
+                    <bk-input type="search" placeholder="Search" ng-keyup="search($event)" ng-model="searchField.text"></bk-input>
+                </bk-bar-element>
+            </bk-bar-middle>
+        </bk-bar>
+        <div bk-scrollbar class="bk-full-height">
+            <table bk-table display-mode="compact" outer-borders="none">
+                <thead bk-table-header sticky="true" interactive="false">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>#</th>
+                        <th bk-table-header-cell>Type</th>
+                        <th bk-table-header-cell>Location</th>
+                        <th bk-table-header-cell>Name</th>
+                        <th bk-table-header-cell>Phase</th>
+                        <th bk-table-header-cell>Status</th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat="artefact in artefacts track by $index" hoverable="true" activable="false" ng-hide="artefact.hidden">
+                        <td bk-table-cell fit-content="true">{{::$index + 1}}</td>
+                        <td bk-table-cell>{{::artefact.type}}</td>
+                        <td bk-table-cell>{{::artefact.location}}</td>
+                        <td bk-table-cell>{{::artefact.name}}</td>
+                        <td bk-table-cell>{{::artefact.phase}}</td>
+                        <td bk-table-cell>{{::artefact.status}}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
         <script type="text/javascript">
-            angular.module('artefacts', ['platformView', 'blimpKit']).controller('ArtefactsController', ($scope, $http) => {
+            angular.module('artefacts', ['platformView', 'blimpKit']).controller('ArtefactsController', ($scope, $http, $timeout) => {
+                $scope.searchField = { text: '' };
+                $scope.showAll = () => {
+                    for (let i = 0; i < $scope.artefacts.length; i++) {
+                        $scope.artefacts[i].hidden = false;
+                    }
+                };
+                let to = 0;
+                $scope.search = (event) => {
+                    if (to) $timeout.cancel(to);
+                    if (event.originalEvent.key === 'Escape') {
+                        $scope.showAll();
+                        return;
+                    }
+                    to = $timeout(() => {
+                        for (let i = 0; i < $scope.artefacts.length; i++) {
+                            const searchValues = `${$scope.artefacts[i].location}${$scope.artefacts[i].name}`.toLowerCase();
+                            if (searchValues.includes($scope.searchField.text.toLowerCase())) {
+                                $scope.artefacts[i].hidden = false;
+                            } else {
+                                $scope.artefacts[i].hidden = true;
+                            }
+                        }
+                    }, 200);
+                };
                 $http.get('/services/js/perspective-operations/api/artefacts/artefacts.mjs').then((response) => {
                     $scope.artefacts = response.data;
                 }, (error) => {

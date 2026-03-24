@@ -24,6 +24,13 @@
     </head>
 
     <body class="bk-vbox">
+        <bk-bar compact="true">
+            <bk-bar-middle>
+                <bk-bar-element full-width="true" style="max-width: 480px">
+                    <bk-input type="search" placeholder="Search" ng-keyup="search($event)" ng-model="searchField.text"></bk-input>
+                </bk-bar-element>
+            </bk-bar-middle>
+        </bk-bar>
         <div bk-scrollbar class="bk-full-height">
             <table bk-table display-mode="compact" outer-borders="none">
                 <thead bk-table-header sticky="true" interactive="false">
@@ -48,13 +55,6 @@
                 </tbody>
             </table>
         </div>
-        <bk-bar bar-design="footer">
-            <bk-bar-middle>
-                <bk-bar-element full-width="true" style="max-width: 480px">
-                    <bk-input type="search" placeholder="Search" ng-keyup="search($event)" ng-model="searchField.text"></bk-input>
-                </bk-bar-element>
-            </bk-bar-middle>
-        </bk-bar>
         <script type="text/javascript">
             angular.module('configurations', ['platformView', 'blimpKit']).controller('ConfigurationsController', ($timeout, $scope, $http) => {
                 $scope.searchField = { text: '' };
@@ -81,7 +81,7 @@
                                 $scope.configurations[i].hidden = true;
                             }
                         }
-                    }, 250);
+                    }, 200);
                 };
 
                 function checkEnv(name, value) {
