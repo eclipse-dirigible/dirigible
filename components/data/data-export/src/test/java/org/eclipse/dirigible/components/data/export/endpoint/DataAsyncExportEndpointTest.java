@@ -16,12 +16,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.sql.Timestamp;
-import java.time.Instant;
 import java.util.List;
 
 import org.eclipse.dirigible.components.data.export.domain.Export;
-import org.eclipse.dirigible.components.data.export.domain.ExportStatus;
+import org.eclipse.dirigible.components.data.export.service.DataAsyncExportService;
 import org.eclipse.dirigible.components.data.export.service.ExportService;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
 import org.eclipse.dirigible.components.data.sources.repository.DataSourceRepository;
@@ -108,7 +106,7 @@ public class DataAsyncExportEndpointTest {
         List<Export> exports = exportService.findAll();
         assertNotNull(exports);
         assertEquals(1, exports.size());
-        CmisFolder exportsFolder = cmsService.getChildFolderByName(cmsService.getRootFolder(), DataAsyncExportEndpoint.EXPORTS_FOLDER_NAME);
+        CmisFolder exportsFolder = cmsService.getChildFolderByName(cmsService.getRootFolder(), DataAsyncExportService.EXPORTS_FOLDER_NAME);
         CmisDocument document = cmsService.getChildDocumentByName(exportsFolder, exports.get(0)
                                                                                         .getName());
         // assertNotNull(document); fails on GitHub?
