@@ -169,7 +169,7 @@ export class Query {
 		// Serialize the array of named parameters for the Java facade
 		const paramsJson = parameters ? JSON.stringify(parameters) : undefined;
 			
-	    const resultset = DatabaseFacade.exportToCsv(
+	    DatabaseFacade.exportToCsv(
 	        sql,
 			paramsJson,
 	        datasourceName,
