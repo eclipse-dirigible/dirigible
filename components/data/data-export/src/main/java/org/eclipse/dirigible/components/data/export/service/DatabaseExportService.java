@@ -11,10 +11,12 @@ package org.eclipse.dirigible.components.data.export.service;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.PipedOutputStream;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -125,6 +127,14 @@ public class DatabaseExportService {
             }
 
             databaseExecutionService.executeStatement(dataSource, statement, true, false, true, false, output);
+        }
+
+    }
+
+    public void exportStatement(String datasource, String statement, Optional<JsonElement> parameters, PipedOutputStream output) {
+        DirigibleDataSource dataSource = datasourceManager.getDataSource(datasource);
+        if (dataSource != null) {
+            databaseExecutionService.executeStatement(dataSource, statement, parameters, true, false, true, false, output);
         }
 
     }
@@ -246,4 +256,5 @@ public class DatabaseExportService {
 
         return integerPrimaryKey;
     }
+
 }

@@ -11,11 +11,13 @@ package org.eclipse.dirigible.components.data.management.service;
 
 
 import java.io.OutputStream;
+import java.io.PipedOutputStream;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.stream.Collectors;
@@ -25,6 +27,7 @@ import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.sources.service.DataSourceService;
+import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.components.database.helpers.DatabaseErrorHelper;
 import org.eclipse.dirigible.components.database.helpers.DatabaseQueryHelper;
 import org.eclipse.dirigible.components.database.helpers.DatabaseResultSetHelper;
@@ -33,6 +36,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import com.google.gson.JsonElement;
 
 /**
  * The Class DataSourceMetadataService.
@@ -221,6 +226,65 @@ public class DatabaseExecutionService {
         }
     }
 
+    public void executeStatement(DirigibleDataSource dataSource, String sql, Optional<JsonElement> parameters, boolean isQuery,
+            boolean isJson, boolean isCsv, boolean limited, OutputStream output) {
+        if ((sql == null) || (sql.length() == 0)) {
+            return;
+        }
+
+        List<String> errors = new ArrayList<String>();
+
+        StringTokenizer tokenizer = new StringTokenizer(sql, getDelimiter(sql));
+        while (tokenizer.hasMoreTokens()) {
+            String line = tokenizer.nextToken();
+            if ("".equals(line.trim())) {
+                continue;
+            }
+
+            try (Connection connection = dataSource.getConnection()) {
+                DatabaseQueryHelper.executeSingleStatement(connection, line, isQuery, parameters, new RequestExecutionCallback() {
+                    @Override
+                    public void updateDone(int recordsCount) {}
+
+                    @Override
+                    public void queryDone(ResultSet rs) {
+                        try {
+                            if (isJson) {
+                                DatabaseResultSetHelper.toJson(rs, limited, true, output);
+                            } else if (isCsv) {
+                                DatabaseResultSetHelper.toCsv(rs, limited, false, output);
+                            } else {
+                                DatabaseResultSetHelper.print(rs, limited, output);
+                            }
+                        } catch (Exception e) {
+                            if (logger.isWarnEnabled()) {
+                                logger.warn(e.getMessage(), e);
+                            }
+                            errors.add(e.getMessage());
+                        }
+                    }
+
+                    @Override
+                    public void error(Throwable t) {
+                        if (logger.isWarnEnabled()) {
+                            logger.warn(t.getMessage(), t);
+                        }
+                        errors.add(t.getMessage());
+                    }
+                });
+            } catch (SQLException e) {
+                if (logger.isWarnEnabled()) {
+                    logger.warn(e.getMessage(), e);
+                }
+                errors.add(e.getMessage());
+            }
+        }
+
+        if (!errors.isEmpty()) {
+            throw new RuntimeException(DatabaseErrorHelper.print(String.join("\n", errors)));
+        }
+    }
+
     /**
      * Execute procedure.
      *
@@ -302,4 +366,5 @@ public class DatabaseExecutionService {
         }
         return SCRIPT_DELIMITER;
     }
+
 }

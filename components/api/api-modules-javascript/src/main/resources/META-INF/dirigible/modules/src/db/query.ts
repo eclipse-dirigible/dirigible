@@ -150,6 +150,32 @@ export class Query {
     // Parse the JSON string back into a JavaScript array of objects
     return JSON.parse(resultset);
   }
+  
+  /**
+     * Exports a SQL query with named parameters (e.g., ":name", ":id").
+     *
+     * @param sql The SQL query to execute.
+     * @param parameters An optional array of NamedQueryParameter objects.
+     * @param datasourceName The name of the database connection to use (optional).
+	 * @param fileName The file name pattern.
+     * @returns An array of records representing the query results.
+     */
+    public static exportCsv(
+      sql: string,
+	  parameters?: NamedQueryParameter[],
+      datasourceName?: string,
+	  fileName?: string
+    ) {
+		// Serialize the array of named parameters for the Java facade
+		const paramsJson = parameters ? JSON.stringify(parameters) : undefined;
+			
+	    const resultset = DatabaseFacade.exportToCsv(
+	        sql,
+			paramsJson,
+	        datasourceName,
+			fileName
+	      );
+    }
 }
 
 // @ts-ignore
