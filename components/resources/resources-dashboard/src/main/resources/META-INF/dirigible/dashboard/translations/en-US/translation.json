@@ -7,6 +7,11 @@
     "metrics": "Metrics",
     "performance": "Performance",
     "statistics": "Statistics",
+    "emptyState": {
+        "title": "Nothing to see here",
+        "subtitle": "Widgets will show up here once they've been registered.",
+        "hint": "If this seems unexpected, contact your administrator."
+    },
     "errMsg": {
         "genericTitle": "Dashboard encountered an error!",
         "widgetList": "Failed to load widget list",
