@@ -56,14 +56,6 @@ angular.module('forms', ['blimpKit', 'platformView', 'platformLocale', 'platform
     };
 #end
 
-#foreach($feed in $feeds)
-    ${dollar}http.get('$feed.url').then(response => {
-        $scope.$feed.name = response.data;
-    }).catch(e => {
-        console.error(e);
-    });
-
-#end
     $scope.model = {};
 #macro(formWidgets $elements)
 #foreach($element in $elements)
@@ -118,5 +110,33 @@ angular.module('forms', ['blimpKit', 'platformView', 'platformLocale', 'platform
 
 $code
 
+#end
+#foreach($feed in $feeds)
+    ${dollar}http.get(`$feed.url`).then(response => {
+    #if($feed.func)
+        #if($feed.name == 'model')
+        Object.assign($scope.model, ${feed.func}(response.data));
+        #else
+        $scope.$feed.name = ${feed.func}(response.data);
+        #end
+    #else
+        #if($feed.name == 'model')
+        Object.assign($scope.model, response.data);
+        #else
+        $scope.$feed.name = response.data;
+        #end
+    #end
+    }, error => {
+        console.error('$feed.name', error);
+        const errorData = JSON.stringify(error);
+        LocaleService.onInit(() => {
+            Dialogs.showAlert({
+                title: LocaleService.t('$projectName:${tprefix}.dialogs.feedErrorTitle', 'Feed request failed'),
+                message: errorData && errorData !== '{}' ? errorData : LocaleService.t('$projectName:${tprefix}.dialogs.feedError', { feed: '$feed.name' }, "Could not retrive data from the feed '$feed.name'. See console for more information."),
+                type: AlertTypes.Error,
+                preformatted: false,
+            });
+        });
+    });
 #end
 });
