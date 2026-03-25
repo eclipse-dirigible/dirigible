@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -64,13 +64,23 @@ if (window !== top) {
         $compileProvider.debugInfoEnabled(false);
         $compileProvider.commentDirectivesEnabled(false);
         $compileProvider.cssClassDirectivesEnabled(false);
-    }).directive('shellHeader', ($window, User, Extensions, shellState, notifications, MessageHub, Shell) => ({
+    }).directive('shellHeader', ($window, $timeout, $http, User, Extensions, shellState, notifications, MessageHub, Shell, LocaleService) => ({
         restrict: 'E',
         replace: true,
         link: (scope, element) => {
+            let exportButton;
             scope.branding = getBrandingInfo();
             const notificationStateKey = `${scope.branding.prefix}.notifications`;
             const dialogHub = new DialogHub();
+            const exportsHub = new ExportsHub();
+            const DB_EXPORT_SERVICE_URL = '/services/data/export-async/';
+            scope.EXPORT_BASE_URL = '/public/cms/__EXPORTS/';
+            scope.ExportStatus = {
+                TRIGGRED: 'TRIGGRED',
+                FINISHED: 'FINISHED',
+                FAILED: 'FAILED',
+                UNKNOWN: 'UNKNOWN'
+            };
             scope.perspectiveId = shellState.perspective.id;
             shellState.registerStateListener((data) => {
                 scope.perspectiveId = data.id;
@@ -85,6 +95,7 @@ if (window !== top) {
             scope.saveNotifications = () => {
                 localStorage.setItem(notificationStateKey, JSON.stringify(scope.notifications));
             };
+            scope.exports = [];
             scope.selectedNotification = '';
             scope.username = undefined;
             User.getName().then((data) => {
@@ -186,9 +197,104 @@ if (window !== top) {
                 return true;
             };
 
+            scope.deleteExport = (id) => {
+                $http({
+                    method: 'DELETE',
+                    url: DB_EXPORT_SERVICE_URL + encodeURIComponent(id),
+                    headers: { 'X-Requested-With': 'Fetch' }
+                }).then(() => {
+                    for (let i = 0; i < scope.exports.length; i++) {
+                        if (scope.exports[i].id === id) {
+                            scope.exports.splice(i, 1);
+                            break;
+                        }
+                    }
+                }, (reject) => {
+                    dialogHub.showAlert({
+                        type: AlertTypes.Error,
+                        title: LocaleService.t('exports.error.delTitle', 'Could not delete export'),
+                        message: LocaleService.t('exports.error.genericMsg', 'Please check the console log for more information.'),
+                    });
+                    console.error(reject);
+                });
+            };
+
+            scope.deleteExports = () => {
+                $http({
+                    method: 'DELETE',
+                    url: DB_EXPORT_SERVICE_URL,
+                    headers: { 'X-Requested-With': 'Fetch' }
+                }).then(() => {
+                    scope.exports.length = 0;
+                }, (reject) => {
+                    dialogHub.showAlert({
+                        type: AlertTypes.Error,
+                        title: LocaleService.t('exports.error.delTitle', 'Could not delete export'),
+                        message: LocaleService.t('exports.error.genericMsg', 'Please check the console log for more information.'),
+                    });
+                    console.error(reject);
+                });
+            };
+
+            scope.getExportDate = (date) => {
+                return new Intl.DateTimeFormat(undefined, {
+                    dateStyle: 'short',
+                    timeStyle: 'short',
+                }).format(new Date(date));
+            };
+
             scope.logout = () => {
                 location.replace('/logout');
             };
+
+            let to = 0;
+            function getExports(open = true) {
+                if (to) $timeout.cancel(to);
+                $http({
+                    method: 'GET',
+                    url: DB_EXPORT_SERVICE_URL,
+                    headers: { 'X-Requested-With': 'Fetch' }
+                }).then((result) => {
+                    scope.exports.length = 0;
+                    scope.exports.push(...result.data.reverse());
+                    if (open) {
+                        scope.$evalAsync(() => {
+                            if (!exportButton) exportButton = element[0].querySelector(`#exports`);
+                            exportButton.focus();
+                            exportButton.click();
+                        });
+                    }
+                    if (open && !scope.exports.length) {
+                        to = $timeout(() => { getExports(false) }, 500);
+                    } else {
+                        for (let i = 0; i < scope.exports.length; i++) {
+                            if (scope.exports[i].status === scope.ExportStatus.TRIGGRED) {
+                                to = $timeout(() => { getExports(false) }, 2000);
+                                break;
+                            }
+                        }
+                    }
+                }, (reject) => {
+                    dialogHub.showAlert({
+                        type: AlertTypes.Error,
+                        title: LocaleService.t('exports.error.fetchTitle', 'Could not get export list'),
+                        message: LocaleService.t('exports.error.genericMsg', 'Please check the console log for more information.'),
+                    });
+                    console.error(reject);
+                });
+            }
+
+            LocaleService.onInit(() => {
+                getExports(false);
+            });
+
+            const exportListener = exportsHub.onRefresh(() => {
+                getExports(true);
+            });
+
+            scope.$on('$destroy', () => {
+                exportsHub.removeMessageListener(exportListener);
+            });
         },
         templateUrl: '/services/web/platform-core/ui/templates/header.html',
     })).directive('submenu', () => ({

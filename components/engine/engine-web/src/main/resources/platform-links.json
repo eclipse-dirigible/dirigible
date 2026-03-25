@@ -78,6 +78,10 @@
     },
     {
       "type": "SCRIPT",
+      "path": "/services/web/platform-core/ui/platform/exports-hub.js"
+    },
+    {
+      "type": "SCRIPT",
       "path": "/services/web/platform-core/ui/platform/notification-hub.js"
     },
     {

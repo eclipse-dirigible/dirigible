@@ -1,6 +1,6 @@
 <!--
 
-    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
 
     All rights reserved. This program and the accompanying materials
     are made available under the terms of the Eclipse Public License v2.0
@@ -54,7 +54,8 @@
                 </bk-popover>
                 <bk-popover ng-show="menus[perspectiveId].include.window">
                     <bk-popover-control>
-                        <bk-button bk-shellbar-button label="{{ systemMenus.window.translation.key | t:systemMenus.window.translation.options:systemMenus.window.label }}" is-menu="true" aria-label="{{'common:aria.windowMenuDdBtn' | t:'window menu dropdown button'}}"></bk-button>
+                        <bk-button bk-shellbar-button label="{{ systemMenus.window.translation.key | t:systemMenus.window.translation.options:systemMenus.window.label }}" is-menu="true"
+                            aria-label="{{'common:aria.windowMenuDdBtn' | t:'window menu dropdown button'}}"></bk-button>
                     </bk-popover-control>
                     <bk-popover-body no-arrow="true" can-scroll="canMenuScroll(systemMenus.window.items)">
                         <bk-menu aria-label="{{'common:aria.headerMenuWindow' | t:'header menu window'}}">
@@ -69,7 +70,8 @@
                 </bk-popover>
                 <bk-popover ng-show="menus[perspectiveId].include.help || !menus[perspectiveId]">
                     <bk-popover-control>
-                        <bk-button bk-shellbar-button label="{{ systemMenus.help.translation.key | t:systemMenus.help.translation.options:systemMenus.help.label }}" is-menu="true" aria-label="{{'common:aria.helpMenuDdBtn' | t:'help menu dropdown button'}}"></bk-button>
+                        <bk-button bk-shellbar-button label="{{ systemMenus.help.translation.key | t:systemMenus.help.translation.options:systemMenus.help.label }}" is-menu="true"
+                            aria-label="{{'common:aria.helpMenuDdBtn' | t:'help menu dropdown button'}}"></bk-button>
                     </bk-popover-control>
                     <bk-popover-body no-arrow="true" can-scroll="::canMenuScroll(systemMenus.help.items)">
                         <bk-menu aria-label="{{'common:aria.headerMenuHelp' | t:'header menu help'}}">
@@ -89,7 +91,47 @@
             <bk-shellbar-action>
                 <bk-popover close-innerclick="false">
                     <bk-popover-control>
-                        <bk-button bk-shellbar-button glyph="sap-icon--bell" badge="{{notifications.length ? notifications.length : ''}}" aria-label="{{'common:aria.ntfListButton' | t:'notification list button'}}" ng-click="notificationsPanelOpen()"></bk-button>
+                        <bk-button id="exports" bk-shellbar-button glyph="sap-icon--download" badge="{{exports.length ? exports.length : ''}}" aria-label="{{'common:aria.exportListButton' | t:'exports list button'}}"
+                            ng-click="exportsPanelOpen()">
+                        </bk-button>
+                    </bk-popover-control>
+                    <bk-popover-body align="bottom-right" can-scroll="true" class="bk-vbox notification-popover">
+                        <bk-toolbar has-title="true">
+                            <bk-toolbar-title ng-if="exports.length">{{ 'exports.title' | t:{ 'num': exports.length} }}</bk-toolbar-title>
+                            <bk-toolbar-spacer></bk-toolbar-spacer>
+                            <bk-button state="transparent" label="{{'clearAll' | t:'Clear all'}}" ng-disabled="exports.length === 0" ng-click="deleteExports()"></bk-button>
+                        </bk-toolbar>
+                        <bk-list ng-show="exports.length" byline="true">
+                            <bk-list-item ng-repeat="export in exports track by export.id">
+                                <bk-list-thumbnail ng-if="export.status === ExportStatus.FINISHED" glyph="sap-icon--message-success"></bk-list-thumbnail>
+                                <bk-list-thumbnail ng-if="export.status === ExportStatus.FAILED" glyph="sap-icon--message-error" color-error></bk-list-thumbnail>
+                                <bk-list-thumbnail ng-if="export.status === ExportStatus.UNKNOWN" glyph="sap-icon--question-mark"></bk-list-thumbnail>
+                                <span ng-if="export.status === ExportStatus.TRIGGRED" class="bk-center">
+                                    <bk-loader size="l"></bk-loader>
+                                </span>
+                                <bk-list-content item-title="{{export.name}}">
+                                    <bk-list-byline ng-if="export.status === ExportStatus.FINISHED" align="left">{{'exports.finished' | t:'Export finished'}}</bk-list-byline>
+                                    <bk-list-byline ng-if="export.status === ExportStatus.TRIGGRED" align="left">{{'exports.exporting' | t:'Exporting...'}}</bk-list-byline>
+                                    <bk-list-byline ng-if="export.status === ExportStatus.FAILED" align="left" class="is-error-message">{{export.message ? export.message : 'unknownError' | t:'Unknown Error' }}</bk-list-byline>
+                                    <bk-list-byline align="right">{{getExportDate(export.startedAt)}}</bk-list-byline>
+                                </bk-list-content>
+                                <a bk-button ng-if="export.status === ExportStatus.FINISHED" ng-href="{{EXPORT_BASE_URL + export.name}}" bk-list-button state="transparent" glyph="sap-icon--download"
+                                    aria-label="{{'download' | t:'Download'}}" title="{{'download' | t:'Download'}}" target="_blank" rel="noopener noreferrer"></a>
+                                <bk-button ng-if="export.status === ExportStatus.FINISHED || export.status === ExportStatus.FAILED || export.status === ExportStatus.UNKNOWN" bk-list-button state="transparent" glyph="sap-icon--delete"
+                                    aria-label="Delete" title="Delete" ng-click="deleteExport(export.id)"></bk-button>
+                            </bk-list-item>
+                        </bk-list>
+                        <bk-message-page ng-if="!exports.length" glyph="sap-icon--download">
+                            <bk-message-page-title>{{'exports.empty' | t:'No Exports'}}</bk-message-page-title>
+                        </bk-message-page>
+                    </bk-popover-body>
+                </bk-popover>
+            </bk-shellbar-action>
+            <bk-shellbar-action>
+                <bk-popover close-innerclick="false">
+                    <bk-popover-control>
+                        <bk-button bk-shellbar-button glyph="sap-icon--bell" badge="{{notifications.length ? notifications.length : ''}}" aria-label="{{'common:aria.ntfListButton' | t:'notification list button'}}"
+                            ng-click="notificationsPanelOpen()"></bk-button>
                     </bk-popover-control>
                     <bk-popover-body align="bottom-right" can-scroll="true" class="bk-vbox notification-popover">
                         <bk-toolbar has-title="true">
