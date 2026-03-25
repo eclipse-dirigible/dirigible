@@ -94,7 +94,7 @@ jobsView.controller('JobsController', ($scope, $http, $timeout, Dialogs) => {
 		}
 		to = $timeout(() => {
 			for (let i = 0; i < $scope.list.length; i++) {
-				const searchValues = `${$scope.list[i].name}${$scope.list[i].handler}${$scope.list[i].message}`.toLowerCase();
+				const searchValues = `${$scope.list[i].name}${$scope.list[i].handler}${$scope.list[i].message}${$scope.list[i].expression}`.toLowerCase();
 				if (searchValues.includes($scope.searchField.text.toLowerCase())) {
 					$scope.list[i].hidden = false;
 				} else {
