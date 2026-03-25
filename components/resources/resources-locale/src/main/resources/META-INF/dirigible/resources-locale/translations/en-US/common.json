@@ -8,6 +8,7 @@
         "windowMenuDdBtn": "window menu dropdown button",
         "helpMenuDdBtn": "help menu dropdown button",
         "ntfListButton": "notification list button",
+        "exportsListButton": "exports list button",
         "delNtf": "delete notification",
         "usrMenuBtn": "user menu button",
         "usrMenu": "user menu",
@@ -15,6 +16,18 @@
         "perspectiveList": "Perspective list",
         "utilityNav": "utility navigation",
         "expandPerGrp": "expand perspective group"
+    },
+    "exports": {
+        "title": "Exports ({{num}})",
+        "empty": "No Exports",
+        "finished": "Export finished",
+        "exporting": "Exporting...",
+        "error": {
+            "genericMsg": "Please check the console log for more information.",
+            "fetchTitle": "Could not get export list",
+            "delTitle": "Could not delete export",
+            "delAllTitle": "Could not delete exports"
+        }
     },
     "yes": "Yes",
     "no": "No",
@@ -50,5 +63,6 @@
     "reset": "Reset",
     "about": "About",
     "status": "Status",
-    "download": "Download"
+    "download": "Download",
+    "unknownError": "Unknown Error"
 }

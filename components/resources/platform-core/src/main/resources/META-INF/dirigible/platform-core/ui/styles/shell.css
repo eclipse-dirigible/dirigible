@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -196,7 +196,7 @@ body {
     background-color: var(--sapButton_Attention_Background, #e97119);
 }
 
-/* Notification overlay */
+/* Notification and Exports overlay */
 .notification-overlay {
     position: fixed;
     width: 100%;
@@ -229,4 +229,24 @@ body {
     -webkit-line-clamp: none;
     line-clamp: none;
     max-height: none;
+}
+
+.notification-popover [bk-list-button]:first-of-type {
+    margin-left: 0.5rem;
+}
+
+.notification-popover span.bk-center {
+    width: 3rem;
+    height: 3rem;
+    margin-inline-end: .75rem;
+}
+
+.notification-popover li:last-child {
+    border-bottom: none !important;
+}
+
+.notification-popover .is-error-message {
+    color: var(--sapNegativeColor) !important;
+    word-wrap: break-word;
+    white-space: wrap;
 }
