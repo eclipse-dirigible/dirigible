@@ -1,6 +1,6 @@
 <!--
 
-    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
 
     All rights reserved. This program and the accompanying materials
     are made available under the terms of the Eclipse Public License v2.0
@@ -21,36 +21,110 @@
         <title config-title></title>
         <script type="text/javascript" src="configs/extensions-view.js"></script>
         <meta name="platform-links" category="ng-view">
+        <style>
+            .fd-table--no-outer-border .fd-table__cell--group {
+                border-left-style: none !important;
+            }
+
+        </style>
     </head>
 
-    <body bk-scrollbar>
-        <table bk-table bk-table-group outer-borders="bottom">
-            <thead bk-table-header sticky="true" interactive="false">
-                <tr bk-table-row>
-                    <th bk-table-header-cell>#</th>
-                    <th bk-table-header-cell>Location</th>
-                    <th bk-table-header-cell>Module</th>
-                    <th bk-table-header-cell>Role</th>
-                    <th bk-table-header-cell>Description</th>
-                </tr>
-            </thead>
-            <tbody bk-table-body>
-                <tr bk-table-row ng-repeat-start="next in list track by $index" hoverable="true">
-                    <td bk-table-group-cell nesting-level="1" expanded="true"><b>{{::next.name}}</b>: {{::next.location}}</td>
-                </tr>
-                <tr bk-table-row ng-repeat-end ng-repeat="extension in next.extensions track by $index">
-                    <td bk-table-cell nesting-level="2" fit-content="true">{{::$index + 1}}</td>
-                    <td bk-table-cell>{{::extension.location}}</td>
-                    <td bk-table-cell>{{::extension.module}}</td>
-                    <td bk-table-cell>{{::extension.role}}</td>
-                    <td bk-table-cell>{{::extension.description}}</td>
-                </tr>
-            </tbody>
-        </table>
+    <body class="bk-vbox">
+        <bk-bar compact="true">
+            <bk-bar-left>
+                <bk-bar-element full-width="true" style="max-width: 480px">
+                    <bk-input type="search" placeholder="Search" ng-keyup="search($event)" ng-model="searchField.text"></bk-input>
+                </bk-bar-element>
+            </bk-bar-left>
+            <bk-bar-right style="flex: 0">
+                <bk-bar-element>
+                    <bk-button glyph="sap-icon--expand" title="Expand All" aria-label="Expand All" state="transparent" ng-click="toggleExpand(true)"></bk-button>
+                </bk-bar-element>
+                <bk-bar-element>
+                    <bk-button glyph="sap-icon--collapse" title="Collapse All" aria-label="Collapse All" state="transparent" ng-click="toggleExpand(false)"></bk-button>
+                </bk-bar-element>
+            </bk-bar-right>
+        </bk-bar>
+        <div bk-scrollbar class="bk-full-height">
+            <table bk-table bk-table-group outer-borders="none">
+                <thead bk-table-header sticky="true" interactive="false">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>#</th>
+                        <th bk-table-header-cell>Location</th>
+                        <th bk-table-header-cell>Module</th>
+                        <th bk-table-header-cell>Role</th>
+                        <th bk-table-header-cell>Description</th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat-start="next in list track by $index" hoverable="true" ng-hide="next.hidden">
+                        <td bk-table-group-cell nesting-level="1" expanded="next.expanded"><b>{{::next.name}}</b>: {{::next.location}}</td>
+                    </tr>
+                    <tr bk-table-row ng-repeat-end ng-repeat="extension in next.extensions track by $index" ng-hide="extension.hidden">
+                        <td bk-table-cell nesting-level="2" fit-content="true">{{::$index + 1}}</td>
+                        <td bk-table-cell>{{::extension.location}}</td>
+                        <td bk-table-cell>{{::extension.module}}</td>
+                        <td bk-table-cell>{{::extension.role}}</td>
+                        <td bk-table-cell>{{::extension.description}}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
         <script type="text/javascript">
-            angular.module('extensions', ['platformView', 'blimpKit']).controller('ExtensionsController', ($scope, $http) => {
+            angular.module('extensions', ['platformView', 'blimpKit']).controller('ExtensionsController', ($scope, $http, $timeout) => {
+                $scope.toggleExpand = (expand) => {
+                    for (let i = 0; i < $scope.list.length; i++) {
+                        $scope.list[i]['expanded'] = expand;
+                    }
+                };
+                $scope.searchField = { text: '' };
+                $scope.showAll = () => {
+                    for (let i = 0; i < $scope.list.length; i++) {
+                        $scope.list[i]['hidden'] = false;
+                        for (let e = 0; e < $scope.list[i].extensions.length; e++) {
+                            $scope.list[i].extensions[e]['hidden'] = false;
+                        }
+                    }
+                };
+                let to = 0;
+                $scope.search = (event) => {
+                    if (to) $timeout.cancel(to);
+                    if (event.originalEvent.key === 'Escape') {
+                        $scope.showAll();
+                        return;
+                    }
+                    to = $timeout(() => {
+                        for (let i = 0; i < $scope.list.length; i++) {
+                            let includes = false;
+                            for (let e = 0; e < $scope.list[i].extensions.length; e++) {
+                                const searchValues = `${$scope.list[i].extensions[e].name}${$scope.list[i].extensions[e].description}${$scope.list[i].extensions[e].module}`.toLowerCase();
+                                if (searchValues.includes($scope.searchField.text.toLowerCase())) {
+                                    $scope.list[i].extensions[e]['hidden'] = false;
+                                    includes = true;
+                                } else {
+                                    $scope.list[i].extensions[e]['hidden'] = true;
+                                }
+                            }
+                            if (includes) {
+                                $scope.list[i].hidden = false;
+                            } else {
+                                const searchValues = `${$scope.list[i].location}${$scope.list[i].name}`;
+                                searchValues.toLowerCase();
+                                if (searchValues.includes($scope.searchField.text.toLowerCase())) {
+                                    $scope.list[i]['hidden'] = false;
+                                    $scope.list[i].expanded = true;
+                                } else {
+                                    $scope.list[i]['hidden'] = true;
+                                }
+                            }
+                        }
+                    }, 200);
+                };
                 $http.get('/services/core/extensionpoints/tree').then((response) => {
                     $scope.list = response.data;
+                    for (let i = 0; i < $scope.list.length; i++) {
+                        $scope.list[i]['expanded'] = true;
+                    }
                 }, (error) => {
                     console.error(error);
                 });

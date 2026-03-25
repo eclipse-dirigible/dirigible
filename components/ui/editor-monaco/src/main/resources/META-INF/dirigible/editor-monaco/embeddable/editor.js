@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -101,6 +101,8 @@ angular.module('codeEditor', ['platformTheming']).directive('codeEditor', (Theme
                     automaticLayout: true,
                     language: scope.codeLang || 'javascript',
                     readOnly: scope.readOnly ? true : false,
+                    fontFamily: 'Droid Sans Mono, Consolas, Menlo, Monaco, Liberation Mono, Courier New, monospace',
+                    fontSize: 14,
                 });
 
                 const model = codeEditor.getModel();

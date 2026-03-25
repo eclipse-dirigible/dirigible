@@ -1,3 +1,14 @@
+/*
+ * Copyright (c) 2026 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v2.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ */
 const WORKSPACE_API = "/services/ide/workspaces";
 const REPOSITORY_API = "/services/core/repository";
 const REGISTRY_API = "/services/core/repository/registry/public";
@@ -624,6 +635,8 @@ class DirigibleEditor {
                         value: '',
                         automaticLayout: true,
                         readOnly: readOnly,
+                        fontFamily: 'Droid Sans Mono, Consolas, Menlo, Monaco, Liberation Mono, Courier New, monospace',
+                        fontSize: 14,
                         autoClosingBrackets: DirigibleEditor.isAutoBracketsEnabled(),
                         renderWhitespace: DirigibleEditor.getRenderWhitespace(),
                         wordWrap: DirigibleEditor.getWordWrap(),

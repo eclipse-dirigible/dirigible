@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -11,10 +11,17 @@
  */
 const jobsView = angular.module('jobs', ['blimpKit', 'platformView']);
 jobsView.constant('Dialogs', new DialogHub());
-jobsView.controller('JobsController', ($scope, $http, Dialogs) => {
+jobsView.controller('JobsController', ($scope, $http, $timeout, Dialogs) => {
+	$scope.searchField = { text: '' };
 	$http.get('/services/jobs').then((response) => {
 		$scope.list = response.data;
 	});
+
+	$scope.showAll = () => {
+		for (let i = 0; i < $scope.list.length; i++) {
+			$scope.list[i].hidden = false;
+		}
+	};
 
 	$scope.getIconClasses = (status) => {
 		let classes = 'sap-icon ';
@@ -76,6 +83,25 @@ jobsView.controller('JobsController', ($scope, $http, Dialogs) => {
 				preformatted: false,
 			});
 		});
+	};
+
+	let to = 0;
+	$scope.search = (event) => {
+		if (to) $timeout.cancel(to);
+		if (event.originalEvent.key === 'Escape') {
+			$scope.showAll();
+			return;
+		}
+		to = $timeout(() => {
+			for (let i = 0; i < $scope.list.length; i++) {
+				const searchValues = `${$scope.list[i].name}${$scope.list[i].handler}${$scope.list[i].message}${$scope.list[i].expression}`.toLowerCase();
+				if (searchValues.includes($scope.searchField.text.toLowerCase())) {
+					$scope.list[i].hidden = false;
+				} else {
+					$scope.list[i].hidden = true;
+				}
+			}
+		}, 200);
 	};
 
 	$scope.showLogsWindow = (job) => {
