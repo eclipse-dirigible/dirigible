@@ -17,10 +17,15 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NavigableMap;
+import java.util.Optional;
 import java.util.TreeMap;
 
+import org.eclipse.dirigible.components.database.NamedParameterStatement;
+import org.eclipse.dirigible.components.database.params.ParametersSetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.gson.JsonElement;
 
 /**
  * Convenience class for common DataSource operations. An instance represents a single DataSource.
@@ -111,6 +116,29 @@ public class DatabaseQueryHelper {
                 } else {
                     preparedStatement.executeUpdate();
                     callback.updateDone(preparedStatement.getUpdateCount());
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Failed to execute SQL [{}]", sql, e);
+            callback.error(e);
+        }
+    }
+
+    public static void executeSingleStatement(Connection connection, String sql, boolean isQuery, Optional<JsonElement> parameters,
+            RequestExecutionCallback callback) {
+        try {
+            try (NamedParameterStatement preparedStatement = new NamedParameterStatement(connection, sql)) {
+                if (parameters.isPresent()) {
+                    ParametersSetter.setNamedParameters(parameters.get(), preparedStatement);
+                }
+                if (isQuery) {
+                    try (ResultSet resultSet = preparedStatement.executeQuery()) {
+                        callback.queryDone(resultSet);
+                    }
+                } else {
+                    preparedStatement.executeUpdate();
+                    callback.updateDone(preparedStatement.getStatement()
+                                                         .getUpdateCount());
                 }
             }
         } catch (Exception e) {

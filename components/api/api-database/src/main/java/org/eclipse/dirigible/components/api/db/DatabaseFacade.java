@@ -34,6 +34,7 @@ import javax.sql.DataSource;
 import org.apache.commons.io.output.WriterOutputStream;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.base.logging.LoggingExecutor;
+import org.eclipse.dirigible.components.data.export.service.DataAsyncExportService;
 import org.eclipse.dirigible.components.data.management.service.DatabaseDefinitionService;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.database.DatabaseParameters;
@@ -62,6 +63,8 @@ import com.google.gson.JsonSyntaxException;
 @Component
 public class DatabaseFacade implements InitializingBean {
 
+    private static final String DEFAULT_DB = "DefaultDB";
+
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(DatabaseFacade.class);
 
@@ -78,6 +81,8 @@ public class DatabaseFacade implements InitializingBean {
     /** The data sources manager. */
     private final DataSourcesManager dataSourcesManager;
 
+    private final DataAsyncExportService dataAsyncExportService;
+
     /**
      * Instantiates a new database facade.
      *
@@ -85,9 +90,11 @@ public class DatabaseFacade implements InitializingBean {
      * @param dataSourcesManager the data sources manager
      */
     @Autowired
-    private DatabaseFacade(DatabaseDefinitionService databaseDefinitionService, DataSourcesManager dataSourcesManager) {
+    private DatabaseFacade(DatabaseDefinitionService databaseDefinitionService, DataSourcesManager dataSourcesManager,
+            DataAsyncExportService dataAsyncExportService) {
         this.databaseDefinitionService = databaseDefinitionService;
         this.dataSourcesManager = dataSourcesManager;
+        this.dataAsyncExportService = dataAsyncExportService;
     }
 
     /**
@@ -147,6 +154,10 @@ public class DatabaseFacade implements InitializingBean {
         return dataSourcesManager;
     }
 
+    public DataAsyncExportService getDataAsyncExportService() {
+        return dataAsyncExportService;
+    }
+
     /**
      * Gets the metadata.
      *
@@ -169,7 +180,7 @@ public class DatabaseFacade implements InitializingBean {
         try {
             boolean defaultDB = datasourceName == null || datasourceName.trim()
                                                                         .isEmpty()
-                    || "DefaultDB".equals(datasourceName);
+                    || DEFAULT_DB.equals(datasourceName);
             DirigibleDataSource dataSource = defaultDB ? DatabaseFacade.get()
                                                                        .getDataSourcesManager()
                                                                        .getDefaultDataSource()
@@ -1038,6 +1049,17 @@ public class DatabaseFacade implements InitializingBean {
 
     public static void toJson(ResultSet resultSet, boolean limited, boolean stringify, OutputStream output) throws Exception {
         DatabaseResultSetHelper.toJson(resultSet, limited, stringify, output);
+    }
+
+    public static void exportToCsv(String sql, String parametersJson, String datasourceName, String fileName) throws SQLException {
+        if (datasourceName == null || datasourceName.trim()
+                                                    .isEmpty()) {
+            datasourceName = DEFAULT_DB;
+        }
+        Optional<JsonElement> parameters = parseOptionalJson(parametersJson);
+        DatabaseFacade.get()
+                      .getDataAsyncExportService()
+                      .exportStatement(datasourceName, sql, parameters, Optional.of(fileName));
     }
 
 }

@@ -30,6 +30,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.google.gson.JsonElement;
+
 @Service
 public class DataAsyncExportService {
 
@@ -83,14 +85,23 @@ public class DataAsyncExportService {
         return cmsService;
     }
 
-    public void exportStatement(String datasource, String statement, Optional<String> name) throws SQLException {
+    public void exportStatement(String datasource, String statement) throws SQLException {
+        exportStatement(datasource, statement, Optional.empty(), Optional.empty());
+    }
+
+    public void exportStatement(String datasource, String statement, Optional<JsonElement> parameters) throws SQLException {
+        exportStatement(datasource, statement, parameters, Optional.empty());
+    }
+
+    public void exportStatement(String datasource, String statement, Optional<JsonElement> parameters, Optional<String> name)
+            throws SQLException {
 
         if (!databaseMetadataService.existsDataSourceMetadata(datasource)) {
             String error = format("Datasource {0} does not exist.", datasource);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, error);
         }
 
-        launchExportJob(datasource, statement, name);
+        launchExportJob(datasource, statement, parameters, name);
     }
 
     public List<Export> get() throws IOException {
@@ -151,7 +162,7 @@ public class DataAsyncExportService {
 
     private final ExecutorService executorService = Executors.newFixedThreadPool(2);
 
-    private void launchExportJob(String datasource, String statement, Optional<String> pattern) {
+    private void launchExportJob(String datasource, String statement, Optional<JsonElement> parameters, Optional<String> pattern) {
         executorService.submit(() -> {
             CmisFolder root;
             try {
@@ -165,7 +176,7 @@ public class DataAsyncExportService {
                 export.setId(exportService.save(export));
                 new Thread(() -> {
                     try (PipedOutputStream producerPos = pos) {
-                        databaseExportService.exportStatement(datasource, statement, producerPos);
+                        databaseExportService.exportStatement(datasource, statement, parameters, producerPos);
                     } catch (Exception e) {
                         logger.error("Database export failed.", e);
                         export.setStatus(ExportStatus.FAILED);

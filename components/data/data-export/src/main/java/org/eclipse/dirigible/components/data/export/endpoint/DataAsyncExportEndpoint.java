@@ -76,7 +76,7 @@ public class DataAsyncExportEndpoint {
     public ResponseEntity<StreamingResponseBody> exportStatement(@PathVariable("datasource") String datasource,
             @Valid @RequestBody String statement, @RequestParam("name") Optional<String> name) throws SQLException {
 
-        getDataAsyncExportService().exportStatement(datasource, statement, name);
+        getDataAsyncExportService().exportStatement(datasource, statement, Optional.empty(), name);
 
         return ResponseEntity.ok()
                              .build();
