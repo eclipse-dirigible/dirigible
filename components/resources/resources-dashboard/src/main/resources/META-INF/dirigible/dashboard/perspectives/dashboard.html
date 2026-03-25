@@ -1,6 +1,6 @@
 <!--
 
-    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
 
     All rights reserved. This program and the accompanying materials
     are made available under the terms of the Eclipse Public License v2.0
@@ -53,7 +53,7 @@
             {{state.busyText}}
         </bk-busy-indicator-extended>
 
-        <bk-scrollbar class="bk-fill-parent" ng-show="!state.error && !state.isBusy">
+        <bk-scrollbar class="bk-fill-parent" ng-show="!state.error && !state.isBusy && hasWidgets()">
             <bk-panel expanded="true" ng-show="smallWidgets.length">
                 <bk-panel-header>
                     <bk-panel-expand hint="expand metrics panel content"></bk-panel-expand>
@@ -100,6 +100,17 @@
                 </bk-panel-content>
             </bk-panel>
         </bk-scrollbar>
+
+        <div class="bk-center bk-fill-parent" bk-scrollbar ng-if="!state.error && !state.isBusy && !hasWidgets()">
+            <div class="bk-vbox bk-box--items-center">
+                <span class="bk-icon--svg bk-icon--scale sap-icon" role="presentation" style="width: 16rem; height: 16rem">
+                    <ng-include src="'/services/web/dashboard/images/breeze.svg'"></ng-include>
+                </span>
+                <h1 class="bk-padding-top--sm" bk-title wrap="true" header-size="3">{{'dashboard:emptyState.title' | t:'Nothing to see here'}}</h1>
+                <p class="bk-text--subtitle bk-font--large">{{'dashboard:emptyState.subtitle' | t:'Widgets will show up here once they`ve been registered.'}}</p>
+                <p class="fd-text bk-text--subtitle bk-font--normal"><i>{{'dashboard:emptyState.hint' | t:'If this seems unexpected, contact your administrator.'}}</i></p>
+            </div>
+        </div>
 
         <bk-message-page glyph="sap-icon--error" ng-if="state.error">
             <bk-message-page-title>{{'dashboard:errMsg.genericTitle' | t:'Dashboard encounterd an error!'}}</bk-message-page-title>
