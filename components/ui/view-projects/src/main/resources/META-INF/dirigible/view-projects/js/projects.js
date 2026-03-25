@@ -397,6 +397,10 @@ projectsView.controller('ProjectsViewController', (
                         id: 'newProject',
                         label: 'New Project',
                         leftIconClass: 'sap-icon--create',
+                    }, {
+                        id: 'importProject',
+                        label: 'Import Project',
+                        leftIconClass: 'sap-icon--upload',
                         separator: true,
                     });
                     if (PublisherService.isEnabled()) {
@@ -673,6 +677,7 @@ projectsView.controller('ProjectsViewController', (
                     } else if (id === 'paste') {
                         jstreeWidget.jstree(true).paste(contextMenuNodes[0]);
                     } else if (id === 'newProject') $scope.createProject();
+                    else if (id === 'importProject') $scope.importProject();
                     else if (id === 'duplicateProject') {
                         $scope.duplicateProject(contextMenuNodes[0]);
                     } else if (id === 'rename') {
@@ -1251,6 +1256,17 @@ projectsView.controller('ProjectsViewController', (
         }, (response) => {
             console.error(response);
             StatusBar.showError(`Unable to delete '${project}'.`);
+        });
+    };
+
+    $scope.importProject = () => {
+        Dialogs.showWindow({
+            hasHeader: true,
+            id: 'import',
+            params: {
+                importType: 'project',
+                workspace: $scope.selectedWorkspace,
+            }
         });
     };
 

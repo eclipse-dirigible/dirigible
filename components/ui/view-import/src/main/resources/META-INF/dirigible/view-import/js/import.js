@@ -31,47 +31,51 @@ importView.controller('ImportViewController', ($scope, $window, ViewParameters, 
     $scope.uploader = new FileUploader({
         url: projectImportUrl
     });
+    $scope.importProjectDialog = false;
 
     $scope.initImport = () => {
-        let params = ViewParameters.get();
+        const params = ViewParameters.get();
+        if (params.workspace) $scope.selectedWorkspace = params.workspace;
         if (params.container === 'window') {
             $scope.inDialog = true;
-            if (params.importRepository) {
-                $scope.importRepository = true;
-                $scope.queueLength = 1;
-                $scope.uploader.url = TransportService.getSnapshotUrl();
-                $scope.dropAreaTitle = 'Import repository from zip';
-                $scope.dropAreaSubtitle = 'Drop snaphot here, or use the "+" button.';
-            } else {
-                $scope.uploadPath = params.uploadPath;
-                if (params.workspace) $scope.selectedWorkspace = params.workspace;
-                if (params.importType === 'file') {
-                    $scope.inputAccept = '';
-                    $scope.importType = params.importType;
-                    $scope.dropAreaTitle = 'Import files';
-                    $scope.dropAreaSubtitle = 'Drop file(s) here, or use the "+" button.';
-                    $scope.dropAreaMore = `Files will be imported in "${params.uploadPath}"`;
-                } else if (params.importType === 'data') {
-                    $scope.inputAccept = 'csv';
-                    $scope.importType = params.importType;
-                    $scope.dropAreaTitle = 'Import data files';
-                    $scope.dropAreaSubtitle = 'Drop file(s) here, or use the "+" button.';
-                    $scope.dropAreaMore = `Files will be imported in "${params.table}"`;
-                } else if (params.importType === 'sql') {
-                    $scope.inputAccept = 'sql';
-                    $scope.importType = params.importType;
-                    $scope.dropAreaTitle = 'Import SQL files';
-                    $scope.dropAreaSubtitle = 'Drop file(s) here, or use the "+" button.';
-                    $scope.dropAreaMore = `Files will be imported in "${params.schema}"`;
+            $scope.importProjectDialog = params.importType === 'project';
+            if (!$scope.importProjectDialog) {
+                if (params.importRepository) {
+                    $scope.importRepository = true;
+                    $scope.queueLength = 1;
+                    $scope.uploader.url = TransportService.getSnapshotUrl();
+                    $scope.dropAreaTitle = 'Import repository from zip';
+                    $scope.dropAreaSubtitle = 'Drop snaphot here, or use the "+" button.';
                 } else {
-                    $scope.dropAreaTitle = 'Import files from zip';
-                    $scope.dropAreaMore = `Files will be extracted in "${params.uploadPath}"`;
-                    let pathSegments = params.uploadPath.split('/');
-                    $scope.uploader.url = UriBuilder().path(zipImportUrl.split('/')).path(pathSegments).build();
-                    if (pathSegments.length <= 2) $scope.uploader.url += '/%252F';
+                    $scope.uploadPath = params.uploadPath;
+                    if (params.importType === 'file') {
+                        $scope.inputAccept = '';
+                        $scope.importType = params.importType;
+                        $scope.dropAreaTitle = 'Import files';
+                        $scope.dropAreaSubtitle = 'Drop file(s) here, or use the "+" button.';
+                        $scope.dropAreaMore = `Files will be imported in "${params.uploadPath}"`;
+                    } else if (params.importType === 'data') {
+                        $scope.inputAccept = 'csv';
+                        $scope.importType = params.importType;
+                        $scope.dropAreaTitle = 'Import data files';
+                        $scope.dropAreaSubtitle = 'Drop file(s) here, or use the "+" button.';
+                        $scope.dropAreaMore = `Files will be imported in "${params.table}"`;
+                    } else if (params.importType === 'sql') {
+                        $scope.inputAccept = 'sql';
+                        $scope.importType = params.importType;
+                        $scope.dropAreaTitle = 'Import SQL files';
+                        $scope.dropAreaSubtitle = 'Drop file(s) here, or use the "+" button.';
+                        $scope.dropAreaMore = `Files will be imported in "${params.schema}"`;
+                    } else {
+                        $scope.dropAreaTitle = 'Import files from zip';
+                        $scope.dropAreaMore = `Files will be extracted in "${params.uploadPath}"`;
+                        let pathSegments = params.uploadPath.split('/');
+                        $scope.uploader.url = UriBuilder().path(zipImportUrl.split('/')).path(pathSegments).build();
+                        if (pathSegments.length <= 2) $scope.uploader.url += '/%252F';
+                    }
                 }
+                $scope.projectsViewId = params.projectsViewId;
             }
-            $scope.projectsViewId = params.projectsViewId;
         } else $scope.reloadWorkspaceList();
     }
 
@@ -89,7 +93,7 @@ importView.controller('ImportViewController', ($scope, $window, ViewParameters, 
 
     $scope.uploader.onBeforeUploadItem = (item) => {
         if (!$scope.importRepository) {
-            if (!$scope.inDialog) {
+            if (!$scope.inDialog || ($scope.inDialog && $scope.importProjectDialog)) {
                 item.url = UriBuilder().path(projectImportUrl.split('/')).path($scope.selectedWorkspace).build();
             } else if ($scope.inDialog && $scope.importType === 'file') {
                 item.headers = {
@@ -108,7 +112,7 @@ importView.controller('ImportViewController', ($scope, $window, ViewParameters, 
     $scope.uploader.onCompleteAll = () => {
         if ($scope.importRepository) {
             Repository.announceRepositoryModified();
-        } else if ($scope.inDialog) {
+        } else if ($scope.inDialog && !$scope.importProjectDialog) {
             // Temporary, publishes all files in the import directory, not just imported ones
             Workspace.announceWorkspaceChanged({
                 workspace: $scope.selectedWorkspace,
