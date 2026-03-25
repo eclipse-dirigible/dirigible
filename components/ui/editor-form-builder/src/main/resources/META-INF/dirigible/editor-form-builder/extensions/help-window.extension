@@ -1,0 +1,5 @@
+{
+    "module": "editor-form-builder/configs/help-window.js",
+    "extensionPoint": "platform-windows",
+    "description": "Feeds help window"
+}
