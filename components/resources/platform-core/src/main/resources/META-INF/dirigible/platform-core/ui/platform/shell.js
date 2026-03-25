@@ -213,7 +213,7 @@ if (window !== top) {
                     dialogHub.showAlert({
                         type: AlertTypes.Error,
                         title: LocaleService.t('exports.error.delTitle', 'Could not delete export'),
-                        message: LocaleService.t('exports.error.genericMsg', 'Please check the console log for more information.'),
+                        message: LocaleService.t('unknownErrorMsg', 'Please check the console log for more information.'),
                     });
                     console.error(reject);
                 });
@@ -230,7 +230,7 @@ if (window !== top) {
                     dialogHub.showAlert({
                         type: AlertTypes.Error,
                         title: LocaleService.t('exports.error.delTitle', 'Could not delete export'),
-                        message: LocaleService.t('exports.error.genericMsg', 'Please check the console log for more information.'),
+                        message: LocaleService.t('unknownErrorMsg', 'Please check the console log for more information.'),
                     });
                     console.error(reject);
                 });
@@ -278,7 +278,7 @@ if (window !== top) {
                     dialogHub.showAlert({
                         type: AlertTypes.Error,
                         title: LocaleService.t('exports.error.fetchTitle', 'Could not get export list'),
-                        message: LocaleService.t('exports.error.genericMsg', 'Please check the console log for more information.'),
+                        message: LocaleService.t('unknownErrorMsg', 'Please check the console log for more information.'),
                     });
                     console.error(reject);
                 });
