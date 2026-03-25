@@ -1,9 +1,10 @@
 {
   "compilerOptions": {
     "module": "ES2022",
-    "target": "es6",
+    "target": "ES2022",
+	"rootDir": "./src",
     "esModuleInterop": true,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "sourceMap": true,
     "lib": [
       "ES2022",
@@ -22,7 +23,12 @@
         "./src/*",
         "./../../../../../../../../components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules/src/*"
       ]
-    }
+    },
+  	"strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "noImplicitThis": false,
+    "skipLibCheck": true
   },
   "include": [
     "src/**/*"

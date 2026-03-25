@@ -1,8 +1,9 @@
 {
   "compilerOptions": {
     "module": "ESNext",
-    "target": "ES6",
-    "moduleResolution": "Node",
+	"target": "ES2022",
+	"rootDir": "./src",
+    "moduleResolution": "bundler",
     "baseUrl": "../",
     "lib": [
       "ESNext",
@@ -21,6 +22,11 @@
     },
     "types": [
       "../modules/types"
-    ]
+    ],
+  	"strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "noImplicitThis": false,
+    "skipLibCheck": true
   }
 }
