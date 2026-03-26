@@ -60,6 +60,11 @@ angular.module('EntityService', []).provider('EntityService', function EntitySer
             const body = JSON.stringify(entity);
             return $http.post(url, body);
         }.bind(this);
+		
+		const exportCsv = function () {
+            const url = `${this.baseUrl}/export`;
+            return $http.post(url);
+        }.bind(this);
 
         const create = function (entity) {
             const url = this.baseUrl;
@@ -86,6 +91,7 @@ angular.module('EntityService', []).provider('EntityService', function EntitySer
             create: create,
             update: update,
             'delete': deleteEntity,
+			exportCsv: exportCsv,
         };
     }];
 });
