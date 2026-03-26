@@ -99,7 +99,7 @@
                         <bk-toolbar has-title="true">
                             <bk-toolbar-title ng-if="exports.length">{{ 'exports.title' | t:{ 'num': exports.length} }}</bk-toolbar-title>
                             <bk-toolbar-spacer></bk-toolbar-spacer>
-                            <bk-button state="transparent" label="{{'clearAll' | t:'Clear all'}}" ng-disabled="exports.length === 0" ng-click="deleteExports()"></bk-button>
+                            <bk-button state="transparent" label="{{'deleteAll' | t:'Delete all'}}" ng-disabled="exports.length === 0" ng-click="deleteExports()"></bk-button>
                         </bk-toolbar>
                         <bk-list ng-show="exports.length" byline="true">
                             <bk-list-item ng-repeat="export in exports track by export.id">
