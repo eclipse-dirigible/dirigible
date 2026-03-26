@@ -1,6 +1,6 @@
 <!--
 
-    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
 
     All rights reserved. This program and the accompanying materials
     are made available under the terms of the Eclipse Public License v2.0
@@ -105,15 +105,21 @@
                                         </div>
                                     </td>
                                     <td bk-table-cell fit-content="true" style="text-align: right">
-                                        <a bk-button bk-list-button ng-if="!isFolder(single)" ng-href="{{getFileDownloadUrl(single)}}" target="_blank" rel="noopener noreferrer" state="transparent" glyph="sap-icon--download"
-                                            aria-label="{{'download' | t:'Download'}}" title="{{'download' | t:'Download'}}">
-                                        </a>
-                                        <bk-button ng-click="showRenameItemDialog(single, $event)" bk-list-button ng-disabled="!writeAccessAllowed(single)" state="transparent" glyph="sap-icon--edit" aria-label="{{'rename' | t:'Rename'}}"
-                                            title="{{'rename' | t:'Rename'}}">
-                                        </bk-button>
-                                        <bk-button ng-click="showDeleteSingleItemDialog(single, $event)" bk-list-button ng-disabled="!writeAccessAllowed(single)" state="transparent" glyph="sap-icon--delete"
-                                            aria-label="{{'delete' | t:'Delete'}}" title="{{'delete' | t:'Delete'}}">
-                                        </bk-button>
+                                        <bk-popover>
+                                            <bk-popover-control>
+                                                <bk-button glyph="sap-icon--overflow" state="transparent" aria-label="{{'documents:aria.rowMenu' | t:{ 'type': isFolder(single) ? '$t(folder)' : '$t(file)' } }}"></bk-button>
+                                            </bk-popover-control>
+                                            <bk-popover-body align="left-top" can-scroll="false">
+                                                <bk-menu aria-label="{{'documents:aria.rowPopover' | t:{ 'type': isFolder(single) ? '$t(folder)' : '$t(file)' } }}">
+                                                    <bk-menu-item title="{{'documents:copyLink' | t:'Copy Link'}}" left-icon-class="sap-icon--chain-link" ng-if="!isFolder(single)" ng-click="copyLink(single)"></bk-menu-item>
+                                                    <bk-menu-item title="{{'rename' | t:'Rename'}}" left-icon-class="sap-icon--edit" is-disabled="!writeAccessAllowed(single)" ng-click="showRenameItemDialog(single, $event)"></bk-menu-item>
+                                                    <bk-menu-item title="{{'download' | t:'Download'}}" left-icon-class="sap-icon--download" ng-if="!isFolder(single)" has-separator="true" link="{{getFileDownloadUrl(single)}}">
+                                                    </bk-menu-item>
+                                                    <bk-menu-item title="{{'delete' | t:'Delete'}}" left-icon-class="sap-icon--delete" is-disabled="!writeAccessAllowed(single)" ng-click="showDeleteSingleItemDialog(single, $event)">
+                                                    </bk-menu-item>
+                                                </bk-menu>
+                                            </bk-popover-body>
+                                        </bk-popover>
                                     </td>
                                 </tr>
                                 <tr ng-if="filteredItems.length === 0" bk-table-row>
