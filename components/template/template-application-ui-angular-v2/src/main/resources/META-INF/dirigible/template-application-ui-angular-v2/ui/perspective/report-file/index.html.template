@@ -18,6 +18,7 @@
 #if($parameters && $parameters.size() > 0)
 			<bk-button compact="true" state="transparent" label="{{ '$projectName:${tprefix}.defaults.filter' | t }}" ng-click="openFilter()"></bk-button>
 #end
+			<bk-button compact="true" state="transparent" label="{{'$projectName:${tprefix}.defaults.export' | t}}" ng-click="triggerExportAction()"></bk-button>
 			<bk-button ng-repeat="action in pageActions track by $index" compact="true" state="transparent" label="{{action.translation.key | t:action.translation.options:action.label}}" ng-click="triggerPageAction(action)"></bk-button>
 			<bk-toolbar-spacer></bk-toolbar-spacer>
 		</bk-toolbar>

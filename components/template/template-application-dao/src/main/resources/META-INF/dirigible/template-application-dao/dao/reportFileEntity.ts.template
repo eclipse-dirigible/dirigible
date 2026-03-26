@@ -67,5 +67,24 @@ export class ${name}Repository {
 
         return Query.executeNamed(sql, parameters, this.datasourceName)[0].REPORT_COUNT;
     }
+    
+    public exportCsv() {
+        const sql = `
+#foreach($queryLine in $queryLines)
+            ${queryLine}
+#end
+        `;
+
+        const parameters: NamedQueryParameter[] = [];
+#foreach($parameter in $parameters)
+        parameters.push({
+            name: `${parameter.name}`,
+            type: `${parameter.type}`,
+            value: filter['${parameter.name}'] !== undefined ? #if($parameter.typeTypescript == 'string' && $parameter.isLikeCondition) `%${dollar}{filter['${parameter.name}']}%`#else filter['${parameter.name}']#end : `${parameter.initial}`
+        });
+#end
+
+        return Query.exportCsv(sql, parameters, this.datasourceName, '${name}');
+    }
 
 }
