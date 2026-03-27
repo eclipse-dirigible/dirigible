@@ -25,14 +25,17 @@ public class IDEFactory {
     private final WorkbenchFactory workbenchFactory;
     private final DatabasePerspectiveFactory databasePerspectiveFactory;
     private final GitPerspectiveFactory gitPerspectiveFactory;
+    private final BpmWorkspacePerspectiveFactory bpmWorkspacePerspectiveFactory;
 
     protected IDEFactory(BrowserFactory browserFactory, RestAssuredExecutor restAssuredExecutor, WorkbenchFactory workbenchFactory,
-            DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory) {
+            DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory,
+            BpmWorkspacePerspectiveFactory bpmWorkspacePerspectiveFactory) {
         this.browserFactory = browserFactory;
         this.restAssuredExecutor = restAssuredExecutor;
         this.workbenchFactory = workbenchFactory;
         this.databasePerspectiveFactory = databasePerspectiveFactory;
         this.gitPerspectiveFactory = gitPerspectiveFactory;
+        this.bpmWorkspacePerspectiveFactory = bpmWorkspacePerspectiveFactory;
     }
 
     public IDE create() {
@@ -46,11 +49,11 @@ public class IDEFactory {
 
     public IDE create(Browser browser, String username, String password) {
         return new IDE(browser, username, password, restAssuredExecutor, workbenchFactory, databasePerspectiveFactory,
-                gitPerspectiveFactory);
+                gitPerspectiveFactory, bpmWorkspacePerspectiveFactory);
     }
 
     public IDE create(String host, String username, String password) {
         return new IDE(browserFactory.createByHost(host), username, password, restAssuredExecutor, workbenchFactory,
-                databasePerspectiveFactory, gitPerspectiveFactory);
+                databasePerspectiveFactory, gitPerspectiveFactory, bpmWorkspacePerspectiveFactory);
     }
 }
