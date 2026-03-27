@@ -254,5 +254,11 @@
       "type": "SCRIPT",
       "path": "/webjars/angular-file-upload/dist/angular-file-upload.min.js"
     }
+  ],
+  "date-time-util": [
+    {
+      "type": "SCRIPT",
+      "path": "/services/web/platform-core/utilities/datetime.js"
+    }
   ]
 }
