@@ -299,6 +299,10 @@ $result##
 				<#getPTag($element.format) class="fd-text#if($element.format) bk-pre-wrap#end#if($element.subtitle) bk-text--subtitle#end#if($element.ellipsis) bk-scroll-hidden bk-text--ellipsis#end#if($element.italic) bk-font--italic#end#if($element.fontSize == 'sm') bk-font--small#end#if($element.fontSize == 'lg') bk-font--large#end #getPaddingClass($element.padding $element.side)">#if($element.model){{ model.$element.model }}#else$element.text#end</#getPTag($element.format)>
 	#elseif($element.controlId == "line")
 				<div class="#if($element.orientation == "h")bk-border--top#else bk-border--left#end" role="presentation"></div>
+	#elseif($element.controlId == "link")
+				<bk-form-item>
+					<bk-link#if($element.variable) ng-href="{{$element.variable}}"#elseif($element.href) href="$element.href"#else href="#"#end#if($element.newTab) target="_blank"#else target="_top"#end>$element.label</bk-link>
+				</bk-form-item>
 	#elseif($element.controlId == "spacer")
 				<div#if($element.stretch) class="bk-stretch"#else style="#if($element.width)width: ${element.width.intValue()}px;#end#if($element.height)height: ${element.height.intValue()}px#end"#end aria-hidden="true"></div>
 	#end

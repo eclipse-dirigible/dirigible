@@ -1379,6 +1379,40 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     }
                 },
                 {
+                    controlId: 'link',
+                    label: 'Link',
+                    icon: 'sap-icon--chain-link',
+                    iconRotate: true,
+                    description: 'Hyperlink',
+                    template: getControlWrapper(`<bk-link href="#">{{props.label.value ? props.label.value : 'Link'}}</bk-link>`),
+                    props: {
+                        label: {
+                            type: 'text',
+                            label: 'Label',
+                            placeholder: 'Some Link',
+                            value: '',
+                            required: true,
+                        },
+                        href: {
+                            type: 'text',
+                            label: 'Link',
+                            placeholder: 'https://...',
+                            value: '',
+                        },
+                        variable: {
+                            type: 'text',
+                            label: 'Variable',
+                            value: '',
+                            placeholder: 'linkString',
+                        },
+                        newTab: {
+                            type: 'checkbox',
+                            label: 'Open in new tab',
+                            value: true,
+                        },
+                    }
+                },
+                {
                     controlId: 'spacer',
                     label: 'Spacer',
                     icon: 'sap-icon--expand',
