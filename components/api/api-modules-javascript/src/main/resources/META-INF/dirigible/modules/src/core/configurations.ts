@@ -1,8 +1,24 @@
 /**
- * API Configurations
- * * Provides a static interface for accessing and manipulating configuration properties,
- * and checking the operating system type.
- */
+## Overview
+
+The Configurations API provides a centralized, type-safe interface for managing application configuration properties and detecting the runtime operating system. It serves as the foundation for environment-specific settings and system-aware behavior in Aerokit applications.
+
+### Key Features
+
+- **Static Interface**: Thread-safe, singleton-like access to configuration data
+- **Type Safety**: Full TypeScript support with proper type definitions
+- **File Loading**: Support for loading configurations from external files
+- **OS Detection**: Comprehensive operating system identification
+- **Memory Efficient**: In-memory storage with optional persistence
+
+### Use Cases
+
+- Environment variable management
+- Feature flag configuration
+- Database connection settings
+- API endpoint configuration
+- Platform-specific behavior adaptation
+*/
 
 const Configuration = Java.type("org.eclipse.dirigible.commons.config.Configuration");
 

@@ -58,7 +58,7 @@ export class PDF {
      *
      * @param {PDFTableData} data The structured data to populate the table.
      * @param {PDFTableConfig} [config] Optional configuration for page size and alignment.
-     * @returns {any[]} The generated PDF content as a byte array (Array<number>).
+     * @returns {any[]} The generated PDF content as a byte array (number[]).
      */
     public static generateTable(data: PDFTableData, config?: PDFTableConfig): any[] {
         const defaultTemplateParameters: Omit<TemplateParameters, keyof PDFTableData> = {
@@ -91,7 +91,7 @@ export class PDF {
      *
      * @param {string} templatePath The path to the custom template file (e.g., in the Registry).
      * @param {PDFTableData} data The data to be injected into the template.
-     * @returns {any[]} The generated PDF content as a byte array (Array<number>).
+     * @returns {any[]} The generated PDF content as a byte array (number[]).
      */
     public static generate(templatePath: string, data: PDFTableData): any[] {
         const template = Registry.getText(templatePath);
