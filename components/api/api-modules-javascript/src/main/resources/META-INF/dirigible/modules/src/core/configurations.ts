@@ -1,23 +1,44 @@
 /**
-## Overview
-
-The Configurations API provides a centralized, type-safe interface for managing application configuration properties and detecting the runtime operating system. It serves as the foundation for environment-specific settings and system-aware behavior in Aerokit applications.
-
-### Key Features
-
-- **Static Interface**: Thread-safe, singleton-like access to configuration data
-- **Type Safety**: Full TypeScript support with proper type definitions
-- **File Loading**: Support for loading configurations from external files
-- **OS Detection**: Comprehensive operating system identification
-- **Memory Efficient**: In-memory storage with optional persistence
-
-### Use Cases
-
-- Environment variable management
-- Feature flag configuration
-- Database connection settings
-- API endpoint configuration
-- Platform-specific behavior adaptation
+ * @module core/configurations
+ * @overview
+ * 
+ * The Configurations API provides a centralized, type-safe interface for managing application configuration properties and detecting the runtime operating system. It serves as the foundation for environment-specific settings and system-aware behavior in Aerokit applications.
+ * 
+ * ### Key Features
+ * 
+ * - **Static Interface**: Thread-safe, singleton-like access to configuration data
+ * - **Type Safety**: Full TypeScript support with proper type definitions
+ * - **File Loading**: Support for loading configurations from external files
+ * - **OS Detection**: Comprehensive operating system identification
+ * - **Memory Efficient**: In-memory storage with optional persistence
+ * 
+ * ### Use Cases
+ * - Application configuration management
+ * - Environment variable management
+ * - Feature flag configuration
+ * - Database connection settings
+ * - API endpoint configuration
+ * - Platform-specific behavior adaptation
+ * 
+ * ### Example Usage
+ * ```ts
+ * import { Configurations } from "@aerokit/sdk/core";
+ * 
+ * // Set a configuration property
+ * Configurations.set("apiEndpoint", "https://api.example.com");
+ * // Get a configuration property
+ * const apiEndpoint = Configurations.get("apiEndpoint");
+ * console.log(apiEndpoint); // Output: "https://api.example.com"
+ * 
+ * // Check the operating system
+ * if (Configurations.isOSWindows()) {
+ *   console.log("Running on Windows");
+ * } else if (Configurations.isOSMac()) {
+ *   console.log("Running on Mac");
+ * } else if (Configurations.isOSUNIX()) {
+ *   console.log("Running on UNIX");
+ * }
+ * ```
 */
 
 const Configuration = Java.type("org.eclipse.dirigible.commons.config.Configuration");
