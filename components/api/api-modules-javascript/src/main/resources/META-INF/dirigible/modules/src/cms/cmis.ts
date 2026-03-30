@@ -1,7 +1,30 @@
 /**
- * API CMIS
- * * Note: This module is supported only with the Mozilla Rhino engine
- * * Provides static access to the CMIS (Content Management Interoperability Services) repository session and utility constants.
+ * @module cms/cmis
+ * @overview
+ * 
+ * This module provides a set of classes and constants for interacting with a CMIS (Content Management Interoperability Services) repository within the Dirigible environment. It allows developers to establish sessions with the repository, navigate and manipulate folders and documents, and manage content streams. The module also defines standard CMIS properties and versioning states for consistent interaction with CMIS-compliant repositories.
+ * 
+ * ### Key Features
+ * - Establishing sessions with CMIS repositories
+ * - Navigating folder structures and managing documents
+ * - Handling content streams for document creation and retrieval
+ * - Defining standard CMIS properties and versioning states for consistent API usage
+ * 
+ * ### Use Cases
+ * - Integrating with enterprise content management systems that support CMIS
+ * - Building applications that require document management capabilities, such as file storage, versioning, and metadata handling
+ * - Automating content management tasks within a CMIS repository, such as bulk uploads, organization, and cleanup
+ * 
+ * ### Example Usage
+ * ```ts
+ * import { Cmis } from "@aerokit/sdk/cms";
+ * const session = Cmis.getSession();
+ * const rootFolder = session.getRootFolder();
+ * const newFolder = rootFolder.createFolder({ "cmis:name": "New Folder" });
+ * const contentStream = session.getObjectFactory().createContentStream("example.txt", 11, "text/plain", new streams.ByteArrayInputStream("Hello World".getBytes()));
+ * const newDocument = newFolder.createDocument({ "cmis:name": "Example Document" }, contentStream, Cmis.VERSIONING_STATE_MAJOR);
+ * console.log(`Created document with ID: ${newDocument.getId()} and name: ${newDocument.getName()}`);
+ * ```
  */
 
 import * as streams from "@aerokit/sdk/io/streams";

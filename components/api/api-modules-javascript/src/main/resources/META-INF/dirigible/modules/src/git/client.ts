@@ -1,3 +1,30 @@
+/**
+ * @module git/client
+ * @overview
+ * 
+ * This module provides a `Client` class for interacting with Git repositories within the Dirigible environment. The `Client` class offers methods for initializing repositories, committing changes, managing branches, and retrieving repository information such as status and history. It abstracts the underlying Git operations through a native Java facade, providing a simplified interface for common Git tasks in the context of workspace projects.
+ * 
+ * ### Key Features
+ * - Repository initialization with an initial commit.
+ * - Committing changes with options for staging and commit messages.
+ * - Branch management, including creation, deletion, and renaming of local and remote branches.
+ * - Pulling and pushing changes to remote repositories.
+ * - Retrieving repository status, current branch, and commit history.
+ * 
+ * ### Use Cases
+ * - Managing Git repositories for projects within the Dirigible workspace.
+ * - Automating Git operations as part of application workflows or CI/CD pipelines.
+ * - Integrating Git functionality into custom applications or modules that require version control capabilities.
+ * 
+ * ### Example Usage
+ * ```ts
+ * import { Client } from "@aerokit/sdk/git";
+ * 
+ * // Initialize a new Git repository for a project
+ * Client.initRepository("Alice", "alice@example.com");
+ * ```
+ */
+
 const GitFacade = Java.type("org.eclipse.dirigible.components.api.git.GitFacade");
 
 /**

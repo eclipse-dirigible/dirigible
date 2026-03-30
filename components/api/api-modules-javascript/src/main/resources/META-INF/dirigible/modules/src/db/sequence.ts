@@ -1,7 +1,34 @@
 /**
- * API Sequence
- *
- * Provides static methods for managing and accessing database sequences.
+ * @module db/sequence
+ * @overview
+ * 
+ * This module provides a `Sequence` class for managing database sequences in the Dirigible environment. The `Sequence` class offers static methods to retrieve the next value from a sequence, create new sequences, and drop existing sequences. It abstracts the underlying database interactions, allowing developers to work with sequences in a consistent manner across different database systems supported by Dirigible.
+ * 
+ * ### Key Features
+ * - Retrieve the next value from a specified database sequence.
+ * - Create new sequences with optional starting values.
+ * - Drop existing sequences when they are no longer needed.
+ * - Support for specifying datasource names to target specific database connections.
+ * 
+ * ### Use Cases
+ * - Generating unique identifiers for records in a database table using sequences.
+ * - Managing database sequences as part of application setup or migration processes.
+ * - Abstracting sequence management to allow for easier maintenance and potential database engine changes in the future.
+ * 
+ * ### Example Usage
+ * ```ts
+ * import { Sequence } from "@aerokit/sdk/db";
+ * 
+ * // Create a new sequence named "user_id_seq" starting at 1000
+ * Sequence.create("user_id_seq", 1000);
+ * 
+ * // Get the next value from the "user_id_seq" sequence
+ * const nextUserId = Sequence.nextval("user_id_seq");
+ * console.log(nextUserId); // Output: 1000
+ * 
+ * // Drop the "user_id_seq" sequence when it's no longer needed
+ * Sequence.drop("user_id_seq");
+ * ```
  */
 
 // Import the Java type used to bridge to the underlying database functionality.

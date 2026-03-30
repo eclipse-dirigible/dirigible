@@ -1,10 +1,42 @@
 import { sql, query } from "@aerokit/sdk/db";
 
 /**
- * Provides static methods for translating entity properties based on a dedicated language table.
+ * @module db/translator
+ * @overview
+ * 
+ * This module provides static methods for translating entity properties based on a dedicated language table.
  * Translation is achieved by querying a separate table (e.g., 'BASE_TABLE_LANG') and merging
  * the translated fields back into the original data.
+ * 
+ * ### Key Features
+ * - Translates properties for a list of entities based on a specified language code.
+ * - Translates properties for a single entity based on its ID and a specified language code.
+ * - Handles cases where the language table may not be present, providing error logging.
+ * 
+ * ### Use Cases
+ * - Supporting multilingual applications by translating entity properties according to user preferences or locale settings.
+ * - Integrating with existing database schemas that use separate language tables for translations.
+ * - Providing a consistent translation mechanism across different modules that require localized data.
+ * 
+ * ### Example Usage
+ * ```ts
+ * import { Translator } from "@aerokit/sdk/db";
+ * 
+ * // Example: Translating a list of products to German
+ * const products = [
+ *   { Id: 1, Name: "Laptop", Description: "A portable computer" },
+ *   { Id: 2, Name: "Phone", Description: "A mobile device" }
+ * ];
+ * const translatedProducts = Translator.translateList(products, 'de', 'PRODUCTS');
+ * console.log(translatedProducts);
+ * 
+ * // Example: Translating a single user entity to French
+ * const user = { Id: 1, FirstName: "John", LastName: "Doe" };
+ * const translatedUser = Translator.translateEntity(user, 1, 'fr', 'USERS');
+ * console.log(translatedUser);
+ * ```
  */
+
 export class Translator {
 
 	/**

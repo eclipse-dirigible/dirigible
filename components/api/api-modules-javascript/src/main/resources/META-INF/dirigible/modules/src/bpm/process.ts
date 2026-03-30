@@ -1,7 +1,30 @@
 /**
- * API Process
- * * Provides methods for interacting with process instances,
- * including starting, updating metadata, and managing variables.
+ * @module bpm/process
+ * @overview
+ * 
+ * This module provides functionalities for managing and interacting with BPMN process instances, including starting processes, updating metadata, and handling process variables.
+ * 
+ * ### Key Features
+ * - Start new process instances with optional business keys and parameters
+ * - Update process instance metadata such as name, business key, and business status
+ * - Manage process variables with support for local and global scopes, as well as transient variables
+ * 
+ * ### Use Cases
+ * - Initiating new process instances from application code
+ * - Dynamically updating process instance information during execution
+ * - Managing process variables for data storage and retrieval within process executions
+ * 
+ * ### Example Usage
+ * ```ts
+ * import { Process } from "@aerokit/sdk/bpm";
+ * // Start a new process instance
+ * const processInstanceId = Process.start("myProcessDefinitionKey", "myBusinessKey", { myVariable: "value" });
+ * console.log(`Started process instance with ID: ${processInstanceId}`);
+ * // Update process instance name
+ * Process.setProcessInstanceName(processInstanceId, "My Process Instance");
+ * // Set a process variable
+ * Process.setVariable(processInstanceId, "myVariable", "newValue");
+ * ```
  */
 
 import { Values } from "@aerokit/sdk/bpm/values";

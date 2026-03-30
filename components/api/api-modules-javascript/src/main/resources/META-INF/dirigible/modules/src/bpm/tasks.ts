@@ -1,5 +1,34 @@
 /**
- * API Tasks
+ * @module bpm/tasks
+ * @overview
+ * 
+ * This module provides functionalities for managing User Tasks within a Business Process Model and Notation (BPMN) context. It allows users to list tasks, manage task variables, complete tasks, and access task-related services.
+ * 
+ * ### Key Features
+ * - List all user tasks in the system
+ * - Get and set task variables, both globally and locally to the task
+ * - Complete tasks with optional variables and user information
+ * - Access the Task Service for advanced task management operations
+ * 
+ * ### Use Cases
+ * - Managing user tasks in a workflow engine
+ * - Automating task completion and variable management in development and production environments
+ * - Integrating task management into larger application workflows or administrative tools
+ * 
+ * ### Example Usage
+ * ```ts
+ * import { Tasks } from "@aerokit/sdk/bpm";
+ * // List all tasks
+ * const tasks = Tasks.list();
+ * console.log(tasks);
+ * // Get a task variable
+ * const variableValue = Tasks.getVariable("taskId", "variableName");
+ * console.log(variableValue);
+ * // Set a task variable
+ * Tasks.setVariable("taskId", "variableName", "newValue");
+ * // Complete a task with variables
+ * Tasks.complete("taskId", { "result": "approved" });
+ * ```
  */
 
 import { Streams } from "@aerokit/sdk/io";

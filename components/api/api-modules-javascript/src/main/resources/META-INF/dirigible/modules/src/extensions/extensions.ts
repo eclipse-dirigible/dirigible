@@ -1,6 +1,33 @@
 /**
- * API Extensions
- *
+ * @module extensions/extensions
+ * @overview
+ * 
+ * This module provides the `Extensions` class, which offers functionality for discovering and loading extensions defined against the Dirigible extension model. The `Extensions` class allows developers to retrieve registered extensions for specific extension points and to load those extensions as modules, ensuring that they meet specified requirements (e.g., exporting certain functions).
+ * 
+ * ### Key Features
+ * - Retrieve registered extension module paths for specific extension points.
+ * - Load extension modules with support for both synchronous and asynchronous loading mechanisms.
+ * - Validate loaded extensions against required function exports to ensure they meet expected interfaces.
+ * - Configurable error handling to either log issues or throw exceptions based on the use case.
+ * 
+ * ### Use Cases
+ * - Dynamically loading and integrating extensions at runtime based on the application's needs.
+ * - Ensuring that loaded extensions conform to expected interfaces by checking for required functions.
+ * - Managing extensions in a modular application design, allowing for third-party contributions without modifying core code.
+ * 
+ * ### Example Usage
+ * ```ts
+ * import { Extensions } from "@aerokit/sdk/extensions";
+ * 
+ * // Load extensions for a specific extension point, requiring certain functions to be exported
+ * const loadedExtensions = await Extensions.load("my.extension.point", ["initialize", "execute"], true);
+ * 
+ * // Use the loaded extensions
+ * loadedExtensions.forEach(extension => {
+ *   extension.initialize();
+ *   extension.execute();
+ * });
+ * ```
  */
 
 const ExtensionsFacade = Java.type("org.eclipse.dirigible.components.api.extensions.ExtensionsFacade");

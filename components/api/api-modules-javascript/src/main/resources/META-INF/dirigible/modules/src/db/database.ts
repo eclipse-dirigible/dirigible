@@ -1,7 +1,36 @@
 /**
- * API Database
- *
+ * @module db/database
+ * @overview
+ * 
+ * This module provides a `Database` class that serves as an interface for interacting with relational databases in the Dirigible environment. It includes functionalities for executing SQL queries, managing database connections, and retrieving metadata about the database structure. The module also defines a set of SQL type constants and helper functions for handling specific data types like CLOBs and BLOBs.
+ * 
+ * ### Key Features
+ * - **SQL Execution**: Execute arbitrary SQL queries and updates against the connected database.
+ * - **Metadata Retrieval**: Access detailed metadata about database schemas, tables, columns, and other structural elements.
+ * - **Type Handling**: Provides utilities for working with various SQL data types, including CLOBs and BLOBs, with special handling for HANA databases.
+ * - **Database System Detection**: Automatically detects the underlying database system to apply appropriate handling for specific data types and features.
+ * - **Prepared Statements**: Support for prepared statements to enhance security and performance when executing parameterized queries.
+ * 
+ * ### Use Cases
+ * - Performing database operations such as querying, inserting, updating, and deleting records in a relational database.
+ * - Retrieving and analyzing database metadata to understand the structure of the database and its components.
+ * - Handling large data types like CLOBs and BLOBs in a way that is compatible with different database systems, including HANA.
+ * - Implementing data access layers in applications that require interaction with relational databases, while abstracting away database-specific details.
+ * 
+ * ### Example Usage
+ * ```ts
+ * import { Database, SQLTypes } from "@aerokit/sdk/db";
+ * // Execute a simple query
+ * const resultSet = Database.executeQuery("SELECT * FROM Users WHERE age > ?", [30], [SQLTypes.INTEGER]);
+ * while (resultSet.next()) {
+ *  console.log(resultSet.getString("name"));
+ * }
+ * // Retrieve database metadata
+ * const metadata = Database.getMetadata();
+ * console.log(metadata.databaseProductName);
+ * ```
  */
+
 import { Bytes } from "@aerokit/sdk/io/bytes";
 import { InputStream } from "@aerokit/sdk/io/streams";
 

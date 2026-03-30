@@ -1,6 +1,28 @@
 /**
- * API Query
- *
+ * @module db/query
+ * @overview
+ * 
+ * This module provides a `Query` class for executing parameterized SQL SELECT statements against a database in the Dirigible environment. The `Query` class supports both positional parameters (using '?' placeholders) and named parameters (using ':paramName' placeholders), allowing for flexible query construction and execution. It also includes options for formatting the result set, such as specifying date formats.
+ * 
+ * ### Key Features
+ * - **Parameterized Queries**: Supports both positional and named parameters for secure and efficient query execution.
+ * - **Result Formatting**: Allows for custom formatting of query results, including date formatting options.
+ * - **JSON Input Support**: Accepts parameters as JSON strings or JavaScript arrays, providing flexibility in how parameters are passed to the query.
+ * - **Error Handling**: Provides robust error handling for invalid parameter formats and JSON parsing issues.
+ * 
+ * ### Use Cases
+ * - Executing complex SQL queries with dynamic parameters in a secure manner to prevent SQL injection.
+ * - Formatting query results according to specific requirements, such as date formats or custom data transformations.
+ * - Integrating with other modules that generate parameters in JSON format, enabling seamless data flow within the application.
+ * 
+ * ### Example Usage
+ * ```ts
+ * import { Query } from "@aerokit/sdk/db";
+ * 
+ * // Positional parameters example
+ * const result1 = Query.execute("SELECT * FROM Users WHERE age > ?", [30]);
+ * console.log(result1); // Output: [{ id: 1, name: "Alice", age: 35 }, { id: 2, name: "Bob", age: 40 }]
+ * ```
  */
 
 const DatabaseFacade = Java.type(

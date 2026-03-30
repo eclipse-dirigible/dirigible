@@ -1,3 +1,38 @@
+/**
+ * @module etcd/client
+ * @overview
+ * 
+ * This module provides a `Client` class for interacting with the Etcd key-value store within the Dirigible environment. The `Client` class allows developers to perform basic operations such as putting (writing) values, getting values, and deleting keys in Etcd. It also includes utility functions for converting between JavaScript types and the native Java/Etcd types used by the underlying Etcd client library.
+ * 
+ * ### Key Features
+ * - Put string or byte array values to Etcd keys.
+ * - Get values from Etcd keys with options for string or byte array formats.
+ * - Retrieve metadata about the Etcd cluster and key-value store through response headers.
+ * - Delete keys from Etcd.
+ * 
+ * ### Use Cases
+ * - Storing configuration data or application state in Etcd for distributed applications.
+ * - Retrieving and managing key-value pairs in Etcd for service discovery, configuration management, or coordination tasks.
+ * - Integrating with other modules that require a consistent interface for interacting with Etcd as a backend store.
+ * 
+ * ### Example Usage
+ * ```ts
+ * import { Client } from "@aerokit/sdk/etcd";
+ * 
+ * const etcdClient = new Client();
+ * 
+ * // Put a string value to a key
+ * etcdClient.putStringValue("config/appName", "MyApp");
+ * 
+ * // Get the string value of a key
+ * const appName = etcdClient.getKvsStringValue("config/appName");
+ * console.log(appName); // Output: { "config/appName": "MyApp" }
+ * 
+ * // Delete a key
+ * etcdClient.delete("config/appName");
+ * ```
+ */
+
 const EtcdFacade = Java.type("org.eclipse.dirigible.components.api.etcd.EtcdFacade");
 
 // =============================================================================

@@ -1,8 +1,21 @@
 /**
- * Values
- * * Utility class for serializing (stringify) and deserializing (parse) complex variable values (like objects and arrays)
- * to and from JSON strings for storage or transfer across the API boundary.
+ * @module bpm/values
+ * @overview
+ * 
+ * The `Values` class provides utility methods for serializing and deserializing complex variable values (such as objects and arrays) to and from JSON strings. This is particularly useful for handling process variables in BPMN processes, where variables may need to be stored or transferred across API boundaries in a consistent format.
+ * 
+ * ### Key Features
+ * - **parseValue**: Safely attempts to parse a string value as JSON, returning the original value if parsing fails.
+ * - **parseValuesMap**: Applies JSON parsing to all values in a Map, allowing for bulk deserialization of process variables.
+ * - **stringifyValue**: Converts objects and arrays into their JSON string representations, while leaving primitive types unchanged. Arrays are also converted into Java Lists for compatibility with Java APIs.
+ * - **stringifyValuesMap**: Applies JSON stringification to all values in a Map, enabling bulk serialization of process variables before API calls.
+ * 
+ * ### Use Cases
+ * - Managing complex process variables in BPMN processes, including objects and arrays.
+ * - Ensuring consistent serialization and deserialization of variables when interacting with APIs that expect string values.
+ * - Facilitating the transfer of structured data across API boundaries in a format that can be easily parsed and utilized.
  */
+
 export class Values {
 
 	/**
