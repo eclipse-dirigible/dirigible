@@ -1,5 +1,7 @@
 /**
  * @module bpm/values
+ * @package @aerokit/sdk/bpm
+ * @name Values
  * @overview
  * 
  * The `Values` class provides utility methods for serializing and deserializing complex variable values (such as objects and arrays) to and from JSON strings. This is particularly useful for handling process variables in BPMN processes, where variables may need to be stored or transferred across API boundaries in a consistent format.

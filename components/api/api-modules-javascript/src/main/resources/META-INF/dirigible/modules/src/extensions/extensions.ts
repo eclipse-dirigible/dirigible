@@ -1,5 +1,7 @@
 /**
  * @module extensions/extensions
+ * @package @aerokit/sdk/extensions
+ * @name Extensions
  * @overview
  * 
  * This module provides the `Extensions` class, which offers functionality for discovering and loading extensions defined against the Dirigible extension model. The `Extensions` class allows developers to retrieve registered extensions for specific extension points and to load those extensions as modules, ensuring that they meet specified requirements (e.g., exporting certain functions).

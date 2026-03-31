@@ -1,5 +1,7 @@
 /**
  * @module db/sequence
+ * @package @aerokit/sdk/db
+ * @name Sequence
  * @overview
  * 
  * This module provides a `Sequence` class for managing database sequences in the Dirigible environment. The `Sequence` class offers static methods to retrieve the next value from a sequence, create new sequences, and drop existing sequences. It abstracts the underlying database interactions, allowing developers to work with sequences in a consistent manner across different database systems supported by Dirigible.

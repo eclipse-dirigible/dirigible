@@ -1,5 +1,7 @@
 /**
  * @module git/client
+ * @package @aerokit/sdk/git
+ * @name Client
  * @overview
  * 
  * This module provides a `Client` class for interacting with Git repositories within the Dirigible environment. The `Client` class offers methods for initializing repositories, committing changes, managing branches, and retrieving repository information such as status and history. It abstracts the underlying Git operations through a native Java facade, providing a simplified interface for common Git tasks in the context of workspace projects.

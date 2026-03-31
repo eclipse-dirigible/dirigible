@@ -1,5 +1,7 @@
 /**
  * @module db/database
+ * @package @aerokit/sdk/db
+ * @name Database
  * @overview
  * 
  * This module provides a `Database` class that serves as an interface for interacting with relational databases in the Dirigible environment. It includes functionalities for executing SQL queries, managing database connections, and retrieving metadata about the database structure. The module also defines a set of SQL type constants and helper functions for handling specific data types like CLOBs and BLOBs.

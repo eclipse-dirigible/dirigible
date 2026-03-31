@@ -1,5 +1,7 @@
 /**
  * @module db/repository
+ * @package @aerokit/sdk/db
+ * @name Repository
  * @overview
  * 
  * This module provides an abstract `Repository` class that serves as a base for data access and business logic layers in the Dirigible environment. The `Repository` class wraps the underlying `store` API, providing a structured way to perform CRUD operations on entities while also handling entity metadata, translation, and event triggering. It is designed to be extended by specific repositories for different entities, allowing for customization of behavior and event handling.

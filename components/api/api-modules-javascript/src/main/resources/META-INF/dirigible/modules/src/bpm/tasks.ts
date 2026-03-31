@@ -1,5 +1,7 @@
 /**
  * @module bpm/tasks
+ * @package @aerokit/sdk/bpm
+ * @name Tasks
  * @overview
  * 
  * This module provides functionalities for managing User Tasks within a Business Process Model and Notation (BPMN) context. It allows users to list tasks, manage task variables, complete tasks, and access task-related services.

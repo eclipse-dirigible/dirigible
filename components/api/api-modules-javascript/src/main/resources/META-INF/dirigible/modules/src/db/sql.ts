@@ -1,5 +1,7 @@
 /**
  * @module db/sql
+ * @package @aerokit/sdk/db
+ * @name SQL
  * @overview
  * 
  * This module provides a fluent API for building SQL statements in a database-agnostic way. It includes builders for SELECT, INSERT, UPDATE, DELETE, CREATE, and DROP statements, as well as a builder for retrieving the next value from a sequence. The builders allow for method chaining to construct complex SQL queries while managing parameters separately to prevent SQL injection. The module abstracts away differences in SQL dialects and provides a consistent interface for constructing SQL statements across different databases.

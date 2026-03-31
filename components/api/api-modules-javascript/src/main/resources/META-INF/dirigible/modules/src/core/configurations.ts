@@ -1,5 +1,7 @@
 /**
  * @module core/configurations
+ * @package @aerokit/sdk/core
+ * @name Configurations
  * @overview
  * 
  * The Configurations API provides a centralized, type-safe interface for managing application configuration properties and detecting the runtime operating system. It serves as the foundation for environment-specific settings and system-aware behavior in Aerokit applications.

@@ -1,5 +1,7 @@
 /**
  * @module db/procedure
+ * @package @aerokit/sdk/db
+ * @name Procedure
  * @overview
  * 
  * This module provides a `Procedure` class for executing stored procedures in a database. It allows for both the creation of stored procedures using DDL statements and the execution of existing stored procedures with parameter support. The `execute` method can handle multiple result sets returned by a stored procedure and returns them as an array of JSON objects.

@@ -1,5 +1,7 @@
 /**
  * @module cache/cache
+ * @package @aerokit/sdk/cache
+ * @name Cache
  * @overview
  * 
  * This module provides a `Cache` class that serves as a static utility for interacting with a server-side cache facade. The `Cache` class allows developers to perform simple key-value storage, retrieval, and invalidation operations on the cache, enabling efficient data management and performance optimization within the Dirigible environment.

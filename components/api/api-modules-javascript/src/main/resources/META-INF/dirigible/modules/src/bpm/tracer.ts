@@ -1,5 +1,7 @@
 /**
  * @module bpm/tracer
+ * @package @aerokit/sdk/bpm
+ * @name Tracer
  * @overview
  * 
  * This module provides a `Tracer` class for logging and tracing the execution of BPMN processes within the Dirigible environment. The `Tracer` class allows developers to log informational messages, warnings, and errors, as well as to track the duration of process execution from start to completion or failure.

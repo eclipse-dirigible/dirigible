@@ -1,6 +1,9 @@
 /**
  * @module bpm/deployer
+ * @package @aerokit/sdk/bpm
+ * @name Deployer
  * @overview
+ * 
  * This module provides functionalities for managing Business Process Model and Notation (BPMN) definitions,
  * including deployment, undeployment, and deletion of process definitions.
  * 

@@ -1,5 +1,7 @@
 /**
  * @module core/globals
+ * @package @aerokit/sdk/core
+ * @name Globals
  * @overview
  * 
  * The Globals API provides a static interface for accessing and manipulating global application variables, typically backed by a central configuration or registry. It allows components and modules to share global state across the entire application without needing to pass values through function parameters or component props. The Globals API is designed to be lightweight and easy to use, making it ideal for managing global state, configuration settings, or any other data that needs to be accessible throughout the application.

@@ -1,5 +1,7 @@
 /**
  * @module etcd/client
+ * @package @aerokit/sdk/etcd
+ * @name Client
  * @overview
  * 
  * This module provides a `Client` class for interacting with the Etcd key-value store within the Dirigible environment. The `Client` class allows developers to perform basic operations such as putting (writing) values, getting values, and deleting keys in Etcd. It also includes utility functions for converting between JavaScript types and the native Java/Etcd types used by the underlying Etcd client library.

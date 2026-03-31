@@ -1,5 +1,7 @@
 /**
  * @module db/update
+ * @package @aerokit/sdk/db
+ * @name Update
  * @overview
  * 
  * This module provides the `Update` class, which serves as a facade for executing SQL UPDATE, INSERT, and DELETE statements in the Dirigible environment. The `execute` method allows for parameterized queries using either primitive values or structured parameter objects that specify both type and value. This flexibility enables developers to work with various data types and database-specific requirements when performing update operations.

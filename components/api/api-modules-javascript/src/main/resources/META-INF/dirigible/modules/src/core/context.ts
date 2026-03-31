@@ -1,5 +1,7 @@
 /**
  * @module core/context
+ * @package @aerokit/sdk/core
+ * @name Context
  * @overview
  * 
  * The Context API provides a simple, static interface for storing and retrieving key-value pairs in a global application context. It allows components and modules to share data across the entire application without needing to pass values through function parameters or component props. The Context API is designed to be lightweight and easy to use, making it ideal for managing global state, configuration settings, or any other data that needs to be accessible throughout the application.

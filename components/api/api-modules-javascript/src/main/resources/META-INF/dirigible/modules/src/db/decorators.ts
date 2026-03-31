@@ -1,5 +1,8 @@
 /**
  * @module db/decorators
+ * @package @aerokit/sdk/db
+ * @name Decorators
+ * @overview
  * 
  * This module provides a set of decorators for defining database entities and their properties in a Dirigible application. The decorators are designed to be compatible with both legacy JavaScript environments (like Mozilla Rhino or older GraalJS) and modern JavaScript environments that support the latest decorator specifications.
  * 

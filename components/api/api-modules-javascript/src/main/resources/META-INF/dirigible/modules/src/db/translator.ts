@@ -2,6 +2,8 @@ import { sql, query } from "@aerokit/sdk/db";
 
 /**
  * @module db/translator
+ * @package @aerokit/sdk/db
+ * @name Translator
  * @overview
  * 
  * This module provides static methods for translating entity properties based on a dedicated language table.

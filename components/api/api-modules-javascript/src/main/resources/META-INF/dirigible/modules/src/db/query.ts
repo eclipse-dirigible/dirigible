@@ -1,5 +1,7 @@
 /**
  * @module db/query
+ * @package @aerokit/sdk/db
+ * @name Query
  * @overview
  * 
  * This module provides a `Query` class for executing parameterized SQL SELECT statements against a database in the Dirigible environment. The `Query` class supports both positional parameters (using '?' placeholders) and named parameters (using ':paramName' placeholders), allowing for flexible query construction and execution. It also includes options for formatting the result set, such as specifying date formats.

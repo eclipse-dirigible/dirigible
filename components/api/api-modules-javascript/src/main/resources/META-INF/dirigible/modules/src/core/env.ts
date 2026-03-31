@@ -1,5 +1,7 @@
 /**
  * @module core/env
+ * @package @aerokit/sdk/core
+ * @name Env
  * @description
  * 
  * The `Env` module provides a static interface for accessing environment variables exposed to the runtime. It allows you to retrieve individual environment variable values by name, as well as list all available environment variables in a structured format.

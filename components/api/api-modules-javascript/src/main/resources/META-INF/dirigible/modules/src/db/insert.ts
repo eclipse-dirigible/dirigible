@@ -1,5 +1,7 @@
 /**
  * @module db/insert
+ * @package @aerokit/sdk/db
+ * @name Insert
  * @overview
  * 
  * The `Insert` class provides static methods for executing parameterized SQL INSERT statements against a database. It supports both single and batch insert operations, allowing developers to efficiently insert data into their databases while abstracting away the underlying database interaction details.

@@ -1,5 +1,7 @@
 /**
  * @module db/ormstatements
+ * @package @aerokit/sdk/db
+ * @name ORMStatements
  * @overview
  * 
  * The `ORMStatements` class provides a set of methods to generate SQL statements based on an ORM (Object-Relational Mapping) definition. It abstracts the SQL generation logic and allows developers to work with high-level ORM definitions while the class handles the conversion to SQL statements for various operations such as creating tables, inserting records, updating records, deleting records, and querying records. The class supports different SQL dialects through the use of a `SQLBuilder` instance, enabling compatibility with various database engines.

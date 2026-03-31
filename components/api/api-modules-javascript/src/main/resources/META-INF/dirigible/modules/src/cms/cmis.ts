@@ -1,5 +1,7 @@
 /**
  * @module cms/cmis
+ * @package @aerokit/sdk/cms
+ * @name Cmis
  * @overview
  * 
  * This module provides a set of classes and constants for interacting with a CMIS (Content Management Interoperability Services) repository within the Dirigible environment. It allows developers to establish sessions with the repository, navigate and manipulate folders and documents, and manage content streams. The module also defines standard CMIS properties and versioning states for consistent interaction with CMIS-compliant repositories.

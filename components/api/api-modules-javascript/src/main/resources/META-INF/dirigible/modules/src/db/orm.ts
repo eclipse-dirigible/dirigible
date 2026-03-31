@@ -1,5 +1,7 @@
 /**
  * @module db/orm
+ * @package @aerokit/sdk/db
+ * @name ORM
  * @overview
  * 
  * The `ORM` class provides a way to define an Object-Relational Mapping (ORM) schema for a database entity. It allows developers to specify the structure of their entities, including properties, associations, and constraints, in a declarative manner. The ORM definition can then be used by other modules (e.g., `DAO`, `Repository`) to perform database operations while ensuring data integrity and consistency with the defined schema.

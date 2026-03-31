@@ -1,5 +1,7 @@
 /**
  * @module db/store
+ * @package @aerokit/sdk/db
+ * @name Store
  * @overview
  * 
  * This module provides a `Store` class that serves as a facade for interacting with the underlying Dirigible Data Store. The `Store` class offers methods for performing CRUD operations, executing parameterized queries, and retrieving metadata about entities. It abstracts away the complexities of JSON serialization and deserialization when communicating with the native Java facade, allowing developers to work with plain JavaScript objects and arrays seamlessly.

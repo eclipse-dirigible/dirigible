@@ -1,5 +1,7 @@
 /**
  * @module db/dao
+ * @package @aerokit/sdk/db
+ * @name DAO
  * @overview
  * 
  * ::: warning

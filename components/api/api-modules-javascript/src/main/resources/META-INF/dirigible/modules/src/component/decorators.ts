@@ -1,5 +1,7 @@
 /**
  * @module component/decorators
+ * @package @aerokit/sdk/component
+ * @name Decorators
  * @overview
  * 
  * This module provides a set of decorators for defining and managing Dependency Injection (DI) components within the Dirigible environment. The decorators are designed to be compatible with both legacy JavaScript environments (like Mozilla Rhino or older GraalJS) and modern JavaScript environments that support the latest decorator specifications.

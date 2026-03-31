@@ -1,5 +1,7 @@
 /**
  * @module bpm/process
+ * @package @aerokit/sdk/bpm
+ * @name Process
  * @overview
  * 
  * This module provides functionalities for managing and interacting with BPMN process instances, including starting processes, updating metadata, and handling process variables.
