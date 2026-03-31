@@ -43,14 +43,15 @@
             <bk-toolbar-spacer></bk-toolbar-spacer>
             <bk-button glyph="sap-icon--search" aria-label="{{'documents:findItem' | t:'Find item'}}" title="{{'documents:findItem' | t:'Find item'}}" state="transparent" ng-click="search.displaySearch = !search.displaySearch"
                 toggled="search.displaySearch"></bk-button>
-            <bk-toolbar-separator></bk-toolbar-separator>
-            <bk-button glyph="sap-icon--add-folder" aria-label="{{'documents:newFolder' | t:'New folder'}}" title="{{'documents:newFolder' | t:'New folder'}}" state="transparent" ng-click="showNewFolderDialog()"></bk-button>
-            <bk-button glyph="sap-icon--delete" aria-label="{{'documents:delSelected' | t:'Delete selected'}}" title="{{'documents:delSelected' | t:'Delete selected'}}" state="transparent" ng-click="showDeleteItemsDialog($event)"
-                ng-disabled="!isDeleteItemsButtonEnabled()"></bk-button>
-            <bk-toolbar-separator></bk-toolbar-separator>
-            <a bk-button glyph="sap-icon--download-from-cloud" state="transparent" aria-label="{{'documents:downloadZip' | t:'Download zip'}}" title="{{'documents:downloadZip' | t:'Download zip'}}"
+            <bk-toolbar-separator ng-if="!params.readOnly"></bk-toolbar-separator>
+            <bk-button ng-if="!params.readOnly" glyph="sap-icon--add-folder" aria-label="{{'documents:newFolder' | t:'New folder'}}" title="{{'documents:newFolder' | t:'New folder'}}" state="transparent" ng-click="showNewFolderDialog()">
+            </bk-button>
+            <bk-button ng-if="!params.readOnly" glyph="sap-icon--delete" aria-label="{{'documents:delSelected' | t:'Delete selected'}}" title="{{'documents:delSelected' | t:'Delete selected'}}" state="transparent"
+                ng-click="showDeleteItemsDialog($event)" ng-disabled="!isDeleteItemsButtonEnabled()"></bk-button>
+            <bk-toolbar-separator ng-if="!params.readOnly"></bk-toolbar-separator>
+            <a ng-if="params.container !== 'window'" bk-button glyph="sap-icon--download-from-cloud" state="transparent" aria-label="{{'documents:downloadZip' | t:'Download zip'}}" title="{{'documents:downloadZip' | t:'Download zip'}}"
                 ng-href="{{ downloadZipPath }}?path={{ folder.path }}"></a>
-            <bk-popover>
+            <bk-popover ng-if="!params.readOnly">
                 <bk-popover-control>
                     <bk-button is-menu="true" glyph="sap-icon--upload-to-cloud" aria-label="{{'documents:uploadFile' | t:{count: 1}:'Upload file'}}" title="{{'documents:uploadFile' | t:{count: 1}:'Upload file'}}" state="transparent">
                     </bk-button>
@@ -85,7 +86,7 @@
                         <table bk-table inner-borders="horizontal" outer-borders="none" display-mode="compact">
                             <thead bk-table-header sticky="true">
                                 <tr bk-table-row>
-                                    <th bk-table-header-cell content-type="checkbox">
+                                    <th bk-table-header-cell content-type="checkbox" ng-if="params.multiple">
                                         <bk-checkbox id="cb-all" ng-model="selection.allSelected" ng-change="selectAllChanged()"></bk-checkbox>
                                         <bk-checkbox-label empty="true" for="cb-all"></bk-checkbox-label>
                                     </th>
@@ -94,7 +95,7 @@
                             </thead>
                             <tbody bk-table-body>
                                 <tr bk-table-row ng-repeat="single in filteredItems = (folder.children | filter: search.filterBy | orderBy: ['-type', 'name'])" selected="single.selected">
-                                    <td bk-table-cell content-type="checkbox">
+                                    <td bk-table-cell content-type="checkbox" ng-if="params.multiple">
                                         <bk-checkbox id="cb-{{single.name}}" ng-model="single.selected" ng-change="selectionChanged()" aria-labelledby="lbl-{{single.name}}"></bk-checkbox>
                                         <bk-checkbox-label empty="true" for="cb-{{single.name}}"></bk-checkbox-label>
                                     </td>
@@ -104,7 +105,7 @@
                                             {{ single.name }}
                                         </div>
                                     </td>
-                                    <td bk-table-cell fit-content="true" style="text-align: right">
+                                    <td ng-if="!params.readOnly" bk-table-cell fit-content="true" style="text-align: right">
                                         <bk-popover>
                                             <bk-popover-control>
                                                 <bk-button glyph="sap-icon--overflow" state="transparent" aria-label="{{'documents:aria.rowMenu' | t:{ 'type': isFolder(single) ? '$t(folder)' : '$t(file)' } }}"></bk-button>
@@ -127,14 +128,14 @@
                                 </tr>
                             </tbody>
                         </table>
-                        <div ng-show="showDropZone" class="drop-zone">
+                        <div ng-if="!params.readOnly" ng-show="showDropZone" class="drop-zone">
                             <bk-message-page glyph="sap-icon--upload-to-cloud" style="pointer-events: none">
                                 <bk-message-page-title>{{'documents:dropFiles' | t:'Drop files here'}}</bk-message-page-title>
                             </bk-message-page>
                         </div>
                     </bk-scrollbar>
                 </split-pane>
-                <split-pane size="50">
+                <split-pane size="50" ng-if="params.container !== 'window'">
                     <div class="bk-fill-parent" bk-scrollbar ng-show="selectedFile && canPreview && !previewLoading && previewType === 'csv'">
                         <table bk-table display-mode="compact" outer-borders="bottom">
                             <thead bk-table-header interactive="false" sticky="true">
@@ -158,6 +159,16 @@
                 </split-pane>
             </split>
         </div>
+        <bk-bar bar-design="footer" ng-if="params.container === 'window'">
+            <bk-bar-right>
+                <bk-bar-element>
+                    <bk-button label="{{'select' | t:'Select'}}" state="emphasized" compact="true" ng-click="closeDialog()"></bk-button>
+                </bk-bar-element>
+                <bk-bar-element>
+                    <bk-button label="{{'cancel' | t:'Cancel'}}" state="transparent" compact="true" ng-click="closeDialog(false)"></bk-button>
+                </bk-bar-element>
+            </bk-bar-right>
+        </bk-bar>
         <theme></theme>
     </body>
 

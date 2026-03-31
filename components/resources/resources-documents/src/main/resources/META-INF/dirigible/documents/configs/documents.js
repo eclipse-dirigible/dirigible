@@ -20,6 +20,13 @@ const perspectiveData = {
 	lazyLoad: true,
 	icon: '/services/web/documents/images/documents.svg',
 };
+const viewData = {
+	region: 'center',
+	hasHeader: false,
+	maxWidth: '640px',
+	...perspectiveData
+};
 if (typeof exports !== 'undefined') {
 	exports.getPerspective = () => perspectiveData;
+	exports.getView = () => viewData;
 }

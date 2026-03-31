@@ -10,7 +10,7 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const perspectiveData = {
-	id: 'perspectiveDocuments',
+	id: 'documentStorage',
 	label: 'Documents',
 	path: '/services/web/documents/index.html',
 	order: 150,
@@ -19,6 +19,8 @@ const perspectiveData = {
 const viewData = {
 	lazyLoad: true,
 	region: 'center',
+	hasHeader: false,
+	maxWidth: '640px',
 	...perspectiveData
 };
 if (typeof exports !== 'undefined') {

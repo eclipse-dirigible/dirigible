@@ -55,6 +55,28 @@ $result##
 		#else
 				<img class="bk-contain-image bk-border-box #getPaddingClass($element.padding $element.side)"#if($element.width) width="$element.width"#end#if($element.height) height="$element.height"#end src="$element.imageLink" alt="$element.desc"/>
 		#end
+	#elseif($element.controlId == "input-documents")
+				<bk-form-item horizontal="$element.horizontal">
+					<bk-form-label colon="true" #if($element.required)ng-required="true"#end for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
+					<div class="fd-file-uploader" style="flex: 1">
+						<div class="fd-file-uploader__container">
+							<bk-input id="$element.id" name="$element.id" class="fd-file-uploader__input" type="text" ng-model="model.$element.model" state="{{ !forms.form['$element.id'].$valid ? 'error' : '' }}"
+								ng-click="_selectFromDocuments('$element.model', $element.multiple, $element.uploadEnabled)"
+								model-array-to-string
+								#if($element.required)
+								ng-required="true"
+								#end
+								#if($element.readonly)
+								ng-readonly="true"
+								#end
+								#if($element.isCompact)
+								compact="true"
+								#end>
+							</bk-input>
+							<bk-button type="button" #if($element.isCompact)compact="true"#end label="{{'select' | t:'Select'}}" #if($element.readonly)ng-disabled="true"#end ng-click="_selectFromDocuments('$element.model', $element.multiple, $element.uploadEnabled)"></bk-button>
+						</div>
+					</div>
+				</bk-form-item>
 	#elseif($element.controlId == "input-textarea")
 				<bk-form-item horizontal="$element.horizontal">
 					<bk-form-label colon="true" ng-required="$element.required" for="$element.id">{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}</bk-form-label>
@@ -293,15 +315,21 @@ $result##
 						</tr>
 					</tbody>
 				</table>
+	#elseif($element.controlId == "stepIndicator")
+				<bk-form-item>
+					<bk-step-indicator#if($element.staticData) steps="_stepIndicators['$element.id']" current-step="$element.currentStep"#else steps="$element.stepsVar" current-step="$element.stepVar"#end #if($element.iconOnly)icon-only="true"#end></bk-step-indicator>
+				</bk-form-item>
 	#elseif($element.controlId == "button")
 				<bk-button#if($element.isSubmit) type="submit" ng-disabled="!forms.form.$valid"#else type="button"#end label="{{ '$projectName:${tprefix}.t.$element.translation' | t:'$element.label' }}" compact="$element.isCompact"#if($element.type) state="$element.type"#end #if($element.callback) ng-click="$element.callback"#elseif($element.isSubmit && $metadata.url) ng-click="_submit()"#end></bk-button>
 	#elseif($element.controlId == "paragraph")
 				<#getPTag($element.format) class="fd-text#if($element.format) bk-pre-wrap#end#if($element.subtitle) bk-text--subtitle#end#if($element.ellipsis) bk-scroll-hidden bk-text--ellipsis#end#if($element.italic) bk-font--italic#end#if($element.fontSize == 'sm') bk-font--small#end#if($element.fontSize == 'lg') bk-font--large#end #getPaddingClass($element.padding $element.side)">#if($element.model){{ model.$element.model }}#else$element.text#end</#getPTag($element.format)>
+	#elseif($element.controlId == "progress")
+				<bk-progress-indicator#if($element.variable) current-value="$element.variable"#else current-value="$element.value"#end state="{{$element.state}}" label="{{$element.label}}" aria-label="{{$element.ariaLabel}}"></bk-progress-indicator>
 	#elseif($element.controlId == "line")
 				<div class="#if($element.orientation == "h")bk-border--top#else bk-border--left#end" role="presentation"></div>
 	#elseif($element.controlId == "link")
 				<bk-form-item>
-					<bk-link#if($element.variable) ng-href="{{$element.variable}}"#elseif($element.href) href="$element.href"#else href="#"#end#if($element.newTab) target="_blank"#else target="_top"#end>$element.label</bk-link>
+					<bk-link class="#getPaddingClass($element.padding $element.side)"#if($element.variable) ng-href="{{$element.variable}}"#elseif($element.href) href="$element.href"#else href="#"#end#if($element.newTab) target="_blank"#else target="_top"#end>$element.label</bk-link>
 				</bk-form-item>
 	#elseif($element.controlId == "spacer")
 				<div#if($element.stretch) class="bk-stretch"#else style="#if($element.width)width: ${element.width.intValue()}px;#end#if($element.height)height: ${element.height.intValue()}px#end"#end aria-hidden="true"></div>

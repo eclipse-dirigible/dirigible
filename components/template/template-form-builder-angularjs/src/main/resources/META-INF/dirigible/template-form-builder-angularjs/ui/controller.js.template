@@ -14,8 +14,31 @@ angular.module('forms', ['blimpKit', 'platformView', 'platformLocale', 'platform
             return new Date(value);
         });
     }
+})).directive('modelArrayToString', () => ({
+    require: 'ngModel',
+    link: (_scope, _element, _attrs, ngModel) => {
+        ngModel.${dollar}formatters.push((value) => {
+            if (Array.isArray(value)) return `"${value.join('", "')}"`;
+            return value;
+        });
+    }
 })).constant('Dialogs', new DialogHub()).controller('FormController', ($scope, $http, Dialogs, LocaleService, ViewParameters) => {
     $scope._is_view = ViewParameters.get().container !== undefined;
+    $scope._stepIndicators = {};
+    ${dollar}scope._selectFromDocuments = (modelKey, multiple, uploadEnabled) => {
+        Dialogs.showWindow({id: 'documentStorage', params: { readOnly: !uploadEnabled, multiple: multiple, topic: '${projectName}.doc.select' } });
+        const docSelectListener = Dialogs.addMessageListener({
+            topic: '${projectName}.doc.select',
+            handler: (data) => {
+                if (data) {
+                    ${dollar}scope.$evalAsync(() => {
+                        ${dollar}scope.model[modelKey] = data.length > 1 ? data : data[0];
+                    });
+                }
+                Dialogs.removeMessageListener(docSelectListener);
+            }
+        });
+    };
     $scope.forms = {
         form: {}
     };
@@ -59,7 +82,27 @@ angular.module('forms', ['blimpKit', 'platformView', 'platformLocale', 'platform
     $scope.model = {};
 #macro(formWidgets $elements)
 #foreach($element in $elements)
-    #if($element.controlId == "input-number")
+    #if($element.controlId == "stepIndicator" && $element.staticData)
+    ${dollar}scope._stepIndicators['$element.id'] = [];
+    LocaleService.onInit(() => {
+        ${dollar}scope._stepIndicators['$element.id'].push(
+            #foreach($step in $element.steps)
+            {
+                label: LocaleService.t('$projectName:${tprefix}.$step.translation', '$step.label'),
+                #if($step.secondaryLabel)
+                secondaryLabel: '$step.secondaryLabel',
+                #end
+                #if($step.glyph)
+                glyph: '$step.glyph',
+                #end
+                #if($step.svg)
+                svg: '$step.svg',
+                #end
+            },
+            #end
+        );
+    });
+    #elseif($element.controlId == "input-number")
     $scope.model.$element.model = 0;
 	#elseif($element.controlId == "input-checkbox")
     $scope.model.$element.model = false;
