@@ -1,5 +1,5 @@
 /**
- * @module http/client
+ * @module http/index
  * @package @aerokit/sdk/http
  * @overview
  * 

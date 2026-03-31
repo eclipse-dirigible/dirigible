@@ -1,5 +1,3 @@
-import { sql, query } from "@aerokit/sdk/db";
-
 /**
  * @module db/translator
  * @package @aerokit/sdk/db
@@ -38,6 +36,8 @@ import { sql, query } from "@aerokit/sdk/db";
  * console.log(translatedUser);
  * ```
  */
+
+import { sql, query } from "@aerokit/sdk/db";
 
 export class Translator {
 
