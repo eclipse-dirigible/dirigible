@@ -1,8 +1,38 @@
 /**
- * Provides a high-level API for managing WebSocket clients and handling
- * lifecycle events within the application context. It wraps the internal Java
- * WebsocketsFacade.
+ * @module net/websockets
+ * @package @aerokit/sdk/net
+ * @name Websockets
+ * @overview
+ * 
+ * The Websockets module provides an API for managing WebSocket clients and handling lifecycle events within the application context. It abstracts the complexities of WebSocket communication, allowing developers to easily create and manage WebSocket connections, send messages, and handle events such as connection openings, messages, errors, and closures.
+ * 
+ * ### Key Features:
+ * - **WebSocket Client Management**: Create and manage WebSocket clients with ease, including sending messages and closing connections.
+ * - **Event Handling**: Access event details such as messages and errors within the context of WebSocket event handlers.
+ * 
+ * ### Use Cases:
+ * - **Real-Time Communication**: This module is ideal for applications that require real-time communication between clients and the server using WebSockets.
+ * - **Integration with WebSocket Systems**: By providing a high-level API for WebSocket management, developers can easily integrate their applications with WebSocket-based systems and protocols.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Websockets } from "@aerokit/sdk/net";
+ * 
+ * // Create a new WebSocket client connection
+ * const client = Websockets.createWebsocket("ws://example.com/socket", "myHandler");
+ * client.send("Hello, WebSocket!");
+ * 
+ * // Access event details in an 'onmessage' handler
+ * if (Websockets.isOnMessage()) {
+ *     const message = Websockets.getMessage();
+ *     console.log("Received message:", message);
+ * }
+ * 
+ * // Close the WebSocket connection when done
+ * client.close();
+ * ```
  */
+
 const WebsocketsFacade = Java.type("org.eclipse.dirigible.components.api.websockets.WebsocketsFacade");
 
 /**

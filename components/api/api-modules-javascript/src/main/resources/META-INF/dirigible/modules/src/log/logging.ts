@@ -1,10 +1,37 @@
 /**
- * Provides a wrapper for the underlying logging facility, allowing
- * for categorized and leveled logging messages with support for variable arguments,
- * including error objects.
+ * @module log/logging
+ * @package @aerokit/sdk/log
+ * @name Logging
+ * @overview
+ * 
+ * The Logging module provides a structured and flexible logging API for applications, allowing developers to create named loggers and emit log messages at various levels (e.g., DEBUG, INFO, WARN, ERROR). The module abstracts the underlying logging implementation, providing a consistent interface for logging across the application. It supports message formatting with variable arguments and can handle error objects to include stack traces in log outputs.
+ * 
+ * ### Key Features:
+ * - **Named Loggers**: Create loggers with specific names to categorize log messages (e.g., 'com.app.service').
+ * - **Leveled Logging**: Emit log messages at different levels (DEBUG, INFO, WARN, ERROR) with the ability to set logging thresholds.
+ * - **Message Formatting**: Support for message templates with variable arguments for dynamic log content.
+ * - **Error Handling**: Ability to include Error objects in log messages to capture stack traces and error details.
+ * 
+ * ### Use Cases:
+ * - **Application Logging**: Use the Logging module to emit log messages throughout your application for debugging, monitoring, and auditing purposes.
+ * - **Error Tracking**: Log errors with stack traces to facilitate troubleshooting and issue resolution.
+ * - **Performance Monitoring**: Emit log messages at different levels to monitor application performance and behavior under various conditions.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Logging } from "@aerokit/sdk/log";
+ * 
+ * const logger = Logging.getLogger("com.app.service");
+ * logger.setLevel("DEBUG");
+ * 
+ * logger.debug("Debugging value: {0}", someVariable);
+ * logger.info("Service started successfully");
+ * logger.warn("Low disk space warning");
+ * logger.error("An error occurred while processing request", new Error("Database connection failed"));
+ * ```
  */
-const LogFacade = Java.type("org.eclipse.dirigible.components.api.log.LogFacade");
 
+const LogFacade = Java.type("org.eclipse.dirigible.components.api.log.LogFacade");
 
 /**
  * The main entry point for the logging API. Use this class to obtain a named

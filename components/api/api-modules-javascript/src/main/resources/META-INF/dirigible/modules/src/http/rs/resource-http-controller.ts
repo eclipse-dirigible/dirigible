@@ -1,3 +1,36 @@
+/**
+ * @module http/rs/controller
+ * @package @aerokit/sdk/http
+ * @name HttpController
+ * 
+ * @overview
+ * 
+ * This module defines the `HttpController` class, which serves as the main entry point for handling HTTP requests in a RESTful manner. The `HttpController` class provides methods for defining resource paths and HTTP method handlers (GET, POST, PUT, DELETE, etc.) using a fluent API. It also includes logic for matching incoming requests to the appropriate resource handlers based on the request path, HTTP method, and media type constraints (consumes/produces). The controller supports before, serve, catch, and finally handler functions for each resource method, allowing for flexible request processing and error handling. Additionally, it includes functionality for sending error responses formatted according to the client's accepted media types.
+ * 
+ * ### Key Features:
+ * - Define resource paths and HTTP method handlers using a fluent API.
+ * - Match incoming requests to resource handlers based on path, method, and media type constraints.
+ * - Support for before, serve, catch, and finally handler functions for each resource method.
+ * - Flexible error handling with customizable error responses formatted according to client preferences.
+ * 
+ * ### Use Cases:
+ * - Building RESTful APIs with complex routing and media type handling requirements.
+ * 
+ * ### Usage Example:
+ * 
+ * ```javascript
+ * import { service } from '@aerokit/sdk/http';
+ * 
+ * const controller = service();
+ * 
+ * controller.get('/api/resource', (ctx) => {
+ *     ctx.response.print('Hello, World!');
+ * });
+ * 
+ * // Start listening for requests (this would typically be done by the framework)
+ * controller.listen();
+ * ```
+ */
 import { Response as response } from "../response";
 import { Request as request } from "../request";
 import { ResourceMappings } from "./resource-mappings";

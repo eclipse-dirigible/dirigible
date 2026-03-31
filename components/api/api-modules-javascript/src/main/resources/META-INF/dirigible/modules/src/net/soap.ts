@@ -1,3 +1,38 @@
+/**
+ * @module net/soap
+ * @package @aerokit/sdk/net
+ * @name SOAP
+ * @overview
+ * 
+ * The SOAP module provides a set of classes and methods for working with SOAP messages in JavaScript. It allows developers to create, parse, and send SOAP messages to SOAP endpoints, abstracting the complexities of the underlying Java SOAP API. This module is essential for integrating with SOAP-based web services and enables seamless communication using the SOAP protocol.
+ * 
+ * ### Key Features:
+ * - **Message Creation**: The `SOAP` class provides methods to create new SOAP messages, including the ability to add namespaces, headers, and body elements.
+ * - **Message Parsing**: The module allows parsing of incoming SOAP messages from HTTP requests, enabling developers to handle SOAP requests in their applications.
+ * - **SOAP Calls**: The `call` method enables sending SOAP messages to specified endpoints and receiving responses, facilitating communication with SOAP-based web services.
+ * 
+ * ### Use Cases:
+ * - **Integrating with SOAP Web Services**: Developers can use this module to interact with existing SOAP web services, sending requests and processing responses in a structured manner.
+ * - **Building SOAP Endpoints**: By parsing incoming SOAP messages, developers can create applications that act as SOAP endpoints, handling requests and providing appropriate responses.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { SOAP } from "@aerokit/sdk/net";
+ * 
+ * // Create a new SOAP message
+ * const message = SOAP.createMessage();
+ * const envelope = message.getPart().getEnvelope();
+ * envelope.addNamespaceDeclaration("ns", "http://example.com/namespace");
+ * const body = envelope.getBody();
+ * const element = body.addChildElement("MyRequest", "ns");
+ * element.addTextNode("Request data");
+ * 
+ * // Send the SOAP message to an endpoint
+ * const response = SOAP.call(message, "http://example.com/soap-endpoint");
+ * console.log(response.getText());
+ * ```
+ */
+
 import { Request } from "@aerokit/sdk/http/request";
 import { Base64 } from "@aerokit/sdk/utils/base64";
 import { Streams, InputStream } from "@aerokit/sdk/io/streams";

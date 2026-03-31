@@ -1,3 +1,31 @@
+/**
+ * @module http/rs/resource
+ * @package @aerokit/sdk/http
+ * @name Resource
+ * @overview
+ * 
+ * The Resource class is a fundamental component of the HTTP controller module, representing an individual API resource. It encapsulates the URL path and the associated handler specifications for various HTTP methods (GET, POST, etc.) that define how requests to that resource should be processed. The Resource class provides a structured way to define and manage API endpoints, allowing developers to configure their API resources with specific paths and handling logic.
+ * 
+ * ### Key Features:
+ * - **Resource Representation**: Represents an API resource with a specific URL path and associated handlers for different HTTP methods.
+ * - **Method Configuration**: Allows defining handlers for various HTTP methods (GET, POST, PUT, DELETE) with specific configurations.
+ * - **Redirection and Disabling**: Provides functionality to redirect requests or disable certain method handlers based on constraints.
+ * 
+ * ### Use Cases:
+ * - **API Endpoint Definition**: Developers can use the Resource class to define API endpoints with specific paths and handling logic for different HTTP methods.
+ * - **Dynamic Resource Management**: The Resource class allows for dynamic configuration of resources, enabling features like redirection and selective disabling of method handlers.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Resource } from "@aerokit/sdk/http";
+ * 
+ * const userResource = new Resource("users/{id}")
+ *   .get((req, res) => { ... })
+ *  .post((req, res) => { ... })
+ *   .redirect("/new-users/{id}")
+ *   .disable("post");
+ * ```
+ */
 import { handlerFunction } from "./resource-common";
 import { ResourceMethod } from "./resource-method";
 

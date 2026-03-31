@@ -1,8 +1,35 @@
 /**
- * The Request API under the HTTP module is responsible for
- * managing standard HTTP request parameters, headers, cookies,
- * and request metadata provided to server-side scripting services.
- *
+ * @module http/request
+ * @package @aerokit/sdk/http
+ * @name Request
+ * @overview
+ * 
+ * The Request class provides a comprehensive API for accessing HTTP request data and metadata within server-side scripting services. It abstracts the underlying HTTP request details and exposes a rich set of static methods to retrieve information such as headers, query parameters, cookies, authentication details, and the request body in various formats (text, JSON, binary).
+ * 
+ * ### Key Features:
+ * - **Comprehensive Request Data Access**: Provides methods to access all aspects of the HTTP request, including headers, parameters, cookies, and body content.
+ * - **Convenient Body Parsing**: Offers built-in methods to retrieve the request body as text or parse it as JSON, simplifying common use cases.
+ * - **Security Information**: Allows checking user roles and authentication types directly from the request context.
+ * 
+ * ### Use Cases:
+ * - **API Development**: Used in RESTful API endpoints to access incoming request data and make decisions based on headers, parameters, or authentication status.
+ * - **Middleware Logic**: Can be used in middleware functions to inspect requests before they reach the main handler logic.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Request } from "@aerokit/sdk/http";
+ * 
+ * function handleRequest() {
+ *     if (Request.isValid()) {
+ *         const method = Request.getMethod();
+ *         const user = Request.getRemoteUser();
+ *         const body = Request.json();
+ *         // Process the request based on method, user, and body content
+ *     } else {
+ *         // Handle invalid request context
+ *     }
+ * }
+ * ```
  */
 
 import { InputStream, Streams } from "@aerokit/sdk/io/streams";

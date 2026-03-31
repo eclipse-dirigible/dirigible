@@ -1,7 +1,33 @@
 /**
- * Provides a static façade (`Upload` class) for checking and parsing
- * multipart/form-data HTTP requests, typically used for file uploads.
+ * @module http/upload
+ * @package @aerokit/sdk/http
+ * @name Upload
+ * @overview
+ * 
+ * The Upload module provides a static façade (`Upload` class) for checking and parsing multipart/form-data HTTP requests, which are commonly used for file uploads. This module allows developers to easily determine if an incoming request contains multipart content and to parse that content into manageable file items, abstracting away the complexities of handling multipart requests directly.
+ * 
+ * ### Key Features:
+ * - **Multipart Detection**: The `isMultipartContent` method allows developers to quickly check if the incoming request is of the multipart/form-data type.
+ * - **Request Parsing**: The `parseRequest` method processes the multipart content and provides a structured representation of the uploaded files and form fields through the `FileItems` class.
+ * 
+ * ### Use Cases:
+ * - **File Upload Handling**: This module is essential for handling file uploads in web applications, allowing developers to access uploaded files and their metadata easily.
+ * - **Form Data Processing**: In addition to file uploads, this module can also handle regular form fields that are part of a multipart request, making it versatile for various form processing scenarios.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Upload } from "@aerokit/sdk/http";
+ * 
+ * if (Upload.isMultipartContent()) {
+ *     const fileItems = Upload.parseRequest();
+ *     for (let i = 0; i < fileItems.size(); i++) {
+ *         const fileItem = fileItems.get(i);
+ *         console.log(`Uploaded file: ${fileItem.getName()}, size: ${fileItem.getSize()} bytes`);
+ *     }
+ * }
+ * ```
  */
+
 import { InputStream } from "@aerokit/sdk/io/streams"
 import { Bytes } from "@aerokit/sdk/io/bytes"
 

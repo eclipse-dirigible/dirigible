@@ -1,6 +1,33 @@
 /**
- * Provides an API for consuming messages from JMS-style destinations,
- * supporting both Queues (point-to-point) and Topics (publish/subscribe).
+ * @module messaging/consumer
+ * @package @aerokit/sdk/messaging
+ * @name Consumer
+ * @overview
+ * 
+ * The Consumer module provides an API for consuming messages from JMS-style destinations, supporting both Queues (point-to-point) and Topics (publish/subscribe). It abstracts the complexities of message consumption, allowing developers to easily receive messages from configured destinations with optional timeout handling.
+ * 
+ * ### Key Features:
+ * - **Queue and Topic Support**: The module supports both Queue and Topic consumers, enabling different messaging patterns (point-to-point and publish/subscribe).
+ * - **Synchronous Message Reception**: The `receive` method allows for synchronous message retrieval with an optional timeout parameter.
+ * 
+ * ### Use Cases:
+ * - **Message-Driven Applications**: Developers can use this module to build applications that react to messages received from queues or topics, enabling event-driven architectures.
+ * - **Integration with Messaging Systems**: By consuming messages from JMS-style destinations, applications can integrate with various messaging systems that support these patterns.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Consumer } from "@aerokit/sdk/messaging";
+ * 
+ * // Create a Queue consumer for 'orders.queue'
+ * const queueConsumer = Consumer.queue("orders.queue");
+ * const messageFromQueue = queueConsumer.receive(5000); // Wait up to 5 seconds for a message
+ * console.log("Received from queue:", messageFromQueue);
+ * 
+ * // Create a Topic consumer for 'market.updates.topic'
+ * const topicConsumer = Consumer.topic("market.updates.topic");
+ * const messageFromTopic = topicConsumer.receive(5000); // Wait up to 5 seconds for a message
+ * console.log("Received from topic:", messageFromTopic);
+ * ```
  */
 
 const MessagingFacade = Java.type("org.eclipse.dirigible.components.api.messaging.MessagingFacade");

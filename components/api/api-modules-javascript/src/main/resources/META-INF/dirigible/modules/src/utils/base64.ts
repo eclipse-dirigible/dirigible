@@ -1,3 +1,34 @@
+/**
+ * @module utils/base64
+ * @package @aerokit/sdk/utils
+ * @name Base64
+ * @overview
+ * 
+ * The Base64 class provides static utility methods for encoding and decoding data using the Base64 encoding scheme. It supports both string and byte array inputs, allowing developers to easily convert data to and from Base64 format. The class abstracts the underlying Java implementation, providing a simple interface for performing Base64 operations in JavaScript.
+ * 
+ * ### Key Features:
+ * - **Encoding**: Methods to encode strings or byte arrays into Base64 format, returning either a Base64 string or a byte array.
+ * - **Decoding**: Methods to decode Base64 strings or byte arrays back into their original byte array form.
+ * 
+ * ### Use Cases:
+ * - **Data Serialization**: Base64 encoding is commonly used for serializing binary data (like images or files) into a text format that can be easily transmitted over text-based protocols such as HTTP.
+ * - **Authentication**: Base64 encoding is often used in authentication schemes (e.g., Basic Authentication) to encode credentials before transmission.
+ * - **Data Storage**: Developers can use Base64 encoding to store binary data in databases that only support text formats.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Base64 } from "@aerokit/sdk/utils";
+ * 
+ * // Encoding a string to Base64
+ * const encodedString = Base64.encode("Hello, World!");
+ * console.log(encodedString); // Output: SGVsbG8sIFdvcmxkIQ==
+ * 
+ * // Decoding a Base64 string back to bytes
+ * const decodedBytes = Base64.decode(encodedString);
+ * console.log(decodedBytes); // Output: [72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33]
+ * ```
+ */
+
 import { Streams } from "@aerokit/sdk/io/streams";
 import { Bytes } from "@aerokit/sdk/io/bytes";
 

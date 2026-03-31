@@ -1,5 +1,38 @@
+/**
+ * @module utils/digest
+ * @package @aerokit/sdk/utils
+ * @name Digest
+ * @overview
+ * 
+ * The Digest class provides static utility methods for calculating cryptographic hash digests (MD5, SHA1, SHA256, SHA384, SHA512) from input data. It supports both string and byte array inputs, allowing developers to easily compute digests in various formats. The class abstracts the underlying Java implementation, providing a simple interface for performing digest operations in JavaScript.
+ * 
+ * ### Key Features:
+ * - **Multiple Digest Algorithms**: Supports MD5, SHA1, SHA256, SHA384, and SHA512 digest algorithms.
+ * - **Flexible Input Types**: Accepts both string and byte array inputs for digest calculation.
+ * - **Output Formats**: Provides methods to return digest results as byte arrays or hexadecimal strings.
+ * 
+ * ### Use Cases:
+ * - **Data Integrity**: Compute digests to verify the integrity of data by comparing computed digests with expected values.
+ * - **Password Hashing**: Use digest functions to hash passwords before storing them in a database (note: consider using a stronger hashing algorithm with salt for password storage).
+ * - **Unique Identifiers**: Generate unique identifiers for data based on their content by computing their digests.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Digest } from "@aerokit/sdk/utils";
+ * 
+ * // Calculate MD5 digest of a string and get it as a hex string
+ * const md5Hex = Digest.md5Hex("Hello, World!");
+ * console.log(md5Hex); // Output: 65a8e27d8879283831b664bd8b7f0ad4
+ * 
+ * // Calculate SHA256 digest of a byte array and get it as a byte array
+ * const sha256Bytes = Digest.sha256([72, 101, 108, 108, 111]); // "Hello" in bytes
+ * console.log(sha256Bytes); // Output: [185, 105, 241, 149, 122, 223, 173, 190, ...]
+ * ```
+ */
+
 import { Streams } from "@aerokit/sdk/io/streams";
 import { Bytes } from "@aerokit/sdk/io/bytes";
+
 const DigestFacade = Java.type("org.eclipse.dirigible.components.api.utils.DigestFacade");
 
 export class Digest {

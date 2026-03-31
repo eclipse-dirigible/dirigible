@@ -1,6 +1,37 @@
 /**
- * Provides the API for managing scheduled jobs and tasks within the platform,
- * allowing users to retrieve, enable, disable, and trigger jobs, as well as log output.
+ * @module job/scheduler
+ * @package @aerokit/sdk/job
+ * @name Scheduler
+ * @overview
+ * 
+ * The Scheduler class provides a static façade for managing scheduled jobs and tasks within the platform. It allows users to retrieve job definitions, enable or disable jobs, trigger immediate execution, and log output associated with specific job instances. The Scheduler interacts with the underlying job scheduling system to facilitate the execution of recurring tasks based on cron expressions or other scheduling criteria.
+ * 
+ * ### Key Features:
+ * - **Job Retrieval**: Methods to retrieve all job definitions or a specific job by name.
+ * - **Job Control**: Methods to enable, disable, or trigger jobs on demand.
+ * - **Logging**: Methods to log messages at various levels (standard, error, warning, info) for specific job instances.
+ * 
+ * ### Use Cases:
+ * - **Task Scheduling**: Developers can use the Scheduler to manage tasks that need to run at specific intervals, such as data cleanup, report generation, or any recurring background processing.
+ * - **Monitoring and Debugging**: The logging methods allow developers to track the execution of jobs and diagnose issues by associating log messages with specific job instances.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Scheduler } from "@aerokit/sdk/job";
+ * 
+ * // Retrieve all job definitions
+ * const jobs = Scheduler.getJobs();
+ * console.log(jobs);
+ * 
+ * // Enable a specific job
+ * Scheduler.enable("myScheduledJob");
+ * 
+ * // Trigger a job immediately with parameters
+ * Scheduler.trigger("myScheduledJob", { param1: "value1", param2: "value2" });
+ * 
+ * // Log a message for a specific job instance
+ * Scheduler.log("myScheduledJob", "This is a log message for the job instance.");
+ * ```
  */
 
 import { configurations } from "@aerokit/sdk/core";

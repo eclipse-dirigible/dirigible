@@ -1,7 +1,38 @@
 /**
- * Provides a static façade (`Session` class) for accessing and manipulating
- * the HTTP session associated with the current request. This module is often used
- * to store user-specific data during their interaction with the application.
+ * @module http/session
+ * @package @aerokit/sdk/http
+ * @name Session
+ * @overview
+ * 
+ * The Session module provides a static façade (`Session` class) for accessing and manipulating the HTTP session associated with the current request. This module is often used to store user-specific data during their interaction with the application, such as authentication status, user preferences, or temporary data that should persist across multiple requests within the same session.
+ * 
+ * ### Key Features:
+ * - **Session Management**: Provides methods to check session validity, retrieve and set attributes, manage session lifetime, and invalidate sessions.
+ * - **Attribute Handling**: Allows storing and retrieving named attributes in the session, which can be used to maintain user state across requests.
+ * - **Session Metadata**: Offers access to session metadata such as creation time, last accessed time, and session ID.
+ * 
+ * ### Use Cases:
+ * - **User Authentication**: Storing user authentication status or tokens in the session to maintain login state across requests.
+ * - **User Preferences**: Keeping user-specific settings or preferences that should persist during the session.
+ * - **Temporary Data Storage**: Holding temporary data that is relevant for the duration of the user's interaction with the application but does not need to be stored permanently.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Session } from "@aerokit/sdk/http";
+ * 
+ * // Check if the session is valid
+ * if (Session.isValid()) {
+ *     // Set a user attribute in the session
+ *     Session.setAttribute("userId", "12345");
+ *     // Retrieve the user attribute from the session
+ *     const userId = Session.getAttribute("userId");
+ *     // Get session metadata
+ *     const creationTime = Session.getCreationTime();
+ *     const lastAccessedTime = Session.getLastAccessedTime();
+ *     // Invalidate the session when done
+ *     Session.invalidate();
+ * }
+ * ```
  */
 
 const HttpSessionFacade = Java.type("org.eclipse.dirigible.components.api.http.HttpSessionFacade");
