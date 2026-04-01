@@ -50,6 +50,7 @@
     "close": "Затвори",
     "clear": "Изчисти",
     "clearAll": "Изчисти всичко",
+    "deleteAll": "$t(delete) всичко",
     "clearFilter": "Изчисти филтъра",
     "name": "Име",
     "username": "Потребител",

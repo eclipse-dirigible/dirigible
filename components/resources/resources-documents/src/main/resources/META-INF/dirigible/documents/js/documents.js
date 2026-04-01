@@ -154,6 +154,7 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
     $scope.hasForward = () => $scope.history.hasForward();
     $scope.goBack = () => $scope.history.goBack(path => loadFolder(path));
     $scope.goForward = () => $scope.history.goForward(path => loadFolder(path));
+    $scope.refresh = refreshFolder;
 
     function getAllSelectedFilePaths() {
         let paths = [];

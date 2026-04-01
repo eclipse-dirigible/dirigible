@@ -32,6 +32,7 @@
             <bk-button glyph="sap-icon--arrow-left" aria-label="{{'documents:goBack' | t:'Go back'}}" title="{{'documents:goBack' | t:'Go back'}}" state="transparent" ng-disabled="!hasBack()" ng-click="goBack()"></bk-button>
             <bk-button glyph="sap-icon--arrow-right" aria-label="{{'documents:goForward' | t:'Go forward'}}" title="{{'documents:goForward' | t:'Go forward'}}" state="transparent" ng-disabled="!hasForward()" ng-click="goForward()">
             </bk-button>
+            <bk-button glyph="sap-icon--refresh" aria-label="{{'refresh' | t:'Refresh'}}" title="{{'refresh' | t:'Refresh'}}" state="transparent" ng-click="refresh()"></bk-button>
             <nav aria-label="path breadcrumbs">
                 <bk-breadcrumb>
                     <bk-breadcrumb-item ng-if="!($last)" ng-repeat="path in breadcrumbs.crumbs track by $index">

@@ -50,6 +50,7 @@
     "close": "Close",
     "clear": "Clear",
     "clearAll": "Clear all",
+    "deleteAll": "$t(delete) all",
     "clearFilter": "Clear filter",
     "name": "Name",
     "username": "Username",
