@@ -39,7 +39,7 @@
                     <td bk-table-cell>{{::websocket.location}}</td>
                     <td bk-table-cell>{{::websocket.endpoint}}</td>
                     <td bk-table-cell>{{::websocket.handler}}</td>
-                    <td bk-table-cell fit-content="true">{{::websocket.createdAt}}</td>
+                    <td bk-table-cell fit-content="true">{{::websocket.createdAt | date:'yyyy-MM-dd HH:mm:ss'}}</td>
                     <td bk-table-cell fit-content="true">{{::websocket.createdBy}}</td>
                 </tr>
                 <tr ng-if="websockets.length === 0" bk-table-row>

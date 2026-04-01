@@ -11,6 +11,7 @@
  */
 angular.module('app', ['platformView', 'blimpKit', 'platformLocale']).controller('ApplicationController', ($scope, $http, $window, LocaleService) => {
     const Dialogs = new DialogHub();
+    const dateTimeUtil = new DateTimeUtil();
     $scope.tasksList = [];
     $scope.tasksListAssignee = [];
     $scope.selectedClaimTask = null;
@@ -38,6 +39,10 @@ angular.module('app', ['platformView', 'blimpKit', 'platformLocale']).controller
         }, (error) => {
             console.error(error);
         });
+    };
+
+    $scope.formatTime = (isoDate) => {
+        return dateTimeUtil.format(isoDate, "YYYY-MM-DD HH:mm:ss");
     };
 
     $scope.selectionClaimChanged = (variable) => {

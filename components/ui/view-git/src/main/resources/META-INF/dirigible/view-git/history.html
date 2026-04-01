@@ -20,7 +20,7 @@
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
         <title config-title></title>
         <script type="text/javascript" src="configs/history-view.js"></script>
-        <meta name="platform-links" category="ng-view">
+        <meta name="platform-links" category="ng-view,date-time-util">
         <script type="text/javascript" src="/services/web/service-git/git.js"></script>
         <script type="text/javascript" src="js/history.js"></script>
     </head>
@@ -51,7 +51,7 @@
                         <td bk-table-cell>{{next.author}}
                             <{{next.emailAddress}}>
                         </td>
-                        <td bk-table-cell>{{next.dateTime}}</td>
+                        <td bk-table-cell>{{formatTime(next.dateTime)}}</td>
                     </tr>
                     <tr ng-if="showEmptyRow()" bk-table-row>
                         <td bk-table-cell no-data="true">{{getNoDataMessage()}}</td>

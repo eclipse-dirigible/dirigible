@@ -20,7 +20,7 @@
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
         <title config-title></title>
         <script type="text/javascript" src="/services/web/perspective-processes/configs/bpm-tasks-view.js"></script>
-        <meta name="platform-links" category="ng-view">
+        <meta name="platform-links" category="ng-view,date-time-util">
         <script type="text/javascript" src="/services/web/perspective-processes/views/js/bpm-tasks.js"></script>
     </head>
 
@@ -56,7 +56,7 @@
                         <td bk-table-cell>{{next.candidateUsers}}</td>
                         <td bk-table-cell>{{next.candidateGroups}}</td>
                         <td bk-table-cell>{{next.processInstanceId}}</td>
-                        <td bk-table-cell>{{next.createTime}}</td>
+                        <td bk-table-cell>{{formatTime(next.createTime)}}</td>
                         </td>
                     </tr>
                     <tr ng-if="tasksList.length === 0" bk-table-row>
@@ -90,9 +90,10 @@
                         <td bk-table-cell>{{next.candidateUsers}}</td>
                         <td bk-table-cell>{{next.candidateGroups}}</td>
                         <td bk-table-cell>{{next.processInstanceId}}</td>
-                        <td bk-table-cell>{{next.createTime}}</td>
+                        <td bk-table-cell>{{formatTime(next.createTime)}}</td>
                         <td bk-table-cell>
-                            <bk-button label="Open Form" title="Open Form" aria-label="Open Form" ng-click="openForm($window.location.origin + next.formKey + '?taskId=' + next.id + '&processInstanceId=' + next.processInstanceId)"></bk-button>
+                            <bk-button label="Open Form" title="Open Form" aria-label="Open Form" ng-click="openForm($window.location.origin + next.formKey + '?taskId=' + next.id + '&processInstanceId=' + next.processInstanceId)">
+                            </bk-button>
                         </td>
                     </tr>
                     <tr ng-if="tasksListAssignee.length === 0" bk-table-row>

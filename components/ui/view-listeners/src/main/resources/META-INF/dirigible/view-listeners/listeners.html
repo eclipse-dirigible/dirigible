@@ -43,7 +43,7 @@
                     <td bk-table-cell>{{::listener.handler}}</td>
                     <td bk-table-cell>{{::listener.description}}</td>
                     <td bk-table-cell fit-content="true">{{::listener.type === 'Q' ? 'Queue' : 'Topic'}}</td>
-                    <td bk-table-cell fit-content="true">{{::view.createdAt}}</td>
+                    <td bk-table-cell fit-content="true">{{::view.createdAt | date:'yyyy-MM-dd HH:mm:ss'}}</td>
                     <td bk-table-cell fit-content="true">{{::view.createdBy}}</td>
                 </tr>
                 <tr ng-if="listeners.length === 0" bk-table-row>

@@ -11,6 +11,7 @@
  */
 const historyView = angular.module('history', ['blimpKit', 'platformView', 'GitService']);
 historyView.controller('HistoryContoller', ($scope, GitService) => {
+	const dateTimeUtil = new DateTimeUtil();
 	$scope.state = {
 		isBusy: false,
 	};
@@ -50,6 +51,10 @@ historyView.controller('HistoryContoller', ($scope, GitService) => {
 			});
 		});
 	};
+
+	$scope.formatTime = (isoDate) => {
+        return dateTimeUtil.format(isoDate, "YYYY-MM-DD HH:mm:ss");
+    };
 
 	$scope.getNoDataMessage = () => {
 		return !$scope.history ? 'Please, select a project' : 'No data found';
