@@ -1,7 +1,43 @@
 /**
- * Utility class for converting and normalizing common data types (Date, Boolean)
- * within an object structure, typically for persistence or API consumption.
+ * @module utils/converter
+ * @package @aerokit/sdk/utils
+ * @name Converter
+ * @overview
+ * 
+ * The Converter class provides static utility methods for converting and normalizing common data types such as Date and Boolean within an object structure. It is designed to facilitate the preparation of data for persistence or API consumption by ensuring that date values are consistently represented as timestamps or ISO strings, and that boolean values are strictly coerced to true or false. This class abstracts common data transformation patterns, allowing developers to easily convert and normalize their data without having to implement repetitive conversion logic throughout their codebase.
+ * 
+ * ### Key Features:
+ * - **Date Conversion**: Methods to convert date properties into Unix timestamps or ISO 8601 strings, with handling for local timezone offsets.
+ * - **Boolean Conversion**: A method to coerce any truthy or falsy value into a strict boolean type.
+ * 
+ * ### Use Cases:
+ * - **Data Preparation**: This class is useful for preparing data objects before saving them to a database or sending them in API requests, ensuring that date and boolean fields are in the expected format.
+ * - **Consistency**: By using these conversion methods, developers can maintain consistency in how dates and booleans are represented across their application, reducing bugs related to data formatting.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Converter } from "@aerokit/sdk/utils";
+ * 
+ * const obj = {
+ *   dateCreated: "2024-01-01T10:00:00Z",
+ *   birthday: "1990-05-15",
+ *   isActive: 1
+ * };
+ * 
+ * Converter.setDate(obj, 'dateCreated');
+ * Converter.setLocalDate(obj, 'birthday');
+ * Converter.setBoolean(obj, 'isActive');
+ * 
+ * console.log(obj);
+ * // Output:
+ * // {
+ * //   dateCreated: 1704096000000,
+ * //   birthday: "1990-05-15T00:00:00.000Z",
+ * //   isActive: true
+ * // }
+ * ```
  */
+
 export class Converter {
 
 	/**

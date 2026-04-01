@@ -1,7 +1,40 @@
 /**
- * Provides a wrapper for the platform's ProblemsFacade to manage system issues,
- * including saving new problems, fetching existing ones, and updating their status.
+ * @module platform/problems
+ * @package @aerokit/sdk/platform
+ * @name Problems
+ * @overview
+ * 
+ * The Problems module provides a static utility class for managing system problems and issues through the platform's ProblemsFacade. It allows developers to save new problems, fetch existing ones, update their status, and delete them as needed. This module abstracts the complexities of problem management, providing a simple interface for handling issues that arise during development or runtime.
+ * 
+ * ### Key Features:
+ * - **Problem Recording**: Save detailed information about problems, including location, type, cause, and expected outcomes.
+ * - **Problem Retrieval**: Fetch individual problems by ID or retrieve all problems with optional filtering and batching.
+ * - **Status Management**: Update the status of problems to indicate whether they are active, solved, or ignored.
+ * - **Problem Deletion**: Remove specific problems or clear all problems based on their status.
+ * 
+ * ### Use Cases:
+ * - **Issue Tracking**: This module is ideal for applications that need to track and manage issues that occur during development or runtime, providing a structured way to log and resolve problems.
+ * - **Automated Problem Handling**: Developers can use this module to automate the handling of known issues by updating their status or deleting them as part of maintenance routines.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Problems } from "@aerokit/sdk/platform";
+ * 
+ * // Save a new problem
+ * Problems.save("/path/to/file.js", "Syntax Error", "10", "15", "Unexpected token", "Expected ';'", "Syntax", "JavaScript", "const a = ;", "file.js");
+ * 
+ * // Fetch all problems
+ * const allProblems = Problems.fetchAllProblems();
+ * console.log("All Problems:", allProblems);
+ * 
+ * // Update the status of a problem
+ * Problems.updateStatus(1, Problems.SOLVED);
+ * 
+ * // Delete a specific problem
+ * Problems.deleteProblem(1);
+ * ```
  */
+
 const ProblemsFacade = Java.type("org.eclipse.dirigible.components.api.platform.ProblemsFacade");
 
 /**

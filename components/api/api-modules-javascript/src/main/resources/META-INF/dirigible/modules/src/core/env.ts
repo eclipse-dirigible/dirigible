@@ -1,6 +1,33 @@
 /**
- * API Env
- * * Provides a static interface for accessing and listing environment variables exposed to the runtime.
+ * @module core/env
+ * @package @aerokit/sdk/core
+ * @name Env
+ * @description
+ * 
+ * The `Env` module provides a static interface for accessing environment variables exposed to the runtime. It allows you to retrieve individual environment variable values by name, as well as list all available environment variables in a structured format.
+ * 
+ * ### Key Features
+ * - **Simple Access**: Retrieve environment variable values using a straightforward `get` method.
+ * - **Comprehensive Listing**: Obtain a complete map of all environment variables using the `list` method, which returns an object with key-value pairs.
+ * - **Type Safety**: The `get` method returns `undefined` if an environment variable is not set, allowing for safe handling of missing variables.
+ * 
+ * ### Use Cases
+ * - Accessing configuration settings that are provided through environment variables, such as API keys, database connection strings, or feature flags.
+ * - Listing all available environment variables for debugging purposes or to dynamically adjust application behavior based on the runtime environment.
+ * - Integrating with external services that require environment variable configuration, ensuring that sensitive information is not hardcoded in the application code.
+ * 
+ * ### Example Usage
+ * ```ts
+ * import { Env } from "@aerokit/sdk/core";
+ * 
+ * // Get a specific environment variable
+ * const apiKey = Env.get("API_KEY");
+ * console.log(apiKey); // Output: "your-api-key" or undefined if not set
+ * 
+ * // List all environment variables
+ * const envVars = Env.list();
+ * console.log(envVars); // Output: { API_KEY: "your-api-key", NODE_ENV: "production", ... }
+ * ```
  */
 
 const EnvFacade = Java.type("org.eclipse.dirigible.components.api.core.EnvFacade");

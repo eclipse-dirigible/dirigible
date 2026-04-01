@@ -1,3 +1,31 @@
+/**
+ * @module db/store
+ * @package @aerokit/sdk/db
+ * @name Store
+ * @overview
+ * 
+ * This module provides a `Store` class that serves as a facade for interacting with the underlying Dirigible Data Store. The `Store` class offers methods for performing CRUD operations, executing parameterized queries, and retrieving metadata about entities. It abstracts away the complexities of JSON serialization and deserialization when communicating with the native Java facade, allowing developers to work with plain JavaScript objects and arrays seamlessly.
+ * 
+ * ### Key Features
+ * - CRUD Operations: Create, read, update, and delete entries in the data store using simple methods.
+ * - Query Execution: Execute parameterized queries with support for both primitive and complex parameters.
+ * - Metadata Retrieval: Access metadata about entities, such as table names and ID fields.
+ * - JSON Handling: Automatically handles JSON serialization and deserialization of JavaScript objects when interacting with the native Java APIs.
+ * 
+ * ### Use Cases
+ * - Managing application data in a structured way using the data store.
+ * - Executing complex queries with dynamic parameters to retrieve specific subsets of data.
+ * - Abstracting away database interactions to allow for easier maintenance and potential future changes to the underlying data storage mechanism.
+ * 
+ * ### Example Usage
+ * ```ts
+ * import { Store } from "@aerokit/sdk/db";
+ * 
+ * // Save a new entry to the "users" entity
+ * const userId = Store.save("users", { name: "Alice", email: "alice@example.com" });
+ * ```
+ */
+
 const DataStoreFacade = Java.type("org.eclipse.dirigible.components.api.db.DataStoreFacade");
 
 /**

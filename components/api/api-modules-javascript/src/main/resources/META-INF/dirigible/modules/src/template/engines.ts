@@ -1,3 +1,35 @@
+/**
+ * @module template/engines
+ * @package @aerokit/sdk/template
+ * @name TemplateEngines
+ * @overview
+ * 
+ * The TemplateEngines module provides a unified interface for working with various server-side template engines, including Velocity, Mustache, and JavaScript. It allows developers to generate dynamic content by processing templates with provided parameters. The module abstracts the underlying template engine implementations, offering a consistent API for generating output from both raw template strings and templates stored in the registry.
+ * 
+ * ### Key Features:
+ * - **Multiple Template Engines**: Supports Velocity, Mustache, and JavaScript template engines, allowing developers to choose the most suitable one for their use case.
+ * - **Dynamic Content Generation**: Enables the generation of dynamic content by processing templates with context parameters.
+ * - **File-Based Templates**: Provides functionality to load templates from the public registry and generate output based on their content.
+ * 
+ * ### Use Cases:
+ * - **Email Templating**: Generate dynamic email content using templates stored in the registry.
+ * - **Report Generation**: Create dynamic reports by processing templates with data retrieved from various sources.
+ * - **Server-Side Rendering**: Use JavaScript templates for server-side rendering of HTML content.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { TemplateEngines } from "@aerokit/sdk/template";
+ * 
+ * // Generate content from a raw template string
+ * const output = TemplateEngines.generate("template1", "Hello, {{name}}!", { name: "World" });
+ * console.log(output); // Output: Hello, World!
+ * 
+ * // Generate content from a template file in the registry
+ * const fileOutput = TemplateEngines.generateFromFile("templates/email.mustache", { name: "Alice" });
+ * console.log(fileOutput); // Output depends on the content of 'email.mustache'
+ * ```
+ */
+
 import { Repository } from "@aerokit/sdk/platform/repository";
 
 const REGISTRY_PUBLIC = "/registry/public/";

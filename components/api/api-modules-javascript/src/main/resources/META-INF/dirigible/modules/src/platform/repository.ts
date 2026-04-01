@@ -1,7 +1,44 @@
 /**
- * Provides a wrapper for the platform's RepositoryFacade to manage files (Resources)
- * and folders (Collections), including CRUD operations, movement, and content handling.
+ * @module platform/repository
+ * @package @aerokit/sdk/platform
+ * @name Repository
+ * @overview
+ * 
+ * The Repository module provides a wrapper for the platform's RepositoryFacade, allowing developers to manage files (Resources) and folders (Collections) within the repository. It offers high-level methods for creating, retrieving, updating, and deleting resources and collections by their paths, as well as handling content in both string and byte array formats. The module abstracts the complexities of repository interactions, providing a simple interface for file management operations.
+ * 
+ * ### Key Features:
+ * - **Resource Management**: Create, retrieve, update, and delete resources (files) with support for both text and binary content.
+ * - **Collection Management**: Create, retrieve, and delete collections (folders), as well as manage their contents.
+ * - **Metadata Access**: Retrieve detailed information about resources and collections, including permissions, size, and timestamps.
+ * - **Search Functionality**: Search for resources using glob patterns to find files matching specific criteria.
+ * 
+ * ### Use Cases:
+ * - **File Storage**: This module is ideal for applications that need to store and manage files within the platform's repository, such as configuration files, data exports, or user-generated content.
+ * - **Content Management**: Developers can use this module to organize files into collections (folders) and manage their lifecycle effectively.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Repository } from "@aerokit/sdk/platform";
+ * 
+ * // Create a new resource with text content
+ * const resource = Repository.createResource("/myproject/data.txt", "Hello, Repository!", "text/plain");
+ * console.log("Resource created at path:", resource.getPath());
+ * 
+ * // Update the resource content with binary data
+ * const binaryContent = [0x48, 0x65, 0x6C, 0x6C, 0x6F]; // "Hello" in bytes
+ * resource.setContent(binaryContent);
+ * console.log("Resource content updated with binary data.");
+ * 
+ * // Create a new collection (folder)
+ * const collection = Repository.createCollection("/myproject/documents");
+ * console.log("Collection created at path:", collection.getPath());
+ * 
+ * // Move the resource into the new collection
+ * resource.moveTo("/myproject/documents/data.txt");
+ * console.log("Resource moved to new path:", resource.getPath());
+ * ```
  */
+
 import { Bytes } from "@aerokit/sdk/io/bytes";
 
 const RepositoryFacade = Java.type("org.eclipse.dirigible.components.api.platform.RepositoryFacade");

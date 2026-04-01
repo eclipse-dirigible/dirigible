@@ -1,8 +1,42 @@
 /**
- * Cache
- * * Provides a static utility for interacting with a server-side cache facade, enabling
- * simple key-value storage, retrieval, and invalidation operations.
+ * @module cache/cache
+ * @package @aerokit/sdk/cache
+ * @name Cache
+ * @overview
+ * 
+ * This module provides a `Cache` class that serves as a static utility for interacting with a server-side cache facade. The `Cache` class allows developers to perform simple key-value storage, retrieval, and invalidation operations on the cache, enabling efficient data management and performance optimization within the Dirigible environment.
+ * 
+ * ### Key Features
+ * - Simple key-value storage: Store any serializable data in the cache using a unique key.
+ * - Efficient retrieval: Quickly retrieve cached values using their associated keys.
+ * - Cache invalidation: Remove specific entries or clear the entire cache when needed.
+ * - Server-side management: The cache is managed on the server, allowing for centralized control over caching behavior and policies.
+ * 
+ * ### Use Cases
+ * - Caching frequently accessed data to improve performance and reduce latency.
+ * - Storing intermediate results of expensive computations or API calls for reuse.
+ * - Managing session data or user-specific information in a scalable manner.
+ * - Implementing application-level caching strategies to optimize resource usage and response times.
+ * 
+ * ### Example Usage
+ * ```ts
+ * import { Cache } from "@aerokit/sdk/cache";
+ * 
+ * // Store a value in the cache
+ * Cache.set("user_123", { name: "Alice", age: 30 });
+ * // Retrieve a value from the cache
+ * const userData = Cache.get("user_123");
+ * console.log(userData); // Output: { name: "Alice", age: 30 }
+ * // Check if a key exists in the cache
+ * const exists = Cache.contains("user_123");
+ * console.log(exists); // Output: true
+ * // Delete a specific key from the cache
+ * Cache.delete("user_123");
+ * // Clear the entire cache
+ * Cache.clear();
+ * ```
  */
+
 const CacheFacade = Java.type("org.eclipse.dirigible.components.api.cache.CacheFacade");
 
 export class Cache {

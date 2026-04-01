@@ -1,10 +1,45 @@
+/**
+ * @module utils/url
+ * @package @aerokit/sdk/utils
+ * @name URL
+ * @overview
+ * 
+ * The URL class provides static methods for performing various forms of URL encoding and decoding. It serves as a wrapper around native Java URL utility methods, allowing developers to easily encode and decode strings for use in URLs, query parameters, path segments, and form data. This utility is essential for ensuring that data is correctly formatted when included in URLs, preventing issues with special characters and ensuring proper transmission of data across the web.
+ * 
+ * ### Key Features:
+ * - **URL Encoding/Decoding**: Methods to encode and decode strings for safe inclusion in URLs.
+ * - **Path Segment Escaping**: Specialized method for escaping strings that will be used as URL path segments.
+ * - **Form Data Escaping**: Method for escaping strings according to HTML form data encoding rules.
+ * 
+ * ### Use Cases:
+ * - **Query Parameters**: Encode user input or dynamic data to be included in URL query parameters.
+ * - **URL Path Segments**: Safely include dynamic values in URL paths without breaking the structure.
+ * - **Form Submissions**: Prepare data for submission via HTML forms using application/x-www-form-urlencoded encoding.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { URL } from "@aerokit/sdk/utils";
+ * 
+ * // Encode a query parameter value
+ * const encodedValue = URL.encode("Hello World!");
+ * console.log(encodedValue); // Output: Hello%20World%21
+ * 
+ * // Decode a previously encoded string
+ * const decodedValue = URL.decode(encodedValue);
+ * console.log(decodedValue); // Output: Hello World!
+ * 
+ * // Escape a string for use as a URL path segment
+ * const escapedPath = URL.escapePath("my folder/file.txt");
+ * console.log(escapedPath); // Output: my%20folder%2Ffile.txt
+ * 
+ * // Escape a string for use in form data
+ * const escapedForm = URL.escapeForm("name=John Doe&age=30");
+ * console.log(escapedForm); // Output: name%3DJohn+Doe%26age%3D30
+ * ```
+ */
+
 const UrlFacade = Java.type("org.eclipse.dirigible.components.api.utils.UrlFacade");
 
-/**
- * Utility class for performing various forms of URL encoding and decoding.
- * It wraps native Java URL utility methods for handling query parameters,
- * path segments, and form data.
- */
 export class URL {
 
 	/**
