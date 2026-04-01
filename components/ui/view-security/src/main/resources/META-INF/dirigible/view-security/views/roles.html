@@ -39,7 +39,7 @@
                     <td bk-table-cell>{{::next.name}}</td>
                     <td bk-table-cell>{{::next.location}}</td>
                     <td bk-table-cell>{{::next.description}}</td>
-                    <td bk-table-cell fit-content="true">{{::next.createdAt}}</td>
+                    <td bk-table-cell fit-content="true">{{::next.createdAt | date:'yyyy-MM-dd HH:mm:ss'}}</td>
                     <td bk-table-cell fit-content="true">{{::next.createdBy}}</td>
                 </tr>
             </tbody>

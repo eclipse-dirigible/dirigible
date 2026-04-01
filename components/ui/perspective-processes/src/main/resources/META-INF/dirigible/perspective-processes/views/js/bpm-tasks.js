@@ -13,6 +13,7 @@ const tasksView = angular.module('tasks', ['platformView', 'blimpKit']);
 tasksView.constant('Notifications', new NotificationHub());
 tasksView.constant('Dialogs', new DialogHub());
 tasksView.controller('TasksController', ($scope, $http, $window, Dialogs, Notifications) => {
+    const dateTimeUtil = new DateTimeUtil();
     $scope.state = {
         loadingGroups: false,
         loadingAssignee: false,
@@ -47,6 +48,10 @@ tasksView.controller('TasksController', ($scope, $http, $window, Dialogs, Notifi
             }, (error) => {
                 console.error(error);
             });
+    };
+
+    $scope.formatTime = (isoDate) => {
+        return dateTimeUtil.format(isoDate, "YYYY-MM-DD HH:mm:ss");
     };
 
     Dialogs.addMessageListener({

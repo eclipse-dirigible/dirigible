@@ -20,7 +20,7 @@
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
         <title config-title></title>
         <script type="text/javascript" src="configs/jobs-view.js"></script>
-        <meta name="platform-links" category="ng-view">
+        <meta name="platform-links" category="ng-view,date-time-util">
         <script src="js/jobs.js" type="text/javascript"></script>
     </head>
 
@@ -41,7 +41,7 @@
                         <th bk-table-header-cell>Name</th>
                         <th bk-table-header-cell>Expression</th>
                         <th bk-table-header-cell>Handler</th>
-                        <th bk-table-header-cell>Timestamp</th>
+                        <th bk-table-header-cell>Executed At</th>
                         <th bk-table-header-cell>Message</th>
                         <th bk-table-header-cell>Logs</th>
                         <th bk-table-header-cell>Trigger</th>
@@ -60,7 +60,7 @@
                         <td bk-table-cell>{{next.name}}</td>
                         <td bk-table-cell>{{next.expression}}</td>
                         <td bk-table-cell>{{next.handler}}</td>
-                        <td bk-table-cell fit-content="true">{{next.executedAt}}</td>
+                        <td bk-table-cell fit-content="true">{{formatTime(next.executedAt)}}</td>
                         <td bk-table-cell fit-content="true">{{next.message}}</td>
                         <td bk-table-cell fit-content="true">
                             <bk-button aria-label="Logs" state="transparent" glyph="sap-icon--history" ng-click="showLogsWindow(next)" title="Logs"></bk-button>

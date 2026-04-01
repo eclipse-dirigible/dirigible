@@ -12,6 +12,7 @@
 const jobsView = angular.module('jobs', ['blimpKit', 'platformView']);
 jobsView.constant('Dialogs', new DialogHub());
 jobsView.controller('JobsController', ($scope, $http, $timeout, Dialogs) => {
+	const dateTimeUtil = new DateTimeUtil();
 	$scope.searchField = { text: '' };
 	$http.get('/services/jobs').then((response) => {
 		$scope.list = response.data;
@@ -22,6 +23,10 @@ jobsView.controller('JobsController', ($scope, $http, $timeout, Dialogs) => {
 			$scope.list[i].hidden = false;
 		}
 	};
+
+	$scope.formatTime = (isoDate) => {
+        return dateTimeUtil.format(isoDate, "YYYY-MM-DD HH:mm:ss");
+    };
 
 	$scope.getIconClasses = (status) => {
 		let classes = 'sap-icon ';

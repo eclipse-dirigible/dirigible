@@ -41,7 +41,7 @@
                     <td bk-table-cell>{{::view.location}}</td>
                     <td bk-table-cell>{{::view.handler}}</td>
                     <td bk-table-cell fit-content="true">{{::view.type}}</td>
-                    <td bk-table-cell fit-content="true">{{::view.createdAt}}</td>
+                    <td bk-table-cell fit-content="true">{{::view.createdAt | date:'yyyy-MM-dd HH:mm:ss'}}</td>
                     <td bk-table-cell fit-content="true">{{::view.createdBy}}</td>
                 </tr>
                 <tr ng-if="views.length === 0" bk-table-row>

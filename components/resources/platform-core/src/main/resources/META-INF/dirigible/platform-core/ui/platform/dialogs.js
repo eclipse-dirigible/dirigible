@@ -18,7 +18,7 @@ angular.module('platformDialogs', ['blimpKit', 'platformView', 'platformLocale']
         Extensions.getWindows().then((response) => {
             cachedWindows = response.data;
         }, (error) => {
-            console.log(error);
+            console.error(error);
         });
         // @ts-ignore
         const dialogHub = new DialogHub();
