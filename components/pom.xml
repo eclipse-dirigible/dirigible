@@ -83,6 +83,7 @@
 
         <!-- IDE -->
         <module>ide/ide-workspace</module>
+        <module>ide/ide-junit-results</module>
         <module>ide/ide-git</module>
         <module>ide/ide-template</module>
         <module>ide/ide-terminal</module>
@@ -735,6 +736,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ide-logs</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ide-junit-results</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
