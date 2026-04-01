@@ -26,6 +26,12 @@
         <script type="text/javascript" src="/services/web/service-generate/generate.js"></script>
         <script type="text/javascript" src="/services/web/service-template/templates.js"></script>
         <script type="text/javascript" src="/services/web/editor-form-builder/js/editor.js"></script>
+        <style>
+            .fd-table__cell:first-child:not(.fd-table__cell--checkbox, .fd-table__cell.fd-table__cell--status-indicator) {
+                padding-inline-start: 0.5rem;
+            }
+
+        </style>
     </head>
 
     <body class="bk-vbox" shortcut="'ctrl+s|delete'" shortcut-action="shortcuts">
@@ -127,12 +133,11 @@
                                             <div>{{ item.label }}</div>
                                             <bk-button glyph="sap-icon--add" compact="true" title="Add option to list" state="transparent" label="Add" aria-label="Add option to list" ng-click="addListItem(item)"></bk-button>
                                         </div>
-                                        <table bk-table display-mode="compact">
+                                        <table bk-table display-mode="compact" style="max-width: 18rem">
                                             <thead bk-table-header interactive="false">
                                                 <tr bk-table-row>
                                                     <th ng-if="item.defaultValue" bk-table-header-cell content-type="checkbox"></th>
-                                                    <th bk-table-header-cell>{{ item.labelText }}</th>
-                                                    <th bk-table-header-cell>{{ item.valueText }}</th>
+                                                    <th bk-table-header-cell ng-repeat="column in item.columns track by $index">{{ column.label }}</th>
                                                     <th bk-table-header-cell></th>
                                                 </tr>
                                             </thead>
@@ -142,11 +147,19 @@
                                                         <bk-checkbox id="{{listItem + $index}}" ng-checked="item.defaultValue === listItem.value" ng-click="setListDefault(item, $index)"></bk-checkbox>
                                                         <bk-checkbox-label empty="true" for="{{listItem + $index}}"></bk-checkbox-label>
                                                     </td>
-                                                    <td bk-table-cell interactive="false">{{listItem.label}}</td>
-                                                    <td bk-table-cell interactive="false">{{listItem.value}}</td>
+                                                    <td bk-table-cell interactive="false" ng-repeat="column in item.columns" class="bk-scroll-hidden bk-text--ellipsis">{{listItem[column.key]}}</td>
                                                     <td bk-table-cell interactive="false" fit-content="true">
-                                                        <bk-button glyph="sap-icon--edit" title="Edit option" state="transparent" aria-label="Edit option" ng-click="editListItem(listItem, item.labelText, item.valueText)"></bk-button>
-                                                        <bk-button glyph="sap-icon--delete" title="Delete option" state="transparent" aria-label="Delete option" ng-click="deleteListItem(item.value, $index)"></bk-button>
+                                                        <bk-popover>
+                                                            <bk-popover-control>
+                                                                <bk-button glyph="sap-icon--overflow" state="transparent" aria-label="Context Menu"></bk-button>
+                                                            </bk-popover-control>
+                                                            <bk-popover-body align="left">
+                                                                <bk-menu aria-label="table row menu">
+                                                                    <bk-menu-item title="Edit" left-icon-class="sap-icon--edit" ng-click="editListItem(listItem, item.columns)"></bk-menu-item>
+                                                                    <bk-menu-item title="Delete" left-icon-class="sap-icon--delete" ng-click="deleteListItem(item.value, $index)"></bk-menu-item>
+                                                                </bk-menu>
+                                                            </bk-popover-body>
+                                                        </bk-popover>
                                                     </td>
                                                 </tr>
                                             </tbody>

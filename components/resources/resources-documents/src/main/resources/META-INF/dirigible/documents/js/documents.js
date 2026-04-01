@@ -50,7 +50,7 @@ class HistoryStack {
         this.history.idx++;
     }
 }
-documents.controller('DocumentsController', ($scope, $http, $timeout, $element, $document, ButtonStates, FileUploader, LocaleService) => {
+documents.controller('DocumentsController', ($scope, $http, $timeout, $element, $document, ButtonStates, FileUploader, LocaleService, ViewParameters) => {
     const dialogHub = new DialogHub();
     const notificationHub = new NotificationHub();
     const statusBarHub = new StatusBarHub();
@@ -74,19 +74,27 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
 
     let iframe;
 
-    angular.element($document[0]).ready(() => {
-        iframe = $document[0].getElementById('preview-iframe');
-        iframe.onload = () => $scope.$evalAsync(() => {
-            $scope.previewLoading = false;
+    $scope.params = {
+        multiple: true,
+        readOnly: false,
+        ...ViewParameters.get()
+    };
+
+    if ($scope.params.container !== 'window') {
+        angular.element($document[0]).ready(() => {
+            iframe = $document[0].getElementById('preview-iframe');
+            iframe.onload = () => $scope.$evalAsync(() => {
+                $scope.previewLoading = false;
+            });
+            iframe.onerror = () => $scope.$evalAsync(() => {
+                console.error(`Error while loading preview for ${$scope.selectedFile.name}`);
+                $scope.previewLoading = false;
+            });
         });
-        iframe.onerror = () => $scope.$evalAsync(() => {
-            console.error(`Error while loading preview for ${$scope.selectedFile.name}`);
-            $scope.previewLoading = false;
-        });
-    });
+    }
 
     $scope.loading = false;
-    $scope.canPreview = true;
+    $scope.canPreview = $scope.params.container !== 'window';
     $scope.previewType = 'web';
     $scope.csvData = {
         headers: [],
@@ -147,6 +155,30 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
     $scope.goBack = () => $scope.history.goBack(path => loadFolder(path));
     $scope.goForward = () => $scope.history.goForward(path => loadFolder(path));
 
+    function getAllSelectedFilePaths() {
+        let paths = [];
+        for (let i = 0; i < $scope.folder.children.length; i++) {
+            if ($scope.folder.children[i].selected) {
+                paths.push($scope.folder.children[i].path);
+            }
+        }
+        return paths;
+    };
+
+    $scope.closeDialog = (sendSelected = true) => {
+        if ($scope.params.topic) {
+            if (sendSelected) {
+                dialogHub.postMessage({
+                    topic: $scope.params.topic,
+                    data: $scope.params.multiple ? getAllSelectedFilePaths() : [$scope.selectedFile['path']]
+                });
+            } else {
+                dialogHub.triggerEvent($scope.params.topic);
+            }
+        }
+        dialogHub.closeWindow({ id: viewData.id });
+    };
+
     $scope.getFullPath = (itemName) => {
         const path = $scope.folder.path ? ($scope.folder.path + '/' + itemName) : itemName;
         return path.replace(/\/\//g, '/');
@@ -167,6 +199,7 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
         if ($scope.isFolder(cmisObject)) {
             openFolder($scope.getFullPath(cmisObject.name));
         } else {
+            $scope.clearSelection();
             setSelectedFile(cmisObject);
         }
     };
@@ -518,9 +551,13 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
 
     function setSelectedFile(selectedFile) {
         if (selectedFile === null) $scope.selectedFile = selectedFile;
-        else if ($scope.canPreviewFile(selectedFile.name)) {
+        else {
             $scope.selectedFile = selectedFile;
-            setPreviewer();
+            if ($scope.params.container === 'window') {
+                $scope.selectedFile.selected = true;
+            } else if ($scope.canPreviewFile(selectedFile.name)) {
+                setPreviewer();
+            }
         }
     };
 
