@@ -39,23 +39,27 @@
             <table bk-table outer-borders="horizontal" display-mode="compact">
                 <thead bk-table-header sticky="true" interactive="false">
                     <tr bk-table-row>
-                        <th bk-table-header-cell>Task Id</th>
+						<th bk-table-header-cell>Definition Name</th>
+						<th bk-table-header-cell>Business Key</th>
                         <th bk-table-header-cell>Task Name</th>
                         <th bk-table-header-cell>Assignee</th>
                         <th bk-table-header-cell>Candidate Users</th>
                         <th bk-table-header-cell>Candidate Groups</th>
                         <th bk-table-header-cell>Process Instance Id</th>
+						<th bk-table-header-cell>Task Id</th>
                         <th bk-table-header-cell>Create Time</th>
                     </tr>
                 </thead>
                 <tbody bk-table-body>
                     <tr bk-table-row ng-repeat="next in tasksList track by next.id" hoverable="true" activable="true" selected="next.selected" ng-click="selectionClaimChanged(next)">
-                        <td bk-table-cell>{{next.id}}</td>
+						<td bk-table-cell>{{next.processDefinitionName}}</td>
+						<td bk-table-cell>{{next.processInstanceBusinessKey}}</td>
                         <td bk-table-cell>{{next.name}}</td>
                         <td bk-table-cell>{{next.assignee}}</td>
                         <td bk-table-cell>{{next.candidateUsers}}</td>
                         <td bk-table-cell>{{next.candidateGroups}}</td>
                         <td bk-table-cell>{{next.processInstanceId}}</td>
+						<td bk-table-cell>{{next.id}}</td>
                         <td bk-table-cell>{{formatTime(next.createTime)}}</td>
                         </td>
                     </tr>
@@ -72,24 +76,28 @@
             <table bk-table outer-borders="horizontal" display-mode="compact">
                 <thead bk-table-header sticky="true" interactive="false">
                     <tr bk-table-row>
-                        <th bk-table-header-cell>Task Id</th>
+						<th bk-table-header-cell>Definition Name</th>
+						<th bk-table-header-cell>Business Key</th>
                         <th bk-table-header-cell>Task Name</th>
                         <th bk-table-header-cell>Assignee</th>
                         <th bk-table-header-cell>Candidate Users</th>
                         <th bk-table-header-cell>Candidate Groups</th>
                         <th bk-table-header-cell>Process Instance Id</th>
+						<th bk-table-header-cell>Task Id</th>
                         <th bk-table-header-cell>Create Time</th>
                         <th bk-table-header-cell>Form Key</th>
                     </tr>
                 </thead>
                 <tbody bk-table-body>
                     <tr bk-table-row ng-repeat="next in tasksListAssignee track by next.id" hoverable="true" activable="true" ng-click="selectionUnclaimChanged(next)">
-                        <td bk-table-cell>{{next.id}}</td>
+						<td bk-table-cell>{{next.processDefinitionName}}</td>
+						<td bk-table-cell>{{next.processInstanceBusinessKey}}</td>
                         <td bk-table-cell>{{next.name}}</td>
                         <td bk-table-cell>{{next.assignee}}</td>
                         <td bk-table-cell>{{next.candidateUsers}}</td>
                         <td bk-table-cell>{{next.candidateGroups}}</td>
                         <td bk-table-cell>{{next.processInstanceId}}</td>
+						<td bk-table-cell>{{next.id}}</td>
                         <td bk-table-cell>{{formatTime(next.createTime)}}</td>
                         <td bk-table-cell>
                             <bk-button label="Open Form" title="Open Form" aria-label="Open Form" ng-click="openForm($window.location.origin + next.formKey + '?taskId=' + next.id + '&processInstanceId=' + next.processInstanceId)">
