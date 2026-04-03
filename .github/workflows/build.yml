@@ -58,7 +58,7 @@ jobs:
           node-version: 22.x
 
       - name: Install TypeScript and esbuild
-        run: npm install -g typescript esbuild
+        run: npm install -g typescript@5.9.3 esbuild
 
       - name: Maven Build
         run: mvn clean install -P quick-build
@@ -151,7 +151,7 @@ jobs:
           node-version: 22.x
 
       - name: Install TypeScript and esbuild
-        run: npm install -g typescript esbuild
+        run: npm install -g typescript@5.9.3 esbuild
 
       - name: Maven Build
         run: mvn clean install -P unit-tests
@@ -183,7 +183,7 @@ jobs:
           node-version: 22.x
 
       - name: Install TypeScript and esbuild
-        run: npm install -g typescript esbuild
+        run: npm install -g typescript@5.9.3 esbuild
 
       - name: Install ttyd (prebuilt)
         run: |
@@ -256,7 +256,7 @@ jobs:
           node-version: 22.x
 
       - name: Install TypeScript and esbuild
-        run: npm install -g typescript esbuild
+        run: npm install -g typescript@5.9.3 esbuild
 
       - name: Install ttyd (prebuilt)
         run: |
@@ -326,7 +326,7 @@ jobs:
           node-version: 22.x
 
       - name: Install TypeScript and esbuild
-        run: npm install -g typescript esbuild
+        run: npm install -g typescript@5.9.3 esbuild
 
       - name: Install ttyd (prebuilt)
         run: |
