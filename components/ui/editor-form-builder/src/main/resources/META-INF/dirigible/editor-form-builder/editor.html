@@ -42,6 +42,7 @@
                 <bk-icon-tab-bar-tab label="Feeds" tab-id="feeds" ng-click="switchTab('feeds')"></bk-icon-tab-bar-tab>
                 <bk-icon-tab-bar-tab label="Code" tab-id="code" ng-click="switchTab('code')"></bk-icon-tab-bar-tab>
                 <bk-icon-tab-bar-tab label="Scripts" tab-id="scripts" ng-click="switchTab('scripts')"></bk-icon-tab-bar-tab>
+                <bk-icon-tab-bar-tab label="Styles" tab-id="styles" ng-click="switchTab('styles')"></bk-icon-tab-bar-tab>
                 <bk-icon-tab-bar-buttons align-right="true">
                     <bk-button state="transparent" glyph="sap-icon--save" label="Save" aria-label="save" ng-click="shortcuts()" ng-disabled="!(isFormValid() && changed)"></bk-button>
                     <bk-button state="transparent" glyph="sap-icon-TNT--operations" aria-label="Regenerate" title="Regenerate" label="Regenerate" ng-click="regenerate()" ng-disabled="changed || !canRegenerate"></bk-button>
@@ -222,7 +223,7 @@
             <bk-icon-tab-bar-panel class="bk-vbox bk-fill-parent fb-panel" tab-id="scripts" ng-show="selectedTab === 'scripts'">
                 <bk-toolbar has-title="false">
                     <bk-toolbar-spacer></bk-toolbar-spacer>
-                    <bk-button glyph="sap-icon--add" title="Add script URL to list" state="transparent" label="Add" aria-label="Add script URL to list" ng-click="addScript()"></bk-button>
+                    <bk-button glyph="sap-icon--add" title="Add script URL to list" state="transparent" label="Add" aria-label="Add script URL to list" ng-click="addUrl(true)"></bk-button>
                 </bk-toolbar>
                 <bk-scrollbar class="bk-fill-parent">
                     <table bk-table display-mode="compact" outer-borders="bottom">
@@ -241,8 +242,38 @@
                                 <td bk-table-cell>{{script.name}}</td>
                                 <td bk-table-cell>{{script.url}}</td>
                                 <td bk-table-cell fit-content="true">
-                                    <bk-button glyph="sap-icon--edit" title="Edit script" state="transparent" aria-label="Edit script" ng-click="editScript(script)"></bk-button>
-                                    <bk-button glyph="sap-icon--delete" title="Delete script" state="transparent" aria-label="Delete script" ng-click="deleteScript($index)"></bk-button>
+                                    <bk-button glyph="sap-icon--edit" title="Edit script" state="transparent" aria-label="Edit script" ng-click="editUrl(script, true)"></bk-button>
+                                    <bk-button glyph="sap-icon--delete" title="Delete script" state="transparent" aria-label="Delete script" ng-click="deleteUrl($index, true)"></bk-button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </bk-scrollbar>
+            </bk-icon-tab-bar-panel>
+            <bk-icon-tab-bar-panel class="bk-vbox bk-fill-parent fb-panel" tab-id="styles" ng-show="selectedTab === 'styles'">
+                <bk-toolbar has-title="false">
+                    <bk-toolbar-spacer></bk-toolbar-spacer>
+                    <bk-button glyph="sap-icon--add" title="Add style URL to list" state="transparent" label="Add" aria-label="Add style URL to list" ng-click="addUrl(false)"></bk-button>
+                </bk-toolbar>
+                <bk-scrollbar class="bk-fill-parent">
+                    <table bk-table display-mode="compact" outer-borders="bottom">
+                        <thead bk-table-header sticky="true" interactive="false">
+                            <tr bk-table-row>
+                                <th bk-table-header-cell>Name</th>
+                                <th bk-table-header-cell>URL</th>
+                                <th bk-table-header-cell></th>
+                            </tr>
+                        </thead>
+                        <tbody bk-table-body>
+                            <tr ng-if="formData.styles.length === 0" bk-table-row>
+                                <td bk-table-cell no-data="true">No styles.</td>
+                            </tr>
+                            <tr bk-table-row hoverable="false" ng-repeat="style in formData.styles track by $index">
+                                <td bk-table-cell>{{style.name}}</td>
+                                <td bk-table-cell>{{style.url}}</td>
+                                <td bk-table-cell fit-content="true">
+                                    <bk-button glyph="sap-icon--edit" title="Edit style" state="transparent" aria-label="Edit style" ng-click="editUrl(style, false)"></bk-button>
+                                    <bk-button glyph="sap-icon--delete" title="Delete style" state="transparent" aria-label="Delete style" ng-click="deleteUrl($index, false)"></bk-button>
                                 </td>
                             </tr>
                         </tbody>

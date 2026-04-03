@@ -38,6 +38,9 @@ $result##
 #foreach($script in $scripts)
 		<script type="text/javascript" src="$script.url"></script>
 #end
+#foreach($style in $styles)
+		<link href="$style.url" rel="stylesheet" />
+#end
 	</head>
 
 	<body class="bk-center--horizontal bk-box--items-start" ng-class="{'bk-padding':!_is_view}">
