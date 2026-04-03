@@ -48,23 +48,27 @@
             <table bk-table display-mode="compact" outer-borders="horizontal">
                 <thead bk-table-header sticky="true">
                     <tr bk-table-row>
-                        <th bk-table-header-cell>{{'inbox:taskId' | t:'Task Id'}}</th>
+						<th bk-table-header-cell>{{'inbox:processDefinitionName' | t:'Definition Name'}}</th>
+						<th bk-table-header-cell>{{'inbox:processInstanceBusinessKey' | t:'Business Key'}}</th>
                         <th bk-table-header-cell>{{'inbox:taskName' | t:'Task Name'}}</th>
                         <th bk-table-header-cell>{{'inbox:assignee' | t:'Assignee'}}</th>
                         <th bk-table-header-cell>{{'inbox:candidateUsers' | t:'Candidate Users'}}</th>
                         <th bk-table-header-cell>{{'inbox:candidateGroups' | t:'Candidate Groups'}}</th>
                         <th bk-table-header-cell>{{'inbox:processInstanceId' | t:'Process Instance Id'}}</th>
+						<th bk-table-header-cell>{{'inbox:taskId' | t:'Task Id'}}</th>
                         <th bk-table-header-cell>{{'inbox:createTime' | t:'Create Time'}}</th>
                     </tr>
                 </thead>
                 <tbody bk-table-body>
                     <tr activable="true" bk-table-row selected="next.selected" hoverable="true" ng-click="selectionClaimChanged(next)" ng-repeat="next in tasksList track by next.id">
-                        <td bk-table-cell>{{next.id}}</td>
+						<td bk-table-cell>{{next.processDefinitionName}}</td>
+						<td bk-table-cell>{{next.processInstanceBusinessKey}}</td>
                         <td bk-table-cell>{{next.name}}</td>
                         <td bk-table-cell>{{next.assignee}}</td>
                         <td bk-table-cell>{{next.candidateUsers}}</td>
                         <td bk-table-cell>{{next.candidateGroups}}</td>
                         <td bk-table-cell>{{next.processInstanceId}}</td>
+						<td bk-table-cell>{{next.id}}</td>
                         <td bk-table-cell>{{formatTime(next.createTime)}}</td>
                     </tr>
                     <tr bk-table-row ng-if="tasksList.length === 0">
@@ -80,24 +84,28 @@
             <table bk-table display-mode="compact" outer-borders="horizontal">
                 <thead bk-table-header sticky="true">
                     <tr bk-table-row>
-                        <th bk-table-header-cell>{{'inbox:taskId' | t:'Task Id'}}</th>
+						<th bk-table-header-cell>{{'inbox:processDefinitionName' | t:'Definition Name'}}</th>
+						<th bk-table-header-cell>{{'inbox:processInstanceBusinessKey' | t:'Business Key'}}</th>
                         <th bk-table-header-cell>{{'inbox:taskName' | t:'Task Name'}}</th>
                         <th bk-table-header-cell>{{'inbox:assignee' | t:'Assignee'}}</th>
                         <th bk-table-header-cell>{{'inbox:candidateUsers' | t:'Candidate Users'}}</th>
                         <th bk-table-header-cell>{{'inbox:candidateGroups' | t:'Candidate Groups'}}</th>
                         <th bk-table-header-cell>{{'inbox:processInstanceId' | t:'Process Instance Id'}}</th>
+						<th bk-table-header-cell>{{'inbox:taskId' | t:'Task Id'}}</th>
                         <th bk-table-header-cell>{{'inbox:createTime' | t:'Create Time'}}</th>
                         <th bk-table-header-cell>{{'inbox:formKey' | t:'Form Key'}}</th>
                     </tr>
                 </thead>
                 <tbody bk-table-body>
                     <tr activable="true" bk-table-row hoverable="true" ng-click="selectionUnclaimChanged(next)" ng-repeat="next in tasksListAssignee track by next.id">
-                        <td bk-table-cell>{{next.id}}</td>
+						<td bk-table-cell>{{next.processDefinitionName}}</td>
+						<td bk-table-cell>{{next.processInstanceBusinessKey}}</td>
                         <td bk-table-cell>{{next.name}}</td>
                         <td bk-table-cell>{{next.assignee}}</td>
                         <td bk-table-cell>{{next.candidateUsers}}</td>
                         <td bk-table-cell>{{next.candidateGroups}}</td>
                         <td bk-table-cell>{{next.processInstanceId}}</td>
+						<td bk-table-cell>{{next.id}}</td>
                         <td bk-table-cell>{{formatTime(next.createTime)}}</td>
                         <td bk-table-cell>
                             <bk-button aria-label="{{'inbox:openForm' | t:'Open Form'}}" label="{{'inbox:openForm' | t:'Open Form'}}" ng-click="openForm(next.formKey + '?taskId=' + next.id + '&processInstanceId=' + next.processInstanceId)"
