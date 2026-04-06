@@ -76,8 +76,7 @@ public class TableAlterProcessor {
 
         // ADD iteration
         for (TableColumn columnModel : tableModel.getColumns()) {
-            String name = "\"" + columnModel.getName() + "\"";
-            String nameOriginal = name;
+            String name = columnModel.getName();
 
             DataType type = DataType.valueOfByName(columnModel.getType());
             String length = columnModel.getLength();
@@ -112,7 +111,7 @@ public class TableAlterProcessor {
 
             modelColumnNames.add(name.toUpperCase());
 
-            String nameOriginalCanonical = nameOriginal.toUpperCase();
+            String nameOriginalCanonical = name.toUpperCase();
             if (!columnDefinitions.containsKey(nameOriginalCanonical)) {
 
                 AlterTableBuilder alterTableBuilder = SqlFactory.getNative(connection)
@@ -120,7 +119,7 @@ public class TableAlterProcessor {
                                                                 .table(tableName);
 
                 alterTableBuilder.add()
-                                 .column(name, type, isPrimaryKey, isNullable, isUnique, args);
+                                 .column("\"" + name + "\"", type, isPrimaryKey, isNullable, isUnique, args);
 
                 if (!isNullable) {
                     throw new SQLException(String.format(INCOMPATIBLE_CHANGE_OF_TABLE, tableName, name, "NOT NULL"));
@@ -144,13 +143,12 @@ public class TableAlterProcessor {
 
         // DROP iteration
         for (String columnName : columnDefinitions.keySet()) {
-            columnName = "\"" + columnName + "\"";
             if (!modelColumnNames.contains(columnName.toUpperCase())) {
                 AlterTableBuilder alterTableBuilder = SqlFactory.getNative(connection)
                                                                 .alter()
                                                                 .table(tableName);
                 alterTableBuilder.drop()
-                                 .column(columnName, DataType.BOOLEAN);
+                                 .column("\"" + columnName + "\"", DataType.BOOLEAN);
                 executeAlterBuilder(connection, alterTableBuilder);
             }
         }
