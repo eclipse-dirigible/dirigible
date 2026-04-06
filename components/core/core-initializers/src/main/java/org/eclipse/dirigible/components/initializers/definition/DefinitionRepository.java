@@ -33,4 +33,14 @@ public interface DefinitionRepository extends JpaRepository<Definition, Long> {
     @Query("update Definition d set d.checksum = :checksum where d.type in :types")
     void updateChecksums(String checksum, Set<String> types);
 
+    /**
+     * Initialize checksums.
+     *
+     * @param location the location
+     */
+    @Modifying
+    @Transactional
+    @Query("update Definition d set d.checksum = '' where d.location like :location")
+    void initializeChecksums(String location);
+
 }

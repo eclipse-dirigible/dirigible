@@ -131,4 +131,13 @@ public class DefinitionService {
         definitionRepository.updateChecksums(checksum, types);
     }
 
+    /**
+     * Initialize checksums.
+     *
+     * @param location the location
+     */
+    public void initializeChecksums(String location) {
+        definitionRepository.initializeChecksums(location + "%");
+    }
+
 }
