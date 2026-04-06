@@ -25,6 +25,23 @@ angular.module('forms', ['blimpKit', 'platformView', 'platformLocale', 'platform
 })).constant('Dialogs', new DialogHub()).controller('FormController', ($scope, $http, Dialogs, LocaleService, ViewParameters) => {
     $scope._is_view = ViewParameters.get().container !== undefined;
     $scope._stepIndicators = {};
+    ${dollar}scope._setDeepModel = (path, value) => {
+        const keys = path.split('.');
+        let current = $scope.model;
+
+        keys.forEach((key, index) => {
+            if (index === keys.length - 1) {
+                current[key] = value;
+            } else {
+                if (current[key] === null || current[key] === undefined) {
+                    current[key] = {};
+                } else if (typeof current[key] !== 'object') {
+                    throw new Error(`${key} is not an object! Cannot set inner keys.`);
+                }
+                current = current[key];
+            }
+        });
+    };
     ${dollar}scope._selectFromDocuments = (modelKey, multiple, uploadEnabled) => {
         Dialogs.showWindow({id: 'documentStorage', params: { readOnly: !uploadEnabled, multiple: multiple, topic: '${projectName}.doc.select' } });
         const docSelectListener = Dialogs.addMessageListener({
@@ -39,13 +56,13 @@ angular.module('forms', ['blimpKit', 'platformView', 'platformLocale', 'platform
             }
         });
     };
-    $scope.forms = {
+    ${dollar}scope.forms = {
         form: {}
     };
 #if($metadata.url)
-    $scope._submit = () => {
+    ${dollar}scope._submit = () => {
         const payload = {};
-        angular.forEach($scope.forms.form, (control, name) => {
+        angular.forEach(${dollar}scope.forms.form, (control, name) => {
             if (name[0] === '$') return;
             payload[name] = control.$modelValue;
         });
@@ -79,7 +96,7 @@ angular.module('forms', ['blimpKit', 'platformView', 'platformLocale', 'platform
     };
 #end
 
-    $scope.model = {};
+    ${dollar}scope.model = {};
 #macro(formWidgets $elements)
 #foreach($element in $elements)
     #if($element.controlId == "stepIndicator" && $element.staticData)
@@ -103,22 +120,22 @@ angular.module('forms', ['blimpKit', 'platformView', 'platformLocale', 'platform
         );
     });
     #elseif($element.controlId == "input-number")
-    $scope.model.$element.model = 0;
+    ${dollar}scope._setDeepModel('$element.model', 0);
 	#elseif($element.controlId == "input-checkbox")
-    $scope.model.$element.model = false;
+    ${dollar}scope._setDeepModel('$element.model', false);
     #elseif($element.controlId == "input-radio")
         #set ($hasDefault = false)
         #if ($element.staticOptions)
             #foreach($radio in $element.staticOptions)
                 #if ($radio.isDefault == true)
                 #set ($hasDefault = true)
-    $scope.model.$element.model = '$radio.value';
+    ${dollar}scope._setDeepModel('$element.model', '$radio.value');
                 #break
                 #end
             #end
         #end
         #if (!$hasDefault)
-    $scope.model.$element.model = '';
+    ${dollar}scope._setDeepModel('$element.model', '');
         #end
     #elseif($element.controlId == "input-select")
         #set ($hasDefault = false)
@@ -126,21 +143,21 @@ angular.module('forms', ['blimpKit', 'platformView', 'platformLocale', 'platform
             #foreach($select in $element.staticOptions)
                 #if ($select.isDefault == true)
                 #set ($hasDefault = true)
-    $scope.model.$element.model = '$select.value';
+    ${dollar}scope._setDeepModel('$element.model', '$select.value');
                 #break
                 #end
             #end
         #end
         #if (!$hasDefault)
-    $scope.model.$element.model = '';
+    ${dollar}scope._setDeepModel('$element.model', '');
         #end
 	#elseif($element.controlId == "input-color")
-    $scope.model.$element.model = '#ffbe6f';
+    ${dollar}scope._setDeepModel('$element.model', '#ffbe6f');
 	#elseif($element.controlId == "paragraph")
         #if($element.model && $element.text)
-    $scope.model.$element.model = `$element.text`;
+    ${dollar}scope._setDeepModel('$element.model', `$element.text`);
         #elseif($element.model)
-    $scope.model.$element.model = null;
+    ${dollar}scope._setDeepModel('$element.model', null);
         #end
 	#end
     #if($element.children)
@@ -158,15 +175,15 @@ $code
     ${dollar}http.get(`$feed.url`).then(response => {
     #if($feed.func)
         #if($feed.name == 'model')
-        Object.assign($scope.model, ${feed.func}(response.data));
+        Object.assign(${dollar}scope.model, ${feed.func}(response.data));
         #else
-        $scope.$feed.name = ${feed.func}(response.data);
+        ${dollar}scope.$feed.name = ${feed.func}(response.data);
         #end
     #else
         #if($feed.name == 'model')
-        Object.assign($scope.model, response.data);
+        Object.assign(${dollar}scope.model, response.data);
         #else
-        $scope.$feed.name = response.data;
+        ${dollar}scope.$feed.name = response.data;
         #end
     #end
     }, error => {

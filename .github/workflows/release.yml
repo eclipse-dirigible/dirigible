@@ -62,7 +62,7 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install TypeScript and esbuild
-        run: npm install -g typescript esbuild
+        run: npm install -g typescript@5.9.3 esbuild
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -168,10 +168,10 @@ jobs:
 
       # Ensure npm 11.5.1 or later is installed
       - name: Update npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.11.1
 
       - name: Install TypeScript and esbuild
-        run: npm install -g typescript esbuild
+        run: npm install -g typescript@5.9.3 esbuild
 
       - name: "Configure Git"
         run: |
@@ -349,7 +349,7 @@ jobs:
 
 
       - name: Install TypeScript and esbuild
-        run: npm install -g typescript esbuild
+        run: npm install -g typescript@5.9.3 esbuild
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3

@@ -1,0 +1,95 @@
+<!--
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
+ -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JUnit Test Results</title>
+    <link rel="stylesheet" href="junit-results.css">
+</head>
+<body>
+    <div class="junit-results-container">
+        <!-- Header with Title and Controls -->
+        <div class="results-header">
+            <h1>JUnit Test Results</h1>
+            <div class="controls">
+                <button id="refreshBtn" class="btn btn-primary" title="Refresh test results">
+                    <span class="icon">🔄</span> Refresh
+                </button>
+                <button id="clearBtn" class="btn btn-secondary" title="Clear all results">
+                    <span class="icon">🗑️</span> Clear
+                </button>
+            </div>
+        </div>
+
+        <!-- Summary Panel -->
+        <div class="summary-panel">
+            <div class="summary-item">
+                <div class="summary-label">Total Tests</div>
+                <div class="summary-value" id="totalTests">0</div>
+            </div>
+            <div class="summary-item passed">
+                <div class="summary-label">Passed</div>
+                <div class="summary-value" id="passedTests">0</div>
+            </div>
+            <div class="summary-item failed">
+                <div class="summary-label">Failed</div>
+                <div class="summary-value" id="failedTests">0</div>
+            </div>
+            <div class="summary-item skipped">
+                <div class="summary-label">Skipped</div>
+                <div class="summary-value" id="skippedTests">0</div>
+            </div>
+            <div class="summary-item">
+                <div class="summary-label">Duration</div>
+                <div class="summary-value" id="totalDuration">0 ms</div>
+            </div>
+        </div>
+
+        <!-- Status Indicator -->
+        <div class="status-bar" id="statusBar"></div>
+
+        <!-- Filter Tabs -->
+        <div class="filter-tabs">
+            <button class="filter-tab active" data-filter="all" onclick="filterResults('all')">
+                All Tests
+            </button>
+            <button class="filter-tab" data-filter="passed" onclick="filterResults('passed')">
+                ✓ Passed
+            </button>
+            <button class="filter-tab" data-filter="failed" onclick="filterResults('failed')">
+                ✗ Failed
+            </button>
+            <button class="filter-tab" data-filter="skipped" onclick="filterResults('skipped')">
+                - Skipped
+            </button>
+        </div>
+
+        <!-- Test Results List -->
+        <div class="results-list" id="resultsList"></div>
+
+        <!-- Loading Indicator -->
+        <div class="loading" id="loadingIndicator" style="display: none;">
+            <div class="spinner"></div>
+            <p>Loading test results...</p>
+        </div>
+
+        <!-- Empty State -->
+        <div class="empty-state" id="emptyState" style="display: none;">
+            <p>No test results available</p>
+            <p>Run your tests to see results here</p>
+        </div>
+    </div>
+
+    <script src="junit-results.js"></script>
+</body>
+</html>

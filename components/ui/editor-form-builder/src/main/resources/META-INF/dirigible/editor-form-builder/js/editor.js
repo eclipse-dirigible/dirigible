@@ -44,6 +44,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
     $scope.formData = {
         feeds: [],
         scripts: [],
+        styles: [],
         code: ''
     };
 
@@ -2209,9 +2210,9 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
         $scope.fileChanged();
     };
 
-    $scope.addScript = () => {
+    $scope.addUrl = (script = true) => {
         dialogHub.showFormDialog({
-            title: 'Add script',
+            title: `Add ${script ? 'script' : 'style'}`,
             form: {
                 'asName': {
                     label: 'Name',
@@ -2236,7 +2237,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
         }).then((form) => {
             if (form) {
                 $scope.$evalAsync(() => {
-                    $scope.formData.scripts.push({
+                    $scope.formData[script ? 'scripts' : 'styles'].push({
                         name: form['asName'],
                         url: form['asUrl']
                     });
@@ -2246,17 +2247,17 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
         }, (error) => {
             console.error(error);
             dialogHub.showAlert({
-                title: 'New script error',
-                message: 'There was an error while adding the new script.',
+                title: `New ${script ? 'script' : 'style'} error`,
+                message: `There was an error while adding the new ${script ? 'script' : 'style'}.`,
                 type: AlertTypes.Error,
                 preformatted: false,
             });
         });
     };
 
-    $scope.editScript = (script) => {
+    $scope.editUrl = (item, script = true) => {
         dialogHub.showFormDialog({
-            title: 'Edit script',
+            title: `Edit ${script ? 'script' : 'style'}`,
             form: {
                 'asName': {
                     label: 'Name',
@@ -2264,7 +2265,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     placeholder: '',
                     type: 'text',
                     minlength: 1,
-                    value: script.name,
+                    value: item.name,
                     focus: true,
                     required: true
                 },
@@ -2274,7 +2275,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     placeholder: '',
                     type: 'text',
                     minlength: 1,
-                    value: script.url,
+                    value: item.url,
                     required: true
                 },
             },
@@ -2283,24 +2284,24 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
         }).then((form) => {
             if (form) {
                 $scope.$evalAsync(() => {
-                    script.name = form['asName'];
-                    script.url = form['asUrl'];
+                    item.name = form['asName'];
+                    item.url = form['asUrl'];
                     $scope.fileChanged();
                 });
             }
         }, (error) => {
             console.error(error);
             dialogHub.showAlert({
-                title: 'New script error',
-                message: 'There was an error while adding the new script.',
+                title: `New ${script ? 'script' : 'style'} error`,
+                message: `There was an error while adding the new ${script ? 'script' : 'style'}.`,
                 type: AlertTypes.Error,
                 preformatted: false,
             });
         });
     };
 
-    $scope.deleteScript = (index) => {
-        $scope.formData.scripts.splice(index, 1);
+    $scope.deleteUrl = (index, script = true) => {
+        $scope.formData[script ? 'scripts' : 'styles'].splice(index, 1);
         $scope.fileChanged();
     };
 
@@ -2480,6 +2481,9 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                     if (response.data.hasOwnProperty('scripts')) {
                         $scope.formData.scripts = response.data.scripts;
                     }
+                    if (response.data.hasOwnProperty('styles')) {
+                        $scope.formData.styles = response.data.styles;
+                    }
                     if (response.data.hasOwnProperty('form')) {
                         createDomFromJson(migrateForm(response.data.form));
                     }
@@ -2542,6 +2546,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
             metadata: getMetadataFromForm(),
             feeds: $scope.formData.feeds,
             scripts: $scope.formData.scripts,
+            styles: $scope.formData.styles,
             code: $scope.formData.code,
             form: createFormJson($scope.formModel)
         };
