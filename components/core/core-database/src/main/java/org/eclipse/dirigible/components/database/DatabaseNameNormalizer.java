@@ -26,7 +26,7 @@ public class DatabaseNameNormalizer {
         }
         return table;
     }
-    
+
     /**
      * Makes necessary formatting if needed.
      *

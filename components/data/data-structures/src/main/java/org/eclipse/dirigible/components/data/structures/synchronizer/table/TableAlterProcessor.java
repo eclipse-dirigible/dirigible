@@ -122,11 +122,11 @@ public class TableAlterProcessor {
                                  .column("\"" + name + "\"", type, isPrimaryKey, isNullable, isUnique, args);
 
                 if (!isNullable) {
-                	logger.error("Column Definitions: {}", columnDefinitions);
+                    logger.error("Column Definitions: {}", columnDefinitions);
                     throw new SQLException(String.format(INCOMPATIBLE_CHANGE_OF_TABLE, tableName, name, "NOT NULL"));
                 }
                 if (isPrimaryKey) {
-                	logger.error("Column Definitions: {}", columnDefinitions);
+                    logger.error("Column Definitions: {}", columnDefinitions);
                     throw new SQLException(String.format(INCOMPATIBLE_CHANGE_OF_TABLE, tableName, name, "PRIMARY KEY"));
                 }
 
@@ -137,7 +137,7 @@ public class TableAlterProcessor {
                 String typeFromDefinition = type.toString();
                 if (!DataTypeUtils.getUnifiedDatabaseType(typeFromMetadata)
                                   .equals(DataTypeUtils.getUnifiedDatabaseType(typeFromDefinition))) {
-                	logger.error("Column Definitions: {}", columnDefinitions);
+                    logger.error("Column Definitions: {}", columnDefinitions);
                     throw new SQLException(String.format(INCOMPATIBLE_CHANGE_OF_TABLE, tableName, name,
                             "of type " + typeFromMetadata + " to be changed to " + type));
                 }
