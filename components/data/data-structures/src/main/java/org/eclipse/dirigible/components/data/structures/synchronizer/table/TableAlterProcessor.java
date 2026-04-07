@@ -65,7 +65,7 @@ public class TableAlterProcessor {
                                          .toUpperCase();
             try {
                 String typeName = DataTypeUtils.getDatabaseTypeName(columnType);
-                columnDefinitions.put(columnName, typeName);
+                columnDefinitions.put(DatabaseNameNormalizer.normalizeColumnName(columnName), typeName);
             } catch (SqlException ex) {
                 String errorMessage = "Missing type for column [" + columnName + "] and type [" + columnType + "]";
                 throw new SqlException(errorMessage, ex);
@@ -76,7 +76,7 @@ public class TableAlterProcessor {
 
         // ADD iteration
         for (TableColumn columnModel : tableModel.getColumns()) {
-            String name = columnModel.getName();
+            String name = DatabaseNameNormalizer.normalizeColumnName(columnModel.getName());
 
             DataType type = DataType.valueOfByName(columnModel.getType());
             String length = columnModel.getLength();
@@ -122,9 +122,11 @@ public class TableAlterProcessor {
                                  .column("\"" + name + "\"", type, isPrimaryKey, isNullable, isUnique, args);
 
                 if (!isNullable) {
+                	logger.error("Column Definitions: {}", columnDefinitions);
                     throw new SQLException(String.format(INCOMPATIBLE_CHANGE_OF_TABLE, tableName, name, "NOT NULL"));
                 }
                 if (isPrimaryKey) {
+                	logger.error("Column Definitions: {}", columnDefinitions);
                     throw new SQLException(String.format(INCOMPATIBLE_CHANGE_OF_TABLE, tableName, name, "PRIMARY KEY"));
                 }
 
@@ -135,6 +137,7 @@ public class TableAlterProcessor {
                 String typeFromDefinition = type.toString();
                 if (!DataTypeUtils.getUnifiedDatabaseType(typeFromMetadata)
                                   .equals(DataTypeUtils.getUnifiedDatabaseType(typeFromDefinition))) {
+                	logger.error("Column Definitions: {}", columnDefinitions);
                     throw new SQLException(String.format(INCOMPATIBLE_CHANGE_OF_TABLE, tableName, name,
                             "of type " + typeFromMetadata + " to be changed to " + type));
                 }

@@ -26,5 +26,15 @@ public class DatabaseNameNormalizer {
         }
         return table;
     }
+    
+    /**
+     * Makes necessary formatting if needed.
+     *
+     * @param column the column name
+     * @return the formatted column name
+     */
+    public static String normalizeColumnName(String column) {
+        return normalizeTableName(column);
+    }
 
 }
