@@ -37,7 +37,7 @@ class ${name}Service {
             const options: ${name}EntityOptions = {
                 $limit: ctx.queryParameters["$limit"] ? parseInt(ctx.queryParameters["$limit"]) : undefined,
                 $offset: ctx.queryParameters["$offset"] ? parseInt(ctx.queryParameters["$offset"]) : undefined,
-                $language: request.getLocale().split("_")[0]
+                $language: request.getLocale()?.split("_")[0]
             };
 #if($layoutType == "MANAGE_DETAILS" || $layoutType == "LIST_DETAILS")
 
@@ -144,7 +144,7 @@ class ${name}Service {
 #end
 #end
             const options: ${name}EntityOptions = {
-                $language: request.getLocale().split("_")[0]
+                $language: request.getLocale()?.split("_")[0]
             };
             const entity = this.repository.findById(id, options);
             if (entity) {

@@ -116,7 +116,7 @@ export abstract class Repository<T extends Record<string, any>> {
     public findAll(options: Options = {}): T[] {
         // Assume store.list returns T[] but we explicitly cast it to T[]
         const list: T[] = store.list(this.getEntityName(), options);
-        translator.translateList(list, options.language, this.getTableName());
+        translator.translateList(list, options?.language, this.getTableName());
         return list;
     }
 
@@ -126,7 +126,7 @@ export abstract class Repository<T extends Record<string, any>> {
     public findById(id: number | string, options: Options = {}): T | undefined {
         // Assume store.get returns T or null/undefined
         const entity: T | null = store.get(this.getEntityName(), id);
-        translator.translateEntity(entity, id, options.language, this.getTableName());
+        translator.translateEntity(entity, id, options?.language, this.getTableName());
         return entity ?? undefined;
     }
 
