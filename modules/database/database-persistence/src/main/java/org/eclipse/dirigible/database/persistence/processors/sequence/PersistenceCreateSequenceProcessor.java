@@ -52,7 +52,8 @@ public class PersistenceCreateSequenceProcessor extends AbstractPersistenceProce
         CreateSequenceBuilder createSequenceBuilder = SqlFactory.getNative(SqlFactory.deriveDialect(connection))
                                                                 .create()
                                                                 .sequence(tableModel.getTableName() + ISqlKeywords.UNDERSCROE
-                                                                        + ISqlKeywords.KEYWORD_SEQUENCE);
+                                                                        + ISqlKeywords.KEYWORD_SEQUENCE)
+                                                                .increment(50);
 
         String sql = createSequenceBuilder.toString();
         if (logger.isTraceEnabled()) {
