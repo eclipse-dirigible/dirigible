@@ -12,3 +12,5 @@
 import { response } from "@aerokit/sdk/http";
 
 response.setHeader("Clear-Site-Data", `"cache"`);
+response.flush();
+response.close();

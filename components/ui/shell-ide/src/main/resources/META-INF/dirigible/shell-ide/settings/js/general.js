@@ -68,6 +68,7 @@ general.controller('GeneralController', ($scope, $http, $cookies, $window, themi
                             $cookies.remove(cookie, { path: '/' });
                         }
                     }
+                    dialogHub.closeBusyDialog();
                     top.location.reload();
                 }, (error) => {
                     console.error(error);

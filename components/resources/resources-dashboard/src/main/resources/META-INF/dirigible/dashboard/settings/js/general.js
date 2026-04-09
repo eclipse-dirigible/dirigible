@@ -48,6 +48,7 @@ general.controller('GeneralController', ($scope, $http, $cookies, theming, Butto
                             $cookies.remove(cookie, { path: '/' });
                         }
                     }
+                    dialogHub.closeBusyDialog();
                     location.reload();
                 }, (error) => {
                     console.error(error);
