@@ -213,7 +213,7 @@
         <chart.js.version>4.4.3</chart.js.version>
         <sortablejs.version>1.15.7</sortablejs.version>
         <fundamental-styles.version>0.38.0</fundamental-styles.version>
-        <angular-aria.version>1.8.2</angular-aria.version>
+        <angular-aria.version>1.8.3</angular-aria.version>
         <split.js.version>1.6.5</split.js.version>
         <diff.version>5.1.0</diff.version>
         <monaco-editor.version>0.40.0</monaco-editor.version>
