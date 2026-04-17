@@ -48,11 +48,13 @@ public class HttpSecurityURIConfigurator {
             "/services/web/resources/**", //
             "/services/web/resources-locale/**", //
             "/services/web/platform-core/**", //
+            "/services/web/application-core/**", //
             "/services/web/editor-monaco/**", //
             "/services/web/service-workspace/**", //
             "/services/web/service-repository/**", //
             "/services/web/theme-*/**", //
             "/services/js/platform-core/**", //
+            "/services/js/application-core/**", //
             "/services/js/platform-branding/**", //
             "/actuator/health/liveness", //
             "/actuator/health/readiness", //
