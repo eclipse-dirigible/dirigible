@@ -103,6 +103,32 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 						$scope.data = [];
 						$scope.dataReset = false;
 					}
+#if($hasDropdowns)
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+					if (options${property.name}HasMore) {
+						${dollar}http.post('${property.widgetDropdownControllerUrl}/search', {
+							conditions: [
+								{ propertyName: '${property.widgetDropDownKey}', operator: 'IN', value: Array.from(new Set(response.data.map(e => e.${property.name}))) }
+							]
+						}).then((response) => {
+							${dollar}scope.options${property.name}.push(...response.data.map(e => ({
+								value: e.${property.widgetDropDownKey},
+								text: e.${property.widgetDropDownValue}
+							})));
+						}, (error) => {
+							console.error(error);
+							const message = error.data ? error.data.message : '';
+							Dialogs.showAlert({
+								title: '${property.name}',
+								message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLoad', { message: message }),
+								type: AlertTypes.Error
+							});
+						});
+					}
+#end
+#end
+#end
 #if($hasDates)
 					response.data.forEach(e => {
 #foreach ($property in $properties)
@@ -245,12 +271,25 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 
 #foreach ($property in $properties)
 #if ($property.widgetType == "DROPDOWN")
+		let options${property.name}HasMore = true;
 
-		${dollar}http.get('${property.widgetDropdownControllerUrl}').then((response) => {
-			${dollar}scope.options${property.name} = response.data.map(e => ({
-				value: e.${property.widgetDropDownKey},
-				text: e.${property.widgetDropDownValue}
-			}));
+		${dollar}http.get('${property.widgetDropdownControllerUrl}/count').then((response) => {
+			const options${property.name}Count = response.data.count;
+			${dollar}http.get('${property.widgetDropdownControllerUrl}').then((response) => {
+				${dollar}scope.options${property.name} = response.data.map(e => ({
+					value: e.${property.widgetDropDownKey},
+					text: e.${property.widgetDropDownValue}
+				}));
+				options${property.name}HasMore = options${property.name}Count > ${dollar}scope.options${property.name}.length;
+			}, (error) => {
+				console.error(error);
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: '${property.name}',
+					message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLoad', { message: message }),
+					type: AlertTypes.Error
+				});
+			});
 		}, (error) => {
 			console.error(error);
 			const message = error.data ? error.data.message : '';
