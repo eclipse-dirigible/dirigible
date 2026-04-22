@@ -234,7 +234,7 @@
         <opensans.version>5.2.7</opensans.version>
         <lucide.version>1.8.0</lucide.version>
         <!-- Tests -->
-        <testcontainers.version>2.0.4</testcontainers.version>
+        <testcontainers.version>2.0.5</testcontainers.version>
         <selenide.version>7.15.1</selenide.version>
 
         <antlr4-maven-plugin.version>4.13.2</antlr4-maven-plugin.version>
