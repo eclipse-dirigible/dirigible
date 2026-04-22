@@ -107,24 +107,27 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
 					if (options${property.name}HasMore) {
-						${dollar}http.post('${property.widgetDropdownControllerUrl}/search', {
-							conditions: [
-								{ propertyName: '${property.widgetDropDownKey}', operator: 'IN', value: Array.from(new Set(response.data.map(e => e.${property.name}))) }
-							]
-						}).then((response) => {
-							${dollar}scope.options${property.name}.push(...response.data.map(e => ({
-								value: e.${property.widgetDropDownKey},
-								text: e.${property.widgetDropDownValue}
-							})));
-						}, (error) => {
-							console.error(error);
-							const message = error.data ? error.data.message : '';
-							Dialogs.showAlert({
-								title: '${property.name}',
-								message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLoad', { message: message }),
-								type: AlertTypes.Error
+						const options${property.name}SearchValues = Array.from(new Set(response.data.map(e => e.${property.name})));
+						if (options${property.name}SearchValues.length > 0) {
+							${dollar}http.post('${property.widgetDropdownControllerUrl}/search', {
+								conditions: [
+									{ propertyName: '${property.widgetDropDownKey}', operator: 'IN', value: options${property.name}SearchValues }
+								]
+							}).then((response) => {
+								${dollar}scope.options${property.name}.push(...response.data.map(e => ({
+									value: e.${property.widgetDropDownKey},
+									text: e.${property.widgetDropDownValue}
+								})));
+							}, (error) => {
+								console.error(error);
+								const message = error.data ? error.data.message : '';
+								Dialogs.showAlert({
+									title: '${property.name}',
+									message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLoad', { message: message }),
+									type: AlertTypes.Error
+								});
 							});
-						});
+						}
 					}
 #end
 #end
