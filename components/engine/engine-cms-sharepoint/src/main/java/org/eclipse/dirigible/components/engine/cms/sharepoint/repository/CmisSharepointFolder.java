@@ -45,6 +45,7 @@ public class CmisSharepointFolder extends CmisSharepointObject implements CmisFo
         return this.getId();
     }
 
+    @Override
     public CmisSharepointFolder createFolder(Map<String, String> properties) {
         String name = properties.get(CmisConstants.NAME);
         if (rootFolder) {

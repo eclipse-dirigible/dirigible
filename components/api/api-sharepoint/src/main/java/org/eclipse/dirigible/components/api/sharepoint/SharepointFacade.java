@@ -68,12 +68,6 @@ public class SharepointFacade {
         return get().sharePointService.listObjects(tenantPath);
     }
 
-    /**
-     * Exists.
-     *
-     * @param keyName the key name
-     * @return true, if successful
-     */
     public static boolean exists(String keyName) {
         String tenantKeyName = get().tenantPathResolver.resolve(keyName);
         return get().sharePointService.exists(tenantKeyName);

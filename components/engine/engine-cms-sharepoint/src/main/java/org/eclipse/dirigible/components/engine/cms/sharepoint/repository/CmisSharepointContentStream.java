@@ -24,7 +24,6 @@ public class CmisSharepointContentStream implements CmisContentStream {
     private final InputStream inputStream;
 
     public CmisSharepointContentStream(String filename, long length, String mimetype, InputStream inputStream) {
-        super();
         this.filename = filename;
         this.length = length;
         this.mimetype = mimetype;
@@ -36,11 +35,6 @@ public class CmisSharepointContentStream implements CmisContentStream {
         return this.inputStream;
     }
 
-    /**
-     * Gets the filename.
-     *
-     * @return the filename
-     */
     @Override
     public String getFilename() {
         return filename;

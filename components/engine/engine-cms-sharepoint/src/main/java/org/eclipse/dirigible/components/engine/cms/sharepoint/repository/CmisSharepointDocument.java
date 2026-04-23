@@ -40,6 +40,7 @@ public class CmisSharepointDocument extends CmisSharepointObject implements Cmis
         return SharepointFacade.getObjectContentType(resource);
     }
 
+    @Override
     public String getPath() {
         return getId();
     }
