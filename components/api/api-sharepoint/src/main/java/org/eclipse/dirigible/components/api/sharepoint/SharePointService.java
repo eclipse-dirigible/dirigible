@@ -1,5 +1,6 @@
 package org.eclipse.dirigible.components.api.sharepoint;
 
+import com.microsoft.graph.core.tasks.LargeFileUploadTask;
 import com.microsoft.graph.drives.item.items.item.createuploadsession.CreateUploadSessionPostRequestBody;
 import com.microsoft.graph.models.*;
 import com.microsoft.graph.serviceclient.GraphServiceClient;
@@ -124,7 +125,7 @@ public class SharePointService {
 
                 // Use the Graph SDK's LargeFileUploadTask
                 try (InputStream is = Files.newInputStream(localFile)) {
-                    var uploadTask = new com.microsoft.graph.core.tasks.LargeFileUploadTask<>(graphClient.getRequestAdapter(), session, is,
+                    LargeFileUploadTask<DriveItem> uploadTask = new LargeFileUploadTask<>(graphClient.getRequestAdapter(), session, is,
                             size, DriveItem::createFromDiscriminatorValue);
                     uploadTask.upload(10, null);
                 }
@@ -175,25 +176,24 @@ public class SharePointService {
                 if (driveId == null) {
                     logger.debug("Resolving SharePoint site drive for {}{}", getSiteHostname(), getSitePath());
                     String siteId = getSiteHostname() + ":" + getSitePath() + ":";
-                    var site = graphClient.sites()
-                                          .bySiteId(siteId)
-                                          .get();
-                    String returnedSiteId = site.getId();
-                    if (site == null || returnedSiteId == null) {
-                        throw new SharePointOperationException("Could not resolve SharePoint site: " + siteId + ". Site: " + site
-                                + " , returned site id: " + returnedSiteId);
-                    }
-                    var drive = graphClient.sites()
-                                           .bySiteId(returnedSiteId)
-                                           .drive()
+                    Site site = graphClient.sites()
+                                           .bySiteId(siteId)
                                            .get();
-                    String driveId = drive.getId();
-                    if (drive == null || driveId == null) {
+                    if (site == null || site.getId() == null) {
+                        throw new SharePointOperationException("Could not resolve SharePoint site: " + siteId + ". Site: " + siteId
+                                + " , returned site id: " + (null != site ? site.getId() : null));
+                    }
+                    String returnedSiteId = site.getId();
+                    Drive drive = graphClient.sites()
+                                             .bySiteId(returnedSiteId)
+                                             .drive()
+                                             .get();
+                    if (drive == null || drive.getId() == null) {
                         throw new SharePointOperationException("Could not resolve default drive for site " + returnedSiteId + ". Drive: "
                                 + drive + ", drive id: " + driveId);
                     }
-                    logger.debug("Resolved drive ID: {} for site: {}", driveId, returnedSiteId);
-                    this.driveId = driveId;
+                    logger.debug("Resolved drive ID: {} for site: {}", drive.getId(), returnedSiteId);
+                    this.driveId = drive.getId();
                 }
             }
         }
