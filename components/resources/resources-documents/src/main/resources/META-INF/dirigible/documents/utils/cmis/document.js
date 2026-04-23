@@ -9,9 +9,10 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { cmis } from "@aerokit/sdk/cms";
-import { streams } from "@aerokit/sdk/io";
+import {cmis} from "@aerokit/sdk/cms";
+import {streams} from "@aerokit/sdk/io";
 import * as objectUtils from "./object";
+
 const path = org.eclipse.dirigible.repository.api.RepositoryPath;
 
 let cmisSession = cmis.getSession();
@@ -68,8 +69,7 @@ function createDocument(folder, fileName, size, mimetype, inputStream) {
 }
 
 export const getDocumentStream = (document) => {
-	let contentStream = document.getContentStream();
-	return contentStream;
+	return document.getContentStream();
 };
 
 export const getDocNameAndStream = (document) => {

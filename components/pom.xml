@@ -69,6 +69,7 @@
         <module>engine/engine-cms</module>
         <module>engine/engine-cms-internal</module>
         <module>engine/engine-cms-s3</module>
+        <module>engine/engine-cms-sharepoint</module>
         <module>engine/engine-jobs</module>
         <module>engine/engine-openapi</module>
         <module>engine/engine-websockets</module>
@@ -108,6 +109,7 @@
         <module>api/api-extensions</module>
         <module>api/api-security</module>
         <module>api/api-s3</module>
+        <module>api/api-sharepoint</module>
         <module>api/api-platform</module>
         <module>api/api-indexing</module>
         <module>api/api-net</module>
@@ -1313,6 +1315,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-api-s3</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-api-sharepoint</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
