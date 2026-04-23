@@ -7,54 +7,47 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.api.s3;
+package org.eclipse.dirigible.components.engine.cms;
 
 import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
+import org.eclipse.dirigible.repository.api.IRepository;
+import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-/**
- * The Class TenantPathResolved.
- */
 @Component
-public class TenantPathResolved {
+public class TenantPathResolver {
 
-    /** The Constant logger. */
-    private static final Logger logger = LoggerFactory.getLogger(TenantPathResolved.class);
+    private static final Logger logger = LoggerFactory.getLogger(TenantPathResolver.class);
 
-    /** The Constant PATH_SEPARATOR. */
     private static final String PATH_SEPARATOR = "/";
 
-    /** The Constant ROOT_PATH. */
     private static final String ROOT_PATH = "/";
 
-    /** The tenant context. */
     private final TenantContext tenantContext;
 
-    /** The default tenant. */
     private final Tenant defaultTenant;
 
-    /**
-     * Instantiates a new tenant path resolved.
-     *
-     * @param tenantContext the tenant context
-     * @param defaultTenant the default tenant
-     */
-    TenantPathResolved(TenantContext tenantContext, @DefaultTenant Tenant defaultTenant) {
+    TenantPathResolver(TenantContext tenantContext, @DefaultTenant Tenant defaultTenant) {
         this.tenantContext = tenantContext;
         this.defaultTenant = defaultTenant;
     }
 
-    /**
-     * Resolve.
-     *
-     * @param path the path
-     * @return the string
-     */
     public String resolve(String path) {
+        logger.debug("Resolving tenant path for [{}]", path);
+        String tenantPath = determinePath(path);
+        logger.debug("Path [{}] is resolved to tenant path [{}]", path, tenantPath);
+
+        String fixedPath = removeDoubleSlash(tenantPath);
+        logger.debug("Path [{}] is finally resolved to tenant path [{}]", path, fixedPath);
+
+        return fixedPath;
+    }
+
+    private @NonNull String determinePath(String path) {
         String tenantId = tenantContext.isInitialized() ? tenantContext.getCurrentTenant()
                                                                        .getId()
                 : defaultTenant.getId();
@@ -71,4 +64,10 @@ public class TenantPathResolved {
         logger.debug("Path [{}] is resolved to [{}]", path, tenantPath);
         return tenantPath;
     }
+
+    private static String removeDoubleSlash(String path) {
+        // Regex "/{2,}" matches 2 or more forward slashes
+        return path.replaceAll(IRepository.SEPARATOR + "{2,}", IRepository.SEPARATOR);
+    }
+
 }

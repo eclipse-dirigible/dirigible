@@ -75,6 +75,10 @@
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-engine-cms-sharepoint</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-engine-bpm</artifactId>
         </dependency>
         <dependency>
