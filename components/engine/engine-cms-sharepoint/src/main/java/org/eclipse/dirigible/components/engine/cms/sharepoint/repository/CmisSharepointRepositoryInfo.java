@@ -16,16 +16,17 @@ class CmisSharepointRepositoryInfo implements CmisRepositoryInfo {
     private final CmisSharepointSession session;
 
     public CmisSharepointRepositoryInfo(CmisSharepointSession session) {
-        super();
         this.session = session;
     }
 
+    @Override
     public String getId() {
         // TODO: Do we need this at all?
         // returning some value
         return "ms-sharepoint-repo-id";
     }
 
+    @Override
     public String getName() {
         // TODO: Do we need this at all?
         // returning some value
