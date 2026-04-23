@@ -174,21 +174,26 @@ public class SharePointService {
             synchronized (this) {
                 if (driveId == null) {
                     logger.debug("Resolving SharePoint site drive for {}{}", getSiteHostname(), getSitePath());
+                    String siteId = getSiteHostname() + ":" + getSitePath() + ":";
                     var site = graphClient.sites()
-                                          .bySiteId(getSiteHostname() + ":" + getSitePath() + ":")
+                                          .bySiteId(siteId)
                                           .get();
-                    if (site == null || site.getId() == null) {
-                        throw new SharePointOperationException("Could not resolve SharePoint site: " + getSiteHostname() + getSitePath());
+                    String returnedSiteId = site.getId();
+                    if (site == null || returnedSiteId == null) {
+                        throw new SharePointOperationException("Could not resolve SharePoint site: " + siteId + ". Site: " + site
+                                + " , returned site id: " + returnedSiteId);
                     }
                     var drive = graphClient.sites()
-                                           .bySiteId(site.getId())
+                                           .bySiteId(returnedSiteId)
                                            .drive()
                                            .get();
-                    if (drive == null || drive.getId() == null) {
-                        throw new SharePointOperationException("Could not resolve default drive for site");
+                    String driveId = drive.getId();
+                    if (drive == null || driveId == null) {
+                        throw new SharePointOperationException("Could not resolve default drive for site " + returnedSiteId + ". Drive: "
+                                + drive + ", drive id: " + driveId);
                     }
-                    driveId = drive.getId();
-                    logger.debug("Resolved drive ID: {}", driveId);
+                    logger.debug("Resolved drive ID: {} for site: {}", driveId, returnedSiteId);
+                    this.driveId = driveId;
                 }
             }
         }
@@ -349,7 +354,7 @@ public class SharePointService {
     }
 
     public boolean exists(String nameOrId) {
-        logger.debug("Checking existence: {}", nameOrId);
+        logger.debug("Checking existence of {}", nameOrId);
         return getById(nameOrId).isPresent();
     }
 
@@ -378,7 +383,7 @@ public class SharePointService {
     }
 
     public String getContentType(String nameOrId) {
-        logger.debug("Getting content type: {}", nameOrId);
+        logger.debug("Getting content type of [{}]", nameOrId);
         DriveItem item = getItem(nameOrId);
         if (item.getFolder() != null) {
             return "application/vnd.sharepoint.folder";
