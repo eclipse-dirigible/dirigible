@@ -86,7 +86,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale']).controlle
 #if($hasDropdowns)
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-		lastSearchValues${property.name}.clear()
+		lastSearchValues${property.name}.clear();
 		allValues${property.name}.length = 0;
 #end
 #end

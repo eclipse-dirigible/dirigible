@@ -1,3 +1,4 @@
+#set($dollar = '$')
 <!DOCTYPE HTML>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
 
@@ -42,6 +43,7 @@
 	                            is-readonly="action === 'select'"
 	#end
 	                            dropdown-items="options${property.name}"
+								ng-keyup="onOptions${property.name}Change(${dollar}event)"
 	                            placeholder="{{ '$projectName:${tprefix}.messages.inputSearch' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}"
 								btn-aria-label="{{ '$projectName:${tprefix}.aria.showHide' | t:{'name':'${property.name}'} }}" list-aria-label="{{ '$projectName:${tprefix}.aria.options' | t:{'name':'${property.name}'} }}">
 	                        </bk-combobox-input>

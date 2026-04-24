@@ -48,7 +48,9 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 #if($hasDropdowns)
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-			$scope.options${property.name} = params.options${property.name};
+			const options${property.name}Map = new Map();
+			params.options${property.name}?.forEach(e => options${property.name}Map.set(e.value, e));
+			$scope.options${property.name} = Array.from(options${property.name}Map.values());
 #if($property.widgetDropDownMultiSelect)
 			if (${dollar}scope.entity.${property.name}) {
 				${dollar}scope.entity.${property.name} = ${dollar}scope.entity.${property.name}.split(',').map(e => parseInt(e));
@@ -118,10 +120,66 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 			});
 		};
 
+#if($hasDropdowns)
 #foreach ($property in $properties)
 #if ($property.widgetType == "DROPDOWN")
 		${dollar}scope.service${property.name} = '${property.widgetDropdownControllerUrl}';
+
+		const lastSearchValues${property.name} = new Set();
+		const allValues${property.name} = [];
+
+		$scope.onOptions${property.name}Change = (event) => {
+			if (allValues${property.name}.length === 0) {
+				allValues${property.name}.push(...${dollar}scope.options${property.name});
+			}
+			if (event.originalEvent.target.value === '') {
+				allValues${property.name}.sort((a, b) => a.text.localeCompare(b.text));
+				${dollar}scope.options${property.name} = allValues${property.name};
+			} else if (isText(event.which)) {
+				let cacheHit = false;
+				Array.from(lastSearchValues${property.name}).forEach(e => {
+					if (event.originalEvent.target.value.startsWith(e)) {
+						cacheHit = true;
+					}
+				})
+				if (!cacheHit) {
+					${dollar}http.post('${property.widgetDropdownControllerUrl}/search', {
+						conditions: [
+							{ propertyName: '${property.widgetDropDownValue}', operator: 'LIKE', value: `${dollar}{event.originalEvent.target.value}%` }
+						]
+					}).then((response) => {
+						const optionValues = allValues${property.name}.map(e => e.value);
+						const searchResult = response.data.map(e => ({
+							value: e.${property.widgetDropDownKey},
+							text: e.${property.widgetDropDownValue}
+						}));
+						searchResult.forEach(e => {
+							if (!optionValues.includes(e.value)) {
+								allValues${property.name}.push(e);
+							}
+						});
+						${dollar}scope.options${property.name} = allValues${property.name}.filter(e => e.text.toLowerCase().startsWith(event.originalEvent.target.value.toLowerCase()));
+					}, (error) => {
+						console.error(error);
+						const message = error.data ? error.data.message : '';
+						Dialogs.showAlert({
+							title: '${property.name}',
+							message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLoad', { message: message }),
+							type: AlertTypes.Error
+						});
+					});
+					lastSearchValues${property.name}.add(event.originalEvent.target.value);
+				}
+			}
+		};
+
 #end
+#end
+
+		function isText(keycode) {
+			if ((keycode >= 48 && keycode <= 90) || (keycode >= 96 && keycode <= 111) || (keycode >= 186 && keycode <= 222) || [8, 46, 173].includes(keycode)) return true;
+			return false;
+		}
 #end
 
 #foreach ($property in $properties)

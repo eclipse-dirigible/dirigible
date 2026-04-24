@@ -292,7 +292,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 		};
 
 		$scope.refresh${property.name} = () => {
-			$scope.options${property.name} =[];
+			$scope.options${property.name} = [];
 			${dollar}http.get('${property.widgetDropdownControllerUrl}').then((response) => {
 				${dollar}scope.options${property.name} = response.data.map(e => ({
 					value: e.${property.widgetDropDownKey},
