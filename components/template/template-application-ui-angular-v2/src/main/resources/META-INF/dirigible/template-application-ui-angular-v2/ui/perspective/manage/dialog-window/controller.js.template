@@ -136,6 +136,45 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 
 		const lastSearchValues${property.name} = new Set();
 		const allValues${property.name} = [];
+		let loadMoreOptions${property.name}Counter = 0;
+		$scope.options${property.name}Loading = false;
+		$scope.options${property.name}HasMore = true;
+
+		$scope.loadMoreOptions${property.name} = () => {
+			const limit = 20;
+			$scope.options${property.name}Loading = true;
+			${dollar}http.get(`${property.widgetDropdownControllerUrl}?$limit=${dollar}{limit}&$offset=${dollar}{++loadMoreOptions${property.name}Counter * limit}`)
+			.then((response) => {
+				const optionValues = allValues${property.name}.map(e => e.value);
+				const resultValues = response.data.map(e => ({
+					value: e.${property.widgetDropDownKey},
+					text: e.${property.widgetDropDownValue}
+				}));
+				const newValues = [];
+				resultValues.forEach(e => {
+					if (!optionValues.includes(e.value)) {
+						allValues${property.name}.push(e);
+						newValues.push(e);
+					}
+				});
+				newValues.forEach(e => {
+					if (!${dollar}scope.options${property.name}.find(o => o.value === e.value)) {
+						${dollar}scope.options${property.name}.push(e);
+					}
+				})
+				$scope.options${property.name}HasMore = resultValues.length > 0;
+				$scope.options${property.name}Loading = false;
+			}, (error) => {
+				$scope.options${property.name}Loading = false;
+				console.error(error);
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlert({
+					title: '${property.name}',
+					message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLoad', { message: message }),
+					type: AlertTypes.Error
+				});
+			});
+		};
 
 		$scope.onOptions${property.name}Change = (event) => {
 			if (allValues${property.name}.length === 0) {
@@ -144,7 +183,9 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 			if (event.originalEvent.target.value === '') {
 				allValues${property.name}.sort((a, b) => a.text.localeCompare(b.text));
 				${dollar}scope.options${property.name} = allValues${property.name};
+				$scope.options${property.name}HasMore = true;
 			} else if (isText(event.which)) {
+				$scope.options${property.name}HasMore = false;
 				let cacheHit = false;
 				Array.from(lastSearchValues${property.name}).forEach(e => {
 					if (event.originalEvent.target.value.startsWith(e)) {

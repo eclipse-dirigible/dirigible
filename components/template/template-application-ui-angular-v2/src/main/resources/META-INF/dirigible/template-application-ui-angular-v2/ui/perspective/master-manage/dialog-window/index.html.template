@@ -46,6 +46,11 @@
 								ng-keyup="onOptions${property.name}Change(${dollar}event)"
 	                            placeholder="{{ '$projectName:${tprefix}.messages.inputSearch' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}"
 								btn-aria-label="{{ '$projectName:${tprefix}.aria.showHide' | t:{'name':'${property.name}'} }}" list-aria-label="{{ '$projectName:${tprefix}.aria.options' | t:{'name':'${property.name}'} }}">
+								    <bk-list-action-item ng-if="options${property.name}HasMore" ng-click="loadMoreOptions${property.name}()">
+										<bk-busy-indicator ng-if="options${property.name}Loading" size="m"></bk-busy-indicator>
+										<span ng-if="!options${property.name}Loading" class="sap-icon sap-icon--navigation-down-arrow" role="presentation"></span>
+										<span ng-if="!options${property.name}Loading">More Options</span>
+									</bk-list-action-item>
 	                        </bk-combobox-input>
 	#if($property.description)
 							<span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
