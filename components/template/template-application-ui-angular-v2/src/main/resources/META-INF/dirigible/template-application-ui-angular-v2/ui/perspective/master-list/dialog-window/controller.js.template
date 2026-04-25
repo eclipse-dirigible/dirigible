@@ -16,7 +16,9 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale']).controlle
 		$scope.entity = params.entity;
 #foreach ($property in $properties)
 #if($property.widgetType == "DROPDOWN")
-		$scope.options${property.name} = params.options${property.name};
+		const options${property.name}Map = new Map();
+		params.options${property.name}?.forEach(e => options${property.name}Map.set(e.value, e));
+		$scope.options${property.name} = Array.from(options${property.name}Map.values());
 #if($property.widgetDropDownMultiSelect)
 		if (${dollar}scope.entity.${property.name}) {
 			${dollar}scope.entity.${property.name} = ${dollar}scope.entity.${property.name}.split(',').map(e => parseInt(e));
