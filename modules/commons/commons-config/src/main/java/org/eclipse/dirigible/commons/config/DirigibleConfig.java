@@ -9,15 +9,24 @@
  */
 package org.eclipse.dirigible.commons.config;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
 /**
  * The Enum DirigibleConfig.
  */
 public enum DirigibleConfig {
+
+    MS_SHAREPOINT_TENANT_ID("DIRIGIBLE_MS_SHAREPOINT_TENANT_ID", null), //
+    MS_SHAREPOINT_SITE_HOSTNAME("DIRIGIBLE_MS_SHAREPOINT_SITE_HOSTNAME", null), //
+    MS_SHAREPOINT_SITE_PATH("DIRIGIBLE_MS_SHAREPOINT_SITE_PATH", null), //
+    MS_SHAREPOINT_CLIENT_ID("DIRIGIBLE_MS_SHAREPOINT_CLIENT_ID", null), //
+    MS_SHAREPOINT_CLIENT_SECRET("DIRIGIBLE_MS_SHAREPOINT_CLIENT_SECRET", null), //
+    MS_SHAREPOINT_TOKEN("DIRIGIBLE_MS_SHAREPOINT_TOKEN", null), //
 
     REGISTRY_EXTERNAL_FOLDER("DIRIGIBLE_REGISTRY_EXTERNAL_FOLDER", null), //
 
@@ -222,5 +231,13 @@ public enum DirigibleConfig {
 
     public void setIntValue(int value) {
         setStringValue(Integer.toString(value));
+    }
+
+    public String getMandatoryStringValue() throws InvalidConfigException {
+        String stringValue = getStringValue();
+        if (StringUtils.isBlank(stringValue)) {
+            throw new InvalidConfigException("Configuration with key [" + key + "] is empty", key);
+        }
+        return stringValue;
     }
 }

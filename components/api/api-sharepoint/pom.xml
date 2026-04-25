@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.eclipse.dirigible</groupId>
+        <artifactId>dirigible-components-parent</artifactId>
+        <version>13.0.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <name>Components - API - S3</name>
+    <artifactId>dirigible-components-api-sharepoint</artifactId>
+    <packaging>jar</packaging>
+
+    <properties>
+        <license.header.location>../../../licensing-header.txt</license.header.location>
+        <parent.pom.folder>../../../</parent.pom.folder>
+
+        <microsoft-graph.version>6.62.0</microsoft-graph.version>
+        <azure-identity.version>1.18.2</azure-identity.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-engine-cms</artifactId>
+        </dependency>
+        <!-- Microsoft Graph SDK -->
+        <dependency>
+            <groupId>com.microsoft.graph</groupId>
+            <artifactId>microsoft-graph</artifactId>
+            <version>${microsoft-graph.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>${okhttp.version}</version>
+            <scope>compile</scope>
+        </dependency>
+
+        <!-- Azure Identity (for ClientSecretCredential) -->
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-identity</artifactId>
+            <version>${azure-identity.version}</version>
+        </dependency>
+
+        <!-- Spring Boot -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-core-base</artifactId>
+        </dependency>
+    </dependencies>
+
+</project>

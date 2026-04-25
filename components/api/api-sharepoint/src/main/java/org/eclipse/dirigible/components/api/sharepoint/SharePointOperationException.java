@@ -7,18 +7,15 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.engine.cms.s3.repository;
+package org.eclipse.dirigible.components.api.sharepoint;
 
-/**
- * The Interface CmisRepository.
- */
-public interface CmisRepository {
+public class SharePointOperationException extends RuntimeException {
 
-    /**
-     * Gets the session.
-     *
-     * @return the session
-     */
-    CmisS3Session getSession();
+    public SharePointOperationException(String message) {
+        super(message);
+    }
 
+    public SharePointOperationException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { zip } from "@aerokit/sdk/io";
+import {zip} from "@aerokit/sdk/io";
 import * as folderUtils from "./folder";
 import * as documentUtils from "./document";
 import * as objectUtils from "./object";
@@ -45,8 +45,15 @@ function createFolder(rootPath, zipEntry, zipInputStream) {
 	let pathAndName = getFullPathAndName(rootPath, zipEntry.getName());
 	let path = pathAndName[0];
 	let name = pathAndName[1];
+
+	if (path.includes("__MACOSX") || name.includes("__MACOSX")) {
+		console.log("System metadata detected. Skipping..." + path);
+		return;
+	}
+	
 	console.log('Creating folder with path:' + path + ' and name: ' + name + ' ...');
 	let parent = folderUtils.getFolder(path);
+
 	if (parent === null) {
 		createParentFolder(path);
 	}
@@ -58,6 +65,11 @@ function createParentFolder(path) {
 	let upperPath = path.substring(0, path.lastIndexOf(SEPARATOR));
 	let upper = folderUtils.getFolder(upperPath);
 	let upperName = path.substring(path.lastIndexOf(SEPARATOR) + 1);
+
+	if (upperPath.includes("__MACOSX") || upperName.includes("__MACOSX")) {
+		console.log("System metadata detected. Skipping..." + path);
+		return;
+	}
 
 	console.warn('Creating the parent folder first with path: ' + upperPath + ' and name: ' + upperName + ' ...');
 	try {
@@ -78,6 +90,11 @@ function createFile(rootPath, zipEntry, zipInputStream) {
 	let pathAndName = getFullPathAndName(rootPath, zipEntry.getName());
 	let path = pathAndName[0];
 	let name = pathAndName[1];
+
+	if (path.includes("__MACOSX") || name.includes("__MACOSX")) {
+		return;
+	}
+
 	console.log('Creating file with root: ' + rootPath + ' path: ' + path + ' and name: ' + name + ' ...');
 
 	let parent = null;
