@@ -235,7 +235,7 @@
         <lucide.version>1.8.0</lucide.version>
         <!-- Tests -->
         <testcontainers.version>2.0.5</testcontainers.version>
-        <selenide.version>7.15.1</selenide.version>
+        <selenide.version>7.16.0</selenide.version>
 
         <antlr4-maven-plugin.version>4.13.2</antlr4-maven-plugin.version>
         <antlr4-runtime.version>4.13.2</antlr4-runtime.version>
