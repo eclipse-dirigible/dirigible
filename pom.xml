@@ -208,7 +208,7 @@
         <logcaptor.version>2.12.6</logcaptor.version>
 
         <!-- UI -->
-        <blimpkit.version>2.1.0</blimpkit.version>
+        <blimpkit.version>2.1.2</blimpkit.version>
         <sap-theming__theming-base-content.version>11.18.2</sap-theming__theming-base-content.version>
         <chart.js.version>4.4.3</chart.js.version>
         <sortablejs.version>1.15.7</sortablejs.version>
