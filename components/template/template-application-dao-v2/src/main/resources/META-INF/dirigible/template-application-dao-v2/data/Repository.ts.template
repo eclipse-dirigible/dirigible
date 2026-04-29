@@ -10,7 +10,8 @@ ${importsCode}
 #foreach ($property in $properties)
     #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
         #set($haveCalculatedPropertyOnCreate = "true")
-    #elseif($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate)
+    #end
+    #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate)
         #set($haveCalculatedPropertyOnUpdate = "true")
     #end
     #if($property.dataType == "DATE" || $property.dataType == "TIMESTAMP")
