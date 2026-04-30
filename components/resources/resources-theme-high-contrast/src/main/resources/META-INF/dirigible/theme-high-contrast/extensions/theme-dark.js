@@ -13,9 +13,10 @@ exports.getTheme = () => ({
 	id: 'high-contrast-dark',
 	name: 'High Contrast Dark',
 	type: 'dark',
-	version: 1,
+	version: 2,
 	links: [
-		'/webjars/sap-theming__theming-base-content/11.18.2/content/Base/baseLib/sap_horizon_hcb/css_variables.css',
-		'/webjars/fundamental-styles/0.38.0/dist/theming/sap_horizon_hcb.css',
+		'/webjars/sap-theming__theming-base-content/content/Base/baseLib/sap_horizon_hcb/css_variables.css',
+		'/webjars/fundamental-styles/dist/theming/sap_horizon_hcb.css',
+		'/services/web/theme-high-contrast/css/contrast-dark.css'
 	]
 });

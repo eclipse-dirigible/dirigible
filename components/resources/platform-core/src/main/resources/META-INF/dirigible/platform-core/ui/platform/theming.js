@@ -14,30 +14,38 @@ angular.module('platformTheming', ['platformExtensions'])
     .provider('theming', function ThemingProvider() {
         this.$get = ['ThemeHub', 'Extensions', function editorsFactory(ThemeHub, Extensions) {
             let theme = ThemeHub.getSavedTheme();
-            let themes = [];
             const branding = getBrandingInfo();
 
-            Extensions.getThemes().then((response) => {
-                themes = response.data;
-                if (!theme.version) {
-                    setTheme(branding.theme);
-                } else {
-                    for (let i = 0; i < themes.length; i++) {
-                        if (themes[i].id === theme.id) {
-                            if (themes[i].version !== theme.version) {
-                                setThemeObject(themes[i]);
-                                break;
+            if (!top.hasOwnProperty('PlatformThemes')) {
+                top['PlatformThemes'] = {
+                    loading: true,
+                    themes: undefined,
+                };
+                Extensions.getThemes().then((response) => {
+                    top.PlatformThemes.themes = response.data;
+                    if (!theme.version) {
+                        setTheme(branding.theme);
+                    } else {
+                        for (let i = 0; i < top.PlatformThemes.themes.length; i++) {
+                            if (top.PlatformThemes.themes[i].id === theme.id) {
+                                if (top.PlatformThemes.themes[i].version !== theme.version) {
+                                    setThemeObject(top.PlatformThemes.themes[i]);
+                                    break;
+                                }
                             }
                         }
                     }
-                }
-                ThemeHub.themesLoaded();
-            });
+                    top.PlatformThemes.loading = false;
+                    ThemeHub.themesLoaded();
+                });
+            } else {
+                if (!top.PlatformThemes.loading) ThemeHub.themesLoaded();
+            }
 
             function setTheme(themeId, sendEvent = true) {
-                for (let i = 0; i < themes.length; i++) {
-                    if (themes[i].id === themeId) {
-                        setThemeObject(themes[i], sendEvent);
+                for (let i = 0; i < top.PlatformThemes.themes.length; i++) {
+                    if (top.PlatformThemes.themes[i].id === themeId) {
+                        setThemeObject(top.PlatformThemes.themes[i], sendEvent);
                         break;
                     }
                 }
@@ -55,7 +63,7 @@ angular.module('platformTheming', ['platformExtensions'])
 
             return {
                 setTheme: setTheme,
-                getThemes: () => themes.map((item) => ({
+                getThemes: () => top.PlatformThemes.themes.map((item) => ({
                     'id': item['id'],
                     'name': item['name']
                 })),

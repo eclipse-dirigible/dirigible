@@ -26,16 +26,26 @@
 
     <body>
         <split direction="horizontal">
-            <split-pane size="20" min-size="280">
+            <split-pane size="20" min-size="120">
+                <bk-toolbar>
+                    <bk-input-group>
+                        <bk-input-group-addon>
+                            <span class="sap-icon sap-icon--search" role="presentation"></span>
+                        </bk-input-group-addon>
+                        <bk-input type="search" placeholder="{{'search' | t:'Search'}}" ng-keyup="searchContent()" ng-model="search.text"></bk-input>
+                        <bk-input-group-addon ng-show="search.text">
+                            <bk-button glyph="sap-icon--decline" title="{{'clear' | t:'Clear'}}" aria-label="{{'clear' | t:'Clear'}}" ng-click="clearSearch()"></bk-button>
+                        </bk-input-group-addon>
+                    </bk-input-group>
+                </bk-toolbar>
                 <bk-list bk-scrollbar class="bk-full-height">
-                    <bk-list-item interactive="true" ng-repeat="setting in settings track by setting.id" ng-click="switchSetting(setting.id)" selected="setting.id === activeId">
-                        <bk-list-icon ng-attr-glyph="{{::setting.glyph}}" ng-attr-svg-path="{{::setting.icon}}"></bk-list-icon>
-                        <bk-list-title>{{::setting.label}}</bk-list-title>
+                    <bk-list-item interactive="true" ng-repeat="setting in settings track by setting.id" ng-hide="setting.hide" ng-click="switchSetting(setting.id)" selected="setting.id === activeId">
+                        <bk-list-title>{{setting.translation.key | t:setting.label}}</bk-list-title>
                     </bk-list-item>
                 </bk-list>
             </split-pane>
             <split-pane size="80" min-size="0">
-                <iframe ng-repeat="setting in settings track by setting.id" ng-show="setting.id === activeId" title="{{::setting.label}}" ng-src="{{::setting.path}}" loading="lazy"></iframe>
+                <embedded-view ng-repeat="setting in settings track by setting.id" ng-show="setting.id === activeId" view-id="{{::setting.id}}" type="setting"></embedded-view>
             </split-pane>
         </split>
         <theme></theme>

@@ -13,6 +13,14 @@
 	<artifactId>dirigible-components-resources-dashboard</artifactId>
     <packaging>jar</packaging>
 
+	<dependencies>
+        <dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-ui-perspective-settings</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+    </dependencies>
+
 	<properties>
 		<license.header.location>../../../licensing-header.txt</license.header.location>
 		<parent.pom.folder>../../../</parent.pom.folder>

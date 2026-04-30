@@ -66,6 +66,8 @@
     "about": "About",
     "status": "Status",
     "download": "Download",
+    "other": "Other",
+    "unknown": "Unknown",
     "unknownError": "Unknown Error",
     "unknownErrorMsg": "Please check the console log for more information."
 }

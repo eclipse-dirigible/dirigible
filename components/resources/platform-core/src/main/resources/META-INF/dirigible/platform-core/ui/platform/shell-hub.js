@@ -11,6 +11,14 @@
  */
 class ShellHub extends MessageHubApi {
     /**
+     * Returns the shell configuration.
+     */
+    getConfig() {
+        if (top.hasOwnProperty('getConfigData')) return top.getConfigData();
+        return {};
+    }
+
+    /**
      * Shows a perspective inside the shell.
      * @param {string} id - Perspective id.
      * @param {object} [params] - Extra parameters.

@@ -315,12 +315,12 @@ if (window !== top) {
         },
         template: `<bk-menu-item ng-repeat-start="item in sublist track by $index" ng-if="!item.items" has-separator="::item.separator" title="{{ item.translation.key | t:item.translation.options:item.label }}" ng-click="::menuHandler(item)"></bk-menu-item>
         <bk-menu-sublist ng-if="item.items" has-separator="::item.separator" title="{{ item.translation.key | t:item.translation.options:item.label }}" can-scroll="::canSubmenuScroll(item.items)" ng-repeat-end><submenu sublist="::item.items" menu-handler="::menuHandler"></submenu></bk-menu-sublist>`,
-    })).directive('perspectiveContainer', (Extensions, shellState, Shell, $location, LocaleService) => ({
+    })).directive('perspectiveContainer', (Extensions, shellState, Shell, $location, LocaleService, $window) => ({
         restrict: 'E',
         transclude: true,
         replace: true,
         scope: {
-            condensed: '<?', // Boolean - If the side navigation should show both icons and labels. This is not dynamic!
+            condensed: '<?', // Boolean - If the side navigation should show both icons and labels.
             config: '=?' // Object - Sidebar configuration containing perspectives and perspective groups. 
         },
         link: {
@@ -390,7 +390,8 @@ if (window !== top) {
                     if (icon) return icon;
                     return '/services/web/resources/images/unknown.svg';
                 };
-                scope.switchPerspective = (id, label, translation) => {
+                scope.switchPerspective = (event, id, label, translation, group) => {
+                    event.stopPropagation();
                     if (URLParams.has('perspective') || URLParams.has('continue')) {
                         URLParams.delete('perspective');
                         URLParams.delete('continue');
@@ -402,6 +403,11 @@ if (window !== top) {
                         id: id,
                         label: translation ? LocaleService.t(translation.key, translation.options, label) : label,
                     };
+                    if (group) {
+                        scope.$evalAsync(() => {
+                            group.expanded = false;
+                        });
+                    }
                 };
 
                 function getPerspectiveLabel(pId, plist) {
@@ -418,6 +424,28 @@ if (window !== top) {
                     }
                     return label;
                 }
+
+                function getNavCondensed() {
+                    const navCondensedKey = `${getBrandingInfo().prefix}.${shellData.id}.settings.general.nav.condensed`;
+                    let navCondensed = $window.localStorage.getItem(navCondensedKey);
+                    if (navCondensed === null) {
+                        navCondensed = scope.condensed !== undefined ? scope.condensed : true;
+                        $window.localStorage.setItem(navCondensedKey, navCondensed);
+                    } else navCondensed = JSON.parse(navCondensed);
+                    return navCondensed;
+                }
+
+                scope.condensed = getNavCondensed();
+                const navCondensedListener = Shell.addMessageListener({
+                    topic: 'general.settings.navigation',
+                    handler: (data) => {
+                        if (data.setting === 'condensed') {
+                            scope.$evalAsync(() => {
+                                scope.condensed = data.value;
+                            });
+                        }
+                    },
+                });
 
                 const showPerspectiveListener = Shell.onShowPerspective((data) => {
                     let label = getPerspectiveLabel(data.id, scope.config.perspectives);
@@ -439,60 +467,70 @@ if (window !== top) {
 
                 scope.$on('$destroy', () => {
                     Shell.removeMessageListener(showPerspectiveListener);
+                    if (navCondensedListener) Shell.removeMessageListener(navCondensedListener);
                 });
             },
         },
         template: `<div class="main-container" no-statusbar="{{::noStatusbar}}">
-            <bk-vertical-nav class="sidebar" condensed="condensed" can-scroll="true">
-                <bk-vertical-nav-main-section aria-label="{{'aria.perspectiveNav' | t:'perspective navigation'}}">
-                    <bk-list aria-label="{{'aria.perspectiveList' | t:'Perspective list'}}" ng-if="!condensed">
-                        <bk-list-navigation-group-header ng-repeat-start="navItem in config.perspectives track by navItem.id" ng-if="navItem.items && navItem.items.length && (navItem.headerLabel || navItem.headerTranslation)">{{navItem.headerTranslation.key | t:navItem.headerLabel}}</bk-list-navigation-group-header>
-                        <bk-list-navigation-item ng-if="navItem.items && navItem.items.length" expandable="true" ng-click="navItem.expanded = !navItem.expanded" is-expanded="navItem.expanded">
-                            <bk-list-navigation-item-icon icon-size="lg" svg-path="{{getIcon(navItem.icon)}}"></bk-list-navigation-item-icon>
-                            <span bk-list-navigation-item-text>{{navItem.translation.key | t:navItem.translation.options:navItem.label}}</span>
-                            <bk-list-navigation-item-arrow aria-label="{{'aria.expandPerGrp' | t:'expand perspective group'}}" is-expanded="navItem.expanded"></bk-list-navigation-item-arrow>
-                            <bk-list>
-                                <bk-list-navigation-item ng-repeat="navGroupItem in navItem.items track by navGroupItem.id" ng-click="$event.stopPropagation();switchPerspective(navGroupItem.id, navGroupItem.label, navGroupItem.translation)">
-                                    <span bk-list-navigation-item-text>{{navGroupItem.translation.key | t:navGroupItem.translation.options:navGroupItem.label}}</span>
-                                    <bk-list-navigation-item-indicator ng-if="isActive(navGroupItem.id, navItem.id)"></bk-list-navigation-item-indicator>
-                                </bk-list-navigation-item>
-                            </bk-list>
-                            <bk-list-navigation-item-indicator ng-if="navItem.id === activeGroupId"></bk-list-navigation-item-indicator>
-                        </bk-list-navigation-item>
-                        <bk-list-navigation-group-header ng-if="!navItem.items && (navItem.headerLabel || navItem.headerTranslation)">{{navItem.headerTranslation.key | t:navItem.headerLabel}}</bk-list-navigation-group-header>
-                        <bk-list-navigation-item ng-repeat-end ng-if="!navItem.items" indicated="navItem.id === activeId" ng-click="switchPerspective(navItem.id, navItem.label, navItem.translation)" title="{{navItem.translation.key | t:navItem.translation.options:navItem.label}}">
-                            <bk-list-navigation-item-icon icon-size="lg" svg-path="{{getIcon(navItem.icon)}}"></bk-list-navigation-item-icon>
-                            <span bk-list-navigation-item-text>{{navItem.translation.key | t:navItem.translation.options:navItem.label}}</span>
-                            <bk-list-navigation-item-indicator ng-if="navItem.id === activeId"></bk-list-navigation-item-indicator>
-                        </bk-list-navigation-item>
-                    </bk-list>
-                    <bk-list aria-label="{{'aria.perspectiveList' | t:'Perspective list'}}" ng-if="condensed">
-                        <bk-list-navigation-item ng-repeat-start="navItem in config.perspectives track by navItem.id" ng-if="!navItem.items" indicated="navItem.id === activeId" ng-click="switchPerspective(navItem.id, navItem.label, navItem.translation)" title="{{::navItem.label}}" id="perspective-{{::navItem.id}}">
-                            <bk-list-navigation-item-icon icon-size="lg" svg-path="{{getIcon(navItem.icon)}}"></bk-list-navigation-item-icon>
-                            <span bk-list-navigation-item-text>{{navItem.translation.key | t:navItem.translation.options:navItem.label}}</span>
-                            <bk-list-navigation-item-indicator ng-if="navItem.id === activeId"></bk-list-navigation-item-indicator>
-                        </bk-list-navigation-item>
-                        <bk-list-navigation-item ng-repeat-end ng-if="navItem.items" ng-repeat="subNavItem in navItem.items track by subNavItem.id" indicated="subNavItem.id === activeId" ng-click="switchPerspective(subNavItem.id, subNavItem.label, subNavItem.translation)" title="{{subNavItem.translation.key | t:subNavItem.translation.options:subNavItem.label}}" id="subperspective{{::subNavItem.id}}">
-                            <bk-list-navigation-item-icon icon-size="lg" svg-path="{{getIcon(subNavItem.icon)}}"></bk-list-navigation-item-icon>
-                            <span bk-list-navigation-item-text>{{subNavItem.translation.key | t:subNavItem.translation.options:subNavItem.label}}</span>
-                            <bk-list-navigation-item-indicator ng-if="subNavItem.id === activeId"></bk-list-navigation-item-indicator>
-                        </bk-list-navigation-item>
-                    </bk-list>
-                </bk-vertical-nav-main-section>
-                <bk-vertical-nav-utility-section ng-if="config.utilities.length" aria-label="{{'aria.utilityNav' | t:'utility navigation'}}">
+    <bk-vertical-nav class="sidebar bk-shadow--none" condensed="condensed" can-scroll="true">
+        <bk-vertical-nav-main-section aria-label="{{'aria.perspectiveNav' | t:'perspective navigation'}}">
+            <bk-list aria-label="{{'aria.perspectiveList' | t:'Perspective list'}}">
+                <bk-list-navigation-group-header ng-repeat-start="navItem in config.perspectives track by navItem.id" ng-if="navItem.items && navItem.items.length && (navItem.headerLabel || navItem.headerTranslation)">{{navItem.headerTranslation.key | t:navItem.headerLabel}}</bk-list-navigation-group-header>
+                <bk-list-navigation-item ng-if="condensed && navItem.items && navItem.items.length" expandable="true" is-expanded="navItem.expanded">
+                    <bk-list-navigation-item-icon icon-size="lg" svg-path="{{getIcon(navItem.icon)}}"></bk-list-navigation-item-icon>
+                    <bk-list-navigation-item-arrow aria-label="{{'aria.expandPerGrp' | t:'expand perspective group'}}"></bk-list-navigation-item-arrow>
+                    <bk-list-navigation-item-popover level="1">
+                        <bk-list>
+                            <bk-list-navigation-item>
+                                <bk-list-navigation-item-icon icon-size="lg" svg-path="{{getIcon(navItem.icon)}}"></bk-list-navigation-item-icon>
+                                <span bk-list-navigation-item-text>{{navItem.translation.key | t:navItem.translation.options:navItem.label}}</span>
+                            </bk-list-navigation-item>
+                        </bk-list>
+                    </bk-list-navigation-item-popover>
+                    <bk-list-navigation-item-popover level="2">
+                        <bk-list>
+                            <bk-list-navigation-item ng-repeat="navGroupItem in navItem.items track by navGroupItem.id" ng-click="switchPerspective($event, navGroupItem.id, navGroupItem.label, navGroupItem.translation, navItem)" indicated="navGroupItem.id === activeId">
+                                <span bk-list-navigation-item-text>{{navGroupItem.translation.key | t:navGroupItem.translation.options:navGroupItem.label}}</span>
+                                <bk-list-navigation-item-indicator></bk-list-navigation-item-indicator>
+                            </bk-list-navigation-item>
+                        </bk-list>
+                    </bk-list-navigation-item-popover>
+                    <bk-list-navigation-item-indicator></bk-list-navigation-item-indicator>
+                </bk-list-navigation-item>
+                <bk-list-navigation-item ng-if="!condensed && navItem.items && navItem.items.length" expandable="true" is-expanded="navItem.expanded">
+                    <bk-list-navigation-item-icon icon-size="lg" svg-path="{{getIcon(navItem.icon)}}"></bk-list-navigation-item-icon>
+                    <span bk-list-navigation-item-text>{{navItem.translation.key | t:navItem.translation.options:navItem.label}}</span>
+                    <bk-list-navigation-item-arrow aria-label="{{'aria.expandPerGrp' | t:'expand perspective group'}}"></bk-list-navigation-item-arrow>
                     <bk-list>
-                        <bk-list-navigation-item ng-repeat="navItem in config.utilities track by navItem.id" ng-click="switchPerspective(navItem.id, navItem.label, navItem.translation)" title="{{navItem.translation.key | t:navItem.translation.options:navItem.label}}">
-                            <bk-list-navigation-item-icon icon-size="lg" svg-path="{{getIcon(navItem.icon)}}"></bk-list-navigation-item-icon>
-                            <span bk-list-navigation-item-text>{{navItem.translation.key | t:navItem.translation.options:navItem.label}}</span>
-                            <bk-list-navigation-item-indicator ng-if="navItem.id === activeId"></bk-list-navigation-item-indicator>
+                        <bk-list-navigation-item ng-repeat="navGroupItem in navItem.items track by navGroupItem.id" ng-click="switchPerspective($event, navGroupItem.id, navGroupItem.label, navGroupItem.translation)" indicated="navGroupItem.id === activeId">
+                            <span bk-list-navigation-item-text>{{navGroupItem.translation.key | t:navGroupItem.translation.options:navGroupItem.label}}</span>
+                            <bk-list-navigation-item-indicator></bk-list-navigation-item-indicator>
                         </bk-list-navigation-item>
                     </bk-list>
-                </bk-vertical-nav-utility-section>
-            </bk-vertical-nav>
-            <iframe ng-repeat-start="perspective in config.perspectives track by perspective.id" ng-if="!perspective.items" ng-show="perspective.id === activeId" title="{{perspective.translation.key | t:perspective.translation.options:perspective.label}}" ng-src="{{::perspective.path}}" data-parameters="{{getDataParams(perspective.params)}}" loading="lazy"></iframe>
-            <iframe ng-repeat-end ng-if="perspective.items" ng-repeat="subperspective in perspective.items track by subperspective.id" ng-show="subperspective.id === activeId" title="{{subperspective.translation.key | t:subperspective.translation.options:subperspective.label}}" ng-src="{{::subperspective.path}}" data-parameters="{{getDataParams(subperspective.params)}}" loading="lazy"></iframe>
-            <iframe ng-repeat="perspective in config.utilities track by perspective.id" ng-show="perspective.id === activeId" title="{{perspective.translation.key | t:perspective.translation.options:perspective.label}}" ng-src="{{::perspective.path}}" data-parameters="{{getDataParams(perspective.params)}}" loading="lazy"></iframe>
-        </div>`,
+                    <bk-list-navigation-item-indicator></bk-list-navigation-item-indicator>
+                </bk-list-navigation-item>
+                <bk-list-navigation-group-header ng-if="!navItem.items && (navItem.headerLabel || navItem.headerTranslation)">{{navItem.headerTranslation.key | t:navItem.headerLabel}}</bk-list-navigation-group-header>
+                <bk-list-navigation-item ng-repeat-end ng-if="!navItem.items" indicated="navItem.id === activeId" ng-click="switchPerspective($event, navItem.id, navItem.label, navItem.translation)" title="{{navItem.translation.key | t:navItem.translation.options:navItem.label}}">
+                    <bk-list-navigation-item-icon icon-size="lg" svg-path="{{getIcon(navItem.icon)}}"></bk-list-navigation-item-icon>
+                    <span bk-list-navigation-item-text>{{navItem.translation.key | t:navItem.translation.options:navItem.label}}</span>
+                    <bk-list-navigation-item-indicator></bk-list-navigation-item-indicator>
+                </bk-list-navigation-item>
+            </bk-list>
+        </bk-vertical-nav-main-section>
+        <bk-vertical-nav-utility-section ng-if="config.utilities.length" aria-label="{{'aria.utilityNav' | t:'utility navigation'}}">
+            <bk-list>
+                <bk-list-navigation-item ng-repeat="navItem in config.utilities track by navItem.id" ng-click="switchPerspective($event, navItem.id, navItem.label, navItem.translation)" title="{{navItem.translation.key | t:navItem.translation.options:navItem.label}}" indicated="navItem.id === activeId">
+                    <bk-list-navigation-item-icon icon-size="lg" svg-path="{{getIcon(navItem.icon)}}"></bk-list-navigation-item-icon>
+                    <span bk-list-navigation-item-text>{{navItem.translation.key | t:navItem.translation.options:navItem.label}}</span>
+                    <bk-list-navigation-item-indicator></bk-list-navigation-item-indicator>
+                </bk-list-navigation-item>
+            </bk-list>
+        </bk-vertical-nav-utility-section>
+    </bk-vertical-nav>
+    <iframe class="bk-border--left" ng-repeat-start="perspective in config.perspectives track by perspective.id" ng-if="!perspective.items" ng-show="perspective.id === activeId" title="{{perspective.translation.key | t:perspective.translation.options:perspective.label}}" ng-src="{{::perspective.path}}" data-parameters="{{getDataParams(perspective.params)}}" loading="lazy"></iframe>
+    <iframe class="bk-border--left" ng-repeat-end ng-if="perspective.items" ng-repeat="subperspective in perspective.items track by subperspective.id" ng-show="subperspective.id === activeId" title="{{subperspective.translation.key | t:subperspective.translation.options:subperspective.label}}" ng-src="{{::subperspective.path}}" data-parameters="{{getDataParams(subperspective.params)}}" loading="lazy"></iframe>
+    <iframe class="bk-border--left" ng-repeat="perspective in config.utilities track by perspective.id" ng-show="perspective.id === activeId" title="{{perspective.translation.key | t:perspective.translation.options:perspective.label}}" ng-src="{{::perspective.path}}" data-parameters="{{getDataParams(perspective.params)}}" loading="lazy"></iframe>
+</div>`,
     })).directive('notifications', (notifications) => ({
         restrict: 'E',
         replace: true,
@@ -565,7 +603,7 @@ if (window !== top) {
                 statusBarHub.removeMessageListener(labelListener);
             });
         },
-        template: `<div class="statusbar">
+        template: `<div class="statusbar bk-border--top">
             <div class="statusbar-busy" ng-if="busy" title="{{ busy }}"><bk-loader contrast="true"></bk-loader><span class="statusbar--text">{{ busy }}</span></div>
             <div class="statusbar-message" ng-if="message">
                 <i class="statusbar--icon sap-icon--information"></i>

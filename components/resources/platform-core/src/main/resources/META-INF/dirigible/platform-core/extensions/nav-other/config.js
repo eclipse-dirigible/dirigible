@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -9,16 +9,14 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const viewData = {
-    id: 'generalDashboardSettings',
-    label: 'General',
+exports.getPerspectiveGroup = () => ({
+    id: 'undefined-group', // The same ID must set in /platform-core/extension-services/modules/perspectives.mjs
+    label: 'Unknown',
     translation: {
-        key: 'dashboard:general',
+        key: 'unknown',
     },
-    order: -1,
-    glyph: 'sap-icon--customize',
-    path: '/services/web/dashboard/settings/general.html',
-};
-if (typeof exports !== 'undefined') {
-    exports.getView = () => viewData;
-}
+    expanded: false,
+    order: 9999,
+    icon: '/services/web/resources/images/unknown.svg',
+    items: []
+});
