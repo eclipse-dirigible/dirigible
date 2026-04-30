@@ -19,29 +19,21 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
 		<title config-title></title>
-		<script type="text/javascript" src="/services/web/shell-ide/configs/general.js"></script>
+		<script type="text/javascript" src="/services/web/perspective-settings/configs/general.js"></script>
 		<meta name="platform-links" category="ng-view,ng-cookies">
 		<script type="text/javascript" src="js/general.js"></script>
-		<style>
-			.bk-hbox.bk-box--space-between.bk-box--items-center {
-				min-height: 2rem;
-			}
-
-		</style>
 	</head>
 
 	<body class="bk-vbox">
 		<bk-toolbar has-title="true">
-			<bk-toolbar-title>General</bk-toolbar-title>
+			<bk-toolbar-title>{{'perspective-settings:general' | t:'General'}}</bk-toolbar-title>
 			<bk-toolbar-spacer></bk-toolbar-spacer>
-			<bk-button label="Reset all" state="negative" title="Reset all" aria-label="reset all settings button" ng-click="resetAll()"></bk-button>
+			<bk-button label="{{'perspective-settings:resetAll' | t:'Reset All'}}" state="negative" title="{{'perspective-settings:resetAll' | t:'Reset All'}}" aria-label="reset all settings button" ng-click="resetAll()"></bk-button>
 		</bk-toolbar>
 		<bk-scrollbar class="bk-center--horizontal bk-padding bk-box--items-start">
 			<div class="bk-vbox bk-box--gap-xl bk-full-width bk-restrict-width--sm">
-				<div class="bk-vbox bk-box--gap">
-					<div class="bk-hbox bk-box--space-between bk-box--items-center">
-						<span class="fd-text"><b>Theme</b></span>
-					</div>
+				<div class="bk-vbox bk-box--gap-m">
+					<h2 bk-title wrap="true" header-size="6">{{'perspective-settings:theme' | t:'Theme'}}</h2>
 					<bk-card card-type="list" aria-roledescription="theme setting section">
 						<bk-card-content aria-roledescription="theme setting list">
 							<bk-list no-border="true">
@@ -54,10 +46,25 @@
 					</bk-card>
 				</div>
 
-				<div class="bk-vbox bk-box--gap">
-					<div class="bk-hbox bk-box--space-between bk-box--items-center">
-						<span class="fd-text"><b>Editors</b></span>
-					</div>
+				<div class="bk-vbox bk-box--gap-m" ng-if="::shellConfig">
+					<h2 bk-title wrap="true" header-size="6">{{'perspective-settings:navigation' | t:'Navigation'}}</h2>
+					<bk-card card-type="list" aria-roledescription="navigation setting section">
+						<bk-card-content aria-roledescription="navigation setting list">
+							<bk-list>
+								<bk-list-item interactive="false" class="bk-no-border--bottom">
+									<bk-list-title id="navc">{{'perspective-settings:condensed' | t:'Condensed'}}</bk-list-title>
+									<bk-switch class="bk-margin-inline--none">
+										<input bk-switch-input id="navcsw" type="checkbox" aria-labelledby="navc" ng-model="switches.navCondensed" ng-change="navCondensedChange()" />
+										<bk-switch-slider></bk-switch-slider>
+									</bk-switch>
+								</bk-list-item>
+							</bk-list>
+						</bk-card-content>
+					</bk-card>
+				</div>
+
+				<div class="bk-vbox bk-box--gap-m" ng-if="params.shellId === 'shellIde'">
+					<h2 bk-title wrap="true" header-size="6">Editors</h2>
 					<bk-card card-type="list" aria-roledescription="editors setting section">
 						<bk-card-content aria-roledescription="editors setting list">
 							<bk-list>

@@ -232,7 +232,9 @@ public class Configuration {
         List<String> staticParams = List.of( //
                 "DIRIGIBLE_ANONYMOUS_USER_NAME_PROPERTY_NAME", //
                 "DIRIGIBLE_BRANDING_NAME", //
+                "DIRIGIBLE_BRANDING_SUBTITLE", //
                 "DIRIGIBLE_BRANDING_BRAND", //
+                "DIRIGIBLE_BRANDING_BRAND_URL", //
                 "DIRIGIBLE_BRANDING_FAVICON", //
                 "DIRIGIBLE_BRANDING_THEME", //
                 "DIRIGIBLE_BRANDING_PREFIX", //

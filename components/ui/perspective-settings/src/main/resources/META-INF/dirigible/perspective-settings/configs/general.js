@@ -12,9 +12,12 @@
 const viewData = {
     id: 'generalSettings',
     label: 'General',
-    order: 1,
+    translation: {
+        key: 'perspective-settings:general',
+    },
+    order: -1,
     glyph: 'sap-icon--customize',
-    path: '/services/web/shell-ide/settings/general.html',
+    path: '/services/web/perspective-settings/settings/general.html',
 };
 if (typeof exports !== 'undefined') {
     exports.getView = () => viewData;

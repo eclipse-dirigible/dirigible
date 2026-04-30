@@ -73,7 +73,7 @@ angular.module('platformExtensions', []).factory('Extensions', ($http) => ({
         return $http.get('/services/js/platform-core/extension-services/views.js', { params: { extensionPoints: exPoints } });
     },
     getSettings: (exPoints = top.PlatformExtPoints.settings) => {
-        return $http.get('/services/js/platform-core/extension-services/views.js', { params: { extensionPoints: exPoints } });
+        return $http.get('/services/js/platform-core/extension-services/views.js', { params: { extensionPoints: exPoints, type: 'settings' } });
     },
     getEditors: (exPoints = top.PlatformExtPoints.editors) => {
         return $http.get('/services/js/platform-core/extension-services/editors.js', { params: { extensionPoints: exPoints } });

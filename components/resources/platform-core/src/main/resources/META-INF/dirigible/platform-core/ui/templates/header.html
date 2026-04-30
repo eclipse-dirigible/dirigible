@@ -35,7 +35,11 @@
                     </bk-menu>
                 </bk-popover-body>
             </bk-popover>
-            <span bk-shellbar-title>{{ ::branding.name }}</span>
+            <span ng-if="branding.subtitle" class="bk-vbox">
+                <span bk-shellbar-title>{{ ::branding.name }}</span>
+                <span bk-shellbar-subtitle>{{ ::branding.subtitle }}</span>
+            </span>
+            <span ng-if="!branding.subtitle" bk-shellbar-title>{{ ::branding.name }}</span>
             <div class="bk-hbox" ng-if="!collapseMenu">
                 <bk-popover ng-repeat="menuItem in menus[perspectiveId].items track by $index">
                     <bk-popover-control>
@@ -168,13 +172,13 @@
                         <bk-avatar title="{{::username}}" glyph="sap-icon--account" shell="true" interactive="true" is-placeholder="true" aria-label="{{'common:aria.usrMenuBtn' | t:'user menu button'}}"></bk-avatar>
                     </bk-popover-control>
                     <bk-popover-body align="bottom-right" can-scroll="false">
-                        <div class="bk-padding--tiny bk-vbox bk-box--gap bk-list-border--bottom">
-                            <bk-form-label class="bk-font--small" colon="false">{{'username' | t:'Username'}}:</bk-form-label>
-                            <p class="fd-text">{{::username}}</p>
+                        <div class="bk-padding--tiny bk-vbox bk-box--gap">
+                            <div class="bk-padding--tiny bk-vbox bk-box--gap bk-border--bottom">
+                                <p class="bk-text--subtitle bk-font--normal fd-margin--none">{{'username' | t:'Username'}}:</p>
+                                <p class="fd-text">{{::username}}</p>
+                            </div>
+                            <bk-button label="{{'logout' | t:'Logout'}}" state="transparent" glyph="sap-icon--log" aria-label="{{'logout' | t:'Logout'}}" ng-click="logout()"></bk-button>
                         </div>
-                        <bk-menu class="bk-full-width" has-icons="true" aria-label="{{'common:aria.usrMenu' | t:'user menu'}}">
-                            <bk-menu-item title="{{'logout' | t:'Logout'}}" left-icon-class="sap-icon--log" ng-click="logout()"></bk-menu-item>
-                        </bk-menu>
                     </bk-popover-body>
                 </bk-popover>
             </bk-shellbar-action>

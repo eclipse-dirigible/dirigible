@@ -13,6 +13,7 @@
 import { Configurations } from '@aerokit/sdk/core';
 
 const BRANDING_NAME = 'DIRIGIBLE_BRANDING_NAME';
+const BRANDING_SUBTITLE = 'DIRIGIBLE_BRANDING_SUBTITLE';
 const BRANDING_BRAND = 'DIRIGIBLE_BRANDING_BRAND';
 const BRANDING_BRAND_URL = 'DIRIGIBLE_BRANDING_BRAND_URL';
 const BRANDING_FAVICON = 'DIRIGIBLE_BRANDING_FAVICON';
@@ -32,6 +33,7 @@ const BRANDING_PREFIX_DEFAULT = 'dirigible';
 export function getBrandingJs() {
     return `if (!top.hasOwnProperty('PlatformBranding')) top.PlatformBranding = {
     name: '${Configurations.get(BRANDING_NAME, BRANDING_NAME_DEFAULT)}',
+    subtitle: '${Configurations.get(BRANDING_SUBTITLE, '')}',
     brand: '${Configurations.get(BRANDING_BRAND, BRANDING_BRAND_DEFAULT)}',
     brandUrl: '${Configurations.get(BRANDING_BRAND_URL, BRANDING_BRAND_URL_DEFAULT)}',
     icons: {

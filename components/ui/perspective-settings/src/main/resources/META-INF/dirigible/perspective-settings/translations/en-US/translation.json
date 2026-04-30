@@ -1,0 +1,16 @@
+{
+    "general": "General",
+    "resetAll": "$t(reset) all",
+    "theme": "Theme",
+    "navigation": "Navigation",
+    "condensed": "Condensed",
+    "settings": "Settings",
+    "resetMsg": "This will clear all general settings, open tabs and cache.\n{{brand}} will then reload.\nDo you wish to continue?",
+    "resetting": "Resetting",
+    "errMsg": {
+        "resetTitle": "Failed to reset",
+        "reset": "There was an error during the reset process. Please refresh manually.",
+        "settingLoadTitle": "Failed to load settings",
+        "settingLoad": "There was an error while trying to load the settings list."
+    }
+}
