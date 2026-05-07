@@ -13,9 +13,8 @@ exports.getTheme = () => ({
 	id: 'mystic-light',
 	name: 'Mystic Light',
 	type: 'light',
-	version: 2,
+	version: 3,
 	links: [
-		'/webjars/blimpkit__blimpkit/dist/css/themes/mystic-light-variables.css',
 		'/webjars/blimpkit__blimpkit/dist/css/themes/mystic-light.css',
 	]
 });

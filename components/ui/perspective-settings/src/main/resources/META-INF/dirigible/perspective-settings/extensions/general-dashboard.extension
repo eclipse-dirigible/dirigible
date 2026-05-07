@@ -1,5 +1,5 @@
 {
-    "module": "dashboard/configs/general.js",
+    "module": "perspective-settings/configs/general.js",
     "extensionPoint": "application-settings",
     "description": "Dashboard general settings view"
 }

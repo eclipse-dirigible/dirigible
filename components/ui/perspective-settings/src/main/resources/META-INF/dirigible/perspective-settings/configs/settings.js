@@ -12,6 +12,9 @@
 const perspectiveData = {
 	id: 'platformSettings',
 	label: 'Settings',
+	translation: {
+		key: 'perspective-settings:settings',
+	},
 	path: '/services/web/perspective-settings/settings.html',
 	order: 100,
 	icon: '/services/web/perspective-settings/images/settings.svg',

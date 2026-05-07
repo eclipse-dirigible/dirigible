@@ -9,16 +9,20 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const general = angular.module('general', ['ngCookies', 'blimpKit', 'platformView']);
-general.controller('GeneralController', ($scope, $http, $cookies, $window, theming, ButtonStates) => {
+const general = angular.module('general', ['ngCookies', 'blimpKit', 'platformView', 'platformLocale']);
+general.controller('GeneralController', ($scope, $http, $cookies, $window, theming, ButtonStates, LocaleService) => {
     const dialogHub = new DialogHub();
     const themingHub = new ThemingHub();
     const brandingInfo = getBrandingInfo();
+    $scope.shellConfig = new ShellHub().getConfig();
     const autoRevealKey = `${brandingInfo.prefix}.settings.general.autoReveal`;
+    const navCondensedKey = `${brandingInfo.prefix}.${$scope.shellConfig['id']}.settings.general.nav.condensed`;
     $scope.themes = [];
     $scope.switches = {
         autoReveal: getAutoReveal(),
+        navCondensed: $scope.shellConfig.hasOwnProperty('id') ? getNavCondensed() : undefined
     };
+
     function getAutoReveal() {
         let autoReveal = $window.localStorage.getItem(autoRevealKey);
         if (autoReveal === null) {
@@ -28,8 +32,19 @@ general.controller('GeneralController', ($scope, $http, $cookies, $window, themi
         return autoReveal;
     }
 
+    function getNavCondensed() {
+        let navCondensed = $window.localStorage.getItem(navCondensedKey);
+        if (navCondensed === null) {
+            navCondensed = true;
+            $window.localStorage.setItem(navCondensedKey, 'true');
+        } else navCondensed = JSON.parse(navCondensed);
+        return navCondensed;
+    }
+
     const themesLoadedListener = themingHub.onThemesLoaded(() => {
-        $scope.$apply(() => $scope.themes = theming.getThemes());
+        $scope.$evalAsync(() => {
+            $scope.themes = theming.getThemes();
+        });
         themingHub.removeMessageListener(themesLoadedListener)
     });
     $scope.currentTheme = theming.getCurrentTheme();
@@ -48,14 +63,23 @@ general.controller('GeneralController', ($scope, $http, $cookies, $window, themi
         });
     };
 
+    $scope.navCondensedChange = () => {
+        $window.localStorage.setItem(navCondensedKey, `${$scope.switches.navCondensed}`);
+        themingHub.postMessage({
+            topic: 'general.settings.navigation',
+            data: { setting: 'condensed', value: $scope.switches.navCondensed }
+        });
+    };
+
     $scope.resetAll = () => {
         dialogHub.showDialog({
-            title: `Reset ${brandingInfo.brand}`,
-            message: `This will clear all settings, open tabs and cache.\n${brandingInfo.brand} will then reload.\nDo you wish to continue?`,
+            title: LocaleService.t('reset', 'Reset'),
+            message: LocaleService.t('perspective-settings:resetMsg', { brand: brandingInfo.name }),
             buttons: [
-                { id: 'yes', label: 'Yes', state: ButtonStates.Emphasized },
-                { id: 'no', label: 'No' }
+                { id: 'yes', label: LocaleService.t('yes', 'Yes'), state: ButtonStates.Emphasized },
+                { id: 'no', label: LocaleService.t('no', 'No') }
             ],
+            preformatted: true,
             closeButton: false
         }).then((buttonId) => {
             if (buttonId === 'yes') {
@@ -74,8 +98,8 @@ general.controller('GeneralController', ($scope, $http, $cookies, $window, themi
                     console.error(error);
                     dialogHub.closeBusyDialog();
                     dialogHub.showAlert({
-                        title: 'Failed to reset',
-                        message: 'There was an error during the reset process. Please refresh manually.',
+                        title: LocaleService.t('perspective-settings:errMsg.resetTitle', 'Failed to reset'),
+                        message: LocaleService.t('perspective-settings:errMsg.reset', 'There was an error during the reset process. Please refresh manually.'),
                         type: AlertTypes.Error,
                         preformatted: false,
                     });
