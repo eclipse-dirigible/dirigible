@@ -76,7 +76,6 @@ export async function getPerspectives(extensionPoints = []) {
 					if (sidebarConfig.perspectives[g].id === 'undefined-group') {
 						sidebarConfig.perspectives[g].items.push(perspectives[i]);
 						sidebarConfig.perspectives[g].items.sort(sortPerspectives);
-						groupFound = true;
 						break;
 					}
 				}
