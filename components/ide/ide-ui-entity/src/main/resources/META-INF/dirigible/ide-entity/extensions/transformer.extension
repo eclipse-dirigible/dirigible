@@ -1,5 +1,0 @@
-{
-    "module":"ide-entity/services/transformer-template.js",
-    "extensionPoint":"ide-template",
-    "description":"The transform template from edm to model format"
-}

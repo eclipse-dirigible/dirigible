@@ -1,90 +1,190 @@
-/*
- * Copyright (c) 2025 Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
+/**
+ * @module net/websockets
+ * @package @aerokit/sdk/net
+ * @name Websockets
+ * @overview
+ * 
+ * The Websockets module provides an API for managing WebSocket clients and handling lifecycle events within the application context. It abstracts the complexities of WebSocket communication, allowing developers to easily create and manage WebSocket connections, send messages, and handle events such as connection openings, messages, errors, and closures.
+ * 
+ * ### Key Features:
+ * - **WebSocket Client Management**: Create and manage WebSocket clients with ease, including sending messages and closing connections.
+ * - **Event Handling**: Access event details such as messages and errors within the context of WebSocket event handlers.
+ * 
+ * ### Use Cases:
+ * - **Real-Time Communication**: This module is ideal for applications that require real-time communication between clients and the server using WebSockets.
+ * - **Integration with WebSocket Systems**: By providing a high-level API for WebSocket management, developers can easily integrate their applications with WebSocket-based systems and protocols.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Websockets } from "@aerokit/sdk/net";
+ * 
+ * // Create a new WebSocket client connection
+ * const client = Websockets.createWebsocket("ws://example.com/socket", "myHandler");
+ * client.send("Hello, WebSocket!");
+ * 
+ * // Access event details in an 'onmessage' handler
+ * if (Websockets.isOnMessage()) {
+ *     const message = Websockets.getMessage();
+ *     console.log("Received message:", message);
+ * }
+ * 
+ * // Close the WebSocket connection when done
+ * client.close();
+ * ```
  */
 
 const WebsocketsFacade = Java.type("org.eclipse.dirigible.components.api.websockets.WebsocketsFacade");
 
+/**
+ * @class Websockets
+ * @description Static utility class for accessing and managing WebSocket functionality.
+ */
 export class Websockets {
 
+	/**
+	 * Creates a new WebSocket client connection to a specified URI, managed by a handler script.
+	 *
+	 * @param uri The target WebSocket URI (e.g., 'ws://example.com/socket').
+	 * @param handler The identifier or path of the script handling the WebSocket events.
+	 * @returns A wrapper object for the new WebSocket session.
+	 */
 	public static createWebsocket(uri: string, handler: string): WebsocketClient {
 		const session = WebsocketsFacade.createWebsocket(uri, handler);
 		return new WebsocketClient(session, uri, handler);
 	}
 
+	/**
+	 * Retrieves a list of all active WebSocket clients.
+	 *
+	 * @returns An array of objects detailing the URI and handler of each client.
+	 */
 	public static getClients(): { uri: string, handler: string }[] {
 		return JSON.parse(WebsocketsFacade.getClientsAsJson());
 	}
 
+	/**
+	 * Retrieves a specific WebSocket client wrapper by its session ID.
+	 *
+	 * @param id The session ID of the client.
+	 * @returns The client wrapper or undefined if not found.
+	 */
 	public static getClient(id: string): WebsocketClient | undefined {
 		const native = WebsocketsFacade.getClient(id);
 		return native ? new WebsocketClient(native.getSession(), native.getSession().getRequestURI(), native.getHandler()) : undefined;
 	}
 
+	/**
+	 * Retrieves a specific WebSocket client wrapper by its handler identifier.
+	 *
+	 * @param handler The handler identifier associated with the client.
+	 * @returns The client wrapper or undefined if not found.
+	 */
 	public static getClientByHandler(handler: string): WebsocketClient | undefined {
 		const native = WebsocketsFacade.getClientByHandler(handler);
 		return native ? new WebsocketClient(native.getSession(), native.getSession().getRequestURI(), native.getHandler()) : undefined;
 	}
 
+	/**
+	 * Retrieves the message payload from the current context, typically used inside an 'onmessage' handler.
+	 *
+	 * @returns The message content.
+	 */
 	public static getMessage(): any {
 		return __context.get('message');
 	}
 
+	/**
+	 * Retrieves error details from the current context, typically used inside an 'onerror' handler.
+	 *
+	 * @returns The error object or string.
+	 */
 	public static getError(): any {
 		return __context.get('error');
 	}
 
-	public static getMethod(): any {
+	/**
+	 * Retrieves the event method name that triggered the current script execution (e.g., "onopen", "onmessage").
+	 *
+	 * @returns The name of the event method.
+	 */
+	public static getMethod(): string {
+		// Assumes __context is a global map provided by the execution environment
 		return __context.get('method');
 	}
 
+	/**
+	 * Checks if the current event context is 'onopen'.
+	 * @returns True if the method is 'onopen'.
+	 */
 	public static isOnOpen(): boolean {
 		return this.getMethod() === "onopen";
 	}
 
+	/**
+	 * Checks if the current event context is 'onmessage'.
+	 * @returns True if the method is 'onmessage'.
+	 */
 	public static isOnMessage(): boolean {
 		return this.getMethod() === "onmessage";
 	}
 
+	/**
+	 * Checks if the current event context is 'onerror'.
+	 * @returns True if the method is 'onerror'.
+	 */
 	public static isOnError(): boolean {
 		return this.getMethod() === "onerror";
 	}
 
+	/**
+	 * Checks if the current event context is 'onclose'.
+	 * @returns True if the method is 'onclose'.
+	 */
 	public static isOnClose(): boolean {
 		return this.getMethod() === "onclose";
 	}
 }
 
 /**
- * WebsocketClient
+ * @class WebsocketClient
+ * @description Wrapper for a native WebSocket session, providing methods to send and close the connection.
  */
 class WebsocketClient {
-	private session: null | any;
-	private uri: string;
-	private handler: string;
+	// Renamed to _session for better encapsulation of the native Java object
+	private readonly _session: null | any;
+	private readonly uri: string;
+	private readonly handler: string;
 
+	/**
+	 * @param session The native Java session object.
+	 * @param uri The connected URI.
+	 * @param handler The handler identifier.
+	 */
 	constructor(session: null | any, uri: string, handler: string) {
-		this.session = session;
+		this._session = session;
 		this.uri = uri;
 		this.handler = handler;
 	}
 
+	/**
+	 * Sends a text message over the WebSocket connection.
+	 * @param text The message to send.
+	 */
 	public send(text: string): void {
-		if (!this.session || this.session === null) {
-			console.error("Websocket Session is null");
+		if (!this._session || this._session === null) {
+			console.error("Websocket Session is null. Message not sent.");
+			return;
 		}
-		this.session.send(this.uri, text);
+		this._session.send(this.uri, text);
 	};
 
+	/**
+	 * Closes the WebSocket connection.
+	 */
 	public close(): void {
-		this.session.close();
+		if (this._session) {
+			this._session.close();
+		}
 	}
 }
 

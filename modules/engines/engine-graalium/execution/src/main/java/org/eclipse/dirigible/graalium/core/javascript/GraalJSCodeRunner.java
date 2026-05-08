@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -9,9 +9,15 @@
  */
 package org.eclipse.dirigible.graalium.core.javascript;
 
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.Tracer;
-import io.opentelemetry.context.Scope;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
 import org.eclipse.dirigible.components.open.telemetry.OpenTelemetryProvider;
 import org.eclipse.dirigible.graalium.core.CodeRunner;
 import org.eclipse.dirigible.graalium.core.graal.ContextCreator;
@@ -25,17 +31,14 @@ import org.eclipse.dirigible.graalium.core.javascript.modules.downloadable.Downl
 import org.eclipse.dirigible.graalium.core.javascript.polyfills.JavascriptPolyfill;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
+import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Source;
 import org.graalvm.polyglot.Value;
+import org.slf4j.LoggerFactory;
 
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Scope;
 
 /**
  * The Class GraalJSCodeRunner.
@@ -392,14 +395,87 @@ public class GraalJSCodeRunner implements CodeRunner<Source, Value> {
             span.addEvent("Successfully executed [" + codeSource.getPath() + "]");
 
             return result;
+        } catch (PolyglotException e) {
+            // Try to add the script stacktrace as cause
+            if (e.isGuestException()) {
+                Value guestObject = e.getGuestObject();
+                if (guestObject.isException()) {
+                    String exMessage = getExceptionMessage(guestObject);
+                    if (exMessage == null) {
+                        exMessage = e.getMessage();
+                    }
+                    String exClassName = getExceptionClass(guestObject);
+                    Throwable exCause = getExceptionCause(guestObject);
+                    StackTraceElement[] stackTrace = getExceptionStackTrace(guestObject);
+                    if (exMessage != null || exClassName != null || (null != stackTrace && stackTrace.length > 0)) {
+                        GuestLanguageException guestLanguageException =
+                                new GuestLanguageException(codeSource.getPath(), exMessage, exClassName, exCause);
+                        guestLanguageException.setStackTrace(stackTrace);
+                        e.addSuppressed(guestLanguageException);
+                    }
+                }
+            }
+
+            span.recordException(e);
+            span.setStatus(io.opentelemetry.api.trace.StatusCode.ERROR, "Exception occurred");
+
+            throw e;
         } catch (RuntimeException e) {
             span.recordException(e);
-
             span.setStatus(io.opentelemetry.api.trace.StatusCode.ERROR, "Exception occurred");
+
             throw e;
         } finally {
             span.end();
         }
+    }
+
+    private String getExceptionMessage(Value value) {
+
+        String getMessageMethodName = "getMessage";
+        if (value.isException() && value.canInvokeMember(getMessageMethodName)) {
+            return value.invokeMember(getMessageMethodName)
+                        .asString();
+        }
+        return null;
+    }
+
+    private String getExceptionClass(Value value) {
+
+        String getClassMethodName = "getClass";
+        if (value.canInvokeMember(getClassMethodName)) {
+            Value classValue = value.invokeMember(getClassMethodName);
+
+            String getNameMethodName = "getName";
+            if (classValue.canInvokeMember(getNameMethodName)) {
+                return classValue.invokeMember(getNameMethodName)
+                                 .asString();
+            }
+        }
+        return null;
+    }
+
+    private Throwable getExceptionCause(Value value) {
+
+        String getCauseMethodName = "getCause";
+        if (value.isException() && value.canInvokeMember(getCauseMethodName)) {
+            Value causeValue = value.invokeMember(getCauseMethodName);
+            if (null != causeValue && causeValue.isException()) {
+                return causeValue.as(Throwable.class);
+            }
+        }
+        return null;
+    }
+
+    private StackTraceElement[] getExceptionStackTrace(Value value) {
+
+        String getStackTraceMethodName = "getStackTrace";
+        if (value.isException() && value.canInvokeMember(getStackTraceMethodName)) {
+            Value stackTrace = value.invokeMember(getStackTraceMethodName);
+            return stackTrace.as(StackTraceElement[].class);
+        }
+
+        return new StackTraceElement[0];
     }
 
     /**

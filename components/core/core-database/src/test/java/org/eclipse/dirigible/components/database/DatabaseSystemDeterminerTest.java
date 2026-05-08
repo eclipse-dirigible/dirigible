@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -21,6 +21,28 @@ class DatabaseSystemDeterminerTest {
 
     @InjectMocks
     private DatabaseSystemDeterminer databaseSystemDeterminer;
+
+    @Test
+    void testDetermineMSSQL_withUrl() {
+        testDetermine_withUrl("jdbc:sqlserver://localhost:1433;databaseName=master", DatabaseSystem.MSSQL);
+    }
+
+    private void testDetermine_withUrl(String jdbcUrl, DatabaseSystem expectedType) {
+        DatabaseSystem result = DatabaseSystemDeterminer.determine(jdbcUrl, null);
+
+        assertEquals(expectedType, result);
+    }
+
+    @Test
+    void testDetermineMSSQL_withDriverUrl() {
+        testDetermine_withDriver("com.microsoft.sqlserver.jdbc.SQLServerDriver", DatabaseSystem.MSSQL);
+    }
+
+    private void testDetermine_withDriver(String driverClass, DatabaseSystem expectedType) {
+        DatabaseSystem result = DatabaseSystemDeterminer.determine(null, driverClass);
+
+        assertEquals(expectedType, result);
+    }
 
     @Test
     void testDetermineDerby_withUrl() {
@@ -115,18 +137,6 @@ class DatabaseSystemDeterminerTest {
     @Test
     void testDetermineUnknown_withDriver() {
         testDetermine_withDriver("com.unknown.Driver", DatabaseSystem.UNKNOWN);
-    }
-
-    private void testDetermine_withUrl(String jdbcUrl, DatabaseSystem expectedType) {
-        DatabaseSystem result = DatabaseSystemDeterminer.determine(jdbcUrl, null);
-
-        assertEquals(expectedType, result);
-    }
-
-    private void testDetermine_withDriver(String driverClass, DatabaseSystem expectedType) {
-        DatabaseSystem result = DatabaseSystemDeterminer.determine(null, driverClass);
-
-        assertEquals(expectedType, result);
     }
 
 }

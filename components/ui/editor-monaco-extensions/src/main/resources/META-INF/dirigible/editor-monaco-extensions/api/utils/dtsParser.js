@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -9,8 +9,8 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { registry } from "sdk/platform";
-import { extensions } from "sdk/extensions";
+import { registry } from "@aerokit/sdk/platform";
+import { extensions } from "@aerokit/sdk/extensions";
 
 // Returns the path to d.ts foreach modules.json entry where isPackageDescription = true
 let dtsPaths = [];

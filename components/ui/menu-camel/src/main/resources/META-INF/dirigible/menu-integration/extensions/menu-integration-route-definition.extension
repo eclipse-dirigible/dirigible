@@ -1,0 +1,5 @@
+{
+    "module": "menu-integration/templates/integration-route-definition.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "Dirigible Java Script Component Extension"
+}

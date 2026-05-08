@@ -1,0 +1,8 @@
+import { command } from "@aerokit/sdk/platform";
+import { response } from "@aerokit/sdk/http";
+
+let result = command.execute("echo 'hello dirigible!'");
+
+response.println("[Result]: " + result);
+response.flush();
+response.close();

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<a>
+  <b>text_b</b>
+  <c c1="attr_c1"/>
+  <d>
+    <e>text_e</e>
+  </d>
+</a>

@@ -1,6 +1,6 @@
 <!--
 
-    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
 
     All rights reserved. This program and the accompanying materials
     are made available under the terms of the Eclipse Public License v2.0
@@ -21,12 +21,17 @@
         <title config-title></title>
         <script type="text/javascript" src="/services/web/editor-form-builder/configs/editor.js"></script>
         <script type="text/javascript" src="/webjars/sortablejs/Sortable.min.js"></script>
-        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=editor-js,code-editor-js"></script>
-        <link type="text/css" rel="stylesheet" data-name="vs/editor/editor.main" href="/services/js/platform-core/services/loader.js?ids=view-css,code-editor-css" />
+        <meta name="platform-links" category="ng-view,ng-editor,ng-code-editor">
         <link type="text/css" rel="stylesheet" href="/services/web/editor-form-builder/css/editor.css" />
         <script type="text/javascript" src="/services/web/service-generate/generate.js"></script>
         <script type="text/javascript" src="/services/web/service-template/templates.js"></script>
         <script type="text/javascript" src="/services/web/editor-form-builder/js/editor.js"></script>
+        <style>
+            .fd-table__cell:first-child:not(.fd-table__cell--checkbox, .fd-table__cell.fd-table__cell--status-indicator) {
+                padding-inline-start: 0.5rem;
+            }
+
+        </style>
     </head>
 
     <body class="bk-vbox" shortcut="'ctrl+s|delete'" shortcut-action="shortcuts">
@@ -37,12 +42,14 @@
                 <bk-icon-tab-bar-tab label="Feeds" tab-id="feeds" ng-click="switchTab('feeds')"></bk-icon-tab-bar-tab>
                 <bk-icon-tab-bar-tab label="Code" tab-id="code" ng-click="switchTab('code')"></bk-icon-tab-bar-tab>
                 <bk-icon-tab-bar-tab label="Scripts" tab-id="scripts" ng-click="switchTab('scripts')"></bk-icon-tab-bar-tab>
+                <bk-icon-tab-bar-tab label="Styles" tab-id="styles" ng-click="switchTab('styles')"></bk-icon-tab-bar-tab>
                 <bk-icon-tab-bar-buttons align-right="true">
                     <bk-button state="transparent" glyph="sap-icon--save" label="Save" aria-label="save" ng-click="shortcuts()" ng-disabled="!(isFormValid() && changed)"></bk-button>
+                    <bk-button state="transparent" glyph="sap-icon-TNT--operations" aria-label="Regenerate" title="Regenerate" label="Regenerate" ng-click="regenerate()" ng-disabled="changed || !canRegenerate"></bk-button>
                 </bk-icon-tab-bar-buttons>
             </bk-icon-tab-bar-tablist>
             <bk-icon-tab-bar-panel class="bk-hbox bk-fill-parent fb-panel" tab-id="designer" ng-show="selectedTab === 'designer'">
-                <bk-scrollbar class="bk-list-border--right">
+                <bk-scrollbar class="bk-border--right">
                     <bk-panel class="fb-margin-block--none" expanded="true" ng-repeat="componentGroup in builderComponents track by $index">
                         <bk-panel-header>
                             <bk-panel-expand hint="expand {{::componentGroup.label}} content"></bk-panel-expand>
@@ -63,15 +70,13 @@
                     <bk-toolbar type="transparent" has-title="false">
                         <bk-toolbar-spacer></bk-toolbar-spacer>
                         <bk-button state="transparent" toggled="state.preview" glyph="sap-icon--show" title="Toggle preview" label="Preview" aria-label="Toggle preview" ng-click="togglePreview()"></bk-button>
-                        <bk-toolbar-separator></bk-toolbar-separator>
-                        <bk-button state="transparent" glyph="sap-icon-TNT--operations" aria-label="Regenerate" title="Regenerate" label="Regenerate" ng-click="regenerate()" ng-disabled="!canRegenerate"></bk-button>
                     </bk-toolbar>
-                    <bk-scrollbar style="flex:1">
+                    <bk-scrollbar style="flex:1" ng-click="clearSelection($event)">
                         <div id="formContainer" class="bk-checkered-bg bk-vbox fb-main-container bk-restrict-width" ng-attr-disabled="{{state.canSave === false || undefined}}" data-preview="{{state.preview}}" data-type="container-main"
-                            ng-on-contextmenu="showContextMenu($event)"></div>
+                            ng-on-contextmenu="showContextMenu($event)" ng-click="showFormProps($event)" ng-class="getPaddingClass(formProps.padding.value, formProps.side.value)"></div>
                     </bk-scrollbar>
                 </div>
-                <bk-scrollbar class="bk-border--left" ng-show="selectedCtrlId !== undefined">
+                <bk-scrollbar class="bk-border--left" ng-show="formSelected || selectedCtrl !== undefined || selectedContainer !== undefined">
                     <bk-panel expanded="true">
                         <bk-panel-header>
                             <h4 bk-panel-title>
@@ -79,23 +84,23 @@
                             </h4>
                         </bk-panel-header>
                         <bk-panel-content aria-label="Control properties" class="bk-no-border--bottom">
-                            <bk-fieldset ng-if="selectedCtrlId !== undefined" ng-form="forms.formProperties">
+                            <bk-fieldset ng-if="formSelected || selectedCtrl !== undefined || selectedContainer !== undefined" ng-form="forms.formProperties">
                                 <bk-form-group>
-                                    <bk-form-item ng-repeat-start="(key, item) in selectedCtrlProps track by $index" ng-if="item.type === 'text' && isPropEnabled(item.enabledOn)">
+                                    <bk-form-item ng-repeat-start="(key, item) in availableProps track by $index" ng-if="item.type === 'text' && isPropEnabled(item.enabledOn)">
                                         <bk-form-label colon="true" required="item.required" for="{{ 'p' + key }}">{{ item.label }}</bk-form-label>
-                                        <bk-form-input-message state="{{ item.error ? 'error' : '' }}" message="'Incorrect input'">
-                                            <bk-input id="{{ 'p' + key }}" type="text" placeholder="{{ item.placeholder}}" state="{{ item.error ? 'error' : '' }}" name="{{ 'p' + key }}" ng-required="item.required" ng-model="item.value"
-                                                ng-trim="false" ng-minlength="item.minlength || 0" ng-maxlength="item.maxlength || -1" input-rules="item.inputRules || {}"
+                                        <bk-form-input-message state="{{ !forms.formProperties['p' + key].$valid ? 'error' : '' }}" message="'Incorrect input'">
+                                            <bk-input id="{{ 'p' + key }}" type="text" placeholder="{{ item.placeholder}}" state="{{ !forms.formProperties['p' + key].$valid ? 'error' : '' }}" name="{{ 'p' + key }}"
+                                                ng-required="item.required" ng-model="item.value" ng-trim="false" ng-minlength="item.minlength || 0" ng-maxlength="item.maxlength || -1" input-rules="item.inputRules || {}"
                                                 ng-change="item.error = !forms.formProperties['p' + key].$valid; fileChanged()"></bk-input>
                                         </bk-form-input-message>
                                     </bk-form-item>
 
                                     <bk-form-item ng-if="item.type === 'textarea' && isPropEnabled(item.enabledOn)">
                                         <bk-form-label colon="true" required="item.required" for="{{ 'p' + key }}">{{ item.label }}</bk-form-label>
-                                        <bk-form-input-message state="{{ item.error ? 'error' : '' }}" message="'Incorrect input'">
-                                            <bk-textarea id="{{ item.id }}" style="min-height:13rem" placeholder="{{ item.placeholder}}" state="{{ item.error ? 'error' : '' }}" name="{{ 'p' + key }}" ng-required="item.required"
-                                                ng-model="item.value" ng-trim="false" ng-minlength="item.minlength || 0" ng-attr-rows="{{item.rows || '1'}}" ng-maxlength="item.maxlength || -1" input-rules="item.inputRules || {}"
-                                                ng-change="item.error = !forms.formProperties['p' + key].$valid; fileChanged()"></bk-textarea>
+                                        <bk-form-input-message state="{{ !forms.formProperties['p' + key].$valid ? 'error' : '' }}" message="'Incorrect input'">
+                                            <bk-textarea id="{{ item.id }}" style="min-height:13rem" placeholder="{{ item.placeholder}}" state="{{ !forms.formProperties['p' + key].$valid ? 'error' : '' }}" name="{{ 'p' + key }}"
+                                                ng-required="item.required" ng-model="item.value" ng-trim="false" ng-minlength="item.minlength || 0" ng-attr-rows="{{item.rows || '1'}}" ng-maxlength="item.maxlength || -1"
+                                                input-rules="item.inputRules || {}" ng-change="item.error = !forms.formProperties['p' + key].$valid; fileChanged()"></bk-textarea>
                                         </bk-form-input-message>
                                     </bk-form-item>
 
@@ -106,19 +111,20 @@
 
                                     <bk-form-item ng-if="item.type === 'number' && isPropEnabled(item.enabledOn)">
                                         <bk-form-label colon="true" required="item.required" for="{{ 'p' + key }}">{{ item.label }}</bk-form-label>
-                                        <bk-step-input input-id="{{ 'p' + key }}" ng-model="item.value" state="{{ item.error ? 'error' : '' }}" name="{{ 'p' + key }}" ng-required="item.required" ng-attr-min="item.min" ng-attr-max="item.max"
-                                            ng-attr-placeholder="{{ item.placeholder}}" ng-change="item.error = !forms.formProperties['p' + key].$valid; fileChanged()" ng-attr-step="item.step">
+                                        <bk-step-input input-id="{{ 'p' + key }}" ng-model="item.value" state="{{ !forms.formProperties['p' + key].$valid ? 'error' : '' }}" name="{{ 'p' + key }}" ng-required="item.required"
+                                            ng-attr-min="item.min" ng-attr-max="item.max" ng-attr-placeholder="{{ item.placeholder}}" ng-change="item.error = !forms.formProperties['p' + key].$valid; fileChanged()" ng-attr-step="item.step">
                                         </bk-step-input>
                                     </bk-form-item>
 
                                     <bk-form-item ng-if="item.type === 'checkbox' && isPropEnabled(item.enabledOn)">
-                                        <bk-checkbox id="{{ 'p' + key }}" ng-model="item.value" state="{'error' : item.error }" ng-change="fileChanged()"></bk-checkbox>
+                                        <bk-checkbox id="{{ 'p' + key }}" ng-model="item.value" ng-change="fileChanged()"></bk-checkbox>
                                         <bk-checkbox-label for="{{ 'p' + key }}">{{ item.label }}</bk-checkbox-label>
                                     </bk-form-item>
 
                                     <bk-form-item ng-if="item.type === 'dropdown' && isPropEnabled(item.enabledOn)">
                                         <bk-form-label colon="true" required="item.required" for="{{ 'p' + key }}">{{ item.label }}</bk-form-label>
-                                        <bk-select placeholder="{{ item.placeholder }}" label-id="{{ 'p' + key }}" ng-required="item.required" ng-model="item.value" ng-change="fileChanged()" dropdown-fixed="true">
+                                        <bk-select name="{{ 'p' + key }}" placeholder="{{ item.placeholder }}" label-id="{{ 'p' + key }}" ng-required="item.required" state="{{ !forms.formProperties['p' + key].$valid ? 'error' : '' }}"
+                                            ng-model="item.value" ng-change="fileChanged()" dropdown-fixed="true">
                                             <bk-option text="{{ menuItem.label }}" value="menuItem.value" ng-repeat="menuItem in item.items"></bk-option>
                                         </bk-select>
                                     </bk-form-item>
@@ -128,12 +134,11 @@
                                             <div>{{ item.label }}</div>
                                             <bk-button glyph="sap-icon--add" compact="true" title="Add option to list" state="transparent" label="Add" aria-label="Add option to list" ng-click="addListItem(item)"></bk-button>
                                         </div>
-                                        <table bk-table display-mode="compact">
+                                        <table bk-table display-mode="compact" style="max-width: 18rem">
                                             <thead bk-table-header interactive="false">
                                                 <tr bk-table-row>
                                                     <th ng-if="item.defaultValue" bk-table-header-cell content-type="checkbox"></th>
-                                                    <th bk-table-header-cell>{{ item.labelText }}</th>
-                                                    <th bk-table-header-cell>{{ item.valueText }}</th>
+                                                    <th bk-table-header-cell ng-repeat="column in item.columns track by $index">{{ column.label }}</th>
                                                     <th bk-table-header-cell></th>
                                                 </tr>
                                             </thead>
@@ -143,11 +148,19 @@
                                                         <bk-checkbox id="{{listItem + $index}}" ng-checked="item.defaultValue === listItem.value" ng-click="setListDefault(item, $index)"></bk-checkbox>
                                                         <bk-checkbox-label empty="true" for="{{listItem + $index}}"></bk-checkbox-label>
                                                     </td>
-                                                    <td bk-table-cell interactive="false">{{listItem.label}}</td>
-                                                    <td bk-table-cell interactive="false">{{listItem.value}}</td>
+                                                    <td bk-table-cell interactive="false" ng-repeat="column in item.columns" class="bk-scroll-hidden bk-text--ellipsis">{{listItem[column.key]}}</td>
                                                     <td bk-table-cell interactive="false" fit-content="true">
-                                                        <bk-button glyph="sap-icon--edit" title="Edit option" state="transparent" aria-label="Edit option" ng-click="editListItem(listItem, item.labelText, item.valueText)"></bk-button>
-                                                        <bk-button glyph="sap-icon--delete" title="Delete option" state="transparent" aria-label="Delete option" ng-click="deleteListItem(item.value, $index)"></bk-button>
+                                                        <bk-popover>
+                                                            <bk-popover-control>
+                                                                <bk-button glyph="sap-icon--overflow" state="transparent" aria-label="Context Menu"></bk-button>
+                                                            </bk-popover-control>
+                                                            <bk-popover-body align="left">
+                                                                <bk-menu aria-label="table row menu">
+                                                                    <bk-menu-item title="Edit" left-icon-class="sap-icon--edit" ng-click="editListItem(listItem, item.columns)"></bk-menu-item>
+                                                                    <bk-menu-item title="Delete" left-icon-class="sap-icon--delete" ng-click="deleteListItem(item.value, $index)"></bk-menu-item>
+                                                                </bk-menu>
+                                                            </bk-popover-body>
+                                                        </bk-popover>
                                                     </td>
                                                 </tr>
                                             </tbody>
@@ -156,13 +169,17 @@
                                 </bk-form-group>
                                 <bk-form-group class="fd-margin-top--sm">
                                     <bk-form-item>
-                                        <bk-button glyph="sap-icon--delete" label="Delete control" title="Delete control" state="negative" aria-label="Delete control" ng-click="deleteControl(selectedCtrlId)"></bk-button>
+                                        <bk-button ng-if="selectedContainer !== undefined" glyph="sap-icon--delete" label="Delete container" title="Delete container" state="negative" aria-label="Delete container"
+                                            ng-click="deleteControl(selectedContainer.getAttribute('id'), true)">
+                                        </bk-button>
+                                        <bk-button ng-if="selectedCtrl !== undefined" glyph="sap-icon--delete" label="Delete control" title="Delete control" state="negative" aria-label="Delete control"
+                                            ng-click="deleteControl(selectedCtrl.getAttribute('data-id'))">
+                                        </bk-button>
+                                        <bk-button ng-if="formSelected" glyph="sap-icon--reset" label="Clear form" title="Clear form" state="negative" aria-label="Clear form" ng-click="clearForm()">
+                                        </bk-button>
                                     </bk-form-item>
                                 </bk-form-group>
                             </bk-fieldset>
-                            <bk-button ng-show="selectedContainerId" glyph="sap-icon--delete" label="Delete container" title="Delete container" state="negative" aria-label="Delete container"
-                                ng-click="deleteControl(selectedContainerId, true)">
-                            </bk-button>
                         </bk-panel-content>
                     </bk-panel>
                 </bk-scrollbar>
@@ -171,6 +188,7 @@
                 <bk-toolbar has-title="false">
                     <bk-toolbar-spacer></bk-toolbar-spacer>
                     <bk-button glyph="sap-icon--add" title="Add feed to list" state="transparent" label="Add" aria-label="Add feed to list" ng-click="addFeed()"></bk-button>
+                    <bk-button glyph="sap-icon--question-mark" title="Feed help" state="transparent" aria-label="Feed help" ng-click="feedHelp()"></bk-button>
                 </bk-toolbar>
                 <bk-scrollbar class="bk-fill-parent">
                     <table bk-table display-mode="compact" outer-borders="bottom">
@@ -178,6 +196,7 @@
                             <tr bk-table-row>
                                 <th bk-table-header-cell>Name</th>
                                 <th bk-table-header-cell>URL</th>
+                                <th bk-table-header-cell>Function</th>
                                 <th bk-table-header-cell></th>
                             </tr>
                         </thead>
@@ -188,6 +207,7 @@
                             <tr bk-table-row hoverable="false" ng-repeat="feed in formData.feeds track by $index">
                                 <td bk-table-cell>{{feed.name}}</td>
                                 <td bk-table-cell>{{feed.url}}</td>
+                                <td bk-table-cell>{{feed.func}}</td>
                                 <td bk-table-cell fit-content="true">
                                     <bk-button glyph="sap-icon--edit" title="Edit feed" state="transparent" aria-label="Edit feed" ng-click="editFeed(feed)"></bk-button>
                                     <bk-button glyph="sap-icon--delete" title="Delete feed" state="transparent" aria-label="Delete feed" ng-click="deleteFeed($index)"></bk-button>
@@ -203,7 +223,7 @@
             <bk-icon-tab-bar-panel class="bk-vbox bk-fill-parent fb-panel" tab-id="scripts" ng-show="selectedTab === 'scripts'">
                 <bk-toolbar has-title="false">
                     <bk-toolbar-spacer></bk-toolbar-spacer>
-                    <bk-button glyph="sap-icon--add" title="Add script URL to list" state="transparent" label="Add" aria-label="Add script URL to list" ng-click="addScript()"></bk-button>
+                    <bk-button glyph="sap-icon--add" title="Add script URL to list" state="transparent" label="Add" aria-label="Add script URL to list" ng-click="addUrl(true)"></bk-button>
                 </bk-toolbar>
                 <bk-scrollbar class="bk-fill-parent">
                     <table bk-table display-mode="compact" outer-borders="bottom">
@@ -222,8 +242,38 @@
                                 <td bk-table-cell>{{script.name}}</td>
                                 <td bk-table-cell>{{script.url}}</td>
                                 <td bk-table-cell fit-content="true">
-                                    <bk-button glyph="sap-icon--edit" title="Edit script" state="transparent" aria-label="Edit script" ng-click="editScript(script)"></bk-button>
-                                    <bk-button glyph="sap-icon--delete" title="Delete script" state="transparent" aria-label="Delete script" ng-click="deleteScript($index)"></bk-button>
+                                    <bk-button glyph="sap-icon--edit" title="Edit script" state="transparent" aria-label="Edit script" ng-click="editUrl(script, true)"></bk-button>
+                                    <bk-button glyph="sap-icon--delete" title="Delete script" state="transparent" aria-label="Delete script" ng-click="deleteUrl($index, true)"></bk-button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </bk-scrollbar>
+            </bk-icon-tab-bar-panel>
+            <bk-icon-tab-bar-panel class="bk-vbox bk-fill-parent fb-panel" tab-id="styles" ng-show="selectedTab === 'styles'">
+                <bk-toolbar has-title="false">
+                    <bk-toolbar-spacer></bk-toolbar-spacer>
+                    <bk-button glyph="sap-icon--add" title="Add style URL to list" state="transparent" label="Add" aria-label="Add style URL to list" ng-click="addUrl(false)"></bk-button>
+                </bk-toolbar>
+                <bk-scrollbar class="bk-fill-parent">
+                    <table bk-table display-mode="compact" outer-borders="bottom">
+                        <thead bk-table-header sticky="true" interactive="false">
+                            <tr bk-table-row>
+                                <th bk-table-header-cell>Name</th>
+                                <th bk-table-header-cell>URL</th>
+                                <th bk-table-header-cell></th>
+                            </tr>
+                        </thead>
+                        <tbody bk-table-body>
+                            <tr ng-if="formData.styles.length === 0" bk-table-row>
+                                <td bk-table-cell no-data="true">No styles.</td>
+                            </tr>
+                            <tr bk-table-row hoverable="false" ng-repeat="style in formData.styles track by $index">
+                                <td bk-table-cell>{{style.name}}</td>
+                                <td bk-table-cell>{{style.url}}</td>
+                                <td bk-table-cell fit-content="true">
+                                    <bk-button glyph="sap-icon--edit" title="Edit style" state="transparent" aria-label="Edit style" ng-click="editUrl(style, false)"></bk-button>
+                                    <bk-button glyph="sap-icon--delete" title="Delete style" state="transparent" aria-label="Delete style" ng-click="deleteUrl($index, false)"></bk-button>
                                 </td>
                             </tr>
                         </tbody>

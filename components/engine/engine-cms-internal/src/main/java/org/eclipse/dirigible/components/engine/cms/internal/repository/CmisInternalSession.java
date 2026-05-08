@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -47,6 +47,7 @@ public class CmisInternalSession implements CmisSession {
      *
      * @return Repository Info
      */
+    @Override
     public CmisInternalRepositoryInfo getRepositoryInfo() {
         return new CmisInternalRepositoryInfo(this);
     }
@@ -56,6 +57,7 @@ public class CmisInternalSession implements CmisSession {
      *
      * @return Object Factory
      */
+    @Override
     public CmisInternalObjectFactory getObjectFactory() {
         return new CmisInternalObjectFactory(this);
     }
@@ -66,6 +68,7 @@ public class CmisInternalSession implements CmisSession {
      * @return CmisInternalFolder
      * @throws IOException IO Exception
      */
+    @Override
     public CmisInternalFolder getRootFolder() throws IOException {
         return new CmisInternalFolder(this);
     }

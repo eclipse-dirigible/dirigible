@@ -1,6 +1,6 @@
 <!--
 
-    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
 
     All rights reserved. This program and the accompanying materials
     are made available under the terms of the Eclipse Public License v2.0
@@ -20,10 +20,9 @@
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
         <title config-title></title>
         <script type="text/javascript" src="/services/web/editor-entity/configs/entity-editor.js"></script>
-        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=editor-js"></script>
+        <meta name="platform-links" category="ng-view,ng-editor">
         <script type="text/javascript" src="/services/web/service-generate/generate.js"></script>
         <script type="text/javascript" src="/services/web/service-template/templates.js"></script>
-        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
         <link type="text/css" href="/services/web/editor-entity/css/styles.css" rel="stylesheet">
         <script type="text/javascript">
             mxBasePath = '/services/web/resources/mxgraph/3.9.1/src';
@@ -47,14 +46,14 @@
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="transparent" glyph="sap-icon-TNT--operations" aria-label="Regenerate" title="Regenerate" ng-click="regenerate()" ng-disabled="!canRegenerate"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
-            <bk-button state="transparent" glyph="sap-icon--copy" aria-label="Copy" title="Copy" ng-click="copy()"></bk-button>
-            <bk-button state="transparent" glyph="sap-icon--paste" aria-label="Paste" title="Paste" ng-click="paste()"></bk-button>
+            <bk-button state="transparent" glyph="sap-icon--copy" aria-label="Copy" title="Copy" ng-click="copy()" ng-disabled="selection.projection || selection.projectionProp"></bk-button>
+            <bk-button state="transparent" glyph="sap-icon--paste" aria-label="Paste" title="Paste" ng-click="paste()" ng-disabled="selection.projection || selection.projectionProp"></bk-button>
             <bk-toolbar-spacer></bk-toolbar-spacer>
             <bk-button state="transparent" glyph="sap-icon--list" aria-label="Properties" title="Properties" ng-click="properties()"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="transparent" glyph="sap-icon--tree" aria-label="Navigation" title="Navigation" ng-click="navigation()"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
-            <bk-button state="transparent" glyph="sap-icon--delete" aria-label="Delete" title="Delete" ng-click="delete()"></bk-button>
+            <bk-button state="transparent" glyph="sap-icon--delete" aria-label="Delete" title="Delete" ng-click="delete()" ng-disabled="selection.projectionProp"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="transparent" glyph="sap-icon--show" aria-label="Show" title="Show" ng-click="show()"></bk-button>
             <bk-button state="transparent" glyph="sap-icon--print" aria-label="Print" title="Print" ng-click="print()"></bk-button>

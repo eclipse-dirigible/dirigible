@@ -1,4 +1,4 @@
-import { Configurations } from 'sdk/core/configurations';
+import { Configurations } from '@aerokit/sdk/core/configurations';
 import { Assert } from 'test/assert';
 
 Configurations.set('name1', 'value1');

@@ -1,4 +1,4 @@
-import { process } from "sdk/bpm"
+import { process } from "@aerokit/sdk/bpm"
 
 const execution = process.getExecutionContext();
 const executionId = execution.getId();

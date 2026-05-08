@@ -1,7 +1,7 @@
-import { Controller, Get, Post, Delete } from "sdk/http"
-import { cmis, Document } from "sdk/cms";
-import { streams } from "sdk/io";
-import { response } from "sdk/http";
+import { Controller, Get, Post, Delete } from "@aerokit/sdk/http"
+import { cmis, Document } from "@aerokit/sdk/cms";
+import { streams } from "@aerokit/sdk/io";
+import { response } from "@aerokit/sdk/http";
 
 @Controller
 class DocumentService {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -9,10 +9,11 @@
  */
 package org.eclipse.dirigible.repository.local;
 
-import java.util.List;
-
 import org.eclipse.dirigible.repository.api.RepositoryPath;
 import org.eclipse.dirigible.repository.fs.FileSystemRepository;
+
+import java.io.InputStream;
+import java.util.List;
 
 /**
  * Internal representation of a Folder/Collection kind of object.
@@ -73,6 +74,11 @@ public class LocalFolder extends LocalObject {
     public void createFile(String name, byte[] content, boolean isBinary, String contentType) throws LocalRepositoryException {
         getRepository().getRepositoryDao()
                        .createFile(RepositoryPath.normalizePath(getPath(), name), content, isBinary, contentType);
+    }
+
+    public void createFile(String name, InputStream contentInputStream) throws LocalRepositoryException {
+        getRepository().getRepositoryDao()
+                       .createFile(RepositoryPath.normalizePath(getPath(), name), contentInputStream);
     }
 
     /**

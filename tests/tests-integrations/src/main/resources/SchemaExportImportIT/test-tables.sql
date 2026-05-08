@@ -1,0 +1,135 @@
+-- Drop tables if they exist
+DROP TABLE IF EXISTS ORDER_ITEMS;
+DROP TABLE IF EXISTS ORDERS;
+DROP TABLE IF EXISTS PRODUCTS;
+DROP TABLE IF EXISTS CATEGORIES;
+DROP TABLE IF EXISTS USERS;
+
+-- USERS table
+CREATE TABLE USERS (
+    USER_ID INT AUTO_INCREMENT PRIMARY KEY,
+    USERNAME VARCHAR(50) NOT NULL,
+    EMAIL VARCHAR(100) NOT NULL UNIQUE,
+    AGE INT CHECK (AGE>=0),
+    CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- CATEGORIES table
+CREATE TABLE CATEGORIES (
+    CATEGORY_ID INT PRIMARY KEY,
+    NAME VARCHAR(50) NOT NULL,
+    DESCRIPTION VARCHAR(200)
+);
+
+-- PRODUCTS table
+CREATE TABLE PRODUCTS (
+    PRODUCT_ID INT AUTO_INCREMENT PRIMARY KEY,
+    NAME VARCHAR(100) NOT NULL,
+    PRICE DECIMAL(10,2) NOT NULL,
+    CATEGORY_ID INT,
+    FOREIGN KEY (CATEGORY_ID) REFERENCES CATEGORIES(CATEGORY_ID)
+);
+
+-- ORDERS table
+CREATE TABLE ORDERS (
+    ORDER_ID INT AUTO_INCREMENT PRIMARY KEY,
+    USER_ID INT,
+    ORDER_DATE TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    TOTAL_AMOUNT DECIMAL(10,2),
+    FOREIGN KEY (USER_ID) REFERENCES USERS(USER_ID)
+);
+
+-- ORDER_ITEMS table
+CREATE TABLE ORDER_ITEMS (
+    ORDER_ITEM_ID INT AUTO_INCREMENT PRIMARY KEY,
+    ORDER_ID INT,
+    PRODUCT_ID INT,
+    QUANTITY INT NOT NULL,
+    PRICE DECIMAL(10,2) NOT NULL,
+    FOREIGN KEY (ORDER_ID) REFERENCES ORDERS(ORDER_ID),
+    FOREIGN KEY (PRODUCT_ID) REFERENCES PRODUCTS(PRODUCT_ID)
+);
+
+-------------------------------------------------------
+-- Insert data
+-------------------------------------------------------
+
+-- USERS
+INSERT INTO USERS (USERNAME, EMAIL, AGE) VALUES
+('ALICE', 'alice@example.com', 18),
+('BOB', 'bob@example.com', 19),
+('CHARLIE', 'charlie@example.com', 20),
+('DIANA', 'diana@example.com', 21),
+('ERIC', 'eric@example.com', 22),
+('FIONA', 'fiona@example.com', 23),
+('GEORGE', 'george@example.com', 24),
+('HANNAH', 'hannah@example.com', 25),
+('IVAN', 'ivan@example.com', 26),
+('JULIA', 'julia@example.com', 27),
+('KEVIN', 'kevin@example.com', 28),
+('LINDA', 'linda@example.com', 29);
+
+-- CATEGORIES
+INSERT INTO CATEGORIES (CATEGORY_ID, NAME, DESCRIPTION) VALUES
+(1, 'ELECTRONICS', 'Devices and gadgets'),
+(2, 'BOOKS', 'Printed and digital books'),
+(3, 'CLOTHING', 'Men and Women clothing'),
+(4, 'SPORTS', 'Sporting goods'),
+(5, 'HOME', 'Home and kitchen products');
+
+-- PRODUCTS
+INSERT INTO PRODUCTS (NAME, PRICE, CATEGORY_ID) VALUES
+('LAPTOP', 1200.15, 1),
+('SMARTPHONE', 800.00, 1),
+('HEADPHONES', 150.00, 1),
+('NOVEL BOOK', 20.00, 2),
+('COOKBOOK', 25.00, 2),
+('T-SHIRT', 15.00, 3),
+('JEANS', 50.00, 3),
+('SNEAKERS', 75.00, 3),
+('FOOTBALL', 30.00, 4),
+('TENNIS RACKET', 120.00, 4),
+('BLENDER', 60.00, 5),
+('VACUUM CLEANER', 150.00, 5),
+('DESK LAMP', 40.00, 5),
+('BACKPACK', 55.00, 3),
+('E-READER', 110.00, 1);
+
+-- ORDERS
+INSERT INTO ORDERS (USER_ID, TOTAL_AMOUNT) VALUES
+(1, 1250.15),
+(2, 875.00),
+(3, 75.00),
+(4, 40.00),
+(5, 200.00),
+(6, 175.00),
+(7, 110.00),
+(8, 1500.00),
+(9, 95.00),
+(10, 130.00),
+(11, 300.00),
+(12, 60.00);
+
+-- ORDER_ITEMS
+INSERT INTO ORDER_ITEMS (ORDER_ID, PRODUCT_ID, QUANTITY, PRICE) VALUES
+(1, 1, 1, 1200.15),
+(1, 3, 1, 50.00),
+(2, 2, 1, 800.00),
+(2, 6, 5, 75.00),
+(3, 9, 2, 60.00),
+(3, 6, 1, 15.00),
+(4, 4, 2, 40.00),
+(5, 11, 2, 120.00),
+(5, 6, 4, 60.00),
+(6, 7, 3, 150.00),
+(6, 14, 1, 25.00),
+(7, 15, 1, 110.00),
+(8, 1, 1, 1200.00),
+(8, 2, 1, 800.00),
+(9, 8, 1, 75.00),
+(9, 6, 1, 15.00),
+(10, 13, 2, 80.00),
+(10, 6, 1, 15.00),
+(11, 12, 2, 300.00),
+(12, 5, 2, 50.00),
+(12, 4, 1, 20.00);

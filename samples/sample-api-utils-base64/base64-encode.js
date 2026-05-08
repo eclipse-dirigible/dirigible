@@ -1,5 +1,5 @@
-import { Base64 } from "sdk/utils/base64";
-import { Response } from "sdk/http/response";
+import { Base64 } from "@aerokit/sdk/utils/base64";
+import { Response } from "@aerokit/sdk/http/response";
 
 const input = [61, 62, 63];
 const result = Base64.encode(input);

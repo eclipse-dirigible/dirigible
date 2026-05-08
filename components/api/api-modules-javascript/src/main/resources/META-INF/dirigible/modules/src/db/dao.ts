@@ -1,13 +1,47 @@
-/*
- * Copyright (c) 2025 Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
+/**
+ * @module db/dao
+ * @package @aerokit/sdk/db
+ * @name DAO
+ * @overview
+ * 
+ * ::: warning
+ * The `DAO` module is deprecated and will be removed in future releases. It is recommended to use the `Repository/Store` modules instead for managing database entities and operations.
+ * :::
+ * 
+ * The `DAO` class provides a generic Data Access Object implementation for performing CRUD operations on database entities defined by an ORM (Object-Relational Mapping) definition. It abstracts the underlying database interactions and allows developers to work with entities as JavaScript objects, while handling the conversion to and from database records seamlessly.
+ * 
+ * ### Key Features
+ * - **Generic CRUD Operations**: Supports create, read, update, and delete operations for any entity defined by an ORM.
+ * - **Association Management**: Handles entity associations (e.g., one-to-one, one-to-many) and allows for cascading operations on related entities.
+ * - **Validation**: Validates entities against mandatory properties defined in the ORM before performing database operations.
+ * - **Customizable Logging**: Provides detailed logging of database operations, with configurable logger names based on the ORM table name.
+ * 
+ * ### Use Cases
+ * - Managing database entities in a structured and consistent manner across different tables and relationships.
+ * - Abstracting database interactions to allow for easier maintenance and potential database engine changes in the future.
+ * - Handling complex entity relationships and ensuring data integrity through validation and association management.
+ * 
+ * ### Example Usage
+ * ```ts
+ * import { DAO } from "@aerokit/sdk/db";
+ * const userORM = {
+ * 		table: "Users",
+ * 		properties: [
+ * 			{name: "id", column: "ID", type: "INTEGER", mandatory: true},
+ * 			{name: "name", column: "NAME", type: "VARCHAR", mandatory: true},
+ * 			{name: "email", column: "EMAIL", type: "VARCHAR", mandatory: true, unique: true}
+ * 		],
+ * 		getPrimaryKey: function() { return this.properties[0]; },
+ * 		getMandatoryProperties: function() { return this.properties.filter(p => p.mandatory); },
+ * 		getUniqueProperties: function() { return this.properties.filter(p => p.unique); }
+ * };
+ * const userDAO = new DAO(userORM);
+ * // Insert a new user
+ * const newUserId = userDAO.insert({ name: "Alice", email: "alice@example.com" });
+ * // Update an existing user
+ * userDAO.update({ id: newUserId, name: "Alice Smith", email: "alice.smith@example.com" });
+ * // Delete a user
+ * userDAO.delete({ id: newUserId });
  */
 "use strict";
 
@@ -15,11 +49,11 @@ import { ORMDefinition, get as getORM } from "./orm";
 import { create as createORMStatements } from "./ormstatements";
 import { Sequence } from "./sequence";
 import { Database } from "./database";
-import { Query } from "sdk/db";
+import { Query } from "@aerokit/sdk/db";
 import { Update } from "./update";
 import { Insert } from "./insert";
-import { Logging } from "sdk/log";
-import { configurations, globals } from "sdk/core";
+import { Logging } from "@aerokit/sdk/log";
+import { configurations, globals } from "@aerokit/sdk/core";
 
 
 export function DAO(orm: ORMDefinition, logCtxName?: string, dataSourceName?: string) {
@@ -410,7 +444,7 @@ DAO.prototype.insert = function (_entity) {
 				try {
 					this.remove(dbEntity[this.orm.getPrimaryKey().name]);
 				} catch (err) {
-					this.$log.error('Could not rollback changes after failed {}[{}}] insert. ', err, this.orm.table, dbEntity[this.orm.getPrimaryKey().name]);
+					this.$log.error('Could not rollback changes after failed {}[{}] insert. ', this.orm.table, dbEntity[this.orm.getPrimaryKey().name], err);
 				}
 			}
 			throw e;
@@ -462,7 +496,7 @@ DAO.prototype.update = function (entity) {
 		return this;
 
 	} catch (e) {
-		this.$log.error('Updating {}[{}] failed', e, this.orm.table, entity !== undefined ? entity[this.orm.getPrimaryKey().name] : entity);
+		this.$log.error('Updating {}[{}] failed', this.orm.table, entity !== undefined ? entity[this.orm.getPrimaryKey().name] : entity, e);
 		throw e;
 	}
 };
@@ -555,7 +589,7 @@ DAO.prototype.remove = function () {
 				this.$log.trace('No changes incurred in {}', this.orm.table);
 
 		} catch (e) {
-			this.$log.error('Deleting {}[{}] entity failed', e, this.orm.table, id);
+			this.$log.error('Deleting {}[{}] entity failed',this.orm.table, id, e);
 			throw e;
 		}
 
@@ -742,7 +776,7 @@ DAO.prototype.find = function (id, expand, select) {
 		}
 		return entity;
 	} catch (e) {
-		this.$log.error("Finding {}[{}] entitiy failed.", e, this.orm.table, id);
+		this.$log.error("Finding {}[{}] entity failed.", this.orm.table, id, e);
 		throw e;
 	}
 };
@@ -762,7 +796,7 @@ DAO.prototype.count = function (settings?) {
 			count = parseInt(rs[0][key], 10);
 		}
 	} catch (e) {
-		this.$log.error('Counting {} entities failed', e, this.orm.table);
+		this.$log.error('Counting {} entities failed', this.orm.table, e);
 		e.errContext = parametericStatement.toString();
 		throw e;
 	}
@@ -863,7 +897,7 @@ DAO.prototype.list = function (settings) {
 
 		return entities;
 	} catch (e) {
-		this.$log.error("Listing {} entities failed.", e, this.orm.table);
+		this.$log.error("Listing {} entities failed.", this.orm.table, e);
 		throw e;
 	}
 };
@@ -887,7 +921,7 @@ DAO.prototype.createTable = function () {
 		this.$log.trace('{} table created', this.orm.table);
 		return this;
 	} catch (e) {
-		this.$log.error("Create table {} failed", e, this.orm.table);
+		this.$log.error("Create table {} failed", this.orm.table, e);
 		throw e;
 	}
 };
@@ -899,7 +933,7 @@ DAO.prototype.dropTable = function (dropIdSequence) {
 		this.execute(parametericStatement);
 		this.$log.trace('Table {} dropped.', this.orm.table);
 	} catch (e) {
-		this.$log.error("Dropping table {} failed.", e, this.orm.table);
+		this.$log.error("Dropping table {} failed.", this.orm.table, e);
 		throw e;
 	}
 
@@ -909,7 +943,7 @@ DAO.prototype.dropTable = function (dropIdSequence) {
 			this.dropIdGenerator();
 			this.$log.trace('Table {} sequence {} dropped.', this.orm.table, this.sequenceName);
 		} catch (e) {
-			this.$log.error("Dropping table {} sequence {} failed.", e, this.orm.table, this.sequenceName);
+			this.$log.error("Dropping table {} sequence {} failed.", this.orm.table, this.sequenceName, e);
 			throw e;
 		}
 	}

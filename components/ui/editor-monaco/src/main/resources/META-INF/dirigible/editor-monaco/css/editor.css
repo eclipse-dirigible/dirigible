@@ -2,6 +2,7 @@ body {
   overflow: hidden;
   height: 100%;
 }
+
 #embeddedEditor {
   margin: 0;
   padding: 0;
@@ -11,20 +12,24 @@ body {
   left: 0;
   right: 0;
 }
+
 #loadingOverview {
   width: 100vw;
   height: 100vh;
   z-index: 1000;
 }
+
 .modified-line {
   background: skyblue;
   width: 3px !important;
   margin-left: 5px;
 }
+
 .deleted-line {
   width: 3px !important;
   margin-left: 5px;
 }
+
 .deleted-line::after {
   display: inline-block;
   position: absolute;
@@ -37,4 +42,9 @@ body {
   border-left: 4px solid #ca4b51;
   border-bottom: 4px solid transparent;
   margin-top: -4px;
+}
+
+.monaco-editor,
+.monaco-editor * {
+  font-family: "Droid Sans Mono", "Consolas", "Menlo", "Monaco", "Liberation Mono", "Courier New", "monospace", monospace;
 }

@@ -1,5 +1,0 @@
-{
-    "module": "ide-operations/services/operations-perspective.js",
-    "extensionPoint": "ide-perspective",
-    "description": "Operations Perspective"
-}

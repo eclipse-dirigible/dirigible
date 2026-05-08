@@ -1,0 +1,8 @@
+import { repository } from "@aerokit/sdk/platform";
+import { response } from "@aerokit/sdk/http";
+
+let resource = repository.getResource("/registry/public/modules/src/platform/repository.ts");
+
+response.println("Exists: " + resource.exists());
+response.flush();
+response.close();

@@ -74,9 +74,11 @@
     </root>
 
     <logger name="org.eclipse.dirigible.tests" level="DEBUG"/>
+    <logger name="org.eclipse.dirigible.integration.tests" level="DEBUG"/>
     <logger name="org.eclipse.dirigible.tests.framework.util.FileUtil" level="INFO"/>
     <logger name="org.eclipse.dirigible.tests.framework.browser.impl.BrowserImpl" level="INFO"/>
 
+    <logger name="org.eclipse.dirigible.components.api.log.LogFacade" level="INFO"/>
     <logger name="org.eclipse.dirigible.components.tenants.tenant" level="INFO"/>
     <logger name="org.eclipse.dirigible.commons.api.helpers.GsonHelper" level="INFO"/>
     <logger name="org.eclipse.dirigible.components.initializers.synchronizer" level="INFO"/>
@@ -89,5 +91,6 @@
     <!--    Reduce logging to remove the logging noise during tests execution -->
     <logger name="org.flowable.job.service.impl.asyncexecutor" level="ERROR"/>
     <logger name="com.codeborne.selenide.impl.AttachmentPrinter" level="ERROR"/>
+    <logger name="org.openqa.selenium.devtools.Connection" level="ERROR"/>
 
 </configuration>

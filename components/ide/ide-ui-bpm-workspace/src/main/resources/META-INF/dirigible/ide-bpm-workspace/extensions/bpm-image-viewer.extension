@@ -1,5 +1,0 @@
-{
-    "module": "ide-bpm-workspace/services/bpm-image-viewer.js",
-    "extensionPoint": "ide-view",
-    "description": "Business Process Inspector"
-}

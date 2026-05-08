@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -139,6 +139,8 @@ public interface DatabaseParameters {
 
     /** The Constant JDBC_COLUMN_NULLABLE_PROPERTY. */
     String JDBC_COLUMN_NULLABLE_PROPERTY = "NULLABLE";
+
+    String JDBC_COLUMN_DEFAULT_VALUE_PROPERTY = "COLUMN_DEF";
 
     /** The Constant JDBC_COLUMN_SIZE_PROPERTY. */
     String JDBC_COLUMN_SIZE_PROPERTY = "COLUMN_SIZE";

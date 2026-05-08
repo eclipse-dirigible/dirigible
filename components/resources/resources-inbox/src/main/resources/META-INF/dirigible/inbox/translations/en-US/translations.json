@@ -1,0 +1,28 @@
+{
+    "processInbox": "Process Inbox",
+    "userTasksListed": "All the user tasks on this instance, for your role, are listed below",
+    "claim": "Claim",
+    "unclaim": "Unclaim",
+    "candidateTasks": "Candidate tasks",
+    "taskId": "Task Id",
+    "taskName": "Task Name",
+    "assignee": "Assignee",
+    "candidateUsers": "Candidate Users",
+    "candidateGroups": "Candidate Groups",
+    "processInstanceId": "Process Instance Id",
+	"processDefinitionName": "Definition Name",
+	"processInstanceBusinessKey": "Business Key",
+    "createTime": "Create Time",
+    "formKey": "Form Key",
+    "noTasks": "No tasks found.",
+    "assignedTasks": "Assigned tasks",
+    "openForm": "Open Form",
+    "actionConfirm": "Action confirmation",
+    "actionClaimSuccess": "Task claimed successfully",
+    "actionUnclaimSuccess": "Task unclaimed successfully",
+    "errMsg": {
+        "actionTitle": "Action failed",
+        "actionClaim": "Failed to claim task {{name}}",
+        "actionUnclaim": "Failed to unclaim task {{name}}"
+    }
+}

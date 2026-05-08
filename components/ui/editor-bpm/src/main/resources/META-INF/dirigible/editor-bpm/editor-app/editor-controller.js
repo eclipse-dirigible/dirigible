@@ -420,7 +420,7 @@ angular.module('flowableModeler')
 	}).then(function (response) {
 		editorManager.bootEditor();
 	}).catch(function (error) {
-		console.log(error);
+		console.error("BPM", error);
 	});
  
  	//minihack to make sure mousebind events are processed if the modeler is used in an iframe.

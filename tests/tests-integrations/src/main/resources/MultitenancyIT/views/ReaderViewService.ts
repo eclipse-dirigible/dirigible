@@ -1,5 +1,5 @@
-import { Controller, Get, response } from "sdk/http"
-import { query, sql } from "sdk/db";
+import { Controller, Get, response } from "@aerokit/sdk/http"
+import { query, sql } from "@aerokit/sdk/db";
 
 @Controller
 class ReaderViewService {

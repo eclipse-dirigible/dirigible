@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -12,14 +12,14 @@ package org.eclipse.dirigible.components.openapi.endpoint;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.openapi.service.OpenAPIService;
 import org.eclipse.dirigible.components.version.domain.Version;
 import org.eclipse.dirigible.components.version.service.VersionService;
-import org.eclipse.dirigible.repository.api.IRepositoryStructure;
-import org.eclipse.dirigible.repository.api.IResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +38,7 @@ import io.swagger.v3.oas.models.Paths;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
+import io.swagger.v3.oas.models.servers.Server;
 import io.swagger.v3.parser.OpenAPIV3Parser;
 import io.swagger.v3.parser.core.models.SwaggerParseResult;
 import jakarta.annotation.security.RolesAllowed;
@@ -65,7 +66,7 @@ public class OpenAPIEndpoint extends BaseEndpoint {
     private static final String CONTACT_EMAIL = "dirigible-dev@eclipse.org";
 
     /** The Constant DESCRIPTION. */
-    private static final String DESCRIPTION = "Eclipse Dirigible API of the REST services provided by the applications";
+    private static final String DESCRIPTION = "Services Open API provided by the applications";
 
     /** The Constant LICENSE_NAME. */
     private static final String LICENSE_NAME = "Eclipse Public License - v 2.0";
@@ -74,10 +75,10 @@ public class OpenAPIEndpoint extends BaseEndpoint {
     private static final String LICENSE_URL = "https://www.eclipse.org/legal/epl-v20.html";
 
     /** The Constant TITLE. */
-    private static final String TITLE = "Eclipse Dirigible - Applications REST Services API";
+    private static final String TITLE = "Applications Services Open API";
 
     /** The Constant VERSION. */
-    private static final String VERSION = "8.0.0";
+    private static final String VERSION = "12.0.0";
 
     /**
      * The openapi service.
@@ -127,11 +128,15 @@ public class OpenAPIEndpoint extends BaseEndpoint {
         OpenAPI openApi = initializeOpenApi(infoOpenApi);
 
         for (org.eclipse.dirigible.components.openapi.domain.OpenAPI openAPI : openAPIService.getAll()) {
-            IResource resource = openAPIService.getResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + openAPI.getLocation());
+            // IResource resource = openAPIService.getResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC +
+            // openAPI.getLocation());
+            //
+            // if (resource.exists()) {
+            // String service = new String(resource.getContent());
+            // populateOpenApiFromContribution(openApi, service);
+            // }
+            populateOpenApiFromContribution(openApi, openAPI.getContent());
 
-            if (resource.exists()) {
-                populateOpenApiFromContribution(openApi, resource);
-            }
         }
 
         String openAPIJson = io.swagger.v3.core.util.Json.mapper()
@@ -179,8 +184,7 @@ public class OpenAPIEndpoint extends BaseEndpoint {
      * @param openApi the open api
      * @param resource the resource
      */
-    private void populateOpenApiFromContribution(OpenAPI openApi, IResource resource) {
-        String service = new String(resource.getContent());
+    private void populateOpenApiFromContribution(OpenAPI openApi, String service) {
 
         SwaggerParseResult contributionOpenApiParseResult = new OpenAPIV3Parser().readContents(service);
         OpenAPI contributionOpenApi = contributionOpenApiParseResult.getOpenAPI();
@@ -276,8 +280,9 @@ public class OpenAPIEndpoint extends BaseEndpoint {
                        .addAll(contributionOpenApi.getSecurity());
             }
             if (contributionOpenApi.getServers() != null) {
+                Set<Server> servers = new LinkedHashSet<>(contributionOpenApi.getServers());
                 openApi.getServers()
-                       .addAll(contributionOpenApi.getServers());
+                       .addAll(servers);
             }
             if (contributionOpenApi.getTags() != null) {
                 openApi.getTags()

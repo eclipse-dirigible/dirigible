@@ -1,4 +1,4 @@
-import { Extensions } from 'sdk/extensions/extensions';
+import { Extensions } from '@aerokit/sdk/extensions/extensions';
 import { Assert } from 'test/assert';
 
 const result = Extensions.getExtensionPoints();

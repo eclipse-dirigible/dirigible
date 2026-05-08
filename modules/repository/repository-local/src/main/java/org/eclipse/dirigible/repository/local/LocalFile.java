@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -11,16 +11,17 @@ package org.eclipse.dirigible.repository.local;
 
 import org.eclipse.dirigible.repository.fs.FileSystemRepository;
 
+import java.io.InputStream;
+
 /**
  * Internal representation of a File/Resource kind of object.
  */
 public class LocalFile extends LocalObject {
 
+    /** The content type. */
+    private final String contentType;
     /** The binary. */
     private boolean binary = false;
-
-    /** The content type. */
-    private String contentType;
 
     /**
      * Instantiates a new local file.
@@ -87,6 +88,11 @@ public class LocalFile extends LocalObject {
     public void setData(byte[] content) throws LocalRepositoryException {
         getRepository().getRepositoryDao()
                        .setFileContent(this, content);
+    }
+
+    public InputStream getDataStream() throws LocalRepositoryException {
+        return getRepository().getRepositoryDao()
+                              .getFileContentStream(this);
     }
 
     /**

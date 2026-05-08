@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -12,6 +12,8 @@ package org.eclipse.dirigible.components.extensions.domain;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.eclipse.dirigible.components.base.artefact.Artefact;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -19,8 +21,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
-
-import org.eclipse.dirigible.components.base.artefact.Artefact;
 
 /**
  * The Class ExtensionPoint.

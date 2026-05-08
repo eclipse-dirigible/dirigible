@@ -1,5 +1,0 @@
-{
-    "module": "ide-file-manager/services/file-manager-view.js",
-    "extensionPoint": "ide-view",
-    "description": "File Manager View"
-}

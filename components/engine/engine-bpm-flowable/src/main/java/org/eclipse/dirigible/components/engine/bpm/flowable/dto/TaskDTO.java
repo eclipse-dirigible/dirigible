@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -39,6 +39,13 @@ public class TaskDTO {
 
     /** The process instance id. */
     private String processInstanceId;
+
+    /** The process instance id. */
+    private String processDefinitionId;
+
+    private String processDefinitionName;
+
+    private String processInstanceBusinessKey;
 
     /**
      * Gets the candidate users.
@@ -184,4 +191,48 @@ public class TaskDTO {
     public void setCreateTime(Date createTime) {
         this.createTime = createTime;
     }
+
+    /**
+     * @return the processDefinitionId
+     */
+    public String getProcessDefinitionId() {
+        return processDefinitionId;
+    }
+
+    /**
+     * @param processDefinitionId the processDefinitionId to set
+     */
+    public void setProcessDefinitionId(String processDefinitionId) {
+        this.processDefinitionId = processDefinitionId;
+    }
+
+    /**
+     * @return the processDefinitionName
+     */
+    public String getProcessDefinitionName() {
+        return processDefinitionName;
+    }
+
+    /**
+     * @param processDefinitionName the processDefinitionName to set
+     */
+    public void setProcessDefinitionName(String processDefinitionName) {
+        this.processDefinitionName = processDefinitionName;
+    }
+
+    /**
+     * @return the processInstanceBusinessKey
+     */
+    public String getProcessInstanceBusinessKey() {
+        return processInstanceBusinessKey;
+    }
+
+    /**
+     * @param processInstanceBusinessKey the processInstanceBusinessKey to set
+     */
+    public void setProcessInstanceBusinessKey(String processInstanceBusinessKey) {
+        this.processInstanceBusinessKey = processInstanceBusinessKey;
+    }
+
+
 }

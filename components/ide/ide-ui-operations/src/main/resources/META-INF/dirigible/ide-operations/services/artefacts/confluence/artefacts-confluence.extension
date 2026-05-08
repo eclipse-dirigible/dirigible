@@ -1,5 +1,0 @@
-{
-    "module": "ide-operations/services/artefacts/confluence/artefacts-confluence.mjs",
-    "extensionPoint": "ide-operations-artefacts",
-    "description": "Confluence Artefacts Extension"
-}

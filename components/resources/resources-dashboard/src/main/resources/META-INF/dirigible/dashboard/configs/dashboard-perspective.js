@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -12,6 +12,9 @@
 const perspectiveData = {
     id: 'dashboard',
     label: 'Dashboard',
+    translation: {
+        key: 'dashboard:dashboard',
+    },
     path: '/services/web/dashboard/perspectives/dashboard.html',
     order: -3,
     lazyLoad: true,

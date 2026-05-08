@@ -1,0 +1,6 @@
+{
+    "extensionPoint": "${projectName}-custom-action",
+    "module": "${projectName}/gen/${genFolderName}/ui/Reports/${name}/dialog-print/print.js",
+    "description": "Print ${name} Report"#if($perspectiveRole || $security.roleRead),
+    "role": "#if($perspectiveRole)${perspectiveRole},#end#if($security.roleRead)${security.roleRead}#end"#end
+}

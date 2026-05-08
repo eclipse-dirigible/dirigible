@@ -1,5 +1,0 @@
-{
-    "module": "ide-jobs/services/job-trigger-window.js",
-    "extensionPoint": "ide-dialog-window",
-    "description": "Trigger job window"
-}

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -39,6 +39,9 @@ public class JavascriptHandler {
     /** The repository. */
     private final IRepository repository;
 
+    /** The Constant systemRunner. */
+    private static final ThreadLocal<DirigibleJavascriptCodeRunner> systemRunner = new ThreadLocal<>();
+
     /**
      * Instantiates a new javascript handler.
      *
@@ -68,6 +71,14 @@ public class JavascriptHandler {
         return repository;
     }
 
+    public DirigibleJavascriptCodeRunner getSystemRunner() {
+        DirigibleJavascriptCodeRunner localSystemRunner = systemRunner.get();
+        if (localSystemRunner == null) {
+            systemRunner.set(new DirigibleJavascriptCodeRunner(null, false));
+        }
+        return systemRunner.get();
+    }
+
     /**
      * Handle callback.
      *
@@ -85,7 +96,7 @@ public class JavascriptHandler {
                                      .toString(),
                     path.subpath(1, path.getNameCount() - 1)
                         .toString(),
-                    null, parameters, false);
+                    null, parameters, false, false);
         }
         throw new RuntimeException("Path to the file to be executed must contain a parent folder");
     }
@@ -101,9 +112,9 @@ public class JavascriptHandler {
      * @return the object
      */
     public Object handleRequest(String projectName, String projectFilePath, String projectFilePathParam, Map<Object, Object> parameters,
-            boolean debug) {
+            boolean debug, boolean keep) {
         try {
-            if (UserRequestVerifier.isValid()) {
+            if (UserRequestVerifier.isValid() && projectFilePathParam != null) {
                 UserRequestVerifier.getRequest()
                                    .setAttribute("dirigible-rest-resource-path", projectFilePathParam);
             }
@@ -117,17 +128,12 @@ public class JavascriptHandler {
             }
 
             Path absoluteSourcePath = sourceProvider.getAbsoluteSourcePath(projectName, projectFilePath);
-            try (DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner(parameters, debug)) {
-                Source source = runner.prepareSource(absoluteSourcePath);
-                runner.getGraalJSInterceptor()
-                      .onBeforeRun(sourceFilePath, absoluteSourcePath, source, runner.getCodeRunner()
-                                                                                     .getGraalContext());
-                Value value = runner.run(source);
-                runner.getGraalJSInterceptor()
-                      .onAfterRun(sourceFilePath, absoluteSourcePath, source, runner.getCodeRunner()
-                                                                                    .getGraalContext(),
-                              value);
-                return transformValue(value);
+            if (keep) {
+                return runCode(sourceFilePath, absoluteSourcePath, getSystemRunner());
+            } else {
+                try (DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner(parameters, debug)) {
+                    return runCode(sourceFilePath, absoluteSourcePath, runner);
+                }
             }
         } catch (Throwable ex) {
             if (ex.getMessage() == null) {
@@ -139,12 +145,43 @@ public class JavascriptHandler {
                 logger.error(ex.getMessage());
                 return ex.getMessage();
             }
-            String errorMessage =
-                    String.format("Error on processing JavaScript service from project: [%s], and path: [%s], with parameters: [%s]",
-                            projectName, projectFilePath, projectFilePathParam);
-            logger.error(errorMessage, ex);
-            throw new RuntimeException(ex.getMessage(), ex);
+            if (ex.getMessage() != null) {
+                logger.error(ex.getMessage(), ex);
+            }
+            String errorMessage = String.format(
+                    "Error on processing JavaScript service from project: [%s], path: [%s], project file path param [%s] with parameters: [%s] - %s",
+                    projectName, projectFilePath, projectFilePathParam != null ? projectFilePathParam : "none",
+                    parameters != null ? parameters : "none", ex.getMessage());
+            throw new RuntimeException(errorMessage, ex);
         }
+    }
+
+    public Object runCode(String sourceFilePath, Path absoluteSourcePath, DirigibleJavascriptCodeRunner runner) {
+        Source source = runner.prepareSource(absoluteSourcePath);
+        runner.getGraalJSInterceptor()
+              .onBeforeRun(sourceFilePath, absoluteSourcePath, source, runner.getCodeRunner()
+                                                                             .getGraalContext());
+        Value value = runner.run(source);
+        runner.getGraalJSInterceptor()
+              .onAfterRun(sourceFilePath, absoluteSourcePath, source, runner.getCodeRunner()
+                                                                            .getGraalContext(),
+                      value);
+        return transformValue(value);
+    }
+
+    /**
+     * Handle request.
+     *
+     * @param projectName the project name
+     * @param projectFilePath the project file path
+     * @param projectFilePathParam the project file path param
+     * @param parameters the parameters
+     * @param debug the debug
+     * @return the object
+     */
+    public Object handleRequest(String projectName, String projectFilePath, String projectFilePathParam, Map<Object, Object> parameters,
+            boolean debug) {
+        return handleRequest(projectName, projectFilePath, projectFilePathParam, parameters, debug, false);
     }
 
 }

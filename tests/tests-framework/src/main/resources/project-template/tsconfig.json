@@ -1,23 +1,32 @@
 {
-    "compilerOptions": {
-        "module": "ESNext",
-        "target": "ES6",
-        "moduleResolution": "Node",
-        "baseUrl": "../",
-        "lib": [
-            "ESNext",
-            "DOM"
-        ],
-        "paths": {
-            "sdk/*": [
-                "./modules/src/*"
-            ],
-            "/*": [
-                "./*"
-            ]
-        },
-        "types": [
-            "../modules/types"
-        ]
-    }
+  "compilerOptions": {
+    "module": "ESNext",
+	"target": "ES2022",
+	"rootDir": "./src",
+    "moduleResolution": "bundler",
+    "baseUrl": "../",
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
+    "paths": {
+      "@aerokit/sdk/*": [
+        "./modules/src/*"
+      ],
+      "sdk/*": [
+        "./modules/src/*"
+      ],
+      "/*": [
+        "./*"
+      ]
+    },
+    "types": [
+      "../modules/types"
+    ],
+  	"strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "noImplicitThis": false,
+    "skipLibCheck": true
+  }
 }

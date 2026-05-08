@@ -1,5 +1,0 @@
-{
-    "extensionPoint": "ide-template",
-    "module": "template-listener/template.js",
-    "description": "Listener Template"
-}

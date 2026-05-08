@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -31,6 +31,8 @@ import org.springframework.web.context.WebApplicationContext;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.util.Base64;
 
 /**
  * The Class DatabaseMetadataEndpointTest.
@@ -91,6 +93,22 @@ public class DatabaseMetadataEndpointTest {
     public void getDataSourceByName() throws Exception {
 
         mockMvc.perform(get("/services/data/metadata/{name}/{schema}/{structure}", "TestDB", "INFORMATION_SCHEMA", "INDEXES"))
+               .andDo(print())
+               .andExpect(status().is2xxSuccessful());
+    }
+
+    /**
+     * Gets the data source by name encoded.
+     *
+     * @return the data source by name
+     * @throws Exception the exception
+     */
+    @Test
+    public void getDataSourceByNameEncoded() throws Exception {
+
+        mockMvc.perform(get("/services/data/metadata/{name}/{schema}/{structure}", "TestDB", "INFORMATION_SCHEMA", Base64.getEncoder()
+                                                                                                                         .encodeToString(
+                                                                                                                                 "INDEXES".getBytes())))
                .andDo(print())
                .andExpect(status().is2xxSuccessful());
     }

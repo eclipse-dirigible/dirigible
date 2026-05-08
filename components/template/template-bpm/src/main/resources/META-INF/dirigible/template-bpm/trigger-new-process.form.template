@@ -7,8 +7,11 @@
         {
             "controlId": "header",
             "groupId": "fb-display",
-            "title": "Trigger new process instance",
-            "size": 1
+            "label": "Trigger new process instance",
+            "headerSize": 2,
+            "level": 1,
+            "padding": "sm",
+            "side": "bottom"
         },
         {
             "controlId": "input-textfield",
@@ -17,14 +20,14 @@
             "label": "Parameter 1",
             "horizontal": false,
             "isCompact": false,
+            "readonly": false,
             "placeholder": "string value here",
             "type": "text",
             "model": "param1",
             "required": false,
             "minLength": 0,
             "maxLength": -1,
-            "validationRegex": "",
-            "errorState": "Incorrect input"
+            "errorMessage": "Incorrect input"
         },
         {
             "controlId": "input-number",
@@ -33,7 +36,7 @@
             "label": "Parameter 2",
             "horizontal": false,
             "isCompact": false,
-            "placeholder": "",
+            "readonly": false,
             "model": "param2",
             "required": false,
             "minNum": 0,
@@ -41,14 +44,20 @@
             "step": 1
         },
         {
-            "controlId": "button",
-            "groupId": "fb-controls",
-            "label": "Trigger",
-            "type": "emphasized",
-            "sizeToText": false,
-            "isSubmit": true,
-            "isCompact": false,
-            "callback": "onTriggerClicked()"
+            "controlId": "container-hbox",
+            "groupId": "fb-containers",
+            "children": [
+                {
+                    "controlId": "button",
+                    "groupId": "fb-controls",
+                    "label": "Trigger",
+                    "type": "emphasized",
+                    "isSubmit": true,
+                    "isCompact": false,
+                    "callback": "onTriggerClicked()"
+                }
+            ],
+            "justify": "end"
         }
     ]
 }

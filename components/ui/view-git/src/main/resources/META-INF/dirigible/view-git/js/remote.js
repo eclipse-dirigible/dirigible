@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -205,7 +205,7 @@ remoteBranchesView.controller('RemoteBranchesViewController', ($scope, GitServic
             statusBarHub.showMessage(`Switched to branch '${$scope.activeBranch.name}'`);
             if (branch) $scope.loadBranches();
         }, (response) => {
-            console.log(response);
+            console.error(response);
             dialogHub.showAlert({
                 title: 'Could not checkout to branch',
                 message: response.message || 'There was an error while switching branches.',

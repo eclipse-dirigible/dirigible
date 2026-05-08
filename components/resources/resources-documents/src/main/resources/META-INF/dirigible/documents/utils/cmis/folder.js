@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -9,8 +9,8 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { cmis } from "sdk/cms";
-import { user } from "sdk/security";
+import { cmis } from "@aerokit/sdk/cms";
+import { user } from "@aerokit/sdk/security";
 import * as objectUtils from "./object";
 
 let cmisSession = cmis.getSession();

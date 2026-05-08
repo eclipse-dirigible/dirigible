@@ -1,0 +1,7 @@
+import { request, response } from "@aerokit/sdk/http";
+
+let method = request.getMethod();
+
+response.println("[Method]: " + method);
+response.flush();
+response.close();

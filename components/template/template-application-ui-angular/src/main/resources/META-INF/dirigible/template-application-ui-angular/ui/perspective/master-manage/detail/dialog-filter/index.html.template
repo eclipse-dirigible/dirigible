@@ -7,8 +7,7 @@
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
         <title config-title></title>
         <script type="text/javascript" src="view.js"></script>
-        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
-        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <meta name="platform-links" category="ng-view">
         <script type="text/javascript" src="controller.js"></script>
     </head>
 
@@ -17,13 +16,13 @@
 			<bk-message-strip class="fd-margin--md" ng-show="errorMessage" glyph="sap-icon--message-error" state="error" on-dismiss="clearErrorMessage()">{{ errorMessage }}</bk-message-strip>
 
             <bk-fieldset class="fd-padding-begin-end--sm" ng-form="forms.details">
-                <bk-form-group label="${name} Filter" name="entityForm" transclude-classes="fd-container fd-form-layout-grid-container">
+                <bk-form-group label="{{ '$projectName:${tprefix}.defaults.formGrpFilter' | t:{'name':'$t($projectName:${tprefix}.t.${dataName})'} }}" name="entityForm" transclude-classes="fd-container fd-form-layout-grid-container">
 #foreach ($property in $properties)
 #if(!$property.dataAutoIncrement && $property.name != $masterEntityId)
 #if($property.widgetType == "DROPDOWN")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--8">
 	                        <bk-combobox-input input-id="id${property.name}"
@@ -34,8 +33,8 @@
 	                            state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 	                            ng-model="entity.${property.name}"
 	                            dropdown-items="options${property.name}"
-	                            placeholder="Search ${property.widgetLabel} ..."
-								btn-aria-label="show/hide ${property.name} options" list-aria-label="${property.name} options">
+	                            placeholder="{{ '$projectName:${tprefix}.messages.inputSearch' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}"
+								btn-aria-label="{{ '$projectName:${tprefix}.aria.showHide' | t:{'name':'${property.name}'} }}" list-aria-label="{{ '$projectName:${tprefix}.aria.options' | t:{'name':'${property.name}'} }}">
 	                        </bk-combobox-input>
 	                    </div>
                     </bk-form-item>
@@ -50,22 +49,22 @@
 								indeterminate="entity.is${property.name}Indeterminate"
 								ng-click="entity.is${property.name}Indeterminate=false">
 	                        </bk-checkbox>
-                        	<bk-checkbox-label for="id${property.name}">${property.widgetLabel}</bk-checkbox-label>
+                        	<bk-checkbox-label for="id${property.name}">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-checkbox-label>
                         </div>
                     </bk-form-item>
 #elseif($property.widgetType == "COLOR")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 	                                ng-model="entity.${property.name}"
 	                                type="color"
-	                                placeholder="Enter ${property.widgetLabel}">
+	                                placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
 	                            </bk-input>
 							</bk-form-input-message>
 	                    </div>
@@ -73,24 +72,24 @@
 #elseif($property.widgetType == "NUMBER")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
 	                        <bk-step-input input-id="id${property.name}"
 								name="${property.name}"
 								state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
 								ng-model="entity.${property.name}"
-								placeholder="Enter ${property.widgetLabel}">
+								placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
 							</bk-step-input>
 	                    </div>
                     </bk-form-item>
 #elseif($property.widgetType == "MONTH")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
@@ -103,10 +102,10 @@
 #elseif($property.widgetType == "WEEK")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
@@ -119,10 +118,10 @@
 #elseif($property.widgetType == "TIME")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
@@ -135,10 +134,10 @@
 #elseif($property.widgetType == "DATETIME-LOCAL")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}From" colon="true">From ${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}From" colon="true">{{ '$projectName:${tprefix}.defaults.from' | t:{'text':'$t($projectName:${tprefix}.t.$property.dataName)'} }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--3">
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 								<bk-input id="id${property.name}From"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
@@ -148,10 +147,10 @@
 							</bk-form-input-message>
 	                    </div>
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}To" colon="true">To ${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}To" colon="true">{{ '$projectName:${tprefix}.defaults.to' | t:{'text':'$t($projectName:${tprefix}.t.$property.dataName)'} }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--3">
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 								<bk-input id="id${property.name}To"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
@@ -164,10 +163,10 @@
 #elseif($property.widgetType == "DATE")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}From" colon="true">From ${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}From" colon="true">{{ '$projectName:${tprefix}.defaults.from' | t:{'text':'$t($projectName:${tprefix}.t.$property.dataName)'} }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 								<bk-input id="id${property.name}From"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
@@ -177,10 +176,10 @@
 							</bk-form-input-message>
 	                    </div>
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}To" colon="true">To ${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}To" colon="true">{{ '$projectName:${tprefix}.defaults.to' | t:{'text':'$t($projectName:${tprefix}.t.$property.dataName)'} }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--2">
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 								<bk-input id="id${property.name}To"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
@@ -193,10 +192,10 @@
 #elseif($property.widgetType == "TEXTAREA")
 					<bk-form-item class="fd-row">
 						<div class="fd-col fd-col-md--2">
-							<bk-form-label for="id${property.name}" colon="true">${property.widgetLabel}</bk-form-label>
+							<bk-form-label for="id${property.name}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
 						</div>
 						<div class="fd-col fd-col-md--8">
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 								<bk-textarea id="id${property.name}"
 									name="${property.name}"
 									state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
@@ -207,7 +206,7 @@
 	#if($property.maxLength)
 									ng-maxlength="${property.maxLength}"
 	#end
-									placeholder="Enter ${property.widgetLabel}">
+									placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
 								</bk-textarea>
 							</bk-form-input-message>
 						</div>
@@ -215,10 +214,10 @@
 #elseif($property.widgetType == "TEL")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
@@ -230,7 +229,7 @@
 									ng-maxlength="${property.maxLength}"
 	#end
 	                                type="tel"
-	                                placeholder="Enter ${property.widgetLabel}">
+	                                placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
 	                            </bk-input>
 							</bk-form-input-message>
 	                    </div>
@@ -238,10 +237,10 @@
 #elseif($property.widgetType == "URL")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--8">
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
@@ -253,7 +252,7 @@
 									ng-maxlength="${property.maxLength}"
 	#end
 	                                type="url"
-	                                placeholder="Enter ${property.widgetLabel}">
+	                                placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
 	                            </bk-input>
 							</bk-form-input-message>
 	                    </div>
@@ -261,10 +260,10 @@
 #elseif($property.widgetType == "EMAIL")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--4">
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
@@ -276,7 +275,7 @@
 									ng-maxlength="${property.maxLength}"
 	#end
 	                                type="email"
-	                                placeholder="Enter ${property.widgetLabel}">
+	                                placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
 	                            </bk-input>
 							</bk-form-input-message>
 	                    </div>
@@ -284,10 +283,10 @@
 #else
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2">
-                        	<bk-form-label for="id${property.name}" colon="true">${property.widgetLabel}</bk-form-label>
+                        	<bk-form-label for="id${property.name}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
                         <div class="fd-col fd-col-md--8">
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" message="'Incorrect Input'">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
 	                                state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
@@ -299,7 +298,7 @@
 									ng-maxlength="${property.maxLength}"
 	#end
 	                                type="text"
-	                                placeholder="Enter ${property.widgetLabel}">
+	                                placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
 	                            </bk-input>
 							</bk-form-input-message>
 	                    </div>
@@ -314,13 +313,13 @@
         <bk-bar bar-design="footer" compact="true" ng-show="action !== 'select'">
 			<bk-bar-right>
 				<bk-bar-element>
-					<bk-button label="Filter" state="emphasized" ng-click="filter()"></bk-button>
+					<bk-button label="{{ '$projectName:${tprefix}.defaults.filter' | t }}" state="emphasized" ng-click="filter()"></bk-button>
 				</bk-bar-element>
 				<bk-bar-element>
-					<bk-button label="Reset" ng-click="resetFilter()"></bk-button>
+					<bk-button label="{{ '$projectName:${tprefix}.defaults.reset' | t }}" ng-click="resetFilter()"></bk-button>
 				</bk-bar-element>
 				<bk-bar-element>
-					<bk-button label="Cancel" ng-click="cancel()"></bk-button>
+					<bk-button label="{{ '$projectName:${tprefix}.defaults.cancel' | t }}" ng-click="cancel()"></bk-button>
 				</bk-bar-element>
 			</bk-bar-right>
 		</bk-bar>

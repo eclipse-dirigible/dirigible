@@ -1,5 +1,0 @@
-{
-    "module": "ide-operations/services/artefacts/security-roles/artefacts-security-roles.mjs",
-    "extensionPoint": "ide-operations-artefacts",
-    "description": "Security Roles Artefacts Extension"
-}

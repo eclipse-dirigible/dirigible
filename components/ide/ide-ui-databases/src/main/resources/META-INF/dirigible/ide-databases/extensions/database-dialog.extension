@@ -1,5 +1,0 @@
-{
-    "module": "ide-databases/services/database-dialog.js",
-    "extensionPoint": "ide-dialog-window",
-    "description": "Dialog for creating new or editing an existing database"
-}

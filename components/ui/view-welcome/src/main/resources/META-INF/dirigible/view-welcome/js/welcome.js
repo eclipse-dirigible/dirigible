@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -65,7 +65,7 @@ welcome.controller('WelcomeController', ($scope, $http, WorkspaceService, Templa
                 controlType: 'input',
                 type: 'text',
                 label: template.parameters[i].label,
-                require: true,
+                required: template.parameters[i].required === true,
             };
         }
         return form;

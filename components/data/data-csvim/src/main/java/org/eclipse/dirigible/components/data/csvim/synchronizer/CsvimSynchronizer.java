@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -8,6 +8,14 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.data.csvim.synchronizer;
+
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.text.ParseException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 import org.apache.commons.io.FilenameUtils;
 import org.eclipse.dirigible.commons.config.Configuration;
@@ -32,14 +40,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-
-import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.text.ParseException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
 
 /**
  * The Class CSVIM Synchronizer.
@@ -114,6 +114,7 @@ public class CsvimSynchronizer extends MultitenantBaseSynchronizer<Csvim, Long> 
     @Override
     protected List<Csvim> parseImpl(String location, byte[] content) throws ParseException {
         Csvim csvim = JsonHelper.fromJson(new String(content, StandardCharsets.UTF_8), Csvim.class);
+        validateCSVFiles(csvim);
         Configuration.configureObject(csvim);
         csvim.setLocation(location);
         csvim.setName(FilenameUtils.getBaseName(location));
@@ -152,6 +153,15 @@ public class CsvimSynchronizer extends MultitenantBaseSynchronizer<Csvim, Long> 
         }
     }
 
+    private void validateCSVFiles(Csvim csvim) throws ParseException {
+        List<CsvFile> csvFiles = csvim.getFiles();
+        for (CsvFile csvFile : csvFiles) {
+            if (csvFile.hasConfiguredLocale() && !csvFile.hasValidLocaleConfigured()) {
+                throw new ParseException("CSV file " + csvFile + " in CSVIM " + csvim + " has invalid locale: " + csvFile.getLocale(), 0);
+            }
+        }
+    }
+
     /**
      * Gets the service.
      *
@@ -170,7 +180,7 @@ public class CsvimSynchronizer extends MultitenantBaseSynchronizer<Csvim, Long> 
      */
     @Override
     public List<Csvim> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**

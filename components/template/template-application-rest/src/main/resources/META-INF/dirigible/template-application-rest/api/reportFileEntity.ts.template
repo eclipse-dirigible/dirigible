@@ -1,10 +1,10 @@
 #if($perspectiveRole || $security.roleRead)
 #set($isEntityPropertySecurityEnabled = "true")
 #end
-import { Controller, Get, Post } from "sdk/http"
+import { Controller, Get, Post } from "@aerokit/sdk/http"
 import { ${name}Repository, ${name}Filter, ${name}PaginatedFilter } from "../../dao/${perspectiveName}/${name}Repository";
 #if($perspectiveRole || $security.roleRead)
-import { user } from "sdk/security"
+import { user } from "@aerokit/sdk/security"
 import { ForbiddenError } from "../utils/ForbiddenError";
 #end
 import { HttpUtils } from "../utils/HttpUtils";
@@ -101,6 +101,23 @@ class ${name}Service {
             return this.repository.findAll(filter).map(e => this.transformEntity("read", e));
 #else
             return this.repository.findAll(filter);
+#end
+        } catch (error: any) {
+            this.handleError(error);
+        }
+    }
+    
+    @Post("/export")
+    public exportCsv() {
+        try {
+#if($perspectiveRole || $security.roleRead)
+            this.checkPermissions("read");
+
+#end
+#if($isEntityPropertySecurityEnabled)
+            return this.repository.exportCsv().map(e => this.transformEntity("read", e));
+#else
+            return this.repository.exportCsv();
 #end
         } catch (error: any) {
             this.handleError(error);

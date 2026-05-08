@@ -1,0 +1,5 @@
+{
+    "module": "template-application-ui-angular-v2/template/template.js",
+    "extensionPoint": "platform-templates",
+    "description": "Application Template - UI (Angular) - v2"
+}

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -9,13 +9,12 @@
  */
 package org.eclipse.dirigible.components.base.logging;
 
+import javax.sql.DataSource;
 import org.eclipse.dirigible.components.base.callable.CallableNoResultAndException;
 import org.eclipse.dirigible.components.base.callable.CallableResultAndException;
 import org.eclipse.dirigible.components.base.callable.CallableResultAndNoException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.sql.DataSource;
 
 public class LoggingExecutor {
     private static final Logger LOGGER = LoggerFactory.getLogger(LoggingExecutor.class);
@@ -25,7 +24,7 @@ public class LoggingExecutor {
         try {
             callable.call();
         } catch (Throwable ex) {
-            LOGGER.error("Failed to execute a code [{}] for data source [{}]", callable, dataSource, ex);
+            LOGGER.error("Failed to execute a code [{}] for data source [{}] with message [{}]", callable, dataSource, ex.getMessage());
             throw ex;
         }
     }
@@ -35,7 +34,7 @@ public class LoggingExecutor {
         try {
             return callable.call();
         } catch (Throwable ex) {
-            LOGGER.error("Failed to execute a code [{}] for data source [{}]", callable, dataSource, ex);
+            LOGGER.error("Failed to execute a code [{}] for data source [{}] with message [{}]", callable, dataSource, ex.getMessage());
             throw ex;
         }
     }
@@ -44,7 +43,7 @@ public class LoggingExecutor {
         try {
             return callable.call();
         } catch (RuntimeException ex) {
-            LOGGER.error("Failed to execute a code [{}]", callable, ex);
+            LOGGER.error("Failed to execute a code [{}] with message [{}]", callable, ex.getMessage());
             throw ex;
         }
     }

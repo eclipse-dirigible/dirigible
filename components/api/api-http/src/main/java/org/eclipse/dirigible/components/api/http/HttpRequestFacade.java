@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -331,7 +331,14 @@ public class HttpRequestFacade {
             throw new InvalidStateException(NO_VALID_REQUEST);
         }
         Object resourcePathParameter = request.getAttribute(ATTRIBUTE_REST_RESOURCE_PATH);
-        return (resourcePathParameter != null ? resourcePathParameter.toString() : "");
+        String resourcePath = "";
+        if (resourcePathParameter != null) {
+            resourcePath = resourcePathParameter.toString();
+        } else {
+            String uri = request.getRequestURI();
+            resourcePath = uri.substring(uri.lastIndexOf('/') + 1);
+        }
+        return resourcePath;
     }
 
     /**

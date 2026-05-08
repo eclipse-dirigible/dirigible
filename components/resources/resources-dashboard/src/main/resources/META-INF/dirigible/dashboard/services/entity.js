@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -15,7 +15,7 @@ angular.module('EntityService', []).provider('EntityService', function EntitySer
 
         const count = function (idOrFilter) {
             let url = `${this.baseUrl}/count`;
-            const bodyFilter = idOrFilter && typeof idOrFilter === 'object' && idOrFilter.$filter ? idOrFilter : undefined;
+            let bodyFilter = idOrFilter && typeof idOrFilter === 'object' && idOrFilter.$filter ? idOrFilter : undefined;
 
             if (!bodyFilter && idOrFilter != null && typeof idOrFilter === 'object') {
                 const query = Object.keys(idOrFilter).map(e => idOrFilter[e] ? `${e}=${idOrFilter[e]}` : null).filter(e => e !== null).join('&');
@@ -24,6 +24,8 @@ angular.module('EntityService', []).provider('EntityService', function EntitySer
                 }
             } else if (!bodyFilter && idOrFilter) {
                 url = `${this.baseUrl}/count/${idOrFilter}`;
+            } else if (bodyFilter && bodyFilter.$filter && bodyFilter.$filter.conditions) {
+                bodyFilter = bodyFilter.$filter;
             }
 
             if (bodyFilter) {
@@ -52,8 +54,16 @@ angular.module('EntityService', []).provider('EntityService', function EntitySer
 
         const search = function (entity) {
             const url = `${this.baseUrl}/search`;
+            if (entity && entity.$filter && entity.$filter.conditions) {
+                entity = entity.$filter;
+            }
             const body = JSON.stringify(entity);
             return $http.post(url, body);
+        }.bind(this);
+		
+		const exportCsv = function () {
+            const url = `${this.baseUrl}/export`;
+            return $http.post(url);
         }.bind(this);
 
         const create = function (entity) {
@@ -81,6 +91,7 @@ angular.module('EntityService', []).provider('EntityService', function EntitySer
             create: create,
             update: update,
             'delete': deleteEntity,
+			exportCsv: exportCsv,
         };
     }];
 });

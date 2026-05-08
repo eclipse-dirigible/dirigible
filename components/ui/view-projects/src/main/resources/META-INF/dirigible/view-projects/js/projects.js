@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -69,7 +69,7 @@ projectsView.controller('ProjectsViewController', (
         action: '',
     };
     let duplicateProjectData = {};
-    const imageFileExts = ['ico', 'bmp', 'png', 'jpg', 'jpeg', 'gif', 'svg'];
+    const imageFileExts = ['ico', 'bmp', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'];
     const modelFileExts = ['extension', 'extensionpoint', 'edm', 'model', 'dsm', 'schema', 'dmm', 'mapping', 'bpmn', 'job', 'listener', 'websocket', 'roles', 'constraints', 'table', 'view', 'report'];
 
     $scope.selectedWorkspace = WorkspaceService.getCurrentWorkspace();
@@ -397,6 +397,10 @@ projectsView.controller('ProjectsViewController', (
                         id: 'newProject',
                         label: 'New Project',
                         leftIconClass: 'sap-icon--create',
+                    }, {
+                        id: 'importProject',
+                        label: 'Import Project',
+                        leftIconClass: 'sap-icon--upload',
                         separator: true,
                     });
                     if (PublisherService.isEnabled()) {
@@ -673,6 +677,7 @@ projectsView.controller('ProjectsViewController', (
                     } else if (id === 'paste') {
                         jstreeWidget.jstree(true).paste(contextMenuNodes[0]);
                     } else if (id === 'newProject') $scope.createProject();
+                    else if (id === 'importProject') $scope.importProject();
                     else if (id === 'duplicateProject') {
                         $scope.duplicateProject(contextMenuNodes[0]);
                     } else if (id === 'rename') {
@@ -1251,6 +1256,17 @@ projectsView.controller('ProjectsViewController', (
         }, (response) => {
             console.error(response);
             StatusBar.showError(`Unable to delete '${project}'.`);
+        });
+    };
+
+    $scope.importProject = () => {
+        Dialogs.showWindow({
+            hasHeader: true,
+            id: 'import',
+            params: {
+                importType: 'project',
+                workspace: $scope.selectedWorkspace,
+            }
         });
     };
 

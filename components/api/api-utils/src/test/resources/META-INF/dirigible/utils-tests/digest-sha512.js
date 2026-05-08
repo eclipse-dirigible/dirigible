@@ -1,5 +1,5 @@
 
-import { Digest } from 'sdk/utils/digest';
+import { Digest } from '@aerokit/sdk/utils/digest';
 import { Assert } from 'test/assert';
 
 const input = [41, 42, 43];

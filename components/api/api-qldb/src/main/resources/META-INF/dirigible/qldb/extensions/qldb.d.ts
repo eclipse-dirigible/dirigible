@@ -1,4 +1,4 @@
-declare module "sdk/qldb" {
+declare module "@aerokit/sdk/qldb" {
     class QLDBRepository {
         /**
          *  Constructs a repository with given ledger and table.

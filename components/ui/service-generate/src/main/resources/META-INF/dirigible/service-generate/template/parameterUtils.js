@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -9,9 +9,9 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-import { Configurations } from "sdk/core";
-import { Base64 } from "sdk/utils";
-import { Bytes } from "sdk/io";
+import { Configurations } from "@aerokit/sdk/core";
+import { Base64 } from "@aerokit/sdk/utils";
+import { Bytes } from "@aerokit/sdk/io";
 
 export function process(model, parameters) {
     model.entities.forEach(e => {
@@ -65,9 +65,11 @@ export function process(model, parameters) {
             p.dataUnique = p.dataUnique === "true";
             p.isRequiredProperty = p.isRequiredProperty === "true";
             p.isCalculatedProperty = p.isCalculatedProperty === "true";
+			p.isReadOnlyProperty = p.isReadOnlyProperty === "true";
             p.widgetIsMajor = p.widgetIsMajor === "true";
             p.widgetLabel = p.widgetLabel ? p.widgetLabel : p.name;
             p.widgetDropdownUrl = "";
+            p.widgetDropdownControllerUrl = "";
 
             const parsedDataType = parseDataTypes(p.dataType);
             p.dataTypeJava = parsedDataType.java;
@@ -131,6 +133,7 @@ export function process(model, parameters) {
 
             if (p.widgetType == "DROPDOWN") {
                 let projectNameString = `/services/ts/${parameters.projectName}/gen/${parameters.genFolderName}/api/${p.relationshipEntityPerspectiveName}/${p.relationshipEntityName}Service.ts`;
+                let projectNameControllerString = `/services/ts/${parameters.projectName}/gen/${parameters.genFolderName}/api/${p.relationshipEntityPerspectiveName}/${p.relationshipEntityName}Controller.ts`;
 
                 e.hasDropdowns = true;
 
@@ -139,14 +142,17 @@ export function process(model, parameters) {
                     e.referencedProjections.forEach(referencedProjection => {
                         if (referencedProjection.name === p.relationshipEntityName && !foundReferenceProjection) {
                             p.widgetDropdownUrl = `/services/ts/${referencedProjection.project}/gen/${referencedProjection.genFolderName}/api/${p.relationshipEntityPerspectiveName}/${p.relationshipEntityName}Service.ts`;
+                            p.widgetDropdownControllerUrl = `/services/ts/${referencedProjection.project}/gen/${referencedProjection.genFolderName}/api/${p.relationshipEntityPerspectiveName}/${p.relationshipEntityName}Controller.ts`;
                             foundReferenceProjection = true;
                         }
                     });
                     if (!foundReferenceProjection) {
                         p.widgetDropdownUrl = projectNameString;
+                        p.widgetDropdownControllerUrl = projectNameControllerString;
                     }
                 } else {
-                    p.widgetDropdownUrl = projectNameString
+                    p.widgetDropdownUrl = projectNameString;
+                    p.widgetDropdownControllerUrl = projectNameControllerString;
                 }
             }
         });
@@ -175,7 +181,7 @@ export function process(model, parameters) {
     parameters.roles = [];
 
     model.entities.forEach(e => {
-        if (e.generateDefaultRoles === "true") {
+        if (e && e.generateDefaultRoles === "true") {
             if (e.type != "PROJECTION") {
 
                 const rolePair = {};
@@ -280,7 +286,7 @@ export function parseDataTypes(dataType) {
         case "TIME":
         case "TIME WITH TIME ZONE":
             parsedDataType.java = "time";
-            parsedDataType.ts = "Date";
+            parsedDataType.ts = "string";
             break;
         case "DATETIME":
         case "TIMESTAMP":
@@ -289,6 +295,7 @@ export function parseDataTypes(dataType) {
             parsedDataType.ts = "Date";
             break;
         case "BOOLEAN":
+        case "BIT":
             parsedDataType.java = "boolean";
             parsedDataType.ts = "boolean";
             break;

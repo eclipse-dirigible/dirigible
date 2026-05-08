@@ -1,0 +1,7 @@
+import { alphanumeric } from "@aerokit/sdk/utils";
+import { response } from "@aerokit/sdk/http";
+
+response.println(alphanumeric.toAlphanumeric("@mystring123!#="));
+
+response.flush();
+response.close();

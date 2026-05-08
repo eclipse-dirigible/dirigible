@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -10,13 +10,23 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const perspectiveData = {
-	id: 'documentsStorage',
-	label: 'Documents Storage',
+	id: 'documentStorage',
+	label: 'Document Storage',
+	translation: {
+		key: 'documents:documentStorage',
+	},
 	path: '/services/web/documents/index.html',
 	order: -1,
 	lazyLoad: true,
 	icon: '/services/web/documents/images/documents.svg',
 };
+const viewData = {
+	region: 'center',
+	hasHeader: false,
+	maxWidth: '640px',
+	...perspectiveData
+};
 if (typeof exports !== 'undefined') {
 	exports.getPerspective = () => perspectiveData;
+	exports.getView = () => viewData;
 }

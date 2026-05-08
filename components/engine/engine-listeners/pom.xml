@@ -5,7 +5,7 @@
 	<parent>
 		<artifactId>dirigible-components-parent</artifactId>
 		<groupId>org.eclipse.dirigible</groupId>
-		<version>12.0.0-SNAPSHOT</version>
+		<version>13.0.0-SNAPSHOT</version>
 		<relativePath>../../pom.xml</relativePath>
 	</parent>
 
@@ -57,6 +57,12 @@
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-engine-javascript</artifactId>
 		</dependency>
+		
+		<!-- Parser -->
+		<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-parsers-typescript</artifactId>
+    	</dependency>
 
 		<!-- Libraries -->
 		<dependency>
@@ -84,6 +90,10 @@
 			<groupId>org.fusesource.hawtbuf</groupId>
 			<artifactId>hawtbuf</artifactId>
 			<version>1.11</version>
+		</dependency>
+		<dependency>
+		    <groupId>commons-codec</groupId>
+		    <artifactId>commons-codec</artifactId>
 		</dependency>
 	</dependencies>
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -25,6 +25,16 @@ public class DatabaseNameNormalizer {
             table = table.substring(1, table.length() - 1);
         }
         return table;
+    }
+
+    /**
+     * Makes necessary formatting if needed.
+     *
+     * @param column the column name
+     * @return the formatted column name
+     */
+    public static String normalizeColumnName(String column) {
+        return normalizeTableName(column);
     }
 
 }

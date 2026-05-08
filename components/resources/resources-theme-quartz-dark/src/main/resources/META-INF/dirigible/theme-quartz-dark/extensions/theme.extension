@@ -1,5 +1,0 @@
-{
-    "description": "IDE Theme - Quartz Dark",
-    "extensionPoint": "ide-themes",
-    "module": "theme-quartz-dark/extensions/theme.js"
-}

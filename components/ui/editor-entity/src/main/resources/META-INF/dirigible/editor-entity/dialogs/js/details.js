@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -112,6 +112,13 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
             { value: 'true', label: 'Show in table header' },
             { value: 'false', label: 'Show in form only' }
         ];
+        $scope.auditTypes = [
+            { value: 'NONE', label: 'None' },
+            { value: 'CREATED_AT', label: 'Created At' },
+            { value: 'CREATED_BY', label: 'Created By' },
+            { value: 'UPDATED_AT', label: 'Updated At' },
+            { value: 'UPDATED_BY', label: 'Updated By' }
+        ];
         $scope.icons = [];
         $scope.loadIcons = () => {
             $http({
@@ -176,6 +183,7 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
                             generateDefaultRoles: $scope.dataParameters.generateDefaultRoles,
                             importsCode: $scope.dataParameters.importsCode,
                             generateReport: $scope.dataParameters.generateReport,
+                            multilingual: $scope.dataParameters.multilingual
                         }
                     });
                 } else {
@@ -190,6 +198,8 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
                             isCalculatedProperty: $scope.dataParameters.isCalculatedProperty,
                             calculatedPropertyExpressionCreate: $scope.dataParameters.calculatedPropertyExpressionCreate,
                             calculatedPropertyExpressionUpdate: $scope.dataParameters.calculatedPropertyExpressionUpdate,
+                            auditType: $scope.dataParameters.auditType,
+							isReadOnlyProperty: $scope.dataParameters.isReadOnlyProperty,
                             dataName: $scope.dataParameters.dataName,
                             dataType: $scope.dataParameters.dataType,
                             dataOrderBy: $scope.dataParameters.dataOrderBy,
@@ -250,4 +260,16 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
             $scope.dialogType = 'property';
             $scope.state.isBusy = false;
         }
+        $scope.adaptAuditDataType = () => {
+            if ($scope.dataParameters.auditType === 'CREATED_AT' || $scope.dataParameters.auditType === 'UPDATED_AT') {
+                $scope.dataParameters.dataType = "TIMESTAMP";
+				$scope.dataParameters.isReadOnlyProperty = "true";
+            } else if ($scope.dataParameters.auditType === 'CREATED_BY' || $scope.dataParameters.auditType === 'UPDATED_BY') {
+                $scope.dataParameters.dataType = "VARCHAR";
+				$scope.dataParameters.isReadOnlyProperty = "true";
+            } else {
+				$scope.dataParameters.dataType = "VARCHAR";
+				$scope.dataParameters.isReadOnlyProperty = "false";
+			}
+        };
     });

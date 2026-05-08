@@ -1,5 +1,0 @@
-{
-    "module":"ide-designer/services/workspace-menu-new-template-designer.js",
-    "extensionPoint":"ide-workspace-menu-new-template",
-    "description":"UI Designer Workspace New Menu Extension"
-}

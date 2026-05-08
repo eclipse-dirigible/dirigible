@@ -1,5 +1,5 @@
-import { response } from "sdk/http";
-import { database } from "sdk/db";
+import { response } from "@aerokit/sdk/http";
+import { database } from "@aerokit/sdk/db";
 
 let extensionPoints = [];
 

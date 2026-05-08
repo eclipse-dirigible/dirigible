@@ -1,5 +1,0 @@
-{
-    "module": "ide-operations/services/artefacts/csv-file/artefacts-csv-file.mjs",
-    "extensionPoint": "ide-operations-artefacts",
-    "description": "CSV File Artefacts Extension"
-}

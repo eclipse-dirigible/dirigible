@@ -1,0 +1,21 @@
+{
+    "guid": "template-application-angular-v2",
+    "dependencies": [
+        {
+            "guid": "template-application-schema"
+        },
+        {
+            "guid": "template-application-rest"
+        },
+        {
+            "guid": "template-application-feed"
+        },
+        {
+            "guid": "template-application-ui-angular"
+        },
+        {
+            "guid": "template-application-odata"
+        }
+    ],
+    "actions": []
+}

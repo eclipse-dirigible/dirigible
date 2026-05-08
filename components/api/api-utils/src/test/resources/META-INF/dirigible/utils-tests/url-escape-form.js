@@ -1,5 +1,5 @@
 
-import { URL } from 'sdk/utils/url';
+import { URL } from '@aerokit/sdk/utils/url';
 import { Assert } from 'test/assert';
 
 const input = 'http://www.test.com?var1=abc123&var2=123 456&var3=стойност';

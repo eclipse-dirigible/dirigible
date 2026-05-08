@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -13,6 +13,15 @@ package org.eclipse.dirigible.components.base.publisher;
  * The Interface PublisherHandler.
  */
 public interface PublisherHandler {
+
+    /**
+     * The AfterPublishMetadata.
+     */
+    record AfterPublishMetadata(String workspace, String projectName, String entryPath, boolean isDirectory) {
+        public boolean isProjectMetadata() {
+            return isDirectory && "".equals(entryPath);
+        }
+    }
 
     /**
      * Before publish.
@@ -43,11 +52,5 @@ public interface PublisherHandler {
      * @param location the location
      */
     default void afterUnpublish(String location) {}
-
-    /**
-     * The AfterPublishMetadata.
-     */
-    record AfterPublishMetadata(String workspace, String projectName, String entryPath, boolean isDirectory) {
-    }
 
 }

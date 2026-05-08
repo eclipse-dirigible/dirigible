@@ -1,5 +1,0 @@
-{
-    "module": "ide-import/services/import-view.js",
-    "extensionPoint": "ide-view",
-    "description": "Import View"
-}

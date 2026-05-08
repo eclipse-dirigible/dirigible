@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -100,6 +100,8 @@ public class DataTypeUtils {
     private static final String TIMESTAMP = "TIMESTAMP";
     /** The Constant DATE. */
     private static final String DATE = "DATE";
+    /** The Constant DATE. */
+    private static final String DATETIME = "DATETIME";
     /** The Constant TEXT. */
     private static final String TEXT = "TEXT";
     /** The Constant CHARACTER. */
@@ -161,8 +163,17 @@ public class DataTypeUtils {
         STRING_TO_DATABASE_TYPE.put(TEXT, Types.VARCHAR);
         // dates
         STRING_TO_DATABASE_TYPE.put(DATE, Types.DATE);
-        STRING_TO_DATABASE_TYPE.put(TIMESTAMP, Types.TIMESTAMP);
         STRING_TO_DATABASE_TYPE.put(TIME, Types.TIME);
+        STRING_TO_DATABASE_TYPE.put(TIMESTAMP, Types.TIMESTAMP);
+
+        // https://docs.snowflake.com/en/sql-reference/data-types-datetime#label-datatypes-timestamp-variations
+        STRING_TO_DATABASE_TYPE.put("TIMESTAMP_NTZ", Types.TIMESTAMP);
+        STRING_TO_DATABASE_TYPE.put("TIMESTAMPNTZ", Types.TIMESTAMP);
+        STRING_TO_DATABASE_TYPE.put("TIMESTAMP WITHOUT TIME ZONE", Types.TIMESTAMP);
+        STRING_TO_DATABASE_TYPE.put("DATETIME", Types.TIMESTAMP);
+
+        STRING_TO_DATABASE_TYPE.put("DATETIME2", Types.TIMESTAMP); // MSSQL
+
         // ints
         STRING_TO_DATABASE_TYPE.put(BIT, Types.BIT);
         STRING_TO_DATABASE_TYPE.put(SMALLINT, Types.SMALLINT);
@@ -266,6 +277,7 @@ public class DataTypeUtils {
         UNIFIED_STRING_FROM_DATABASE_TYPE.put(BINARY_VARYING, BLOB);
         UNIFIED_STRING_FROM_DATABASE_TYPE.put(BINARY_LARGE_OBJECT, BLOB);
         UNIFIED_STRING_FROM_DATABASE_TYPE.put(BYTEA, BLOB);
+        UNIFIED_STRING_FROM_DATABASE_TYPE.put(DATETIME, TIMESTAMP);
 
     }
 

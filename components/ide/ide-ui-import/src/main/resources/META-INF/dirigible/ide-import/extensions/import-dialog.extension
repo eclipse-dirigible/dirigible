@@ -1,5 +1,0 @@
-{
-    "module": "ide-import/services/import-dialog.js",
-    "extensionPoint": "ide-dialog-window",
-    "description": "Import Dialog"
-}

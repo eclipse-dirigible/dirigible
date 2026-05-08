@@ -1,5 +1,0 @@
-{
-    "module": "DependsOnScenariosTestProject/gen/sales-order/ui/Country/Country/dialog-filter/view.js",
-    "extensionPoint": "application-windows",
-    "description": "DependsOnScenariosTestProject - Application Dialog Window"
-}

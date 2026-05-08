@@ -1,5 +1,0 @@
-{
-    "module": "ide-operations/services/artefacts/data-views/artefacts-data-views.mjs",
-    "extensionPoint": "ide-operations-artefacts",
-    "description": "Data Views Artefacts Extension"
-}

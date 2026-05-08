@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -52,7 +52,8 @@ public class PersistenceCreateSequenceProcessor extends AbstractPersistenceProce
         CreateSequenceBuilder createSequenceBuilder = SqlFactory.getNative(SqlFactory.deriveDialect(connection))
                                                                 .create()
                                                                 .sequence(tableModel.getTableName() + ISqlKeywords.UNDERSCROE
-                                                                        + ISqlKeywords.KEYWORD_SEQUENCE);
+                                                                        + ISqlKeywords.KEYWORD_SEQUENCE)
+                                                                .increment(50);
 
         String sql = createSequenceBuilder.toString();
         if (logger.isTraceEnabled()) {

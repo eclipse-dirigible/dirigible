@@ -4,7 +4,7 @@ The execution of the job [{{job.name}}] is back to normal.
 
 You can investigate further at:
 
-{{job.scheme}}://{{job.host}}:{{job.port}}/services/web/ide-jobs/view/jobs.html
+{{job.scheme}}://{{job.host}}:{{job.port}}/services/web/shell-ide/?perspective=jobs&view=jobs
 
 Regards,
 Your Job Engine

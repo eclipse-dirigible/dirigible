@@ -1,5 +1,0 @@
-{
-	"module": "ide-debugger/views/debugger/view.js",
-	"extensionPoint": "ide-view",
-	"description": "Debugger View"
-}

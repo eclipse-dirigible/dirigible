@@ -1,5 +1,0 @@
-{
-    "module": "ide-console/services/console-view.js",
-    "extensionPoint": "ide-view",
-    "description": "Console View"
-}

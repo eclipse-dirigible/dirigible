@@ -28,7 +28,7 @@ export function getTemplate(parameters) {
 
     return {
         name: "Application - UI (AngularJS)",
-        description: "Application with UI, REST APIs and DAOs",
+        description: "Application With UI, REST APIs and DAOs",
         extension: "model",
         sources: templateSources,
         parameters: templateParameters

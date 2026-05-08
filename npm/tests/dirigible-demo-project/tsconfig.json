@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "target": "ES6",
+    "moduleResolution": "Node",
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
+    "paths": {
+      "sdk/*": [
+        "./node_modules/@aerokit/sdk/dist/dts/*"
+      ]
+    }
+  },
+  "exclude": [
+    "target"
+  ]
+}

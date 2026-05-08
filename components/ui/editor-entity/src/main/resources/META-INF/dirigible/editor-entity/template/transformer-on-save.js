@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -10,8 +10,8 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 import * as transformer from "editor-entity/template/transform-edm";
-import { Workspace as workspaceManager } from "sdk/platform";
-import { Bytes } from "sdk/io";
+import { Workspace as workspaceManager } from "@aerokit/sdk/platform";
+import { Bytes } from "@aerokit/sdk/io";
 
 const workspace = __context.get('workspace');
 const project = __context.get('project');

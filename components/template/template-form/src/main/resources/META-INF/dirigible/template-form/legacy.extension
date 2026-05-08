@@ -1,5 +1,0 @@
-{
-    "extensionPoint": "ide-template",
-    "module": "template-form/template.js",
-    "description": "Form Sample Template"
-}

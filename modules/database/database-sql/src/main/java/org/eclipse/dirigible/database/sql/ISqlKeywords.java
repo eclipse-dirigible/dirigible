@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -47,6 +47,8 @@ public interface ISqlKeywords {
      * The Constant KEYWORD_OUTER.
      */
     String KEYWORD_OUTER = "OUTER"; //$NON-NLS-1$
+
+    String KEYWORD_FULL_OUTER = "FULL OUTER"; //$NON-NLS-1$
 
     /**
      * The Constant KEYWORD_LEFT.
@@ -167,6 +169,8 @@ public interface ISqlKeywords {
      * The Constant KEYWORD_TABLE.
      */
     String KEYWORD_TABLE = "TABLE"; //$NON-NLS-1$
+
+    String KEYWORD_TOP = "TOP";
 
     /**
      * The Constant KEYWORD_PRIMARY.

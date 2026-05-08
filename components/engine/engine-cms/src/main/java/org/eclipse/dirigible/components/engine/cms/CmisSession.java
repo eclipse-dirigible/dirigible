@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -22,7 +22,29 @@ public interface CmisSession {
      * @return CMIS Object
      * @throws IOException IO Exception
      */
-    public CmisObject getObject(String id) throws IOException;
+    CmisObject getObject(String id) throws IOException;
+
+    /**
+     * Returns the information about the CMIS repository.
+     *
+     * @return Repository Info
+     */
+    CmisRepositoryInfo getRepositoryInfo();
+
+    /**
+     * Returns the root folder of this repository.
+     *
+     * @return CmisFolder
+     * @throws IOException IO Exception
+     */
+    CmisFolder getRootFolder() throws IOException;
+
+    /**
+     * Returns the ObjectFactory utility.
+     *
+     * @return Object Factory
+     */
+    CmisObjectFactory getObjectFactory();
 
     /**
      * Returns a CMIS Object by path.
@@ -31,5 +53,5 @@ public interface CmisSession {
      * @return CMIS Object
      * @throws IOException IO Exception
      */
-    public CmisObject getObjectByPath(String path) throws IOException;
+    CmisObject getObjectByPath(String path) throws IOException;
 }

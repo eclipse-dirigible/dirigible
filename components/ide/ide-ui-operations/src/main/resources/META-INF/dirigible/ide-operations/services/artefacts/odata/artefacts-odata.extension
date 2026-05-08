@@ -1,5 +1,0 @@
-{
-    "module": "ide-operations/services/artefacts/odata/artefacts-odata.mjs",
-    "extensionPoint": "ide-operations-artefacts",
-    "description": "OData Artefacts Extension"
-}

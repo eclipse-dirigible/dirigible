@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -36,7 +36,7 @@ public class HttpSecurityURIConfigurator {
             "/index.html", //
             "/logout", //
             "/index-busy.html", //
-            "/stomp", //
+            "/stomp/**", //
             "/error/**", //
             "/error.html", //
             "/favicon.ico", //
@@ -46,12 +46,16 @@ public class HttpSecurityURIConfigurator {
             "/services/core/version/**", //
             "/services/core/healthcheck/**", //
             "/services/web/resources/**", //
-            "/services/web/resources-core/**", //
+            "/services/web/resources-locale/**", //
             "/services/web/platform-core/**", //
-            "/services/web/theme-blimpkit/**", //
+            "/services/web/application-core/**", //
+            "/services/web/editor-monaco/**", //
+            "/services/web/service-workspace/**", //
+            "/services/web/service-repository/**", //
+            "/services/web/theme-*/**", //
             "/services/js/platform-core/**", //
-            "/services/js/resources-core/**", //
-            "/services/integrations/**", //
+            "/services/js/application-core/**", //
+            "/services/js/platform-branding/**", //
             "/actuator/health/liveness", //
             "/actuator/health/readiness", //
             "/actuator/health"};
@@ -59,6 +63,7 @@ public class HttpSecurityURIConfigurator {
     /** The Constant AUTHENTICATED_PATTERNS. */
     private static final String[] AUTHENTICATED_PATTERNS = { //
             "/services/**", //
+            "/services/integrations/**", //
             "/websockets/**", //
             "/api-docs/swagger-config", //
             "/api-docs/**", //

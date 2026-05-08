@@ -1,5 +1,0 @@
-{
-    "module": "ide-report/services/report-editor.js",
-    "extensionPoint": "ide-editor",
-    "description": "Report Editor"
-}

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -9,9 +9,9 @@
  */
 package org.eclipse.dirigible.database.sql.builders;
 
-import org.eclipse.dirigible.database.sql.ISqlDialect;
-
 import java.util.List;
+
+import org.eclipse.dirigible.database.sql.ISqlDialect;
 
 /**
  * The Abstract Query SQL Builder.

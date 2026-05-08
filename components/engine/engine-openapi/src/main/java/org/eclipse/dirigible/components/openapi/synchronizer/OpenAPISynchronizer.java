@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -19,6 +19,7 @@ import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.openapi.domain.OpenAPI;
+import org.eclipse.dirigible.components.openapi.generator.OpenApiGenerator;
 import org.eclipse.dirigible.components.openapi.service.OpenAPIService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +27,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.text.ParseException;
 import java.util.List;
 
@@ -44,7 +47,8 @@ public class OpenAPISynchronizer extends BaseSynchronizer<OpenAPI, Long> {
     /**
      * The Constant FILE_EXTENSION_OPENAPI.
      */
-    private static final String FILE_EXTENSION_OPENAPI = ".openapi";
+    private static final String FILE_EXTENSION_OPENAPI = "Controller.ts";
+    public static final String[] FILE_EXTENSIONS_OPENAPI = new String[] {"controller.ts", "service.ts"};
 
     /**
      * The openAPI service.
@@ -94,6 +98,8 @@ public class OpenAPISynchronizer extends BaseSynchronizer<OpenAPI, Long> {
         openAPI.setLocation(location);
         openAPI.setName(FilenameUtils.getBaseName(location));
         openAPI.setType(OpenAPI.ARTEFACT_TYPE);
+        String openApiContent = OpenApiGenerator.generate(location, new String(content));
+        openAPI.setContent(openApiContent);
         openAPI.updateKey();
         try {
             OpenAPI maybe = getService().findByKey(openAPI.getKey());
@@ -134,7 +140,7 @@ public class OpenAPISynchronizer extends BaseSynchronizer<OpenAPI, Long> {
      */
     @Override
     public List<OpenAPI> retrieve(String location) {
-        return getService().getAll();
+        return getService().findByLocation(location);
     }
 
     /**
@@ -207,5 +213,24 @@ public class OpenAPISynchronizer extends BaseSynchronizer<OpenAPI, Long> {
     @Override
     public String getArtefactType() {
         return OpenAPI.ARTEFACT_TYPE;
+    }
+
+    /**
+     * Checks if is accepted.
+     *
+     * @param file the file
+     * @param attrs the attrs
+     * @return true, if is accepted
+     */
+    @Override
+    public boolean isAccepted(Path file, BasicFileAttributes attrs) {
+        for (String extension : FILE_EXTENSIONS_OPENAPI) {
+            if (file.toString()
+                    .toLowerCase()
+                    .endsWith(extension)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -1,5 +1,0 @@
-{
-    "module": "resources-core/services/menus/window.js",
-    "extensionPoint": "ide-jobs-menu",
-    "description": "Window Menu"
-}

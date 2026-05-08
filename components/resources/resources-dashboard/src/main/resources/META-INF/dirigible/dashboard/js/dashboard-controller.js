@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -9,17 +9,27 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const dashboard = angular.module('dashboard', ['blimpKit', 'platformView']);
-dashboard.controller('DashboardController', ($scope, Extensions) => {
+const dashboard = angular.module('dashboard', ['blimpKit', 'platformView', 'platformLocale']);
+dashboard.controller('DashboardController', ($scope, Extensions, LocaleService) => {
+    $scope.loadingLabel = 'Loading...';
+    $scope.errorMessage = 'Failed to load widget list';
+    LocaleService.onInit(() => {
+        $scope.loadingLabel = `${LocaleService.t('loading')}...`;
+        $scope.errorMessage = LocaleService.t('dashboard:errMsg.widgetList');
+    });
     $scope.state = {
         isBusy: true,
         error: false,
-        busyText: 'Loading...',
+        busyText: $scope.loadingLabel,
     };
 
     $scope.smallWidgets = [];
     $scope.mediumWidgets = [];
     $scope.largeWidgets = [];
+
+    $scope.hasWidgets = () => {
+        return $scope.smallWidgets.length || $scope.mediumWidgets.length || $scope.largeWidgets.length;
+    };
 
     Extensions.getSubviews(['dashboard-widgets']).then((response) => {
         response.data.forEach(widget => {
@@ -35,6 +45,5 @@ dashboard.controller('DashboardController', ($scope, Extensions) => {
     }).catch((error) => {
         console.error('Error fetching widget list:', error);
         $scope.state.error = true;
-        $scope.errorMessage = 'Failed to load widget list';
     });
 });

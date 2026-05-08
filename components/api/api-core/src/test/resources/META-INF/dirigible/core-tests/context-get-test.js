@@ -1,4 +1,4 @@
-import { Context } from 'sdk/core/context';
+import { Context } from '@aerokit/sdk/core/context';
 import { Assert } from 'test/assert';
 
 Context.set('name1', 'value1');

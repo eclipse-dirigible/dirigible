@@ -1,5 +1,5 @@
-import { Controller, Post, response } from "sdk/http"
-import { process } from "sdk/bpm"
+import { Controller, Post, response } from "@aerokit/sdk/http"
+import { process } from "@aerokit/sdk/bpm"
 
 @Controller
 class ProcessService {
@@ -8,7 +8,7 @@ class ProcessService {
     public startProcess(parameters: any) {
         const processKey = '${processId}';
         const params = parameters ? parameters : {};
-        const processInstanceId = process.start(processKey, params);
+        const processInstanceId = process.start(processKey, "BPM-Project-Starter", params);
 
         response.setStatus(response.ACCEPTED);
         return {

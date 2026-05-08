@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -46,12 +46,12 @@ class DependsOnTestProject extends BaseTestProject {
         browser.openPath(VERIFICATION_URI);
         browser.clickOnElementWithText(HtmlElementType.SPAN, "Orders");
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
-        browser.enterTextInElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Country ...", "Bulgaria");
+        browser.enterTextInElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search Country...", "Bulgaria");
 
         // click out of the input field to trigger the search
         browser.clickOnElementContainingText(HtmlElementType.HEADER1, "Create Order");
 
-        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search City ...");
+        browser.clickOnElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.PLACEHOLDER, "Search City...");
 
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Sofia");
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Varna");

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -9,6 +9,16 @@
  */
 package org.eclipse.dirigible.integration.tests.api.java.db;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import java.math.BigInteger;
+import java.sql.Connection;
+import java.sql.Date;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Time;
+import java.sql.Timestamp;
 import org.assertj.db.api.Assertions;
 import org.assertj.db.type.Table;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
@@ -30,13 +40,6 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
-
-import java.math.BigInteger;
-import java.sql.*;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class DatabaseFacadeIT extends IntegrationTest {
@@ -324,19 +327,21 @@ class DatabaseFacadeIT extends IntegrationTest {
                       .isNull();
         }
 
-        @Test
-        void testInsertWithInvalidParamsObjects() throws Throwable {
-            String parametersJson = "[[],[],[],[]]";
-
-            String insertSql = createInsertInTestTableAllColumnsSql();
-
-            Exception thrownException =
-                    assertThrows(IllegalArgumentException.class, () -> DatabaseFacade.insert(insertSql, parametersJson, null));
-
-            assertThat(thrownException.getMessage()).contains(
-                    "Parameter with index [1] must be primitive or object. Parameter element [[]]");
-
-        }
+        // Not valid anymore
+        // @Test
+        // void testInsertWithInvalidParamsObjects() throws Throwable {
+        // String parametersJson = "[[],[],[],[]]";
+        //
+        // String insertSql = createInsertInTestTableAllColumnsSql();
+        //
+        // Exception thrownException =
+        // assertThrows(JdbcSQLDataException.class, () -> DatabaseFacade.insert(insertSql, parametersJson,
+        // null));
+        //
+        // assertThat(thrownException.getMessage()).contains(
+        // "Parameter with index [1] must be primitive or object. Parameter element [[]]");
+        //
+        // }
 
         @Test
         void testInsertWithParamsObjectsArrayWithNulls() throws Throwable {

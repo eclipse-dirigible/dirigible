@@ -1,5 +1,5 @@
 
-import { Hex } from 'sdk/utils/hex';
+import { Hex } from '@aerokit/sdk/utils/hex';
 import { Assert } from 'test/assert';
 
 const input = '414243';

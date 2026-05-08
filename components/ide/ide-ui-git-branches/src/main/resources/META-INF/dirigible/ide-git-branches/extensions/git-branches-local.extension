@@ -1,5 +1,0 @@
-{
-    "module": "ide-git-branches/services/local-view.js",
-    "extensionPoint": "ide-view",
-    "description": "Git Local Branches View"
-}

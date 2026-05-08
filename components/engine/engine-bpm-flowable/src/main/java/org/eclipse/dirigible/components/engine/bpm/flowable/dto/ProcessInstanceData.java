@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -8,6 +8,8 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.dto;
+
+import java.util.Date;
 
 /**
  * The Class ProcessInstanceData.
@@ -26,6 +28,9 @@ public class ProcessInstanceData {
     /** The id. */
     private String id;
 
+    /** The process instance id. */
+    private String processInstanceId;
+
     /** The name. */
     private String name;
 
@@ -43,6 +48,18 @@ public class ProcessInstanceData {
 
     /** The tenant id. */
     private String tenantId;
+
+    /** The start time. */
+    private Date startTime;
+
+    /** The reference id. */
+    private String referenceId;
+
+    /** The callback id. */
+    private String callbackId;
+
+    /** The activity id. */
+    private String activityId;
 
     /**
      * Gets the business key.
@@ -114,6 +131,24 @@ public class ProcessInstanceData {
      */
     public void setId(String id) {
         this.id = id;
+    }
+
+    /**
+     * Gets the process instance id.
+     *
+     * @return the processInstanceId
+     */
+    public String getProcessInstanceId() {
+        return processInstanceId;
+    }
+
+    /**
+     * Sets the process instance id.
+     *
+     * @param processInstanceId the process instance id to set
+     */
+    public void setProcessInstanceId(String processInstanceId) {
+        this.processInstanceId = processInstanceId;
     }
 
     /**
@@ -224,6 +259,76 @@ public class ProcessInstanceData {
         this.tenantId = tenantId;
     }
 
+    /**
+     * Gets the start time.
+     *
+     * @return the startTime
+     */
+    public Date getStartTime() {
+        return startTime;
+    }
 
+    /**
+     * Sets the start time.
+     *
+     * @param startTime the startTime to set
+     */
+    public void setStartTime(Date startTime) {
+        this.startTime = startTime;
+    }
+
+    /**
+     * Gets the reference id.
+     *
+     * @return the referenceId
+     */
+    public String getReferenceId() {
+        return referenceId;
+    }
+
+    /**
+     * Sets the reference id.
+     *
+     * @param referenceId the referenceId to set
+     */
+    public void setReferenceId(String referenceId) {
+        this.referenceId = referenceId;
+    }
+
+    /**
+     * Gets the callback id.
+     *
+     * @return the callbackId
+     */
+    public String getCallbackId() {
+        return callbackId;
+    }
+
+    /**
+     * Sets the callback id.
+     *
+     * @param callbackId the callbackId to set
+     */
+    public void setCallbackId(String callbackId) {
+        this.callbackId = callbackId;
+    }
+
+    /**
+     * Gets the activity id.
+     *
+     * @return the activityId
+     */
+    public String getActivityId() {
+        return activityId;
+    }
+
+    /**
+     * Sets the activity id.
+     *
+     * @param activityId the activityId to set
+     */
+    public void setActivityId(String activityId) {
+        this.activityId = activityId;
+    }
 
 }

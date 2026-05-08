@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -9,19 +9,24 @@
  */
 package org.eclipse.dirigible.commons.config;
 
-import org.apache.commons.lang3.reflect.FieldUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import static java.text.MessageFormat.format;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-
-import static java.text.MessageFormat.format;
+import org.apache.commons.lang3.reflect.FieldUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Configuration Facade class keeps all the configurations in the Dirigible instance It has the
@@ -227,10 +232,14 @@ public class Configuration {
         List<String> staticParams = List.of( //
                 "DIRIGIBLE_ANONYMOUS_USER_NAME_PROPERTY_NAME", //
                 "DIRIGIBLE_BRANDING_NAME", //
+                "DIRIGIBLE_BRANDING_SUBTITLE", //
                 "DIRIGIBLE_BRANDING_BRAND", //
+                "DIRIGIBLE_BRANDING_BRAND_URL", //
                 "DIRIGIBLE_BRANDING_FAVICON", //
                 "DIRIGIBLE_BRANDING_THEME", //
-                "DIRIGIBLE_BRANDING_PREFIX", "DIRIGIBLE_GIT_ROOT_FOLDER", //
+                "DIRIGIBLE_BRANDING_PREFIX", //
+                "DIRIGIBLE_BRANDING_ANALYTICS", //
+                "DIRIGIBLE_GIT_ROOT_FOLDER", //
                 "DIRIGIBLE_REGISTRY_EXTERNAL_FOLDER", //
                 "DIRIGIBLE_REGISTRY_IMPORT_WORKSPACE", //
                 "DIRIGIBLE_REPOSITORY_PROVIDER", //
@@ -326,6 +335,7 @@ public class Configuration {
                 "DIRIGIBLE_OPERATIONS_LOGS_ROOT_FOLDER_DEFAULT", //
                 "DIRIGIBLE_THEME_DEFAULT", //
                 "DIRIGIBLE_GENERATE_PRETTY_NAMES", //
+                "DIRIGIBLE_OAUTH_CUSTOM_CLIENTS", //
                 "DIRIGIBLE_OAUTH_ENABLED", //
                 "DIRIGIBLE_OAUTH_AUTHORIZE_UR", //
                 "DIRIGIBLE_OAUTH_TOKEN_URL", //
@@ -381,6 +391,8 @@ public class Configuration {
                 "DIRIGIBLE_DATABASE_SYSTEM_URL", //
                 "DIRIGIBLE_DATABASE_SYSTEM_USERNAME", //
                 "DIRIGIBLE_DATABASE_SYSTEM_PASSWORD", //
+                "DIRIGIBLE_DATABASE_SYSTEM_DIALECT", //
+                "DIRIGIBLE_DATABASE_SYSTEM_DDL_AUTO", //
                 "SNOWFLAKE_DEFAULT_TABLE_TYPE", //
                 "DIRIGIBLE_PROJECT_TYPESCRIPT", //
                 "DIRIGIBLE_MULTI_TENANT_MODE", //

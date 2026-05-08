@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -94,8 +94,8 @@ class CsvimTestProject extends BaseTestProject {
             String sql = dialect.create()
                                 .table(UNDEFINED_TABLE_NAME)
                                 .column("READER_ID", DataType.INTEGER, true)
-                                .column("READER_FIRST_NAME", DataType.VARCHAR)
-                                .column("READER_LAST_NAME", DataType.VARCHAR)
+                                .columnVarchar("READER_FIRST_NAME", 50)
+                                .columnVarchar("READER_LAST_NAME", 50)
                                 .build();
             try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
                 LOGGER.info("Will create table using [{}]", sql);

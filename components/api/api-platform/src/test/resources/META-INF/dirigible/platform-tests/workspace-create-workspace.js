@@ -1,4 +1,4 @@
-import { Workspace } from 'sdk/platform/workspace';
+import { Workspace } from '@aerokit/sdk/platform/workspace';
 import { Assert } from 'test/assert';
 
 Workspace.createWorkspace('testworkspace');

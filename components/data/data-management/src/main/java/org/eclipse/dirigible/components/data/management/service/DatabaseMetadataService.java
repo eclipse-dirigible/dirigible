@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -15,11 +15,11 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.eclipse.dirigible.components.data.management.config.DatabaseMetadataCache;
-import org.eclipse.dirigible.components.data.management.domain.DatabaseStructureTypes;
-import org.eclipse.dirigible.components.data.management.helpers.DatabaseMetadataHelper;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.sources.service.DataSourceService;
+import org.eclipse.dirigible.components.database.domain.DatabaseStructureTypes;
+import org.eclipse.dirigible.components.database.helpers.DatabaseMetadataHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;

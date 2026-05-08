@@ -24,8 +24,16 @@ jobs:
         run: mvn -T 1C formatter:validate
 
   build-deploy:
-    needs: [ tests, integration-tests-h2, integration-tests-postgresql ]
-    runs-on: ubuntu-latest
+    needs: [ tests, integration-tests-h2, integration-tests-postgresql, integration-tests-mssql ]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: amd64
+          - runner: ubuntu-24.04-arm
+            platform: arm64
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,31 +51,75 @@ jobs:
         with:
           distribution: 'corretto'
           java-version: '21'
-          architecture: x64
 
       - name: Install NodeJS
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22.x
 
       - name: Install TypeScript and esbuild
-        run: npm install -g typescript esbuild
-
-      - name: Setup Docker Buildx
-        run: |
-          docker buildx create --name dirigible-builder
-          docker buildx use dirigible-builder
+        run: npm install -g typescript@5.9.3 esbuild
 
       - name: Maven Build
         run: mvn clean install -P quick-build
 
-      - name: Docker Login
-        run: docker login -u ${{secrets.DOCKER_USER}} -p ${{secrets.DOCKER_PASSWORD}}
+      - name: Log in to Registry
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Push Dirigible image to Docker Hub
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: build/application
+          platforms: ${{ matrix.platform }}
+          tags: dirigiblelabs/dirigible
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
         run: |
-          cd build/application
-          docker buildx build --push --tag dirigiblelabs/dirigible -o type=image --platform=linux/arm64,linux/amd64 .
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.platform }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  build-deploy-manifest:
+    needs: build-deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Registry
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create -t dirigiblelabs/dirigible:latest \
+            $(printf 'dirigiblelabs/dirigible@sha256:%s ' *)
 
   tests:
     runs-on: ${{ matrix.os }}-latest
@@ -96,10 +148,10 @@ jobs:
       - name: Install NodeJS
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22.x
 
       - name: Install TypeScript and esbuild
-        run: npm install -g typescript esbuild
+        run: npm install -g typescript@5.9.3 esbuild
 
       - name: Maven Build
         run: mvn clean install -P unit-tests
@@ -128,10 +180,10 @@ jobs:
       - name: Install NodeJS
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22.x
 
       - name: Install TypeScript and esbuild
-        run: npm install -g typescript esbuild
+        run: npm install -g typescript@5.9.3 esbuild
 
       - name: Install ttyd (prebuilt)
         run: |
@@ -155,7 +207,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          retention-days: 1
+          retention-days: 3
           name: ${{ env.ARTIFACT_NAME }}
           path: tests/tests-integrations/build/reports/tests
 
@@ -201,10 +253,10 @@ jobs:
       - name: Install NodeJS
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22.x
 
       - name: Install TypeScript and esbuild
-        run: npm install -g typescript esbuild
+        run: npm install -g typescript@5.9.3 esbuild
 
       - name: Install ttyd (prebuilt)
         run: |
@@ -233,13 +285,83 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          retention-days: 1
+          retention-days: 3
+          name: ${{ env.ARTIFACT_NAME }}
+          path: tests/tests-integrations/build/reports/tests
+
+  integration-tests-mssql:
+    runs-on: ubuntu-latest
+    env:
+      MSSQL_PASS: 'mYPass1234!'
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-CU22-ubuntu-22.04
+        ports:
+          - 1433:1433
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: ${{ env.MSSQL_PASS }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache local Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+
+      - name: Set up JDK Corretto 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '21'
+          architecture: x64
+
+      - name: Install NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript@5.9.3 esbuild
+
+      - name: Install ttyd (prebuilt)
+        run: |
+          sudo apt update
+          sudo apt install -y ttyd
+
+      - name: Verify ttyd installation
+        run: ttyd --version
+
+      - name: Integration tests
+        run: mvn clean install -P integration-tests
+        env:
+          DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER: 'com.microsoft.sqlserver.jdbc.SQLServerDriver'
+          DIRIGIBLE_DATASOURCE_DEFAULT_URL: 'jdbc:sqlserver://localhost:1433;databaseName=master;encrypt=true;trustServerCertificate=true'
+          DIRIGIBLE_DATASOURCE_DEFAULT_USERNAME: 'sa'
+          DIRIGIBLE_DATASOURCE_DEFAULT_PASSWORD: ${{ env.MSSQL_PASS }}
+
+      - name: Generate a random artifact name
+        if: always()
+        id: generate_name
+        run: |
+          TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+          echo "ARTIFACT_NAME=selenide-screenshots-${TIMESTAMP}.zip" >> $GITHUB_ENV
+
+      - name: Upload selenide screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          retention-days: 3
           name: ${{ env.ARTIFACT_NAME }}
           path: tests/tests-integrations/build/reports/tests
 
   scan-image:
     name: Scan Docker image using Docker Scout
-    needs: [ build-deploy ]
+    needs: [ build-deploy-manifest ]
     runs-on: ubuntu-latest
 
     steps:
@@ -276,7 +398,7 @@ jobs:
 
   dast-scan:
     name: Perform DAST testing using ZAP
-    needs: [ build-deploy ]
+    needs: [ build-deploy-manifest ]
     runs-on: ubuntu-latest
 
     services:

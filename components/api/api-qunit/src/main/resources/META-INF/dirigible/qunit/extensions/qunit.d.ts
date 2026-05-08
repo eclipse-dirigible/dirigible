@@ -1,4 +1,4 @@
-declare module "sdk/qunit" {
+declare module "@aerokit/sdk/qunit" {
     module qunit {
         /**
          * Register a module by name

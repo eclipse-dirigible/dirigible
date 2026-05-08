@@ -1,5 +1,0 @@
-{
-    "module": "ide-databases/services/databases-view.js",
-    "extensionPoint": "ide-view",
-    "description": "Databases view"
-}

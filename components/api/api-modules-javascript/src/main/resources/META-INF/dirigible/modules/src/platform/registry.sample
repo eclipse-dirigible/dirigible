@@ -1,0 +1,8 @@
+import { registry } from "@aerokit/sdk/platform";
+import { response } from "@aerokit/sdk/http";
+
+let text = registry.getText("modules/src/platform/registry.ts");
+
+response.println(text);
+response.flush();
+response.close();

@@ -1,0 +1,4 @@
+{
+	"description": "Extension Point for the dashboard locale providers",
+	"name": "application-locales"
+}

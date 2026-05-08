@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -9,7 +9,34 @@
  */
 package org.eclipse.dirigible.components.data.csvim.processor;
 
-import static org.eclipse.dirigible.components.api.platform.RepositoryFacade.getResource;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
+import org.apache.commons.csv.QuoteMode;
+import org.apache.commons.lang3.StringUtils;
+import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.data.csvim.domain.CsvFile;
+import org.eclipse.dirigible.components.data.csvim.domain.CsvRecord;
+import org.eclipse.dirigible.components.data.csvim.synchronizer.CsvimProcessingException;
+import org.eclipse.dirigible.components.data.csvim.utils.CsvimUtils;
+import org.eclipse.dirigible.components.data.sources.config.DefaultDataSourceName;
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.database.DatabaseSystem;
+import org.eclipse.dirigible.components.database.DirigibleDataSource;
+import org.eclipse.dirigible.components.database.domain.ColumnMetadata;
+import org.eclipse.dirigible.components.database.domain.TableMetadata;
+import org.eclipse.dirigible.database.sql.SqlFactory;
+import org.eclipse.dirigible.database.sql.builders.records.SelectBuilder;
+import org.eclipse.dirigible.repository.api.IRepository;
+import org.eclipse.dirigible.repository.api.IRepositoryStructure;
+import org.eclipse.dirigible.repository.api.IResource;
+import org.eclipse.dirigible.repository.api.RepositoryReadException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -22,30 +49,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
-import javax.sql.DataSource;
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
-import org.apache.commons.csv.CSVRecord;
-import org.apache.commons.lang3.StringUtils;
-import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.components.data.csvim.domain.CsvFile;
-import org.eclipse.dirigible.components.data.csvim.domain.CsvRecord;
-import org.eclipse.dirigible.components.data.csvim.synchronizer.CsvimProcessingException;
-import org.eclipse.dirigible.components.data.csvim.utils.CsvimUtils;
-import org.eclipse.dirigible.components.data.management.domain.ColumnMetadata;
-import org.eclipse.dirigible.components.data.management.domain.TableMetadata;
-import org.eclipse.dirigible.components.data.sources.config.DefaultDataSourceName;
-import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
-import org.eclipse.dirigible.database.sql.SqlFactory;
-import org.eclipse.dirigible.database.sql.builders.records.SelectBuilder;
-import org.eclipse.dirigible.repository.api.IRepository;
-import org.eclipse.dirigible.repository.api.IRepositoryStructure;
-import org.eclipse.dirigible.repository.api.IResource;
-import org.eclipse.dirigible.repository.api.RepositoryReadException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
+
+import static org.eclipse.dirigible.components.api.platform.RepositoryFacade.getResource;
 
 /**
  * The Class CsvimProcessor.
@@ -57,16 +62,6 @@ public class CsvimProcessor {
      * The Constant logger.
      */
     private static final Logger logger = LoggerFactory.getLogger(CsvimProcessor.class);
-
-    /**
-     * The Constant DIRIGIBLE_CSV_DATA_BATCH_SIZE.
-     */
-    private static final String DIRIGIBLE_CSV_DATA_BATCH_SIZE = "DIRIGIBLE_CSV_DATA_BATCH_SIZE";
-
-    /**
-     * The Constant DIRIGIBLE_CSV_DATA_BATCH_SIZE_DEFAULT.
-     */
-    private static final int DIRIGIBLE_CSV_DATA_BATCH_SIZE_DEFAULT = 100;
 
     /**
      * The Constant MODULE.
@@ -149,15 +144,29 @@ public class CsvimProcessor {
      * @throws Exception the exception
      */
     public void process(CsvFile csvFile, InputStream content, String dataSourceName) throws Exception {
-        boolean defaultDataSource = null == dataSourceName || dataSourceName.equalsIgnoreCase(defaultDataSourceName);
-        DataSource dataSource =
+        boolean defaultDataSource = isDefaultDataSource(dataSourceName);
+        DirigibleDataSource dataSource =
                 defaultDataSource ? datasourcesManager.getDefaultDataSource() : datasourcesManager.getDataSource(dataSourceName);
         try (Connection connection = dataSource.getConnection()) {
 
             String fileSchema = csvFile.getSchema();
-            String targetSchema =
-                    defaultDataSource ? ("PUBLIC".equalsIgnoreCase(fileSchema) ? connection.getSchema() : fileSchema) : fileSchema;
+            String targetSchema = fileSchema;
+            if (defaultDataSource) {
+                if (("PUBLIC".equals(fileSchema) && dataSource.isOfType(DatabaseSystem.H2))//
+                        || ("public".equals(fileSchema) && dataSource.isOfType(DatabaseSystem.POSTGRESQL))//
+                        || ("dbo".equals(fileSchema) && dataSource.isOfType(DatabaseSystem.MSSQL))//
+                        || (dataSourceName == null && "public".equalsIgnoreCase(fileSchema))) {
+                    // 1. needed for the multitenancy logic - change the schema to the default db schema for this tenant
+                    // 2. when datasource is not specified but the import is for default schema - import into defaultdb
+                    // schema
+                    logger.debug("Changing target schema from [{}] to default data source schema [{}]", targetSchema,
+                            connection.getSchema());
+                    targetSchema = connection.getSchema();
+                }
+            }
+
             if (null != targetSchema) {
+                logger.debug("Updating connection schema to [{}]", targetSchema);
                 connection.setSchema(targetSchema);
             }
             String tableName = csvFile.getTable();
@@ -226,44 +235,54 @@ public class CsvimProcessor {
             if (Boolean.TRUE.equals(csvFile.getUpsert()) && recordsToUpdate.size() > 0) {
                 updateCsvRecords(connection, targetSchema, tableMetadata, recordsToUpdate, csvParser.getHeaderNames(), pkName, csvFile);
             }
-            if (countAll > 0 && csvFile.getSequence() != null) {
-                int sequenceStart = countAll + 1;
+            updateSequence(csvFile, connection, countAll);
+        }
+    }
 
-                PreparedStatement preparedStatement = null;
+    public void updateSequence(CsvFile csvFile, Connection connection, int countAll) throws SQLException {
+        if (countAll > 0 && csvFile.getSequence() != null) {
+            int sequenceStart = countAll + 1;
+
+            PreparedStatement preparedStatement = null;
+            try {
+                String createSequenceSql = SqlFactory.getNative(connection)
+                                                     .create()
+                                                     .sequence(csvFile.getSequence())
+                                                     .start(sequenceStart)
+                                                     .increment(50)
+                                                     .build();
+                preparedStatement = connection.prepareStatement(createSequenceSql);
+                preparedStatement.executeUpdate();
+            } catch (SQLException e) {
+                if (preparedStatement != null) {
+                    preparedStatement.close();
+                }
                 try {
-                    String createSequenceSql = SqlFactory.getNative(connection)
-                                                         .create()
-                                                         .sequence(csvFile.getSequence())
-                                                         .start(sequenceStart)
-                                                         .build();
-                    preparedStatement = connection.prepareStatement(createSequenceSql);
+                    String alterSequenceSql = SqlFactory.getNative(connection)
+                                                        .alter()
+                                                        .sequence(csvFile.getSequence())
+                                                        .restartWith(sequenceStart)
+                                                        .increment(50)
+                                                        .build();
+                    preparedStatement = connection.prepareStatement(alterSequenceSql);
                     preparedStatement.executeUpdate();
-                } catch (SQLException e) {
-                    if (preparedStatement != null) {
-                        preparedStatement.close();
-                    }
-                    try {
-                        String alterSequenceSql = SqlFactory.getNative(connection)
-                                                            .alter()
-                                                            .sequence(csvFile.getSequence())
-                                                            .restartWith(sequenceStart)
-                                                            .build();
-                        preparedStatement = connection.prepareStatement(alterSequenceSql);
-                        preparedStatement.executeUpdate();
-                    } catch (SQLException e1) {
-                        logger.error("Failed to restart database sequence [" + csvFile.getSequence() + "]", e1);
-                    } finally {
-                        if (preparedStatement != null) {
-                            preparedStatement.close();
-                        }
-                    }
+                } catch (SQLException e1) {
+                    logger.error("Failed to restart database sequence [" + csvFile.getSequence() + "]", e1);
                 } finally {
                     if (preparedStatement != null) {
                         preparedStatement.close();
                     }
                 }
+            } finally {
+                if (preparedStatement != null) {
+                    preparedStatement.close();
+                }
             }
         }
+    }
+
+    private boolean isDefaultDataSource(String dataSourceName) {
+        return null == dataSourceName || dataSourceName.equalsIgnoreCase(defaultDataSourceName);
     }
 
     /**
@@ -315,8 +334,10 @@ public class CsvimProcessor {
         if (csvFile.getDelimField() != null && (!csvFile.getDelimField()
                                                         .equals(",")
                 && !csvFile.getDelimField()
-                           .equals(";"))) {
-            String errorMessage = "Only ';' or ',' characters are supported as delimiters for CSV files.";
+                           .equals(";")
+                && !csvFile.getDelimField()
+                           .equals("\t"))) {
+            String errorMessage = "Only ';', ',' or tab characters are supported as delimiters for CSV files.";
             CsvimUtils.logProcessorErrors(errorMessage, ERROR_TYPE_PROCESSOR, csvFile.getFile(), CsvFile.ARTEFACT_TYPE, MODULE);
             throw new Exception(errorMessage);
         }
@@ -333,14 +354,20 @@ public class CsvimProcessor {
         char quote = Objects.isNull(csvFile.getDelimEnclosing()) ? '"'
                 : csvFile.getDelimEnclosing()
                          .charAt(0);
+
+        // import csv format must be aligned with the used export csv format
         CSVFormat csvFormat = CSVFormat.newFormat(delimiter)
                                        .withIgnoreEmptyLines()
-                                       .withQuote(quote)
-                                       .withEscape('\\');
+                                       .withQuoteMode(QuoteMode.ALL_NON_NULL)
+                                       .withQuote(quote);
 
         boolean useHeader = !Objects.isNull(csvFile.getHeader()) && csvFile.getHeader();
         if (useHeader) {
             csvFormat = csvFormat.withFirstRecordAsHeader();
+        }
+        boolean trim = !Objects.isNull(csvFile.getTrim()) && csvFile.getTrim();
+        if (trim) {
+            csvFormat = csvFormat.withTrim(trim);
         }
 
         return csvFormat;
@@ -383,7 +410,7 @@ public class CsvimProcessor {
      * @return the csv data batch size
      */
     private int getCsvDataBatchSize() {
-        return Configuration.getAsInt(DIRIGIBLE_CSV_DATA_BATCH_SIZE, DIRIGIBLE_CSV_DATA_BATCH_SIZE_DEFAULT);
+        return DirigibleConfig.CSV_DATA_BATCH_SIZE.getIntValue();
     }
 
     /**
@@ -401,7 +428,7 @@ public class CsvimProcessor {
         try {
             List<CsvRecord> csvRecords = recordsToProcess.stream()
                                                          .map(e -> new CsvRecord(e, tableModel, headerNames,
-                                                                 csvFile.getDistinguishEmptyFromNull()))
+                                                                 csvFile.getDistinguishEmptyFromNull(), csvFile.getParsedLocale()))
                                                          .collect(Collectors.toList());
             csvProcessor.insert(connection, schema, tableModel, csvRecords, headerNames, csvFile);
         } catch (Exception e) {
@@ -430,7 +457,7 @@ public class CsvimProcessor {
         try {
             List<CsvRecord> csvRecords = recordsToProcess.stream()
                                                          .map(e -> new CsvRecord(e, tableModel, headerNames,
-                                                                 csvFile.getDistinguishEmptyFromNull()))
+                                                                 csvFile.getDistinguishEmptyFromNull(), csvFile.getParsedLocale()))
                                                          .collect(Collectors.toList());
             csvProcessor.update(connection, schema, tableModel, csvRecords, headerNames, pkName, csvFile);
         } catch (SQLException e) {
@@ -516,7 +543,7 @@ public class CsvimProcessor {
         boolean exists = false;
         SelectBuilder selectBuilder = new SelectBuilder(SqlFactory.deriveDialect(connection));
         String sql = selectBuilder.distinct()
-                                  .column("1 " + pkNameForCSVRecord)
+                                  .column("1")
                                   .from(tableName)
                                   .schema(schema)
                                   .where(pkNameForCSVRecord + " = ?")

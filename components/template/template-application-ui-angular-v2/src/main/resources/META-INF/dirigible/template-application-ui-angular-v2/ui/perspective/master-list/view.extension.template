@@ -1,0 +1,6 @@
+{
+    "module": "${projectName}/gen/${genFolderName}/ui/${perspectiveName}/${name}/view.js",
+    "extensionPoint": "application-views",
+    "description": "${projectName} - Application View"#if($perspectiveRole || $roleRead || $roleWrite),
+    "role": "#if($perspectiveRole)${perspectiveRole},#end#if($roleRead)${roleRead},#end#if($roleWrite)${roleWrite}#end"#end
+}

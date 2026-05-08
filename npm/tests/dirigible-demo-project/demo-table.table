@@ -1,0 +1,22 @@
+{
+    "name": "STUDENTS",
+    "type": "TABLE",
+    "columns": [
+        {
+            "name": "ID",
+            "type": "INTEGER",
+            "length": "0",
+            "nullable": false,
+            "primaryKey": true,
+            "defaultValue": "",
+            "unique": false
+        },
+        {
+            "name": "NAME",
+            "type": "VARCHAR",
+            "primaryKey": false,
+            "unique": false,
+            "nullable": false
+        }
+    ]
+}

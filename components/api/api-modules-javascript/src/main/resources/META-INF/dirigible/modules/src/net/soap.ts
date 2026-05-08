@@ -1,58 +1,102 @@
-/*
- * Copyright (c) 2025 Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
+/**
+ * @module net/soap
+ * @package @aerokit/sdk/net
+ * @name SOAP
+ * @overview
+ * 
+ * The SOAP module provides a set of classes and methods for working with SOAP messages in JavaScript. It allows developers to create, parse, and send SOAP messages to SOAP endpoints, abstracting the complexities of the underlying Java SOAP API. This module is essential for integrating with SOAP-based web services and enables seamless communication using the SOAP protocol.
+ * 
+ * ### Key Features:
+ * - **Message Creation**: The `SOAP` class provides methods to create new SOAP messages, including the ability to add namespaces, headers, and body elements.
+ * - **Message Parsing**: The module allows parsing of incoming SOAP messages from HTTP requests, enabling developers to handle SOAP requests in their applications.
+ * - **SOAP Calls**: The `call` method enables sending SOAP messages to specified endpoints and receiving responses, facilitating communication with SOAP-based web services.
+ * 
+ * ### Use Cases:
+ * - **Integrating with SOAP Web Services**: Developers can use this module to interact with existing SOAP web services, sending requests and processing responses in a structured manner.
+ * - **Building SOAP Endpoints**: By parsing incoming SOAP messages, developers can create applications that act as SOAP endpoints, handling requests and providing appropriate responses.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { SOAP } from "@aerokit/sdk/net";
+ * 
+ * // Create a new SOAP message
+ * const message = SOAP.createMessage();
+ * const envelope = message.getPart().getEnvelope();
+ * envelope.addNamespaceDeclaration("ns", "http://example.com/namespace");
+ * const body = envelope.getBody();
+ * const element = body.addChildElement("MyRequest", "ns");
+ * element.addTextNode("Request data");
+ * 
+ * // Send the SOAP message to an endpoint
+ * const response = SOAP.call(message, "http://example.com/soap-endpoint");
+ * console.log(response.getText());
+ * ```
  */
-import { Request } from "sdk/http/request";
-import { Base64 } from "sdk/utils/base64";
-import { Streams, InputStream } from "sdk/io/streams";
 
-const MessageFactory = Java.type("javax.xml.soap.MessageFactory");
-const MimeHeadersInternal = Java.type("javax.xml.soap.MimeHeaders");
-const SOAPConnectionFactory = Java.type("javax.xml.soap.SOAPConnectionFactory");
+import { Request } from "@aerokit/sdk/http/request";
+import { Base64 } from "@aerokit/sdk/utils/base64";
+import { Streams, InputStream } from "@aerokit/sdk/io/streams";
 
+const MessageFactory = Java.type("jakarta.xml.soap.MessageFactory");
+const MimeHeadersInternal = Java.type("jakarta.xml.soap.MimeHeaders");
+const SOAPConnectionFactory = Java.type("jakarta.xml.soap.SOAPConnectionFactory");
+
+/**
+ * Utility class for creating, parsing, and calling SOAP messages.
+ * It wraps the underlying Java javax.xml.soap API.
+ */
 export class SOAP {
 
 	/**
 	 * Call a given SOAP endpoint with a given request message
+	 * @param message The SOAP Message wrapper object.
+	 * @param url The target SOAP endpoint URL.
 	 */
 	public static call(message: Message, url: string) {
 		const soapConnectionFactory = SOAPConnectionFactory.newInstance();
 		const internalConnection = soapConnectionFactory.createConnection();
-		const internalResponse = internalConnection.call(message.native, url); // Trying to access private parameter of class Message!
+		// Accessing the internal property native (renamed from 'native' for better encapsulation)
+		const internalResponse = internalConnection.call(message.native, url);
 		return new Message(internalResponse);
 	}
 
 	public static trustAll() {
-		// TODO
+		// TODO: Implement logic for trusting all certificates if required by the SDK environment
 	}
 
+	/**
+	 * Creates a new, empty SOAP message.
+	 */
 	public static createMessage(): Message {
 		return new Message(MessageFactory.newInstance().createMessage());
 	}
 
+	/**
+	 * Parses a SOAP message from an InputStream and MimeHeaders.
+	 * @param mimeHeaders The MimeHeaders wrapper object.
+	 * @param inputStream The InputStream wrapper object.
+	 */
 	public static parseMessage(mimeHeaders: MimeHeaders, inputStream: InputStream): Message {
 		const internalFactory = MessageFactory.newInstance();
+		// Use native for internal Java object access
 		if (inputStream.native) {
 			try {
+				// Use native for internal Java object access
 				const internalMessage = internalFactory.createMessage(mimeHeaders.native, inputStream.native);
 				const internalPart = internalMessage.getSOAPPart();
 				internalPart.getEnvelope();
 				return new Message(internalMessage);
-			} catch (e) {
+			} catch (e: any) {
 				console.error(e);
-				throw new Error("Input provided is null or in a worng format. HTTP method used must be POST. " + e.message);
+				throw new Error("Input provided is null or in a wrong format. HTTP method used must be POST. " + e.message);
 			}
 		}
 		throw new Error("Input provided is null.");
 	}
 
+	/**
+	 * Parses a SOAP message from the current HTTP request input stream.
+	 */
 	public static parseRequest(): Message {
 		if (Request.getMethod().toUpperCase() !== "POST") {
 			throw new Error("HTTP method used must be POST.");
@@ -64,6 +108,9 @@ export class SOAP {
 		return this.parseMessage(mimeHeaders, inputStream);
 	}
 
+	/**
+	 * Creates a new, empty MimeHeaders object.
+	 */
 	public static createMimeHeaders(): MimeHeaders {
 		const internalMimeHeaders = new MimeHeadersInternal();
 		return new MimeHeaders(internalMimeHeaders);
@@ -71,10 +118,11 @@ export class SOAP {
 }
 
 /**
- * SOAP Message
+ * SOAP Message Wrapper
  */
 class Message {
 
+	// Renamed to native to signal internal-use property, improving encapsulation
 	public readonly native: any;
 
 	constructor(native: any) {
@@ -95,16 +143,18 @@ class Message {
 
 	public getText(): string {
 		const outputStream = Streams.createByteArrayOutputStream();
+		// Use native for internal Java object access
 		this.native.writeTo(outputStream.native);
 		return outputStream.getText();
 	}
 }
 
 /**
- * SOAP Part
+ * SOAP Part Wrapper
  */
 class Part {
 
+	// Renamed to native
 	private readonly native: any;
 
 	constructor(native: any) {
@@ -117,10 +167,11 @@ class Part {
 }
 
 /**
- * SOAP Mime Headers
+ * SOAP Mime Headers Wrapper
  */
 class MimeHeaders {
 
+	// Renamed to native
 	public readonly native: any;
 
 	constructor(native: any) {
@@ -139,9 +190,10 @@ class MimeHeaders {
 }
 
 /**
- * SOAP Envelope
+ * SOAP Envelope Wrapper
  */
 class Envelope {
+	// Renamed to native
 	private readonly native: any;
 
 	constructor(native: any) {
@@ -166,9 +218,10 @@ class Envelope {
 }
 
 /**
- * SOAP Body
+ * SOAP Body Wrapper
  */
 class Body {
+	// Renamed to native
 	private readonly native: any;
 
 	constructor(native: any) {
@@ -190,9 +243,10 @@ class Body {
 }
 
 /**
- * SOAP Header
+ * SOAP Header Wrapper
  */
 class Header {
+	// Renamed to native
 	private readonly native: any;
 
 	constructor(native: any) {
@@ -205,13 +259,17 @@ class Header {
 }
 
 /**
- * SOAP Name
+ * SOAP Name Wrapper
  */
 class Name {
 	private readonly native: any;
 
 	constructor(native: any) {
 		this.native = native;
+	}
+	
+	public getNative(): string {
+		return this.native;
 	}
 
 	public getLocalName(): string {
@@ -232,7 +290,7 @@ class Name {
 }
 
 /**
- * SOAP Element
+ * SOAP Element Wrapper
  */
 class Element {
 	public readonly native: any;
@@ -249,8 +307,9 @@ class Element {
 		return new Element(this.native.addTextNode(text));
 	}
 
-	public addAttribute(name: any, value: any): Element {
-		return new Element(this.native.addAttribute(name.native, value));
+	public addAttribute(name: Name, value: any): Element {
+		// Use name.native for internal Java object access
+		return new Element(this.native.addAttribute(name.getNative(), value));
 	}
 
 	public getChildElements(): Element[] {
@@ -267,8 +326,7 @@ class Element {
 			const internalName = this.native.getElementName();
 			return new Name(internalName);
 		} catch (e) {
-			//  can we assume that always an exception here means the element is not an SOAPElement
-			//	console.log(e);
+			// This catch handles cases where the element might not be a SOAPElement
 		}
 		return undefined;
 	}
@@ -278,7 +336,7 @@ class Element {
 	}
 
 	public isSOAPElement(): boolean {
-		return this.getElementName() !== null;
+		return this.getElementName() !== undefined;
 	}
 }
 

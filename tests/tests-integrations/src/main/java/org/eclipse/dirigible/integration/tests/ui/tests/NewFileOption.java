@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -11,6 +11,8 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 enum NewFileOption {
+    CAMEL_TS_HANDLER("Route Step Handler", "route-step-handler.ts"), //
+    CAMEL_ROUTE("Route Definition", "route-definition.camel"), //
     ENTITY_DATA_MODEL("Entity Data Model", "edm.edm"), //
     JAVASCRIPT_SERVICE("JavaScript Service", "javascript-esm.mjs"), //
     TYPESCRIPT_SERVICE("TypeScript Service", "typescript.ts"), //

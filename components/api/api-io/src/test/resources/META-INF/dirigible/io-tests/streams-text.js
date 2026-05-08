@@ -1,5 +1,5 @@
 
-import { Streams } from 'sdk/io/streams';
+import { Streams } from '@aerokit/sdk/io/streams';
 import { Assert } from 'test/assert';
 
 const baos = Streams.createByteArrayOutputStream();

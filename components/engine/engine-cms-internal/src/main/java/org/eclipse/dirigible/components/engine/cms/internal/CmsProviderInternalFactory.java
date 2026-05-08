@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -32,9 +32,6 @@ import java.util.Map;
  */
 @Component("cms-provider-internal")
 class CmsProviderInternalFactory implements CmsProviderFactory, DisposableBean {
-
-    /** The Constant DIRIGIBLE_CMS_INTERNAL_ROOT_FOLDER. */
-    private static final String DIRIGIBLE_CMS_INTERNAL_ROOT_FOLDER = "DIRIGIBLE_CMS_INTERNAL_ROOT_FOLDER";
 
     /** The Constant PROVIDERS. */
     private static final Map<String, CmsProvider> PROVIDERS = new HashMap<String, CmsProvider>();

@@ -1,5 +1,5 @@
-import { Controller, Post } from "sdk/http"
-import { uuid } from "sdk/utils"
+import { Controller, Post } from "@aerokit/sdk/http"
+import { uuid } from "@aerokit/sdk/utils"
 
 @Controller
 class OrdersService {

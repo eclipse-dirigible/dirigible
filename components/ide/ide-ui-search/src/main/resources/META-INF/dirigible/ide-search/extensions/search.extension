@@ -1,5 +1,0 @@
-{
-    "module": "ide-search/services/search-view.js",
-    "extensionPoint": "ide-view",
-    "description": "Search View"
-}

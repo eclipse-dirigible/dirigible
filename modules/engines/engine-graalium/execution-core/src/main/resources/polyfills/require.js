@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -90,6 +90,10 @@ function fixPath(path, mod) {
     let fixedPath = path;
     if (fixedPath.startsWith("sdk")) {
         fixedPath = fixedPath.substring("sdk".length)
+    }
+
+    if (fixedPath.startsWith("@aerokit/sdk")) {
+        fixedPath = fixedPath.substring("@aerokit/sdk".length)
     }
 
     for (const mod of mods) {

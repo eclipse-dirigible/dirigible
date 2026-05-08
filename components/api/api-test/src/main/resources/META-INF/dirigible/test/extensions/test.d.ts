@@ -1,4 +1,4 @@
-declare module "sdk/test" {
+declare module "@aerokit/sdk/test" {
     
     module assert {
         /**

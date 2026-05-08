@@ -1,5 +1,0 @@
-{
-    "extensionPoint": "ide-template",
-    "module": "template-http-client/template.js",
-    "description": "HTTP Client Template"
-}

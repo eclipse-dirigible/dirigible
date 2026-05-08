@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -388,7 +388,8 @@ public class HttpClientFacade {
         ContentType contentType = shouldParseContentType ? ContentType.parse(contentTypeString) : ContentType.create(contentTypeString);
 
         EntityBuilder entityBuilder = EntityBuilder.create()
-                                                   .setText(httpClientRequestOptions.getText())
+                                                   .setBinary(httpClientRequestOptions.getText()
+                                                                                      .getBytes(StandardCharsets.UTF_8))
                                                    .setContentType(contentType);
         if (httpClientRequestOptions.isCharacterEncodingEnabled()) {
             entityBuilder.setContentEncoding(httpClientRequestOptions.getCharacterEncoding());
@@ -510,7 +511,8 @@ public class HttpClientFacade {
         httpPut.setConfig(config);
         prepareHeaders(httpClientRequestOptions, httpPut);
         EntityBuilder entityBuilder = EntityBuilder.create()
-                                                   .setText(httpClientRequestOptions.getText())
+                                                   .setBinary(httpClientRequestOptions.getText()
+                                                                                      .getBytes(StandardCharsets.UTF_8))
                                                    .setContentType(ContentType.create(httpClientRequestOptions.getContentType()));
         if (httpClientRequestOptions.isCharacterEncodingEnabled()) {
             entityBuilder.setContentEncoding(httpClientRequestOptions.getCharacterEncoding());
@@ -634,7 +636,8 @@ public class HttpClientFacade {
         httpPatch.setConfig(config);
         prepareHeaders(httpClientRequestOptions, httpPatch);
         EntityBuilder entityBuilder = EntityBuilder.create()
-                                                   .setText(httpClientRequestOptions.getText())
+                                                   .setBinary(httpClientRequestOptions.getText()
+                                                                                      .getBytes(StandardCharsets.UTF_8))
                                                    .setContentType(ContentType.create(httpClientRequestOptions.getContentType()));
         if (httpClientRequestOptions.isCharacterEncodingEnabled()) {
             entityBuilder.setContentEncoding(httpClientRequestOptions.getCharacterEncoding());

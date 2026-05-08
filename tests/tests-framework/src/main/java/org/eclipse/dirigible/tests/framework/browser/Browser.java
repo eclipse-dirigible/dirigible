@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -28,6 +28,8 @@ public interface Browser {
 
     void enterTextInElementByAttributePattern(String elementType, String attribute, String pattern, String text);
 
+    void maximizeBrowser();
+
     void enterTextInElementById(String elementId, String text);
 
     void assertElementExistsByTypeAndText(HtmlElementType elementType, String text);
@@ -37,6 +39,8 @@ public interface Browser {
     void assertElementExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text);
 
     void assertElementExistsByTypeAndContainsText(String htmlElementType, String text);
+
+    void assertElementExistsByIdAndContainsText(String id, String text);
 
     void assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text);
 

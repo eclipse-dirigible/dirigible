@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -9,18 +9,45 @@
  */
 package org.eclipse.dirigible.commons.config;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The Enum DirigibleConfig.
  */
 public enum DirigibleConfig {
 
-    EXEC_COMMAND_LOGGING_ENABLED("DIRIGIBLE_EXEC_COMMAND_LOGGING_ENABLED", "false"), //
+    REGISTRY_EXTERNAL_FOLDER("DIRIGIBLE_REGISTRY_EXTERNAL_FOLDER", null), //
+
+    // an example for DIRIGIBLE_REGISTRY_EXTERNAL_FOLDER=/a/b/mydir
+    // if set to true - /a/b/mydir will be replicated to <repo_dir>/mydir
+    // if set to false - /a/b/mydir will be replicated to <repo_dir>
+    REGISTRY_EXTERNAL_FOLDER_AS_SUBFOLDER("DIRIGIBLE_REGISTRY_EXTERNAL_FOLDER_AS_SUBFOLDER", Boolean.FALSE.toString()), //
+    // folders separated by comma, example value: target,bin,node_modules
+    REGISTRY_EXTERNAL_IGNORED_FOLDERS("DIRIGIBLE_REGISTRY_EXTERNAL_IGNORED_FOLDERS", null), //
+    // folders separated by comma, example value: target,bin,node_modules
+    REGISTRY_LOCAL_IGNORED_FOLDERS("DIRIGIBLE_REGISTRY_LOCAL_IGNORED_FOLDERS", null), //
+
+    CSV_DATA_BATCH_SIZE("DIRIGIBLE_CSV_DATA_BATCH_SIZE", "1000"), //
+
+    FLOWABLE_DATABASE_DRIVER("DIRIGIBLE_FLOWABLE_DATABASE_DRIVER", null), //
+    FLOWABLE_DATABASE_URL("DIRIGIBLE_FLOWABLE_DATABASE_URL", null), //
+    FLOWABLE_DATABASE_USER("DIRIGIBLE_FLOWABLE_DATABASE_USER", null), //
+    FLOWABLE_DATABASE_PASSWORD("DIRIGIBLE_FLOWABLE_DATABASE_PASSWORD", null), //
+    FLOWABLE_DATABASE_DATASOURCE_NAME("DIRIGIBLE_FLOWABLE_DATABASE_DATASOURCE_NAME", null), //
+    FLOWABLE_DATABASE_SCHEMA_UPDATE("DIRIGIBLE_FLOWABLE_DATABASE_SCHEMA_UPDATE", Boolean.TRUE.toString()), //
+
+    FLOWABLE_MAIL_SERVER_HOST("DIRIGIBLE_FLOWABLE_MAIL_SERVER_HOST", null), //
+    FLOWABLE_MAIL_SERVER_PORT("DIRIGIBLE_FLOWABLE_MAIL_SERVER_PORT", "587"), //
+    FLOWABLE_MAIL_SERVER_USERNAME("DIRIGIBLE_FLOWABLE_MAIL_SERVER_USERNAME", null), //
+    FLOWABLE_MAIL_SERVER_PASSWORD("DIRIGIBLE_FLOWABLE_MAIL_SERVER_PASSWORD", null), //
+    FLOWABLE_MAIL_SERVER_USE_TLS("DIRIGIBLE_FLOWABLE_MAIL_SERVER_USE_TLS", Boolean.TRUE.toString()), //
+    FLOWABLE_MAIL_SERVER_USE_SSL("DIRIGIBLE_FLOWABLE_MAIL_SERVER_USE_SSL", Boolean.FALSE.toString()), //
+    FLOWABLE_MAIL_SERVER_DEFAULT_FROM("DIRIGIBLE_FLOWABLE_MAIL_SERVER_DEFAULT_FROM", null), //
+
+    EXEC_COMMAND_LOGGING_ENABLED("DIRIGIBLE_EXEC_COMMAND_LOGGING_ENABLED", Boolean.FALSE.toString()), //
 
     SYNCHRONIZER_CROSS_RETRY_COUNT("DIRIGIBLE_SYNCHRONIZER_CROSS_RETRY_COUNT", "10"), //
 

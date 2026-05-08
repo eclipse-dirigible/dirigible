@@ -1,5 +1,0 @@
-{
-    "module": "ide-bpm-workspace/services/bpm-process-definitions-view.js",
-    "extensionPoint": "ide-view",
-    "description": "Business Process Definitions"
-}

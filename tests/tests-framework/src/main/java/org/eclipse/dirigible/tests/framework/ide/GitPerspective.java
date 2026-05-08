@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -33,6 +33,28 @@ public class GitPerspective {
 
     public void cloneRepository(String repositoryUrl, Optional<String> user, Optional<String> pass, Optional<String> branch,
             long waitForCloneMillis) {
+        asyncCloneRepository(repositoryUrl, user, pass, branch);
+
+        SleepUtil.sleepMillis(waitForCloneMillis);
+
+        assertClonedRepository(repositoryUrl);
+    }
+
+    private void assertClonedRepository(String repositoryUrl) {
+        String repositoryName = GitUtil.extractRepoName(repositoryUrl);
+
+        browser.assertElementExistsByTypeAndText(HtmlElementType.ANCHOR, repositoryName);
+    }
+
+    /**
+     * Trigger clone of a repository
+     *
+     * @param repositoryUrl repo URL
+     * @param user user
+     * @param pass password
+     * @param branch branch
+     */
+    public void asyncCloneRepository(String repositoryUrl, Optional<String> user, Optional<String> pass, Optional<String> branch) {
         browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.TITLE, "Clone");
 
         browser.enterTextInElementById("curli", repositoryUrl);
@@ -42,14 +64,22 @@ public class GitPerspective {
         branch.ifPresent(b -> browser.enterTextInElementById("cbi", b));
 
         browser.clickOnElementByAttributePattern(HtmlElementType.BUTTON, HtmlAttribute.LABEL, "Clone");
-
-        SleepUtil.sleepMillis(waitForCloneMillis);
-
-        assertClonedRepository();
     }
 
-    private void assertClonedRepository() {
+    private void assertClonedRepositoryNotification() {
+        // note that this notification is shown for only a few seconds (~4-5s)
         browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER4, "Repository cloned");
     }
-}
 
+    public void asyncCloneRepository(String repositoryUrl) {
+        asyncCloneRepository(repositoryUrl, Optional.empty(), Optional.empty(), Optional.empty());
+    }
+
+    public void asyncCloneRepository(String repositoryUrl, String branch) {
+        asyncCloneRepository(repositoryUrl, Optional.empty(), Optional.empty(), Optional.of(branch));
+    }
+
+    public void asyncCloneRepository(String repositoryUrl, String user, String password) {
+        asyncCloneRepository(repositoryUrl, Optional.of(user), Optional.of(password), Optional.empty());
+    }
+}

@@ -1,5 +1,0 @@
-{
-    "module": "ide-databases/services/transfer-view.js",
-    "extensionPoint": "ide-view",
-    "description": "Transfer view"
-}

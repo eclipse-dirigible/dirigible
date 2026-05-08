@@ -1,5 +1,0 @@
-{
-    "module":"ide-bpm-workspace/services/bpm-task-details-window.js",
-    "extensionPoint":"ide-dialog-window",
-    "description":"User Task Details"
-}

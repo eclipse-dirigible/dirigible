@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -9,11 +9,13 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'WorkspaceService']).controller('PageController', ($scope, $window, $http, WorkspaceService, ViewParameters, ButtonStates) => {
+angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'WorkspaceService', 'GenerateService']).controller('PageController', ($scope, $window, $http, WorkspaceService, GenerateService, ViewParameters, ButtonStates) => {
 	const statusBarHub = new StatusBarHub();
 	const workspaceHub = new WorkspaceHub();
 	const layoutHub = new LayoutHub();
 	const dialogHub = new DialogHub();
+	let genFile = '';
+	let workspace = '';
 	let contents;
 	$scope.changed = false;
 	$scope.nameErrorMessage = 'Allowed characters include all letters, numbers, \'_\', \'-\', \'.\', \':\' and \'"\'. Maximum length is 255.';
@@ -103,14 +105,35 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 
 	angular.element($window).bind('focus', () => { statusBarHub.showLabel('') });
 
+	function getTranslationId(str) {
+		return `${str.replaceAll(' ', '').replaceAll('_', '').replaceAll('.', '').replaceAll(':', '')}`;
+	}
+	// Same migration happens in generateUtils.js
+	function migrateReport(report) {
+		if (!report.hasOwnProperty('tId')) {
+			report['tId'] = getTranslationId(report.alias);
+			report['label'] = report.alias;
+			$scope.fileChanged();
+		}
+		for (let i = 0; i < report.columns.length; i++) {
+			if (!report.columns[i].hasOwnProperty('tId')) {
+				report.columns[i]['tId'] = getTranslationId(report.columns[i]['alias']);
+				report.columns[i]['label'] = report.columns[i]['alias'];
+				$scope.fileChanged();
+			}
+		}
+		return report;
+	}
+
 	const loadFileContents = () => {
 		if (!$scope.state.error) {
 			$scope.state.isBusy = true;
 			WorkspaceService.loadContent($scope.dataParameters.filePath).then((response) => {
 				$scope.$evalAsync(() => {
 					if (response.data === '') $scope.report = {};
-					else $scope.report = response.data;
+					else $scope.report = migrateReport(response.data);
 					contents = JSON.stringify($scope.report, null, 4);
+					$scope.query = $scope.report.query;
 					$scope.state.isBusy = false;
 				});
 			}, (response) => {
@@ -123,6 +146,67 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 			});
 		}
 		loadDatabasesMetadata();
+	};
+
+	$scope.refreshTables = function () {
+		loadDatabasesMetadata();
+	};
+
+	$scope.regenerate = () => {
+		$scope.save();
+		dialogHub.showBusyDialog('Loading data');
+		WorkspaceService.loadContent(genFile).then((response) => {
+			let { models, perspectives, templateId, filePath, workspaceName, projectName, ...params } = response.data;
+			if (!response.data.templateId) {
+				$scope.chooseTemplate(response.data.projectName, response.data.filePath, params);
+			} else {
+				dialogHub.showBusyDialog('Regenerating');
+				$scope.generateFromModel(response.data.projectName, response.data.filePath, response.data.templateId, params);
+			}
+		}, (error) => {
+			console.error(error);
+			dialogHub.closeBusyDialog();
+			dialogHub.showAlert({
+				title: 'Unable to load gen file',
+				message: 'There was an error while loading the gen file.\nPlease look at the console for more information.',
+				type: AlertTypes.Error,
+				preformatted: true,
+			});
+		});
+	};
+
+	$scope.generateFromModel = (project, filePath, templateId, params) => {
+		GenerateService.generateFromModel(
+			workspace,
+			project,
+			filePath,
+			templateId,
+			params
+		).then(() => {
+			dialogHub.closeBusyDialog();
+			statusBarHub.showMessage(`Generated from model '${filePath}'`);
+			dialogHub.postMessage({ topic: 'projects.tree.refresh', data: { partial: true, project: project, workspace: workspace } });
+		}, (error) => {
+			console.error(error);
+			dialogHub.showAlert({
+				title: 'Failed to generate',
+				message: 'Please look at the console for more information',
+				type: AlertTypes.Error,
+				preformatted: false,
+			});
+		});
+	};
+
+	$scope.checkGenFile = () => {
+		WorkspaceService.resourceExists(genFile).then(() => {
+			$scope.$evalAsync(() => {
+				$scope.canRegenerate = true;
+			});
+		}, () => {
+			$scope.$evalAsync(() => {
+				$scope.canRegenerate = false;
+			});
+		});
 	};
 
 	function loadDatabasesMetadata() {
@@ -178,7 +262,6 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		}, (response) => {
 			console.error(response);
 			$scope.$evalAsync(() => {
-				$scope.state.error = true;
 				$scope.errorMessage = `Error saving '${$scope.dataParameters.filePath}'. Please look at the console for more information.`;
 				$scope.state.isBusy = false;
 			});
@@ -188,9 +271,10 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 	$scope.save = (keySet = 'ctrl+s', event) => {
 		event?.preventDefault();
 		if (keySet === 'ctrl+s') {
-			if ($scope.changed && $scope.forms.editor.$valid && !$scope.state.error) {
+			if ($scope.changed && $scope.forms.editor.$valid) {
 				$scope.state.busyText = 'Saving...';
 				$scope.state.isBusy = true;
+				$scope.state.error = false;
 				saveContents(JSON.stringify($scope.report, null, 4));
 			}
 		}
@@ -204,6 +288,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		if (data.path === $scope.dataParameters.filePath) {
 			$scope.$evalAsync(() => {
 				$scope.dataParameters = ViewParameters.get();
+				genFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.gen';
+				workspace = $scope.dataParameters.filePath.substring($scope.dataParameters.filePath.indexOf('/', 1), 1);
 			});
 		};
 	});
@@ -222,17 +308,25 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		}
 	});
 
+	$scope.fileChanged = () => {
+		if (!$scope.changed) {
+			$scope.changed = true;
+			layoutHub.setEditorDirty({
+				path: $scope.dataParameters.filePath,
+				dirty: $scope.changed,
+			});
+		}
+	};
+
 	$scope.$watch('report', () => {
-		if (!$scope.state.error && !$scope.state.isBusy) {
-			const isDirty = contents !== JSON.stringify($scope.report, null, 4);
-			if ($scope.changed !== isDirty) {
-				$scope.changed = isDirty;
-				layoutHub.setEditorDirty({
-					path: $scope.dataParameters.filePath,
-					dirty: isDirty,
-				});
-				$scope.generateQuery();
+		if (!$scope.state.isBusy) {
+			if (!$scope.state.error) {
+				const isDirty = contents !== JSON.stringify($scope.report, null, 4);
+				if ($scope.changed !== isDirty) {
+					$scope.fileChanged();
+				}
 			}
+			$scope.generateQuery();
 		}
 	}, true);
 
@@ -252,6 +346,16 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		dialogHub.showFormDialog({
 			title: 'Add column',
 			form: {
+				'teiLabel': {
+					label: 'Label',
+					controlType: 'input',
+					placeholder: "Enter label",
+					type: 'text',
+					minlength: 1,
+					maxlength: 255,
+					focus: true,
+					required: true
+				},
 				'teiTable': {
 					label: 'Table Alias',
 					controlType: 'input',
@@ -259,7 +363,9 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 					type: 'text',
 					minlength: 1,
 					maxlength: 255,
-					focus: true,
+					inputRules: {
+						excluded: excludedAliases,
+					},
 					required: true
 				},
 				'teiAlias': {
@@ -282,7 +388,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 					minlength: 1,
 					maxlength: 255,
 					inputRules: {
-						excluded: excludedAliases,
+						excluded: excludedNames,
 					},
 					required: true
 				},
@@ -320,6 +426,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 				$scope.$evalAsync(() => {
 					if (!$scope.report.columns) $scope.report.columns = [];
 					$scope.report.columns.push({
+						tId: getTranslationId(form['teiAlias']),
+						label: form['teiLabel'],
 						table: form['teiTable'],
 						alias: form['teiAlias'],
 						name: form['teiName'],
@@ -356,6 +464,17 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		dialogHub.showFormDialog({
 			title: 'Add column',
 			form: {
+				'teiLabel': {
+					label: 'Label',
+					controlType: 'input',
+					placeholder: "Enter label",
+					type: 'text',
+					minlength: 1,
+					maxlength: 255,
+					value: $scope.report.columns[index].label,
+					focus: true,
+					required: true
+				},
 				'teiTable': {
 					label: 'Table Alias',
 					controlType: 'input',
@@ -367,7 +486,6 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 						excluded: excludedAliases,
 					},
 					value: $scope.report.columns[index].table,
-					focus: true,
 					required: true
 				},
 				'teiAlias': {
@@ -391,7 +509,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 					minlength: 1,
 					maxlength: 255,
 					inputRules: {
-						excluded: excludedAliases,
+						excluded: excludedNames,
 					},
 					value: $scope.report.columns[index].name,
 					required: true
@@ -428,6 +546,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		}).then((form) => {
 			if (form) {
 				$scope.$evalAsync(() => {
+					$scope.report.columns[$scope.editColumnIndex].tId = getTranslationId(form['teiAlias']);
+					$scope.report.columns[$scope.editColumnIndex].label = form['teiLabel'];
 					$scope.report.columns[$scope.editColumnIndex].table = form['teiTable'];
 					$scope.report.columns[$scope.editColumnIndex].alias = form['teiAlias'];
 					$scope.report.columns[$scope.editColumnIndex].name = form['teiName'];
@@ -1267,7 +1387,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 			}
 		}
 		$scope.report.query = $scope.query;
-	}
+	};
 
 	$scope.dataParameters = ViewParameters.get();
 	if (!$scope.dataParameters.hasOwnProperty('filePath')) {
@@ -1276,7 +1396,12 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 	} else if (!$scope.dataParameters.hasOwnProperty('contentType')) {
 		$scope.state.error = true;
 		$scope.errorMessage = 'The \'contentType\' data parameter is missing.';
-	} else loadFileContents();
+	} else {
+		genFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.gen';
+		workspace = $scope.dataParameters.filePath.substring($scope.dataParameters.filePath.indexOf('/', 1), 1);
+		loadFileContents();
+		$scope.checkGenFile();
+	}
 
 	// Begin Base Table Section -------------------------------------------------------------------------------
 	$scope.setBaseTable = () => {

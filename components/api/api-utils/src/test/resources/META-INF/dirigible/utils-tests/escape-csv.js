@@ -1,5 +1,5 @@
 
-import { Escape } from 'sdk/utils/escape';
+import { Escape } from '@aerokit/sdk/utils/escape';
 import { Assert } from 'test/assert';
 
 const input = '1,2,3,4,5,6';

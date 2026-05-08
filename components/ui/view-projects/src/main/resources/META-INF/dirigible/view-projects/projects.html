@@ -1,6 +1,6 @@
 <!--
 
-    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
 
     All rights reserved. This program and the accompanying materials
     are made available under the terms of the Eclipse Public License v2.0
@@ -20,13 +20,12 @@
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
         <title config-title></title>
         <script type="text/javascript" src="configs/projects-view.js"></script>
-        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=editor-js,editors-service,jstree-js"></script>
+        <meta name="platform-links" category="ng-view,ng-editor,ng-editors-service,ng-jstree">
         <script type="text/javascript" src="/services/web/service-publisher/publisher.js"></script>
         <script type="text/javascript" src="/services/web/service-template/templates.js"></script>
         <script type="text/javascript" src="/services/web/service-generate/generate.js"></script>
         <script type="text/javascript" src="/services/web/service-transport/transport.js"></script>
         <script type="text/javascript" src="/services/web/service-actions/actions.js"></script>
-        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?ids=view-css,jstree-css" />
         <script type="text/javascript" src="js/projects.js"></script>
     </head>
 
@@ -56,6 +55,7 @@
             <bk-toolbar-overflow>
                 <bk-button state="transparent" label="Create project" glyph="sap-icon--create" is-overflow="true" ng-click="createProject()"></bk-button>
                 <bk-button state="transparent" label="Duplicate project" glyph="sap-icon--duplicate" is-overflow="true" ng-click="duplicateProject()"></bk-button>
+                <bk-button state="transparent" label="Import projects" glyph="sap-icon--upload" is-overflow="true" ng-click="importProject()"></bk-button>
                 <bk-button state="transparent" label="Export projects" glyph="sap-icon--download-from-cloud" is-overflow="true" ng-click="exportProjects()"></bk-button>
                 <bk-toolbar-separator></bk-toolbar-separator>
                 <bk-button state="transparent" label="Create workspace" glyph="sap-icon--add" is-overflow="true" ng-click="createWorkspace()"></bk-button>

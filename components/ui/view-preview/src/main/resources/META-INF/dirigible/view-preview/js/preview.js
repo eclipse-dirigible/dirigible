@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -56,9 +56,11 @@ previewView.controller('PreviewController', ($scope, $document, ButtonStates) =>
     };
 
     $scope.reload = () => {
-        if (iframe.contentDocument) {
-            iframe.contentDocument.location.reload(true);
-        }
+		setTimeout(() => {
+            if (iframe.contentDocument) {
+                iframe.contentDocument.location.reload(true);
+            }
+		}, 1000);
     };
 
     $scope.getParams = () => JSON.stringify($scope.customParameters);
@@ -122,7 +124,7 @@ previewView.controller('PreviewController', ($scope, $document, ButtonStates) =>
         if (isOData) {
             url = window.location.protocol + '//' + window.location.host + '/odata/v2/';
         } else if (isOpenAPI) {
-            url = `${window.location.protocol}//${window.location.host}/services/web/ide-swagger/ui/index.html?openapi=/services/web${resourcePath}`;
+            url = `${window.location.protocol}//${window.location.host}/services/web/view-swagger/ui/index.html?openapi=/services/web${resourcePath}`;
         } else {
             switch (type) {
                 case 'rhino':
@@ -181,6 +183,7 @@ previewView.controller('PreviewController', ($scope, $document, ButtonStates) =>
                 case 'hdi':
                 case 'hdbtable':
                 case 'hdbstructurе':
+                case 'hdbstructure':
                 case 'hdbview':
                 case 'hdbtablefunction':
                 case 'hdbprocedure':

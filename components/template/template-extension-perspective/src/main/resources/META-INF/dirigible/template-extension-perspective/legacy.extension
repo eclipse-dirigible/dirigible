@@ -1,5 +1,0 @@
-{
-	"extensionPoint": "ide-template",
-	"module": "template-extension-perspective/template.js",
-	"description": "Extension Perspective Template"
-}

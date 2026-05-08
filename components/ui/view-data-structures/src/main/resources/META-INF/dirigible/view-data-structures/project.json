@@ -1,3 +1,5 @@
 {
-    "guid": "ide-data-structures"
+    "guid": "view-data-structures",
+    "dependencies": [],
+    "actions": []
 }

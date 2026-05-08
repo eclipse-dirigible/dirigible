@@ -1,21 +1,64 @@
-/*
- * Copyright (c) 2025 Eclipse Dirigible contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v2.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v20.html
- *
- * SPDX-FileCopyrightText: Eclipse Dirigible contributors
- * SPDX-License-Identifier: EPL-2.0
+/**
+ * @module mongodb/dao
+ * @package @aerokit/sdk/mongodb
+ * @name DAO
+ * @overview
+ * 
+ * The DAO (Data Access Object) module provides a high-level abstraction for performing CRUD operations on MongoDB collections. It defines a DAO class that encapsulates the logic for interacting with MongoDB, including entity validation, transformation, and database operations. The module also includes a factory function for creating DAO instances based on ORM definitions.
+ * 
+ * ### Key Features:
+ * - **Entity Validation**: The DAO class includes methods for validating entities against mandatory properties defined in the ORM.
+ * - **Entity Transformation**: The `createNoSQLEntity` method transforms JavaScript objects into a format suitable for MongoDB storage, applying any necessary transformations defined in the ORM.
+ * - **CRUD Operations**: The DAO class provides methods for inserting, updating, deleting, and querying entities in MongoDB collections.
+ * - **Logging**: The module integrates with the logging system to provide detailed logs of database operations and errors.
+ * 
+ * ### Use Cases:
+ * - **Data Management**: Developers can use the DAO module to manage data stored in MongoDB collections, performing CRUD operations with ease.
+ * - **ORM Integration**: By defining ORM specifications, developers can leverage the DAO module to ensure consistent data handling and validation across their application.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { dao } from "@aerokit/sdk/mongodb";
+ * 
+ * // Define an ORM specification for a "users" collection
+ * const userOrm = {
+ *   table: "users",
+ *   primaryKey: { name: "id" },
+ *   mandatoryProperties: [
+ *     { name: "name", type: "VARCHAR" },
+ *     { name: "email", type: "VARCHAR" }
+ *   ],
+ *   optionalProperties: [
+ *     { name: "age", type: "INTEGER" }
+ *   ]
+ * };
+ * 
+ * // Create a DAO instance for the "users" collection
+ * const userDao = dao(userOrm);
+ * 
+ * // Insert a new user entity
+ * const newUserId = userDao.insert({ name: "Alice", email: "alice@example.com" });
+ * 
+ * // Find the inserted user entity
+ * const user = userDao.find(newUserId);
+ * console.log("User found:", user);
+ * 
+ * // Update the user entity
+ * user.age = 30;
+ * userDao.update(user);
+ * 
+ * // Delete the user entity
+ * userDao.remove(newUserId);
+ * ```
  */
+
 "use strict";
 
-import { globals } from "sdk/core"
+import { globals } from "@aerokit/sdk/core"
 import { Client } from "./client"
-import * as dirigibleOrm from "sdk/db/orm";
-import { Logging } from "sdk/log";
-import { Configurations } from "sdk/core";
+import * as dirigibleOrm from "@aerokit/sdk/db/orm";
+import { Logging } from "@aerokit/sdk/log";
+import { Configurations } from "@aerokit/sdk/core";
 
 const dbUri = Configurations.get("DIRIGIBLE_MONGODB_CLIENT_URI", "mongodb://localhost:27017");
 
@@ -144,7 +187,7 @@ export class DAO {
                     try {
                         this.remove(dbEntity[this.orm.getPrimaryKey().name]);
                     } catch (err) {
-                        this.$log.error('Could not rollback changes after failed {}[{}}] insert. ', this.orm.table, dbEntity[this.orm.getPrimaryKey().name]);
+                        this.$log.error('Could not rollback changes after failed {}[{}] insert. ', this.orm.table, dbEntity[this.orm.getPrimaryKey().name], err);
                     }
                 }
                 throw e;
@@ -189,7 +232,7 @@ export class DAO {
     
             return this;
         } catch (e) {
-            this.$log.error('Updating {}[{}] failed', this.orm.table, entity !== undefined ? entity[this.orm.getPrimaryKey().name] : entity);
+            this.$log.error('Updating {}[{}] failed', this.orm.table, entity !== undefined ? entity[this.orm.getPrimaryKey().name] : entity, e);
             throw e;
         }
     };
@@ -234,7 +277,7 @@ export class DAO {
                 collection.remove({ "_id": id });
     
             } catch (e) {
-                this.$log.error('Deleting {}[{}] entity failed', this.orm.table, id);
+                this.$log.error('Deleting {}[{}] entity failed', this.orm.table, id, e);
                 throw e;
             }
     
@@ -305,7 +348,7 @@ export class DAO {
             }
             return entity;
         } catch (e) {
-            this.$log.error("Finding {}[{}] entitiy failed.", this.orm.table, id);
+            this.$log.error("Finding {}[{}] entitiy failed.", this.orm.table, id, e);
             throw e;
         }
     }
@@ -319,7 +362,7 @@ export class DAO {
             var collection = db.getCollection(this.orm.table);
             count = collection.count();
         } catch (e) {
-            this.$log.error('Counting {} entities failed', e, this.orm.table);
+            this.$log.error('Counting {} entities failed', this.orm.table, e);
             // e.errContext = parametericStatement.toString(); // TODO: parametericStatement?
             throw e;
         }
@@ -420,7 +463,7 @@ export class DAO {
     
             return entities;
         } catch (e) {
-            this.$log.error("Listing {} entities failed.", this.orm.table);
+            this.$log.error("Listing {} entities failed.", this.orm.table, e);
             throw e;
         }
     }

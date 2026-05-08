@@ -95,30 +95,14 @@ angular.module('flowableModeler').controller('FlowableFormReferencePopupCtrl',
             
             var modelMetaData = editorManager.getBaseModelData();
             var json = editorManager.getModel();
-            json = JSON.stringify(json);
-
-            var params = {
-                modeltype: modelMetaData.model.modelType,
-                json_xml: json,
-                name: modelMetaData.name,
-                key: modelMetaData.key,
-                description: modelMetaData.description,
-                newversion: false,
-                lastUpdated: modelMetaData.lastUpdated
-            };
 
             // Update
             $http({ method: 'POST',
-                data: params,
+                data: json,
                 ignoreErrors: true,
-                headers: {'Accept': 'application/json',
-                          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'},
-                transformRequest: function (obj) {
-                    var str = [];
-                    for (var p in obj) {
-                        str.push(encodeURIComponent(p) + "=" + encodeURIComponent(obj[p]));
-                    }
-                    return str.join("&");
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
                 },
                 url: FLOWABLE.URL.putModel(modelMetaData.modelId)})
 
@@ -180,30 +164,14 @@ angular.module('flowableModeler').controller('FlowableFormReferencePopupCtrl',
                 
                 var modelMetaData = editorManager.getBaseModelData();
                 var json = editorManager.getModel();
-                json = JSON.stringify(json);
-
-                var params = {
-                    modeltype: modelMetaData.model.modelType,
-                    json_xml: json,
-                    name: modelMetaData.name,
-                    key: modelMetaData.key,
-                    description: modelMetaData.description,
-                    newversion: false,
-                    lastUpdated: modelMetaData.lastUpdated
-                };
 
                 // Update
                 $http({ method: 'POST',
-                    data: params,
+                    data: json,
                     ignoreErrors: true,
-                    headers: {'Accept': 'application/json',
-                              'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'},
-                    transformRequest: function (obj) {
-                        var str = [];
-                        for (var p in obj) {
-                            str.push(encodeURIComponent(p) + "=" + encodeURIComponent(obj[p]));
-                        }
-                        return str.join("&");
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
                     },
                     url: FLOWABLE.URL.putModel(modelMetaData.modelId)})
 

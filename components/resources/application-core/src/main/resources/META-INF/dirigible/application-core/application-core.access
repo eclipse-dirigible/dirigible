@@ -1,0 +1,12 @@
+{
+    "constraints": [
+        {
+            "scope": "HTTP",
+            "path": "/application-core/",
+            "method": "GET",
+            "roles": [
+                "Public"
+            ]
+        }
+    ]
+}

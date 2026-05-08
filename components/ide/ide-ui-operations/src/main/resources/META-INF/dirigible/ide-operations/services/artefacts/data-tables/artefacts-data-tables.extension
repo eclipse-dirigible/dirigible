@@ -1,5 +1,0 @@
-{
-    "module": "ide-operations/services/artefacts/data-tables/artefacts-data-tables.mjs",
-    "extensionPoint": "ide-operations-artefacts",
-    "description": "Data Tables Artefacts Extension"
-}

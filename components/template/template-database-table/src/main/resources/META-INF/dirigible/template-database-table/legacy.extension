@@ -1,5 +1,0 @@
-{
-    "extensionPoint": "ide-template",
-    "module": "template-database-table/template.js",
-    "description": "Database Table Template"
-}

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -14,6 +14,8 @@ import org.assertj.db.type.AssertDbConnection;
 import org.assertj.db.type.AssertDbConnectionFactory;
 import org.assertj.db.type.Table;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.database.DatabaseSystem;
+import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.springframework.stereotype.Component;
@@ -37,13 +39,40 @@ public class DBAsserter {
     }
 
     public Table getDefaultDbTable(String tableName) {
+        String schemaName = getDefaultDBDefaultSchema();
+        return getDefaultDbTable(schemaName, tableName);
+    }
+
+    private String getDefaultDBDefaultSchema() {
+        DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
+
+        if (dataSource.isOfType(DatabaseSystem.H2)) {
+            return "PUBLIC";
+        }
+
+        if (dataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
+            return "public";
+        }
+
+        if (dataSource.isOfType(DatabaseSystem.MSSQL)) {
+            return "dbo";
+        }
+
+        throw new IllegalStateException("Missing default schema for datasource " + dataSource);
+    }
+
+    public Table getDefaultDbTable(String schemaName, String tableName) {
         AssertDbConnection connection = getDefaultDbAssertDbConnection();
-        DataSource dataSource = dataSourcesManager.getDefaultDataSource();
+        DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
         ISqlDialect dialect = getDefaultDbDialect(dataSource);
+
         char escapeSymbol = dialect.getEscapeSymbol();
         String escapedTableName = escapeSymbol + tableName + escapeSymbol;
 
-        return connection.table(escapedTableName)
+        String escapedSchemaName = escapeSymbol + schemaName + escapeSymbol;
+
+        String fullTableName = escapedSchemaName + "." + escapedTableName;
+        return connection.table(fullTableName)
                          .build();
     }
 

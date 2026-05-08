@@ -1,0 +1,66 @@
+#set($dollar = '$')
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'])
+    .config(['EntityServiceProvider', (EntityServiceProvider) => {
+        EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Controller.ts';
+    }])
+    .controller('PageController', ($scope, EntityService, LocaleService, ViewParameters) => {
+        const Dialogs = new DialogHub();
+		let params = ViewParameters.get();
+		if (Object.keys(params).length) {         
+            const filterEntity = params.filterEntity ?? {};
+
+			$scope.filter = {};
+#foreach ($parameter in $parameters)
+			if (filterEntity.${parameter.name}) {
+#if($parameter.typeTypescript == 'Date')
+				$scope.filter.${parameter.name} = new Date(filterEntity.${parameter.name});
+#else
+				$scope.filter.${parameter.name} = filterEntity.${parameter.name};
+#end
+			}
+#end
+		}
+
+        $scope.loadPage = (filter) => {
+            if (!filter && $scope.filter) {
+                filter = $scope.filter;
+            }
+            let request;
+            if (filter) {
+                request = EntityService.search(filter);
+            } else {
+                request = EntityService.list();
+            }
+            request.then((response) => {
+#if($hasDates)
+                response.data.forEach(e => {
+#foreach ($column in $columns)
+#if($column.typeTypescript == 'Date')
+                    if (e['${column.alias}']) {
+                        e['${column.alias}'] = new Date(e['${column.alias}']);
+                    }
+#end
+#end
+                });
+
+#end
+                $scope.data = response.data;
+                setTimeout(() => {
+                    window.print();
+                }, 250);
+            }, (error) => {
+                const message = error.data ? error.data.message : '';
+                Dialogs.showAlert({
+                    title: LocaleService.t('$projectName:${tprefix}.t.${tId}'),
+                    message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLF', { name: '$t($projectName:${tprefix}.t.${tId})', message: message }),
+                    type: AlertTypes.Error
+                });
+                console.error('EntityService:', error);
+            });
+        };
+        $scope.loadPage($scope.filter);
+
+        window.onafterprint = () => {
+            Dialogs.closeWindow({ path: viewData.path });
+        }
+    });

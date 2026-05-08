@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -28,20 +28,45 @@ ideBpmProcessJobsView.controller('IDEBpmProcessJobsViewController', ($scope, $ht
             });
     };
 
+    $scope.getRelativeTime = (dateTimeString) => {
+        return formatRelativeTime(new Date(dateTimeString));
+    };
+
     $scope.openDialog = (job) => {
-        Dialogs.showAlert({
-            title: job.exceptionMessage,
-            message: job.exceptionStacktrace,
-            type: AlertTypes.Error,
-            preformatted: true,
+        Dialogs.showWindow({
+            id: 'bpm-process-jobs-details',
+            params: {
+                job: job,
+            },
+            closeButton: true,
         });
     };
 
     Dialogs.addMessageListener({
         topic: 'bpm.instance.selected',
         handler: (data) => {
-            const processInstanceId = data.instance;
-            $scope.fetchData(processInstanceId);
+            if (data.deselect) {
+                $scope.$evalAsync(() => {
+                    $scope.jobsList.length = 0;
+                    $scope.currentProcessInstanceId = null;
+                });
+            } else {
+                $scope.fetchData(data.instance);
+            }
+        }
+    });
+
+    Dialogs.addMessageListener({
+        topic: 'bpm.historic.instance.selected',
+        handler: (data) => {
+            if (data.deselect) {
+                $scope.$evalAsync(() => {
+                    $scope.jobsList.length = 0;
+                    $scope.currentProcessInstanceId = null;
+                });
+            } else {
+                $scope.fetchData(data.instance);
+            }
         }
     });
 });

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -12,22 +12,18 @@ package org.eclipse.dirigible.components.odata.domain;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-
+import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
+import org.eclipse.dirigible.components.base.artefact.Artefact;
+import org.eclipse.dirigible.components.odata.api.ODataAssociation;
+import org.eclipse.dirigible.components.odata.api.ODataEntity;
+import com.google.gson.annotations.Expose;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
-
-import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
-import org.eclipse.dirigible.components.base.artefact.Artefact;
-import org.eclipse.dirigible.components.odata.api.ODataAssociation;
-import org.eclipse.dirigible.components.odata.api.ODataEntity;
-
-import com.google.gson.annotations.Expose;
 
 /**
  * The OData Model.
@@ -51,8 +47,7 @@ public class OData extends Artefact {
     private String namespace;
 
     /** The raw content. */
-    @Column(name = "HDB_CONTENT", columnDefinition = "CLOB")
-    @Lob
+    @Column(name = "HDB_CONTENT", columnDefinition = "TEXT")
     private String content;
 
     /** The entities. */

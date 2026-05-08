@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -18,13 +18,22 @@ exports.getMenu = () => ({
 	items: [
 		{
 			label: 'File',
+			translation: {
+				key: 'perspective-workbench:file',
+			},
 			items: [
 				{
 					label: 'New',
+					translation: {
+						key: 'common:new',
+					},
 					order: 1,
 					items: [
 						{
 							label: 'Project',
+							translation: {
+								key: 'perspective-workbench:project',
+							},
 							order: 1,
 							action: 'event',
 							data: {
@@ -35,6 +44,9 @@ exports.getMenu = () => ({
 				},
 				{
 					label: 'Save All',
+					translation: {
+						key: 'perspective-workbench:saveAll',
+					},
 					order: 2,
 					action: 'event',
 					data: {
@@ -44,6 +56,9 @@ exports.getMenu = () => ({
 				},
 				{
 					label: 'Publish All',
+					translation: {
+						key: 'perspective-workbench:publishAll',
+					},
 					order: 3,
 					action: 'event',
 					data: {
@@ -52,6 +67,9 @@ exports.getMenu = () => ({
 				},
 				{
 					label: 'Unpublish All',
+					translation: {
+						key: 'perspective-workbench:unpublishAll',
+					},
 					order: 4,
 					action: 'event',
 					data: {
@@ -61,6 +79,9 @@ exports.getMenu = () => ({
 				},
 				{
 					label: 'Export All',
+					translation: {
+						key: 'perspective-workbench:exportAll',
+					},
 					order: 5,
 					action: 'event',
 					data: {

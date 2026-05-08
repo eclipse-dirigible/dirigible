@@ -1,0 +1,224 @@
+#set($dollar = '$')
+#set($hasDropdowns = false)
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+#set($hasDropdowns = true)
+#end
+#end
+#foreach ($property in $filter.properties)
+#if($property.widgetType == "DROPDOWN")
+#set($hasDropdowns = true)
+#end
+#end
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'])
+	.config(['EntityServiceProvider', (EntityServiceProvider) => {
+		EntityServiceProvider.baseUrl = '/services/ts/${projectName}/gen/${genFolderName}/api/${perspectiveName}/${name}Controller.ts';
+	}])
+	.controller('PageController', (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end, EntityService, LocaleService) => {
+		const Dialogs = new DialogHub();
+
+		$scope.filter = {};
+
+		function resetPagination() {
+			$scope.dataPage = 1;
+			$scope.dataCount = 0;
+			$scope.dataLimit = 20;
+		}
+		resetPagination();
+
+		//-----------------Events-------------------//
+		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.filter', handler: (data) => {
+			$scope.filter = data;
+			${dollar}scope.loadPage(1);
+		}});
+		//-----------------Events-------------------//
+
+		$scope.loadPage = (pageNumber) => {
+			const listFilter = {
+				$filter: {
+					offset: (pageNumber - 1) * $scope.dataLimit,
+					limit: $scope.dataLimit,
+					...$scope.filter
+				}
+			};
+			$scope.dataPage = pageNumber;
+			EntityService.count($scope.filter).then((resp) => {
+				$scope.dataCount = resp.data.count;
+				EntityService.list(listFilter).then((response) => {
+#if($hasDates)
+					response.data.forEach(e => {
+#foreach ($property in $properties)
+#if($property.isDateType)
+						if (e.${property.name}) {
+							e.${property.name} = new Date(e.${property.name});
+						}
+#end
+#end
+					});
+
+#end
+					$scope.data = response.data;
+				}, (error) => {
+					const message = error.data ? error.data.message : '';
+					Dialogs.showAlert({ title: LocaleService.t('$projectName:${tprefix}.t.${dataName}'), message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLF', { name: '$t($projectName:${tprefix}.t.${dataName})', message: message }), type: AlertTypes.Error });
+					console.error('EntityService:', error);
+				});
+			}, (error) => {
+				const message = error.data ? error.data.message : '';
+				Dialogs.showAlertError({ title: LocaleService.t('$projectName:${tprefix}.t.${dataName}'), message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToCount', { name: '$t($projectName:${tprefix}.t.${dataName})', message: message }), type: AlertTypes.Error });
+				console.error('EntityService:', error);
+			});
+		};
+		$scope.loadPage($scope.dataPage);
+
+		$scope.selectEntity = (entity) => {
+			$scope.selectedEntity = entity;
+		};
+
+		$scope.openDetails = (entity) => {
+			$scope.selectedEntity = entity;
+			Dialogs.showWindow({
+				id: '${name}-details',
+				params: {
+					action: 'select',
+					entity: entity,
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+					options${property.name}: $scope.options${property.name},
+#end
+#end
+				},
+			});
+		};
+
+		$scope.openFilter = () => {
+			Dialogs.showWindow({
+				id: '${name}-details-filter',
+				params: {
+					action: 'filter',
+					filter: $scope.filter,
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+					options${property.name}: $scope.options${property.name},
+#end
+#end
+#foreach ($property in $filter.properties)
+#if($property.widgetType == "DROPDOWN")
+					options${property.name}: $scope.options${property.name},
+#end
+#end
+				}
+			});
+		};
+
+#if($hasDropdowns)
+
+		//----------------Dropdowns-----------------//
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+		$scope.options${property.name} = [];
+#end
+#end
+#foreach ($property in $filter.properties)
+#if($property.widgetType == "DROPDOWN")
+		$scope.options${property.name} = [];
+#end
+#end
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+
+		${dollar}http.get('${property.widgetDropdownControllerUrl}').then((response) => {
+			${dollar}scope.options${property.name} = response.data.map(e => ({
+				value: e.${property.widgetDropDownKey},
+				text: e.${property.widgetDropDownValue}
+			}));
+		}, (error) => {
+			console.error(error);
+			const message = error.data ? error.data.message : '';
+			Dialogs.showAlert({
+				title: '${property.name}',
+				message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLoad', { message: message }),
+				type: AlertTypes.Error
+			});
+		});
+#end
+#end
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+
+		${dollar}http.get('${property.widgetDropdownControllerUrl}').then((response) => {
+			${dollar}scope.options${property.name} = response.data.map(e => ({
+				value: e.${property.widgetDropDownKey},
+				text: e.${property.widgetDropDownValue}
+			}));
+		}, (error) => {
+			console.error(error);
+			const message = error.data ? error.data.message : '';
+			Dialogs.showAlert({
+				title: '${property.name}',
+				message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLoad', { message: message }),
+				type: AlertTypes.Error
+			});
+		});
+#end
+#end
+#foreach ($property in $filter.properties)
+#if($property.widgetType == "DROPDOWN")
+
+		${dollar}http.get('${property.widgetDropdownControllerUrl}').then((response) => {
+			${dollar}scope.options${property.name} = response.data.map(e => ({
+				value: e.${property.widgetDropDownKey},
+				text: e.${property.widgetDropDownValue}
+			}));
+		}, (error) => {
+			console.error(error);
+			const message = error.data ? error.data.message : '';
+			Dialogs.showAlert({
+				title: '${property.name}',
+				message: LocaleService.t('$projectName:${tprefix}.messages.error.unableToLoad', { message: message }),
+				type: AlertTypes.Error
+			});
+		});
+#end
+#end
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+		${dollar}scope.options${property.name}Value = (optionKey) => {
+#if($property.widgetDropDownMultiSelect)
+			const values = [];
+			if (Array.isArray(optionKey)) {
+				optionKey = optionKey.join();
+			}
+			optionKey.split(',').map(e => parseInt(e)).forEach(key => {
+				const found = ${dollar}scope.options${property.name}.find(e => e.value === key);
+				if (found) {
+					values.push(found.text);
+				}
+			});
+			return values.join(', ');
+#else
+			for (let i = 0; i < ${dollar}scope.options${property.name}.length; i++) {
+				if (${dollar}scope.options${property.name}[i].value === optionKey) {
+					return ${dollar}scope.options${property.name}[i].text;
+				}
+			}
+			return null;
+#end
+		};
+#end
+#end
+#foreach ($property in $filter.properties)
+#if($property.widgetType == "DROPDOWN")
+		${dollar}scope.options${property.name}Value = (optionKey) => {
+			for (let i = 0; i < ${dollar}scope.options${property.name}.length; i++) {
+				if (${dollar}scope.options${property.name}[i].value === optionKey) {
+					return ${dollar}scope.options${property.name}[i].text;
+				}
+			}
+			return null;
+		};
+#end
+#end
+		//----------------Dropdowns-----------------//
+#end
+	});

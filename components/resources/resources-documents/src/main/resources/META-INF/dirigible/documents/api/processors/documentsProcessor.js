@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -13,9 +13,9 @@ import * as objectUtils from "../../utils/cmis/object";
 import * as folderUtils from "../../utils/cmis/folder";
 import * as documentUtils from "../../utils/cmis/document";
 import * as contentTypeHandler from "../../utils/content-type-handler";
-import { registry } from "sdk/platform";
+import { registry } from "@aerokit/sdk/platform";
 import { formatPath } from "../../utils/string";
-import { user } from "sdk/security";
+import { user } from "@aerokit/sdk/security";
 
 export const get = (path) => {
 	let document = documentUtils.getDocument(path);

@@ -1,5 +1,0 @@
-{
-	"module": "ide-documents-ext-content-type-ms/extensions/content-type.js",
-	"extensionPoint": "ide-documents-content-type",
-	"description": "Content Type Extension for MS Documents"
-}

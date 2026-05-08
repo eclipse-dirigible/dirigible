@@ -1,37 +1,141 @@
 #set($dollar = '$')
-angular.module('forms', ['blimpKit', 'platformView']).controller('FormController', ($scope, $http, ViewParameters) => {
-    $scope.forms = {
+angular.module('forms', ['blimpKit', 'platformView', 'platformLocale', 'platformDialogs']).directive('modelToNumber', () => ({
+    require: 'ngModel',
+    link: (_scope, _element, _attrs, ngModel) => {
+        ngModel.${dollar}formatters.push((value) => {
+            return parseFloat(value);
+        });
+    }
+})).directive('modelToDate', () => ({
+    require: 'ngModel',
+    link: (_scope, _element, _attrs, ngModel) => {
+        ngModel.${dollar}formatters.push((value) => {
+            if (value instanceof Date) return value;
+            return new Date(value);
+        });
+    }
+})).directive('modelArrayToString', () => ({
+    require: 'ngModel',
+    link: (_scope, _element, _attrs, ngModel) => {
+        ngModel.${dollar}formatters.push((value) => {
+            if (Array.isArray(value)) return `"${value.join('", "')}"`;
+            return value;
+        });
+    }
+})).constant('Dialogs', new DialogHub()).controller('FormController', ($scope, $http, Dialogs, LocaleService, ViewParameters) => {
+    $scope._is_view = ViewParameters.get().container !== undefined;
+    $scope._stepIndicators = {};
+    ${dollar}scope._setDeepModel = (path, value) => {
+        const keys = path.split('.');
+        let current = $scope.model;
+
+        keys.forEach((key, index) => {
+            if (index === keys.length - 1) {
+                current[key] = value;
+            } else {
+                if (current[key] === null || current[key] === undefined) {
+                    current[key] = {};
+                } else if (typeof current[key] !== 'object') {
+                    throw new Error(`${key} is not an object! Cannot set inner keys.`);
+                }
+                current = current[key];
+            }
+        });
+    };
+    ${dollar}scope._selectFromDocuments = (modelKey, multiple, uploadEnabled) => {
+        Dialogs.showWindow({id: 'documentStorage', params: { readOnly: !uploadEnabled, multiple: multiple, topic: '${projectName}.doc.select' } });
+        const docSelectListener = Dialogs.addMessageListener({
+            topic: '${projectName}.doc.select',
+            handler: (data) => {
+                if (data) {
+                    ${dollar}scope.$evalAsync(() => {
+                        ${dollar}scope.model[modelKey] = data.length > 1 ? data : data[0];
+                    });
+                }
+                Dialogs.removeMessageListener(docSelectListener);
+            }
+        });
+    };
+    ${dollar}scope.forms = {
         form: {}
     };
-
-#foreach($feed in $feeds)
-    ${dollar}http.get('$feed.url').then(response => {
-        $scope.$feed.name = response.data;
-    }).catch(e => {
-        console.error(e);
-    });
-
+#if($metadata.url)
+    ${dollar}scope._submit = () => {
+        const payload = {};
+        angular.forEach(${dollar}scope.forms.form, (control, name) => {
+            if (name[0] === '$') return;
+            payload[name] = control.$modelValue;
+        });
+        Dialogs.showBusyDialog('Sending...');
+        ${dollar}http({
+            method:#if($metadata.method == 'post') 'POST'#else 'GET'#end,
+            url: '$metadata.url',
+            #if($metadata.method == 'post')
+            headers: { 'Content-Type': 'application/json' },
+            data: JSON.stringify(payload)
+            #else
+            params: payload
+            #end
+        }).then(() => {
+            Dialogs.showAlert({
+                title: LocaleService.t('$projectName:${tprefix}.dialogs.successTitle', 'Submited'),
+                message: LocaleService.t('$projectName:${tprefix}.dialogs.successMsg', 'Form submited successfully!'),
+                type: AlertTypes.Success,
+            });
+        }, (error) => {
+            console.error(error);
+            Dialogs.showAlert({
+                title: LocaleService.t('$projectName:${tprefix}.dialogs.errorTitle', 'Submit failed'),
+                message: JSON.stringify(error),
+                type: AlertTypes.Error,
+                preformatted: true,
+            });
+        }).finally(() => {
+            Dialogs.closeBusyDialog();
+        });
+    };
 #end
-    $scope.model = {};
+
+    ${dollar}scope.model = {};
 #macro(formWidgets $elements)
 #foreach($element in $elements)
-    #if($element.controlId == "input-number")
-    $scope.model.$element.model = 0;
+    #if($element.controlId == "stepIndicator" && $element.staticData)
+    ${dollar}scope._stepIndicators['$element.id'] = [];
+    LocaleService.onInit(() => {
+        ${dollar}scope._stepIndicators['$element.id'].push(
+            #foreach($step in $element.steps)
+            {
+                label: LocaleService.t('$projectName:${tprefix}.$step.translation', '$step.label'),
+                #if($step.secondaryLabel)
+                secondaryLabel: '$step.secondaryLabel',
+                #end
+                #if($step.glyph)
+                glyph: '$step.glyph',
+                #end
+                #if($step.svg)
+                svg: '$step.svg',
+                #end
+            },
+            #end
+        );
+    });
+    #elseif($element.controlId == "input-number")
+    ${dollar}scope._setDeepModel('$element.model', 0);
 	#elseif($element.controlId == "input-checkbox")
-    $scope.model.$element.model = false;
+    ${dollar}scope._setDeepModel('$element.model', false);
     #elseif($element.controlId == "input-radio")
         #set ($hasDefault = false)
         #if ($element.staticOptions)
             #foreach($radio in $element.staticOptions)
                 #if ($radio.isDefault == true)
                 #set ($hasDefault = true)
-    $scope.model.$element.model = '$radio.value';
+    ${dollar}scope._setDeepModel('$element.model', '$radio.value');
                 #break
                 #end
             #end
         #end
         #if (!$hasDefault)
-    $scope.model.$element.model = '';
+    ${dollar}scope._setDeepModel('$element.model', '');
         #end
     #elseif($element.controlId == "input-select")
         #set ($hasDefault = false)
@@ -39,22 +143,22 @@ angular.module('forms', ['blimpKit', 'platformView']).controller('FormController
             #foreach($select in $element.staticOptions)
                 #if ($select.isDefault == true)
                 #set ($hasDefault = true)
-    $scope.model.$element.model = '$select.value';
+    ${dollar}scope._setDeepModel('$element.model', '$select.value');
                 #break
                 #end
             #end
         #end
         #if (!$hasDefault)
-    $scope.model.$element.model = '';
+    ${dollar}scope._setDeepModel('$element.model', '');
         #end
 	#elseif($element.controlId == "input-color")
-    $scope.model.$element.model = '#ffbe6f';
+    ${dollar}scope._setDeepModel('$element.model', '#ffbe6f');
 	#elseif($element.controlId == "paragraph")
-    #if($element.model && $element.text)
-    $scope.model.$element.model = `$element.text`;
-    #elseif($element.model)
-    $scope.model.$element.model = null;
-    #end
+        #if($element.model && $element.text)
+    ${dollar}scope._setDeepModel('$element.model', `$element.text`);
+        #elseif($element.model)
+    ${dollar}scope._setDeepModel('$element.model', null);
+        #end
 	#end
     #if($element.children)
         #formWidgets($element.children)
@@ -66,5 +170,33 @@ angular.module('forms', ['blimpKit', 'platformView']).controller('FormController
 
 $code
 
+#end
+#foreach($feed in $feeds)
+    ${dollar}http.get(`$feed.url`).then(response => {
+    #if($feed.func)
+        #if($feed.name == 'model')
+        Object.assign(${dollar}scope.model, ${feed.func}(response.data));
+        #else
+        ${dollar}scope.$feed.name = ${feed.func}(response.data);
+        #end
+    #else
+        #if($feed.name == 'model')
+        Object.assign(${dollar}scope.model, response.data);
+        #else
+        ${dollar}scope.$feed.name = response.data;
+        #end
+    #end
+    }, error => {
+        console.error('$feed.name', error);
+        const errorData = JSON.stringify(error);
+        LocaleService.onInit(() => {
+            Dialogs.showAlert({
+                title: LocaleService.t('$projectName:${tprefix}.dialogs.feedErrorTitle', 'Feed request failed'),
+                message: errorData && errorData !== '{}' ? errorData : LocaleService.t('$projectName:${tprefix}.dialogs.feedError', { feed: '$feed.name' }, "Could not retrive data from the feed '$feed.name'. See console for more information."),
+                type: AlertTypes.Error,
+                preformatted: false,
+            });
+        });
+    });
 #end
 });

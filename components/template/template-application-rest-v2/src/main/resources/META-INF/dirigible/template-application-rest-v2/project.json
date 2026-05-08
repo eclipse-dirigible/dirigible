@@ -1,0 +1,9 @@
+{
+    "guid": "template-application-rest-v2",
+    "dependencies": [
+        {
+            "guid": "template-application-dao-v2"
+        }
+    ],
+    "actions": []
+}

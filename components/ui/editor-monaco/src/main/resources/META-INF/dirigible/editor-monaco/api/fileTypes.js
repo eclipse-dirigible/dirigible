@@ -1,5 +1,5 @@
-import { response } from "sdk/http"
-import { extensions } from "sdk/extensions";
+import { response } from "@aerokit/sdk/http"
+import { extensions } from "@aerokit/sdk/extensions";
 
 const fileTypeExtensions = await extensions.loadExtensionModules("platform-file-types");
 

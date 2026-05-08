@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -61,12 +61,16 @@ function addSidebarIcon(graph, sidebar, prototype, image, hint, $scope, dialogs)
 			} else if (prototype.style === 'report') {
 				$scope.$cell = graph.getSelectionCell();
 				$scope.$cell.value.entityType = "REPORT";
+				$scope.$cell.value.perspectiveName = "Reports";
+				$scope.$cell.value.perspectiveLabel = "Reports";
 			} else if (prototype.style === 'filter') {
 				$scope.$cell = graph.getSelectionCell();
 				$scope.$cell.value.entityType = "FILTER";
 			} else if (prototype.style === 'setting') {
 				$scope.$cell = graph.getSelectionCell();
 				$scope.$cell.value.entityType = "SETTING";
+				$scope.$cell.value.perspectiveName = "Settings";
+				$scope.$cell.value.perspectiveLabel = "Settings";
 			} else if (prototype.style === 'copied') {
 				$scope.$cell = graph.getSelectionCell();
 				$scope.showCopiedEntityDialog($scope.$cell.id);
@@ -165,6 +169,10 @@ function addSidebarIcon(graph, sidebar, prototype, image, hint, $scope, dialogs)
 			return null;
 		}
 		let cell = graph.getCellAt(x, y);
+
+		if (cell && cell.hasOwnProperty('style') && (cell.style === 'projectionproperty' || cell.style === 'projection')) {
+			return null;
+		}
 
 		if (graph.isSwimlane(cell)) {
 			return cell;
@@ -406,35 +414,40 @@ function createPopupMenu(editor, graph, menu, cell, evt) {
 			editor.execute('properties', cell);
 		}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--list");
 
-		menu.addItem('Move up', 'arrow-up', function () {
-			editor.execute('moveup', cell);
-		}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--slim-arrow-up");
+		if (cell.style !== 'projection' && cell.style !== 'projectionproperty') {
+			menu.addItem('Move up', 'arrow-up', function () {
+				editor.execute('moveup', cell);
+			}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--slim-arrow-up");
 
-		menu.addItem('Move down', 'arrow-down', function () {
-			editor.execute('movedown', cell);
-		}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--slim-arrow-down");
+			menu.addItem('Move down', 'arrow-down', function () {
+				editor.execute('movedown', cell);
+			}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--slim-arrow-down");
 
-		menu.addItem('Copy', 'copy', function () {
-			editor.execute('copy', cell);
-		}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--copy");
-
+			menu.addItem('Copy', 'copy', function () {
+				editor.execute('copy', cell);
+			}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--copy");
+		}
 	}
 
-	menu.addItem('Paste', 'paste', function () {
-		editor.execute('paste', cell);
-	}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--paste");
+	if (cell.style !== 'projection' && cell.style !== 'projectionproperty') {
+		menu.addItem('Paste', 'paste', function () {
+			editor.execute('paste', cell);
+		}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--paste");
+	}
 
-	menu.addItem('Undo', 'undo', function () {
-		editor.execute('undo', cell);
-	}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--undo");
+	if (cell.style !== 'projectionproperty') {
+		menu.addItem('Undo', 'undo', function () {
+			editor.execute('undo', cell);
+		}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--undo");
 
-	menu.addItem('Redo', 'repeat', function () {
-		editor.execute('redo', cell);
-	}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--redo");
+		menu.addItem('Redo', 'repeat', function () {
+			editor.execute('redo', cell);
+		}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--redo");
 
-	if (cell !== null) {
-		menu.addItem('Delete', 'times', function () {
-			editor.execute('delete', cell);
-		}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--delete");
+		if (cell !== null) {
+			menu.addItem('Delete', 'times', function () {
+				editor.execute('delete', cell);
+			}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--delete");
+		}
 	}
 }

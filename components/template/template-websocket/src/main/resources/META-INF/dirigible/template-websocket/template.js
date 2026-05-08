@@ -3,28 +3,31 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-export function getTemplate() {
-	return {
-		name: "WebSocket Service (Model)",
-		description: "WebSocket service with a Javascript handler",
-		sources: [{
-			location: "/template-websocket/websocket.template", 
-			action: "generate",
-			rename: "{{fileName}}.websocket"
-		}, {
-			location: "/template-websocket/service-handler.js.template", 
-			action: "generate",
-			rename: "{{fileName}}-service-handler.js"
-		}, {
-			location: "/template-websocket/client-handler.js.template", 
-			action: "generate",
-			rename: "{{fileName}}-client-handler.js"
-		}, {
-			location: "/template-websocket/client.js.template", 
-			action: "generate",
-			rename: "{{fileName}}-client.js"
-		}],
-		parameters: [],
-		order: 52
-	};
-};
+export const getTemplate = () => ({
+  name: "WebSocket Service (Model)",
+  description: "WebSocket Service With a JavaScript Handler",
+  sources: [
+    {
+      location: "/template-websocket/websocket.template",
+      action: "generate",
+      rename: "{{fileName}}.websocket",
+    },
+    {
+      location: "/template-websocket/service-handler.js.template",
+      action: "generate",
+      rename: "{{fileName}}-service-handler.js",
+    },
+    {
+      location: "/template-websocket/client-handler.js.template",
+      action: "generate",
+      rename: "{{fileName}}-client-handler.js",
+    },
+    {
+      location: "/template-websocket/client.js.template",
+      action: "generate",
+      rename: "{{fileName}}-client.js",
+    },
+  ],
+  parameters: [],
+  order: 52,
+});

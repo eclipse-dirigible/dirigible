@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -25,6 +25,8 @@ public interface ApplicationListenersOrder {
      */
     interface ApplicationReadyEventListeners {
 
+        int TYPE_SCRIPT_TRANSPILATION_SERVICE = 5;
+
         /** The system roles initializer. */
         int SYSTEM_ROLES_INITIALIZER = 10;
 
@@ -39,6 +41,8 @@ public interface ApplicationListenersOrder {
 
         /** The jobs initializer. */
         int JOBS_INITIALIZER = 50;
+
+        int PROCESSES_INITIALIZER = 60;
 
         int TENANTS_INITIALIZER = 1000;
 

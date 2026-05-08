@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -14,18 +14,18 @@ import java.io.IOException;
 /**
  * The Interface CmisDocument.
  */
-public interface CmisDocument {
+public interface CmisDocument extends CmisObject {
     /**
      * Returns the Path of this CmisDocument.
      *
      * @return the path
      */
-    public String getPath();
+    String getPath();
 
     /**
      * Returns the CmisContentStream representing the contents of this CmisDocument.
      *
      * @return Content Stream
      */
-    public CmisContentStream getContentStream() throws IOException;
+    CmisContentStream getContentStream() throws IOException;
 }

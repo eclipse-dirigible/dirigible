@@ -1,5 +1,0 @@
-{
-    "module": "resources-core/services/menus/help.js",
-    "extensionPoint": "ide-bpm-workspace-menu",
-    "description": "Help Menu"
-}

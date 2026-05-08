@@ -1,0 +1,58 @@
+{
+  "name": "@aerokit/sdk",
+  "version": "1.0.0",
+  "description": "Unified TypeScript SDK for modern cloud platforms.",
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "node ./build.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eclipse-dirigible/dirigible.git"
+  },
+  "keywords": [
+    "aerokit-sdk",
+    "aerokit",
+    "sdk",
+    "eclipse",
+    "dirigible-sdk",
+    "dirigible"
+  ],
+  "license": "EPL-2.0",
+  "bugs": {
+    "url": "https://github.com/eclipse-dirigible/dirigible/issues"
+  },
+  "homepage": "https://github.com/eclipse-dirigible/dirigible#readme",
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "package.json"
+  ],
+  "module": "./dist/esm/index.mjs",
+  "main": "./dist/cjs/index.js",
+  "types": "./dist/dts/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.mjs",
+      "require": "./dist/cjs/index.js",
+      "types": "./dist/dts/index.d.ts"
+    },
+    "./*": {
+      "import": "./dist/esm/*/index.mjs",
+      "require": "./dist/cjs/*/index.js",
+      "types": "./dist/dts/*/index.d.ts"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "dist/dts/*/index.d.ts"
+      ]
+    }
+  }
+}

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -27,6 +27,7 @@ public class CmisS3Session implements CmisSession {
      *
      * @return Repository Info
      */
+    @Override
     public CmisS3RepositoryInfo getRepositoryInfo() {
         return new CmisS3RepositoryInfo(this);
     }
@@ -36,6 +37,7 @@ public class CmisS3Session implements CmisSession {
      *
      * @return Object Factory
      */
+    @Override
     public CmisS3ObjectFactory getObjectFactory() {
         return new CmisS3ObjectFactory();
     }
@@ -45,7 +47,7 @@ public class CmisS3Session implements CmisSession {
      *
      * @return CmisS3Folder
      */
-
+    @Override
     public CmisS3Folder getRootFolder() {
         return new CmisS3Folder(ROOT, ROOT, true);
     }
@@ -74,11 +76,20 @@ public class CmisS3Session implements CmisSession {
         if (isFolder(id)) {
             return new CmisS3Folder(id, CmisS3Utils.findCurrentFolder(id), ROOT.equals(id));
         }
+
         if (S3Facade.exists(id)) {
             return new CmisS3Document(id, CmisS3Utils.findCurrentFile(id));
-        } else {
-            throw new IOException("Missing object with id [" + id + "]");
         }
+
+        // try to handle folders which ids don't have trailing slash
+        if (!id.endsWith(IRepository.SEPARATOR)) {
+            String folderId = id + IRepository.SEPARATOR;
+            if (S3Facade.exists(folderId)) {
+                return new CmisS3Folder(folderId, CmisS3Utils.findCurrentFolder(folderId), ROOT.equals(folderId));
+            }
+        }
+
+        throw new IOException("Missing object with id [" + id + "]");
     }
 
     private boolean isFolder(String path) {

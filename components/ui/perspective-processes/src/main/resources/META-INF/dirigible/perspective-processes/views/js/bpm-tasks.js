@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -12,7 +12,13 @@
 const tasksView = angular.module('tasks', ['platformView', 'blimpKit']);
 tasksView.constant('Notifications', new NotificationHub());
 tasksView.constant('Dialogs', new DialogHub());
-tasksView.controller('TasksController', ($scope, $http, $window, Dialogs) => {
+tasksView.controller('TasksController', ($scope, $http, $window, Dialogs, Notifications) => {
+    const dateTimeUtil = new DateTimeUtil();
+    $scope.state = {
+        loadingGroups: false,
+        loadingAssignee: false,
+        busyText: 'Loading...',
+    };
     $scope.tasksList = [];
     $scope.tasksListAssignee = [];
     $scope.currentProcessInstanceId;
@@ -30,6 +36,7 @@ tasksView.controller('TasksController', ($scope, $http, $window, Dialogs) => {
         $http.get('/services/bpm/bpm-processes/instance/' + processInstanceId + '/tasks?type=groups', { params: { 'limit': 100 } })
             .then((response) => {
                 $scope.tasksList = response.data;
+                $scope.state.loadingGroups = false;
             }, (error) => {
                 console.error(error);
             });
@@ -37,18 +44,32 @@ tasksView.controller('TasksController', ($scope, $http, $window, Dialogs) => {
         $http.get('/services/bpm/bpm-processes/instance/' + processInstanceId + '/tasks?type=assignee', { params: { 'limit': 100 } })
             .then((response) => {
                 $scope.tasksListAssignee = response.data;
+                $scope.state.loadingAssignee = false;
             }, (error) => {
                 console.error(error);
             });
     };
 
+    $scope.formatTime = (isoDate) => {
+        return dateTimeUtil.format(isoDate, "YYYY-MM-DD HH:mm:ss");
+    };
+
     Dialogs.addMessageListener({
         topic: 'bpm.instance.selected',
         handler: (data) => {
-            const processInstanceId = data.instance;
-            $scope.fetchData(processInstanceId);
             $scope.$evalAsync(() => {
-                $scope.currentProcessInstanceId = processInstanceId;
+                if (data.deselect) {
+                    $scope.tasksList.length = 0;
+                    $scope.tasksListAssignee.length = 0;
+                    $scope.currentProcessInstanceId = null;
+                    $scope.selectedClaimTask = null;
+                    $scope.selectedUnclaimTask = null;
+                } else {
+                    $scope.state.loadingGroups = true;
+                    $scope.state.loadingAssignee = true;
+                    $scope.currentProcessInstanceId = data.instance;
+                    $scope.fetchData(data.instance);
+                }
             });
         }
     });
@@ -66,14 +87,14 @@ tasksView.controller('TasksController', ($scope, $http, $window, Dialogs) => {
     };
 
     $scope.claimTask = () => {
-        $scope.executeAction($scope.selectedClaimTask.id, { 'action': 'CLAIM' }, 'claimed', () => { $scope.selectedClaimTask = null });
+        $scope.executeAction($scope.selectedClaimTask.id, { 'action': 'CLAIM' }, true, () => { $scope.selectedClaimTask = null });
     };
 
     $scope.unclaimTask = () => {
-        $scope.executeAction($scope.selectedUnclaimTask.id, { 'action': 'UNCLAIM' }, 'unclaimed', () => { $scope.selectedUnclaimTask = null });
+        $scope.executeAction($scope.selectedUnclaimTask.id, { 'action': 'UNCLAIM' }, false, () => { $scope.selectedUnclaimTask = null });
     };
 
-    $scope.executeAction = (taskId, requestBody, actionName, clearCallback) => {
+    $scope.executeAction = (taskId, requestBody, claimed, clearCallback) => {
         const apiUrl = '/services/bpm/bpm-processes/tasks/' + taskId;
 
         $http({
@@ -84,17 +105,16 @@ tasksView.controller('TasksController', ($scope, $http, $window, Dialogs) => {
         }).then(() => {
             Notifications.show({
                 title: 'Action confirmation',
-                description: "Task " + actionName + " successfully!",
+                description: `Task ${claimed ? 'claimed' : 'unclaimed'} successfully!`,
                 type: 'positive'
             });
             $scope.reload();
-            // console.log('Successfully ' + actionName + ' task with id ' + taskId);
             clearCallback();
         }).catch((error) => {
             console.error('Error making POST request:', error);
             Dialogs.showAlert({
                 title: 'Action failed',
-                message: "Failed to " + actionName + " task " + error.message,
+                message: `Failed to ${claimed ? 'claim' : 'unclaim'} task ${error.message}`,
                 type: AlertTypes.Error,
                 preformatted: false,
             });

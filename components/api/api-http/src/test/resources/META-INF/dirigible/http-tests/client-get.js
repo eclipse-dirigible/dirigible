@@ -1,4 +1,4 @@
-import { HttpClient } from 'sdk/http/client';
+import { HttpClient } from '@aerokit/sdk/http/client';
 import { Assert } from 'test/assert';
 
 const result = HttpClient.get('https://raw.githubusercontent.com/eclipse/dirigible/master/NOTICE.txt');

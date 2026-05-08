@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.engine.bpm.flowable.endpoint;
 
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessInstanceData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskActionData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskDTO;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService;
@@ -85,6 +86,11 @@ public class BpmInboxEndpoint extends BaseEndpoint {
                                             .map(IdentityLinkInfo::getGroupId)
                                             .filter(Objects::nonNull)
                                             .collect(Collectors.joining(",")));
+        ProcessInstanceData processInstance = bpmService.getProcessInstanceById(task.getProcessInstanceId());
+        dto.setProcessInstanceBusinessKey(processInstance.getBusinessKey());
+        dto.setProcessDefinitionId(processInstance.getProcessDefinitionId());
+        dto.setProcessDefinitionName(processInstance.getProcessDefinitionName());
+
         return dto;
     }
 
