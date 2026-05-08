@@ -3,18 +3,19 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-export function getTemplate() {
-	return {
-		name: 'View with HTTP data requests (UI)',
-		description: 'Dirigible view with tables and HTTP data requests.',
-		sources: [{
-			location: '/template-html/index.html.template',
-			action: 'generate',
-			rename: '{{fileName}}.html',
-			start: '[[',
-			end: ']]'
-		}],
-		parameters: [],
-		order: 30
-	};
-};
+export const getTemplate = () => ({
+  name: "Data Tables (UI)",
+  description: "Table View With HTTP Data Requests",
+  image: "/services/web/template-html/template.svg",
+  sources: [
+    {
+      location: "/template-html/index.html.template",
+      action: "generate",
+      rename: "{{fileName}}.html",
+      start: "[[",
+      end: "]]",
+    },
+  ],
+  parameters: [],
+  order: 30,
+});

@@ -1,7 +1,44 @@
 /**
- * Provides core functionality for input/output stream management,
- * including stream creation, data transfer, and byte array handling.
+ * @module io/streams
+ * @package @aerokit/sdk/io
+ * @name Streams
+ * @overview
+ * 
+ * The Streams module provides core functionality for input/output stream management, including stream creation, data transfer, and byte array handling. It abstracts the complexities of working with streams in JavaScript by providing a set of classes and methods that wrap native Java stream objects, allowing developers to easily read from and write to streams in a consistent manner.
+ * 
+ * ### Key Features:
+ * - **Stream Copying**: Methods for copying data between input and output streams, with support for both small and large data transfers.
+ * - **Resource Stream Creation**: Ability to create input streams from resources accessible via the class loader, facilitating access to bundled resources.
+ * - **Byte Array Handling**: Methods for creating streams from JavaScript byte arrays and retrieving byte data from streams in both JavaScript and native formats.
+ * - **Text Handling**: Methods for reading and writing text data to streams, with automatic encoding and decoding based on the platform's default character set.
+ * 
+ * ### Use Cases:
+ * - **File I/O**: Reading from and writing to files using streams, which is essential for handling large files without consuming excessive memory.
+ * - **Network Communication**: Managing input and output streams for network sockets or HTTP requests/responses.
+ * - **Data Transformation**: Using streams to transform data on-the-fly, such as compressing or encrypting data as it is read or written.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Streams, InputStream, OutputStream } from "@aerokit/sdk/io";
+ * 
+ * // Create an input stream from a resource
+ * const inputStream = Streams.getResourceAsByteArrayInputStream("data/input.txt");
+ * 
+ * // Create an output stream to write to a file
+ * const outputStream = new OutputStream(...);
+ * 
+ * // Copy data from the input stream to the output stream
+ * Streams.copy(inputStream, outputStream);
+ * 
+ * // Read text from the input stream
+ * const text = inputStream.readText();
+ * console.log(text);
+ * 
+ * // Write text to the output stream
+ * outputStream.writeText("Hello, World!");
+ * ```
  */
+
 import { Bytes } from "@aerokit/sdk/io/bytes";
 
 const StreamsFacade = Java.type("org.eclipse.dirigible.components.api.io.StreamsFacade");

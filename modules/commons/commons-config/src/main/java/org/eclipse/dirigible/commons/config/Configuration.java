@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -232,7 +232,9 @@ public class Configuration {
         List<String> staticParams = List.of( //
                 "DIRIGIBLE_ANONYMOUS_USER_NAME_PROPERTY_NAME", //
                 "DIRIGIBLE_BRANDING_NAME", //
+                "DIRIGIBLE_BRANDING_SUBTITLE", //
                 "DIRIGIBLE_BRANDING_BRAND", //
+                "DIRIGIBLE_BRANDING_BRAND_URL", //
                 "DIRIGIBLE_BRANDING_FAVICON", //
                 "DIRIGIBLE_BRANDING_THEME", //
                 "DIRIGIBLE_BRANDING_PREFIX", //

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -15,7 +15,7 @@ import { getBrandingJs } from './branding.mjs';
 rs.service()
     .resource('')
     .get(function (_ctx, _request, response) {
-        response.setContentType("text/javascript");
+        response.setContentType("text/javascript;charset=UTF-8");
         response.println(getBrandingJs());
     })
     .execute();

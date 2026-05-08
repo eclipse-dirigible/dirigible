@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -12,7 +12,7 @@ package org.eclipse.dirigible.components.initializers.synchronizer;
 import org.eclipse.dirigible.components.base.ApplicationListenersOrder.ApplicationReadyEventListeners;
 import org.eclipse.dirigible.components.initializers.classpath.ClasspathExpander;
 import org.eclipse.dirigible.components.registry.watcher.ExternalRegistryWatcher;
-import org.eclipse.dirigible.components.registry.watcher.RecursiveFolderWatcher;
+import org.eclipse.dirigible.components.registry.watcher.LocalRegistryWatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -38,19 +38,26 @@ public class SynchronizationInitializer implements ApplicationListener<Applicati
     /** The classpath expander. */
     private final ClasspathExpander classpathExpander;
 
+    /** The external registry watcher. */
     private final ExternalRegistryWatcher externalRegistryWatcher;
+
+    /** The local registry watcher. */
+    private final LocalRegistryWatcher localRegistryWatcher;
 
     /**
      * Instantiates a new synchronizers initializer.
      *
      * @param synchronizationProcessor the synchronization processor
      * @param classpathExpander the classpath expander
+     * @param externalRegistryWatcher the external registry watcher
+     * @param localRegistryWatcher the local registry watcher
      */
     public SynchronizationInitializer(SynchronizationProcessor synchronizationProcessor, ClasspathExpander classpathExpander,
-            ExternalRegistryWatcher externalRegistryWatcher) {
+            ExternalRegistryWatcher externalRegistryWatcher, LocalRegistryWatcher localRegistryWatcher) {
         this.synchronizationProcessor = synchronizationProcessor;
         this.classpathExpander = classpathExpander;
         this.externalRegistryWatcher = externalRegistryWatcher;
+        this.localRegistryWatcher = localRegistryWatcher;
     }
 
     /**
@@ -66,6 +73,7 @@ public class SynchronizationInitializer implements ApplicationListener<Applicati
         classpathExpander.expandContent();
         synchronizationProcessor.processSynchronizers();
         externalRegistryWatcher.initialize();
+        localRegistryWatcher.initialize();
 
         LOGGER.info("Completed.");
 

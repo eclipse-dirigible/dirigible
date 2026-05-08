@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -11,6 +11,7 @@
  */
 const historyView = angular.module('history', ['blimpKit', 'platformView', 'GitService']);
 historyView.controller('HistoryContoller', ($scope, GitService) => {
+	const dateTimeUtil = new DateTimeUtil();
 	$scope.state = {
 		isBusy: false,
 	};
@@ -50,6 +51,10 @@ historyView.controller('HistoryContoller', ($scope, GitService) => {
 			});
 		});
 	};
+
+	$scope.formatTime = (isoDate) => {
+        return dateTimeUtil.format(isoDate, "YYYY-MM-DD HH:mm:ss");
+    };
 
 	$scope.getNoDataMessage = () => {
 		return !$scope.history ? 'Please, select a project' : 'No data found';

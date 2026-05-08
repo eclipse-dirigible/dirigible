@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -60,6 +60,11 @@ angular.module('EntityService', []).provider('EntityService', function EntitySer
             const body = JSON.stringify(entity);
             return $http.post(url, body);
         }.bind(this);
+		
+		const exportCsv = function () {
+            const url = `${this.baseUrl}/export`;
+            return $http.post(url);
+        }.bind(this);
 
         const create = function (entity) {
             const url = this.baseUrl;
@@ -86,6 +91,7 @@ angular.module('EntityService', []).provider('EntityService', function EntitySer
             create: create,
             update: update,
             'delete': deleteEntity,
+			exportCsv: exportCsv,
         };
     }];
 });

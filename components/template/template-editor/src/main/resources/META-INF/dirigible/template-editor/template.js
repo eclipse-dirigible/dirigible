@@ -3,36 +3,42 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-export function getTemplate() {
-	return {
-		name: 'Editor (UI)',
-		description: 'Basic Dirigible TXT Editor',
-		image: '/services/web/template-editor/template-image/template.svg',
-		sources: [{
-			location: '/template-editor/index.html.template',
-			action: 'generate',
-			engine: 'velocity',
-			rename: '{{fileName}}.html'
-		}, {
-			location: '/template-editor/js/editor.js.template',
-			action: 'generate',
-			rename: 'js/{{fileName}}.js'
-		}, {
-			location: '/template-editor/configs/editor.js.template',
-			action: 'generate',
-			rename: 'configs/{{fileName}}-editor.js'
-		}, {
-			location: '/template-editor/extensions/editor.extension.template',
-			action: 'generate',
-			rename: 'extensions/{{fileName}}.extension'
-		}],
-		parameters: [{
-			name: 'editorId',
-			label: 'Unique Editor Id'
-		}, {
-			name: 'editorName',
-			label: 'Name'
-		}],
-		order: 13
-	};
-};
+export const getTemplate = () => ({
+  name: "Editor (UI)",
+  description: "Minimal Text File Editor",
+  image: "/services/web/template-editor/template-image/template.svg",
+  sources: [
+    {
+      location: "/template-editor/index.html.template",
+      action: "generate",
+      engine: "velocity",
+      rename: "{{fileName}}.html",
+    },
+    {
+      location: "/template-editor/js/editor.js.template",
+      action: "generate",
+      rename: "js/{{fileName}}.js",
+    },
+    {
+      location: "/template-editor/configs/editor.js.template",
+      action: "generate",
+      rename: "configs/{{fileName}}-editor.js",
+    },
+    {
+      location: "/template-editor/extensions/editor.extension.template",
+      action: "generate",
+      rename: "extensions/{{fileName}}.extension",
+    },
+  ],
+  parameters: [
+    {
+      name: "editorId",
+      label: "Unique Editor Id",
+    },
+    {
+      name: "editorName",
+      label: "Name",
+    },
+  ],
+  order: 13,
+});

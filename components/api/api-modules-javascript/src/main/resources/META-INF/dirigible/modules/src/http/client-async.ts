@@ -1,6 +1,34 @@
 /**
- * Provides a JavaScript/TypeScript wrapper (Facade) for making asynchronous HTTP requests.
- *
+ * @module http/client-async
+ * @package @aerokit/sdk/http
+ * @name HttpAsyncClient
+ * @overview
+ * 
+ * The HttpAsyncClient class provides a JavaScript/TypeScript wrapper (Facade) for making asynchronous HTTP requests using the underlying Java HTTP client. It allows developers to perform non-blocking HTTP operations by defining success, error, and cancel callbacks as strings of executable JavaScript code. The class supports all standard HTTP methods (GET, POST, PUT, PATCH, DELETE, HEAD, TRACE) and accepts a comprehensive set of request options that mirror the capabilities of the Java client.
+ * 
+ * ### Key Features:
+ * - **Asynchronous Execution**: All HTTP methods return immediately, with callbacks executed upon completion.
+ * - **Comprehensive Request Options**: Supports a wide range of configuration options for fine-tuning HTTP requests.
+ * - **Callback Flexibility**: Callbacks are defined as strings of JavaScript code, allowing for dynamic execution in the JVM environment.
+ * 
+ * ### Use Cases:
+ * - **Non-blocking API Calls**: Ideal for scenarios where you want to perform HTTP requests without blocking the main execution thread.
+ * - **Complex Request Configurations**: Suitable for advanced use cases that require detailed request configurations and handling.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { HttpAsyncClient } from "@aerokit/sdk/http";
+ * 
+ * const client = HttpAsyncClient.getInstance();
+ * 
+ * client.getAsync("https://api.example.com/data", {
+ *   success: "function(response) { console.log('Success:', response); }",
+ *   error: "function(error) { console.error('Error:', error); }"
+ * }, {
+ *   headers: [{ name: 'Authorization', value: 'Bearer token' }],
+ *   params: [{ name: 'query', value: 'search term' }]
+ * });
+ * ```
  */
 
 // --- Shared Interfaces (for documentation clarity) ---

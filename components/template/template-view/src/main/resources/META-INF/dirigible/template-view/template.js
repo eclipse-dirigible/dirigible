@@ -3,36 +3,42 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-export function getTemplate() {
-	return {
-		name: 'View (UI)',
-		description: 'Basic Dirigible View',
-		image: '/services/web/template-view/template-image/view.svg',
-		sources: [{
-			location: '/template-view/index.html.template',
-			action: 'generate',
-			engine: 'velocity',
-			rename: '{{fileName}}.html'
-		}, {
-			location: '/template-view/js/view.js.template',
-			action: 'generate',
-			rename: 'js/{{fileName}}.js'
-		}, {
-			location: '/template-view/configs/view.js.template',
-			action: 'generate',
-			rename: 'configs/{{fileName}}-view.js'
-		}, {
-			location: '/template-view/extensions/view.extension.template',
-			action: 'generate',
-			rename: 'extensions/{{fileName}}.extension'
-		}],
-		parameters: [{
-			name: 'viewId',
-			label: 'Unique View Id'
-		}, {
-			name: 'viewName',
-			label: 'Name'
-		}],
-		order: 10
-	};
-};
+export const getTemplate = () => ({
+  name: "View (UI)",
+  description: "Minimal View Sample",
+  image: "/services/web/template-view/template-image/view.svg",
+  sources: [
+    {
+      location: "/template-view/index.html.template",
+      action: "generate",
+      engine: "velocity",
+      rename: "{{fileName}}.html",
+    },
+    {
+      location: "/template-view/js/view.js.template",
+      action: "generate",
+      rename: "js/{{fileName}}.js",
+    },
+    {
+      location: "/template-view/configs/view.js.template",
+      action: "generate",
+      rename: "configs/{{fileName}}-view.js",
+    },
+    {
+      location: "/template-view/extensions/view.extension.template",
+      action: "generate",
+      rename: "extensions/{{fileName}}.extension",
+    },
+  ],
+  parameters: [
+    {
+      name: "viewId",
+      label: "Unique View Id",
+    },
+    {
+      name: "viewName",
+      label: "Name",
+    },
+  ],
+  order: 10,
+});

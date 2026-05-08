@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -38,11 +38,14 @@ body {
     -webkit-app-region: no-drag;
 }
 
+body:not(.bk-backdrop--active)>.main-header>.fd-shellbar {
+    z-index: 12;
+}
+
 /* Sidebar */
 .sidebar {
     box-sizing: border-box;
     box-shadow: none;
-    border-right: .0625rem solid var(--sapGroup_TitleBorderColor, #d9d9d9);
     -ms-overflow-style: none;
     scrollbar-width: none;
 }
@@ -89,7 +92,6 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: space-between;
-    border-top: 0.0625rem solid var(--sapPageFooter_BorderColor);
     overflow: hidden;
 }
 
@@ -196,7 +198,7 @@ body {
     background-color: var(--sapButton_Attention_Background, #e97119);
 }
 
-/* Notification overlay */
+/* Notification and Exports overlay */
 .notification-overlay {
     position: fixed;
     width: 100%;
@@ -212,7 +214,7 @@ body {
 }
 
 .notification-popover {
-    --bkPopoverBody_BackgroundColor: var(--sapGroup_TitleBackground);
+    /* --bkPopoverBody_BackgroundColor: var(--sapBackgroundColor); */
     width: 35rem;
     height: auto;
     max-width: 35rem;
@@ -229,4 +231,24 @@ body {
     -webkit-line-clamp: none;
     line-clamp: none;
     max-height: none;
+}
+
+.notification-popover [bk-list-button]:first-of-type {
+    margin-left: 0.5rem;
+}
+
+.notification-popover span.bk-center {
+    width: 3rem;
+    height: 3rem;
+    margin-inline-end: .75rem;
+}
+
+.notification-popover li:last-child {
+    border-bottom: none !important;
+}
+
+.notification-popover .is-error-message {
+    color: var(--sapNegativeColor) !important;
+    word-wrap: break-word;
+    white-space: wrap;
 }

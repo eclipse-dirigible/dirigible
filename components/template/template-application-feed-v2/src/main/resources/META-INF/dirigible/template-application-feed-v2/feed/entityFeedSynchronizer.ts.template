@@ -1,0 +1,35 @@
+#if($feedUrl)
+import { HttpClient } from '@aerokit/sdk/http'
+import { Base64 } from '@aerokit/sdk/utils'
+import { Bytes } from '@aerokit/sdk/io'
+import { ${name}Repository } from '../../data/${perspectiveName}/${name}Repository'
+
+const repository = new ${name}Repository();
+
+const url = Bytes.byteArrayToText(Base64.decode('${feedUrl}'));
+const username = Bytes.byteArrayToText(Base64.decode('${feedUsername}'));
+const password = Bytes.byteArrayToText(Base64.decode('${feedPassword}'));
+
+if (repository.count() === 0) {
+	const clientResponse = HttpClient.get(url, {
+		headers: [{
+			name: 'Authorization',
+			value: 'Basic ' + Base64.encode(username + ':' + password) 
+		}]
+	});
+	
+	const data = JSON.parse(clientResponse.text)#if($feedPath).${feedPath}#end;
+	
+	for (let i = 0; i < data.length; i ++) {
+		repository.create({
+	#foreach ($property in $properties)
+		#if(!$property.dataPrimaryKey)
+			${property.name}: data[i].${property.feedPropertyName}#if($foreach.hasNext),#end
+		#end
+	#end
+		});
+	}
+}
+#else
+console.log('Local entity');
+#end

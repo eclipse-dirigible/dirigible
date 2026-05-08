@@ -1,5 +1,0 @@
-@import url("/services/web/theme-classic/css/classic-light-variables.css") only screen and (prefers-color-scheme: light);
-@import url("/services/web/theme-classic/css/classic-light.css") only screen and (prefers-color-scheme: light);
-
-@import url("/services/web/theme-classic/css/classic-dark-variables.css") only screen and (prefers-color-scheme: dark);
-@import url("/services/web/theme-classic/css/classic-dark.css") only screen and (prefers-color-scheme: dark);

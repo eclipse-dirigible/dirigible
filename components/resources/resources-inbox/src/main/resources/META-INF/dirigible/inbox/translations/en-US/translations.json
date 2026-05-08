@@ -10,6 +10,8 @@
     "candidateUsers": "Candidate Users",
     "candidateGroups": "Candidate Groups",
     "processInstanceId": "Process Instance Id",
+	"processDefinitionName": "Definition Name",
+	"processInstanceBusinessKey": "Business Key",
     "createTime": "Create Time",
     "formKey": "Form Key",
     "noTasks": "No tasks found.",

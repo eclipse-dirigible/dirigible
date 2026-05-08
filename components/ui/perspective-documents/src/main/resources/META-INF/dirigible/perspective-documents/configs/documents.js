@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -10,7 +10,7 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const perspectiveData = {
-	id: 'perspectiveDocuments',
+	id: 'documentStorage',
 	label: 'Documents',
 	path: '/services/web/documents/index.html',
 	order: 150,
@@ -19,6 +19,8 @@ const perspectiveData = {
 const viewData = {
 	lazyLoad: true,
 	region: 'center',
+	hasHeader: false,
+	maxWidth: '640px',
 	...perspectiveData
 };
 if (typeof exports !== 'undefined') {

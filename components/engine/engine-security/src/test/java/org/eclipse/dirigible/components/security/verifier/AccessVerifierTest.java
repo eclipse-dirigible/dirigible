@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -75,6 +75,7 @@ class AccessVerifierTest {
                 createSecurityAccess("/a/b/c/test.access", "test1", "description", "HTTP", "/a" + "/b/c/test.txt", "GET", "test1"));
         securityAccessRepository.save(
                 createSecurityAccess("/a/b/c/test.access", "test2", "description", "HTTP", "/a" + "/b/c/test.txt", "GET", "test2"));
+        securityAccessVerifier.refreshCache(true);
     }
 
     /**
@@ -104,6 +105,7 @@ class AccessVerifierTest {
     void testGetMatchingSecurityAccessesWithAntPatterns() {
         securityAccessRepository.save(createSecurityAccess("/ant/pattern/access.access", "antPattern", "description", "HTTP",
                 "/this/is/ant/pattern/*/test/**", "GET", "somerole"));
+        securityAccessVerifier.refreshCache(true);
         List<Access> matchingSecurityAccesses =
                 securityAccessVerifier.getMatchingSecurityAccesses("HTTP", "/this/is/ant/pattern/1234/test/api/v2/123", "GET");
         assertThat(matchingSecurityAccesses).hasSize(1);

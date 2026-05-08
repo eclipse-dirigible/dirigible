@@ -2,7 +2,7 @@
     "constraints": [
         {
             "scope": "HTTP",
-            "path": "/platform-core/",
+            "path": "/platform-core/**",
             "method": "GET",
             "roles": [
                 "Public"

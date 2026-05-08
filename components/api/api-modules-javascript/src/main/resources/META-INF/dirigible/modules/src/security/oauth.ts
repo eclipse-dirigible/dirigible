@@ -1,3 +1,31 @@
+/**
+ * @module security/oauth
+ * @package @aerokit/sdk/security
+ * @name OAuthClient
+ * @overview
+ * 
+ * The OAuthClient class provides a simple interface for obtaining OAuth access tokens using the client credentials grant type. It abstracts the process of making HTTP requests to an OAuth token endpoint, allowing developers to easily integrate OAuth authentication into their applications. By providing the necessary configuration parameters such as the token endpoint URL, client ID, and client secret, developers can use this class to retrieve access tokens that can be used for authenticating API requests or accessing protected resources.
+ * 
+ * ### Key Features:
+ * - **Token Retrieval**: The `getToken` method sends a POST request to the specified OAuth token endpoint with the client credentials and retrieves the access token.
+ * - **Configurable Grant Type**: While the default grant type is set to 'client_credentials', developers can specify other grant types if needed by providing it in the configuration.
+ * 
+ * ### Use Cases:
+ * - **API Authentication**: The OAuthClient can be used to authenticate API requests by obtaining access tokens that are required for accessing protected endpoints.
+ * - **Integration with OAuth Providers**: Developers can use this class to integrate their applications with various OAuth providers that support the client credentials grant type, enabling secure access to resources.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { OAuthClient } from "@aerokit/sdk/security";
+ * 
+ * const oauthClient = new OAuthClient({
+ *   url: "https://example.com/oauth/token",
+ *   clientId: "your-client-id",
+ *   clientSecret: "your-client-secret"
+ * });
+ * ```
+ */
+
 import { client as httpClient} from "@aerokit/sdk/http"
 import { url } from "@aerokit/sdk/utils"
 

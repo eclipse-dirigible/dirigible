@@ -1,3 +1,37 @@
+/**
+ * @module db/sql
+ * @package @aerokit/sdk/db
+ * @name SQL
+ * @overview
+ * 
+ * This module provides a fluent API for building SQL statements in a database-agnostic way. It includes builders for SELECT, INSERT, UPDATE, DELETE, CREATE, and DROP statements, as well as a builder for retrieving the next value from a sequence. The builders allow for method chaining to construct complex SQL queries while managing parameters separately to prevent SQL injection. The module abstracts away differences in SQL dialects and provides a consistent interface for constructing SQL statements across different databases.
+ * 
+ * ### Key Features
+ * - Fluent API for building SQL statements with method chaining.
+ * - Support for SELECT, INSERT, UPDATE, DELETE, CREATE, and DROP statements.
+ * - Separate parameter management to prevent SQL injection.
+ * - Database-agnostic design that abstracts away SQL dialect differences.
+ * - Integration with the underlying database connection for executing built statements.
+ * 
+ * ### Use Cases
+ * - Constructing complex SQL queries in a readable and maintainable way.
+ * - Building SQL statements dynamically based on application logic or user input.
+ * - Abstracting database interactions to allow for easier maintenance and potential database engine changes in the future.
+ * 
+ * ### Example Usage
+ * ```ts
+ * import { SQLBuilder } from "@aerokit/sdk/db";
+ * 
+ * // Example of building a SELECT statement
+ * const sqlBuilder = SQLBuilder.getDialect();
+ * const selectQuery = sqlBuilder.select()
+ *   .column("id")
+ *   .column("name")
+ *   .from("users")
+ *   .where("id = ?", 1);
+ * ```
+ */
+
 import { Connection } from "./database";
 
 // Assumed imports for the native Java API calls

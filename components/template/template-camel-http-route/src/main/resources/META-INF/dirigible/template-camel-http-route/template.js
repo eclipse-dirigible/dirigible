@@ -3,26 +3,28 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-export function getTemplate() {
-	return {
-		name: "Http Route Project Starter",
-		description: "Apache Camel Http Route Project Starter Template",
-		sources: [{
-			location: "/template-camel-http-route/http-route.camel.template",
-			action: "generate",
-			engine: "velocity",
-			rename: "http-route.camel"
-		}, {
-			location: "/template-camel-http-route/handler.ts.template",
-			action: "generate",
-            engine: "velocity",
-			rename: "handler.ts"
-		}, {
-            location: "/template-camel-http-route/project.json",
-            action: "generate",
-            rename: "project.json"
-        }],
-		parameters: [],
-		"order": 38
-	};
-};
+export const getTemplate = () => ({
+  name: "HTTP Route Project Starter",
+  description: "Apache Camel HTTP Route Project Sample",
+  sources: [
+    {
+      location: "/template-camel-http-route/http-route.camel.template",
+      action: "generate",
+      engine: "velocity",
+      rename: "http-route.camel",
+    },
+    {
+      location: "/template-camel-http-route/handler.ts.template",
+      action: "generate",
+      engine: "velocity",
+      rename: "handler.ts",
+    },
+    {
+      location: "/template-camel-http-route/project.json",
+      action: "generate",
+      rename: "project.json",
+    },
+  ],
+  parameters: [],
+  order: 38,
+});

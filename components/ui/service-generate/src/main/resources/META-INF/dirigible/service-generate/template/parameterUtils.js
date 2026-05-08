@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -65,6 +65,7 @@ export function process(model, parameters) {
             p.dataUnique = p.dataUnique === "true";
             p.isRequiredProperty = p.isRequiredProperty === "true";
             p.isCalculatedProperty = p.isCalculatedProperty === "true";
+			p.isReadOnlyProperty = p.isReadOnlyProperty === "true";
             p.widgetIsMajor = p.widgetIsMajor === "true";
             p.widgetLabel = p.widgetLabel ? p.widgetLabel : p.name;
             p.widgetDropdownUrl = "";
@@ -180,7 +181,7 @@ export function process(model, parameters) {
     parameters.roles = [];
 
     model.entities.forEach(e => {
-        if (e.generateDefaultRoles === "true") {
+        if (e && e.generateDefaultRoles === "true") {
             if (e.type != "PROJECTION") {
 
                 const rolePair = {};
@@ -285,7 +286,7 @@ export function parseDataTypes(dataType) {
         case "TIME":
         case "TIME WITH TIME ZONE":
             parsedDataType.java = "time";
-            parsedDataType.ts = "Date";
+            parsedDataType.ts = "string";
             break;
         case "DATETIME":
         case "TIMESTAMP":

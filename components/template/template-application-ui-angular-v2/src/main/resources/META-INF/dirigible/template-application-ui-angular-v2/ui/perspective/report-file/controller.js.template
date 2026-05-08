@@ -5,9 +5,17 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 	}])
 	.controller('PageController', (${dollar}scope, EntityService, LocaleService, Extensions) => {
 		const Dialogs = new DialogHub();
+		const exportsHub = new ExportsHub();
 		$scope.dataPage = 1;
 		$scope.dataCount = 0;
 		$scope.dataLimit = 20;
+		
+		$scope.triggerExportAction = () => {
+			let request = EntityService.exportCsv();
+			request.then(() => {
+				exportsHub.refresh();
+			});
+		}
 
 		//-----------------Custom Actions-------------------//
 		Extensions.getWindows(['${projectName}-custom-action']).then((response) => {

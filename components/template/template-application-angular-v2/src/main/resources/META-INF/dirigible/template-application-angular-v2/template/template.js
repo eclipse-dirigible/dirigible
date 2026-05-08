@@ -4,7 +4,7 @@
  * Do not modify the content as it may be re-generated again.
  */
 import * as schemaTemplateManager from "template-application-schema/template/template";
-import * as feedTemplateManager from "template-application-feed/template/template";
+import * as feedTemplateManager from "template-application-feed-v2/template/template";
 import * as uiAngularjsTemplateManager from "template-application-ui-angular-v2/template/template";
 import * as odataTemplateManager from "template-application-odata/template/template";
 import * as generateUtils from "service-generate/template/generateUtils";
@@ -47,7 +47,7 @@ export function getTemplate(parameters) {
 
     return {
         name: "Application - Full Stack - v2",
-        description: "Application - full stack with a Database Schema, a set of REST Services and an AngularJS User Interfaces",
+        description: "Full stack application with a Database Schema, a set of REST Services and an AngularJS User Interface",
         extension: "model",
         sources: templateSources,
         parameters: parameterUtils.getUniqueParameters(schemaTemplate.parameters, feedTemplate.parameters, uiAngularjsTemplate.parameters, odataTemplate.parameters)

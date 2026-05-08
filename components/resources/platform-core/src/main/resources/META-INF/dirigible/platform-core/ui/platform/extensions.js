@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -73,7 +73,7 @@ angular.module('platformExtensions', []).factory('Extensions', ($http) => ({
         return $http.get('/services/js/platform-core/extension-services/views.js', { params: { extensionPoints: exPoints } });
     },
     getSettings: (exPoints = top.PlatformExtPoints.settings) => {
-        return $http.get('/services/js/platform-core/extension-services/views.js', { params: { extensionPoints: exPoints } });
+        return $http.get('/services/js/platform-core/extension-services/views.js', { params: { extensionPoints: exPoints, type: 'settings' } });
     },
     getEditors: (exPoints = top.PlatformExtPoints.editors) => {
         return $http.get('/services/js/platform-core/extension-services/editors.js', { params: { extensionPoints: exPoints } });

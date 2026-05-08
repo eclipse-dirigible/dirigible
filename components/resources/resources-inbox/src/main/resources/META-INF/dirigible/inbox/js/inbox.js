@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -11,6 +11,7 @@
  */
 angular.module('app', ['platformView', 'blimpKit', 'platformLocale']).controller('ApplicationController', ($scope, $http, $window, LocaleService) => {
     const Dialogs = new DialogHub();
+    const dateTimeUtil = new DateTimeUtil();
     $scope.tasksList = [];
     $scope.tasksListAssignee = [];
     $scope.selectedClaimTask = null;
@@ -38,6 +39,10 @@ angular.module('app', ['platformView', 'blimpKit', 'platformLocale']).controller
         }, (error) => {
             console.error(error);
         });
+    };
+
+    $scope.formatTime = (isoDate) => {
+        return dateTimeUtil.format(isoDate, "YYYY-MM-DD HH:mm:ss");
     };
 
     $scope.selectionClaimChanged = (variable) => {

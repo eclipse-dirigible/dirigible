@@ -16,11 +16,6 @@
     <dependencies>
         <dependency>
             <groupId>org.webjars.npm</groupId>
-            <artifactId>split.js</artifactId>
-            <version>${split.js.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.webjars.npm</groupId>
             <artifactId>i18next</artifactId>
             <version>${i18next.version}</version>
         </dependency>

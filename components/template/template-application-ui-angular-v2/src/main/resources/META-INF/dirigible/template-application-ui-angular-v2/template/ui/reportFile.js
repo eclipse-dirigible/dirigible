@@ -37,7 +37,7 @@ function getTableReportBackendSources() {
         }, {
             location: "/template-application-rest/api/reportFileEntity.ts.template",
             action: "generate",
-            rename: "gen/{{genFolderName}}/api/Reports/{{name}}Service.ts",
+            rename: "gen/{{genFolderName}}/api/Reports/{{name}}Controller.ts",
             engine: "velocity",
             collection: "reportModels"
         }, {

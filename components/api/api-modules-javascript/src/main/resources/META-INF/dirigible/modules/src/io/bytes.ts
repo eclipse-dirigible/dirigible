@@ -1,9 +1,41 @@
 /**
- * Provides utilities for converting and manipulating byte arrays,
- * facilitating conversions between JavaScript arrays, Java arrays, text, and integers.
+ * @module io/bytes
+ * @package @aerokit/sdk/io
+ * @name Bytes
+ * @overview
+ * 
+ * The Bytes class provides static methods for converting and manipulating byte arrays, facilitating conversions between JavaScript arrays, Java arrays, text, and integers. It serves as a utility for bridging data types between the JavaScript environment and native Java components, particularly in scenarios where byte-level data manipulation is required.
+ * 
+ * ### Key Features:
+ * - **Byte Array Conversion**: Methods to convert between JavaScript byte arrays (arrays of numbers) and native Java byte arrays, enabling seamless data exchange with Java methods.
+ * - **Text Encoding/Decoding**: Methods to convert text strings to byte arrays and vice versa, using the default platform encoding (UTF-8).
+ * - **Integer Conversion**: Methods to convert 32-bit integers to byte arrays and back, with support for both big-endian and little-endian byte orders.
+ * 
+ * ### Use Cases:
+ * - **File Handling**: When working with file uploads or downloads, the Bytes class can be used to convert file content between different formats.
+ * - **Network Communication**: In scenarios involving network communication where data is transmitted as bytes, the Bytes class can facilitate encoding and decoding of messages.
+ * - **Data Serialization**: For applications that require custom serialization of data into byte formats, the Bytes class provides essential utilities for handling such conversions.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Bytes } from "@aerokit/sdk/io";
+ * 
+ * // Convert text to byte array and back
+ * const text = "Hello, World!";
+ * const byteArray = Bytes.textToByteArray(text);
+ * const reconstructedText = Bytes.byteArrayToText(byteArray);
+ * console.log(reconstructedText); // Output: Hello, World!
+ * 
+ * // Convert integer to byte array and back
+ * const intValue = 123456789;
+ * const intByteArray = Bytes.intToByteArray(intValue, "BIG_ENDIAN");
+ * const reconstructedInt = Bytes.byteArrayToInt(intByteArray, "BIG_ENDIAN");
+ * console.log(reconstructedInt); // Output: 123456789
+ * ```
  */
 
 const JString = Java.type("java.lang.String");
+const Charset = Java.type("java.nio.charset.Charset");
 const JByte = Java.type("java.lang.Byte");
 const JArray = Java.type("java.lang.reflect.Array");
 const BytesFacade = Java.type("org.eclipse.dirigible.components.api.io.BytesFacade");
@@ -64,8 +96,7 @@ export class Bytes {
 	 * @returns The reconstructed text string.
 	 */
 	public static byteArrayToText(data: any[]): string {
-		const native = Bytes.toJavaBytes(data);
-		return String.fromCharCode.apply(String, Bytes.toJavaScriptBytes(native));
+		return new JString(data, Charset.forName("UTF8"));
 	}
 
 	/**

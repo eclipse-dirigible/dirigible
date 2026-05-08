@@ -1,6 +1,39 @@
 /**
- * Provides a static façade (`Searcher` class) for performing
- * term-based and time-based queries against a native indexing service.
+ * @module indexing/searcher
+ * @package @aerokit/sdk/indexing
+ * @name Searcher
+ * @overview
+ * 
+ * The Searcher class provides a static façade for performing term-based and time-based queries against a native indexing service. It allows developers to execute keyword searches and filter indexed entries based on their indexing timestamps, facilitating efficient retrieval of relevant data from the index.
+ * 
+ * ### Key Features:
+ * - **Keyword Search**: The `search` method enables searching for entries in a specified index using keywords or search phrases.
+ * - **Time-Based Queries**: The `before`, `after`, and `between` methods allow filtering indexed entries based on their indexing timestamps, enabling retrieval of entries indexed before, after, or within a specific date range.
+ * 
+ * ### Use Cases:
+ * - **Data Retrieval**: Developers can use the Searcher class to retrieve relevant data from an index based on keywords or time criteria, which is essential for applications that rely on indexed data for search functionality.
+ * - **Index Management**: The time-based query methods can be useful for managing and maintaining the index by identifying entries that may need to be updated or removed based on their age.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Searcher } from "@aerokit/sdk/indexing";
+ * 
+ * // Perform a keyword search in the 'documents' index
+ * const results = Searcher.search('documents', 'example search term');
+ * console.log(results);
+ * 
+ * // Find entries indexed before a specific date
+ * const oldEntries = Searcher.before('documents', new Date('2023-01-01'));
+ * console.log(oldEntries);
+ * 
+ * // Find entries indexed after a specific date
+ * const recentEntries = Searcher.after('documents', new Date('2023-06-01'));
+ * console.log(recentEntries);
+ * 
+ * // Find entries indexed between two dates
+ * const entriesInRange = Searcher.between('documents', new Date('2023-01-01'), new Date('2023-06-01'));
+ * console.log(entriesInRange);
+ * ```
  */
 
 const IndexingFacade = Java.type("org.eclipse.dirigible.components.api.indexing.IndexingFacade");

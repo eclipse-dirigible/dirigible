@@ -1,4 +1,5 @@
 {
+    "metadata": {},
     "feeds": [],
     "scripts": [],
     "code": "let url = new URL(window.location);\nlet params = new URLSearchParams(url.search);\nlet taskId = params.get(\"taskId\");\n\n$scope.onApproveClicked = function () {\n    const url = `/services/ts/BPMLeaveRequestIT/api/ProcessService.ts/requests/${taskId}/approve`;\n    $http.put(url)\n        .then(function (response) {\n        if (response.status != 200) {\n            alert(`Unable to approve request: '${response.message}'`);\n            return;\n        }\n        $scope.entity = {};\n        alert(\"Request Approved\");\n    });\n};\n\n$scope.onDeclineClicked = function () {\n    const url = `/services/ts/BPMLeaveRequestIT/api/ProcessService.ts/requests/${taskId}/decline`;\n    $http.put(url)\n        .then(function (response) {\n        if (response.status != 200) {\n            alert(`Unable to decline request: '${response.message}'`);\n            return;\n        }\n        $scope.entity = {};\n        alert(\"Request Declined\");\n    });\n\n};\n\nconst detailsUrl = `/services/ts/BPMLeaveRequestIT/api/ProcessService.ts/requests/${taskId}/details`;\n$http.get(detailsUrl)\n    .then(function (response) {\n        if (response.status != 200) {\n            alert(`Unable to get details for the request: '${response.message}'`);\n            return;\n        }\n        const details = response.data;\n\n        // fill details\n        $scope.model.requester = details.requester;\n        $scope.model.fromDate = new Date(details.fromDate);\n        $scope.model.toDate = new Date(details.toDate);\n    });",
@@ -6,8 +7,11 @@
         {
             "controlId": "header",
             "groupId": "fb-display",
-            "title": "Process leave request",
-            "size": 1
+            "label": "Process leave request",
+            "headerSize": 2,
+            "level": 1,
+            "padding": "tiny",
+            "side": "bottom"
         },
         {
             "controlId": "input-textfield",
@@ -16,14 +20,13 @@
             "label": "Requester",
             "horizontal": false,
             "isCompact": false,
-            "placeholder": "",
+            "readonly": false,
             "type": "text",
             "model": "requester",
             "required": false,
             "minLength": 0,
             "maxLength": -1,
-            "validationRegex": "",
-            "errorState": "Incorrect input"
+            "errorMessage": "Incorrect input"
         },
         {
             "controlId": "input-date",
@@ -32,6 +35,7 @@
             "label": "From date",
             "horizontal": false,
             "isCompact": false,
+            "readonly": false,
             "type": "date",
             "model": "fromDate",
             "required": false
@@ -43,6 +47,7 @@
             "label": "To date",
             "horizontal": false,
             "isCompact": false,
+            "readonly": false,
             "type": "date",
             "model": "toDate",
             "required": false
@@ -56,7 +61,6 @@
                     "groupId": "fb-controls",
                     "label": "Approve",
                     "type": "positive",
-                    "sizeToText": false,
                     "isSubmit": true,
                     "isCompact": false,
                     "callback": "onApproveClicked()"
@@ -66,12 +70,12 @@
                     "groupId": "fb-controls",
                     "label": "Decline",
                     "type": "negative",
-                    "sizeToText": false,
                     "isSubmit": true,
                     "isCompact": false,
                     "callback": "onDeclineClicked()"
                 }
-            ]
+            ],
+            "justify": "end"
         }
     ]
 }

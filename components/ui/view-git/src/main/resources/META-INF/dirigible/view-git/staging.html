@@ -1,6 +1,6 @@
 <!--
 
-    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
 
     All rights reserved. This program and the accompanying materials
     are made available under the terms of the Eclipse Public License v2.0
@@ -20,9 +20,8 @@
     <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
     <title config-title></title>
     <script type="text/javascript" src="configs/staging-view.js"></script>
-    <script type="text/javascript" src="/services/js/platform-core/services/loader.js?ids=view-js,jstree-js"></script>
+    <meta name="platform-links" category="ng-view,ng-jstree">
     <script type="text/javascript" src="/services/web/service-git/git.js"></script>
-    <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?ids=view-css,jstree-css" />
     <script type="text/javascript" src="js/staging.js"></script>
   </head>
 
@@ -45,7 +44,7 @@
         <bk-button state="transparent" glyph="sap-icon--filter-facets" aria-label="Show difference" title="Show difference" ng-click="getSelectedDiff()"></bk-button>
         <bk-button state="transparent" glyph="sap-icon--reset" aria-label="Revert to last commit" title="Revert to last commit" ng-click="revert()"></bk-button>
       </bk-toolbar>
-      <div id="unstaged" bk-scrollbar class="jstree-fiori--fill bk-list-border--top bk-list-border--bottom jstree-list-mode" style="flex: 4">
+      <div id="unstaged" bk-scrollbar class="jstree-fiori--fill bk-border--top bk-border--bottom jstree-list-mode" style="flex: 4">
       </div>
       <bk-toolbar no-bottom-border="true" compact="true">
         <span>Staged</span>
@@ -54,7 +53,7 @@
         </bk-button>
         <bk-button state="transparent" glyph="sap-icon--filter-facets" aria-label="Show difference" title="Show difference" ng-click="getSelectedDiff(false)"></bk-button>
       </bk-toolbar>
-      <div id="staged" bk-scrollbar class="jstree-fiori--fill bk-list-border--top bk-list-border--bottom jstree-list-mode" style="flex: 4"></div>
+      <div id="staged" bk-scrollbar class="jstree-fiori--fill bk-border--top bk-border--bottom jstree-list-mode" style="flex: 4"></div>
       <div class="fd-container fd-form-layout-grid-container" style="padding: 0.5rem;" ng-hide="loadingGitState" ng-form="forms.credentialsFieldset">
         <div class="fd-row">
 

@@ -1,3 +1,31 @@
+/**
+ * @module http/rs/method
+ * @package @aerokit/sdk/http
+ * @name ResourceMethod
+ * @overview
+ * 
+ * The ResourceMethod class is a core component of the HTTP controller module, responsible for managing the configuration of individual HTTP method handlers (e.g., GET, POST) attached to a Resource. It provides a fluent API for defining the behavior of these handlers, including their processing logic and MIME type constraints.
+ * 
+ * ### Key Features:
+ * - **Fluent API**: Allows developers to define HTTP method handlers in a fluent and intuitive manner.
+ * - **Handler Configuration**: Supports configuration of various processing phases (before, serve, catch, finally) for matched resource requests.
+ * - **MIME Type Management**: Provides methods to specify the MIME types that the handler consumes and produces.
+ * 
+ * ### Use Cases:
+ * - **API Endpoint Definition**: Developers can use ResourceMethod to define the behavior of specific HTTP methods for their API endpoints, including request processing logic and content type handling.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { ResourceMethod } from "@aerokit/sdk/http";
+ * 
+ * const resourceMethod = new ResourceMethod()
+ *  .get(function(req, res) {
+ *      // Handler logic for GET requests
+ *  })
+ *  .produces("application/json")
+ *  .execute();
+ * ```
+ */
 import { handlerFunction } from "./resource-common";
 
 /**

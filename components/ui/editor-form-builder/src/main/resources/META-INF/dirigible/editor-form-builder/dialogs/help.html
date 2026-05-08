@@ -1,0 +1,61 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="help" ng-controller="HelpController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/editor-form-builder/configs/help-window.js"></script>
+        <meta name="platform-links" category="ng-view">
+    </head>
+
+    <body class="bk-padding" bk-scrollbar>
+        <h2 bk-title wrap="true" header-size="4">Name</h2>
+        <p class="bk-font--normal">The feed name determines the scope variable to which the response value is assigned.
+        <p class="bk-font--normal">For example, if the feed name is <code class="fd-code fd-code--inline">extraData</code>, the corresponding variable will be available as <code class="fd-code fd-code--inline">$scope.extraData</code>.
+            Within the Designer tab, this variable can be referenced without the <code class="fd-code fd-code--inline">$scope.</code> prefix.</p>
+        <p class="bk-font--normal">To assign the response data directly to the model, set the feed name to <code class="fd-code fd-code--inline">model</code>.</p>
+
+        <h2 bk-title wrap="true" header-size="4">URL</h2>
+        <p class="bk-font--normal">This field specifies the URL of your back-end service. If the URL is dynamic, you can use a template literal (<code class="fd-code fd-code--inline">${}</code>) to interpolate variable values or invoke
+            functions.</p>
+        <p class="bk-font--normal">For example, if the URL is defined as:</p>
+        <code class="fd-code">/path/to/service/${someId}/</code>
+        <p class="bk-font--normal">and a variable is declared in the Code tab as:</p>
+        <code class="fd-code">const someId = '1';</code>
+        <p class="bk-font--normal">then the resulting request URL will be:</p>
+        <code class="fd-code">/path/to/service/1/</code>
+
+        <h2 class="bk-padding-top--sm" bk-title wrap="true" header-size="4">Function</h2>
+        <p class="bk-font--normal">Specifying a function name is optional.</p>
+        <p class="bk-font--normal">If you need to modify the response data before it is assigned to the target variable, you can provide a function name here. Then, define a corresponding function in the Code tab. This function must accept
+            the response data as its first parameter, apply any necessary transformations, and return the updated result for assignment.</p>
+        <p class="bk-font--normal">For example, if the function name is set to:</p>
+        <code class="fd-code">printResponse</code>
+        <p class="bk-font--normal">the function should be defined as:</p>
+        <pre><code class="fd-code">function printResponse(data) {
+    console.log(data);
+    return data;
+}</code></pre>
+
+        <script>
+            angular.module('help', ['blimpKit', 'platformView']).controller('HelpController', () => {});
+        </script>
+        <theme></theme>
+    </body>
+
+</html>

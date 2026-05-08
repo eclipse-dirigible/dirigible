@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -13,14 +13,8 @@ angular.module('statements', ['blimpKit', 'platformView', 'platformTheming']).co
     const statusBarHub = new StatusBarHub();
     const dialogHub = new DialogHub();
     const themingHub = new ThemingHub();
+    const exportsHub = new ExportsHub();
     const DB_EXPORT_SERVICE_URL = '/services/data/export-async/';
-    $scope.EXPORT_BASE_URL = '/public/cms/__EXPORTS/';
-    $scope.ExportStatus = {
-        TRIGGRED: 'TRIGGRED',
-        FINISHED: 'FINISHED',
-        FAILED: 'FAILED',
-        UNKNOWN: 'UNKNOWN'
-    };
     const lastSelectedDatabaseKey = `${getBrandingInfo().prefix}.view-db-explorer.database`;
     let selectedDatabase = JSON.parse(localStorage.getItem(lastSelectedDatabaseKey) ?? 'null');
     if (!selectedDatabase) {
@@ -41,13 +35,10 @@ angular.module('statements', ['blimpKit', 'platformView', 'platformTheming']).co
         error: false,
         busyText: 'Loading...',
     };
-    $scope.exports = [];
-    getExports(false);
 
     let monacoTheme = 'vs-light';
     let autoListener = false;
     let theme = Theme.getTheme();
-    let exportButton;
 
     function onThemeChange(event) {
         if (autoListener) {
@@ -161,39 +152,6 @@ angular.module('statements', ['blimpKit', 'platformView', 'platformTheming']).co
         };
     }
 
-    function getExports(open = true) {
-        $http({
-            method: 'GET',
-            url: DB_EXPORT_SERVICE_URL,
-            headers: { 'X-Requested-With': 'Fetch' }
-        }).then((result) => {
-            $scope.exports.length = 0;
-            $scope.exports.push(...result.data.reverse());
-            if (open) {
-                exportButton.focus();
-                exportButton.click();
-            }
-            if (open && !$scope.exports.length) {
-                $timeout(() => { getExports(false) }, 500);
-            } else {
-                for (let i = 0; i < $scope.exports.length; i++) {
-                    if ($scope.exports[i].status === $scope.ExportStatus.TRIGGRED) {
-                        $timeout(() => { getExports(false) }, 1000);
-                        break;
-                    }
-                }
-            }
-        }, (reject) => {
-            dialogHub.showAlert({
-                type: AlertTypes.Error,
-                title: 'Could not get export list',
-                message: 'Please check the console log for more information.',
-                preformatted: true,
-            });
-            console.error(reject);
-        });
-    }
-
     function exportQuery(command) {
         const url = DB_EXPORT_SERVICE_URL + encodeURIComponent(selectedDatabase.name);
         const sql = command.trim().toLowerCase();
@@ -207,7 +165,7 @@ angular.module('statements', ['blimpKit', 'platformView', 'platformTheming']).co
                     'X-Requested-With': 'Fetch',
                 }
             }).then(() => {
-                getExports();
+                exportsHub.refresh();
             }, (reject) => {
                 dialogHub.showAlert({
                     type: AlertTypes.Error,
@@ -227,7 +185,7 @@ angular.module('statements', ['blimpKit', 'platformView', 'platformTheming']).co
                     'X-Requested-With': 'Fetch',
                 }
             }).then(() => {
-                getExports();
+                exportsHub.refresh();
             }, (reject) => {
                 dialogHub.showAlert({
                     type: AlertTypes.Error,
@@ -255,29 +213,6 @@ angular.module('statements', ['blimpKit', 'platformView', 'platformTheming']).co
 
     let _editor;
 
-    $scope.deleteExport = (id) => {
-        $http({
-            method: 'DELETE',
-            url: DB_EXPORT_SERVICE_URL + encodeURIComponent(id),
-            headers: { 'X-Requested-With': 'Fetch' }
-        }).then(() => {
-            for (let i = 0; i < $scope.exports.length; i++) {
-                if ($scope.exports[i].id === id) {
-                    $scope.exports.splice(i, 1);
-                    break;
-                }
-            }
-        }, (reject) => {
-            dialogHub.showAlert({
-                type: AlertTypes.Error,
-                title: 'Could not get export list',
-                message: 'Please check the console log for more information.',
-                preformatted: true,
-            });
-            console.error(reject);
-        });
-    };
-
     $scope.executeSQL = () => {
         const executionObject = createExecuteAction();
         executionObject.run(_editor);
@@ -286,31 +221,6 @@ angular.module('statements', ['blimpKit', 'platformView', 'platformTheming']).co
     $scope.exportSQL = () => {
         const executionObject = createExportAction();
         executionObject.run(_editor);
-    };
-
-    $scope.deleteExports = () => {
-        $http({
-            method: 'DELETE',
-            url: DB_EXPORT_SERVICE_URL,
-            headers: { 'X-Requested-With': 'Fetch' }
-        }).then(() => {
-            $scope.exports.length = 0;
-        }, (reject) => {
-            dialogHub.showAlert({
-                type: AlertTypes.Error,
-                title: 'Could not get export list',
-                message: 'Please check the console log for more information.',
-                preformatted: true,
-            });
-            console.error(reject);
-        });
-    };
-
-    $scope.getExportDate = (date) => {
-        return new Intl.DateTimeFormat(undefined, {
-            dateStyle: 'short',
-            timeStyle: 'short',
-        }).format(new Date(date));
     };
 
     const scriptListener = dialogHub.addMessageListener({
@@ -329,7 +239,6 @@ angular.module('statements', ['blimpKit', 'platformView', 'platformTheming']).co
     });
 
     angular.element($document[0]).ready(() => {
-        exportButton = $document[0].querySelector(`#exports`);
         require.config({ paths: { vs: "/webjars/monaco-editor/min/vs" } });
 
         // @ts-ignore

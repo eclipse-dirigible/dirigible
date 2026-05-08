@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -29,7 +29,7 @@ public class BPMStarterTemplateIT extends UserInterfaceIntegrationTest {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BPMStarterTemplateIT.class);
 
-    private static final String TEMPLATE_TITLE = "BPM Project Starter";
+    private static final String TEMPLATE_TITLE = "BPM Starter Project";
     private static final String TEST_PROJECT = "bpm-test-project";
     private static final String TEST_PROCESS = "bpm-test-process";
     private static final String PROCESS_IDENTIFIER_ID = "param_processId";

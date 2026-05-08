@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -235,41 +235,47 @@ public class CsvimProcessor {
             if (Boolean.TRUE.equals(csvFile.getUpsert()) && recordsToUpdate.size() > 0) {
                 updateCsvRecords(connection, targetSchema, tableMetadata, recordsToUpdate, csvParser.getHeaderNames(), pkName, csvFile);
             }
-            if (countAll > 0 && csvFile.getSequence() != null) {
-                int sequenceStart = countAll + 1;
+            updateSequence(csvFile, connection, countAll);
+        }
+    }
 
-                PreparedStatement preparedStatement = null;
+    public void updateSequence(CsvFile csvFile, Connection connection, int countAll) throws SQLException {
+        if (countAll > 0 && csvFile.getSequence() != null) {
+            int sequenceStart = countAll + 1;
+
+            PreparedStatement preparedStatement = null;
+            try {
+                String createSequenceSql = SqlFactory.getNative(connection)
+                                                     .create()
+                                                     .sequence(csvFile.getSequence())
+                                                     .start(sequenceStart)
+                                                     .increment(50)
+                                                     .build();
+                preparedStatement = connection.prepareStatement(createSequenceSql);
+                preparedStatement.executeUpdate();
+            } catch (SQLException e) {
+                if (preparedStatement != null) {
+                    preparedStatement.close();
+                }
                 try {
-                    String createSequenceSql = SqlFactory.getNative(connection)
-                                                         .create()
-                                                         .sequence(csvFile.getSequence())
-                                                         .start(sequenceStart)
-                                                         .build();
-                    preparedStatement = connection.prepareStatement(createSequenceSql);
+                    String alterSequenceSql = SqlFactory.getNative(connection)
+                                                        .alter()
+                                                        .sequence(csvFile.getSequence())
+                                                        .restartWith(sequenceStart)
+                                                        .increment(50)
+                                                        .build();
+                    preparedStatement = connection.prepareStatement(alterSequenceSql);
                     preparedStatement.executeUpdate();
-                } catch (SQLException e) {
-                    if (preparedStatement != null) {
-                        preparedStatement.close();
-                    }
-                    try {
-                        String alterSequenceSql = SqlFactory.getNative(connection)
-                                                            .alter()
-                                                            .sequence(csvFile.getSequence())
-                                                            .restartWith(sequenceStart)
-                                                            .build();
-                        preparedStatement = connection.prepareStatement(alterSequenceSql);
-                        preparedStatement.executeUpdate();
-                    } catch (SQLException e1) {
-                        logger.error("Failed to restart database sequence [" + csvFile.getSequence() + "]", e1);
-                    } finally {
-                        if (preparedStatement != null) {
-                            preparedStatement.close();
-                        }
-                    }
+                } catch (SQLException e1) {
+                    logger.error("Failed to restart database sequence [" + csvFile.getSequence() + "]", e1);
                 } finally {
                     if (preparedStatement != null) {
                         preparedStatement.close();
                     }
+                }
+            } finally {
+                if (preparedStatement != null) {
+                    preparedStatement.close();
                 }
             }
         }

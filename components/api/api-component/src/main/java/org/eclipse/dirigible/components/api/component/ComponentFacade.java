@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -68,22 +68,6 @@ public class ComponentFacade implements InitializingBean {
             injectionsMap = constructor.getMember("__injections_map");
         }
 
-        // if (!constructor.hasMember("__injections_map")) {
-        // // Fallback: retrieve from context
-        // String contextId = ComponentContextHolder.get();
-        // ComponentContext context = ComponentContextRegistry.getContext(contextId);
-        //
-        //
-        //
-        //
-        //
-        // if (constructor.hasMember("__component_name")) {
-        // String cname = constructor.getMember("__component_name")
-        // .asString();
-        // injectionsMap = context.getMetadata(cname);
-        // }
-        // }
-
         if (injectionsMap == null || injectionsMap.isNull()) {
             logger.error("Metadata is null for: {}", name);
             return;
@@ -111,10 +95,11 @@ public class ComponentFacade implements InitializingBean {
             ComponentContext context = ComponentContextRegistry.getContext(contextId);
 
             ComponentFileMetadata componentFileMetadata = context.getComponentFileMetadata(lookupName);
+            if (componentFileMetadata == null) {
+                throw new RuntimeException("Component does not exist for injection: " + lookupName);
+            }
             Value dependency = ComponentRegister.createComponentInstance(componentFileMetadata.getLocation(),
                     componentFileMetadata.getProjectName(), componentFileMetadata.getFilePath(), componentFileMetadata.getContextId());
-
-            // Value dependency = context.getComponent(lookupName);
 
             if (dependency != null && !dependency.isNull()) {
                 instance.putMember(propertyKey, dependency);

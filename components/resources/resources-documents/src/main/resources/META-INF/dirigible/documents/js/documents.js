@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -50,9 +50,10 @@ class HistoryStack {
         this.history.idx++;
     }
 }
-documents.controller('DocumentsController', ($scope, $http, $timeout, $element, $document, ButtonStates, FileUploader, LocaleService) => {
+documents.controller('DocumentsController', ($scope, $http, $timeout, $element, $document, ButtonStates, FileUploader, LocaleService, ViewParameters) => {
     const dialogHub = new DialogHub();
     const notificationHub = new NotificationHub();
+    const statusBarHub = new StatusBarHub();
     const documentsApi = '/services/js/documents/api/documents.js';
     const folderApi = '/services/js/documents/api/documents.js/folder';
     const zipApi = '/services/js/documents/api/documents.js/zip';
@@ -73,19 +74,27 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
 
     let iframe;
 
-    angular.element($document[0]).ready(() => {
-        iframe = $document[0].getElementById('preview-iframe');
-        iframe.onload = () => $scope.$evalAsync(() => {
-            $scope.previewLoading = false;
+    $scope.params = {
+        multiple: true,
+        readOnly: false,
+        ...ViewParameters.get()
+    };
+
+    if ($scope.params.container !== 'window') {
+        angular.element($document[0]).ready(() => {
+            iframe = $document[0].getElementById('preview-iframe');
+            iframe.onload = () => $scope.$evalAsync(() => {
+                $scope.previewLoading = false;
+            });
+            iframe.onerror = () => $scope.$evalAsync(() => {
+                console.error(`Error while loading preview for ${$scope.selectedFile.name}`);
+                $scope.previewLoading = false;
+            });
         });
-        iframe.onerror = () => $scope.$evalAsync(() => {
-            console.error(`Error while loading preview for ${$scope.selectedFile.name}`);
-            $scope.previewLoading = false;
-        });
-    });
+    }
 
     $scope.loading = false;
-    $scope.canPreview = true;
+    $scope.canPreview = $scope.params.container !== 'window';
     $scope.previewType = 'web';
     $scope.csvData = {
         headers: [],
@@ -145,6 +154,31 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
     $scope.hasForward = () => $scope.history.hasForward();
     $scope.goBack = () => $scope.history.goBack(path => loadFolder(path));
     $scope.goForward = () => $scope.history.goForward(path => loadFolder(path));
+    $scope.refresh = refreshFolder;
+
+    function getAllSelectedFilePaths() {
+        let paths = [];
+        for (let i = 0; i < $scope.folder.children.length; i++) {
+            if ($scope.folder.children[i].selected) {
+                paths.push($scope.folder.children[i].path);
+            }
+        }
+        return paths;
+    };
+
+    $scope.closeDialog = (sendSelected = true) => {
+        if ($scope.params.topic) {
+            if (sendSelected) {
+                dialogHub.postMessage({
+                    topic: $scope.params.topic,
+                    data: $scope.params.multiple ? getAllSelectedFilePaths() : [$scope.selectedFile['path']]
+                });
+            } else {
+                dialogHub.triggerEvent($scope.params.topic);
+            }
+        }
+        dialogHub.closeWindow({ id: viewData.id });
+    };
 
     $scope.getFullPath = (itemName) => {
         const path = $scope.folder.path ? ($scope.folder.path + '/' + itemName) : itemName;
@@ -166,6 +200,7 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
         if ($scope.isFolder(cmisObject)) {
             openFolder($scope.getFullPath(cmisObject.name));
         } else {
+            $scope.clearSelection();
             setSelectedFile(cmisObject);
         }
     };
@@ -202,6 +237,20 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
 
     const getFilePreviewUrl = (item) => isDocument(item) ?
         `${$scope.previewPath}?path=${$scope.getFullPath(item.name)}` : 'about:blank';
+
+    $scope.copyLink = (item) => {
+        try {
+            navigator.clipboard.writeText(`${window.location.origin}${$scope.previewPath}?path=${$scope.getFullPath(item.name)}`);
+            statusBarHub.showMessage(LocaleService.t('documents:linkCopied', 'Link copied'));
+        } catch (error) {
+            console.error(error);
+            dialogHub.showAlert({
+                title: LocaleService.t('documents:errMsg.copyLink', 'Failed to copy link'),
+                message: LocaleService.t('unknownErrorMsg', 'Please check the console log for more information.'),
+                type: AlertTypes.Error,
+            });
+        }
+    };
 
     $scope.getFileDownloadUrl = (item) => isDocument(item) ?
         `${$scope.downloadPath}?path=${$scope.getFullPath(item.name)}` : 'about:blank';
@@ -503,9 +552,13 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
 
     function setSelectedFile(selectedFile) {
         if (selectedFile === null) $scope.selectedFile = selectedFile;
-        else if ($scope.canPreviewFile(selectedFile.name)) {
+        else {
             $scope.selectedFile = selectedFile;
-            setPreviewer();
+            if ($scope.params.container === 'window') {
+                $scope.selectedFile.selected = true;
+            } else if ($scope.canPreviewFile(selectedFile.name)) {
+                setPreviewer();
+            }
         }
     };
 

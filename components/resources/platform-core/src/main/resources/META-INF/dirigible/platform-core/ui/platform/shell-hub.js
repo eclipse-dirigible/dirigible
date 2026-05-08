@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -10,6 +10,14 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 class ShellHub extends MessageHubApi {
+    /**
+     * Returns the shell configuration.
+     */
+    getConfig() {
+        if (top.hasOwnProperty('getConfigData')) return top.getConfigData();
+        return {};
+    }
+
     /**
      * Shows a perspective inside the shell.
      * @param {string} id - Perspective id.

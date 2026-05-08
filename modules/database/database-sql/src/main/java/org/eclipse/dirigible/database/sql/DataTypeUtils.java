@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -100,6 +100,8 @@ public class DataTypeUtils {
     private static final String TIMESTAMP = "TIMESTAMP";
     /** The Constant DATE. */
     private static final String DATE = "DATE";
+    /** The Constant DATE. */
+    private static final String DATETIME = "DATETIME";
     /** The Constant TEXT. */
     private static final String TEXT = "TEXT";
     /** The Constant CHARACTER. */
@@ -275,6 +277,7 @@ public class DataTypeUtils {
         UNIFIED_STRING_FROM_DATABASE_TYPE.put(BINARY_VARYING, BLOB);
         UNIFIED_STRING_FROM_DATABASE_TYPE.put(BINARY_LARGE_OBJECT, BLOB);
         UNIFIED_STRING_FROM_DATABASE_TYPE.put(BYTEA, BLOB);
+        UNIFIED_STRING_FROM_DATABASE_TYPE.put(DATETIME, TIMESTAMP);
 
     }
 

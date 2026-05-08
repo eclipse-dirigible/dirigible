@@ -27,6 +27,14 @@ export class CountryEntity {
 
     @Column({ name: "COUNTRY_NUMERIC", type: "string" })
     public Numeric?: string;
+    
+    @Column({ name: "COUNTRY_CREATED_AT", type: "timestamp" })
+    @CreatedAt()
+    public createdAt?: Date;
+
+    @Column({ name: "COUNTRY_CREATED_BY", type: "string" })
+    @CreatedBy()
+    public createdBy?: string;
 
 }
 

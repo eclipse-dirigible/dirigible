@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
+import org.eclipse.dirigible.components.security.repository.AccessRepository;
+import org.eclipse.dirigible.components.security.verifier.AccessVerifier;
 import org.eclipse.dirigible.tests.base.BaseTestProject;
 import org.eclipse.dirigible.tests.base.ProjectUtil;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
@@ -16,6 +18,8 @@ import org.eclipse.dirigible.tests.framework.ide.EdmView;
 import org.eclipse.dirigible.tests.framework.ide.IDE;
 import org.eclipse.dirigible.tests.framework.ide.IDEFactory;
 import org.eclipse.dirigible.tests.framework.security.SecurityUtil;
+import org.eclipse.dirigible.tests.framework.util.SleepUtil;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -37,14 +41,20 @@ class CustomSecurityTestProject extends BaseTestProject {
     private final SecurityUtil securityUtil;
     private final IDEFactory ideFactory;
 
-    CustomSecurityTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, SecurityUtil securityUtil, IDEFactory ideFactory) {
+    @Autowired
+    private AccessVerifier securityAccessVerifier;
+
+    CustomSecurityTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, SecurityUtil securityUtil, IDEFactory ideFactory,
+            AccessVerifier securityAccessVerifier) {
         super("CustomSecurityIT", ide, projectUtil, edmView);
         this.securityUtil = securityUtil;
         this.ideFactory = ideFactory;
+        this.securityAccessVerifier = securityAccessVerifier;
     }
 
     @Override
     public void verify() {
+        securityAccessVerifier.refreshCache(true);
         testAccessProtectedPageWithUserWithoutRole();
         testAccessProtectedPageWithUserWithRole();
     }

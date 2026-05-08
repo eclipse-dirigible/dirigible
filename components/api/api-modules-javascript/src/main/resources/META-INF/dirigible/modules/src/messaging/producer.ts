@@ -1,6 +1,31 @@
 /**
- * Provides an API for producing (sending) messages to JMS-style destinations,
- * supporting both Queues (point-to-point) and Topics (publish/subscribe).
+ * @module messaging/producer
+ * @package @aerokit/sdk/messaging
+ * @name Producer
+ * @overview
+ * 
+ * The Producer module provides an API for configuring and managing messaging producers, allowing scripts to send messages to JMS-style destinations such as Queues and Topics. It abstracts the complexities of message production, enabling developers to easily integrate message sending capabilities into their applications.
+ * 
+ * ### Key Features:
+ * - **Queue and Topic Support**: The module supports both Queue and Topic producers, enabling different messaging patterns (point-to-point and publish/subscribe).
+ * - **Message Sending**: The `send` method allows for sending messages to the configured destinations.
+ * 
+ * ### Use Cases:
+ * - **Event Production**: Developers can use this module to produce messages to queues or topics, enabling use cases such as event-driven architectures and microservices communication.
+ * - **Integration with Messaging Systems**: By sending messages to JMS-style destinations, applications can integrate with various messaging systems that support these patterns.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Producer } from "@aerokit/sdk/messaging";
+ * 
+ * // Create a Queue producer for 'task.queue'
+ * const queueProducer = Producer.queue("task.queue");
+ * queueProducer.send("New task created");
+ * 
+ * // Create a Topic producer for 'sensor.data.topic'
+ * const topicProducer = Producer.topic("sensor.data.topic");
+ * topicProducer.send("Temperature reading: 22°C");
+ * ```
  */
 
 const MessagingFacade = Java.type("org.eclipse.dirigible.components.api.messaging.MessagingFacade");

@@ -1,3 +1,4 @@
+#set($dollar = '$')
 <!DOCTYPE HTML>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="page" ng-controller="PageController">
 
@@ -7,9 +8,8 @@
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
         <title config-title></title>
         <script type="text/javascript" src="view.js"></script>
-        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
+        <meta name="platform-links" category="ng-view">
 		<script type="text/javascript" src="/services/web/dashboard/services/entity.js"></script>
-        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
         <script type="text/javascript" src="controller.js"></script>
     </head>
 
@@ -35,14 +35,20 @@
 	                            ng-required="${property.isRequiredProperty}"
 	#end
 	                            ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE" || $property.isReadOnlyProperty == "true")
 	                            is-readonly="true"
 	#else
 	                            is-readonly="action === 'select'"
 	#end
 	                            dropdown-items="options${property.name}"
+								ng-keyup="onOptions${property.name}Change(${dollar}event)"
 	                            placeholder="{{ '$projectName:${tprefix}.messages.inputSearch' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}"
 								btn-aria-label="{{ '$projectName:${tprefix}.aria.showHide' | t:{'name':'${property.name}'} }}" list-aria-label="{{ '$projectName:${tprefix}.aria.options' | t:{'name':'${property.name}'} }}">
+								    <bk-list-action-item ng-if="options${property.name}HasMore" ng-click="loadMoreOptions${property.name}()">
+										<bk-busy-indicator ng-if="options${property.name}Loading" size="m"></bk-busy-indicator>
+										<span ng-if="!options${property.name}Loading" class="sap-icon sap-icon--navigation-down-arrow" role="presentation"></span>
+										<span ng-if="!options${property.name}Loading">More Options</span>
+									</bk-list-action-item>
 	                        </bk-combobox-input>
 	#if($property.description)
 							<span class="sap-icon sap-icon--information" role="presentation" ng-click="alert('${property.description}')"></span>
@@ -58,7 +64,7 @@
 	#if(!$property.isCalculatedProperty)
 	                            ng-required="${property.isRequiredProperty}"
 	#end
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE" || $property.isReadOnlyProperty == "true")
 	                            ng-readonly="true"
 	#else
 	                            ng-readonly="action === 'select'"
@@ -89,7 +95,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE" || $property.isReadOnlyProperty == "true")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -118,7 +124,7 @@
 								ng-required="${property.isRequiredProperty}"
 	#end
 								ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE" || $property.isReadOnlyProperty == "true")
 								is-readonly="true"
 	#else
 								is-readonly="action === 'select'"
@@ -146,7 +152,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE" || $property.isReadOnlyProperty == "true")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -177,7 +183,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE" || $property.isReadOnlyProperty == "true")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -208,7 +214,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE" || $property.isReadOnlyProperty == "true")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -239,7 +245,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE" || $property.isReadOnlyProperty == "true")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -270,7 +276,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE" || $property.isReadOnlyProperty == "true")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -292,7 +298,19 @@
 						</div>
 						<div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
+							<bk-form-input-message
+								state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
+							#if($property.inputRule)
+								text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
+							#elseif($property.maxLength && $property.minLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMinMax' | t:{'min':'${property.minLength}','max':'${property.maxLength}'} }}">
+							#elseif($property.maxLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMax' | t:{'max':'${property.maxLength}'} }}">
+							#elseif($property.minLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMin' | t:{'min':'${property.minLength}'} }}">
+							#else
+								text="{{ '$projectName:${tprefix}.messages.error.incorrectInput' | t }}">
+							#end
 	#end
 								<bk-textarea id="id${property.name}"
 									name="${property.name}"
@@ -301,7 +319,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 									ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE" || $property.isReadOnlyProperty == "true")
 	                            	ng-readonly="true"
 	#else
 	                            	ng-readonly="action === 'select'"
@@ -312,7 +330,7 @@
 	#if($property.maxLength && !$property.isCalculatedProperty)
 									ng-maxlength="${property.maxLength}"
 	#end
-	#if(!$property.isCalculatedProperty)
+	#if($property.inputRule && !$property.isCalculatedProperty)
 									input-rules="{ patterns: ['${property.inputRule}'] }"
 	#end
 									placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
@@ -337,7 +355,7 @@
 						</div>
                         <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
+							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'#if($property.inputRule == "")^[0-9]{0,14}$#else ${property.inputRule}#end'} }}">
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -346,7 +364,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE" || $property.isReadOnlyProperty == "true")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -381,7 +399,19 @@
 						</div>
                         <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
+							<bk-form-input-message
+								state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
+							#if($property.inputRule)
+								text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
+							#elseif($property.maxLength && $property.minLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMinMax' | t:{'min':'${property.minLength}','max':'${property.maxLength}'} }}">
+							#elseif($property.maxLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMax' | t:{'max':'${property.maxLength}'} }}">
+							#elseif($property.minLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMin' | t:{'min':'${property.minLength}'} }}">
+							#else
+								text="{{ '$projectName:${tprefix}.messages.error.incorrectInput' | t }}">
+							#end
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -390,7 +420,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE" || $property.isReadOnlyProperty == "true")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -401,11 +431,11 @@
 	#if($property.maxLength && !$property.isCalculatedProperty)
 									ng-maxlength="${property.maxLength}"
 	#end
-	#if(!$property.isCalculatedProperty)
-	                                input-rules="{ patterns: ['${property.inputRule}'] }"
+	#if($property.inputRule && !$property.isCalculatedProperty)
+									input-rules="{ patterns: ['${property.inputRule}'] }"
 	#end
 	                                type="url"
-	                                placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
+	                                placeholder="https://...">
 	                            </bk-input>
 	#if(!$property.isCalculatedProperty)
 							</bk-form-input-message>
@@ -425,7 +455,19 @@
 						</div>
                         <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
+							<bk-form-input-message
+								state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
+							#if($property.inputRule)
+								text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
+							#elseif($property.maxLength && $property.minLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMinMax' | t:{'min':'${property.minLength}','max':'${property.maxLength}'} }}">
+							#elseif($property.maxLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMax' | t:{'max':'${property.maxLength}'} }}">
+							#elseif($property.minLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMin' | t:{'min':'${property.minLength}'} }}">
+							#else
+								text="{{ '$projectName:${tprefix}.messages.error.incorrectInput' | t }}">
+							#end
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -434,7 +476,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE" || $property.isReadOnlyProperty == "true")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -445,8 +487,8 @@
 	#if($property.maxLength && !$property.isCalculatedProperty)
 									ng-maxlength="${property.maxLength}"
 	#end
-	#if(!$property.isCalculatedProperty)
-	                                input-rules="{ patterns: ['${property.inputRule}'] }"
+	#if($property.inputRule && !$property.isCalculatedProperty)
+									input-rules="{ patterns: ['${property.inputRule}'] }"
 	#end
 	                                type="email"
 	                                placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">
@@ -466,7 +508,19 @@
                         </div>
                         <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
 	#if(!$property.isCalculatedProperty)
-							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
+							<bk-form-input-message
+								state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
+							#if($property.inputRule)
+								text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'${property.inputRule}'} }}">
+							#elseif($property.maxLength && $property.minLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMinMax' | t:{'min':'${property.minLength}','max':'${property.maxLength}'} }}">
+							#elseif($property.maxLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMax' | t:{'max':'${property.maxLength}'} }}">
+							#elseif($property.minLength)
+								text="{{ '$projectName:${tprefix}.messages.error.lengthMin' | t:{'min':'${property.minLength}'} }}">
+							#else
+								text="{{ '$projectName:${tprefix}.messages.error.incorrectInput' | t }}">
+							#end
 	#end
 								<bk-input id="id${property.name}"
 	                                name="${property.name}"
@@ -475,7 +529,7 @@
 									ng-required="${property.isRequiredProperty}"
 	#end
 	                                ng-model="entity.${property.name}"
-	#if($property.isCalculatedProperty == "true")
+	#if($property.isCalculatedProperty == "true" || $property.auditType != "NONE" || $property.isReadOnlyProperty == "true")
 	                                ng-readonly="true"
 	#else
 	                                ng-readonly="action === 'select'"
@@ -486,8 +540,8 @@
 	#if($property.maxLength && !$property.isCalculatedProperty)
 									ng-maxlength="${property.maxLength}"
 	#end
-	#if(!$property.isCalculatedProperty)
-	                                input-rules="{ patterns: ['${property.inputRule}'] }"
+	#if($property.inputRule && !$property.isCalculatedProperty)
+									input-rules="{ patterns: ['${property.inputRule}'] }"
 	#end
 	                                type="text"
 	                                placeholder="{{ '$projectName:${tprefix}.messages.inputEnter' | t:{'name':'$t($projectName:${tprefix}.t.$property.dataName)'} }}">

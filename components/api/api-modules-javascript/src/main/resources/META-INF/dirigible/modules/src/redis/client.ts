@@ -1,8 +1,36 @@
 /**
- * Redis Client
- *
- * This class serves as a facade for common Redis operations, providing a convenient
- * JavaScript interface that wraps the underlying Java Redis client implementation.
+ * @module redis/client
+ * @package @aerokit/sdk/redis
+ * @name Client
+ * @overview
+ * 
+ * The Redis Client module provides a JavaScript interface for interacting with Redis, a popular in-memory data structure store. This module serves as a facade for the underlying Java Redis client implementation, allowing developers to perform common Redis operations such as key-value manipulation and list management using a simple and intuitive API. The Client class abstracts the complexities of the Java implementation, providing a seamless experience for developers working with Redis in their applications built on the platform.
+ * 
+ * ### Key Features:
+ * - **Key-Value Operations**: Methods for setting, getting, deleting, and checking the existence of keys, as well as incrementing and decrementing numeric values.
+ * - **List Operations**: Methods for managing lists, including pushing and popping elements from both ends of the list and retrieving list elements by index or range.
+ * 
+ * ### Use Cases:
+ * - **Caching**: The Redis Client can be used to implement caching mechanisms in applications, improving performance by storing frequently accessed data in memory.
+ * - **Session Management**: Developers can use this module to manage user sessions in web applications by storing session data in Redis.
+ * - **Real-Time Data Processing**: The Redis Client is ideal for applications that require real-time data processing and quick access to data structures like lists and sets.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Client } from "@aerokit/sdk/redis";
+ * 
+ * const redisClient = new Client();
+ * 
+ * // Set a key-value pair
+ * redisClient.set("myKey", "Hello, Redis!");
+ * 
+ * // Get the value of a key
+ * const value = redisClient.get("myKey");
+ * console.log(value); // Output: Hello, Redis!
+ * 
+ * // Push values to a list
+ * redisClient.rpush("myList", "item1", "item2", "item3");
+ * ```
  */
 
 const RedisFacade = Java.type("org.eclipse.dirigible.components.api.redis.RedisFacade");

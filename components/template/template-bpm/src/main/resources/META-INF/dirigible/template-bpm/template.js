@@ -3,44 +3,51 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-export function getTemplate() {
-	return {
-		name: "BPM Project Starter",
-		description: "BPM Project Starter Template",
-		sources: [{
-			location: "/template-bpm/process.bpmn.template",
-			action: "generate",
-			engine: "velocity",
-			rename: "{{fileName}}.bpmn"
-		}, {
-			location: "/template-bpm/api/ProcessService.ts.template",
-			action: "generate",
-            engine: "velocity",
-			rename: "api/ProcessService.ts"
-		}, {
-			location: "/template-bpm/trigger-new-process.form.template",
-			action: "generate",
-            engine: "velocity",
-			rename: "trigger-new-process.form"
-		}, {
-			location: "/template-bpm/trigger-new-process.gen.template",
-			action: "generate",
-            engine: "velocity",
-			rename: "trigger-new-process.gen"
-		}, {
-			location: "/template-bpm/tasks/my-service-task.ts",
-			action: "generate",
-			rename: "tasks/my-service-task.ts"
-		}, {
-            location: "/template-bpm/project.json",
-            action: "generate",
-            rename: "project.json"
-        }],
-		parameters: [{
-			name: "processId",
-			label: "Process Identifier",
-			required: true
-		}],
-		order: 35
-	};
-};
+export const getTemplate = () => ({
+  name: "BPM Starter Project",
+  description: "BPM Process And Service Task Sample",
+  sources: [
+    {
+      location: "/template-bpm/process.bpmn.template",
+      action: "generate",
+      engine: "velocity",
+      rename: "{{fileName}}.bpmn",
+    },
+    {
+      location: "/template-bpm/api/ProcessService.ts.template",
+      action: "generate",
+      engine: "velocity",
+      rename: "api/ProcessService.ts",
+    },
+    {
+      location: "/template-bpm/trigger-new-process.form.template",
+      action: "generate",
+      engine: "velocity",
+      rename: "trigger-new-process.form",
+    },
+    {
+      location: "/template-bpm/trigger-new-process.gen.template",
+      action: "generate",
+      engine: "velocity",
+      rename: "trigger-new-process.gen",
+    },
+    {
+      location: "/template-bpm/tasks/my-service-task.ts",
+      action: "generate",
+      rename: "tasks/my-service-task.ts",
+    },
+    {
+      location: "/template-bpm/project.json",
+      action: "generate",
+      rename: "project.json",
+    },
+  ],
+  parameters: [
+    {
+      name: "processId",
+      label: "Process Identifier",
+      required: true,
+    },
+  ],
+  order: 35,
+});

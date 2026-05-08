@@ -83,6 +83,7 @@
 
         <!-- IDE -->
         <module>ide/ide-workspace</module>
+        <module>ide/ide-junit-results</module>
         <module>ide/ide-git</module>
         <module>ide/ide-template</module>
         <module>ide/ide-terminal</module>
@@ -213,6 +214,7 @@
         <module>ui/menu-help</module>
 
         <!-- Resources -->
+        <module>resources/application-core</module>
         <module>resources/platform-core</module>
         <module>resources/application-core</module>
         <module>resources/platform-branding</module>
@@ -238,6 +240,7 @@
         <module>template/template-application-data</module>
         <module>template/template-application-data-v2</module>
         <module>template/template-application-feed</module>
+        <module>template/template-application-feed-v2</module>
         <module>template/template-application-odata</module>
         <module>template/template-application-rest</module>
         <module>template/template-application-rest-v2</module>
@@ -738,6 +741,11 @@
                 <artifactId>dirigible-components-ide-logs</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ide-junit-results</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
@@ -1199,6 +1207,11 @@
             <!-- Resources -->
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-application-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-resources-platform-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -1353,6 +1366,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-template-application-feed</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-template-application-feed-v2</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

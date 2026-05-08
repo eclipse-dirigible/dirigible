@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -13,6 +13,7 @@ const tasksView = angular.module('tasks', ['platformView', 'blimpKit']);
 tasksView.constant('Notifications', new NotificationHub());
 tasksView.constant('Dialogs', new DialogHub());
 tasksView.controller('TasksController', ($scope, $http, $window, Dialogs, Notifications) => {
+    const dateTimeUtil = new DateTimeUtil();
     $scope.state = {
         loadingGroups: false,
         loadingAssignee: false,
@@ -47,6 +48,10 @@ tasksView.controller('TasksController', ($scope, $http, $window, Dialogs, Notifi
             }, (error) => {
                 console.error(error);
             });
+    };
+
+    $scope.formatTime = (isoDate) => {
+        return dateTimeUtil.format(isoDate, "YYYY-MM-DD HH:mm:ss");
     };
 
     Dialogs.addMessageListener({

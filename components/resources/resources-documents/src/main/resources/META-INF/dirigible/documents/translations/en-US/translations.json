@@ -1,8 +1,14 @@
 {
+    "aria": {
+        "rowMenu": "{{type}} context menu",
+        "rowPopover": "{{type}} menu options"
+    },
     "documentStorage": "Document Storage",
     "goBack": "Go back",
     "goForward": "Go forward",
     "findItem": "Find item",
+    "copyLink": "Copy Link",
+    "linkCopied": "Link copied",
     "newFolder": "$t(new) $t(folder)",
     "enterFolName": "Enter folder name",
     "delSelected": "$t(delete) selected",
@@ -37,6 +43,7 @@
         "openFolderTitle": "Failed to open folder",
         "openFolder": "Could not open folder. Check console for errors.",
         "uploadTitle": "Failed to upload item",
-        "upload": "Could not upload item. Check console for errors."
+        "upload": "Could not upload item. Check console for errors.",
+        "copyLink": "Failed to copy link"
     }
 }

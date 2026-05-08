@@ -1,3 +1,57 @@
+/**
+ * @module mongodb/dao
+ * @package @aerokit/sdk/mongodb
+ * @name DAO
+ * @overview
+ * 
+ * The DAO (Data Access Object) module provides a high-level abstraction for performing CRUD operations on MongoDB collections. It defines a DAO class that encapsulates the logic for interacting with MongoDB, including entity validation, transformation, and database operations. The module also includes a factory function for creating DAO instances based on ORM definitions.
+ * 
+ * ### Key Features:
+ * - **Entity Validation**: The DAO class includes methods for validating entities against mandatory properties defined in the ORM.
+ * - **Entity Transformation**: The `createNoSQLEntity` method transforms JavaScript objects into a format suitable for MongoDB storage, applying any necessary transformations defined in the ORM.
+ * - **CRUD Operations**: The DAO class provides methods for inserting, updating, deleting, and querying entities in MongoDB collections.
+ * - **Logging**: The module integrates with the logging system to provide detailed logs of database operations and errors.
+ * 
+ * ### Use Cases:
+ * - **Data Management**: Developers can use the DAO module to manage data stored in MongoDB collections, performing CRUD operations with ease.
+ * - **ORM Integration**: By defining ORM specifications, developers can leverage the DAO module to ensure consistent data handling and validation across their application.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { dao } from "@aerokit/sdk/mongodb";
+ * 
+ * // Define an ORM specification for a "users" collection
+ * const userOrm = {
+ *   table: "users",
+ *   primaryKey: { name: "id" },
+ *   mandatoryProperties: [
+ *     { name: "name", type: "VARCHAR" },
+ *     { name: "email", type: "VARCHAR" }
+ *   ],
+ *   optionalProperties: [
+ *     { name: "age", type: "INTEGER" }
+ *   ]
+ * };
+ * 
+ * // Create a DAO instance for the "users" collection
+ * const userDao = dao(userOrm);
+ * 
+ * // Insert a new user entity
+ * const newUserId = userDao.insert({ name: "Alice", email: "alice@example.com" });
+ * 
+ * // Find the inserted user entity
+ * const user = userDao.find(newUserId);
+ * console.log("User found:", user);
+ * 
+ * // Update the user entity
+ * user.age = 30;
+ * userDao.update(user);
+ * 
+ * // Delete the user entity
+ * userDao.remove(newUserId);
+ * ```
+ */
+
 "use strict";
 
 import { globals } from "@aerokit/sdk/core"

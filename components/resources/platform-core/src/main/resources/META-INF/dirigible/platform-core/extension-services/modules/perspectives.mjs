@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -62,11 +62,22 @@ export async function getPerspectives(extensionPoints = []) {
 
 	for (let i = 0; i < perspectives.length; i++) {
 		if (perspectives[i].groupId) {
+			let groupFound = false;
 			for (let g = 0; g < sidebarConfig.perspectives.length; g++) {
 				if (perspectives[i].groupId === sidebarConfig.perspectives[g].id) {
 					sidebarConfig.perspectives[g].items.push(perspectives[i]);
 					sidebarConfig.perspectives[g].items.sort(sortPerspectives);
+					groupFound = true;
 					break;
+				}
+			}
+			if (!groupFound) {
+				for (let g = 0; g < sidebarConfig.perspectives.length; g++) {
+					if (sidebarConfig.perspectives[g].id === 'undefined-group') {
+						sidebarConfig.perspectives[g].items.push(perspectives[i]);
+						sidebarConfig.perspectives[g].items.sort(sortPerspectives);
+						break;
+					}
 				}
 			}
 		} else sidebarConfig.perspectives.push(perspectives[i]);

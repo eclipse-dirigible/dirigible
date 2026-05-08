@@ -3,26 +3,28 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-export function getTemplate() {
-	return {
-		name: "Cron Route Project Starter",
-		description: "Apache Camel Cron Route Project Starter Template",
-		sources: [{
-			location: "/template-camel-cron-route/cron-route.camel.template",
-			action: "generate",
-			engine: "velocity",
-			rename: "cron-route.camel"
-		}, {
-			location: "/template-camel-cron-route/handler.ts.template",
-			action: "generate",
-            engine: "velocity",
-			rename: "handler.ts"
-		}, {
-            location: "/template-camel-cron-route/project.json",
-            action: "generate",
-            rename: "project.json"
-        }],
-		parameters: [],
-		"order": 37
-	};
-};
+export const getTemplate = () => ({
+  name: "Cron Route Project Starter",
+  description: "Apache Camel Cron Route Project Sample",
+  sources: [
+    {
+      location: "/template-camel-cron-route/cron-route.camel.template",
+      action: "generate",
+      engine: "velocity",
+      rename: "cron-route.camel",
+    },
+    {
+      location: "/template-camel-cron-route/handler.ts.template",
+      action: "generate",
+      engine: "velocity",
+      rename: "handler.ts",
+    },
+    {
+      location: "/template-camel-cron-route/project.json",
+      action: "generate",
+      rename: "project.json",
+    },
+  ],
+  parameters: [],
+  order: 37,
+});

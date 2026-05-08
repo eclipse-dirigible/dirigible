@@ -17,7 +17,7 @@ export function generate(model, parameters) {
 export function getTemplate(parameters) {
     return {
         name: "AngularJS Generator from Form Model",
-        description: "AngularJS Form Model generator template",
+        description: "AngularJS Form Model Generator Template",
         extension: "form",
         sources: [
             {

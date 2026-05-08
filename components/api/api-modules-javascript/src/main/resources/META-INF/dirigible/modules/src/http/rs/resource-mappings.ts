@@ -1,3 +1,33 @@
+/**
+ * @module http/rs/mappings
+ * @package @aerokit/sdk/http
+ * @name ResourceMappings
+ * @overview
+ * 
+ * The ResourceMappings class is a core component of the HTTP controller module, responsible for managing the mappings between URL path templates and their corresponding resource handler specifications. It serves as the configuration store for the HttpController, allowing developers to define and manage their API resources in a structured manner.
+ * 
+ * ### Key Features:
+ * - **Resource Management**: Allows defining resources with specific URL path templates and their associated handlers.
+ * 
+ * ### Use Cases:
+ * - **API Configuration**: Developers can use ResourceMappings to configure their API endpoints, specifying the paths and the logic that should handle requests to those paths.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { ResourceMappings } from "@aerokit/sdk/http";
+ * 
+ * const resourceMappings = new ResourceMappings({
+ *  "users/{id}": {
+ *   get: (req, res) => { ... },
+ *   post: (req, res) => { ... }
+ * },
+ * "products/{id}": {
+ *  get: (req, res) => { ... },
+ *  post: (req, res) => { ... }
+ * }
+ * });
+ * ``` 
+ */
 import { Resource } from "./resource";
 
 /**

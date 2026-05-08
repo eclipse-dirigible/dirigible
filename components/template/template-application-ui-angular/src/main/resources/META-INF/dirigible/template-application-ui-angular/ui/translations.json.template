@@ -23,7 +23,10 @@
             "unableToLoad": "Unable to load data: '{{message}}'",
             "unableToLF": "Unable to list/filter {{name}}: '{{message}}'",
             "unableToCount": "Unable to count {{name}}: '{{message}}'",
-            "pattern": "The value doesn't match the required pattern: {{rule}}"
+            "pattern": "The value doesn't match the required pattern: {{rule}}",
+            "lengthMinMax": "Value must be between {{min}} and {{max}} characters long",
+            "lengthMin": "Value must not be less than {{min}} characters",
+            "lengthMax": "Value must not be more than {{max}} characters"
         },
         "propertySuccessfullyCreated": "{{name}} successfully created",
         "propertySuccessfullyUpdated": "{{name}} successfully updated",

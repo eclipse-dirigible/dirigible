@@ -1,6 +1,6 @@
 <!--
 
-    Copyright (c) 2010-2025 Eclipse Dirigible contributors
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
 
     All rights reserved. This program and the accompanying materials
     are made available under the terms of the Eclipse Public License v2.0
@@ -20,8 +20,7 @@
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
         <title config-title></title>
         <script type="text/javascript" src="/services/web/perspective-processes/configs/bpm-tasks-view.js"></script>
-        <script type="text/javascript" src="/services/js/platform-core/services/loader.js?id=view-js"></script>
-        <link type="text/css" rel="stylesheet" href="/services/js/platform-core/services/loader.js?id=view-css" />
+        <meta name="platform-links" category="ng-view,date-time-util">
         <script type="text/javascript" src="/services/web/perspective-processes/views/js/bpm-tasks.js"></script>
     </head>
 
@@ -40,24 +39,28 @@
             <table bk-table outer-borders="horizontal" display-mode="compact">
                 <thead bk-table-header sticky="true" interactive="false">
                     <tr bk-table-row>
-                        <th bk-table-header-cell>Task Id</th>
+						<th bk-table-header-cell>Definition Name</th>
+						<th bk-table-header-cell>Business Key</th>
                         <th bk-table-header-cell>Task Name</th>
                         <th bk-table-header-cell>Assignee</th>
                         <th bk-table-header-cell>Candidate Users</th>
                         <th bk-table-header-cell>Candidate Groups</th>
                         <th bk-table-header-cell>Process Instance Id</th>
+						<th bk-table-header-cell>Task Id</th>
                         <th bk-table-header-cell>Create Time</th>
                     </tr>
                 </thead>
                 <tbody bk-table-body>
                     <tr bk-table-row ng-repeat="next in tasksList track by next.id" hoverable="true" activable="true" selected="next.selected" ng-click="selectionClaimChanged(next)">
-                        <td bk-table-cell>{{next.id}}</td>
+						<td bk-table-cell>{{next.processDefinitionName}}</td>
+						<td bk-table-cell>{{next.processInstanceBusinessKey}}</td>
                         <td bk-table-cell>{{next.name}}</td>
                         <td bk-table-cell>{{next.assignee}}</td>
                         <td bk-table-cell>{{next.candidateUsers}}</td>
                         <td bk-table-cell>{{next.candidateGroups}}</td>
                         <td bk-table-cell>{{next.processInstanceId}}</td>
-                        <td bk-table-cell>{{next.createTime}}</td>
+						<td bk-table-cell>{{next.id}}</td>
+                        <td bk-table-cell>{{formatTime(next.createTime)}}</td>
                         </td>
                     </tr>
                     <tr ng-if="tasksList.length === 0" bk-table-row>
@@ -73,27 +76,32 @@
             <table bk-table outer-borders="horizontal" display-mode="compact">
                 <thead bk-table-header sticky="true" interactive="false">
                     <tr bk-table-row>
-                        <th bk-table-header-cell>Task Id</th>
+						<th bk-table-header-cell>Definition Name</th>
+						<th bk-table-header-cell>Business Key</th>
                         <th bk-table-header-cell>Task Name</th>
                         <th bk-table-header-cell>Assignee</th>
                         <th bk-table-header-cell>Candidate Users</th>
                         <th bk-table-header-cell>Candidate Groups</th>
                         <th bk-table-header-cell>Process Instance Id</th>
+						<th bk-table-header-cell>Task Id</th>
                         <th bk-table-header-cell>Create Time</th>
                         <th bk-table-header-cell>Form Key</th>
                     </tr>
                 </thead>
                 <tbody bk-table-body>
                     <tr bk-table-row ng-repeat="next in tasksListAssignee track by next.id" hoverable="true" activable="true" ng-click="selectionUnclaimChanged(next)">
-                        <td bk-table-cell>{{next.id}}</td>
+						<td bk-table-cell>{{next.processDefinitionName}}</td>
+						<td bk-table-cell>{{next.processInstanceBusinessKey}}</td>
                         <td bk-table-cell>{{next.name}}</td>
                         <td bk-table-cell>{{next.assignee}}</td>
                         <td bk-table-cell>{{next.candidateUsers}}</td>
                         <td bk-table-cell>{{next.candidateGroups}}</td>
                         <td bk-table-cell>{{next.processInstanceId}}</td>
-                        <td bk-table-cell>{{next.createTime}}</td>
+						<td bk-table-cell>{{next.id}}</td>
+                        <td bk-table-cell>{{formatTime(next.createTime)}}</td>
                         <td bk-table-cell>
-                            <bk-button label="Open Form" title="Open Form" aria-label="Open Form" ng-click="openForm($window.location.origin + next.formKey + '?taskId=' + next.id + '&processInstanceId=' + next.processInstanceId)"></bk-button>
+                            <bk-button label="Open Form" title="Open Form" aria-label="Open Form" ng-click="openForm($window.location.origin + next.formKey + '?taskId=' + next.id + '&processInstanceId=' + next.processInstanceId)">
+                            </bk-button>
                         </td>
                     </tr>
                     <tr ng-if="tasksListAssignee.length === 0" bk-table-row>

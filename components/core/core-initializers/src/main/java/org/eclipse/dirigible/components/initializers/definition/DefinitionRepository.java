@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -32,5 +32,15 @@ public interface DefinitionRepository extends JpaRepository<Definition, Long> {
     @Transactional
     @Query("update Definition d set d.checksum = :checksum where d.type in :types")
     void updateChecksums(String checksum, Set<String> types);
+
+    /**
+     * Initialize checksums.
+     *
+     * @param location the location
+     */
+    @Modifying
+    @Transactional
+    @Query("update Definition d set d.checksum = '' where d.location like :location")
+    void initializeChecksums(String location);
 
 }

@@ -1,6 +1,45 @@
+/**
+ * @module mongodb/client
+ * @package @aerokit/sdk/mongodb
+ * @name Client
+ * @overview
+ * 
+ * The Client module provides a high-level API for connecting to MongoDB databases and performing operations on collections. It abstracts the underlying MongoDB Java driver, allowing developers to interact with MongoDB using familiar JavaScript objects and methods. The module includes classes for managing database connections, accessing collections, and executing queries, making it easier to integrate MongoDB into applications built on the Dirigible platform.
+ * 
+ * ### Key Features:
+ * - **MongoDB Connection Management**: The `Client` class allows for connecting to MongoDB using a connection URI and credentials.
+ * - **Database and Collection Access**: The `DB` and `DBCollection` classes provide methods for accessing databases and collections, as well as performing CRUD operations.
+ * - **Querying and Cursor Management**: The `DBCursor` class enables iterating over query results with support for sorting, limiting, and batch processing.
+ * 
+ * ### Use Cases:
+ * - **Data Storage and Retrieval**: Developers can use this module to store and retrieve data in MongoDB, leveraging its flexible document model.
+ * - **Integration with MongoDB**: By providing a JavaScript-friendly API, this module facilitates integration with MongoDB in applications running on the Dirigible platform.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Client } from "@aerokit/sdk/mongodb";
+ * 
+ * // Create a MongoDB client and connect to the database
+ * const client = new Client("mongodb://localhost:27017", "username", "password");
+ * const db = client.getDB("myDatabase");
+ * const collection = db.getCollection("myCollection");
+ * 
+ * // Insert a document into the collection
+ * collection.insert({ name: "Alice", age: 30 });
+ * 
+ * // Find documents in the collection
+ * const cursor = collection.find({ age: { $gt: 25 } });
+ * while (cursor.hasNext()) {
+ *     const doc = cursor.next();
+ *     console.log(doc);
+ * }
+ * ```
+ */
+
+import { UUID } from "@aerokit/sdk/utils/uuid";
+
 const MongoDBFacade = Java.type("org.eclipse.dirigible.components.api.mongodb.MongoDBFacade");
 const TimeUnit = Java.type("java.util.concurrent.TimeUnit");
-import { UUID } from "@aerokit/sdk/utils/uuid";
 
 /**
  * Define a common type for input to functions that accept either a plain JavaScript object

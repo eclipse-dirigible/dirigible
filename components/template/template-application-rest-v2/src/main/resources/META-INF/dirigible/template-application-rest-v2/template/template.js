@@ -26,7 +26,7 @@ export function getTemplate(parameters) {
     }, {
         location: "/template-application-rest-v2/api/reportEntity.ts.template",
         action: "generate",
-        rename: "gen/{{genFolderName}}/api/{{perspectiveName}}/{{name}}Service.ts",
+        rename: "gen/{{genFolderName}}/api/{{perspectiveName}}/{{name}}Controller.ts",
         engine: "velocity",
         collection: "reportModels"
     }, {

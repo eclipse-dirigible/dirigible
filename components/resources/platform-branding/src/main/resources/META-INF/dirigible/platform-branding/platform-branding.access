@@ -1,0 +1,12 @@
+{
+    "constraints": [
+        {
+            "scope": "HTTP",
+            "path": "/platform-branding/**",
+            "method": "GET",
+            "roles": [
+                "Public"
+            ]
+        }
+    ]
+}

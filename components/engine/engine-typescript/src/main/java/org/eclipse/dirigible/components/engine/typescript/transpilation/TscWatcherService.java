@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -54,8 +54,10 @@ public class TscWatcherService implements ApplicationListener<ApplicationReadyEv
             {
                 "compilerOptions": {
                     "module": "ESNext",
-                    "target": "ES6",
-                    "moduleResolution": "Node",
+                    "target": "ES2022",
+                    "rootDir": "./",
+                    "esModuleInterop": true,
+                    "moduleResolution": "bundler",
                     "baseUrl": "./",
                     "lib": [
                         "ESNext",
@@ -74,7 +76,12 @@ public class TscWatcherService implements ApplicationListener<ApplicationReadyEv
                     },
                     "types": [
                         "./modules/types"
-                    ]
+                    ],
+                    "strict": false,
+                    "noImplicitAny": false,
+                    "strictNullChecks": false,
+                    "noImplicitThis": false,
+                    "skipLibCheck": true
                 },
                 "exclude": ["modules", "modules-tests"]
             }

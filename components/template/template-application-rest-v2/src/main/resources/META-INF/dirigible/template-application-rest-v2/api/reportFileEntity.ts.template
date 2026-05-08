@@ -109,6 +109,23 @@ class ${name}Service {
             this.handleError(error);
         }
     }
+    
+    @Post("/export")
+    public exportCsv() {
+        try {
+#if($perspectiveRole || $security.roleRead)
+            this.checkPermissions("read");
+
+#end
+#if($isEntityPropertySecurityEnabled)
+            return this.repository.exportCsv().map(e => this.transformEntity("read", e));
+#else
+            return this.repository.exportCsv();
+#end
+        } catch (error: any) {
+            this.handleError(error);
+        }
+    }
 
     private handleError(error: any) {
         if (error.name === "ForbiddenError") {

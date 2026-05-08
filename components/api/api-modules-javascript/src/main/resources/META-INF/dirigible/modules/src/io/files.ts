@@ -1,7 +1,40 @@
 /**
- * Provides a comprehensive static façade for file and directory operations,
- * abstracting the underlying Java file system implementation.
+ * @module io/files
+ * @package @aerokit/sdk/io
+ * @name Files
+ * @overview
+ * 
+ * The Files class provides a comprehensive static façade for file and directory operations, abstracting the underlying Java file system implementation. It offers a wide range of methods for checking file properties, reading and writing content, managing file metadata, and performing common file system tasks such as copying, moving, and deleting files and directories.
+ * 
+ * ### Key Features:
+ * - **File Property Checks**: Methods to check if a path exists, is a file or directory, is readable/writable/executable, and more.
+ * - **Content Manipulation**: Methods to read and write both text and binary content to files, with automatic conversion between Java byte arrays and JavaScript arrays.
+ * - **Metadata Management**: Methods to get and set file metadata such as last modified time, owner, and permissions.
+ * - **File System Operations**: Methods to create files and directories, copy and move files/directories, delete files/directories, and create temporary files/directories.
+ * - **Directory Traversal**: Methods to traverse directory structures and list contents with support for glob patterns.
+ * 
+ * ### Use Cases:
+ * - **File Handling in Applications**: Essential for any application that needs to read from or write to the file system, such as configuration management, data storage, or log handling.
+ * - **Scripting and Automation**: Useful for scripts that perform file system maintenance, batch processing of files, or automated generation of content.
+ * - **Data Processing**: When working with data files, the Files class can be used to read input data, process it, and write output results back to the file system.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Files } from "@aerokit/sdk/io";
+ * 
+ * // Check if a file exists and read its content
+ * const filePath = "/path/to/file.txt";
+ * if (Files.exists(filePath)) {
+ *     const content = Files.readText(filePath);
+ *     console.log(content);
+ * }
+ * 
+ * // Write text to a new file
+ * const newFilePath = "/path/to/newfile.txt";
+ * Files.writeText(newFilePath, "Hello, World!");
+ * ```
  */
+
 import { InputStream, OutputStream } from "@aerokit/sdk/io/streams";
 import { Bytes } from "@aerokit/sdk/io/bytes";
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
@@ -10,10 +10,10 @@
 package org.eclipse.dirigible.components.engine.web.endpoint;
 
 import org.apache.commons.io.FileUtils;
+import org.eclipse.dirigible.components.base.synchronizer.SynchronizationWatcher;
 import org.eclipse.dirigible.components.initializers.classpath.ClasspathExpander;
 import org.eclipse.dirigible.components.initializers.definition.DefinitionRepository;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
-import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationWatcher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;

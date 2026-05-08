@@ -1,7 +1,46 @@
 /**
- * A utility class providing static methods to standardize and send
- * common HTTP responses (success and error) with application/json content type.
+ * @module http/utils
+ * @package @aerokit/sdk/http
+ * @name HttpUtils
+ * @overview
+ * 
+ * The HttpUtils class provides a collection of static utility methods for sending standardized HTTP responses in a consistent format. These methods abstract away the details of setting response status codes, content types, and formatting response bodies as JSON, allowing developers to easily send common success and error responses with minimal code.
+ * 
+ * ### Key Features:
+ * - **Standardized Responses**: Provides methods for sending common HTTP responses such as 200 OK, 201 Created, 204 No Content, 400 Bad Request, 403 Forbidden, 404 Not Found, and 500 Internal Server Error.
+ * - **JSON Formatting**: Automatically formats response bodies as JSON, ensuring a consistent response structure across the application.
+ * 
+ * ### Use Cases:
+ * - **API Development**: These utilities are essential for API development, allowing developers to quickly send appropriate responses based on the outcome of request processing.
+ * - **Error Handling**: Simplifies error handling by providing methods to send standardized error responses with descriptive messages.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { HttpUtils } from "@aerokit/sdk/http";
+ * 
+ * // Sending a successful response with data
+ * HttpUtils.sendResponseOk({ id: "123", name: "Example" });
+ * 
+ * // Sending a created response after creating a resource
+ * HttpUtils.sendResponseCreated({ id: "123", name: "New Resource" });
+ * 
+ * // Sending a no content response after deleting a resource
+ * HttpUtils.sendResponseNoContent();
+ * 
+ * // Sending a bad request error response
+ * HttpUtils.sendResponseBadRequest("Invalid input data");
+ * 
+ * // Sending a forbidden error response
+ * HttpUtils.sendForbiddenRequest("You do not have permission to access this resource");
+ * 
+ * // Sending a not found error response
+ * HttpUtils.sendResponseNotFound("Resource not found");
+ * 
+ * // Sending an internal server error response
+ * HttpUtils.sendInternalServerError("An unexpected error occurred");
+ * ```
  */
+
 import { response } from "@aerokit/sdk/http";
 
 /**

@@ -8,6 +8,7 @@
         "windowMenuDdBtn": "window menu dropdown button",
         "helpMenuDdBtn": "help menu dropdown button",
         "ntfListButton": "notification list button",
+        "exportsListButton": "exports list button",
         "delNtf": "delete notification",
         "usrMenuBtn": "user menu button",
         "usrMenu": "user menu",
@@ -16,9 +17,21 @@
         "utilityNav": "utility navigation",
         "expandPerGrp": "expand perspective group"
     },
+    "exports": {
+        "title": "Exports ({{num}})",
+        "empty": "No Exports",
+        "finished": "Export finished",
+        "exporting": "Exporting...",
+        "error": {
+            "fetchTitle": "Could not get export list",
+            "delTitle": "Could not delete export",
+            "delAllTitle": "Could not delete exports"
+        }
+    },
     "yes": "Yes",
     "no": "No",
     "ok": "OK",
+    "select": "Select",
     "cancel": "Cancel",
     "add": "Add",
     "edit": "Edit",
@@ -37,6 +50,7 @@
     "close": "Close",
     "clear": "Clear",
     "clearAll": "Clear all",
+    "deleteAll": "$t(delete) all",
     "clearFilter": "Clear filter",
     "name": "Name",
     "username": "Username",
@@ -44,11 +58,16 @@
     "search": "Search",
     "loading": "Loading",
     "folder": "Folder",
+    "file": "File",
     "rename": "Rename",
     "refresh": "Refresh",
     "settings": "Settings",
     "reset": "Reset",
     "about": "About",
     "status": "Status",
-    "download": "Download"
+    "download": "Download",
+    "other": "Other",
+    "unknown": "Unknown",
+    "unknownError": "Unknown Error",
+    "unknownErrorMsg": "Please check the console log for more information."
 }

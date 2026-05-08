@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Eclipse Dirigible contributors
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -26,7 +26,7 @@ Entity.prototype.icon = '/services/web/resources/unicons/file.svg';
 Entity.prototype.menuLabel = ''; // the visible name of the menu
 Entity.prototype.menuIndex = 100;
 Entity.prototype.layoutType = 'MANAGE';
-Entity.prototype.perspectiveName = 'entities';
+Entity.prototype.perspectiveName = 'Entities';
 Entity.prototype.perspectiveLabel = 'Entities';
 Entity.prototype.perspectiveHeader = '';
 Entity.prototype.perspectiveNavId = '';
@@ -62,6 +62,8 @@ Property.prototype.isRequiredProperty = false;
 Property.prototype.isCalculatedProperty = false;
 Property.prototype.calculatedPropertyExpressionCreate = null;
 Property.prototype.calculatedPropertyExpressionUpdate = null;
+Property.prototype.auditType = 'NONE';
+Property.prototype.isReadOnlyProperty = false;
 Property.prototype.dataName = null;
 Property.prototype.dataType = 'VARCHAR';
 Property.prototype.dataLength = '20';

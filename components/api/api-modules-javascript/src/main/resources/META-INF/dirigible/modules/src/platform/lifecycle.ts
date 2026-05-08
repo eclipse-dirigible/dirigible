@@ -1,6 +1,33 @@
 /**
- * Provides a wrapper for managing the application lifecycle (publish/unpublish)
+ * @module platform/lifecycle
+ * @package @aerokit/sdk/platform
+ * @name Lifecycle
+ * @overview
+ * 
+ * The Lifecycle module provides a static utility class for managing the lifecycle of projects on the platform, including publishing and unpublishing projects. It abstracts the complexities of project deployment, allowing developers to easily control the availability of their projects through simple method calls.
+ * 
+ * ### Key Features:
+ * - **Project Publishing**: The `publish` method allows developers to publish a specific project or all projects within a workspace for a given user.
+ * - **Project Unpublishing**: The `unpublish` method enables developers to unpublish a specific project or all currently deployed projects, making them unavailable for use.
+ * 
+ * ### Use Cases:
+ * - **Deployment Management**: This module is ideal for applications that need to manage the deployment status of projects on the platform, allowing for dynamic control over which projects are available at any given time.
+ * - **Automated Deployment**: Developers can use this module to automate the publishing and unpublishing of projects as part of their development and deployment workflows.
+ * 
+ * ### Example Usage:
+ * ```ts
+ * import { Lifecycle } from "@aerokit/sdk/platform";
+ * 
+ * // Publish a specific project
+ * const publishResult = Lifecycle.publish("john_doe", "my_workspace", "my_project");
+ * console.log("Publish Result:", publishResult);
+ * 
+ * // Unpublish all currently deployed projects
+ * const unpublishResult = Lifecycle.unpublish();
+ * console.log("Unpublish Result:", unpublishResult);
+ * ``` 
  */
+
 const LifecycleFacade = Java.type("org.eclipse.dirigible.components.api.platform.LifecycleFacade");
 
 /**
