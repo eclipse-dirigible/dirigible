@@ -232,7 +232,7 @@
         <alpinejs.version>3.15.11</alpinejs.version>
         <harmonia.version>1.4.2</harmonia.version>
         <opensans.version>5.2.7</opensans.version>
-        <lucide.version>1.8.0</lucide.version>
+        <lucide.version>1.14.0</lucide.version>
         <!-- Tests -->
         <testcontainers.version>2.0.5</testcontainers.version>
         <selenide.version>7.15.1</selenide.version>
