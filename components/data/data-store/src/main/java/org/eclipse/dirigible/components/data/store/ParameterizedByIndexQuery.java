@@ -20,7 +20,7 @@ import java.util.List;
 
 import org.eclipse.dirigible.components.database.ParameterizedByIndex;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
-import org.hibernate.query.BindableType;
+import org.hibernate.type.BindableType;
 import org.hibernate.query.ParameterMetadata;
 import org.hibernate.query.Query;
 import org.hibernate.query.QueryParameter;
@@ -349,7 +349,7 @@ public class ParameterizedByIndexQuery implements ParameterizedByIndex {
         ParameterMetadata parameterMetaData = statement.getParameterMetadata();
         QueryParameter<?> queryParameter = parameterMetaData.getQueryParameter(sqlParamIndex);
         BindableType bindableSqlType = parameterMetaData.getInferredParameterType(queryParameter);
-        Class javaType = bindableSqlType.getBindableJavaType();
+        Class javaType = bindableSqlType.getJavaType();
         int sqlType = DataTypeUtils.getDatabaseTypeByJavaType(javaType);
         return sqlType;
     }

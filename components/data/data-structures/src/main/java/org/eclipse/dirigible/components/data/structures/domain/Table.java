@@ -27,8 +27,6 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 
 import org.eclipse.dirigible.components.base.artefact.Artefact;
-import org.hibernate.annotations.LazyCollection;
-import org.hibernate.annotations.LazyCollectionOption;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
@@ -63,13 +61,11 @@ public class Table extends Artefact {
 
     /** The columns. */
     @OneToMany(mappedBy = "table", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    @LazyCollection(LazyCollectionOption.FALSE)
     @Expose
     private List<TableColumn> columns = new ArrayList<TableColumn>();
 
     /** The indexes. */
     @OneToMany(mappedBy = "table", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    @LazyCollection(LazyCollectionOption.FALSE)
     @Nullable
     @Expose
     private List<TableIndex> indexes = new ArrayList<TableIndex>();

@@ -13,8 +13,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.google.gson.annotations.Expose;
 import jakarta.annotation.Nullable;
 import jakarta.persistence.*;
-import org.hibernate.annotations.LazyCollection;
-import org.hibernate.annotations.LazyCollectionOption;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
@@ -42,21 +40,18 @@ public class TableConstraints {
 
     /** The foreign keys. */
     @OneToMany(mappedBy = "constraints", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    @LazyCollection(LazyCollectionOption.FALSE)
     @Nullable
     @Expose
     private List<TableConstraintForeignKey> foreignKeys = new ArrayList<TableConstraintForeignKey>();
 
     /** The unique indices. */
     @OneToMany(mappedBy = "constraints", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    @LazyCollection(LazyCollectionOption.FALSE)
     @Nullable
     @Expose
     private List<TableConstraintUnique> uniqueIndexes = new ArrayList<TableConstraintUnique>();
 
     /** The checks. */
     @OneToMany(mappedBy = "constraints", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    @LazyCollection(LazyCollectionOption.FALSE)
     @Nullable
     @Expose
     private List<TableConstraintCheck> checks = new ArrayList<TableConstraintCheck>();

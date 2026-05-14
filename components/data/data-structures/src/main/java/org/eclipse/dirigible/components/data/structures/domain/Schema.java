@@ -23,8 +23,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 
 import org.eclipse.dirigible.components.base.artefact.Artefact;
-import org.hibernate.annotations.LazyCollection;
-import org.hibernate.annotations.LazyCollectionOption;
 
 import com.google.gson.annotations.Expose;
 
@@ -51,13 +49,11 @@ public class Schema extends Artefact {
 
     /** The tables. */
     @OneToMany(mappedBy = "schemaReference", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    @LazyCollection(LazyCollectionOption.FALSE)
     @Expose
     private List<Table> tables = new ArrayList<Table>();
 
     /** The views. */
     @OneToMany(mappedBy = "schemaReference", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    @LazyCollection(LazyCollectionOption.FALSE)
     @Expose
     private List<View> views = new ArrayList<View>();
 

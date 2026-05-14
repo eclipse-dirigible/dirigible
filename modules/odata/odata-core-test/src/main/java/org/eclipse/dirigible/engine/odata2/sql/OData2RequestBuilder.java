@@ -346,15 +346,15 @@ public class OData2RequestBuilder {
             expect(contentInputStream.available()).andReturn(0)
                                                   .anyTimes();
             if (contentSize > 0) {
-                expect(contentInputStream.read(EasyMock.anyObject())).andReturn(contentSize)
-                                                                     .times(1)
-                                                                     .andReturn(-1)
-                                                                     .times(1)
-                                                                     .andReturn(0)
-                                                                     .anyTimes();
+                expect(contentInputStream.read(EasyMock.<byte[]>anyObject())).andReturn(contentSize)
+                                                                             .times(1)
+                                                                             .andReturn(-1)
+                                                                             .times(1)
+                                                                             .andReturn(0)
+                                                                             .anyTimes();
             } else {
-                expect(contentInputStream.read(EasyMock.anyObject())).andReturn(contentSize)
-                                                                     .times(1);
+                expect(contentInputStream.read(EasyMock.<byte[]>anyObject())).andReturn(contentSize)
+                                                                             .times(1);
             }
         }
         expect(servletRequest.getInputStream()).andReturn(contentInputStream)

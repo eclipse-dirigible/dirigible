@@ -19,6 +19,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.stereotype.Component;
 import jakarta.persistence.EntityManagerFactory;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 
 /**
  * https://github.com/galovics/hibernate-encryption-listener
@@ -32,6 +35,8 @@ public class EncryptionBeanPostProcessor implements BeanPostProcessor {
     /** The encryption listener. */
     @Autowired
     private EncryptionListener encryptionListener;
+
+    private final Set<EntityManagerFactory> processed = Collections.newSetFromMap(new IdentityHashMap<>());
 
     /**
      * Post process before initialization.
@@ -56,7 +61,7 @@ public class EncryptionBeanPostProcessor implements BeanPostProcessor {
      */
     @Override
     public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
-        if (bean instanceof EntityManagerFactory emf) {
+        if (bean instanceof EntityManagerFactory emf && processed.add(emf)) {
             SessionFactoryImpl sessionFactory = emf.unwrap(SessionFactoryImpl.class);
             EventListenerRegistry registry = sessionFactory.getServiceRegistry()
                                                            .getService(EventListenerRegistry.class);

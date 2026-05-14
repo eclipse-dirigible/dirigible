@@ -157,9 +157,9 @@ public class DataStore {
         Map<String, Object> data = JsonTypeConverter.normalizeForEntity(object, type);
         try (Session session = getSessionFactory().openSession()) {
             Transaction transaction = session.beginTransaction();
-            Object id = session.save(type, data);
+            session.persist(type, data);
             transaction.commit();
-            return id;
+            return data.get("id");
         }
     }
 
@@ -296,7 +296,7 @@ public class DataStore {
         Map<String, Object> data = JsonTypeConverter.normalizeForEntity(object, type);
         try (Session session = getSessionFactory().openSession()) {
             Transaction transaction = session.beginTransaction();
-            session.saveOrUpdate(type, data);
+            session.merge(type, data);
             transaction.commit();
         }
     }
@@ -323,7 +323,7 @@ public class DataStore {
         Map<String, Object> data = JsonTypeConverter.normalizeForEntity(object, type);
         try (Session session = getSessionFactory().openSession()) {
             Transaction transaction = session.beginTransaction();
-            session.update(type, data);
+            session.merge(type, data);
             transaction.commit();
         }
     }
@@ -338,7 +338,7 @@ public class DataStore {
         try (Session session = getSessionFactory().openSession()) {
             Transaction transaction = session.beginTransaction();
             Object object = get(type, id);
-            session.delete(type, object);
+            session.remove(object);
             transaction.commit();
         }
     }
