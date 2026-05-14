@@ -286,15 +286,23 @@ class BrowserImpl implements Browser {
 
     @Override
     public void assertAlertWithMessage(String message) {
-        String alertMessage = getAlertMessage();
-        assertThat(alertMessage).contains(message);
+        Alert alert = Selenide.switchTo()
+                              .alert();
+        String alertMessage = alert.getText();
+        try {
+            assertThat(alertMessage).contains(message);
+        } finally {
+            alert.accept();
+        }
     }
 
     @Override
     public String getAlertMessage() {
         Alert alert = Selenide.switchTo()
                               .alert();
-        return alert.getText();
+        String text = alert.getText();
+        alert.accept();
+        return text;
     }
 
     @Override
