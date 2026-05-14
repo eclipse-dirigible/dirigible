@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.data.store;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -189,6 +190,11 @@ public class DataStore {
                                                          .setProperty("hibernate.current_session_context_class",
                                                                  "org.hibernate.context.internal.ThreadLocalSessionContext");
 
+        String dialect = detectHibernateDialect();
+        if (dialect != null) {
+            configuration.setProperty("hibernate.dialect", dialect);
+        }
+
         mappings.forEach((k, v) -> addInputStreamToConfig(configuration, k, v));
 
         StandardServiceRegistryBuilder serviceRegistryBuilder = new StandardServiceRegistryBuilder();
@@ -229,6 +235,43 @@ public class DataStore {
      */
     public DataSource getDataSource() {
         return dataSource;
+    }
+
+    private String detectHibernateDialect() {
+        try (Connection connection = datasourcesManager.getDefaultDataSource()
+                                                       .getConnection()) {
+            String productName = connection.getMetaData()
+                                           .getDatabaseProductName();
+            if (productName == null) {
+                return null;
+            }
+            String name = productName.toLowerCase();
+            if (name.contains("h2")) {
+                return "org.hibernate.dialect.H2Dialect";
+            }
+            if (name.contains("postgres")) {
+                return "org.hibernate.dialect.PostgreSQLDialect";
+            }
+            if (name.contains("mariadb")) {
+                return "org.hibernate.dialect.MariaDBDialect";
+            }
+            if (name.contains("mysql")) {
+                return "org.hibernate.dialect.MySQLDialect";
+            }
+            if (name.contains("microsoft sql server") || name.contains("mssql")) {
+                return "org.hibernate.dialect.SQLServerDialect";
+            }
+            if (name.contains("hdb") || name.contains("hana")) {
+                return "org.hibernate.dialect.HANADialect";
+            }
+            if (name.contains("snowflake")) {
+                return null;
+            }
+            return null;
+        } catch (SQLException e) {
+            logger.warn("Could not detect Hibernate dialect from datasource metadata", e);
+            return null;
+        }
     }
 
     /**

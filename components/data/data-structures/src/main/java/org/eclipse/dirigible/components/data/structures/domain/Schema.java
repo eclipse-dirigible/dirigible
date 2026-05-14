@@ -48,12 +48,12 @@ public class Schema extends Artefact {
     private String datasource;
 
     /** The tables. */
-    @OneToMany(mappedBy = "schemaReference", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "schemaReference", fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     @Expose
     private List<Table> tables = new ArrayList<Table>();
 
     /** The views. */
-    @OneToMany(mappedBy = "schemaReference", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "schemaReference", fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     @Expose
     private List<View> views = new ArrayList<View>();
 

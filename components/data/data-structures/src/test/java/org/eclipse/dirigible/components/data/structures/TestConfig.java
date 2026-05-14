@@ -12,16 +12,21 @@ package org.eclipse.dirigible.components.data.structures;
 import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
+import org.mockito.Mockito;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.context.annotation.Bean;
 
 @TestConfiguration
 public class TestConfig {
 
-    @MockitoBean
-    private TenantContext tenantContext;
+    @Bean
+    TenantContext tenantContext() {
+        return Mockito.mock(TenantContext.class);
+    }
 
-    @MockitoBean
+    @Bean
     @DefaultTenant
-    private Tenant defaultTenant;
+    Tenant defaultTenant() {
+        return Mockito.mock(Tenant.class);
+    }
 }

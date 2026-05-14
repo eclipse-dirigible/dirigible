@@ -60,12 +60,12 @@ public class Table extends Artefact {
     protected String schema;
 
     /** The columns. */
-    @OneToMany(mappedBy = "table", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "table", fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     @Expose
     private List<TableColumn> columns = new ArrayList<TableColumn>();
 
     /** The indexes. */
-    @OneToMany(mappedBy = "table", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "table", fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     @Nullable
     @Expose
     private List<TableIndex> indexes = new ArrayList<TableIndex>();

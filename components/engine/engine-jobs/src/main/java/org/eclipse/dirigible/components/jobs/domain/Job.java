@@ -87,7 +87,7 @@ public class Job extends Artefact {
     /**
      * The parameters.
      */
-    @OneToMany(mappedBy = "job", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "job", fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     @Transient
     private List<JobParameter> parameters = new ArrayList<>();
 

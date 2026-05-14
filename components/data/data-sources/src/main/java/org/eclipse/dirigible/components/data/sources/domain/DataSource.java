@@ -60,7 +60,7 @@ public class DataSource extends Artefact {
     private String schema;
 
     /** The properties. */
-    @OneToMany(mappedBy = "datasource", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "datasource", fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     @Expose
     private List<DataSourceProperty> properties = new ArrayList<DataSourceProperty>();
 

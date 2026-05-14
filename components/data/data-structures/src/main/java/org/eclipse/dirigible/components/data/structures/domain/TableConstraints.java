@@ -39,19 +39,19 @@ public class TableConstraints {
     private TableConstraintPrimaryKey primaryKey;
 
     /** The foreign keys. */
-    @OneToMany(mappedBy = "constraints", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "constraints", fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     @Nullable
     @Expose
     private List<TableConstraintForeignKey> foreignKeys = new ArrayList<TableConstraintForeignKey>();
 
     /** The unique indices. */
-    @OneToMany(mappedBy = "constraints", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "constraints", fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     @Nullable
     @Expose
     private List<TableConstraintUnique> uniqueIndexes = new ArrayList<TableConstraintUnique>();
 
     /** The checks. */
-    @OneToMany(mappedBy = "constraints", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "constraints", fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     @Nullable
     @Expose
     private List<TableConstraintCheck> checks = new ArrayList<TableConstraintCheck>();

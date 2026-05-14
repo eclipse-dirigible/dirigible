@@ -66,7 +66,7 @@ public class Csvim extends Artefact {
     /**
      * The csv file definitions.
      */
-    @OneToMany(mappedBy = "csvim", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "csvim", fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     @Nullable
     @Expose
     private List<CsvFile> files = new ArrayList<CsvFile>();
