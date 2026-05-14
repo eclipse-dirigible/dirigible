@@ -361,6 +361,11 @@
                         <testClassesDirectory>${project.build.outputDirectory}</testClassesDirectory>
                         <failIfNoTests>false</failIfNoTests>
                         <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+                        <argLine>
+                            --add-opens=java.base/java.lang=ALL-UNNAMED
+                            --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
+                            --add-opens=java.base/java.nio=ALL-UNNAMED
+                        </argLine>
                         <includes>
                             <include>**/*IT.java</include>
                         </includes>
@@ -948,6 +953,13 @@
                 <groupId>io.opentelemetry.instrumentation</groupId>
                 <artifactId>opentelemetry-instrumentation-bom</artifactId>
                 <version>2.27.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.groovy</groupId>
+                <artifactId>groovy-bom</artifactId>
+                <version>4.0.29</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
