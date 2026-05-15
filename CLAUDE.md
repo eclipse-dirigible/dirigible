@@ -117,7 +117,9 @@ JS/TS user code is **not** synchronized — it is loaded on demand by `engine-ja
 
 The user-facing help portal at <https://www.dirigible.io/help/> documents the IDE perspectives (Workbench, Database, Git, Operations, Documents), artefact authoring (Jobs, CSVIM, Entity model, OData, Listeners, Camel routes, BPMN), JS/TS API reference (`/api/`), and deployment guides (Docker, Kubernetes, Cloud Foundry). Useful when reading integration-test fixtures under `tests/tests-integrations/src/main/resources/<TestName>/` or understanding what a given artefact extension is supposed to do.
 
-Caveats — parts of the portal are out of date and should not be trusted over the code:
+The portal is **a separate repository** — MkDocs-built from <https://github.com/dirigible-io/dirigible-io.github.io> (Markdown sources under `docs-help/docs/`, nav in `docs-help/mkdocs.yml`). Doc fixes go there as PRs, not in this repo.
+
+Caveats — parts of the portal are out of date and should not be trusted over the code (verified against `dirigible-io.github.io@master`):
 
 - URL paths often use legacy `/services/v4/...` prefixes; the current endpoints are rooted at `/services/...` and `/public/...` per `BaseEndpoint` (see Run section above).
 - The "Environment Variables" page lists `DIRIGIBLE_HOME_URL` default as `/services/v4/web/ide/index.html`, but the live default in `DirigibleConfig.HOME_URL` is `services/web/shell-ide/`. Treat `modules/commons/commons-config/src/main/java/org/eclipse/dirigible/commons/config/DirigibleConfig.java` (the enum) and `Configuration.java` (the allow-list) as the source of truth for env-var names and defaults.
