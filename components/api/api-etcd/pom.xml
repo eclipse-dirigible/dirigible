@@ -1,72 +1,87 @@
 <project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xmlns="http://maven.apache.org/POM/4.0.0"
-	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-	<modelVersion>4.0.0</modelVersion>
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
 
-	<parent>
-		<groupId>org.eclipse.dirigible</groupId>
-		<artifactId>dirigible-components-parent</artifactId>
-		<version>13.0.0-SNAPSHOT</version>
-		<relativePath>../../pom.xml</relativePath>
-	</parent>
+    <parent>
+        <groupId>org.eclipse.dirigible</groupId>
+        <artifactId>dirigible-components-parent</artifactId>
+        <version>13.0.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
 
-	<name>Components - API - Core</name>
-	<artifactId>dirigible-components-api-etcd</artifactId>
-	<packaging>jar</packaging>
+    <name>Components - API - Core</name>
+    <artifactId>dirigible-components-api-etcd</artifactId>
+    <packaging>jar</packaging>
 
-	<dependencies>
-		<!-- JS sources -->
-		<dependency>
-			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-api-modules-javascript</artifactId>
-		</dependency>
+    <dependencies>
+        <!-- JS sources -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-api-modules-javascript</artifactId>
+        </dependency>
 
-		<!-- Etcd dependencies -->
-		<dependency>
-			<groupId>io.etcd</groupId>
-			<artifactId>jetcd-core</artifactId>
-			<version>${jetcd.core.version}</version>
-			<exclusions>
-				<exclusion>
-					<groupId>com.google.protobuf</groupId>
-					<artifactId>protobuf-java</artifactId>
-				</exclusion>
-				<exclusion>
-					<groupId>com.google.protobuf</groupId>
-					<artifactId>protobuf-java-util</artifactId>
-				</exclusion>
-			</exclusions>
-		</dependency>
-		<dependency>
-			<groupId>com.google.protobuf</groupId>
-			<artifactId>protobuf-java</artifactId>
-			<version>${protobuf-java.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>com.google.protobuf</groupId>
-			<artifactId>protobuf-java-util</artifactId>
-			<version>${protobuf-java.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>io.etcd</groupId>
-			<artifactId>jetcd-launcher</artifactId>
-			<version>${jetcd.core.version}</version>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>io.etcd</groupId>
-			<artifactId>jetcd-test</artifactId>
-			<version>0.8.6</version>
-			<scope>test</scope>
-		</dependency>
-		<!-- / Etcd dependencies -->
-	</dependencies>
+        <!-- Etcd dependencies -->
+        <dependency>
+            <groupId>io.etcd</groupId>
+            <artifactId>jetcd-core</artifactId>
+            <version>${jetcd.core.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.protobuf</groupId>
+                    <artifactId>protobuf-java</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.protobuf</groupId>
+                    <artifactId>protobuf-java-util</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>${protobuf-java.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java-util</artifactId>
+            <version>${protobuf-java.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.etcd</groupId>
+            <artifactId>jetcd-launcher</artifactId>
+            <version>${jetcd.core.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.etcd</groupId>
+            <artifactId>jetcd-test</artifactId>
+            <version>0.8.6</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- / Etcd dependencies -->
+    </dependencies>
 
-	<properties>
-		<license.header.location>../../../licensing-header.txt</license.header.location>
-		<parent.pom.folder>../../../</parent.pom.folder>
+    <properties>
+        <license.header.location>../../../licensing-header.txt</license.header.location>
+        <parent.pom.folder>../../../</parent.pom.folder>
 
-		<protobuf-java.version>4.34.1</protobuf-java.version>
-	</properties>
+        <protobuf-java.version>4.34.1</protobuf-java.version>
+    </properties>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- EtcdFacadeTest uses Testcontainers (etcd cluster). Skip unless the
+                         testcontainers profile is active (skipTCs=false), matching how
+                         api-s3 gates its Localstack-based tests. -->
+                    <skip>${ВИП}</skip>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>
