@@ -194,12 +194,15 @@ class DefaultDataSourceProvisioning implements TenantProvisioningStep {
     private void grantUserPermissionsInMSSQL(String userId) {
         DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
 
-        // GRANT CREATE TABLE, CREATE VIEW, CREATE PROCEDURE, CREATE TYPE TO <user>
+        // GRANT CREATE TABLE, CREATE VIEW, CREATE PROCEDURE, CREATE TYPE, VIEW DATABASE PERFORMANCE STATE
+        // TO <user>
+        // VIEW DATABASE PERFORMANCE STATE is required so the MS JDBC driver's DatabaseMetaData.getIndexInfo
+        // can read sys.dm_db_index_usage_stats — without it, tenant-scoped CSVIM table introspection fails.
         String grantSql = """
                     DECLARE @sql nvarchar(max);
 
                     SET @sql =
-                        N'GRANT CREATE TABLE, CREATE VIEW, CREATE PROCEDURE, CREATE TYPE TO '
+                        N'GRANT CREATE TABLE, CREATE VIEW, CREATE PROCEDURE, CREATE TYPE, VIEW DATABASE PERFORMANCE STATE TO '
                         + QUOTENAME(?);
 
                     EXEC sp_executesql @sql;
