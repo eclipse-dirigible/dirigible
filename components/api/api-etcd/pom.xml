@@ -78,7 +78,7 @@
                     <!-- EtcdFacadeTest uses Testcontainers (etcd cluster). Skip unless the
                          testcontainers profile is active (skipTCs=false), matching how
                          api-s3 gates its Localstack-based tests. -->
-                    <skip>${ВИП}</skip>
+                    <skip>${skipTCs}</skip>
                 </configuration>
             </plugin>
         </plugins>
