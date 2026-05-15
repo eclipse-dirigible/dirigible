@@ -160,7 +160,8 @@ public class DataStore {
             Transaction transaction = session.beginTransaction();
             // Use merge to retain Hibernate-6 save() semantics: handles both transient and detached entities,
             // including detached associations reached via cascade. persist() is too strict and throws
-            // EntityExistsException when a detached entity (e.g. an already-persisted manyToOne target) is passed.
+            // EntityExistsException when a detached entity (e.g. an already-persisted manyToOne target) is
+            // passed.
             Object merged = session.merge(type, data);
             transaction.commit();
             if (merged instanceof Map<?, ?> mergedMap) {
