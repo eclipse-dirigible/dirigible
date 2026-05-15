@@ -46,7 +46,7 @@ java -jar build/application/target/dirigible-application-*-executable.jar
 
 UI at `http://localhost:8080`, default credentials `admin`/`admin`. Useful URLs on the same port:
 
-- `/` — IDE Workbench
+- `/` — redirects to the IDE entrypoint (default `services/web/shell-ide/`, configurable via `DIRIGIBLE_HOME_URL`)
 - `/swagger-ui/index.html`, `/api-docs` — OpenAPI / Swagger UI for built-in REST endpoints
 - `/spring-admin/` — Spring Boot Admin (server profile enabled in this app)
 - `/actuator/health/readiness`, `/actuator/health/liveness` — health probes (also what the CI DAST job polls)
@@ -56,7 +56,7 @@ UI at `http://localhost:8080`, default credentials `admin`/`admin`. Useful URLs 
 - `/odata/v2/...` — OData services (CXF base path)
 - `/websockets/...` — WebSocket endpoints
 
-Default DB is in-memory H2; switch by exporting `DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER/URL/USERNAME/PASSWORD` (then `mvn clean` so leftover H2 files don't poison startup). Server port is overridable via `DIRIGIBLE_SERVER_PORT` (default 8080). The in-IDE terminal launches `ttyd` on 9000. The Dockerfile additionally exposes 8081 as the Graalium debug port (used when `DIRIGIBLE_GRAALIUM_ENABLE_DEBUG=true`, which is the default).
+Default DB is **file-backed** H2 at `jdbc:h2:file:./target/dirigible/h2/DefaultDB;LOCK_TIMEOUT=10000` (see `components/data/data-sources/src/main/resources/META-INF/dirigible/datasources/DefaultDB.datasource` — this is also why `mvn clean` is required when switching DBs, the old H2 files survive otherwise). Switch by exporting `DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER/URL/USERNAME/PASSWORD`. Server port is overridable via `DIRIGIBLE_SERVER_PORT` (default 8080). The in-IDE terminal launches `ttyd` on 9000. The Dockerfile additionally exposes 8081 as the Graalium debug port (env var `DIRIGIBLE_JAVASCRIPT_GRAALVM_DEBUGGER_PORT`; debugging is on by default via `DIRIGIBLE_GRAALIUM_ENABLE_DEBUG=true`).
 
 The on-disk Dirigible repository ("registry") defaults to `./target/` relative to the working directory (`DIRIGIBLE_REPOSITORY_LOCAL_ROOT_FOLDER`). Inside it the canonical layout is `/registry/public/<project>/...` for published artefacts and `/users/<user>/workspace/<project>/...` for in-IDE workspaces (see `IRepositoryStructure`). Multi-tenancy is on by default (`DIRIGIBLE_MULTI_TENANT_MODE=true`).
 
@@ -112,6 +112,16 @@ JS/TS user code is **not** synchronized — it is loaded on demand by `engine-ja
 - **Configuration goes through `DirigibleConfig` / `Configuration`** (`modules/commons/commons-config`). When introducing a new tunable, add the enum entry there with a `DIRIGIBLE_*` env-var key and a sensible default — don't read env vars or `System.getProperty` ad-hoc.
 - **Spring beans glue everything together; `StaticObjects` is legacy.** Some code paths still grab dependencies via `StaticObjects.get(...)` (e.g. `RepositoryConfig` registers `IRepository` there explicitly) because parts of the runtime predate Spring. New code should rely on constructor injection; don't add new `StaticObjects` keys.
 - **Bean-definition overriding is enabled** (`spring.main.allow-bean-definition-overriding=true` in `application-common.properties`), so a duplicate `@Bean` name will silently shadow another. Be deliberate about bean names.
+
+## External documentation
+
+The user-facing help portal at <https://www.dirigible.io/help/> documents the IDE perspectives (Workbench, Database, Git, Operations, Documents), artefact authoring (Jobs, CSVIM, Entity model, OData, Listeners, Camel routes, BPMN), JS/TS API reference (`/api/`), and deployment guides (Docker, Kubernetes, Cloud Foundry). Useful when reading integration-test fixtures under `tests/tests-integrations/src/main/resources/<TestName>/` or understanding what a given artefact extension is supposed to do.
+
+Caveats — parts of the portal are out of date and should not be trusted over the code:
+
+- URL paths often use legacy `/services/v4/...` prefixes; the current endpoints are rooted at `/services/...` and `/public/...` per `BaseEndpoint` (see Run section above).
+- The "Environment Variables" page lists `DIRIGIBLE_HOME_URL` default as `/services/v4/web/ide/index.html`, but the live default in `DirigibleConfig.HOME_URL` is `services/web/shell-ide/`. Treat `modules/commons/commons-config/src/main/java/org/eclipse/dirigible/commons/config/DirigibleConfig.java` (the enum) and `Configuration.java` (the allow-list) as the source of truth for env-var names and defaults.
+- OAuth wiring described as `DIRIGIBLE_OAUTH_*` in the portal doesn't match the in-repo GitHub flow, which uses Spring's `spring.security.oauth2.client.registration.github.*` driven by `DIRIGIBLE_GITHUB_CLIENT_ID` / `DIRIGIBLE_GITHUB_CLIENT_SECRET` / `DIRIGIBLE_GITHUB_SCOPE` (see `build/application/src/main/resources/application-github.properties`).
 
 ## CI reference
 
