@@ -25,6 +25,7 @@ The whole project is a multi-module Maven build at the root. The Maven coordinat
 | Run unit + integration tests        | `mvn clean install -P tests`                                       |
 | Integration tests only              | `mvn clean install -P integration-tests -D selenide.headless=true` |
 | A specific IT (comma-separated)     | `mvn clean install -P integration-tests -Dit.test="CsvimIT,CreateNewProjectIT" -D selenide.headless=true` |
+| A specific unit test (single module) | `mvn -pl <module-path> -am test -Dtest=ClassName#method`          |
 | Format Java code                    | `mvn formatter:format` (or `-P format`)                            |
 | Validate formatting (what CI runs)  | `mvn -T 1C formatter:validate`                                     |
 | Static analysis                     | `mvn clean install -P spotbugs`                                    |
@@ -43,7 +44,21 @@ After a build:
 java -jar build/application/target/dirigible-application-*-executable.jar
 ```
 
-UI at `http://localhost:8080`, default credentials `admin`/`admin`. The default DB is in-memory H2; switch to PostgreSQL/MSSQL/etc. by exporting `DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER/URL/USERNAME/PASSWORD` (and `mvn clean` if you previously ran with a different DB so leftover H2 files don't poison startup). The server port is overridable via `DIRIGIBLE_SERVER_PORT`. The in-IDE terminal launches `ttyd` on port 9000.
+UI at `http://localhost:8080`, default credentials `admin`/`admin`. Useful URLs on the same port:
+
+- `/` — IDE Workbench
+- `/swagger-ui/index.html`, `/api-docs` — OpenAPI / Swagger UI for built-in REST endpoints
+- `/spring-admin/` — Spring Boot Admin (server profile enabled in this app)
+- `/actuator/health/readiness`, `/actuator/health/liveness` — health probes (also what the CI DAST job polls)
+- `/services/...` — secured Spring-side endpoints (see `BaseEndpoint.PREFIX_ENDPOINT_*`)
+- `/public/...` — unauthenticated counterpart
+- `/services/js/<project>/<file>.{js,mjs,ts}` — execute a JS/TS file from the user repository (the same path under `/public/js/` is the unauthenticated variant)
+- `/odata/v2/...` — OData services (CXF base path)
+- `/websockets/...` — WebSocket endpoints
+
+Default DB is in-memory H2; switch by exporting `DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER/URL/USERNAME/PASSWORD` (then `mvn clean` so leftover H2 files don't poison startup). Server port is overridable via `DIRIGIBLE_SERVER_PORT` (default 8080). The in-IDE terminal launches `ttyd` on 9000. The Dockerfile additionally exposes 8081 as the Graalium debug port (used when `DIRIGIBLE_GRAALIUM_ENABLE_DEBUG=true`, which is the default).
+
+The on-disk Dirigible repository ("registry") defaults to `./target/` relative to the working directory (`DIRIGIBLE_REPOSITORY_LOCAL_ROOT_FOLDER`). Inside it the canonical layout is `/registry/public/<project>/...` for published artefacts and `/users/<user>/workspace/<project>/...` for in-IDE workspaces (see `IRepositoryStructure`). Multi-tenancy is on by default (`DIRIGIBLE_MULTI_TENANT_MODE=true`).
 
 For remote debugging:
 
@@ -72,6 +87,20 @@ The Maven hierarchy (from root `pom.xml`) is: `modules`, `components`, `build`, 
 - **`dependencies/`** — BOM-style module aggregating third-party version pins (the actual `<properties>` for versions still live in the root `pom.xml`).
 - **`open-telemetry/`**, **`samples/`**, **`misc/`**, **`npm/`** — auxiliary content, not part of the Maven reactor in the root build (verify in the relevant `pom.xml` before assuming).
 
+## How a feature reaches the running system (the synchronizer model)
+
+This is the single most important architectural pattern to understand before changing engines or adding artefact types. Dirigible does not "deploy" projects — instead, files in the repository (`/registry/public/...`) are continuously reconciled into runtime state by **synchronizers**.
+
+Each artefact type has three collaborating pieces:
+
+1. An **Artefact** JPA entity (`extends Artefact` from `components/core/core-base`) — the persisted projection of a file.
+2. A **Synchronizer** (`extends BaseSynchronizer<A, ID>` or `MultitenantBaseSynchronizer`) — registered as a Spring bean, scans the repository for a specific file extension/pattern, parses it, upserts the artefact, and reacts to lifecycle phases (`CREATE`, `UPDATE`, `DELETE`, `START`, `STOP`). Ordering across synchronizer types is fixed in `SynchronizersOrder`.
+3. An optional **engine/service/endpoint** that consumes the live artefact (e.g. Quartz scheduler for jobs, Flowable for `.bpmn`, Camel for routes, Spring MVC endpoints for `expose` declarations).
+
+Existing synchronizer implementations (grep `extends BaseSynchronizer` / `extends MultitenantBaseSynchronizer`) give a complete inventory of supported artefact types: `Job`, `Bpmn`, `Camel`, `Listener`, `Csvim`, `DataSource`, `Table`, `View`, `Access` (security), `Expose` (URL routing), `ExtensionPoint` / `Extension`, `Markdown`, `Proxy`, etc. Adding a new artefact type means producing a new synchronizer + entity + (usually) a service, then registering it in the relevant `group-*` aggregator.
+
+JS/TS user code is **not** synchronized — it is loaded on demand by `engine-javascript` (`JavascriptEndpoint` at `/services/js/...`, `/public/js/...`) via `DirigibleJavascriptCodeRunner` backed by Graalium/GraalVM polyglot. The `api-*` Java modules under `components/api/` register the JS-callable APIs (`@dirigible/db`, `@dirigible/http`, etc.) into the GraalJS context — pre-built TS/JS bundles for those APIs live in `components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules/`.
+
 ## Conventions worth knowing
 
 - **Code formatting is enforced.** Build job `code-style` in `.github/workflows/build.yml` runs `mvn formatter:validate`. The IDE setup (Eclipse / IntelliJ / VS Code) for importing `dirigible-formatter.xml` is documented in `CONTRIBUTING.md`.
@@ -80,6 +109,9 @@ The Maven hierarchy (from root `pom.xml`) is: `modules`, `components`, `build`, 
 - **DB-specific behavior is covered by parametrized CI.** `build.yml` runs the integration suite three times — H2 (default), PostgreSQL 16, and MSSQL 2022 — by varying the `DIRIGIBLE_DATASOURCE_DEFAULT_*` env vars. When touching SQL or schema-emission code, replicate this locally for the affected DB rather than assuming H2 behavior generalizes.
 - **WebJars / `dirigiblelabs` modules.** Some IDE-side modules (names starting with `ide-`, `api-`, `ext-`) historically lived as separate repos under [dirigiblelabs](https://github.com/dirigiblelabs); per `CONTRIBUTING.md` step 8 you may need `mvn clean install -Pcontent` to pull their latest content if working across them.
 - **`*IT.java` vs `*Test.java` matters** — failsafe picks up the former, surefire the latter. Putting an integration test under a `*Test` name will silently run it during the wrong phase (and likely without the test app context).
+- **Configuration goes through `DirigibleConfig` / `Configuration`** (`modules/commons/commons-config`). When introducing a new tunable, add the enum entry there with a `DIRIGIBLE_*` env-var key and a sensible default — don't read env vars or `System.getProperty` ad-hoc.
+- **Spring beans glue everything together; `StaticObjects` is legacy.** Some code paths still grab dependencies via `StaticObjects.get(...)` (e.g. `RepositoryConfig` registers `IRepository` there explicitly) because parts of the runtime predate Spring. New code should rely on constructor injection; don't add new `StaticObjects` keys.
+- **Bean-definition overriding is enabled** (`spring.main.allow-bean-definition-overriding=true` in `application-common.properties`), so a duplicate `@Bean` name will silently shadow another. Be deliberate about bean names.
 
 ## CI reference
 
