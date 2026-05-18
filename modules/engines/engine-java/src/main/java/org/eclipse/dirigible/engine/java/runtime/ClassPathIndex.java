@@ -37,23 +37,23 @@ import org.springframework.stereotype.Component;
  * entries that can be passed to {@code javac} via {@code --class-path}.
  *
  * <p>
- * <b>Why on-disk and not in-process?</b> Spring Boot 3's {@code LaunchedClassLoader} reuses
- * pooled {@code NestedJarFile} handles for nested {@code BOOT-INF/lib/*.jar} entries. Reading
- * those resources via {@code ClassLoader.getResourceAsStream} or via in-process classpath
- * scanners (e.g. ClassGraph) inadvertently closes the pooled handles and leaves the running
- * application unable to load classes from the affected jars. The symptom is sporadic
- * {@code NoClassDefFoundError}s on platform classes — a critical correctness regression.
+ * <b>Why on-disk and not in-process?</b> Spring Boot 3's {@code LaunchedClassLoader} reuses pooled
+ * {@code NestedJarFile} handles for nested {@code BOOT-INF/lib/*.jar} entries. Reading those
+ * resources via {@code ClassLoader.getResourceAsStream} or via in-process classpath scanners (e.g.
+ * ClassGraph) inadvertently closes the pooled handles and leaves the running application unable to
+ * load classes from the affected jars. The symptom is sporadic {@code NoClassDefFoundError}s on
+ * platform classes — a critical correctness regression.
  *
  * <p>
  * To avoid this, we crack the outer fat jar directly via {@link java.util.jar.JarFile} (which
- * bypasses Spring Boot's loader entirely) and extract every {@code BOOT-INF/lib/} entry plus
- * the {@code BOOT-INF/classes/} tree to a temp directory under
- * {@code $TMPDIR/dirigible-engine-java/<pid>/}. The extraction is one-shot per JVM and is
- * cleaned up on shutdown.
+ * bypasses Spring Boot's loader entirely) and extract every {@code BOOT-INF/lib/} entry plus the
+ * {@code BOOT-INF/classes/} tree to a temp directory under
+ * {@code $TMPDIR/dirigible-engine-java/<pid>/}. The extraction is one-shot per JVM and is cleaned
+ * up on shutdown.
  *
  * <p>
- * For development / test runs the application is launched from a plain {@link URLClassLoader},
- * not a fat jar. In that case we simply collect the loader's URLs — they're already on disk.
+ * For development / test runs the application is launched from a plain {@link URLClassLoader}, not
+ * a fat jar. In that case we simply collect the loader's URLs — they're already on disk.
  */
 @Component
 public class ClassPathIndex implements DisposableBean {
@@ -80,8 +80,8 @@ public class ClassPathIndex implements DisposableBean {
             long start = System.currentTimeMillis();
             s = build();
             snapshotRef.set(s);
-            LOGGER.info("Materialised compile-time classpath: [{}] entries, root [{}], took [{}] ms",
-                    s.entries.size(), s.extractionRoot, System.currentTimeMillis() - start);
+            LOGGER.info("Materialised compile-time classpath: [{}] entries, root [{}], took [{}] ms", s.entries.size(), s.extractionRoot,
+                    System.currentTimeMillis() - start);
             return s;
         }
     }

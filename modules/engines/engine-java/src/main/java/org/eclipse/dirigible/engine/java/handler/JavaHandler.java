@@ -17,8 +17,9 @@ import jakarta.servlet.http.HttpServletResponse;
  *
  * <p>
  * Sources placed under a project in {@code /registry/public/<project>/} that compile to a class
- * implementing this interface become accessible at {@code /services/java/<project>/<package-path>/<ClassName>}
- * once the synchronizer picks them up. The class must have a public no-arg constructor.
+ * implementing this interface become accessible at
+ * {@code /services/java/<project>/<package-path>/<ClassName>} once the synchronizer picks them up.
+ * The class must have a public no-arg constructor.
  *
  * <p>
  * Implementations are reloaded on every source change; do not retain process-global state on the

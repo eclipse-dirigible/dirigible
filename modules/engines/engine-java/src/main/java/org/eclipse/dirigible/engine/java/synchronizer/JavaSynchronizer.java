@@ -50,14 +50,14 @@ import org.springframework.stereotype.Component;
  * </ol>
  * The deferred-batch model exists because every client class is loaded under a single shared
  * {@link org.eclipse.dirigible.engine.java.runtime.ClientClassLoader ClientClassLoader} so client
- * code can reference any other client class (entity classes from handlers, shared utilities, …).
- * A batch compile lets {@code javac} resolve those cross-file references in a single pass.
+ * code can reference any other client class (entity classes from handlers, shared utilities, …). A
+ * batch compile lets {@code javac} resolve those cross-file references in a single pass.
  *
  * <p>
  * Ordering: this synchronizer runs after {@code JOB} (50) / {@code LISTENER} (60) but before
  * {@code EXPOSE} (70) — chosen so URL routing artefacts and other late-binding components can
- * observe registered classes if needed. The endpoint resolves classes at request time, so
- * ordering is not load-bearing; this just keeps the boot timeline tidy.
+ * observe registered classes if needed. The endpoint resolves classes at request time, so ordering
+ * is not load-bearing; this just keeps the boot timeline tidy.
  */
 @Component
 @Order(JavaSynchronizer.SYNCHRONIZER_ORDER)
@@ -71,7 +71,9 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
     private final JavaFileService javaFileService;
     private final JavaLoader javaLoader;
 
-    /** Set by any per-artefact lifecycle change in the current cycle; consumed by {@link #finishing}. */
+    /**
+     * Set by any per-artefact lifecycle change in the current cycle; consumed by {@link #finishing}.
+     */
     private final AtomicBoolean dirty = new AtomicBoolean(false);
 
     private SynchronizerCallback callback;
@@ -123,7 +125,7 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
         // duplicate rather than a confusing "produces no class file" downstream.
         JavaFile existingByFqn = findByFqn(parsed.fqn());
         if (existingByFqn != null && !existingByFqn.getLocation()
-                                                    .equals(location)) {
+                                                   .equals(location)) {
             throw new ParseException("Java class [" + parsed.fqn() + "] is already declared at [" + existingByFqn.getLocation()
                     + "]; refusing to register a duplicate at [" + location + "]", 0);
         }
@@ -233,12 +235,12 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
             if (result.failures()
                       .containsKey(fqn)) {
                 String message = result.failures()
-                                        .get(fqn);
+                                       .get(fqn);
                 file.setLifecycle(ArtefactLifecycle.FAILED);
                 file.setError(message);
                 javaFileService.save(file);
             } else if (result.succeededFqns()
-                              .contains(fqn)) {
+                             .contains(fqn)) {
                 file.setLifecycle(ArtefactLifecycle.CREATED);
                 file.setError(null);
                 javaFileService.save(file);

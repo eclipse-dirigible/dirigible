@@ -30,13 +30,13 @@ class JavaEntityToHbmMapperTest {
         JavaEntityToHbmMapper.Result r = JavaEntityToHbmMapper.map("p::Basic", Basic.class);
 
         assertEquals("Basic", r.registered()
-                                .entityName());
+                               .entityName());
         assertEquals("BASIC", r.registered()
-                                .tableName(),
+                               .tableName(),
                 "default table name is uppercase entity name");
 
         String xml = r.descriptor()
-                       .serialize();
+                      .serialize();
         assertTrue(xml.contains("entity-name=\"Basic\""), xml);
         assertTrue(xml.contains("table=\"`BASIC`\""), xml);
         assertTrue(xml.contains("<id name=\"id\""), xml);
@@ -49,12 +49,12 @@ class JavaEntityToHbmMapperTest {
         JavaEntityToHbmMapper.Result r = JavaEntityToHbmMapper.map("p::Renamed", Renamed.class);
 
         assertEquals("CountryEntity", r.registered()
-                                        .entityName());
+                                       .entityName());
         assertEquals("COUNTRIES", r.registered()
-                                    .tableName());
+                                   .tableName());
 
         String xml = r.descriptor()
-                       .serialize();
+                      .serialize();
         assertTrue(xml.contains("entity-name=\"CountryEntity\""), xml);
         assertTrue(xml.contains("table=\"`COUNTRIES`\""), xml);
         assertTrue(xml.contains("column=\"`COUNTRY_NAME`\""), xml);
@@ -64,11 +64,11 @@ class JavaEntityToHbmMapperTest {
     void records_audit_flag_for_createdAt() {
         JavaEntityToHbmMapper.Result r = JavaEntityToHbmMapper.map("p::Audited", Audited.class);
         assertEquals("createdAt", r.registered()
-                                    .audit()
-                                    .createdAtProperty());
+                                   .audit()
+                                   .createdAtProperty());
         assertTrue(r.registered()
-                     .audit()
-                     .any());
+                    .audit()
+                    .any());
     }
 
     @Test
@@ -76,8 +76,9 @@ class JavaEntityToHbmMapperTest {
         JavaEntityToHbmMapper.Result r = JavaEntityToHbmMapper.map("p::WithTransient", WithTransient.class);
         // The transient field's name should NOT appear as a <property> in the HBM XML.
         assertTrue(r.descriptor()
-                     .serialize()
-                     .indexOf("name=\"computed\"") < 0, "transient property must not be mapped");
+                    .serialize()
+                    .indexOf("name=\"computed\"") < 0,
+                "transient property must not be mapped");
     }
 
     @Test

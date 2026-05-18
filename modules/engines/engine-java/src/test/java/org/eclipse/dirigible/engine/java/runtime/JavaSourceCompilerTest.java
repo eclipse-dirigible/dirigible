@@ -59,7 +59,8 @@ class JavaSourceCompilerTest {
                 }
                 """));
         assertTrue(ex.getMessage()
-                     .contains("Broken"), "diagnostic should reference the offending class");
+                     .contains("Broken"),
+                "diagnostic should reference the offending class");
     }
 
 }

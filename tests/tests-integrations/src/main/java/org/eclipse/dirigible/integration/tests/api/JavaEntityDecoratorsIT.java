@@ -34,8 +34,8 @@ import org.springframework.beans.factory.annotation.Autowired;
  *
  * <p>
  * Resource layout under {@code src/main/resources/JavaEntityDecoratorsIT/sample-java-entities/}:
- * {@code Country.java}, {@code CountrySeeder.java}, {@code CountryController.java}.
- * They live under registry path {@code /sample-java-entities/demo/...} in the running app.
+ * {@code Country.java}, {@code CountrySeeder.java}, {@code CountryController.java}. They live under
+ * registry path {@code /sample-java-entities/demo/...} in the running app.
  */
 class JavaEntityDecoratorsIT extends IntegrationTest {
 
@@ -47,7 +47,9 @@ class JavaEntityDecoratorsIT extends IntegrationTest {
     private static final String SEEDER_ENDPOINT = "/services/java/" + PROJECT + "/demo/CountrySeeder";
     private static final String CONTROLLER_ENDPOINT = "/services/java/" + PROJECT + "/demo/CountryController";
 
-    /** Cap matches JavaEngineIT — covers the async lag between forceProcessSynchronizers() and dispatch. */
+    /**
+     * Cap matches JavaEngineIT — covers the async lag between forceProcessSynchronizers() and dispatch.
+     */
     private static final long ASSERTION_TIMEOUT_SECONDS = 30;
 
     @Autowired

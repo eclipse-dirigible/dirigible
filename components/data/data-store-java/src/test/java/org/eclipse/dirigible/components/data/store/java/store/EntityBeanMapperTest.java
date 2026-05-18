@@ -27,7 +27,7 @@ class EntityBeanMapperTest {
     @Test
     void roundtrip_preserves_persistent_fields() {
         RegisteredEntity meta = JavaEntityToHbmMapper.map("p::Person", Person.class)
-                                                      .registered();
+                                                     .registered();
         Person original = new Person();
         original.id = 42L;
         original.name = "Ada";
@@ -50,7 +50,7 @@ class EntityBeanMapperTest {
     @Test
     void coerces_jdbc_numeric_widths() {
         RegisteredEntity meta = JavaEntityToHbmMapper.map("p::Person", Person.class)
-                                                      .registered();
+                                                     .registered();
         // Hibernate may return java.math.BigInteger or java.lang.Integer for a long column on
         // different drivers; both should land back as Long.
         Map<String, Object> data = Map.of("id", java.math.BigInteger.valueOf(7), "name", "Linus", "age", 50L);

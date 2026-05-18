@@ -15,8 +15,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Overrides the physical table name for an {@link Entity}. When absent, the table name defaults
- * to the entity name in upper case.
+ * Overrides the physical table name for an {@link Entity}. When absent, the table name defaults to
+ * the entity name in upper case.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)

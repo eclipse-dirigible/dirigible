@@ -59,8 +59,8 @@ public final class JavaEntityToHbmMapper {
 
     /**
      * Build the descriptor + registered-entity pair for a single entity class. Throws
-     * {@link IllegalArgumentException} when the class is not a valid entity (missing
-     * {@link Entity}, no {@link Id}, duplicate {@code @Id}, etc.).
+     * {@link IllegalArgumentException} when the class is not a valid entity (missing {@link Entity}, no
+     * {@link Id}, duplicate {@code @Id}, etc.).
      */
     public static Result map(String key, Class<?> entityClass) {
         Entity entityAnn = entityClass.getAnnotation(Entity.class);
@@ -72,7 +72,7 @@ public final class JavaEntityToHbmMapper {
                                      .isEmpty() ? entityClass.getSimpleName() : entityAnn.name();
         Table tableAnn = entityClass.getAnnotation(Table.class);
         String tableName = (tableAnn != null && !tableAnn.name()
-                                                          .isEmpty()) ? tableAnn.name() : entityName.toUpperCase(Locale.ROOT);
+                                                         .isEmpty()) ? tableAnn.name() : entityName.toUpperCase(Locale.ROOT);
 
         // Walk fields (including inherited ones) in declaration order. LinkedHashMap preserves
         // the order, which produces deterministic HBM output — easier to test and diff.
@@ -109,7 +109,7 @@ public final class JavaEntityToHbmMapper {
                 idField = field;
                 Column col = field.getAnnotation(Column.class);
                 idColumn = (col != null && !col.name()
-                                                .isEmpty()) ? col.name() : field.getName();
+                                               .isEmpty()) ? col.name() : field.getName();
                 idType = hibernateTypeFor(field.getType());
                 GeneratedValue gen = field.getAnnotation(GeneratedValue.class);
                 if (gen != null) {

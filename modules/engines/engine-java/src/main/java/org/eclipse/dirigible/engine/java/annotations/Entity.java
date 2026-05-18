@@ -15,14 +15,13 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks a client Java class as a persistent entity managed by the
- * {@code data-store-java} module.
+ * Marks a client Java class as a persistent entity managed by the {@code data-store-java} module.
  *
  * <p>
  * Signatures mirror {@code jakarta.persistence.Entity} so existing JPA knowledge transfers, but
- * Dirigible's runtime processes the annotation itself — it is not propagated to Hibernate via
- * JPA. The {@code data-store-java} module reflects over these annotations and builds Hibernate
- * mappings (HBM XML, dynamic-map mode) on the fly.
+ * Dirigible's runtime processes the annotation itself — it is not propagated to Hibernate via JPA.
+ * The {@code data-store-java} module reflects over these annotations and builds Hibernate mappings
+ * (HBM XML, dynamic-map mode) on the fly.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)

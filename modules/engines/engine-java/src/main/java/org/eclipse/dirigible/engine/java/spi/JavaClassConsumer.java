@@ -22,8 +22,8 @@ package org.eclipse.dirigible.engine.java.spi;
  * Built-in consumers:
  * <ul>
  * <li>{@code HandlerClassConsumer} — claims classes that implement
- * {@code org.eclipse.dirigible.engine.java.handler.JavaHandler} and exposes them as REST
- * endpoints via {@code JavaEndpoint}.</li>
+ * {@code org.eclipse.dirigible.engine.java.handler.JavaHandler} and exposes them as REST endpoints
+ * via {@code JavaEndpoint}.</li>
  * </ul>
  *
  * <p>
@@ -33,20 +33,20 @@ package org.eclipse.dirigible.engine.java.spi;
 public interface JavaClassConsumer {
 
     /**
-     * Decide whether this consumer wants to handle the given class. Called once per class per
-     * rebuild; cheap by convention (annotation or interface check).
+     * Decide whether this consumer wants to handle the given class. Called once per class per rebuild;
+     * cheap by convention (annotation or interface check).
      */
     boolean accepts(Class<?> clazz);
 
     /**
-     * Called when a class accepted by this consumer enters the registry (either newly compiled
-     * or replacing a previous definition).
+     * Called when a class accepted by this consumer enters the registry (either newly compiled or
+     * replacing a previous definition).
      */
     void onClassLoaded(LoadedClass info);
 
     /**
-     * Called when a class accepted by this consumer leaves the registry (source removed or
-     * superseded by a rebuild that no longer produces it).
+     * Called when a class accepted by this consumer leaves the registry (source removed or superseded
+     * by a rebuild that no longer produces it).
      */
     void onClassUnloaded(LoadedClass info);
 

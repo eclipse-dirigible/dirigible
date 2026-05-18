@@ -122,8 +122,8 @@ class JavaLoaderTest {
 
     @Test
     void compile_error_is_isolated_to_the_offending_unit() {
-        JavaLoader.RebuildResult result = loader.rebuild(List.of(handlerSource("client.Good", "ok"), new JavaLoader.ClientSource(PROJECT,
-                "client.Broken", """
+        JavaLoader.RebuildResult result =
+                loader.rebuild(List.of(handlerSource("client.Good", "ok"), new JavaLoader.ClientSource(PROJECT, "client.Broken", """
                         package client;
                         public class Broken {
                             void m() { thisMethodDoesNotExist(); }
@@ -142,18 +142,17 @@ class JavaLoaderTest {
         int dot = fqn.lastIndexOf('.');
         String pkg = dot >= 0 ? fqn.substring(0, dot) : "";
         String simple = dot >= 0 ? fqn.substring(dot + 1) : fqn;
-        return new JavaLoader.ClientSource(PROJECT, fqn,
-                """
-                        package %s;
-                        import org.eclipse.dirigible.engine.java.handler.JavaHandler;
-                        import jakarta.servlet.http.HttpServletRequest;
-                        import jakarta.servlet.http.HttpServletResponse;
-                        public class %s implements JavaHandler {
-                            public void handle(HttpServletRequest req, HttpServletResponse resp) throws Exception {
-                                resp.getWriter().write("%s");
-                            }
-                        }
-                        """.formatted(pkg, simple, body));
+        return new JavaLoader.ClientSource(PROJECT, fqn, """
+                package %s;
+                import org.eclipse.dirigible.engine.java.handler.JavaHandler;
+                import jakarta.servlet.http.HttpServletRequest;
+                import jakarta.servlet.http.HttpServletResponse;
+                public class %s implements JavaHandler {
+                    public void handle(HttpServletRequest req, HttpServletResponse resp) throws Exception {
+                        resp.getWriter().write("%s");
+                    }
+                }
+                """.formatted(pkg, simple, body));
     }
 
     /** Test consumer that records every load/unload — accepts every class. */

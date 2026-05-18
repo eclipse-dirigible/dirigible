@@ -19,9 +19,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
- * Plugs the {@code data-store-java} runtime into {@code engine-java}'s class-loaded events:
- * every class annotated with {@link Entity} is registered with the {@link JavaEntityManager}
- * (and the Hibernate {@code SessionFactory} is rebuilt to include it).
+ * Plugs the {@code data-store-java} runtime into {@code engine-java}'s class-loaded events: every
+ * class annotated with {@link Entity} is registered with the {@link JavaEntityManager} (and the
+ * Hibernate {@code SessionFactory} is rebuilt to include it).
  */
 @Component
 public class EntityClassConsumer implements JavaClassConsumer {

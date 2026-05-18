@@ -39,14 +39,14 @@ import jakarta.servlet.http.HttpServletResponse;
  * URL shape: {@code /services/java/<project>/<package-path>/<ClassName>} (secured) and the
  * unauthenticated counterpart {@code /public/java/...}. The path after {@code <project>/} is
  * converted to a fully-qualified class name by replacing {@code /} with {@code .} — exactly the
- * inverse of the convention {@code JavaSynchronizer} uses to derive the FQN from the source
- * file's location.
+ * inverse of the convention {@code JavaSynchronizer} uses to derive the FQN from the source file's
+ * location.
  *
  * <p>
- * A fresh instance of the handler is constructed on each request via {@link Class#getDeclaredConstructor()}.
- * The thread-context classloader is switched to the handler's own loader so utilities that rely on
- * TCCL (Jackson, JPA, logging frameworks) can resolve user types correctly, then restored after the
- * call returns.
+ * A fresh instance of the handler is constructed on each request via
+ * {@link Class#getDeclaredConstructor()}. The thread-context classloader is switched to the
+ * handler's own loader so utilities that rely on TCCL (Jackson, JPA, logging frameworks) can
+ * resolve user types correctly, then restored after the call returns.
  */
 @RestController
 @RequestMapping({BaseEndpoint.PREFIX_ENDPOINT_SECURED + "java", BaseEndpoint.PREFIX_ENDPOINT_PUBLIC + "java"})
@@ -113,8 +113,8 @@ public class JavaEndpoint extends BaseEndpoint {
             throw e;
         } catch (Exception e) {
             LOGGER.error("Java handler [{}/{}] failed: {}", project, classFqn, e.getMessage(), e);
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Java handler [" + classFqn + "] failed: " + e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Java handler [" + classFqn + "] failed: " + e.getMessage(),
+                    e);
         } finally {
             Thread.currentThread()
                   .setContextClassLoader(previousTccl);

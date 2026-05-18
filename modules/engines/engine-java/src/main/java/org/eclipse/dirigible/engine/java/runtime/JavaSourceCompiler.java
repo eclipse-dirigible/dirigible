@@ -40,8 +40,8 @@ import org.springframework.stereotype.Component;
  *
  * <p>
  * Sources are passed as strings; emitted bytecode is captured in memory by
- * {@link InMemoryJavaFileManager}. The compile-time classpath is supplied by
- * {@link ClassPathIndex} as a list of on-disk paths and bound to the standard file manager via
+ * {@link InMemoryJavaFileManager}. The compile-time classpath is supplied by {@link ClassPathIndex}
+ * as a list of on-disk paths and bound to the standard file manager via
  * {@link StandardJavaFileManager#setLocationFromPaths setLocationFromPaths(CLASS_PATH, ...)}.
  *
  * <p>
@@ -67,8 +67,8 @@ public class JavaSourceCompiler {
     }
 
     /**
-     * Compile a single Java source. Convenience wrapper over {@link #compileBatch(List)} that
-     * throws on any failure to keep its existing call-sites stable.
+     * Compile a single Java source. Convenience wrapper over {@link #compileBatch(List)} that throws on
+     * any failure to keep its existing call-sites stable.
      *
      * @param fqn fully-qualified binary class name (e.g. {@code com.example.HelloHandler})
      * @param source the source text
@@ -90,14 +90,14 @@ public class JavaSourceCompiler {
     }
 
     /**
-     * Compile multiple sources together so cross-file references resolve. The compiler is
-     * invoked once; per-source diagnostics are sorted into {@link BatchResult#failures()},
-     * successful bytecode into {@link BatchResult#bytecode()}.
+     * Compile multiple sources together so cross-file references resolve. The compiler is invoked once;
+     * per-source diagnostics are sorted into {@link BatchResult#failures()}, successful bytecode into
+     * {@link BatchResult#bytecode()}.
      *
      * <p>
-     * Note: {@code javac} may still produce class files for units that don't depend on a broken
-     * unit. If a single unit fails its own type-check, only that unit is reported as failed;
-     * the others remain in {@link BatchResult#bytecode()}.
+     * Note: {@code javac} may still produce class files for units that don't depend on a broken unit.
+     * If a single unit fails its own type-check, only that unit is reported as failed; the others
+     * remain in {@link BatchResult#bytecode()}.
      */
     public BatchResult compileBatch(List<SourceUnit> units) {
         if (units.isEmpty()) {
@@ -105,8 +105,7 @@ public class JavaSourceCompiler {
         }
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         if (compiler == null) {
-            throw new JavaCompilationException("System Java compiler is not available. "
-                    + "Ensure the runtime is a JDK, not a JRE.");
+            throw new JavaCompilationException("System Java compiler is not available. " + "Ensure the runtime is a JDK, not a JRE.");
         }
 
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
@@ -124,15 +123,13 @@ public class JavaSourceCompiler {
             }
             List<String> options = Arrays.asList("-proc:none", "-g");
 
-            JavaCompiler.CompilationTask task =
-                    compiler.getTask(null, fileManager, diagnostics, options, null, compilationUnits);
+            JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager, diagnostics, options, null, compilationUnits);
             task.call();
 
             Map<String, byte[]> bytecode = fileManager.compiledClasses();
             Map<String, String> failures = bucketDiagnostics(units, bytecode, diagnostics);
 
-            LOGGER.debug("Compiled batch: [{}] units, [{}] class file(s), [{}] failure(s)", units.size(), bytecode.size(),
-                    failures.size());
+            LOGGER.debug("Compiled batch: [{}] units, [{}] class file(s), [{}] failure(s)", units.size(), bytecode.size(), failures.size());
 
             return new BatchResult(bytecode, failures);
 
@@ -142,10 +139,10 @@ public class JavaSourceCompiler {
     }
 
     /**
-     * Build a {@code Map<FQN, message>} of compilation failures keyed by the source's top-level
-     * FQN. A unit is considered failed if it produced no class file <em>or</em> if any error-level
-     * diagnostic in the batch references its source file (by simple-name match — javac doesn't
-     * give us back the original {@code JavaFileObject} we passed in for every diagnostic).
+     * Build a {@code Map<FQN, message>} of compilation failures keyed by the source's top-level FQN. A
+     * unit is considered failed if it produced no class file <em>or</em> if any error-level diagnostic
+     * in the batch references its source file (by simple-name match — javac doesn't give us back the
+     * original {@code JavaFileObject} we passed in for every diagnostic).
      */
     private static Map<String, String> bucketDiagnostics(List<SourceUnit> units, Map<String, byte[]> bytecode,
             DiagnosticCollector<JavaFileObject> diagnostics) {
@@ -190,8 +187,7 @@ public class JavaSourceCompiler {
             if (!errs.isEmpty()) {
                 failures.put(fqn, formatDiagnostics(fqn, errs));
             } else if (!hasBytecode) {
-                String message = orphan.isEmpty() ? "Compilation produced no class file for [" + fqn + "]"
-                        : formatDiagnostics(fqn, orphan);
+                String message = orphan.isEmpty() ? "Compilation produced no class file for [" + fqn + "]" : formatDiagnostics(fqn, orphan);
                 failures.put(fqn, message);
             }
         }
@@ -200,7 +196,7 @@ public class JavaSourceCompiler {
 
     private static String formatDiagnostics(String fqn, List<Diagnostic<? extends JavaFileObject>> errs) {
         StringBuilder sb = new StringBuilder("Compilation of [").append(fqn)
-                                                                 .append("] failed:");
+                                                                .append("] failed:");
         for (Diagnostic<? extends JavaFileObject> d : errs) {
             sb.append(System.lineSeparator())
               .append("  ")

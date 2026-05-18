@@ -38,15 +38,15 @@ import org.springframework.stereotype.Component;
  *
  * <p>
  * Whenever an entity class enters or leaves the runtime (via {@code EntityClassConsumer}), the
- * factory is rebuilt with the current set of HBM mappings. The rebuild is synchronized; only
- * one thread can be reconfiguring at any time. Reads against {@link #getSessionFactory()} block
- * briefly during a rebuild, which is acceptable because rebuilds run only on the synchronization
- * thread and are bounded by the number of registered entities.
+ * factory is rebuilt with the current set of HBM mappings. The rebuild is synchronized; only one
+ * thread can be reconfiguring at any time. Reads against {@link #getSessionFactory()} block briefly
+ * during a rebuild, which is acceptable because rebuilds run only on the synchronization thread and
+ * are bounded by the number of registered entities.
  *
  * <p>
  * Schema management is delegated to Hibernate's {@code hbm2ddl.auto = update} — the same default
- * the TypeScript {@code DataStore} uses: tables and columns are created or extended, never
- * dropped, so removing an entity file from the registry does not lose data.
+ * the TypeScript {@code DataStore} uses: tables and columns are created or extended, never dropped,
+ * so removing an entity file from the registry does not lose data.
  */
 @Component
 public class JavaEntityManager implements DisposableBean {
@@ -79,7 +79,7 @@ public class JavaEntityManager implements DisposableBean {
             registered.put(key, mapped.registered());
             rebuildSessionFactory();
             LOGGER.info("Registered Java entity [{}] → table [{}]", mapped.registered()
-                                                                           .entityName(),
+                                                                          .entityName(),
                     mapped.registered()
                           .tableName());
             return mapped.registered();
@@ -110,9 +110,9 @@ public class JavaEntityManager implements DisposableBean {
 
     /**
      * Look up by entity {@link Class} — finds the registered entry whose
-     * {@link RegisteredEntity#entityClass()} matches by identity, falling back to FQN equality so
-     * a class loaded in a previous generation of the {@code ClientClassLoader} still resolves to
-     * its current registration.
+     * {@link RegisteredEntity#entityClass()} matches by identity, falling back to FQN equality so a
+     * class loaded in a previous generation of the {@code ClientClassLoader} still resolves to its
+     * current registration.
      */
     public Optional<RegisteredEntity> findForClass(Class<?> entityClass) {
         for (RegisteredEntity r : registered.values()) {
@@ -122,8 +122,8 @@ public class JavaEntityManager implements DisposableBean {
         }
         for (RegisteredEntity r : registered.values()) {
             if (r.entityClass()
-                  .getName()
-                  .equals(entityClass.getName())) {
+                 .getName()
+                 .equals(entityClass.getName())) {
                 return Optional.of(r);
             }
         }
@@ -158,19 +158,19 @@ public class JavaEntityManager implements DisposableBean {
         SessionFactory old = sessionFactory;
 
         Configuration configuration = new Configuration().setProperty(Environment.HBM2DDL_AUTO, "update")
-                                                          .setProperty(Environment.SHOW_SQL, "false");
+                                                         .setProperty(Environment.SHOW_SQL, "false");
 
         for (RegisteredEntity entity : registered.values()) {
             HbmXmlDescriptor.HbmIdDescriptor idDesc = new HbmXmlDescriptor.HbmIdDescriptor(entity.idField()
-                                                                                                  .getName(),
+                                                                                                 .getName(),
                     entity.idColumn(), hibernateTypeOf(entity.idField()
-                                                              .getType()),
+                                                             .getType()),
                     "native");
             // Re-map fresh — we don't want to leak Java reflection objects into the Hibernate
             // metadata layer. JavaEntityToHbmMapper.map is the canonical builder.
             JavaEntityToHbmMapper.Result mapped = JavaEntityToHbmMapper.map(entity.key(), entity.entityClass());
             String xml = mapped.descriptor()
-                                .serialize();
+                               .serialize();
             try (InputStream in = IOUtils.toInputStream(xml, StandardCharsets.UTF_8)) {
                 configuration.addInputStream(in);
             } catch (Exception e) {
@@ -198,8 +198,8 @@ public class JavaEntityManager implements DisposableBean {
     }
 
     /**
-     * Minimal Java→Hibernate type table for the id column (the mapper has the full version). The
-     * id type is the only one we look up outside the mapper itself.
+     * Minimal Java→Hibernate type table for the id column (the mapper has the full version). The id
+     * type is the only one we look up outside the mapper itself.
      */
     private static String hibernateTypeOf(Class<?> javaType) {
         if (javaType == String.class) {

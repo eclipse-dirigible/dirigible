@@ -41,7 +41,9 @@ public class JavaFile extends Artefact {
     @Column(name = "JAVAFILE_PROJECT", columnDefinition = "VARCHAR", nullable = false, length = 255)
     private String project;
 
-    /** Fully-qualified class name parsed from the source ({@code package} + top-level {@code class}). */
+    /**
+     * Fully-qualified class name parsed from the source ({@code package} + top-level {@code class}).
+     */
     @Column(name = "JAVAFILE_CLASS_FQN", columnDefinition = "VARCHAR", nullable = false, length = 510)
     private String classFqn;
 

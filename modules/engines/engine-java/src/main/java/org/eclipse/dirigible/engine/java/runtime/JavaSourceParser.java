@@ -13,14 +13,14 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Lightweight, regex-based extractor for the {@code package} declaration and primary top-level
- * type name from a Java source string.
+ * Lightweight, regex-based extractor for the {@code package} declaration and primary top-level type
+ * name from a Java source string.
  *
  * <p>
- * We deliberately avoid pulling in a full Java parser; the synchronizer only needs the binary
- * class name to key the artefact and request a compilation unit by name. Comments and string
- * literals are stripped first so {@code //}- and {@code /* *}/-embedded {@code package} tokens
- * don't trip up the matcher.
+ * We deliberately avoid pulling in a full Java parser; the synchronizer only needs the binary class
+ * name to key the artefact and request a compilation unit by name. Comments and string literals are
+ * stripped first so {@code //}- and {@code /* *}/-embedded {@code package} tokens don't trip up the
+ * matcher.
  */
 public final class JavaSourceParser {
 
@@ -30,8 +30,7 @@ public final class JavaSourceParser {
     private static final Pattern STRING_LITERAL = Pattern.compile("\"(?:\\\\.|[^\"\\\\])*\"");
     private static final Pattern CHAR_LITERAL = Pattern.compile("'(?:\\\\.|[^'\\\\])'");
 
-    private static final Pattern PACKAGE_DECL =
-            Pattern.compile("(?m)^\\s*package\\s+([a-zA-Z_$][\\w$]*(?:\\.[a-zA-Z_$][\\w$]*)*)\\s*;");
+    private static final Pattern PACKAGE_DECL = Pattern.compile("(?m)^\\s*package\\s+([a-zA-Z_$][\\w$]*(?:\\.[a-zA-Z_$][\\w$]*)*)\\s*;");
 
     // First class/interface/record/enum declaration after optional modifiers.
     // Sub-expression captures the simple name.

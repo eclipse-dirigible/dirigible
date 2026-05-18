@@ -29,9 +29,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * {@code /services/java/...} endpoint reflects the latest state.
  *
  * <p>
- * The test exercises the full reconciliation loop without the IDE: create → hot-reload (modify)
- * → delete → compile-error. Each case verifies the synchronizer's
- * CREATE/UPDATE/DELETE/FAILED handling end-to-end through the HTTP boundary.
+ * The test exercises the full reconciliation loop without the IDE: create → hot-reload (modify) →
+ * delete → compile-error. Each case verifies the synchronizer's CREATE/UPDATE/DELETE/FAILED
+ * handling end-to-end through the HTTP boundary.
  */
 class JavaEngineIT extends IntegrationTest {
 
@@ -120,10 +120,10 @@ class JavaEngineIT extends IntegrationTest {
     /**
      * Polls the endpoint until the assertion holds, capped at {@value #ASSERTION_TIMEOUT_SECONDS}
      * seconds. The cap is required because {@code forceProcessSynchronizers()} returns synchronously
-     * but the in-process compile + class-define cycle (including the one-time fat-jar extraction on
-     * the first invocation per Spring context) can still finish a few hundred milliseconds after
-     * the call returns, depending on scheduler scheduling. The framework's retry helper handles
-     * exactly this scenario.
+     * but the in-process compile + class-define cycle (including the one-time fat-jar extraction on the
+     * first invocation per Spring context) can still finish a few hundred milliseconds after the call
+     * returns, depending on scheduler scheduling. The framework's retry helper handles exactly this
+     * scenario.
      */
     private static final long ASSERTION_TIMEOUT_SECONDS = 30;
 

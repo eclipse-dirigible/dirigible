@@ -29,8 +29,8 @@ import javax.tools.StandardJavaFileManager;
  * binary class name.
  *
  * <p>
- * Classpath enumeration is delegated entirely to the wrapped {@link StandardJavaFileManager},
- * which is configured by {@link JavaSourceCompiler} with explicit on-disk paths via
+ * Classpath enumeration is delegated entirely to the wrapped {@link StandardJavaFileManager}, which
+ * is configured by {@link JavaSourceCompiler} with explicit on-disk paths via
  * {@link StandardJavaFileManager#setLocationFromPaths}. See {@link ClassPathIndex} for the
  * rationale (Spring Boot 3 nested-jar handles must not be touched in-process).
  */

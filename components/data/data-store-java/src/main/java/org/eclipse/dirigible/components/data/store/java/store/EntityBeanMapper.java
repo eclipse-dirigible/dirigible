@@ -30,8 +30,8 @@ import org.eclipse.dirigible.components.data.store.java.manager.RegisteredEntity
  * <p>
  * Map keys are the entity's <b>property names</b> (i.e. the field names, since we never rename
  * properties — only their columns are renameable via {@code @Column.name}). Values are coerced
- * between Java types and the temporal types Hibernate hands us back from the JDBC driver
- * (e.g. {@code java.sql.Timestamp} → {@code Instant}).
+ * between Java types and the temporal types Hibernate hands us back from the JDBC driver (e.g.
+ * {@code java.sql.Timestamp} → {@code Instant}).
  */
 public final class EntityBeanMapper {
 
@@ -47,7 +47,7 @@ public final class EntityBeanMapper {
             entity.idField()
                   .setAccessible(true);
             data.put(entity.idField()
-                            .getName(),
+                           .getName(),
                     entity.idField()
                           .get(bean));
             for (RegisteredEntity.PropertyInfo p : entity.properties()) {
@@ -57,16 +57,16 @@ public final class EntityBeanMapper {
             }
         } catch (IllegalAccessException e) {
             throw new IllegalStateException("Cannot read fields of " + bean.getClass()
-                                                                            .getName() + ": " + e.getMessage(),
-                    e);
+                                                                           .getName()
+                    + ": " + e.getMessage(), e);
         }
         return data;
     }
 
     /**
-     * Instantiate {@code type} via its no-arg constructor and assign every entry from {@code data}
-     * to the matching field. Unknown keys are ignored. Values are coerced where the target field
-     * type differs from the JDBC-returned type (e.g. {@code Timestamp} → {@code Instant}).
+     * Instantiate {@code type} via its no-arg constructor and assign every entry from {@code data} to
+     * the matching field. Unknown keys are ignored. Values are coerced where the target field type
+     * differs from the JDBC-returned type (e.g. {@code Timestamp} → {@code Instant}).
      */
     public static <T> T fromMap(Class<T> type, Map<String, Object> data, RegisteredEntity entity) {
         T instance;
@@ -81,11 +81,11 @@ public final class EntityBeanMapper {
             entity.idField()
                   .setAccessible(true);
             Object idValue = data.get(entity.idField()
-                                             .getName());
+                                            .getName());
             if (idValue != null) {
                 entity.idField()
                       .set(instance, coerce(idValue, entity.idField()
-                                                            .getType()));
+                                                           .getType()));
             }
             for (RegisteredEntity.PropertyInfo p : entity.properties()) {
                 Object v = data.get(p.propertyName());
@@ -103,8 +103,8 @@ public final class EntityBeanMapper {
     }
 
     /**
-     * Best-effort type coercion to bridge gaps between what Hibernate returns and the user's
-     * declared field type. Returns the value unchanged when no coercion is needed.
+     * Best-effort type coercion to bridge gaps between what Hibernate returns and the user's declared
+     * field type. Returns the value unchanged when no coercion is needed.
      */
     private static Object coerce(Object value, Class<?> target) {
         if (value == null || target.isInstance(value)) {

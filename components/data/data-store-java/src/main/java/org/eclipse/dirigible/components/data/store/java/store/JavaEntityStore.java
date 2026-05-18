@@ -39,8 +39,8 @@ import org.springframework.stereotype.Component;
  * the two representations.
  *
  * <p>
- * Audit fields ({@code @CreatedAt}, {@code @UpdatedAt}, {@code @CreatedBy}, {@code @UpdatedBy})
- * are populated automatically on {@link #save(Object)} / {@link #update(Object)} from
+ * Audit fields ({@code @CreatedAt}, {@code @UpdatedAt}, {@code @CreatedBy}, {@code @UpdatedBy}) are
+ * populated automatically on {@link #save(Object)} / {@link #update(Object)} from
  * {@link UserFacade#getName()} and {@link Instant#now()}.
  */
 @Component
@@ -62,7 +62,7 @@ public class JavaEntityStore {
         Map<String, Object> data = EntityBeanMapper.toMap(entity, meta);
 
         try (Session session = entityManager.getSessionFactory()
-                                             .openSession()) {
+                                            .openSession()) {
             Transaction tx = session.beginTransaction();
             Object generatedId = session.save(meta.entityName(), data);
             tx.commit();
@@ -81,7 +81,7 @@ public class JavaEntityStore {
         applyUpdateAudit(entity, meta);
         Map<String, Object> data = EntityBeanMapper.toMap(entity, meta);
         try (Session session = entityManager.getSessionFactory()
-                                             .openSession()) {
+                                            .openSession()) {
             Transaction tx = session.beginTransaction();
             session.update(meta.entityName(), data);
             tx.commit();
@@ -89,15 +89,19 @@ public class JavaEntityStore {
         return entity;
     }
 
-    /** Find by id. Throws {@link IllegalArgumentException} when not found — use {@link #findOne} for the optional variant. */
+    /**
+     * Find by id. Throws {@link IllegalArgumentException} when not found — use {@link #findOne} for the
+     * optional variant.
+     */
     public <T> T findById(Class<T> type, Object id) {
-        return findOne(type, id).orElseThrow(() -> new IllegalArgumentException("No entity [" + type.getSimpleName() + "] with id [" + id + "]"));
+        return findOne(type, id).orElseThrow(
+                () -> new IllegalArgumentException("No entity [" + type.getSimpleName() + "] with id [" + id + "]"));
     }
 
     public <T> Optional<T> findOne(Class<T> type, Object id) {
         RegisteredEntity meta = resolve(type);
         try (Session session = entityManager.getSessionFactory()
-                                             .openSession()) {
+                                            .openSession()) {
             @SuppressWarnings("unchecked")
             Map<String, Object> data = (Map<String, Object>) session.get(meta.entityName(), (java.io.Serializable) id);
             if (data == null) {
@@ -114,7 +118,7 @@ public class JavaEntityStore {
     public <T> List<T> findAll(Class<T> type, int limit, int offset) {
         RegisteredEntity meta = resolve(type);
         try (Session session = entityManager.getSessionFactory()
-                                             .openSession()) {
+                                            .openSession()) {
             Query<Map> query = session.createQuery("from " + meta.entityName(), Map.class);
             if (limit > 0) {
                 query.setMaxResults(limit);
@@ -130,7 +134,7 @@ public class JavaEntityStore {
         RegisteredEntity meta = resolve(entity.getClass());
         Map<String, Object> data = EntityBeanMapper.toMap(entity, meta);
         try (Session session = entityManager.getSessionFactory()
-                                             .openSession()) {
+                                            .openSession()) {
             Transaction tx = session.beginTransaction();
             session.delete(meta.entityName(), data);
             tx.commit();
@@ -140,7 +144,7 @@ public class JavaEntityStore {
     public <T> void deleteById(Class<T> type, Object id) {
         RegisteredEntity meta = resolve(type);
         try (Session session = entityManager.getSessionFactory()
-                                             .openSession()) {
+                                            .openSession()) {
             @SuppressWarnings("unchecked")
             Map<String, Object> data = (Map<String, Object>) session.get(meta.entityName(), (java.io.Serializable) id);
             if (data == null) {
@@ -155,22 +159,22 @@ public class JavaEntityStore {
     public <T> long count(Class<T> type) {
         RegisteredEntity meta = resolve(type);
         try (Session session = entityManager.getSessionFactory()
-                                             .openSession()) {
+                                            .openSession()) {
             Long result = session.createQuery("select count(*) from " + meta.entityName(), Long.class)
-                                  .getSingleResult();
+                                 .getSingleResult();
             return result == null ? 0L : result;
         }
     }
 
     /**
-     * Execute an HQL/JPQL query against the entity. Parameters are bound by name. The query must
-     * select map projections (default for dynamic-map entities — {@code from <entityName>} works
-     * out of the box).
+     * Execute an HQL/JPQL query against the entity. Parameters are bound by name. The query must select
+     * map projections (default for dynamic-map entities — {@code from <entityName>} works out of the
+     * box).
      */
     public <T> List<T> query(Class<T> type, String hql, Map<String, Object> parameters) {
         RegisteredEntity meta = resolve(type);
         try (Session session = entityManager.getSessionFactory()
-                                             .openSession()) {
+                                            .openSession()) {
             Query<Map> q = session.createQuery(hql, Map.class);
             if (parameters != null) {
                 parameters.forEach(q::setParameter);
@@ -199,14 +203,14 @@ public class JavaEntityStore {
 
     private RegisteredEntity resolve(Class<?> entityClass) {
         return entityManager.findForClass(entityClass)
-                             .orElseThrow(() -> new IllegalStateException(
-                                     "Class [" + entityClass.getName() + "] is not a registered @Entity. "
-                                             + "Ensure it has been picked up by the synchronizer (file present in the registry, no compile errors)."));
+                            .orElseThrow(() -> new IllegalStateException("Class [" + entityClass.getName()
+                                    + "] is not a registered @Entity. "
+                                    + "Ensure it has been picked up by the synchronizer (file present in the registry, no compile errors)."));
     }
 
     private void applyCreateAudit(Object entity, RegisteredEntity meta) {
         if (!meta.audit()
-                  .any()) {
+                 .any()) {
             return;
         }
         try {
@@ -229,7 +233,7 @@ public class JavaEntityStore {
 
     private void applyUpdateAudit(Object entity, RegisteredEntity meta) {
         if (!meta.audit()
-                  .any()) {
+                 .any()) {
             return;
         }
         try {

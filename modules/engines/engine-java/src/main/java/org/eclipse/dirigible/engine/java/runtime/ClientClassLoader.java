@@ -25,10 +25,10 @@ import java.util.Set;
  * next GC.
  *
  * <p>
- * Why a custom loader instead of {@code URLClassLoader} over a temp directory: keeping bytecode
- * in heap avoids creating loader leaks rooted in {@code URLClassLoader}'s file handle cache,
- * removes a class of "stale bytes on disk" failures, and makes the hot-reload path observable
- * from a single heap dump.
+ * Why a custom loader instead of {@code URLClassLoader} over a temp directory: keeping bytecode in
+ * heap avoids creating loader leaks rooted in {@code URLClassLoader}'s file handle cache, removes a
+ * class of "stale bytes on disk" failures, and makes the hot-reload path observable from a single
+ * heap dump.
  */
 public final class ClientClassLoader extends ClassLoader {
 

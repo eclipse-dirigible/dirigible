@@ -18,9 +18,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>
  * Writes (rebuild → swap) happen on the synchronization thread; reads happen on every HTTP
- * dispatch. {@link AtomicReference} gives lock-free reads + linearizable swaps. The previous
- * loader is intentionally not closed — it must remain reachable until any in-flight code that
- * holds a {@code Class} loaded from it returns. Once those references drop, GC reclaims it.
+ * dispatch. {@link AtomicReference} gives lock-free reads + linearizable swaps. The previous loader
+ * is intentionally not closed — it must remain reachable until any in-flight code that holds a
+ * {@code Class} loaded from it returns. Once those references drop, GC reclaims it.
  */
 @Component
 public class ClientClassLoaderHolder {

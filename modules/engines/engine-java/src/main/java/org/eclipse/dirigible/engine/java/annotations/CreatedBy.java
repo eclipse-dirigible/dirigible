@@ -15,8 +15,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks a {@code String} field that the store automatically populates with the calling user's
- * name on insert (via {@code UserFacade.getName()}).
+ * Marks a {@code String} field that the store automatically populates with the calling user's name
+ * on insert (via {@code UserFacade.getName()}).
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.FIELD)

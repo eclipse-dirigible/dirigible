@@ -22,8 +22,8 @@ import org.springframework.stereotype.Component;
  * JavaEndpoint}.
  *
  * <p>
- * The actual registry is {@link JavaClassRegistry}; this consumer is the bridge that translates
- * the engine-wide SPI events into registry register/unregister calls.
+ * The actual registry is {@link JavaClassRegistry}; this consumer is the bridge that translates the
+ * engine-wide SPI events into registry register/unregister calls.
  */
 @Component
 public class HandlerClassConsumer implements JavaClassConsumer {

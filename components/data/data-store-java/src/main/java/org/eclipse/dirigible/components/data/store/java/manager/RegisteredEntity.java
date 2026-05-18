@@ -96,8 +96,8 @@ public final class RegisteredEntity {
     }
 
     /**
-     * Convenience flags identifying which property names carry audit semantics. Lets the store
-     * fill them in on save/update without re-walking annotations on every call.
+     * Convenience flags identifying which property names carry audit semantics. Lets the store fill
+     * them in on save/update without re-walking annotations on every call.
      */
     public record AuditFlags(String createdAtProperty, String updatedAtProperty, String createdByProperty, String updatedByProperty) {
         public boolean any() {

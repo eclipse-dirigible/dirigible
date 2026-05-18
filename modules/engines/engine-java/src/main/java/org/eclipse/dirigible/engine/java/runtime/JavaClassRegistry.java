@@ -23,11 +23,11 @@ import org.springframework.stereotype.Component;
  * {@code <project>::<class-fqn>}.
  *
  * <p>
- * The {@link org.eclipse.dirigible.engine.java.synchronizer.JavaSynchronizer JavaSynchronizer}
- * is the only writer. The {@link org.eclipse.dirigible.engine.java.endpoint.JavaEndpoint
- * JavaEndpoint} is the only reader. A {@link ConcurrentHashMap} is sufficient: each entry's
- * value is a {@link LoadedHandler} that is itself immutable, and replacement on update is a
- * single {@code put} which is atomic.
+ * The {@link org.eclipse.dirigible.engine.java.synchronizer.JavaSynchronizer JavaSynchronizer} is
+ * the only writer. The {@link org.eclipse.dirigible.engine.java.endpoint.JavaEndpoint JavaEndpoint}
+ * is the only reader. A {@link ConcurrentHashMap} is sufficient: each entry's value is a
+ * {@link LoadedHandler} that is itself immutable, and replacement on update is a single {@code put}
+ * which is atomic.
  *
  * <p>
  * On {@code register}, an existing entry is overwritten and the previous {@link LoadedHandler}'s

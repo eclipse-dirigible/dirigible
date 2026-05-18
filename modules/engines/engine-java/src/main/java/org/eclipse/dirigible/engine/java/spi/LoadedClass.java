@@ -10,8 +10,8 @@
 package org.eclipse.dirigible.engine.java.spi;
 
 /**
- * Descriptor for a client class that the engine has just loaded into the shared
- * {@link ClassLoader} or is about to drop.
+ * Descriptor for a client class that the engine has just loaded into the shared {@link ClassLoader}
+ * or is about to drop.
  *
  * @param project owning project (first segment under the registry root); the same FQN can only be
  *        declared in a single project at a time
