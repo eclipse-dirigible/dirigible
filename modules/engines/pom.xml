@@ -15,6 +15,7 @@
 
 	<modules>
 		<module>engine-graalium</module>
+		<module>engine-java</module>
     </modules>
 
 	<properties>
