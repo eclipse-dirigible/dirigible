@@ -9,74 +9,170 @@
  */
 package org.eclipse.dirigible.engine.java.runtime;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.eclipse.dirigible.engine.java.handler.JavaHandler;
+import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
+import org.eclipse.dirigible.engine.java.spi.LoadedClass;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
- * Glue between {@link JavaSourceCompiler} and {@link JavaClassRegistry}: compiles a single source
- * unit, defines its classes in a fresh {@link BytecodeClassLoader}, validates the primary type
- * implements {@link JavaHandler}, and registers the result.
+ * Batch compile + load + dispatch entry point for client {@code .java} sources.
  *
  * <p>
- * Each call produces a brand new {@link BytecodeClassLoader}, so a re-registration cleanly
- * supersedes the prior class identity — vital for hot reload.
+ * On each rebuild:
+ * <ol>
+ * <li>Hand all sources to {@link JavaSourceCompiler#compileBatch(java.util.List)} — a single
+ * {@code javac} task so cross-file references in client code resolve.</li>
+ * <li>Build a fresh {@link ClientClassLoader} from the resulting bytecode; install it under
+ * {@link ClientClassLoaderHolder}.</li>
+ * <li>Load every primary class from the new loader.</li>
+ * <li>Compute the delta against the previous generation and notify every registered
+ * {@link JavaClassConsumer}: {@code onClassUnloaded} for FQNs that disappeared or are being
+ * replaced, then {@code onClassLoaded} for FQNs in the new generation.</li>
+ * </ol>
+ * No state from the previous generation survives in the active loader — the prior
+ * {@link ClassLoader} becomes unreachable as soon as in-flight code releases its references.
  */
 @Component
 public class JavaLoader {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(JavaLoader.class);
+
     private final JavaSourceCompiler compiler;
-    private final JavaClassRegistry registry;
+    private final ClientClassLoaderHolder loaderHolder;
+    private final List<JavaClassConsumer> consumers;
+
+    /** FQN → {@link LoadedClass} record for the currently-installed generation. */
+    private final Map<String, LoadedClass> currentGeneration = new HashMap<>();
 
     @Autowired
-    public JavaLoader(JavaSourceCompiler compiler, JavaClassRegistry registry) {
+    public JavaLoader(JavaSourceCompiler compiler, ClientClassLoaderHolder loaderHolder, List<JavaClassConsumer> consumers) {
         this.compiler = compiler;
-        this.registry = registry;
+        this.loaderHolder = loaderHolder;
+        this.consumers = consumers;
     }
 
     /**
-     * Compile, load, and register a Java source.
+     * Recompile + reload the entire client code surface.
      *
-     * @param project the owning project (registry first-path-segment)
-     * @param fqn fully-qualified class name parsed from the source
-     * @param source raw Java source code
-     * @return the freshly registered handler
-     * @throws JavaCompilationException on compile error or if the primary class does not implement
-     *         {@link JavaHandler}
+     * @param sources every client {@code .java} that should be visible in the new generation
+     *        (i.e. {@link JavaFileService#getAll()} filtered for the ones whose source files
+     *        currently exist in the registry, minus any that failed FQN-uniqueness pre-check)
+     * @return per-FQN outcomes — successes (in the new generation) and per-FQN compile error
+     *         messages for the ones that failed to produce bytecode
      */
-    public LoadedHandler loadAndRegister(String project, String fqn, String source) {
-        Map<String, byte[]> bytecode = compiler.compile(fqn, source);
+    public synchronized RebuildResult rebuild(List<ClientSource> sources) {
+        List<JavaSourceCompiler.SourceUnit> compileUnits = new ArrayList<>(sources.size());
+        Map<String, String> fqnToProject = new HashMap<>();
+        for (ClientSource s : sources) {
+            compileUnits.add(new JavaSourceCompiler.SourceUnit(s.fqn(), s.source()));
+            fqnToProject.put(s.fqn(), s.project());
+        }
 
-        // Parent is the loader that loaded the JavaHandler interface: that way user code can
-        // refer to the platform-provided SPI and any other API on the application classpath.
+        JavaSourceCompiler.BatchResult batch = compiler.compileBatch(compileUnits);
+
+        // Build the new ClientClassLoader from successful bytecode. Parent is the platform CL so
+        // user code sees JavaHandler, our annotations, Spring, Hibernate, etc.
         ClassLoader parent = JavaHandler.class.getClassLoader();
-        BytecodeClassLoader loader = new BytecodeClassLoader(parent, bytecode);
+        ClientClassLoader nextLoader = new ClientClassLoader(parent, batch.bytecode());
 
-        Class<?> primary;
-        try {
-            primary = loader.loadClass(fqn);
-        } catch (ClassNotFoundException e) {
-            throw new JavaCompilationException("Compiled bytecode did not contain expected class [" + fqn + "]", e);
+        // Resolve every successfully-compiled primary FQN through the new loader.
+        Map<String, LoadedClass> nextGeneration = new LinkedHashMap<>();
+        Map<String, String> failures = new HashMap<>(batch.failures());
+        for (String fqn : batch.bytecode()
+                                .keySet()) {
+            String project = fqnToProject.get(fqn);
+            if (project == null) {
+                // A nested type's binary name (com.example.Outer$Inner) wasn't listed as a top-level
+                // source. We keep its bytecode in the loader (so reflective access via outer class
+                // works) but we don't notify consumers for it — only top-level classes flow through.
+                continue;
+            }
+            try {
+                Class<?> type = nextLoader.loadClass(fqn);
+                nextGeneration.put(fqn, new LoadedClass(project, fqn, type, nextLoader));
+            } catch (ClassNotFoundException | LinkageError e) {
+                LOGGER.error("Compiled bytecode could not be loaded for [{}]: {}", fqn, e.getMessage(), e);
+                failures.put(fqn, "Failed to load class [" + fqn + "]: " + e.getMessage());
+            }
         }
 
-        if (!JavaHandler.class.isAssignableFrom(primary)) {
-            throw new JavaCompilationException(
-                    "Class [" + fqn + "] must implement " + JavaHandler.class.getName() + " to be exposed as a Java endpoint");
+        // Diff against the previous generation: notify consumers of removals first, then additions.
+        Set<String> previousFqns = new HashSet<>(currentGeneration.keySet());
+        Set<String> nextFqns = new HashSet<>(nextGeneration.keySet());
+
+        Set<String> removed = new HashSet<>(previousFqns);
+        removed.removeAll(nextFqns);
+        for (String fqn : removed) {
+            notifyUnloaded(currentGeneration.get(fqn));
         }
 
-        @SuppressWarnings("unchecked")
-        Class<? extends JavaHandler> handlerClass = (Class<? extends JavaHandler>) primary;
+        Set<String> replaced = new HashSet<>(previousFqns);
+        replaced.retainAll(nextFqns);
+        for (String fqn : replaced) {
+            notifyUnloaded(currentGeneration.get(fqn));
+        }
 
-        LoadedHandler loaded = new LoadedHandler(project, fqn, loader, handlerClass);
-        registry.register(loaded);
-        return loaded;
+        // Install the loader BEFORE notifying onClassLoaded so consumers see consistent state via
+        // the holder if they look it up.
+        loaderHolder.swap(nextLoader);
+
+        for (LoadedClass info : nextGeneration.values()) {
+            notifyLoaded(info);
+        }
+
+        currentGeneration.clear();
+        currentGeneration.putAll(nextGeneration);
+
+        return new RebuildResult(Collections.unmodifiableSet(nextGeneration.keySet()), Collections.unmodifiableMap(failures),
+                Collections.unmodifiableSet(removed));
     }
 
-    /** Drop a handler from the registry. Returns {@code true} if something was removed. */
-    public boolean unload(String project, String classFqn) {
-        return registry.unregister(project, classFqn);
+    private void notifyLoaded(LoadedClass info) {
+        for (JavaClassConsumer consumer : consumers) {
+            try {
+                if (consumer.accepts(info.type())) {
+                    consumer.onClassLoaded(info);
+                }
+            } catch (RuntimeException e) {
+                LOGGER.error("Consumer [{}] threw on onClassLoaded for [{}]: {}", consumer.getClass()
+                                                                                          .getSimpleName(),
+                        info.fqn(), e.getMessage(), e);
+            }
+        }
+    }
+
+    private void notifyUnloaded(LoadedClass info) {
+        for (JavaClassConsumer consumer : consumers) {
+            try {
+                if (consumer.accepts(info.type())) {
+                    consumer.onClassUnloaded(info);
+                }
+            } catch (RuntimeException e) {
+                LOGGER.error("Consumer [{}] threw on onClassUnloaded for [{}]: {}", consumer.getClass()
+                                                                                            .getSimpleName(),
+                        info.fqn(), e.getMessage(), e);
+            }
+        }
+    }
+
+    /** A client {@code .java} source as input to {@link #rebuild(List)}. */
+    public record ClientSource(String project, String fqn, String source) {
+    }
+
+    /** Per-FQN outcomes of a rebuild. */
+    public record RebuildResult(Set<String> succeededFqns, Map<String, String> failures, Set<String> unloadedFqns) {
     }
 
 }

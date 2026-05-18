@@ -32,14 +32,26 @@ final class RegistrySourceLoader {
      * @param location relative to the project root (i.e. excludes {@code /registry/public/}).
      */
     static byte[] read(String location) {
-        IRepository repository = BeanProvider.getBean(IRepository.class);
-        String fullPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC
-                + (location.startsWith("/") ? location : "/" + location);
-        IResource resource = repository.getResource(fullPath);
+        IResource resource = resolve(location);
         if (resource == null || !resource.exists()) {
-            throw new IllegalStateException("Java source not found in registry: " + fullPath);
+            throw new IllegalStateException("Java source not found in registry: " + toFullPath(location));
         }
         return resource.getContent();
+    }
+
+    /** Does the source file still exist in the registry? */
+    static boolean exists(String location) {
+        IResource resource = resolve(location);
+        return resource != null && resource.exists();
+    }
+
+    private static IResource resolve(String location) {
+        IRepository repository = BeanProvider.getBean(IRepository.class);
+        return repository.getResource(toFullPath(location));
+    }
+
+    private static String toFullPath(String location) {
+        return IRepositoryStructure.PATH_REGISTRY_PUBLIC + (location.startsWith("/") ? location : "/" + location);
     }
 
 }

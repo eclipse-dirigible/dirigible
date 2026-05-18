@@ -45,6 +45,7 @@
         <module>data/data-transfer</module>
         <module>data/data-management</module>
         <module>data/data-store</module>
+        <module>data/data-store-java</module>
         <module>data/data-csvim</module>
         <module>data/data-export</module>
         <module>data/data-import</module>
@@ -542,6 +543,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-data-store</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-data-store-java</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

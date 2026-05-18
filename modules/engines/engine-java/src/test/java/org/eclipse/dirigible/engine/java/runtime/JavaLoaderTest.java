@@ -10,12 +10,18 @@
 package org.eclipse.dirigible.engine.java.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import org.eclipse.dirigible.engine.java.handler.HandlerClassConsumer;
 import org.eclipse.dirigible.engine.java.handler.JavaHandler;
+import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
+import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -27,83 +33,148 @@ class JavaLoaderTest {
     private static final String PROJECT = "sample-project";
     private static final String FQN = "client.SampleHandler";
 
+    private JavaClassRegistry handlerRegistry;
+    private ClientClassLoaderHolder holder;
+    private RecordingConsumer recording;
+    private HandlerClassConsumer handlerConsumer;
     private JavaLoader loader;
-    private JavaClassRegistry registry;
 
     @BeforeEach
     void setUp() {
-        registry = new JavaClassRegistry();
-        loader = new JavaLoader(new JavaSourceCompiler(), registry);
+        handlerRegistry = new JavaClassRegistry();
+        holder = new ClientClassLoaderHolder();
+        handlerConsumer = new HandlerClassConsumer(handlerRegistry);
+        recording = new RecordingConsumer();
+        loader = new JavaLoader(new JavaSourceCompiler(), holder, List.of(handlerConsumer, recording));
     }
 
     @Test
-    void compiles_loads_and_registers_handler() throws Exception {
-        loader.loadAndRegister(PROJECT, FQN, """
+    void handler_class_is_registered_and_consumed() {
+        JavaLoader.RebuildResult result = loader.rebuild(List.of(handlerSource(FQN, "first")));
+
+        assertTrue(result.succeededFqns()
+                         .contains(FQN));
+        assertTrue(result.failures()
+                         .isEmpty());
+
+        LoadedHandler loaded = handlerRegistry.find(PROJECT, FQN)
+                                              .orElseThrow();
+        assertNotNull(loaded);
+        assertSame(holder.current(), loaded.getLoader(), "registered handler shares the active client classloader");
+
+        // Recording consumer accepts every class — proves the SPI fan-out works.
+        assertEquals(1, recording.loaded.size());
+        assertEquals(FQN, recording.loaded.get(0)
+                                          .fqn());
+    }
+
+    @Test
+    void rebuild_replaces_class_loader_and_notifies_consumers_of_the_swap() {
+        loader.rebuild(List.of(handlerSource(FQN, "v1")));
+        ClassLoader firstLoader = holder.current();
+        Class<?> firstClass = handlerRegistry.find(PROJECT, FQN)
+                                             .orElseThrow()
+                                             .getHandlerClass();
+
+        loader.rebuild(List.of(handlerSource(FQN, "v2")));
+        ClassLoader secondLoader = holder.current();
+        Class<?> secondClass = handlerRegistry.find(PROJECT, FQN)
+                                              .orElseThrow()
+                                              .getHandlerClass();
+
+        assertNotSame(firstLoader, secondLoader);
+        assertNotSame(firstClass, secondClass);
+
+        // Two onClassLoaded (one per rebuild) and one onClassUnloaded (for the replacement).
+        assertEquals(2, recording.loaded.size());
+        assertEquals(1, recording.unloaded.size());
+        assertEquals(FQN, recording.unloaded.get(0)
+                                            .fqn());
+    }
+
+    @Test
+    void removing_source_in_next_rebuild_fires_unload() {
+        loader.rebuild(List.of(handlerSource(FQN, "v1")));
+        assertEquals(1, recording.loaded.size());
+        assertEquals(0, recording.unloaded.size());
+
+        loader.rebuild(List.of()); // empty rebuild = nothing left
+        assertEquals(1, recording.unloaded.size());
+        assertEquals(0, handlerRegistry.size(), "handler registry empties after consumer onClassUnloaded");
+    }
+
+    @Test
+    void non_handler_class_is_loaded_but_not_in_handler_registry() {
+        JavaLoader.RebuildResult result = loader.rebuild(List.of(new JavaLoader.ClientSource(PROJECT, "client.Plain", """
                 package client;
-                import org.eclipse.dirigible.engine.java.handler.JavaHandler;
-                import jakarta.servlet.http.HttpServletRequest;
-                import jakarta.servlet.http.HttpServletResponse;
-                public class SampleHandler implements JavaHandler {
-                    public void handle(HttpServletRequest req, HttpServletResponse resp) throws Exception {
-                        resp.getWriter().write("first");
-                    }
+                public class Plain {
+                    public String greet() { return "hi"; }
                 }
-                """);
-        LoadedHandler loaded = registry.find(PROJECT, FQN)
-                                       .orElseThrow();
-        JavaHandler instance = loaded.newInstance();
-        // Smoke test: instance is the right shape; full HTTP behaviour tested at endpoint level.
-        assertTrue(instance instanceof JavaHandler);
+                """)));
+
+        assertTrue(result.succeededFqns()
+                         .contains("client.Plain"));
+        assertTrue(result.failures()
+                         .isEmpty());
+        assertEquals(0, handlerRegistry.size(), "Plain isn't a JavaHandler so the handler registry stays empty");
+        assertEquals(1, recording.loaded.size(), "recording consumer (accepts everything) still sees it");
     }
 
     @Test
-    void reload_replaces_class_loader_so_old_class_identity_is_dropped() {
-        loader.loadAndRegister(PROJECT, FQN, sampleSource("first"));
-        LoadedHandler before = registry.find(PROJECT, FQN)
-                                       .orElseThrow();
-
-        loader.loadAndRegister(PROJECT, FQN, sampleSource("second"));
-        LoadedHandler after = registry.find(PROJECT, FQN)
-                                      .orElseThrow();
-
-        // Different ClassLoader instance — proves the prior bytecode buffer + class identity is
-        // no longer referenced from the registry path.
-        assertNotSame(before.getLoader(), after.getLoader());
-        assertNotSame(before.getHandlerClass(), after.getHandlerClass());
-    }
-
-    @Test
-    void rejects_class_that_does_not_implement_handler() {
-        JavaCompilationException ex = assertThrows(JavaCompilationException.class, () -> loader.loadAndRegister(PROJECT, "client.Plain",
-                """
+    void compile_error_is_isolated_to_the_offending_unit() {
+        JavaLoader.RebuildResult result = loader.rebuild(List.of(handlerSource("client.Good", "ok"), new JavaLoader.ClientSource(PROJECT,
+                "client.Broken", """
                         package client;
-                        public class Plain {}
-                        """));
-        assertTrue(ex.getMessage()
-                     .contains("JavaHandler"));
+                        public class Broken {
+                            void m() { thisMethodDoesNotExist(); }
+                        }
+                        """)));
+
+        assertTrue(result.succeededFqns()
+                         .contains("client.Good"));
+        assertTrue(result.failures()
+                         .containsKey("client.Broken"));
+        assertNotNull(handlerRegistry.find(PROJECT, "client.Good")
+                                     .orElse(null));
     }
 
-    @Test
-    void unload_removes_registry_entry() {
-        loader.loadAndRegister(PROJECT, FQN, sampleSource("x"));
-        assertEquals(1, registry.size());
-        assertTrue(loader.unload(PROJECT, FQN));
-        assertEquals(0, registry.size());
-        assertFalse(loader.unload(PROJECT, FQN));
+    private static JavaLoader.ClientSource handlerSource(String fqn, String body) {
+        int dot = fqn.lastIndexOf('.');
+        String pkg = dot >= 0 ? fqn.substring(0, dot) : "";
+        String simple = dot >= 0 ? fqn.substring(dot + 1) : fqn;
+        return new JavaLoader.ClientSource(PROJECT, fqn,
+                """
+                        package %s;
+                        import org.eclipse.dirigible.engine.java.handler.JavaHandler;
+                        import jakarta.servlet.http.HttpServletRequest;
+                        import jakarta.servlet.http.HttpServletResponse;
+                        public class %s implements JavaHandler {
+                            public void handle(HttpServletRequest req, HttpServletResponse resp) throws Exception {
+                                resp.getWriter().write("%s");
+                            }
+                        }
+                        """.formatted(pkg, simple, body));
     }
 
-    private static String sampleSource(String body) {
-        return """
-                package client;
-                import org.eclipse.dirigible.engine.java.handler.JavaHandler;
-                import jakarta.servlet.http.HttpServletRequest;
-                import jakarta.servlet.http.HttpServletResponse;
-                public class SampleHandler implements JavaHandler {
-                    public void handle(HttpServletRequest req, HttpServletResponse resp) throws Exception {
-                        resp.getWriter().write("%s");
-                    }
-                }
-                """.formatted(body);
+    /** Test consumer that records every load/unload — accepts every class. */
+    private static final class RecordingConsumer implements JavaClassConsumer {
+        final List<LoadedClass> loaded = new ArrayList<>();
+        final List<LoadedClass> unloaded = new ArrayList<>();
+
+        @Override
+        public boolean accepts(Class<?> clazz) {
+            return true;
+        }
+
+        @Override
+        public void onClassLoaded(LoadedClass info) {
+            loaded.add(info);
+        }
+
+        @Override
+        public void onClassUnloaded(LoadedClass info) {
+            unloaded.add(info);
+        }
     }
 
     // Static smoke check at import-resolution time
@@ -111,5 +182,7 @@ class JavaLoaderTest {
     private static final Class<?> SERVLET_PRESENT = HttpServletRequest.class;
     @SuppressWarnings("unused")
     private static final Class<?> SERVLET_RESPONSE_PRESENT = HttpServletResponse.class;
+    @SuppressWarnings("unused")
+    private static final Class<?> HANDLER_PRESENT = JavaHandler.class;
 
 }
