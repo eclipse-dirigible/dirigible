@@ -43,6 +43,7 @@ import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 
@@ -59,6 +60,8 @@ import jakarta.servlet.http.HttpServletResponse;
  * {@link ControllerEntry}. Hot-reload swaps the entry atomically through the router.
  */
 @Component
+@Order(300) // Run after EntityClassConsumer (100) and RepositoryClassConsumer (200) so @Inject
+            // fields on controllers find their repository in the registry on the same cycle.
 public class ControllerClassConsumer implements JavaClassConsumer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ControllerClassConsumer.class);

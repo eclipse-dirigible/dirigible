@@ -16,6 +16,7 @@ import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
@@ -24,6 +25,7 @@ import org.springframework.stereotype.Component;
  * Hibernate {@code SessionFactory} is rebuilt to include it).
  */
 @Component
+@Order(100) // Run first so entity tables exist before any repository / controller binds to them.
 public class EntityClassConsumer implements JavaClassConsumer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EntityClassConsumer.class);

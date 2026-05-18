@@ -114,23 +114,26 @@ public class JavaLoader {
 
         Set<String> removed = new HashSet<>(previousFqns);
         removed.removeAll(nextFqns);
+        List<LoadedClass> toUnload = new ArrayList<>();
         for (String fqn : removed) {
-            notifyUnloaded(currentGeneration.get(fqn));
+            toUnload.add(currentGeneration.get(fqn));
         }
-
         Set<String> replaced = new HashSet<>(previousFqns);
         replaced.retainAll(nextFqns);
         for (String fqn : replaced) {
-            notifyUnloaded(currentGeneration.get(fqn));
+            toUnload.add(currentGeneration.get(fqn));
         }
+        // Consumer-outer / class-inner: every consumer drains its claimed classes before the next
+        // consumer runs. Combined with Spring's @Order on the consumers, this lets dependents
+        // (e.g. ControllerClassConsumer satisfying @Inject) see their providers (e.g.
+        // RepositoryClassConsumer) already registered within the same rebuild cycle.
+        notifyAll(consumers, toUnload, /* loaded */ false);
 
         // Install the loader BEFORE notifying onClassLoaded so consumers see consistent state via
         // the holder if they look it up.
         loaderHolder.swap(nextLoader);
 
-        for (LoadedClass info : nextGeneration.values()) {
-            notifyLoaded(info);
-        }
+        notifyAll(consumers, new ArrayList<>(nextGeneration.values()), /* loaded */ true);
 
         currentGeneration.clear();
         currentGeneration.putAll(nextGeneration);
@@ -139,30 +142,30 @@ public class JavaLoader {
                 Collections.unmodifiableSet(removed));
     }
 
-    private void notifyLoaded(LoadedClass info) {
+    /**
+     * Iterate each consumer in {@code @Order} sequence and drain its claimed classes before moving on.
+     * {@code loaded=true} dispatches {@code onClassLoaded}, {@code false} dispatches
+     * {@code onClassUnloaded}.
+     */
+    private static void notifyAll(List<JavaClassConsumer> consumers, List<LoadedClass> classes, boolean loaded) {
         for (JavaClassConsumer consumer : consumers) {
-            try {
-                if (consumer.accepts(info.type())) {
-                    consumer.onClassLoaded(info);
+            for (LoadedClass info : classes) {
+                if (info == null) {
+                    continue;
                 }
-            } catch (RuntimeException e) {
-                LOGGER.error("Consumer [{}] threw on onClassLoaded for [{}]: {}", consumer.getClass()
-                                                                                          .getSimpleName(),
-                        info.fqn(), e.getMessage(), e);
-            }
-        }
-    }
-
-    private void notifyUnloaded(LoadedClass info) {
-        for (JavaClassConsumer consumer : consumers) {
-            try {
-                if (consumer.accepts(info.type())) {
-                    consumer.onClassUnloaded(info);
+                try {
+                    if (consumer.accepts(info.type())) {
+                        if (loaded) {
+                            consumer.onClassLoaded(info);
+                        } else {
+                            consumer.onClassUnloaded(info);
+                        }
+                    }
+                } catch (RuntimeException e) {
+                    LOGGER.error("Consumer [{}] threw on {} for [{}]: {}", consumer.getClass()
+                                                                                   .getSimpleName(),
+                            loaded ? "onClassLoaded" : "onClassUnloaded", info.fqn(), e.getMessage(), e);
                 }
-            } catch (RuntimeException e) {
-                LOGGER.error("Consumer [{}] threw on onClassUnloaded for [{}]: {}", consumer.getClass()
-                                                                                            .getSimpleName(),
-                        info.fqn(), e.getMessage(), e);
             }
         }
     }

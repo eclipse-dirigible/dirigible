@@ -17,6 +17,7 @@ import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
@@ -31,6 +32,9 @@ import org.springframework.stereotype.Component;
  * the new generation registers the replacement.
  */
 @Component
+@Order(200) // Run after EntityClassConsumer (100, registers tables) and before
+            // ControllerClassConsumer (300, resolves @Inject) so client controllers can
+            // bind to the repository in the same rebuild cycle that loaded both classes.
 public class RepositoryClassConsumer implements JavaClassConsumer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RepositoryClassConsumer.class);
