@@ -9,14 +9,6 @@
  */
 package org.eclipse.dirigible.integration.tests.api;
 
-import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.containsString;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.Objects;
-
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -25,6 +17,14 @@ import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Objects;
+
+import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
 
 /**
  * End-to-end test for the {@code data-store-java} module: drops a {@code Country} {@code @Entity}
@@ -85,6 +85,25 @@ class JavaEntityDecoratorsIT extends IntegrationTest {
                              .body(containsString("Albania"))
                              .body(containsString("Algeria")),
                 ASSERTION_TIMEOUT_SECONDS);
+    }
+
+    private void writeFixture(String location, String resourceName) {
+        writeBytes(location, readResource(resourceName));
+    }
+
+    private void writeBytes(String location, byte[] content) {
+        String full = IRepositoryStructure.PATH_REGISTRY_PUBLIC + location;
+        repository.createResource(full, content, false, "text/x-java", true);
+    }
+
+    private static byte[] readResource(String resourceName) {
+        String path = "/JavaEntityDecoratorsIT/sample-java-entities/" + resourceName;
+        try (InputStream in = JavaEntityDecoratorsIT.class.getResourceAsStream(path)) {
+            Objects.requireNonNull(in, () -> "Missing classpath resource " + path);
+            return in.readAllBytes();
+        } catch (IOException e) {
+            throw new IllegalStateException("Cannot read fixture " + path + ": " + e.getMessage(), e);
+        }
     }
 
     @Test
@@ -171,25 +190,6 @@ class JavaEntityDecoratorsIT extends IntegrationTest {
         String full = IRepositoryStructure.PATH_REGISTRY_PUBLIC + location;
         if (repository.hasResource(full)) {
             repository.removeResource(full);
-        }
-    }
-
-    private void writeFixture(String location, String resourceName) {
-        writeBytes(location, readResource(resourceName));
-    }
-
-    private void writeBytes(String location, byte[] content) {
-        String full = IRepositoryStructure.PATH_REGISTRY_PUBLIC + location;
-        repository.createResource(full, content, false, "text/x-java", true);
-    }
-
-    private static byte[] readResource(String resourceName) {
-        String path = "/JavaEntityDecoratorsIT/sample-java-entities/" + resourceName;
-        try (InputStream in = JavaEntityDecoratorsIT.class.getResourceAsStream(path)) {
-            Objects.requireNonNull(in, () -> "Missing classpath resource " + path);
-            return in.readAllBytes();
-        } catch (IOException e) {
-            throw new IllegalStateException("Cannot read fixture " + path + ": " + e.getMessage(), e);
         }
     }
 
