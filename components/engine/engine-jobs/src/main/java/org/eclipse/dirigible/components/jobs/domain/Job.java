@@ -12,8 +12,6 @@ package org.eclipse.dirigible.components.jobs.domain;
 import com.google.gson.annotations.Expose;
 import jakarta.persistence.*;
 import org.eclipse.dirigible.components.base.artefact.Artefact;
-import org.hibernate.annotations.LazyCollection;
-import org.hibernate.annotations.LazyCollectionOption;
 import org.springframework.data.annotation.Transient;
 
 import java.sql.Timestamp;
@@ -89,8 +87,7 @@ public class Job extends Artefact {
     /**
      * The parameters.
      */
-    @OneToMany(mappedBy = "job", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    @LazyCollection(LazyCollectionOption.FALSE)
+    @OneToMany(mappedBy = "job", fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     @Transient
     private List<JobParameter> parameters = new ArrayList<>();
 
