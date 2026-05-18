@@ -80,8 +80,11 @@ class JavaEngineIT extends IntegrationTest {
         repository.removeResource(REGISTRY_PATH);
         synchronizationProcessor.forceProcessSynchronizers();
 
-        // Cleanup phase ran: the handler is no longer in the registry.
-        assertEndpointReturns(404, "No Java handler registered for [" + PROJECT + "/demo.Hello]");
+        // Cleanup phase ran: the handler is no longer in the registry. We don't assert on the
+        // response body — Spring Boot 4's default error handling does not include the
+        // ResponseStatusException reason in the JSON body without per-request opt-in, so the
+        // status code is the contract we exercise here.
+        assertEndpointStatus(404);
     }
 
     @Test
@@ -99,7 +102,7 @@ class JavaEngineIT extends IntegrationTest {
                 }
                 """;
         writeAndSync(broken);
-        assertEndpointReturns(404, "No Java handler registered");
+        assertEndpointStatus(404);
     }
 
     @AfterEach
@@ -133,6 +136,14 @@ class JavaEngineIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(expectedStatus)
                                                  .body(containsString(expectedBodyFragment)),
+                ASSERTION_TIMEOUT_SECONDS);
+    }
+
+    private void assertEndpointStatus(int expectedStatus) {
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(ENDPOINT)
+                                                 .then()
+                                                 .statusCode(expectedStatus),
                 ASSERTION_TIMEOUT_SECONDS);
     }
 
