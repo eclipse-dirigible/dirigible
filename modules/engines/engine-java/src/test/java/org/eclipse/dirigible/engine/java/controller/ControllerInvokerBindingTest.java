@@ -327,6 +327,10 @@ class ControllerInvokerBindingTest {
         @Override
         public void sendRedirect(String location) {}
 
+        // Added in Jakarta Servlet 6.1 (Spring Boot 4) — unused in tests.
+        @Override
+        public void sendRedirect(String location, int sc, boolean clearBuffer) {}
+
         @Override
         public void setDateHeader(String name, long date) {}
 

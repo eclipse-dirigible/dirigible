@@ -64,10 +64,13 @@ public class JavaEntityStore {
         try (Session session = entityManager.getSessionFactory()
                                             .openSession()) {
             Transaction tx = session.beginTransaction();
-            Object generatedId = session.save(meta.entityName(), data);
+            // Hibernate 7 removed the legacy save(...) overloads. persist() returns void; for
+            // dynamic-map entities the generator-produced id is populated into `data` under the
+            // id property's key. Read it back to mirror it onto the caller's typed bean.
+            session.persist(meta.entityName(), data);
             tx.commit();
-            // Write the generator-produced id back onto the bean. Hibernate updates `data` too,
-            // but the caller passed us a typed bean.
+            Object generatedId = data.get(meta.idField()
+                                              .getName());
             if (generatedId != null) {
                 writeId(entity, meta, generatedId);
             }
@@ -83,7 +86,9 @@ public class JavaEntityStore {
         try (Session session = entityManager.getSessionFactory()
                                             .openSession()) {
             Transaction tx = session.beginTransaction();
-            session.update(meta.entityName(), data);
+            // Hibernate 7: update(entityName, ...) is gone. merge() is the standardized
+            // replacement — copies state from the detached map onto the managed instance.
+            session.merge(meta.entityName(), data);
             tx.commit();
         }
         return entity;
@@ -102,8 +107,9 @@ public class JavaEntityStore {
         RegisteredEntity meta = resolve(type);
         try (Session session = entityManager.getSessionFactory()
                                             .openSession()) {
+            // Hibernate 7: get(entityName, ...) is deprecated-for-removal in favour of find(...).
             @SuppressWarnings("unchecked")
-            Map<String, Object> data = (Map<String, Object>) session.get(meta.entityName(), (java.io.Serializable) id);
+            Map<String, Object> data = (Map<String, Object>) session.find(meta.entityName(), id);
             if (data == null) {
                 return Optional.empty();
             }
@@ -133,25 +139,31 @@ public class JavaEntityStore {
     public <T> void delete(T entity) {
         RegisteredEntity meta = resolve(entity.getClass());
         Map<String, Object> data = EntityBeanMapper.toMap(entity, meta);
-        try (Session session = entityManager.getSessionFactory()
-                                            .openSession()) {
-            Transaction tx = session.beginTransaction();
-            session.delete(meta.entityName(), data);
-            tx.commit();
+        Object id = data.get(meta.idField()
+                                 .getName());
+        if (id == null) {
+            return;
         }
+        removeById(meta, id);
     }
 
     public <T> void deleteById(Class<T> type, Object id) {
-        RegisteredEntity meta = resolve(type);
+        removeById(resolve(type), id);
+    }
+
+    /**
+     * Hibernate 7 removed {@code delete(entityName, ...)} entirely. The replacement is to load the
+     * managed instance first and then call {@link Session#remove(Object)} on it — Hibernate routes to
+     * the correct entity type via the persistence-context state of the loaded {@link Map}.
+     */
+    private void removeById(RegisteredEntity meta, Object id) {
         try (Session session = entityManager.getSessionFactory()
                                             .openSession()) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> data = (Map<String, Object>) session.get(meta.entityName(), (java.io.Serializable) id);
-            if (data == null) {
-                return;
-            }
             Transaction tx = session.beginTransaction();
-            session.delete(meta.entityName(), data);
+            Object managed = session.find(meta.entityName(), id);
+            if (managed != null) {
+                session.remove(managed);
+            }
             tx.commit();
         }
     }
