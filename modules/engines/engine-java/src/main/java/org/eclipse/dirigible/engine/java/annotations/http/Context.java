@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.engine.java.annotations;
+package org.eclipse.dirigible.engine.java.annotations.http;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -15,14 +15,12 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Attaches a human-readable description to a type, field, or method. Surfaced in the auto-generated
- * OpenAPI document for {@code @Controller} classes (class-level → description; method-level →
- * operation summary). Also recognised on {@code @Entity} fields for future schema docs.
+ * Marks a controller-method parameter as a request-scoped object supplied by the runtime. Supported
+ * parameter types are {@code jakarta.servlet.http.HttpServletRequest}, {@code HttpServletResponse}
+ * and {@code Map<String, String>} — the latter receives the merged path and query parameters (query
+ * overrides path on name collisions).
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD})
-public @interface Documentation {
-
-    String value();
-
+@Target(ElementType.PARAMETER)
+public @interface Context {
 }

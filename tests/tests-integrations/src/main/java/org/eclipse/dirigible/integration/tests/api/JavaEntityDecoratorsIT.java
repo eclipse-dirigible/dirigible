@@ -27,10 +27,11 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 
 /**
- * End-to-end test for the {@code data-store-java} module: drops a {@code Country} {@code @Entity}
- * source plus a seeder and a controller {@code JavaHandler} directly into the registry, forces a
- * synchronisation cycle, and asserts the entity is reachable via the typed {@code JavaEntityStore}
- * API.
+ * End-to-end test for {@code data-store-java} + the controller decorator stack: drops a
+ * {@code Country} {@code @Entity}, a {@code CountrySeeder} {@code @Controller}, and a
+ * {@code CountryController} {@code @Controller} directly into the registry, forces a
+ * synchronisation cycle, and asserts the entity is reachable through the declarative
+ * {@code @Get / @Post / @Delete} routes that the controller decorators expose.
  *
  * <p>
  * Resource layout under {@code src/main/resources/JavaEntityDecoratorsIT/sample-java-entities/}:
@@ -44,8 +45,11 @@ class JavaEntityDecoratorsIT extends IntegrationTest {
     private static final String SEEDER_LOCATION = "/" + PROJECT + "/demo/CountrySeeder.java";
     private static final String CONTROLLER_LOCATION = "/" + PROJECT + "/demo/CountryController.java";
 
-    private static final String SEEDER_ENDPOINT = "/services/java/" + PROJECT + "/demo/CountrySeeder";
-    private static final String CONTROLLER_ENDPOINT = "/services/java/" + PROJECT + "/demo/CountryController";
+    /** Base path of the CountrySeeder controller — POST hits it directly (no @Post suffix). */
+    private static final String SEEDER_BASE = "/services/java/" + PROJECT + "/demo/CountrySeeder";
+
+    /** Base path of the CountryController — method-level @Get/@Post/@Delete add the suffix. */
+    private static final String CONTROLLER_BASE = "/services/java/" + PROJECT + "/demo/CountryController";
 
     /**
      * Cap matches JavaEngineIT — covers the async lag between forceProcessSynchronizers() and dispatch.
@@ -62,23 +66,23 @@ class JavaEntityDecoratorsIT extends IntegrationTest {
     private RestAssuredExecutor restAssuredExecutor;
 
     @Test
-    void entity_registered_and_can_be_seeded_and_listed() {
-        writeFixture(COUNTRY_LOCATION, "Country.java");
-        writeFixture(SEEDER_LOCATION, "CountrySeeder.java");
-        writeFixture(CONTROLLER_LOCATION, "CountryController.java");
+    void entity_can_be_seeded_and_listed_through_controllers() {
+        writeAllFixtures();
         synchronizationProcessor.forceProcessSynchronizers();
 
+        // POST /seeder — class-level controller with a single @Post method matches the base URL.
         restAssuredExecutor.execute( //
                 () -> given().when()
-                             .post(SEEDER_ENDPOINT)
+                             .post(SEEDER_BASE)
                              .then()
                              .statusCode(200)
                              .body(containsString("seeded")),
                 ASSERTION_TIMEOUT_SECONDS);
 
+        // GET /controller/list — @Get("/list") on the controller class.
         restAssuredExecutor.execute( //
                 () -> given().when()
-                             .get(CONTROLLER_ENDPOINT)
+                             .get(CONTROLLER_BASE + "/list")
                              .then()
                              .statusCode(200)
                              .body(containsString("Afghanistan"))
@@ -87,65 +91,132 @@ class JavaEntityDecoratorsIT extends IntegrationTest {
                 ASSERTION_TIMEOUT_SECONDS);
     }
 
-    private void writeFixture(String location, String resourceName) {
-        writeBytes(location, readResource(resourceName));
-    }
+    @Test
+    void path_param_body_and_delete_routes_work_end_to_end() {
+        writeAllFixtures();
+        synchronizationProcessor.forceProcessSynchronizers();
 
-    private void writeBytes(String location, byte[] content) {
-        String full = IRepositoryStructure.PATH_REGISTRY_PUBLIC + location;
-        repository.createResource(full, content, false, "text/x-java", true);
-    }
+        // Seed first.
+        restAssuredExecutor.execute( //
+                () -> given().when()
+                             .post(SEEDER_BASE)
+                             .then()
+                             .statusCode(200),
+                ASSERTION_TIMEOUT_SECONDS);
 
-    private static byte[] readResource(String resourceName) {
-        String path = "/JavaEntityDecoratorsIT/sample-java-entities/" + resourceName;
-        try (InputStream in = JavaEntityDecoratorsIT.class.getResourceAsStream(path)) {
-            Objects.requireNonNull(in, () -> "Missing classpath resource " + path);
-            return in.readAllBytes();
-        } catch (IOException e) {
-            throw new IllegalStateException("Cannot read fixture " + path + ": " + e.getMessage(), e);
-        }
+        // GET /controller/{id} — @PathParam binding. The seeder writes ids starting at 1.
+        restAssuredExecutor.execute( //
+                () -> given().when()
+                             .get(CONTROLLER_BASE + "/1")
+                             .then()
+                             .statusCode(200)
+                             .body(containsString("Afghanistan")),
+                ASSERTION_TIMEOUT_SECONDS);
+
+        // POST /controller with JSON body — @Body deserialised via Jackson into a Country.
+        restAssuredExecutor.execute( //
+                () -> given().contentType("application/json")
+                             .body("{\"code2\":\"AD\",\"code3\":\"AND\",\"numericCode\":\"020\",\"name\":\"Andorra\"}")
+                             .when()
+                             .post(CONTROLLER_BASE)
+                             .then()
+                             .statusCode(200)
+                             .body(containsString("Andorra")),
+                ASSERTION_TIMEOUT_SECONDS);
+
+        // GET /controller/list — should now have four rows.
+        restAssuredExecutor.execute( //
+                () -> given().when()
+                             .get(CONTROLLER_BASE + "/list")
+                             .then()
+                             .statusCode(200)
+                             .body(containsString("Andorra")),
+                ASSERTION_TIMEOUT_SECONDS);
+
+        // DELETE /controller/{id} — remove Afghanistan (id=1).
+        restAssuredExecutor.execute( //
+                () -> given().when()
+                             .delete(CONTROLLER_BASE + "/1")
+                             .then()
+                             .statusCode(200),
+                ASSERTION_TIMEOUT_SECONDS);
+
+        // List no longer contains Afghanistan.
+        restAssuredExecutor.execute( //
+                () -> given().when()
+                             .get(CONTROLLER_BASE + "/list")
+                             .then()
+                             .statusCode(200)
+                             .body(org.hamcrest.Matchers.not(containsString("Afghanistan"))),
+                ASSERTION_TIMEOUT_SECONDS);
     }
 
     @Test
-    void deleting_controller_unregisters_handler_but_entity_data_persists() {
-        writeFixture(COUNTRY_LOCATION, "Country.java");
-        writeFixture(SEEDER_LOCATION, "CountrySeeder.java");
-        writeFixture(CONTROLLER_LOCATION, "CountryController.java");
+    void deleting_controller_unregisters_routes_but_entity_data_persists() {
+        writeAllFixtures();
         synchronizationProcessor.forceProcessSynchronizers();
 
-        // Seed and list once to prove the chain works.
+        // Seed once, prove the list endpoint works.
         restAssuredExecutor.execute( //
                 () -> given().when()
-                             .post(SEEDER_ENDPOINT)
+                             .post(SEEDER_BASE)
                              .then()
                              .statusCode(200),
                 ASSERTION_TIMEOUT_SECONDS);
         restAssuredExecutor.execute( //
                 () -> given().when()
-                             .get(CONTROLLER_ENDPOINT)
+                             .get(CONTROLLER_BASE + "/list")
                              .then()
                              .statusCode(200)
                              .body(containsString("Albania")),
                 ASSERTION_TIMEOUT_SECONDS);
 
-        // Remove the controller and re-sync; the entity / its table / its data stay in place.
+        // Drop the controller file and force a re-sync — all four of its routes must disappear.
         repository.removeResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + CONTROLLER_LOCATION);
         synchronizationProcessor.forceProcessSynchronizers();
 
         restAssuredExecutor.execute( //
                 () -> given().when()
-                             .get(CONTROLLER_ENDPOINT)
+                             .get(CONTROLLER_BASE + "/list")
+                             .then()
+                             .statusCode(404),
+                ASSERTION_TIMEOUT_SECONDS);
+        restAssuredExecutor.execute( //
+                () -> given().when()
+                             .get(CONTROLLER_BASE + "/1")
                              .then()
                              .statusCode(404),
                 ASSERTION_TIMEOUT_SECONDS);
 
-        // Seeder is still alive and is idempotent — a second POST should report "already seeded".
+        // The seeder controller still exists; a second invocation should report "already seeded"
+        // (i.e. the COUNTRIES table survived the controller unregistration, since hbm2ddl.auto is
+        // 'update' rather than 'create-drop').
         restAssuredExecutor.execute( //
                 () -> given().when()
-                             .post(SEEDER_ENDPOINT)
+                             .post(SEEDER_BASE)
                              .then()
                              .statusCode(200)
                              .body(containsString("already seeded")),
+                ASSERTION_TIMEOUT_SECONDS);
+    }
+
+    @Test
+    void controller_routes_are_published_to_openapi_document() {
+        writeAllFixtures();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        // /services/openapi aggregates every stored OpenAPI artefact — including the fragments
+        // emitted by JavaControllerOpenApiPublisher when ControllerClassConsumer registers a
+        // controller. The exact OpenAPI shape isn't asserted here; we only confirm that the
+        // controller's URLs appear in the merged document.
+        restAssuredExecutor.execute( //
+                () -> given().when()
+                             .get("/services/openapi")
+                             .then()
+                             .statusCode(200)
+                             .body(containsString(CONTROLLER_BASE + "/list"))
+                             .body(containsString(CONTROLLER_BASE + "/{id}"))
+                             .body(containsString(SEEDER_BASE)),
                 ASSERTION_TIMEOUT_SECONDS);
     }
 
@@ -171,10 +242,35 @@ class JavaEntityDecoratorsIT extends IntegrationTest {
         // since we didn't drop the controller in this test.
         restAssuredExecutor.execute( //
                 () -> given().when()
-                             .get(CONTROLLER_ENDPOINT)
+                             .get(CONTROLLER_BASE + "/list")
                              .then()
                              .statusCode(404),
                 ASSERTION_TIMEOUT_SECONDS);
+    }
+
+    private void writeAllFixtures() {
+        writeFixture(COUNTRY_LOCATION, "Country.java");
+        writeFixture(SEEDER_LOCATION, "CountrySeeder.java");
+        writeFixture(CONTROLLER_LOCATION, "CountryController.java");
+    }
+
+    private void writeFixture(String location, String resourceName) {
+        writeBytes(location, readResource(resourceName));
+    }
+
+    private void writeBytes(String location, byte[] content) {
+        String full = IRepositoryStructure.PATH_REGISTRY_PUBLIC + location;
+        repository.createResource(full, content, false, "text/x-java", true);
+    }
+
+    private static byte[] readResource(String resourceName) {
+        String path = "/JavaEntityDecoratorsIT/sample-java-entities/" + resourceName;
+        try (InputStream in = JavaEntityDecoratorsIT.class.getResourceAsStream(path)) {
+            Objects.requireNonNull(in, () -> "Missing classpath resource " + path);
+            return in.readAllBytes();
+        } catch (IOException e) {
+            throw new IllegalStateException("Cannot read fixture " + path + ": " + e.getMessage(), e);
+        }
     }
 
     @AfterEach

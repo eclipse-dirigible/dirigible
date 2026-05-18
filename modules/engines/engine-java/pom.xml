@@ -51,6 +51,17 @@
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
 
+        <!--
+          OpenAPI artefact storage used by JavaControllerOpenApiPublisher to contribute fragments to
+          /services/openapi. Optional at compile time, mandatory at runtime — the application's fat
+          jar always pulls it in via group-engines.
+        -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-engine-openapi</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- Tests -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.engine.java.annotations;
+package org.eclipse.dirigible.engine.java.annotations.http;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -15,14 +15,14 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Attaches a human-readable description to a type, field, or method. Surfaced in the auto-generated
- * OpenAPI document for {@code @Controller} classes (class-level → description; method-level →
- * operation summary). Also recognised on {@code @Entity} fields for future schema docs.
+ * Maps a controller method to HTTP {@code PUT}. The {@link #value()} is appended to the
+ * controller's base URL.
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD})
-public @interface Documentation {
+@Target(ElementType.METHOD)
+public @interface Put {
 
-    String value();
+    /** Path suffix relative to the controller's base URL. Empty matches the base URL itself. */
+    String value() default "";
 
 }

@@ -9,35 +9,32 @@
  */
 package demo;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import org.eclipse.dirigible.components.base.spring.BeanProvider;
 import org.eclipse.dirigible.components.data.store.java.store.JavaEntityStore;
-import org.eclipse.dirigible.engine.java.handler.JavaHandler;
+import org.eclipse.dirigible.engine.java.annotations.Documentation;
+import org.eclipse.dirigible.engine.java.annotations.http.Controller;
+import org.eclipse.dirigible.engine.java.annotations.http.Post;
 
-public class CountrySeeder implements JavaHandler {
+/**
+ * Stand-alone @Controller that seeds a small fixture set of {@link Country} rows. Kept separate
+ * from {@code CountryController} so the IT can prove deleting one controller does not affect the
+ * other.
+ */
+@Controller
+@Documentation("Seeds the sample country fixture")
+public class CountrySeeder {
 
-    @Override
-    public void handle(HttpServletRequest request, HttpServletResponse response) throws Exception {
+    @Post
+    @Documentation("Idempotently seeds three countries; returns either 'seeded' or 'already seeded'")
+    public String seed() {
         JavaEntityStore store = BeanProvider.getBean(JavaEntityStore.class);
-
-        // Idempotent: only seed when empty. Lets the IT call POST multiple times safely.
         if (store.count(Country.class) > 0) {
-            response.setStatus(200);
-            response.setContentType("text/plain");
-            response.getWriter()
-                    .write("already seeded");
-            return;
+            return "already seeded";
         }
-
         store.save(country("AF", "AFG", "004", "Afghanistan"));
         store.save(country("AL", "ALB", "008", "Albania"));
         store.save(country("DZ", "DZA", "012", "Algeria"));
-
-        response.setStatus(200);
-        response.setContentType("text/plain");
-        response.getWriter()
-                .write("seeded");
+        return "seeded";
     }
 
     private static Country country(String code2, String code3, String numericCode, String name) {
@@ -48,5 +45,4 @@ public class CountrySeeder implements JavaHandler {
         c.name = name;
         return c;
     }
-
 }

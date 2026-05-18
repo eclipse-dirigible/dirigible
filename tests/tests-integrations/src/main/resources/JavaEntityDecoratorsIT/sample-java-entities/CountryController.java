@@ -11,48 +11,51 @@ package demo;
 
 import java.util.List;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import org.eclipse.dirigible.components.base.spring.BeanProvider;
 import org.eclipse.dirigible.components.data.store.java.store.JavaEntityStore;
-import org.eclipse.dirigible.engine.java.handler.JavaHandler;
+import org.eclipse.dirigible.engine.java.annotations.Documentation;
+import org.eclipse.dirigible.engine.java.annotations.http.Body;
+import org.eclipse.dirigible.engine.java.annotations.http.Controller;
+import org.eclipse.dirigible.engine.java.annotations.http.Delete;
+import org.eclipse.dirigible.engine.java.annotations.http.Get;
+import org.eclipse.dirigible.engine.java.annotations.http.PathParam;
+import org.eclipse.dirigible.engine.java.annotations.http.Post;
+import org.eclipse.dirigible.engine.java.annotations.http.Roles;
 
-public class CountryController implements JavaHandler {
+/**
+ * REST surface for {@link Country}. Exercises every method-level HTTP decorator the engine
+ * supports, plus {@code @Body}, {@code @PathParam}, and class-level {@code @Roles}.
+ */
+@Controller
+@Documentation("CRUD over the Country entity")
+@Roles({"DEVELOPER"})
+public class CountryController {
 
-    @Override
-    public void handle(HttpServletRequest request, HttpServletResponse response) throws Exception {
-        JavaEntityStore store = BeanProvider.getBean(JavaEntityStore.class);
-        List<Country> countries = store.findAll(Country.class);
-
-        response.setStatus(200);
-        response.setContentType("application/json");
-        StringBuilder json = new StringBuilder("[");
-        boolean first = true;
-        for (Country c : countries) {
-            if (!first) {
-                json.append(",");
-            }
-            first = false;
-            json.append("{")
-                .append("\"id\":")
-                .append(c.id)
-                .append(",")
-                .append("\"code2\":\"")
-                .append(c.code2)
-                .append("\",")
-                .append("\"code3\":\"")
-                .append(c.code3)
-                .append("\",")
-                .append("\"numericCode\":\"")
-                .append(c.numericCode)
-                .append("\",")
-                .append("\"name\":\"")
-                .append(c.name)
-                .append("\"}");
-        }
-        json.append("]");
-        response.getWriter()
-                .write(json.toString());
+    @Get("/list")
+    @Documentation("Lists every Country")
+    public List<Country> list() {
+        return store().findAll(Country.class);
     }
 
+    @Get("/{id}")
+    @Documentation("Fetches a single country by id")
+    public Country byId(@PathParam("id") Long id) {
+        return store().findById(Country.class, id);
+    }
+
+    @Post
+    @Documentation("Creates a new country from a JSON body")
+    public Country create(@Body Country country) {
+        return store().save(country);
+    }
+
+    @Delete("/{id}")
+    @Documentation("Deletes the country with the given id")
+    public void remove(@PathParam("id") Long id) {
+        store().deleteById(Country.class, id);
+    }
+
+    private static JavaEntityStore store() {
+        return BeanProvider.getBean(JavaEntityStore.class);
+    }
 }
