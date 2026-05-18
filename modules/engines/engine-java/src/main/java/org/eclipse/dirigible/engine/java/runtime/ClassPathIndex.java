@@ -153,20 +153,24 @@ public class ClassPathIndex implements DisposableBean {
             Files.createDirectories(libDir);
             Files.createDirectories(classesDir);
 
+            Path libBase = libDir.toAbsolutePath()
+                                 .normalize();
+            Path classesBase = classesDir.toAbsolutePath()
+                                         .normalize();
             Enumeration<JarEntry> es = jar.entries();
             while (es.hasMoreElements()) {
                 JarEntry entry = es.nextElement();
                 String name = entry.getName();
                 if (name.startsWith("BOOT-INF/lib/") && name.endsWith(".jar") && !entry.isDirectory()) {
                     String jarName = name.substring("BOOT-INF/lib/".length());
-                    Path target = libDir.resolve(jarName);
+                    Path target = safeResolve(libBase, jarName);
                     try (InputStream in = jar.getInputStream(entry)) {
                         Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
                     }
                     entries.add(target);
                 } else if (name.startsWith("BOOT-INF/classes/") && !entry.isDirectory()) {
                     String relative = name.substring("BOOT-INF/classes/".length());
-                    Path target = classesDir.resolve(relative);
+                    Path target = safeResolve(classesBase, relative);
                     Files.createDirectories(target.getParent());
                     try (InputStream in = jar.getInputStream(entry)) {
                         Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
@@ -182,6 +186,21 @@ public class ClassPathIndex implements DisposableBean {
             throw new IllegalStateException("Failed to extract classpath from " + fatJar + ": " + e.getMessage(), e);
         }
         return new Snapshot(Collections.unmodifiableList(entries), root);
+    }
+
+    /**
+     * Resolve a jar entry's relative path against the extraction base directory while guarding against
+     * zip-slip: a malicious entry named {@code ../../etc/passwd} would otherwise escape the temp dir
+     * and overwrite arbitrary files. Throws {@link IOException} when the resolved target does not stay
+     * under {@code base}.
+     */
+    private static Path safeResolve(Path base, String relative) throws IOException {
+        Path target = base.resolve(relative)
+                          .normalize();
+        if (!target.startsWith(base)) {
+            throw new IOException("Unsafe jar entry [" + relative + "] would escape extraction directory [" + base + "]");
+        }
+        return target;
     }
 
     private static Snapshot collectFromUrlClassLoader() {

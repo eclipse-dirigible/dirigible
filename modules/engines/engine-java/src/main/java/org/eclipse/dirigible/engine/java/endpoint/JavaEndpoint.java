@@ -136,7 +136,8 @@ public class JavaEndpoint extends BaseEndpoint {
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            LOGGER.error("Java handler [{}/{}] failed: {}", project, classFqn, e.getMessage(), e);
+            LOGGER.error("Java handler [{}/{}] failed: {}", sanitizeForLog(project), sanitizeForLog(classFqn),
+                    sanitizeForLog(e.getMessage()), e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Java handler [" + classFqn + "] failed: " + e.getMessage(),
                     e);
         } finally {
@@ -151,6 +152,18 @@ public class JavaEndpoint extends BaseEndpoint {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Class path is empty");
         }
         return trimmed.replace('/', '.');
+    }
+
+    /**
+     * Strip CR/LF (and stray control characters) from values that originate in user-controlled URL
+     * segments before they reach the log. Prevents log-injection / log-forging where an attacker could
+     * craft a request whose path embeds newlines to forge log entries.
+     */
+    private static String sanitizeForLog(String value) {
+        if (value == null) {
+            return "null";
+        }
+        return value.replaceAll("[\\r\\n\\t]", "_");
     }
 
 }
