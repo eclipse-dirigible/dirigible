@@ -24,6 +24,7 @@ import org.eclipse.dirigible.engine.java.controller.ParamBinding;
 import org.eclipse.dirigible.engine.java.controller.Route;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
@@ -55,7 +56,15 @@ public class JavaControllerOpenApiPublisher {
     private final ObjectMapper objectMapper;
 
     @Autowired
-    public JavaControllerOpenApiPublisher(OpenAPIService openAPIService, ObjectMapper objectMapper) {
+    public JavaControllerOpenApiPublisher(OpenAPIService openAPIService, ObjectProvider<ObjectMapper> objectMapperProvider) {
+        this.openAPIService = openAPIService;
+        // Prefer the Spring-managed ObjectMapper; fall back to a default so the bean still wires up
+        // in minimal test contexts where JacksonAutoConfiguration didn't register one.
+        this.objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
+    }
+
+    /** Test-friendly constructor — bypasses Spring's ObjectProvider. */
+    JavaControllerOpenApiPublisher(OpenAPIService openAPIService, ObjectMapper objectMapper) {
         this.openAPIService = openAPIService;
         this.objectMapper = objectMapper;
     }

@@ -21,6 +21,7 @@ import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -45,7 +46,15 @@ public class ControllerInvoker {
     private final ObjectMapper objectMapper;
 
     @Autowired
-    public ControllerInvoker(ObjectMapper objectMapper) {
+    public ControllerInvoker(ObjectProvider<ObjectMapper> objectMapperProvider) {
+        // Prefer the Spring-managed primary ObjectMapper (so users get the platform's Jackson
+        // configuration); fall back to a fresh one if no bean is registered — e.g. in minimal test
+        // contexts where JacksonAutoConfiguration didn't fire.
+        this.objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
+    }
+
+    /** Test-friendly constructor — bypasses Spring's ObjectProvider. */
+    ControllerInvoker(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
