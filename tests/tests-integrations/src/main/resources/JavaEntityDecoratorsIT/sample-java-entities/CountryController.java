@@ -11,9 +11,8 @@ package demo;
 
 import java.util.List;
 
-import org.eclipse.dirigible.components.base.spring.BeanProvider;
-import org.eclipse.dirigible.components.data.store.java.store.JavaEntityStore;
 import org.eclipse.dirigible.engine.java.annotations.Documentation;
+import org.eclipse.dirigible.engine.java.annotations.Inject;
 import org.eclipse.dirigible.engine.java.annotations.http.Body;
 import org.eclipse.dirigible.engine.java.annotations.http.Controller;
 import org.eclipse.dirigible.engine.java.annotations.http.Delete;
@@ -23,39 +22,40 @@ import org.eclipse.dirigible.engine.java.annotations.http.Post;
 import org.eclipse.dirigible.engine.java.annotations.http.Roles;
 
 /**
- * REST surface for {@link Country}. Exercises every method-level HTTP decorator the engine
- * supports, plus {@code @Body}, {@code @PathParam}, and class-level {@code @Roles}.
+ * REST surface for {@link Country}. Demonstrates the recommended client-code pattern: the
+ * controller declares a {@code @Inject} {@link CountryRepository} field and never touches
+ * {@code JavaEntityStore} or {@code BeanProvider} directly. The engine satisfies the field at
+ * controller-load time via the data-store-java repository registry.
  */
 @Controller
 @Documentation("CRUD over the Country entity")
 @Roles({"DEVELOPER"})
 public class CountryController {
 
+    @Inject
+    private CountryRepository countries;
+
     @Get("/list")
     @Documentation("Lists every Country")
     public List<Country> list() {
-        return store().findAll(Country.class);
+        return countries.findAll();
     }
 
     @Get("/{id}")
     @Documentation("Fetches a single country by id")
     public Country byId(@PathParam("id") Long id) {
-        return store().findById(Country.class, id);
+        return countries.findById(id);
     }
 
     @Post
     @Documentation("Creates a new country from a JSON body")
     public Country create(@Body Country country) {
-        return store().save(country);
+        return countries.save(country);
     }
 
     @Delete("/{id}")
     @Documentation("Deletes the country with the given id")
     public void remove(@PathParam("id") Long id) {
-        store().deleteById(Country.class, id);
-    }
-
-    private static JavaEntityStore store() {
-        return BeanProvider.getBean(JavaEntityStore.class);
+        countries.deleteById(id);
     }
 }

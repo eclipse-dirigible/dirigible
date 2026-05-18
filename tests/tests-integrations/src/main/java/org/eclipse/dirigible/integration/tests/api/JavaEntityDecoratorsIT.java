@@ -27,21 +27,25 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 
 /**
- * End-to-end test for {@code data-store-java} + the controller decorator stack: drops a
- * {@code Country} {@code @Entity}, a {@code CountrySeeder} {@code @Controller}, and a
- * {@code CountryController} {@code @Controller} directly into the registry, forces a
- * synchronisation cycle, and asserts the entity is reachable through the declarative
- * {@code @Get / @Post / @Delete} routes that the controller decorators expose.
+ * End-to-end test for {@code data-store-java} + the controller decorator stack. Drops a
+ * {@code Country} {@code @Entity}, a {@code CountryRepository} ({@code @Repository} extending
+ * {@code JavaRepository<Country>}), and two {@code @Controller}s ({@code CountrySeeder},
+ * {@code CountryController}) into the registry, forces a synchronisation cycle, and asserts the
+ * entity is reachable through the declarative {@code @Get / @Post / @Delete} routes that the
+ * controllers expose. Both controllers receive their {@code CountryRepository} via {@code @Inject}
+ * — never via {@code BeanProvider} or {@code JavaEntityStore} directly.
  *
  * <p>
  * Resource layout under {@code src/main/resources/JavaEntityDecoratorsIT/sample-java-entities/}:
- * {@code Country.java}, {@code CountrySeeder.java}, {@code CountryController.java}. They live under
- * registry path {@code /sample-java-entities/demo/...} in the running app.
+ * {@code Country.java}, {@code CountryRepository.java}, {@code CountrySeeder.java},
+ * {@code CountryController.java}. They live under registry path
+ * {@code /sample-java-entities/demo/...} in the running app.
  */
 class JavaEntityDecoratorsIT extends IntegrationTest {
 
     private static final String PROJECT = "sample-java-entities";
     private static final String COUNTRY_LOCATION = "/" + PROJECT + "/demo/Country.java";
+    private static final String REPOSITORY_LOCATION = "/" + PROJECT + "/demo/CountryRepository.java";
     private static final String SEEDER_LOCATION = "/" + PROJECT + "/demo/CountrySeeder.java";
     private static final String CONTROLLER_LOCATION = "/" + PROJECT + "/demo/CountryController.java";
 
@@ -250,6 +254,7 @@ class JavaEntityDecoratorsIT extends IntegrationTest {
 
     private void writeAllFixtures() {
         writeFixture(COUNTRY_LOCATION, "Country.java");
+        writeFixture(REPOSITORY_LOCATION, "CountryRepository.java");
         writeFixture(SEEDER_LOCATION, "CountrySeeder.java");
         writeFixture(CONTROLLER_LOCATION, "CountryController.java");
     }
@@ -276,6 +281,7 @@ class JavaEntityDecoratorsIT extends IntegrationTest {
     @AfterEach
     void removeFixturesFromRegistry() {
         deleteIfPresent(COUNTRY_LOCATION);
+        deleteIfPresent(REPOSITORY_LOCATION);
         deleteIfPresent(SEEDER_LOCATION);
         deleteIfPresent(CONTROLLER_LOCATION);
         // Force a final sync so the next test starts with an empty client-class space.
