@@ -26,7 +26,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -46,8 +45,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class JavaControllerOpenApiPublisher {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(JavaControllerOpenApiPublisher.class);
-
-    private static final String LOCATION_PREFIX = "java-controller://";
 
     private static final String ENDPOINT_PREFIX = "/services/java/";
 
@@ -273,7 +270,14 @@ public class JavaControllerOpenApiPublisher {
         return template.startsWith("/") ? template : "/" + template;
     }
 
+    /**
+     * Location is the registry path of the controller's {@code .java} source. Anchoring the artefact to
+     * a real file is what keeps {@code SynchronizationProcessor}'s orphan-cleanup pass from deleting
+     * it: that pass walks every {@link OpenAPI} artefact and drops any whose location doesn't resolve
+     * to a registry resource. When the user deletes the source, the same pass then correctly removes
+     * our artefact too.
+     */
     private static String locationOf(String project, String fqn) {
-        return LOCATION_PREFIX + project + "::" + fqn;
+        return "/" + project + "/" + fqn.replace('.', '/') + ".java";
     }
 }

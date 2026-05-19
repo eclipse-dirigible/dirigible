@@ -58,8 +58,12 @@ class JavaControllerOpenApiPublisherTest {
         verify(service, atLeastOnce()).save(captor.capture());
 
         OpenAPI saved = captor.getValue();
-        assertTrue(saved.getLocation()
-                        .startsWith("java-controller://"));
+        // Location anchored to the controller's .java source path so the framework's orphan
+        // cleanup (which deletes OpenAPI artefacts whose location doesn't resolve to a registry
+        // resource) doesn't wipe it between rebuilds.
+        assertEquals("/p/" + Sample.class.getName()
+                                         .replace('.', '/')
+                + ".java", saved.getLocation());
         assertEquals(Sample.class.getName(), saved.getName());
 
         JsonNode root = new ObjectMapper().readTree(saved.getContent());
@@ -98,8 +102,9 @@ class JavaControllerOpenApiPublisherTest {
     @Test
     void retract_deletes_existing_artefact() {
         OpenAPIService service = mock(OpenAPIService.class);
-        OpenAPI existing = new OpenAPI("java-controller://p::demo.Sample", "demo.Sample", "x");
-        when(service.findByLocation("java-controller://p::demo.Sample")).thenReturn(List.of(existing));
+        String location = "/p/demo/Sample.java";
+        OpenAPI existing = new OpenAPI(location, "demo.Sample", "x");
+        when(service.findByLocation(location)).thenReturn(List.of(existing));
         JavaControllerOpenApiPublisher publisher = new JavaControllerOpenApiPublisher(service, new ObjectMapper());
 
         publisher.retract("p", "demo.Sample");
