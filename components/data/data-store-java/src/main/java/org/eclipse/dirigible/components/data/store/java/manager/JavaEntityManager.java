@@ -19,7 +19,6 @@ import javax.sql.DataSource;
 
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
-import org.eclipse.dirigible.components.data.store.hbm.HbmXmlDescriptor;
 import org.eclipse.dirigible.components.data.store.java.hbm.JavaEntityToHbmMapper;
 import org.hibernate.SessionFactory;
 import org.hibernate.boot.registry.StandardServiceRegistry;
@@ -161,13 +160,8 @@ public class JavaEntityManager implements DisposableBean {
                                                          .setProperty(Environment.SHOW_SQL, "false");
 
         for (RegisteredEntity entity : registered.values()) {
-            HbmXmlDescriptor.HbmIdDescriptor idDesc = new HbmXmlDescriptor.HbmIdDescriptor(entity.idField()
-                                                                                                 .getName(),
-                    entity.idColumn(), hibernateTypeOf(entity.idField()
-                                                             .getType()),
-                    "native");
-            // Re-map fresh — we don't want to leak Java reflection objects into the Hibernate
-            // metadata layer. JavaEntityToHbmMapper.map is the canonical builder.
+            // Re-map fresh through JavaEntityToHbmMapper rather than reusing reflection-derived
+            // descriptors — keeps Java reflection objects out of the Hibernate metadata layer.
             JavaEntityToHbmMapper.Result mapped = JavaEntityToHbmMapper.map(entity.key(), entity.entityClass());
             String xml = mapped.descriptor()
                                .serialize();
@@ -195,26 +189,6 @@ public class JavaEntityManager implements DisposableBean {
                 LOGGER.warn("Failed to close prior SessionFactory cleanly: {}", e.getMessage());
             }
         }
-    }
-
-    /**
-     * Minimal Java→Hibernate type table for the id column (the mapper has the full version). The id
-     * type is the only one we look up outside the mapper itself.
-     */
-    private static String hibernateTypeOf(Class<?> javaType) {
-        if (javaType == String.class) {
-            return "string";
-        }
-        if (javaType == long.class || javaType == Long.class) {
-            return "long";
-        }
-        if (javaType == int.class || javaType == Integer.class) {
-            return "integer";
-        }
-        if (javaType == java.util.UUID.class) {
-            return "uuid";
-        }
-        return "string";
     }
 
     @Override

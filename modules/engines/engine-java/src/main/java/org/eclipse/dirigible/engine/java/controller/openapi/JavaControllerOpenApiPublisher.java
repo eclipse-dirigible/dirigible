@@ -174,9 +174,7 @@ public class JavaControllerOpenApiPublisher {
         }
 
         op.put("responses", responsesSpec(route.method()
-                                               .getReturnType(),
-                route.method()
-                     .getGenericReturnType()));
+                                               .getReturnType()));
 
         if (route.roles() != null && !route.roles()
                                            .isEmpty()) {
@@ -195,7 +193,7 @@ public class JavaControllerOpenApiPublisher {
         p.put("name", name);
         p.put("in", in);
         p.put("required", required);
-        p.put("schema", schemaFor(type, null));
+        p.put("schema", schemaFor(type));
         return p;
     }
 
@@ -203,12 +201,12 @@ public class JavaControllerOpenApiPublisher {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("required", true);
         Map<String, Object> jsonMedia = new LinkedHashMap<>();
-        jsonMedia.put("schema", schemaFor(type, null));
+        jsonMedia.put("schema", schemaFor(type));
         body.put("content", Map.of("application/json", jsonMedia));
         return body;
     }
 
-    private static Map<String, Object> responsesSpec(Class<?> returnType, java.lang.reflect.Type genericReturn) {
+    private static Map<String, Object> responsesSpec(Class<?> returnType) {
         Map<String, Object> responses = new LinkedHashMap<>();
         if (returnType == void.class) {
             responses.put("200", Map.of("description", "OK"));
@@ -217,13 +215,13 @@ public class JavaControllerOpenApiPublisher {
         Map<String, Object> ok = new LinkedHashMap<>();
         ok.put("description", "OK");
         Map<String, Object> jsonMedia = new LinkedHashMap<>();
-        jsonMedia.put("schema", schemaFor(returnType, genericReturn));
+        jsonMedia.put("schema", schemaFor(returnType));
         ok.put("content", Map.of("application/json", jsonMedia));
         responses.put("200", ok);
         return responses;
     }
 
-    private static Map<String, Object> schemaFor(Class<?> type, java.lang.reflect.Type generic) {
+    private static Map<String, Object> schemaFor(Class<?> type) {
         Map<String, Object> schema = new LinkedHashMap<>();
         if (type == String.class || type == CharSequence.class) {
             schema.put("type", "string");
