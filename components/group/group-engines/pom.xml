@@ -127,6 +127,14 @@
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-engine-odata</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-engine-java</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-data-store-java</artifactId>
+        </dependency>
     </dependencies>
 
     <properties>

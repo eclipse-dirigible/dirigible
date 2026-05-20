@@ -35,11 +35,11 @@ import jakarta.persistence.EntityManagerFactory;
 @org.springframework.context.annotation.Configuration
 @EnableTransactionManagement
 @EnableJpaRepositories(entityManagerFactoryRef = "entityManagerFactory", transactionManagerRef = "transactionManager",
-        basePackages = {"org.eclipse.dirigible.components"})
+        basePackages = {"org.eclipse.dirigible.components", "org.eclipse.dirigible.engine"})
 public class DataSourceSystemConfig {
 
     /** The dirigible scan packages. */
-    @Value("${dirigible.scan.packages:org.eclipse.dirigible.components}")
+    @Value("${dirigible.scan.packages:org.eclipse.dirigible.components,org.eclipse.dirigible.engine}")
     private String dirigibleScanPackages;
 
     /**
