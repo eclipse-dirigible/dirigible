@@ -15,18 +15,17 @@ import static org.hamcrest.Matchers.containsString;
 /**
  * Clones {@code dirigiblelabs/sample-java-entity-decorators}, publishes it through the IDE, and
  * verifies that the {@code @Entity} / {@code @Repository} / {@code @Controller} stack from
- * {@code engine-java} + {@code data-store-java} is wired end-to-end: POSTing rows via the
- * controller persists them, the same controller lists them back, and the OpenAPI aggregator picks
- * up the controller's routes.
+ * {@code engine-java} + {@code data-store-java} reads the project's CSVIM-seeded data end-to-end:
+ * the {@code SAMPLE_COUNTRY} table is created and populated from {@code data/countries.csv}, the
+ * {@code @Inject}-ed {@code CountryRepository} lists those rows through {@code @Get("/")}, a single
+ * row is fetched through {@code @Get("/{id}")} / {@code @PathParam}, and the OpenAPI aggregator
+ * picks up the controller's routes.
  */
 public class JavaEntityDecoratorsSampleProjectIT extends SampleProjectRepositoryIT {
 
     private static final String PROJECT = "sample-java-entity-decorators";
 
-    /**
-     * Controller base. {@code @Get("/")} and {@code @Post} both bind here; the HTTP method
-     * disambiguates list vs. create.
-     */
+    /** Controller base — {@code @Get("/")} lists, {@code @Get("/{id}")} fetches one. */
     private static final String CONTROLLER_BASE = "/services/java/" + PROJECT + "/demo/CountryController";
 
     @Override
@@ -37,14 +36,8 @@ public class JavaEntityDecoratorsSampleProjectIT extends SampleProjectRepository
     @Override
     protected void verifyProject() {
         restAssuredExecutor.execute(() -> {
-            // Seed three rows via the controller's @Post @Body route — proves @Inject
-            // CountryRepository resolved, the COUNTRIES table exists, and Jackson deserialised
-            // each request body into a Country instance.
-            postCountry("AF", "AFG", "004", "Afghanistan");
-            postCountry("AL", "ALB", "008", "Albania");
-            postCountry("DZ", "DZA", "012", "Algeria");
-
-            // GET on the bare base URL → @Get("/") list route.
+            // GET on the bare base URL → @Get("/") list route. Proves @Inject CountryRepository
+            // resolved and the SAMPLE_COUNTRY table was seeded from data/countries.csv via CSVIM.
             given().when()
                    .get(CONTROLLER_BASE)
                    .then()
@@ -53,8 +46,8 @@ public class JavaEntityDecoratorsSampleProjectIT extends SampleProjectRepository
                    .body(containsString("Albania"))
                    .body(containsString("Algeria"));
 
-            // GET /{id} — exercises @PathParam binding and JavaRepository.findById. Ids are
-            // generated in insertion order starting at 1.
+            // GET /{id} — exercises @PathParam binding and JavaRepository.findById against the
+            // seeded COUNTRY_ID primary key (countries.csv assigns Afghanistan id 1).
             given().when()
                    .get(CONTROLLER_BASE + "/1")
                    .then()
@@ -70,18 +63,6 @@ public class JavaEntityDecoratorsSampleProjectIT extends SampleProjectRepository
                    .body(containsString(CONTROLLER_BASE))
                    .body(containsString(CONTROLLER_BASE + "/{id}"));
         });
-    }
-
-    private static void postCountry(String code2, String code3, String numericCode, String name) {
-        String body = String.format("{\"code2\":\"%s\",\"code3\":\"%s\",\"numericCode\":\"%s\",\"name\":\"%s\"}", code2, code3, numericCode,
-                name);
-        given().contentType("application/json")
-               .body(body)
-               .when()
-               .post(CONTROLLER_BASE)
-               .then()
-               .statusCode(200)
-               .body(containsString(name));
     }
 
 }
